@@ -1,6 +1,6 @@
 {
-  "name": "multix",
-  "version": "0.0.1",
+  "name": "@mrgoonie/multix",
+  "version": "0.0.2",
   "description": "AI multimodal CLI — Gemini, MiniMax, OpenRouter, ffmpeg, ImageMagick, doc-to-md",
   "type": "module",
   "bin": {
@@ -48,9 +48,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/multix-cli/multix-cli"
+    "url": "git+https://github.com/mrgoonie/multix-cli.git"
   },
-  "homepage": "https://github.com/multix-cli/multix-cli#readme",
+  "bugs": {
+    "url": "https://github.com/mrgoonie/multix-cli/issues"
+  },
+  "homepage": "https://github.com/mrgoonie/multix-cli#readme",
   "dependencies": {
     "commander": "^12.1.0",
     "dotenv": "^16.4.5",

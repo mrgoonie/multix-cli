@@ -7,9 +7,9 @@ Supports **Gemini** (analyze, transcribe, generate, Veo video), **MiniMax** (ima
 ## Install
 
 ```bash
-npm install -g multix
+npm install -g @mrgoonie/multix
 # or run without installing:
-npx multix --help
+npx -p @mrgoonie/multix multix --help
 ```
 
 **Requirements:** Node >= 20. For media commands: `ffmpeg` and `magick` (ImageMagick 7+) on PATH.
@@ -169,7 +169,7 @@ All generated files are saved to `./multix-output/` by default. Override with `M
 ## Contributing
 
 ```bash
-git clone https://github.com/multix-cli/multix-cli
+git clone https://github.com/mrgoonie/multix-cli
 npm install
 npm run build
 npm test
