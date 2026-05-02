@@ -33,7 +33,7 @@ export function formatResults(
 function renderFormat(results: AnalysisResult[], format: OutputFormat): string {
   switch (format) {
     case "json":
-      return JSON.stringify(results, null, 2) + "\n";
+      return `${JSON.stringify(results, null, 2)}\n`;
     case "csv":
       return renderCsv(results);
     case "markdown":
@@ -49,7 +49,7 @@ function renderText(results: AnalysisResult[]): string {
       const header = `[${r.file}]\nStatus: ${r.status}`;
       if (r.status === "success" && r.response) return `${header}\nResult:\n${r.response}\n`;
       if (r.status === "error") return `${header}\nError: ${r.error}\n`;
-      return header + "\n";
+      return `${header}\n`;
     })
     .join("\n");
 }
@@ -60,7 +60,7 @@ function renderCsv(results: AnalysisResult[]): string {
     const csvCell = (v?: string) => `"${(v ?? "").replace(/"/g, '""')}"`;
     return [csvCell(r.file), csvCell(r.status), csvCell(r.response), csvCell(r.error)].join(",");
   });
-  return header + rows.join("\n") + "\n";
+  return `${header + rows.join("\n")}\n`;
 }
 
 function renderMarkdown(results: AnalysisResult[]): string {

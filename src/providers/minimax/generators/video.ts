@@ -5,9 +5,9 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { getOutputDir } from "../../../core/output-dir.js";
-import { apiPost, pollAsyncTask, downloadMinimaxFile } from "../client.js";
 import type { Logger } from "../../../core/logger.js";
+import { getOutputDir } from "../../../core/output-dir.js";
+import { apiPost, downloadMinimaxFile, pollAsyncTask } from "../client.js";
 
 interface VideoTaskResponse {
   task_id?: string;
@@ -45,7 +45,7 @@ export async function generateMinimaxVideo(opts: {
   } = opts;
 
   const payload: Record<string, unknown> = { prompt, model, duration, resolution };
-  if (firstFrame) payload["first_frame_image"] = firstFrame;
+  if (firstFrame) payload.first_frame_image = firstFrame;
 
   logger?.debug(`Submitting video generation with ${model}...`);
 
@@ -67,7 +67,7 @@ export async function generateMinimaxVideo(opts: {
   logger?.debug(`Task ID: ${taskId}, polling...`);
   const start = Date.now();
 
-  let pollResult;
+  let pollResult: Awaited<ReturnType<typeof pollAsyncTask>>;
   try {
     pollResult = await pollAsyncTask(taskId, "video_generation", apiKey, {
       intervalMs: 10_000,

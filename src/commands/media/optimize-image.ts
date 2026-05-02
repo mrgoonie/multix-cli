@@ -3,14 +3,14 @@
  * Replaces Pillow from media_optimizer.py — no native deps.
  */
 
-import { assertMagick, runMagick } from "./magick-runner.js";
 import type { Logger } from "../../core/logger.js";
+import { assertMagick, runMagick } from "./magick-runner.js";
 
 export interface OptimizeImageOptions {
   input: string;
   output: string;
-  maxWidth?: number;   // default 1920
-  quality?: number;   // 1-100, default 85
+  maxWidth?: number; // default 1920
+  quality?: number; // 1-100, default 85
   verbose?: boolean;
   logger?: Logger;
 }
@@ -22,12 +22,7 @@ export async function optimizeImage(opts: OptimizeImageOptions): Promise<void> {
 
   // magick input -resize <maxWidth>x> -quality <q> output
   // The ">" suffix in geometry means "only shrink, never enlarge"
-  const args = [
-    input,
-    "-resize", `${maxWidth}x>`,
-    "-quality", String(quality),
-    output,
-  ];
+  const args = [input, "-resize", `${maxWidth}x>`, "-quality", String(quality), output];
 
   await runMagick(args, { verbose, logger });
   logger?.success(`Optimized: ${output}`);

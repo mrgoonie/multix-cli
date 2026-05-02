@@ -3,17 +3,17 @@
  * Mirrors optimize_video() from media_optimizer.py.
  */
 
-import { assertFfmpeg, runFfmpeg, getMediaInfo } from "./ffmpeg-runner.js";
 import { ValidationError } from "../../core/errors.js";
 import type { Logger } from "../../core/logger.js";
+import { assertFfmpeg, getMediaInfo, runFfmpeg } from "./ffmpeg-runner.js";
 
 export interface OptimizeVideoOptions {
   input: string;
   output: string;
   targetSizeMb?: number;
-  quality?: number;       // CRF value (0-51, lower=better, default 23)
-  resolution?: string;   // e.g. "1920x1080"
-  maxWidth?: number;     // default 1920
+  quality?: number; // CRF value (0-51, lower=better, default 23)
+  resolution?: string; // e.g. "1920x1080"
+  maxWidth?: number; // default 1920
   verbose?: boolean;
   logger?: Logger;
 }
@@ -23,7 +23,8 @@ export async function optimizeVideo(opts: OptimizeVideoOptions): Promise<void> {
   await assertFfmpeg();
 
   const {
-    input, output,
+    input,
+    output,
     targetSizeMb,
     quality = 23,
     resolution,

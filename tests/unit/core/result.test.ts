@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { ok, err, isOk, isErr } from "../../../src/core/result.js";
+import { describe, expect, it } from "vitest";
+import { err, isErr, isOk, ok } from "../../../src/core/result.js";
 
 describe("result helpers", () => {
   it("ok() creates success result", () => {

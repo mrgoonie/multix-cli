@@ -6,10 +6,10 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { getOutputDir } from "../../../core/output-dir.js";
 import { fetchBytes } from "../../../core/http-client.js";
-import { apiPost } from "../client.js";
 import type { Logger } from "../../../core/logger.js";
+import { getOutputDir } from "../../../core/output-dir.js";
+import { apiPost } from "../client.js";
 
 interface MusicResponse {
   data?: { audio?: string };
@@ -45,7 +45,10 @@ export async function generateMinimaxMusic(opts: {
   } = opts;
 
   if (!lyrics && !prompt) {
-    return { status: "error", error: "Either --lyrics or --prompt is required for music generation" };
+    return {
+      status: "error",
+      error: "Either --lyrics or --prompt is required for music generation",
+    };
   }
 
   const payload: Record<string, unknown> = {
@@ -59,8 +62,8 @@ export async function generateMinimaxMusic(opts: {
     },
   };
 
-  if (lyrics) payload["lyrics"] = lyrics.slice(0, 3500);
-  if (prompt) payload["prompt"] = prompt.slice(0, 2000);
+  if (lyrics) payload.lyrics = lyrics.slice(0, 3500);
+  if (prompt) payload.prompt = prompt.slice(0, 2000);
 
   logger?.debug(`Generating music with ${model}...`);
 
@@ -94,7 +97,10 @@ export async function generateMinimaxMusic(opts: {
       fs.writeFileSync(dest, audioBytes);
     }
   } catch (e) {
-    return { status: "error", error: `Failed to save audio: ${e instanceof Error ? e.message : String(e)}` };
+    return {
+      status: "error",
+      error: `Failed to save audio: ${e instanceof Error ? e.message : String(e)}`,
+    };
   }
 
   const durSec = durationMs / 1000;

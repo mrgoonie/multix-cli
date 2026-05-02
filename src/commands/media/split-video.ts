@@ -5,14 +5,14 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { assertFfmpeg, runFfmpeg, getMediaInfo } from "./ffmpeg-runner.js";
 import { ValidationError } from "../../core/errors.js";
 import type { Logger } from "../../core/logger.js";
+import { assertFfmpeg, getMediaInfo, runFfmpeg } from "./ffmpeg-runner.js";
 
 export interface SplitVideoOptions {
   input: string;
   outputDir: string;
-  chunkDuration?: number;  // seconds, default 3600
+  chunkDuration?: number; // seconds, default 3600
   verbose?: boolean;
   logger?: Logger;
 }
@@ -45,11 +45,17 @@ export async function splitVideo(opts: SplitVideoOptions): Promise<string[]> {
   logger?.debug(`Splitting into ~${numChunks} chunks of ${chunkDuration}s each`);
 
   const args = [
-    "-i", input, "-y",
-    "-f", "segment",
-    "-segment_time", String(chunkDuration),
-    "-c", "copy",
-    "-reset_timestamps", "1",
+    "-i",
+    input,
+    "-y",
+    "-f",
+    "segment",
+    "-segment_time",
+    String(chunkDuration),
+    "-c",
+    "copy",
+    "-reset_timestamps",
+    "1",
     outputPattern,
   ];
 

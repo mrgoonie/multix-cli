@@ -4,10 +4,10 @@
 
 import type { Command } from "commander";
 import { registerAnalyzeCommand } from "./analyze.js";
-import { registerTranscribeCommand } from "./transcribe.js";
 import { registerExtractCommand } from "./extract.js";
-import { registerGenerateCommand } from "./generate.js";
 import { registerGenerateVideoCommand } from "./generate-video.js";
+import { registerGenerateCommand } from "./generate.js";
+import { registerTranscribeCommand } from "./transcribe.js";
 
 export function registerGeminiCommands(program: Command): void {
   const gemini = program

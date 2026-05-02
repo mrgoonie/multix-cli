@@ -5,9 +5,9 @@
  * Mirrors minimax_api_client.py exactly.
  */
 
-import { httpJson, downloadFile as coreDownload } from "../../core/http-client.js";
-import { ConfigError, ProviderError } from "../../core/errors.js";
 import { resolveKey } from "../../core/env-loader.js";
+import { ConfigError, ProviderError } from "../../core/errors.js";
+import { downloadFile as coreDownload, httpJson } from "../../core/http-client.js";
 import type { Logger } from "../../core/logger.js";
 
 export const MINIMAX_BASE_URL = "https://api.minimax.io/v1";
@@ -96,11 +96,7 @@ export async function pollAsyncTask(
   let elapsed = 0;
 
   while (Date.now() < deadline) {
-    const result = await apiGet<PollResult>(
-      `query/${taskType}`,
-      { task_id: taskId },
-      apiKey,
-    );
+    const result = await apiGet<PollResult>(`query/${taskType}`, { task_id: taskId }, apiKey);
 
     const status = result.status ?? "Unknown";
     if (elapsed > 0 && elapsed % 30_000 < intervalMs) {

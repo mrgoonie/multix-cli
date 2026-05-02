@@ -16,8 +16,8 @@ let cachedOutputDir: string | undefined;
 export function getOutputDir(): string {
   if (cachedOutputDir) return cachedOutputDir;
 
-  const dir = process.env["MULTIX_OUTPUT_DIR"]
-    ? path.resolve(process.env["MULTIX_OUTPUT_DIR"])
+  const dir = process.env.MULTIX_OUTPUT_DIR
+    ? path.resolve(process.env.MULTIX_OUTPUT_DIR)
     : path.resolve(process.cwd(), "multix-output");
 
   fs.mkdirSync(dir, { recursive: true });

@@ -21,7 +21,8 @@ export function mockFetch(responseMap: ResponseMap): () => void {
   const originalFetch = globalThis.fetch;
 
   globalThis.fetch = async (input: string | URL | Request): Promise<Response> => {
-    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    const url =
+      typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
 
     // Find matching entry by URL substring
     const entry = Object.entries(responseMap).find(([key]) => url.includes(key));

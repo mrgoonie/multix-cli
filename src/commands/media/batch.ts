@@ -5,11 +5,11 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { extToKind, VIDEO_EXTS, AUDIO_EXTS, IMAGE_EXTS } from "./detect-type.js";
-import { optimizeVideo } from "./optimize-video.js";
+import type { Logger } from "../../core/logger.js";
+import { AUDIO_EXTS, IMAGE_EXTS, VIDEO_EXTS, extToKind } from "./detect-type.js";
 import { optimizeAudio } from "./optimize-audio.js";
 import { optimizeImage } from "./optimize-image.js";
-import type { Logger } from "../../core/logger.js";
+import { optimizeVideo } from "./optimize-video.js";
 
 const ALL_EXTS = new Set([...VIDEO_EXTS, ...AUDIO_EXTS, ...IMAGE_EXTS]);
 
@@ -32,7 +32,15 @@ export interface BatchResult {
 
 /** Process all supported media files in a directory. */
 export async function batchOptimize(opts: BatchOptions): Promise<BatchResult> {
-  const { inputDir, outputDir, quality = 85, maxWidth = 1920, bitrate = "64k", verbose, logger } = opts;
+  const {
+    inputDir,
+    outputDir,
+    quality = 85,
+    maxWidth = 1920,
+    bitrate = "64k",
+    verbose,
+    logger,
+  } = opts;
 
   fs.mkdirSync(outputDir, { recursive: true });
 
@@ -62,11 +70,25 @@ export async function batchOptimize(opts: BatchOptions): Promise<BatchResult> {
 
     try {
       if (kind === "video") {
-        await optimizeVideo({ input: inputPath, output: outputPath, quality, maxWidth, verbose, logger });
+        await optimizeVideo({
+          input: inputPath,
+          output: outputPath,
+          quality,
+          maxWidth,
+          verbose,
+          logger,
+        });
       } else if (kind === "audio") {
         await optimizeAudio({ input: inputPath, output: outputPath, bitrate, verbose, logger });
       } else if (kind === "image") {
-        await optimizeImage({ input: inputPath, output: outputPath, maxWidth, quality, verbose, logger });
+        await optimizeImage({
+          input: inputPath,
+          output: outputPath,
+          maxWidth,
+          quality,
+          verbose,
+          logger,
+        });
       }
       succeeded++;
     } catch (e) {

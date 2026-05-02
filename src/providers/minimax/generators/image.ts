@@ -5,11 +5,11 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { getOutputDir } from "../../../core/output-dir.js";
-import { fetchBytes } from "../../../core/http-client.js";
 import { ProviderError } from "../../../core/errors.js";
-import { apiPost } from "../client.js";
+import { fetchBytes } from "../../../core/http-client.js";
 import type { Logger } from "../../../core/logger.js";
+import { getOutputDir } from "../../../core/output-dir.js";
+import { apiPost } from "../client.js";
 
 interface ImageGenerationResponse {
   data?: { image_urls?: string[] };
@@ -79,7 +79,10 @@ export async function generateMinimaxImage(opts: {
       savedFiles.push(dest);
       logger?.success(`Saved: ${dest}`);
     } catch (e) {
-      throw new ProviderError(`Failed to download image: ${e instanceof Error ? e.message : String(e)}`, "minimax");
+      throw new ProviderError(
+        `Failed to download image: ${e instanceof Error ? e.message : String(e)}`,
+        "minimax",
+      );
     }
   }
 

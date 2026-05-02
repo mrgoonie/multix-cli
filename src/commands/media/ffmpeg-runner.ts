@@ -4,7 +4,7 @@
  * Throws ProviderError on non-zero exit; logs stderr at verbose level.
  */
 
-import { execa, ExecaError } from "execa";
+import { type ExecaError, execa } from "execa";
 import { ProviderError, ValidationError } from "../../core/errors.js";
 import type { Logger } from "../../core/logger.js";
 
@@ -16,9 +16,9 @@ export async function assertFfmpeg(): Promise<void> {
     if ((e as NodeJS.ErrnoException).code === "ENOENT") {
       throw new ValidationError(
         "ffmpeg not found on PATH.\n" +
-        "  Linux: sudo apt-get install ffmpeg\n" +
-        "  macOS: brew install ffmpeg\n" +
-        "  Windows: https://ffmpeg.org/download.html",
+          "  Linux: sudo apt-get install ffmpeg\n" +
+          "  macOS: brew install ffmpeg\n" +
+          "  Windows: https://ffmpeg.org/download.html",
       );
     }
     // ffmpeg -version exits non-zero on some builds but binary exists — ignore
@@ -70,13 +70,11 @@ export interface MediaInfo {
 /** Get media file info via ffprobe. Returns partial info on error. */
 export async function getMediaInfo(filePath: string): Promise<Partial<MediaInfo>> {
   try {
-    const result = await execa("ffprobe", [
-      "-v", "quiet",
-      "-print_format", "json",
-      "-show_format",
-      "-show_streams",
-      filePath,
-    ], { reject: true });
+    const result = await execa(
+      "ffprobe",
+      ["-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", filePath],
+      { reject: true },
+    );
 
     // biome-ignore lint/suspicious/noExplicitAny: dynamic JSON
     const data = JSON.parse(result.stdout) as any;

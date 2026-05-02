@@ -6,11 +6,11 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { httpJson, fetchBytes } from "../../core/http-client.js";
-import { ConfigError, ProviderError } from "../../core/errors.js";
 import { resolveKey } from "../../core/env-loader.js";
-import { getOutputDir } from "../../core/output-dir.js";
+import { ConfigError, ProviderError } from "../../core/errors.js";
+import { fetchBytes, httpJson } from "../../core/http-client.js";
 import type { Logger } from "../../core/logger.js";
+import { getOutputDir } from "../../core/output-dir.js";
 
 export const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 export const DEFAULT_OPENROUTER_MODEL = "google/gemini-3.1-flash-image-preview";
@@ -24,7 +24,9 @@ export function isOpenRouterModel(model: string): boolean {
 export function requireOpenRouterKey(): string {
   const key = resolveKey("OPENROUTER_API_KEY");
   if (!key) {
-    throw new ConfigError("OPENROUTER_API_KEY is not set. Get one at https://openrouter.ai/settings/keys");
+    throw new ConfigError(
+      "OPENROUTER_API_KEY is not set. Get one at https://openrouter.ai/settings/keys",
+    );
   }
   return key;
 }
@@ -57,13 +59,13 @@ function buildPayload(opts: GeneratePayload): Record<string, unknown> {
   };
 
   if (opts.imageSize) {
-    (payload["image_config"] as Record<string, string>)["image_size"] = opts.imageSize;
+    (payload.image_config as Record<string, string>).image_size = opts.imageSize;
   }
 
   if (opts.fallbackModels.length > 0) {
-    payload["models"] = [opts.model, ...opts.fallbackModels];
+    payload.models = [opts.model, ...opts.fallbackModels];
   } else {
-    payload["model"] = opts.model;
+    payload.model = opts.model;
   }
 
   return payload;
@@ -100,15 +102,7 @@ export async function generateOpenRouterImage(opts: {
   output?: string;
   logger?: Logger;
 }): Promise<GenerateImageResult> {
-  const {
-    prompt,
-    model,
-    aspectRatio = "1:1",
-    imageSize,
-    numImages = 1,
-    output,
-    logger,
-  } = opts;
+  const { prompt, model, aspectRatio = "1:1", imageSize, numImages = 1, output, logger } = opts;
 
   const apiKey = requireOpenRouterKey();
   const fallbackModels = (resolveKey("OPENROUTER_FALLBACK_MODELS") ?? "")
@@ -122,7 +116,9 @@ export async function generateOpenRouterImage(opts: {
   for (let i = 0; i < Math.max(1, numImages); i++) {
     const payload = buildPayload({ prompt, model, aspectRatio, imageSize, fallbackModels });
 
-    logger?.debug(`OpenRouter model: ${model}${fallbackModels.length ? ` (fallbacks: ${fallbackModels.join(", ")})` : ""}`);
+    logger?.debug(
+      `OpenRouter model: ${model}${fallbackModels.length ? ` (fallbacks: ${fallbackModels.join(", ")})` : ""}`,
+    );
 
     let data: ChatCompletionResponse;
     try {
@@ -173,7 +169,10 @@ export async function generateOpenRouterImage(opts: {
       savedFiles.push(dest);
       logger?.success(`Saved: ${dest}`);
     } catch (e) {
-      throw new ProviderError(`Failed to save image: ${e instanceof Error ? e.message : String(e)}`, "openrouter");
+      throw new ProviderError(
+        `Failed to save image: ${e instanceof Error ? e.message : String(e)}`,
+        "openrouter",
+      );
     }
   }
 

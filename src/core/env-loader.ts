@@ -29,7 +29,7 @@ export function loadEnv(): void {
   }
 
   // ~/.multix/.env — skip in test mode
-  if (!process.env["MULTIX_DISABLE_HOME_ENV"]) {
+  if (!process.env.MULTIX_DISABLE_HOME_ENV) {
     const homeEnv = path.join(os.homedir(), ".multix", ".env");
     if (fs.existsSync(homeEnv)) {
       dotenvConfig({ path: homeEnv, override: false });

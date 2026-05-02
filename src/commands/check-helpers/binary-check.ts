@@ -28,7 +28,11 @@ export async function checkBinary(binary: string): Promise<BinaryStatus> {
 
     // Windows: cmd/PowerShell prints "not recognized" for missing binaries
     const output = (err.stderr ?? err.all ?? "").toLowerCase();
-    if (output.includes("not recognized") || output.includes("not found") || output.includes("no such file")) {
+    if (
+      output.includes("not recognized") ||
+      output.includes("not found") ||
+      output.includes("no such file")
+    ) {
       return { available: false, binary };
     }
 

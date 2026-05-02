@@ -6,18 +6,19 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import {
-  generateContent,
-  extractText,
-  inlinePart,
-  uploadFile,
-  shouldUseFileApi,
-} from "../../providers/gemini/client.js";
-import { getOutputDir } from "../../core/output-dir.js";
 import { ValidationError } from "../../core/errors.js";
+import type { Logger } from "../../core/logger.js";
+import { getOutputDir } from "../../core/output-dir.js";
+import {
+  type ContentPart,
+  extractText,
+  generateContent,
+  inlinePart,
+  shouldUseFileApi,
+  uploadFile,
+} from "../../providers/gemini/client.js";
 import { DOC_MODEL_DEFAULT } from "../../providers/gemini/models.js";
 import { DEFAULT_CONVERT_PROMPT } from "./default-prompt.js";
-import type { Logger } from "../../core/logger.js";
 
 export interface ConvertOptions {
   inputs: string[];
@@ -72,7 +73,7 @@ export async function convertDocuments(opts: ConvertOptions): Promise<void> {
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         const useApi = shouldUseFileApi(filePath);
-        let contentParts;
+        let contentParts: ContentPart[];
 
         if (useApi) {
           logger?.debug("File >20MB — using Files API");
@@ -119,7 +120,7 @@ export async function convertDocuments(opts: ConvertOptions): Promise<void> {
   for (const r of results) {
     lines.push(`\n## ${path.basename(r.file)}\n`);
     if (r.status === "success" && r.markdown) {
-      lines.push(r.markdown + "\n");
+      lines.push(`${r.markdown}\n`);
     } else if (r.status === "success") {
       lines.push("**Note**: Conversion succeeded but no content was returned.\n");
     } else {

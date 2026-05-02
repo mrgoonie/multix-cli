@@ -1,11 +1,11 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
-  isMinimaxModel,
   MINIMAX_IMAGE_MODELS,
-  MINIMAX_VIDEO_MODELS,
-  MINIMAX_SPEECH_MODELS,
   MINIMAX_MUSIC_MODELS,
+  MINIMAX_SPEECH_MODELS,
+  MINIMAX_VIDEO_MODELS,
   TASK_DEFAULTS,
+  isMinimaxModel,
 } from "../../../../src/providers/minimax/models.js";
 
 describe("MiniMax model sets", () => {

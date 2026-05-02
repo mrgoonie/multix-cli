@@ -3,7 +3,7 @@
  * Replaces Pillow from the Python source — no native module deps.
  */
 
-import { execa, ExecaError } from "execa";
+import { type ExecaError, execa } from "execa";
 import { ProviderError, ValidationError } from "../../core/errors.js";
 import type { Logger } from "../../core/logger.js";
 
@@ -15,9 +15,9 @@ export async function assertMagick(): Promise<void> {
     if ((e as NodeJS.ErrnoException).code === "ENOENT") {
       throw new ValidationError(
         "ImageMagick (magick) not found on PATH.\n" +
-        "  Linux: sudo apt-get install imagemagick\n" +
-        "  macOS: brew install imagemagick\n" +
-        "  Windows: https://imagemagick.org/script/download.php",
+          "  Linux: sudo apt-get install imagemagick\n" +
+          "  macOS: brew install imagemagick\n" +
+          "  Windows: https://imagemagick.org/script/download.php",
       );
     }
     // Some versions exit non-zero on -version but binary exists

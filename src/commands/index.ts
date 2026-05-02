@@ -4,12 +4,12 @@
  */
 
 import type { Command } from "commander";
-import { registerCheckCommand } from "./check.js";
-import { registerDocCommands } from "./doc/index.js";
-import { registerMediaCommands } from "./media/index.js";
 import { registerGeminiCommands } from "../providers/gemini/commands/index.js";
 import { registerMinimaxCommands } from "../providers/minimax/commands/index.js";
 import { registerOpenRouterCommands } from "../providers/openrouter/commands/index.js";
+import { registerCheckCommand } from "./check.js";
+import { registerDocCommands } from "./doc/index.js";
+import { registerMediaCommands } from "./media/index.js";
 
 export function registerCommands(program: Command): void {
   registerCheckCommand(program);

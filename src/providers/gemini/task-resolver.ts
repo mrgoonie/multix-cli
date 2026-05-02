@@ -9,7 +9,18 @@ export type GeminiTask = "transcribe" | "analyze" | "extract";
 
 const AUDIO_EXTS = new Set([".mp3", ".wav", ".aac", ".flac", ".ogg", ".aiff", ".m4a"]);
 const IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif", ".gif", ".bmp"]);
-const VIDEO_EXTS = new Set([".mp4", ".mpeg", ".mov", ".avi", ".flv", ".mpg", ".webm", ".wmv", ".3gpp", ".mkv"]);
+const VIDEO_EXTS = new Set([
+  ".mp4",
+  ".mpeg",
+  ".mov",
+  ".avi",
+  ".flv",
+  ".mpg",
+  ".webm",
+  ".wmv",
+  ".3gpp",
+  ".mkv",
+]);
 const DOC_EXTS = new Set([".pdf", ".txt", ".html", ".md", ".doc", ".docx"]);
 
 /** Infer the analysis task from a file path's extension. */

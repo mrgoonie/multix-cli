@@ -3,10 +3,10 @@
  * All tests use `node dist/cli.js` to avoid shebang issues on Windows.
  */
 
-import { describe, it, expect, beforeAll } from "vitest";
-import { execa } from "execa";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { execa } from "execa";
+import { beforeAll, describe, expect, it } from "vitest";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLI = path.resolve(__dirname, "../../dist/cli.js");

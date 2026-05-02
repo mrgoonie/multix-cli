@@ -5,8 +5,8 @@
  */
 
 import fs from "node:fs";
-import { pipeline } from "node:stream/promises";
 import path from "node:path";
+import { pipeline } from "node:stream/promises";
 import { HttpError } from "./errors.js";
 
 const DEFAULT_TIMEOUT_MS = 120_000;
@@ -67,7 +67,11 @@ export async function httpJson<T>(opts: HttpJsonOptions): Promise<T> {
  * Download a URL to a local file path, streaming to avoid large memory usage.
  * Parent directory is created if it does not exist.
  */
-export async function downloadFile(url: string, dest: string, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<void> {
+export async function downloadFile(
+  url: string,
+  dest: string,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+): Promise<void> {
   fs.mkdirSync(path.dirname(dest), { recursive: true });
 
   let response: Response;
@@ -104,7 +108,9 @@ export async function fetchBytes(urlOrDataUri: string): Promise<Buffer> {
 
   let response: Response;
   try {
-    response = await globalThis.fetch(urlOrDataUri, { signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS) });
+    response = await globalThis.fetch(urlOrDataUri, {
+      signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
+    });
   } catch (cause) {
     const msg = cause instanceof Error ? cause.message : String(cause);
     throw new HttpError(0, msg, urlOrDataUri);

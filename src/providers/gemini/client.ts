@@ -8,11 +8,11 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { httpJson, downloadFile } from "../../core/http-client.js";
-import { ConfigError, ProviderError } from "../../core/errors.js";
 import { resolveKey } from "../../core/env-loader.js";
-import { getMimeType, requiresProcessingWait } from "./task-resolver.js";
+import { ConfigError, ProviderError } from "../../core/errors.js";
+import { downloadFile, httpJson } from "../../core/http-client.js";
 import type { Logger } from "../../core/logger.js";
+import { getMimeType, requiresProcessingWait } from "./task-resolver.js";
 
 const BASE = "https://generativelanguage.googleapis.com";
 const FILES_BASE = `${BASE}/upload/v1beta/files`;
@@ -56,7 +56,10 @@ export interface ImageGenerationResponse {
 /** Resolve and validate GEMINI_API_KEY. */
 function requireApiKey(): string {
   const key = resolveKey("GEMINI_API_KEY");
-  if (!key) throw new ConfigError("GEMINI_API_KEY is not set. Get one at https://aistudio.google.com/apikey");
+  if (!key)
+    throw new ConfigError(
+      "GEMINI_API_KEY is not set. Get one at https://aistudio.google.com/apikey",
+    );
   return key;
 }
 
@@ -108,7 +111,10 @@ export async function uploadFile(
 
   if (!resp.ok) {
     const txt = await resp.text();
-    throw new ProviderError(`File upload failed (HTTP ${resp.status}): ${txt.slice(0, 500)}`, "gemini");
+    throw new ProviderError(
+      `File upload failed (HTTP ${resp.status}): ${txt.slice(0, 500)}`,
+      "gemini",
+    );
   }
 
   // biome-ignore lint/suspicious/noExplicitAny: dynamic API response
@@ -126,8 +132,10 @@ export async function uploadFile(
       }).then((r) => r.file);
       logger?.debug(`Processing... state=${fileRef.state}`);
     }
-    if (fileRef.state === "FAILED") throw new ProviderError(`File processing failed: ${filePath}`, "gemini");
-    if (fileRef.state === "PROCESSING") throw new ProviderError(`Processing timeout: ${filePath}`, "gemini");
+    if (fileRef.state === "FAILED")
+      throw new ProviderError(`File processing failed: ${filePath}`, "gemini");
+    if (fileRef.state === "PROCESSING")
+      throw new ProviderError(`Processing timeout: ${filePath}`, "gemini");
   }
 
   logger?.debug(`Uploaded: ${fileRef.name} (${fileRef.uri})`);
@@ -137,7 +145,9 @@ export async function uploadFile(
 /**
  * Call generateContent endpoint and return the full response.
  */
-export async function generateContent(req: GenerateContentRequest): Promise<GenerateContentResponse> {
+export async function generateContent(
+  req: GenerateContentRequest,
+): Promise<GenerateContentResponse> {
   const apiKey = requireApiKey();
   return httpJson<GenerateContentResponse>({
     url: `${GENERATE_BASE}/${req.model}:generateContent`,
@@ -165,11 +175,15 @@ export function extractText(resp: GenerateContentResponse): string {
  * Extract inline image data from a generateContent response.
  * Returns array of { mimeType, data } (base64).
  */
-export function extractImages(resp: GenerateContentResponse): Array<{ mimeType: string; data: string }> {
+export function extractImages(
+  resp: GenerateContentResponse,
+): Array<{ mimeType: string; data: string }> {
   const parts = resp.candidates?.[0]?.content?.parts ?? [];
   return parts
-    .filter((p) => p.inlineData !== undefined)
-    .map((p) => ({ mimeType: p.inlineData!.mimeType, data: p.inlineData!.data }));
+    .filter(
+      (p): p is { inlineData: { mimeType: string; data: string } } => p.inlineData !== undefined,
+    )
+    .map((p) => ({ mimeType: p.inlineData.mimeType, data: p.inlineData.data }));
 }
 
 /**

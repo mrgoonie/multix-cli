@@ -18,35 +18,37 @@ export function registerMinimaxGenerateCommand(parent: Command): void {
     .option("--num-images <n>", "Number of images (1-9)", "1")
     .option("--output <path>", "Copy first image to this path")
     .option("-v, --verbose", "Verbose logging")
-    .action(async (opts: {
-      prompt: string;
-      model?: string;
-      aspectRatio: string;
-      numImages: string;
-      output?: string;
-      verbose?: boolean;
-    }) => {
-      const logger = createLogger({ verbose: opts.verbose ?? false });
-      const apiKey = requireMinimaxKey();
-      const model = opts.model ?? TASK_DEFAULTS.image;
-      const numImages = Math.min(Math.max(Number.parseInt(opts.numImages, 10) || 1, 1), 9);
+    .action(
+      async (opts: {
+        prompt: string;
+        model?: string;
+        aspectRatio: string;
+        numImages: string;
+        output?: string;
+        verbose?: boolean;
+      }) => {
+        const logger = createLogger({ verbose: opts.verbose ?? false });
+        const apiKey = requireMinimaxKey();
+        const model = opts.model ?? TASK_DEFAULTS.image;
+        const numImages = Math.min(Math.max(Number.parseInt(opts.numImages, 10) || 1, 1), 9);
 
-      const result = await generateMinimaxImage({
-        apiKey,
-        prompt: opts.prompt,
-        model,
-        aspectRatio: opts.aspectRatio,
-        numImages,
-        output: opts.output,
-        logger,
-      });
+        const result = await generateMinimaxImage({
+          apiKey,
+          prompt: opts.prompt,
+          model,
+          aspectRatio: opts.aspectRatio,
+          numImages,
+          output: opts.output,
+          logger,
+        });
 
-      if (result.status === "error") {
-        logger.error(result.error ?? "Unknown error");
-        process.exit(1);
-      }
+        if (result.status === "error") {
+          logger.error(result.error ?? "Unknown error");
+          process.exit(1);
+        }
 
-      console.log(`\nGenerated ${result.generatedImages?.length ?? 0} image(s):`);
-      for (const f of result.generatedImages ?? []) console.log(`  ${f}`);
-    });
+        console.log(`\nGenerated ${result.generatedImages?.length ?? 0} image(s):`);
+        for (const f of result.generatedImages ?? []) console.log(`  ${f}`);
+      },
+    );
 }

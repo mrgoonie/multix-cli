@@ -1,7 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
-  isOpenRouterModel,
   DEFAULT_OPENROUTER_MODEL,
+  isOpenRouterModel,
 } from "../../../../src/providers/openrouter/client.js";
 
 describe("isOpenRouterModel", () => {

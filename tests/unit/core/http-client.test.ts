@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { HttpError } from "../../../src/core/errors.js";
 
 describe("httpJson", () => {
@@ -32,7 +32,10 @@ describe("httpJson", () => {
   });
 
   it("sends POST and parses response", async () => {
-    vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ received: true }), { status: 200 }));
+    vi.stubGlobal(
+      "fetch",
+      async () => new Response(JSON.stringify({ received: true }), { status: 200 }),
+    );
     const { httpJson } = await import("../../../src/core/http-client.js");
     const result = await httpJson<{ received: boolean }>({
       url: "https://api.test/endpoint",
@@ -43,7 +46,9 @@ describe("httpJson", () => {
   });
 
   it("throws HttpError when fetch rejects (network error)", async () => {
-    vi.stubGlobal("fetch", async () => { throw new Error("Network error"); });
+    vi.stubGlobal("fetch", async () => {
+      throw new Error("Network error");
+    });
     const { httpJson } = await import("../../../src/core/http-client.js");
     await expect(httpJson({ url: "https://unreachable.test/api" })).rejects.toThrow(HttpError);
   });

@@ -2,10 +2,10 @@
  * Smoke tests — verify each subcommand group responds to --help with exit 0.
  */
 
-import { describe, it, expect } from "vitest";
-import { execa } from "execa";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { execa } from "execa";
+import { describe, expect, it } from "vitest";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLI = path.resolve(__dirname, "../../dist/cli.js");

@@ -3,15 +3,15 @@
  * Mirrors optimize_audio() from media_optimizer.py.
  */
 
-import { assertFfmpeg, runFfmpeg, getMediaInfo } from "./ffmpeg-runner.js";
 import { ValidationError } from "../../core/errors.js";
 import type { Logger } from "../../core/logger.js";
+import { assertFfmpeg, getMediaInfo, runFfmpeg } from "./ffmpeg-runner.js";
 
 export interface OptimizeAudioOptions {
   input: string;
   output: string;
-  bitrate?: string;      // default "64k"
-  sampleRate?: number;   // default 16000
+  bitrate?: string; // default "64k"
+  sampleRate?: number; // default 16000
   verbose?: boolean;
   logger?: Logger;
 }
@@ -31,11 +31,17 @@ export async function optimizeAudio(opts: OptimizeAudioOptions): Promise<void> {
   }
 
   const args = [
-    "-i", input, "-y",
-    "-c:a", "aac",
-    "-b:a", bitrate,
-    "-ar", String(sampleRate),
-    "-ac", "1",  // mono — Gemini uses mono
+    "-i",
+    input,
+    "-y",
+    "-c:a",
+    "aac",
+    "-b:a",
+    bitrate,
+    "-ar",
+    String(sampleRate),
+    "-ac",
+    "1", // mono — Gemini uses mono
     output,
   ];
 

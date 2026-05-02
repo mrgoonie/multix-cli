@@ -36,8 +36,16 @@ export const GEMINI_IMAGE_MODELS = new Set([
 
 /** Supported aspect ratios for image/video generation. */
 export const ASPECT_RATIOS = [
-  "1:1", "2:3", "3:2", "3:4", "4:3",
-  "4:5", "5:4", "9:16", "16:9", "21:9",
+  "1:1",
+  "2:3",
+  "3:2",
+  "3:4",
+  "4:3",
+  "4:5",
+  "5:4",
+  "9:16",
+  "16:9",
+  "21:9",
 ] as const;
 export type AspectRatio = (typeof ASPECT_RATIOS)[number];
 
@@ -48,13 +56,15 @@ export type ImageSize = (typeof IMAGE_SIZES)[number];
 /**
  * Get default model for a given task, with env overrides matching the Python source.
  */
-export function getDefaultModel(task: "generate" | "generate-video" | "analyze" | "transcribe" | "extract"): string {
+export function getDefaultModel(
+  task: "generate" | "generate-video" | "analyze" | "transcribe" | "extract",
+): string {
   if (task === "generate") {
-    return process.env["IMAGE_GEN_MODEL"] ?? process.env["GEMINI_IMAGE_GEN_MODEL"] ?? IMAGE_MODEL_DEFAULT;
+    return process.env.IMAGE_GEN_MODEL ?? process.env.GEMINI_IMAGE_GEN_MODEL ?? IMAGE_MODEL_DEFAULT;
   }
   if (task === "generate-video") {
-    return process.env["VIDEO_GEN_MODEL"] ?? VIDEO_MODEL_DEFAULT;
+    return process.env.VIDEO_GEN_MODEL ?? VIDEO_MODEL_DEFAULT;
   }
   // analyze / transcribe / extract
-  return process.env["MULTIMODAL_MODEL"] ?? process.env["GEMINI_MODEL"] ?? ANALYSIS_MODEL_DEFAULT;
+  return process.env.MULTIMODAL_MODEL ?? process.env.GEMINI_MODEL ?? ANALYSIS_MODEL_DEFAULT;
 }

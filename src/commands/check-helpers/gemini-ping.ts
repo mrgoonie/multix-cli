@@ -3,8 +3,8 @@
  * Uses a short 10s timeout to avoid blocking check command.
  */
 
-import { httpJson } from "../../core/http-client.js";
 import { HttpError } from "../../core/errors.js";
+import { httpJson } from "../../core/http-client.js";
 
 const MODELS_URL = "https://generativelanguage.googleapis.com/v1beta/models";
 

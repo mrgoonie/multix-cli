@@ -3,10 +3,10 @@
  */
 
 import type { Command } from "commander";
-import { registerMinimaxGenerateCommand } from "./generate.js";
-import { registerMinimaxGenerateVideoCommand } from "./generate-video.js";
-import { registerMinimaxGenerateSpeechCommand } from "./generate-speech.js";
 import { registerMinimaxGenerateMusicCommand } from "./generate-music.js";
+import { registerMinimaxGenerateSpeechCommand } from "./generate-speech.js";
+import { registerMinimaxGenerateVideoCommand } from "./generate-video.js";
+import { registerMinimaxGenerateCommand } from "./generate.js";
 
 export function registerMinimaxCommands(program: Command): void {
   const minimax = program

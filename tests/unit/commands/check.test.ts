@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 /**
  * Tests for check command helpers.
@@ -13,7 +13,8 @@ describe("gemini-ping helper", () => {
   it("returns success when API responds with models array", async () => {
     vi.stubGlobal(
       "fetch",
-      async () => new Response(JSON.stringify({ models: [{ name: "m1" }, { name: "m2" }] }), { status: 200 }),
+      async () =>
+        new Response(JSON.stringify({ models: [{ name: "m1" }, { name: "m2" }] }), { status: 200 }),
     );
     const { pingGemini } = await import("../../../src/commands/check-helpers/gemini-ping.js");
     const result = await pingGemini("fake-key");
@@ -36,7 +37,9 @@ describe("gemini-ping helper", () => {
   });
 
   it("returns network_error when fetch throws", async () => {
-    vi.stubGlobal("fetch", async () => { throw new Error("Connection refused"); });
+    vi.stubGlobal("fetch", async () => {
+      throw new Error("Connection refused");
+    });
     const { pingGemini } = await import("../../../src/commands/check-helpers/gemini-ping.js");
     const result = await pingGemini("any-key");
     expect(result.status).toBe("network_error");

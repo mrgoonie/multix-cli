@@ -32,10 +32,10 @@ export const ALL_MINIMAX_MODELS = new Set([
 
 /** Task-level defaults (from env or hardcoded fallback). */
 export const TASK_DEFAULTS = {
-  image: process.env["MINIMAX_IMAGE_MODEL"] ?? "image-01",
-  video: process.env["MINIMAX_VIDEO_MODEL"] ?? "MiniMax-Hailuo-2.3",
-  speech: process.env["MINIMAX_SPEECH_MODEL"] ?? "speech-2.8-hd",
-  music: process.env["MINIMAX_MUSIC_MODEL"] ?? "music-2.5",
+  image: process.env.MINIMAX_IMAGE_MODEL ?? "image-01",
+  video: process.env.MINIMAX_VIDEO_MODEL ?? "MiniMax-Hailuo-2.3",
+  speech: process.env.MINIMAX_SPEECH_MODEL ?? "speech-2.8-hd",
+  music: process.env.MINIMAX_MUSIC_MODEL ?? "music-2.5",
 } as const;
 
 /** Heuristic: is this a MiniMax model id? */

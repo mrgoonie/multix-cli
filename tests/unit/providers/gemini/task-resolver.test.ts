@@ -1,5 +1,9 @@
-import { describe, it, expect } from "vitest";
-import { inferTaskFromFile, getMimeType, requiresProcessingWait } from "../../../../src/providers/gemini/task-resolver.js";
+import { describe, expect, it } from "vitest";
+import {
+  getMimeType,
+  inferTaskFromFile,
+  requiresProcessingWait,
+} from "../../../../src/providers/gemini/task-resolver.js";
 
 describe("inferTaskFromFile", () => {
   it("returns transcribe for .mp3", () => {

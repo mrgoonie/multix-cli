@@ -6,11 +6,11 @@
  */
 
 import type { Command } from "commander";
+import { redact, resolveKey } from "../core/env-loader.js";
 import { createLogger } from "../core/logger.js";
-import { resolveKey, redact } from "../core/env-loader.js";
 import { checkBinary } from "./check-helpers/binary-check.js";
 import { pingGemini } from "./check-helpers/gemini-ping.js";
-import { SETUP_HINTS, FFMPEG_HINT, MAGICK_HINT } from "./check-helpers/setup-hints.js";
+import { FFMPEG_HINT, MAGICK_HINT, SETUP_HINTS } from "./check-helpers/setup-hints.js";
 
 export function registerCheckCommand(program: Command): void {
   program
@@ -97,7 +97,9 @@ export function registerCheckCommand(program: Command): void {
       if (exitCode === 0) {
         logger.success("multix is ready to use");
         if (geminiKey) {
-          console.log("  Full Gemini multimodal setup (analyze, transcribe, generate, doc convert)");
+          console.log(
+            "  Full Gemini multimodal setup (analyze, transcribe, generate, doc convert)",
+          );
         } else {
           console.log("  Image generation via OpenRouter/MiniMax available");
           console.log("  Add GEMINI_API_KEY for analysis, transcription, and doc conversion");

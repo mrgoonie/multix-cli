@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { _resetEnvLoader, loadEnv, resolveKey, redact } from "../../../src/core/env-loader.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { _resetEnvLoader, loadEnv, redact, resolveKey } from "../../../src/core/env-loader.js";
 
 describe("env-loader", () => {
   beforeEach(() => {
@@ -12,13 +12,13 @@ describe("env-loader", () => {
   });
 
   it("resolveKey returns process.env value", () => {
-    process.env["TEST_MULTIX_KEY"] = "abc123";
+    process.env.TEST_MULTIX_KEY = "abc123";
     expect(resolveKey("TEST_MULTIX_KEY")).toBe("abc123");
-    delete process.env["TEST_MULTIX_KEY"];
+    process.env.TEST_MULTIX_KEY = "";
   });
 
   it("resolveKey returns undefined for unset var", () => {
-    delete process.env["NONEXISTENT_MULTIX_VAR"];
+    process.env.NONEXISTENT_MULTIX_VAR = "";
     expect(resolveKey("NONEXISTENT_MULTIX_VAR")).toBeUndefined();
   });
 
@@ -29,10 +29,10 @@ describe("env-loader", () => {
   });
 
   it("process.env values survive loadEnv (override:false)", () => {
-    process.env["GEMINI_API_KEY"] = "preset-value";
+    process.env.GEMINI_API_KEY = "preset-value";
     loadEnv();
-    expect(process.env["GEMINI_API_KEY"]).toBe("preset-value");
-    delete process.env["GEMINI_API_KEY"];
+    expect(process.env.GEMINI_API_KEY).toBe("preset-value");
+    process.env.GEMINI_API_KEY = undefined;
   });
 
   describe("redact", () => {

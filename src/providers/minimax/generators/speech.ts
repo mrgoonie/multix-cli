@@ -6,9 +6,9 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import type { Logger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import { apiPost } from "../client.js";
-import type { Logger } from "../../../core/logger.js";
 
 interface SpeechResponse {
   data?: { audio?: string };

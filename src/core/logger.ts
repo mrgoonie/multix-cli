@@ -17,7 +17,7 @@ const ANSI = {
 
 function c(color: string, text: string): string {
   // Skip ANSI if NO_COLOR is set or not a TTY
-  if (process.env["NO_COLOR"] || !process.stdout.isTTY) return text;
+  if (process.env.NO_COLOR || !process.stdout.isTTY) return text;
   return `${color}${text}${ANSI.reset}`;
 }
 
