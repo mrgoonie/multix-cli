@@ -2,7 +2,7 @@
 
 AI multimodal CLI — generate images/video/speech/music, analyze and transcribe media files, convert documents to Markdown, and optimize media with ffmpeg/ImageMagick.
 
-Supports **Gemini** (analyze, transcribe, generate, Veo video), **MiniMax** (image, video, speech, music), and **OpenRouter** (image generation).
+Supports **Gemini** (analyze, transcribe, generate, Veo video), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation), and **Leonardo.Ai** (image, video, upscale).
 
 ## Install
 
@@ -42,6 +42,10 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `GEMINI_API_KEY` | For Gemini | [AI Studio](https://aistudio.google.com/apikey) |
 | `OPENROUTER_API_KEY` | For OpenRouter | [OpenRouter](https://openrouter.ai/settings/keys) |
 | `MINIMAX_API_KEY` | For MiniMax | [MiniMax](https://platform.minimax.io/user-center/basic-information/interface-key) |
+| `LEONARDO_API_KEY` | For Leonardo | [Leonardo](https://app.leonardo.ai/settings/api-keys) |
+| `LEONARDO_BASE_URL` | No | Override Leonardo API base (default `https://cloud.leonardo.ai/api/rest/v1`) |
+| `LEONARDO_DEFAULT_MODEL` | No | Default Leonardo image model UUID |
+| `LEONARDO_VIDEO_MODEL` | No | Default Leonardo video model (default `MOTION2`) |
 | `MULTIX_OUTPUT_DIR` | No | Override default output dir (`./multix-output`) |
 | `OPENROUTER_IMAGE_MODEL` | No | Default OpenRouter model |
 | `OPENROUTER_FALLBACK_MODELS` | No | Comma-separated fallback model ids |
@@ -80,6 +84,9 @@ multix gemini generate --prompt "A mountain lake" [--model <id>] [--aspect-ratio
 
 # Generate video [EXPERIMENTAL — requires billing]
 multix gemini generate-video --prompt "Ocean waves" [--model veo-3.1-generate-preview] [--resolution 720p|1080p] [--aspect-ratio 16:9] [--reference-images first.png last.png] [-v]
+
+# Image-to-video with Veo (alias: i2v) [EXPERIMENTAL]
+multix gemini image-to-video <imagePath> --prompt "camera pans left" [--last-frame <path>] [--model veo-3.1-generate-preview] [--resolution 1080p] [--aspect-ratio 16:9] [--output <path>] [-v]
 ```
 
 **Gemini models:**
@@ -111,9 +118,51 @@ multix minimax generate-music [--lyrics <str>] [--prompt <str>] [--model music-2
 
 ```bash
 multix openrouter generate --prompt "Retro robot" [--model google/gemini-3.1-flash-image-preview] [--aspect-ratio 1:1] [--image-size <sz>] [--num-images 1] [-v]
+
+# Image-to-video (async — returns job id; image input is URL only)
+multix openrouter image-to-video --prompt "camera pans left" --image-url https://... [--last-frame-url <url>] [--model google/veo-3.1] [--resolution 720p] [--aspect-ratio 16:9] [--duration <n>] [--seed <n>] [-v]
+# alias: multix openrouter i2v --prompt "..." --image-url https://...
+
+# Poll a video job (use --download to fetch when completed)
+multix openrouter video-status <jobId> [--download] [--output <path>] [-v]
+
+# List available video models
+multix openrouter video-models
 ```
 
-Fallback models from `OPENROUTER_FALLBACK_MODELS` (CSV) are appended to the payload automatically.
+Fallback models from `OPENROUTER_FALLBACK_MODELS` (CSV) are appended to the chat-image payload automatically. Override the default video model with `OPENROUTER_VIDEO_MODEL` (default `google/veo-3.1`).
+
+### `multix leonardo`
+
+```bash
+# Account info / remaining credits
+multix leonardo me
+
+# List image platform models
+multix leonardo models [--limit <n>]
+
+# List video models (static enum)
+multix leonardo video-models
+
+# Generate images (polls until COMPLETE, downloads to MULTIX_OUTPUT_DIR)
+multix leonardo generate "a cyberpunk cat" [-m <modelId>] [-w 1024] [-h 1024] [-n 1] [--alchemy] [--ultra] [--style <uuid>] [--seed <n>] [--negative <text>] [--enhance] [--quality HIGH] [--output <path>] [--no-download] [--wait-timeout 480000] [-v]
+
+# Generate text-to-video (async — returns generationId)
+multix leonardo video "a dancer" [--model MOTION2|VEO3|kling-2.6|...] [--resolution RESOLUTION_720] [--enhance] [--frame-interpolation] [-v]
+
+# Generate image-to-video (async — returns generationId)
+multix leonardo image-to-video <imageId> --prompt "camera pans left" [--image-type GENERATED|UPLOADED] [--model MOTION2] [--resolution RESOLUTION_720] [--duration 6] [--seed <n>] [--negative <text>] [--enhance] [--frame-interpolation] [-v]
+# alias: multix leonardo i2v <imageId> --prompt "..."
+
+# Check a generation
+multix leonardo status <generationId>
+
+# Universal Upscaler (async)
+multix leonardo upscale <generatedImageId> [--style GENERAL] [--strength 0.35] [--multiplier 1.5]
+multix leonardo variation <variationId>
+```
+
+GPT Image models (`gpt-image-*`) and v2 video models (kling/hailuo/ltxv/seedance) are dispatched to Leonardo's `/api/rest/v2` endpoint automatically.
 
 ### `multix media`
 

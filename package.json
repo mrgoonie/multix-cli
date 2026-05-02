@@ -36,6 +36,8 @@
     "gemini",
     "minimax",
     "openrouter",
+    "leonardo",
+    "leonardo-ai",
     "ffmpeg",
     "imagemagick",
     "media",

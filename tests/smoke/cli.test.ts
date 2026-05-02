@@ -12,7 +12,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLI = path.resolve(__dirname, "../../dist/cli.js");
 
 describe("multix --help (smoke)", () => {
-  it("exits 0 and lists all 6 top-level commands", async () => {
+  it("exits 0 and lists all top-level commands", async () => {
     const result = await execa("node", [CLI, "--help"], { reject: false });
     expect(result.exitCode).toBe(0);
 
@@ -21,8 +21,43 @@ describe("multix --help (smoke)", () => {
     expect(out).toContain("gemini");
     expect(out).toContain("minimax");
     expect(out).toContain("openrouter");
+    expect(out).toContain("leonardo");
     expect(out).toContain("media");
     expect(out).toContain("doc");
+  });
+
+  it("lists gemini i2v subcommand", async () => {
+    const result = await execa("node", [CLI, "gemini", "--help"], { reject: false });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout + result.stderr).toContain("image-to-video");
+  });
+
+  it("lists openrouter video subcommands", async () => {
+    const result = await execa("node", [CLI, "openrouter", "--help"], { reject: false });
+    expect(result.exitCode).toBe(0);
+    const out = result.stdout + result.stderr;
+    expect(out).toContain("image-to-video");
+    expect(out).toContain("video-status");
+    expect(out).toContain("video-models");
+  });
+
+  it("lists leonardo subcommands", async () => {
+    const result = await execa("node", [CLI, "leonardo", "--help"], { reject: false });
+    expect(result.exitCode).toBe(0);
+    const out = result.stdout + result.stderr;
+    for (const sub of [
+      "generate",
+      "video",
+      "image-to-video",
+      "video-models",
+      "upscale",
+      "variation",
+      "status",
+      "models",
+      "me",
+    ]) {
+      expect(out).toContain(sub);
+    }
   });
 
   it("prints version", async () => {
