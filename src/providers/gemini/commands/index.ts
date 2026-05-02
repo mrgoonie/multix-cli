@@ -7,6 +7,7 @@ import { registerAnalyzeCommand } from "./analyze.js";
 import { registerExtractCommand } from "./extract.js";
 import { registerGenerateVideoCommand } from "./generate-video.js";
 import { registerGenerateCommand } from "./generate.js";
+import { registerGeminiImageToVideoCommand } from "./image-to-video.js";
 import { registerTranscribeCommand } from "./transcribe.js";
 
 export function registerGeminiCommands(program: Command): void {
@@ -19,4 +20,5 @@ export function registerGeminiCommands(program: Command): void {
   registerExtractCommand(gemini);
   registerGenerateCommand(gemini);
   registerGenerateVideoCommand(gemini);
+  registerGeminiImageToVideoCommand(gemini);
 }
