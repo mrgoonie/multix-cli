@@ -1,0 +1,16 @@
+# Source & tooling — not needed in published package
+src/
+tests/
+plans/
+docs/
+.github/
+*.env*
+.env
+tsconfig*.json
+tsup.config.ts
+biome.json
+vitest.config.ts
+
+# Misc
+*.log
+.DS_Store

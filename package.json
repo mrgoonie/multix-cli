@@ -1,0 +1,74 @@
+{
+  "name": "multix",
+  "version": "0.0.1",
+  "description": "AI multimodal CLI — Gemini, MiniMax, OpenRouter, ffmpeg, ImageMagick, doc-to-md",
+  "type": "module",
+  "bin": {
+    "multix": "./dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "skill",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "start": "node dist/cli.js",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:smoke": "vitest run tests/smoke"
+  },
+  "keywords": [
+    "cli",
+    "ai",
+    "multimodal",
+    "gemini",
+    "minimax",
+    "openrouter",
+    "ffmpeg",
+    "imagemagick",
+    "media",
+    "image-generation",
+    "video-generation",
+    "speech-generation",
+    "document-converter"
+  ],
+  "author": "multix-cli contributors",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/multix-cli/multix-cli"
+  },
+  "homepage": "https://github.com/multix-cli/multix-cli#readme",
+  "dependencies": {
+    "commander": "^12.1.0",
+    "dotenv": "^16.4.5",
+    "execa": "^9.4.0",
+    "undici": "^7.2.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@types/node": "^22.10.0",
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
