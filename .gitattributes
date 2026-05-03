@@ -1,0 +1,15 @@
+# Enforce LF line endings repo-wide so biome (which normalizes to LF) passes
+# on Windows runners. Without this, Git for Windows checks out files with
+# CRLF when core.autocrlf=true and biome's formatter rejects them.
+* text=auto eol=lf
+
+# Common binaries — never touch line endings.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.mp3 binary
+*.mp4 binary
+*.wav binary
+*.pdf binary
