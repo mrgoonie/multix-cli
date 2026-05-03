@@ -12,6 +12,58 @@ import { checkBinary } from "./check-helpers/binary-check.js";
 import { pingGemini } from "./check-helpers/gemini-ping.js";
 import { FFMPEG_HINT, MAGICK_HINT, SETUP_HINTS } from "./check-helpers/setup-hints.js";
 
+interface ProviderEntry {
+  name: string;
+  envPrimary: string;
+  envFallback?: string;
+  optional: boolean;
+  link: string;
+}
+
+const PROVIDERS: ProviderEntry[] = [
+  {
+    name: "Gemini",
+    envPrimary: "GEMINI_API_KEY",
+    optional: false,
+    link: "https://aistudio.google.com/apikey",
+  },
+  {
+    name: "OpenRouter",
+    envPrimary: "OPENROUTER_API_KEY",
+    optional: true,
+    link: "https://openrouter.ai/settings/keys",
+  },
+  {
+    name: "MiniMax",
+    envPrimary: "MINIMAX_API_KEY",
+    optional: true,
+    link: "https://platform.minimax.io/user-center/basic-information/interface-key",
+  },
+  {
+    name: "Leonardo.Ai",
+    envPrimary: "LEONARDO_API_KEY",
+    optional: true,
+    link: "https://app.leonardo.ai/settings/api-keys",
+  },
+  {
+    name: "BytePlus",
+    envPrimary: "BYTEPLUS_API_KEY",
+    envFallback: "ARK_API_KEY",
+    optional: true,
+    link: "https://console.byteplus.com/auth/api-keys",
+  },
+];
+
+function resolveProviderKey(p: ProviderEntry): { key?: string; envUsed?: string } {
+  const primary = resolveKey(p.envPrimary);
+  if (primary) return { key: primary, envUsed: p.envPrimary };
+  if (p.envFallback) {
+    const fb = resolveKey(p.envFallback);
+    if (fb) return { key: fb, envUsed: p.envFallback };
+  }
+  return {};
+}
+
 export function registerCheckCommand(program: Command): void {
   program
     .command("check")
@@ -44,36 +96,31 @@ export function registerCheckCommand(program: Command): void {
       // ── Section 2: API Keys ─────────────────────────────────────────────
       logger.header("API Keys");
 
-      const geminiKey = resolveKey("GEMINI_API_KEY");
-      const openrouterKey = resolveKey("OPENROUTER_API_KEY");
-      const minimaxKey = resolveKey("MINIMAX_API_KEY");
-
-      if (geminiKey) {
-        logger.success(`GEMINI_API_KEY found — ${redact(geminiKey)}`);
-      } else {
-        logger.warn("GEMINI_API_KEY not set (Gemini analyze/transcribe/doc features unavailable)");
+      let anyKey = false;
+      const resolved = new Map<string, { key?: string; envUsed?: string }>();
+      for (const p of PROVIDERS) {
+        const r = resolveProviderKey(p);
+        resolved.set(p.name, r);
+        if (r.key) anyKey = true;
+        const envLabel = r.envUsed ?? p.envPrimary;
+        if (r.key) {
+          logger.success(`${envLabel} found — ${redact(r.key)}`);
+        } else if (p.optional) {
+          const fbNote = p.envFallback ? ` (or ${p.envFallback})` : "";
+          logger.info(`${p.envPrimary}${fbNote} not set (optional)`);
+        } else {
+          logger.warn(`${p.envPrimary} not set (${p.name} features unavailable)`);
+        }
       }
 
-      if (openrouterKey) {
-        logger.success(`OPENROUTER_API_KEY found — ${redact(openrouterKey)}`);
-      } else {
-        logger.info("OPENROUTER_API_KEY not set (optional)");
-      }
-
-      if (minimaxKey) {
-        logger.success(`MINIMAX_API_KEY found — ${redact(minimaxKey)}`);
-      } else {
-        logger.info("MINIMAX_API_KEY not set (optional)");
-      }
-
-      // Check at least one key is configured
-      if (!geminiKey && !openrouterKey && !minimaxKey) {
+      if (!anyKey) {
         logger.header("No Provider Keys Configured");
         console.log(SETUP_HINTS);
         process.exit(1);
       }
 
       // ── Section 3: Gemini Live Ping ─────────────────────────────────────
+      const geminiKey = resolved.get("Gemini")?.key;
       if (geminiKey) {
         logger.header("Gemini Connectivity");
         logger.info("Pinging Gemini models endpoint...");
@@ -87,7 +134,6 @@ export function registerCheckCommand(program: Command): void {
           exitCode = 1;
         } else {
           logger.warn(`Gemini network error (API may be down): ${ping.error ?? ""}`);
-          // Don't set exitCode — transient
         }
       }
 
@@ -101,7 +147,7 @@ export function registerCheckCommand(program: Command): void {
             "  Full Gemini multimodal setup (analyze, transcribe, generate, doc convert)",
           );
         } else {
-          console.log("  Image generation via OpenRouter/MiniMax available");
+          console.log("  Image generation via OpenRouter/MiniMax/Leonardo/BytePlus available");
           console.log("  Add GEMINI_API_KEY for analysis, transcription, and doc conversion");
         }
       } else {

@@ -2,7 +2,7 @@
 
 AI multimodal CLI — generate images/video/speech/music, analyze and transcribe media files, convert documents to Markdown, and optimize media with ffmpeg/ImageMagick.
 
-Supports **Gemini** (analyze, transcribe, generate, Veo video, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation), and **Leonardo.Ai** (image, video, upscale).
+Supports **Gemini** (analyze, transcribe, generate, Veo video, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation), **Leonardo.Ai** (image, video, upscale), and **BytePlus** (Seedream image, Seedance video).
 
 ## Install
 
@@ -46,6 +46,12 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `LEONARDO_BASE_URL` | No | Override Leonardo API base (default `https://cloud.leonardo.ai/api/rest/v1`) |
 | `LEONARDO_DEFAULT_MODEL` | No | Default Leonardo image model UUID |
 | `LEONARDO_VIDEO_MODEL` | No | Default Leonardo video model (default `MOTION2`) |
+| `BYTEPLUS_API_KEY` | For BytePlus | [BytePlus](https://console.byteplus.com/auth/api-keys) |
+| `ARK_API_KEY` | No | Fallback for `BYTEPLUS_API_KEY` (Volcengine ARK shared name) |
+| `BYTEPLUS_BASE_URL` | No | Override BytePlus base (default `https://ark.ap-southeast.bytepluses.com/api/v3`) |
+| `BYTEPLUS_IMAGE_MODEL` | No | Default Seedream model (default `seedream-4-0-250828`) |
+| `BYTEPLUS_VIDEO_MODEL` | No | Default Seedance model (default `seedance-2.0`) |
+| `BYTEPLUS_VIDEO_PARAMS_MODE` | No | `flags` (default) or `structured` — how video params are encoded |
 | `MULTIX_OUTPUT_DIR` | No | Override default output dir (`./multix-output`) |
 | `OPENROUTER_IMAGE_MODEL` | No | Default OpenRouter model |
 | `OPENROUTER_FALLBACK_MODELS` | No | Comma-separated fallback model ids |
@@ -174,6 +180,41 @@ multix leonardo variation <variationId>
 ```
 
 GPT Image models (`gpt-image-*`) and v2 video models (kling/hailuo/ltxv/seedance) are dispatched to Leonardo's `/api/rest/v2` endpoint automatically.
+
+### `multix byteplus`
+
+```bash
+# Image generation (Seedream 4.0, sync)
+multix byteplus generate --prompt "a cyberpunk cat" [--model seedream-4-0-250828] [--size 2K|1024x1024] [--aspect-ratio 16:9] [-n 1] [--seed <n>] [--no-watermark] [--input-image <path|url>] [--output <path>] [-v]
+
+# Text-to-video (Seedance 2.0, async with auto-poll)
+multix byteplus video --prompt "ocean waves" [--model seedance-2.0|seedance-2.0-fast|seedance-2.0-pro] [--resolution 1080p] [--duration 8] [--aspect-ratio 16:9] [--audio|--no-audio] [--seed <n>] [--negative <text>] [--camera-fixed] [--async] [--wait-timeout 600000] [--output <path>] [-v]
+
+# Image-to-video (alias: i2v)
+multix byteplus image-to-video <imagePath|url> --prompt "camera pans left" [--last-frame <path|url>] [--model ...] [video flags] [-v]
+multix byteplus i2v ./photo.jpg --prompt "..."
+
+# Reference-to-video (alias: r2v) — up to 9 images + 3 videos + 3 audio refs (total ≤12)
+multix byteplus reference-to-video --prompt "..." \
+  --ref-image ./hero.jpg:subject \
+  --ref-image ./bg.jpg:environment \
+  --ref-video ./style.mp4:style \
+  --ref-audio ./music.mp3:audio \
+  [video flags] [-v]
+# On Windows, escape literal colons in paths with `\:` or use URLs.
+
+# Poll a task / download MP4
+multix byteplus status <taskId> [--wait] [--wait-timeout 600000] [--download] [--output <path>] [-v]
+```
+
+**BytePlus models:**
+- Image: `seedream-4-0-250828`
+- Video: `seedance-2.0-fast`, `seedance-2.0` (default), `seedance-2.0-pro`
+
+**Notes:**
+- Auth: `BYTEPLUS_API_KEY` is preferred; `ARK_API_KEY` is accepted as a fallback for compatibility with the Volcengine ARK SDK ecosystem.
+- Video params can be encoded as flags inside the prompt text (default, e.g. `--rs 1080p --dur 8 --rt 16:9`) or as a top-level `parameters` object — set `BYTEPLUS_VIDEO_PARAMS_MODE=structured` to switch.
+- **Task cancellation is not supported** — there is no verified DELETE endpoint on the ARK API. Submitted tasks must run to completion.
 
 ### `multix media`
 
