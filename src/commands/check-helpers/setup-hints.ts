@@ -10,6 +10,8 @@ To configure multix, set at least one provider API key:
     Gemini / AI Studio : https://aistudio.google.com/apikey
     OpenRouter         : https://openrouter.ai/settings/keys
     MiniMax            : https://platform.minimax.io/user-center/basic-information/interface-key
+    Leonardo.Ai        : https://app.leonardo.ai/settings/api-keys
+    BytePlus           : https://console.byteplus.com/auth/api-keys
 
   Option A — user global config (recommended):
     echo 'GEMINI_API_KEY=your-key' >> ~/.multix/.env

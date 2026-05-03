@@ -4,6 +4,7 @@
  */
 
 import type { Command } from "commander";
+import { registerBytePlusCommands } from "../providers/byteplus/commands/index.js";
 import { registerGeminiCommands } from "../providers/gemini/commands/index.js";
 import { registerLeonardoCommands } from "../providers/leonardo/commands/index.js";
 import { registerMinimaxCommands } from "../providers/minimax/commands/index.js";
@@ -18,6 +19,7 @@ export function registerCommands(program: Command): void {
   registerMinimaxCommands(program);
   registerOpenRouterCommands(program);
   registerLeonardoCommands(program);
+  registerBytePlusCommands(program);
   registerMediaCommands(program);
   registerDocCommands(program);
 }
