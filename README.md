@@ -2,7 +2,7 @@
 
 AI multimodal CLI — generate images/video/speech/music, analyze and transcribe media files, convert documents to Markdown, and optimize media with ffmpeg/ImageMagick.
 
-Supports **Gemini** (analyze, transcribe, generate, Veo video), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation), and **Leonardo.Ai** (image, video, upscale).
+Supports **Gemini** (analyze, transcribe, generate, Veo video, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation), and **Leonardo.Ai** (image, video, upscale).
 
 ## Install
 
@@ -52,6 +52,7 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `IMAGE_GEN_MODEL` | No | Override Gemini image generation model |
 | `VIDEO_GEN_MODEL` | No | Override Gemini video generation model |
 | `MULTIMODAL_MODEL` | No | Override Gemini analysis model |
+| `GEMINI_TTS_MODEL` / `TTS_MODEL` | No | Override Gemini TTS model (default `gemini-3.1-flash-tts-preview`) |
 
 Priority: `process.env` > `cwd/.env` > `~/.multix/.env`.
 
@@ -87,14 +88,24 @@ multix gemini generate-video --prompt "Ocean waves" [--model veo-3.1-generate-pr
 
 # Image-to-video with Veo (alias: i2v) [EXPERIMENTAL]
 multix gemini image-to-video <imagePath> --prompt "camera pans left" [--last-frame <path>] [--model veo-3.1-generate-preview] [--resolution 1080p] [--aspect-ratio 16:9] [--output <path>] [-v]
+
+# Text-to-speech (Gemini 3.1 Flash TTS — single & multi-speaker)
+multix gemini generate-speech (--text|--prompt) "Say cheerfully: Have a wonderful day!" [--model gemini-3.1-flash-tts-preview] [--voice Kore] [--output-format wav|pcm] [--output <path>] [-v]
+
+# Multi-speaker (max 2): repeat --speaker name:voice; prompt should prefix lines with "<name>:"
+multix gemini generate-speech --text "Joe: How's it going? Jane: Not too bad!" \
+  --speaker Joe:Kore --speaker Jane:Puck
 ```
 
 **Gemini models:**
 - Analysis: `gemini-2.5-flash` (default)
 - Image gen: `gemini-3.1-flash-image-preview` (Nano Banana 2, fastest), `gemini-3-pro-image-preview` (4K text), `imagen-4.0-generate-001` (production)
 - Video: `veo-3.1-generate-preview` (requires billing)
+- TTS: `gemini-3.1-flash-tts-preview` (default), `gemini-2.5-flash-preview-tts`, `gemini-2.5-pro-preview-tts`
 
 **Aspect ratios:** `1:1 2:3 3:2 3:4 4:3 4:5 5:4 9:16 16:9 21:9`
+
+**TTS voices (30 prebuilt):** Zephyr, Puck, Charon, Kore, Fenrir, Leda, Orus, Aoede, Callirrhoe, Autonoe, Enceladus, Iapetus, Umbriel, Algieba, Despina, Erinome, Algenib, Rasalgethi, Laomedeia, Achernar, Alnilam, Schedar, Gacrux, Pulcherrima, Achird, Zubenelgenubi, Vindemiatrix, Sadachbia, Sadaltager, Sulafat. Audio is PCM s16le @ 24 kHz mono — saved as WAV (default) or raw PCM. Style is controlled via natural language in the prompt (`[whispers]`, `Say excitedly:`, etc.). No streaming; max 2 speakers; ~32k token context.
 
 ### `multix minimax`
 
