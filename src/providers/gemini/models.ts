@@ -15,6 +15,9 @@ export const VIDEO_MODEL_DEFAULT = "veo-3.1-generate-preview";
 /** Default multimodal analysis/transcription model. */
 export const ANALYSIS_MODEL_DEFAULT = "gemini-2.5-flash";
 
+/** Default TTS model. */
+export const TTS_MODEL_DEFAULT = "gemini-3.1-flash-tts-preview";
+
 /** Default document conversion model. */
 export const DOC_MODEL_DEFAULT = "gemini-2.5-flash";
 
@@ -57,13 +60,16 @@ export type ImageSize = (typeof IMAGE_SIZES)[number];
  * Get default model for a given task, with env overrides matching the Python source.
  */
 export function getDefaultModel(
-  task: "generate" | "generate-video" | "analyze" | "transcribe" | "extract",
+  task: "generate" | "generate-video" | "generate-speech" | "analyze" | "transcribe" | "extract",
 ): string {
   if (task === "generate") {
     return process.env.IMAGE_GEN_MODEL ?? process.env.GEMINI_IMAGE_GEN_MODEL ?? IMAGE_MODEL_DEFAULT;
   }
   if (task === "generate-video") {
     return process.env.VIDEO_GEN_MODEL ?? VIDEO_MODEL_DEFAULT;
+  }
+  if (task === "generate-speech") {
+    return process.env.GEMINI_TTS_MODEL ?? process.env.TTS_MODEL ?? TTS_MODEL_DEFAULT;
   }
   // analyze / transcribe / extract
   return process.env.MULTIMODAL_MODEL ?? process.env.GEMINI_MODEL ?? ANALYSIS_MODEL_DEFAULT;

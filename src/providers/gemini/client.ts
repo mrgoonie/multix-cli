@@ -172,6 +172,23 @@ export function extractText(resp: GenerateContentResponse): string {
 }
 
 /**
+ * Extract inline audio data from a generateContent response.
+ * Returns first audio part as { mimeType, data } (base64), or null.
+ * TTS models emit audio/L16 (PCM s16le) at the rate declared in mimeType.
+ */
+export function extractAudio(
+  resp: GenerateContentResponse,
+): { mimeType: string; data: string } | null {
+  const parts = resp.candidates?.[0]?.content?.parts ?? [];
+  for (const p of parts) {
+    if (p.inlineData?.mimeType.startsWith("audio/")) {
+      return { mimeType: p.inlineData.mimeType, data: p.inlineData.data };
+    }
+  }
+  return null;
+}
+
+/**
  * Extract inline image data from a generateContent response.
  * Returns array of { mimeType, data } (base64).
  */
