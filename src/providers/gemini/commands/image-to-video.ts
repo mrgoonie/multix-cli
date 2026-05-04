@@ -16,6 +16,7 @@ import { ProviderError, ValidationError } from "../../../core/errors.js";
 import { downloadFile, httpJson } from "../../../core/http-client.js";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
+import { maybeDownloadThumb } from "../../../core/video-thumb.js";
 import { ASPECT_RATIOS, type AspectRatio, getDefaultModel } from "../models.js";
 
 const BASE = "https://generativelanguage.googleapis.com";
@@ -45,6 +46,7 @@ export function registerGeminiImageToVideoCommand(parent: Command): void {
     .option("--resolution <res>", "720p|1080p", "1080p")
     .option("--aspect-ratio <ratio>", "Aspect ratio", "16:9")
     .option("--output <path>", "Copy generated video to this path")
+    .option("--no-thumb", "Skip downloading the thumbnail if the API returns one")
     .option("-v, --verbose", "Verbose logging")
     .action(
       async (
@@ -56,6 +58,7 @@ export function registerGeminiImageToVideoCommand(parent: Command): void {
           resolution: string;
           aspectRatio: string;
           output?: string;
+          thumb?: boolean;
           verbose?: boolean;
         },
       ) => {
@@ -147,6 +150,12 @@ export function registerGeminiImageToVideoCommand(parent: Command): void {
           fs.copyFileSync(dest, opts.output);
           logger.success(`Copied to: ${opts.output}`);
         }
+
+        await maybeDownloadThumb(finalOp.response, dest, {
+          skip: opts.thumb === false,
+          copyTo: opts.output,
+          logger,
+        });
 
         console.log(`\nGenerated video: ${dest}`);
       },

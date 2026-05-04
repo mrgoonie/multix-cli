@@ -7,6 +7,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Logger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
+import { maybeDownloadThumb } from "../../../core/video-thumb.js";
 import { apiPost, downloadMinimaxFile, pollAsyncTask } from "../client.js";
 
 interface VideoTaskResponse {
@@ -31,6 +32,7 @@ export async function generateMinimaxVideo(opts: {
   resolution?: string;
   firstFrame?: string;
   output?: string;
+  thumb?: boolean;
   logger?: Logger;
 }): Promise<VideoResult> {
   const {
@@ -41,6 +43,7 @@ export async function generateMinimaxVideo(opts: {
     resolution = "1080P",
     firstFrame,
     output,
+    thumb,
     logger,
   } = opts;
 
@@ -100,6 +103,12 @@ export async function generateMinimaxVideo(opts: {
     fs.mkdirSync(path.dirname(path.resolve(output)), { recursive: true });
     fs.copyFileSync(dest, output);
   }
+
+  await maybeDownloadThumb(pollResult, dest, {
+    skip: thumb === false,
+    copyTo: output,
+    logger,
+  });
 
   logger?.debug(`Generated in ${elapsed.toFixed(1)}s, size: ${fileSizeMb.toFixed(2)} MB`);
 

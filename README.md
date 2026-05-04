@@ -249,6 +249,22 @@ Multiple inputs are concatenated with `---` separators into a single output.
 
 All generated files are saved to `./multix-output/` by default. Override with `MULTIX_OUTPUT_DIR`.
 
+### Polling and downloading videos
+
+Every video-generating subcommand accepts a uniform set of polling/download flags:
+
+| Flag | Description |
+|------|-------------|
+| `--wait` | Poll the provider until the job reaches a terminal status (skip with the provider's `--async` flag where present). |
+| `--wait-timeout <ms>` | Polling timeout (default `600000` = 10 min). |
+| `--download` | Stream the resulting MP4 to disk on success — implies `--wait`. |
+| `--output <path>` | Copy the saved MP4 to a custom path. The thumbnail is copied beside it as `<base>_thumb.<ext>`. |
+| `--no-thumb` | Skip thumbnail download. |
+
+Thumbnail detection is automatic: if the provider response includes any of `cover_image_url`, `thumbnail_url`, `thumb_url`, `preview_url`, `first_frame_url`, `poster_url`, or `image_url` (and the value is an `https://…(.jpg|.png|.webp|.gif|.bmp)` URL), the file is downloaded next to the video as `<basename>_thumb.<ext>`. Providers that don't expose a thumbnail simply skip this step.
+
+`leonardo video`, `leonardo image-to-video`, and `openrouter image-to-video` are async-by-default for backward compatibility — pass `--wait` (or `--download`) to opt into the synchronous flow.
+
 ## Troubleshooting
 
 **No API key found:** Run `multix check` — it prints setup instructions.

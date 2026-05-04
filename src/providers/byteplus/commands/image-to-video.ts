@@ -6,6 +6,7 @@ import path from "node:path";
 import type { Command } from "commander";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
+import { maybeDownloadThumb } from "../../../core/video-thumb.js";
 import { PollFailedError, PollTimeoutError } from "../../leonardo/poll.js";
 import { createBytePlusClient } from "../client.js";
 import {
@@ -37,6 +38,7 @@ export function registerBytePlusImageToVideoCommand(parent: Command): void {
     .option("--async", "Submit task and exit")
     .option("--wait-timeout <ms>", "Poll timeout in ms", "600000")
     .option("--output <path>", "Output MP4 path")
+    .option("--no-thumb", "Skip downloading the thumbnail if the API returns one")
     .option("-v, --verbose", "Verbose logging")
     .action(
       async (
@@ -55,6 +57,7 @@ export function registerBytePlusImageToVideoCommand(parent: Command): void {
           async?: boolean;
           waitTimeout: string;
           output?: string;
+          thumb?: boolean;
           verbose?: boolean;
         },
       ) => {
@@ -111,6 +114,11 @@ export function registerBytePlusImageToVideoCommand(parent: Command): void {
             opts.output ??
             path.join(getOutputDir(), `byteplus-i2v-${taskId.slice(0, 8)}-${Date.now()}.mp4`);
           await downloadVideo(url, outPath, logger);
+          await maybeDownloadThumb(final, outPath, {
+            skip: opts.thumb === false,
+            copyTo: opts.output,
+            logger,
+          });
           console.log(`\nTask: ${taskId}`);
           console.log(`Saved: ${outPath}`);
         } catch (e) {
