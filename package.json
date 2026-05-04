@@ -14,13 +14,7 @@
       "types": "./dist/index.d.ts"
     }
   },
-  "files": [
-    "dist",
-    "skill",
-    "README.md",
-    "LICENSE",
-    "CHANGELOG.md"
-  ],
+  "files": ["dist", "skill", "README.md", "LICENSE", "CHANGELOG.md"],
   "engines": {
     "node": ">=20"
   },
