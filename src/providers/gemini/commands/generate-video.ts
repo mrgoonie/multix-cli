@@ -12,6 +12,7 @@ import { ProviderError, ValidationError } from "../../../core/errors.js";
 import { httpJson } from "../../../core/http-client.js";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
+import { maybeDownloadThumb } from "../../../core/video-thumb.js";
 import { ASPECT_RATIOS, type AspectRatio, getDefaultModel } from "../models.js";
 
 const BASE = "https://generativelanguage.googleapis.com";
@@ -30,6 +31,7 @@ export function registerGenerateVideoCommand(parent: Command): void {
     )
     .option("--upload-timeout <ms>", "Upload timeout in ms", "120000")
     .option("--output <path>", "Copy generated video to this path")
+    .option("--no-thumb", "Skip downloading the thumbnail if the API returns one")
     .option("-v, --verbose", "Verbose logging")
     .action(
       async (opts: {
@@ -40,6 +42,7 @@ export function registerGenerateVideoCommand(parent: Command): void {
         referenceImages?: string[];
         uploadTimeout: string;
         output?: string;
+        thumb?: boolean;
         verbose?: boolean;
       }) => {
         const logger = createLogger({ verbose: opts.verbose ?? false });
@@ -156,6 +159,12 @@ export function registerGenerateVideoCommand(parent: Command): void {
           fs.copyFileSync(dest, opts.output);
           logger.success(`Copied to: ${opts.output}`);
         }
+
+        await maybeDownloadThumb(finalOp.response, dest, {
+          skip: opts.thumb === false,
+          copyTo: opts.output,
+          logger,
+        });
 
         console.log(`\nGenerated video: ${dest}`);
       },

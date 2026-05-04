@@ -10,7 +10,9 @@
 import type { Command } from "commander";
 import { resolveKey } from "../../../core/env-loader.js";
 import { createLogger } from "../../../core/logger.js";
-import { submitVideoJob } from "../video-client.js";
+import { PollFailedError, PollTimeoutError, poll } from "../../leonardo/poll.js";
+import { type OpenRouterVideoPollResponse, pollVideoJob, submitVideoJob } from "../video-client.js";
+import { downloadOpenRouterVideo } from "./video-status.js";
 
 export function registerOpenRouterImageToVideoCommand(parent: Command): void {
   parent
@@ -25,6 +27,11 @@ export function registerOpenRouterImageToVideoCommand(parent: Command): void {
     .option("--aspect-ratio <r>", "Aspect ratio hint (e.g. 16:9, 9:16)")
     .option("--duration <n>", "Duration seconds")
     .option("--seed <n>", "Fixed seed")
+    .option("--wait", "Poll until status is 'completed' or 'failed'")
+    .option("--wait-timeout <ms>", "Poll timeout in ms (with --wait)", "600000")
+    .option("--download", "Download the generated video on success (implies --wait)")
+    .option("--output <path>", "Copy downloaded video to this path")
+    .option("--no-thumb", "Skip downloading the thumbnail if the API returns one")
     .option("-v, --verbose", "Verbose logging")
     .action(
       async (opts: {
@@ -36,6 +43,11 @@ export function registerOpenRouterImageToVideoCommand(parent: Command): void {
         aspectRatio?: string;
         duration?: string;
         seed?: string;
+        wait?: boolean;
+        waitTimeout: string;
+        download?: boolean;
+        output?: string;
+        thumb?: boolean;
         verbose?: boolean;
       }) => {
         const logger = createLogger({ verbose: opts.verbose ?? false });
@@ -69,8 +81,51 @@ export function registerOpenRouterImageToVideoCommand(parent: Command): void {
         logger.info(`Submitting image-to-video job (model=${model})`);
         const res = await submitVideoJob(body);
         logger.success(`Job ${res.id} (status: ${res.status})`);
-        console.log(res.id);
-        console.error(`Poll with: multix openrouter video-status ${res.id}`);
+
+        const shouldWait = !!(opts.wait || opts.download);
+        if (!shouldWait) {
+          console.log(res.id);
+          console.error(`Poll with: multix openrouter video-status ${res.id}`);
+          return;
+        }
+
+        let final: OpenRouterVideoPollResponse;
+        try {
+          final = await poll<OpenRouterVideoPollResponse>({
+            fetch: () => pollVideoJob(res.id),
+            done: (v) => v.status === "completed",
+            failed: (v) => v.status === "failed",
+            intervalMs: 5000,
+            maxAttempts: Math.max(
+              1,
+              Math.ceil((Number.parseInt(opts.waitTimeout, 10) || 600_000) / 5000),
+            ),
+            onTick: (n, v) => logger.debug(`attempt ${n} — status: ${v.status}`),
+          });
+        } catch (e) {
+          if (e instanceof PollTimeoutError) {
+            logger.error(`Timed out — multix openrouter video-status ${res.id}`);
+            process.exit(1);
+          }
+          if (e instanceof PollFailedError) {
+            logger.error(`Job failed: ${JSON.stringify(e.value)}`);
+            process.exit(1);
+          }
+          throw e;
+        }
+
+        console.error(`status: ${final.status}`);
+        for (const u of final.unsigned_urls ?? []) console.log(u);
+
+        if (opts.download) {
+          await downloadOpenRouterVideo({
+            jobId: res.id,
+            output: opts.output,
+            thumb: opts.thumb,
+            logger,
+            source: final,
+          });
+        }
       },
     );
 }

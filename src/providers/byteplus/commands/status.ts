@@ -8,6 +8,7 @@ import path from "node:path";
 import type { Command } from "commander";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
+import { maybeDownloadThumb } from "../../../core/video-thumb.js";
 import { PollFailedError, PollTimeoutError } from "../../leonardo/poll.js";
 import { createBytePlusClient } from "../client.js";
 import { downloadVideo, getVideoTaskStatus, waitForVideoTask } from "../generators/video.js";
@@ -20,6 +21,7 @@ export function registerBytePlusStatusCommand(parent: Command): void {
     .option("--wait-timeout <ms>", "Poll timeout in ms (with --wait)", "600000")
     .option("--download", "Download MP4 on success (implies --wait)")
     .option("--output <path>", "Output MP4 path (with --download)")
+    .option("--no-thumb", "Skip downloading the thumbnail if the API returns one")
     .option("-v, --verbose", "Verbose logging")
     .action(
       async (
@@ -29,6 +31,7 @@ export function registerBytePlusStatusCommand(parent: Command): void {
           waitTimeout: string;
           download?: boolean;
           output?: string;
+          thumb?: boolean;
           verbose?: boolean;
         },
       ) => {
@@ -55,6 +58,11 @@ export function registerBytePlusStatusCommand(parent: Command): void {
             const outPath =
               opts.output ?? path.join(getOutputDir(), `byteplus-video-${taskId.slice(0, 8)}.mp4`);
             await downloadVideo(url, outPath, logger);
+            await maybeDownloadThumb(status, outPath, {
+              skip: opts.thumb === false,
+              copyTo: opts.output,
+              logger,
+            });
             console.log(`Saved: ${outPath}`);
           }
         } catch (e) {

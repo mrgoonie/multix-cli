@@ -11,3 +11,4 @@ export { httpJson, downloadFile, fetchBytes } from "./http-client.js";
 export type { HttpJsonOptions } from "./http-client.js";
 export { createLogger, defaultLogger } from "./logger.js";
 export type { Logger } from "./logger.js";
+export { detectThumbUrl, downloadThumbBeside, maybeDownloadThumb } from "./video-thumb.js";

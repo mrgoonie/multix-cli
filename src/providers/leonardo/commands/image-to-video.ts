@@ -15,6 +15,7 @@ import { createLogger } from "../../../core/logger.js";
 import { createLeonardoClient } from "../client.js";
 import { LEONARDO_DEFAULTS } from "../models.js";
 import type { CreateVideoResponse } from "../types.js";
+import { _leonardoPollAndDownload } from "./video.js";
 
 type ImageType = "GENERATED" | "UPLOADED";
 
@@ -36,6 +37,11 @@ export function registerLeonardoImageToVideoCommand(parent: Command): void {
     .option("--negative <text>", "Negative prompt")
     .option("--enhance", "Enable prompt enhance")
     .option("--frame-interpolation", "Enable frame interpolation")
+    .option("--wait", "Poll until COMPLETE/FAILED instead of returning the job id")
+    .option("--wait-timeout <ms>", "Poll timeout in ms (with --wait)", "600000")
+    .option("--download", "Download the generated video on success (implies --wait)")
+    .option("--output <path>", "Output MP4 path (with --download)")
+    .option("--no-thumb", "Skip downloading the thumbnail if the API returns one")
     .option("-v, --verbose", "Verbose logging")
     .action(
       async (
@@ -50,6 +56,11 @@ export function registerLeonardoImageToVideoCommand(parent: Command): void {
           negative?: string;
           enhance?: boolean;
           frameInterpolation?: boolean;
+          wait?: boolean;
+          waitTimeout: string;
+          download?: boolean;
+          output?: string;
+          thumb?: boolean;
           verbose?: boolean;
         },
       ) => {
@@ -89,8 +100,22 @@ export function registerLeonardoImageToVideoCommand(parent: Command): void {
           logger.error(`No generationId returned by Leonardo: ${JSON.stringify(res)}`);
           process.exit(1);
         }
-        console.log(jobId);
-        console.error(`Poll with: multix leonardo status ${jobId}`);
+
+        const shouldWait = !!(opts.wait || opts.download);
+        if (!shouldWait) {
+          console.log(jobId);
+          console.error(`Poll with: multix leonardo status ${jobId}`);
+          return;
+        }
+
+        await _leonardoPollAndDownload(client, jobId, {
+          waitTimeoutMs: Number.parseInt(opts.waitTimeout, 10) || 600_000,
+          download: !!opts.download,
+          output: opts.output,
+          thumb: opts.thumb !== false,
+          logger,
+          basename: "leonardo-i2v",
+        });
       },
     );
 }

@@ -24,6 +24,7 @@ export function registerMinimaxGenerateVideoCommand(parent: Command): void {
     .option("--resolution <res>", `Resolution (${VIDEO_RESOLUTIONS.join("|")})`, "1080P")
     .option("--first-frame <url>", "First frame image URL")
     .option("--output <path>", "Copy generated video to this path")
+    .option("--no-thumb", "Skip downloading the thumbnail if the API returns one")
     .option("-v, --verbose", "Verbose logging")
     .action(
       async (opts: {
@@ -33,6 +34,7 @@ export function registerMinimaxGenerateVideoCommand(parent: Command): void {
         resolution: string;
         firstFrame?: string;
         output?: string;
+        thumb?: boolean;
         verbose?: boolean;
       }) => {
         const logger = createLogger({ verbose: opts.verbose ?? false });
@@ -64,6 +66,7 @@ export function registerMinimaxGenerateVideoCommand(parent: Command): void {
           resolution,
           firstFrame: opts.firstFrame,
           output: opts.output,
+          thumb: opts.thumb,
           logger,
         });
 
