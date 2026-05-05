@@ -7,3 +7,4 @@ multix-output/
 coverage/
 *.log
 .DS_Store
+.claude/
