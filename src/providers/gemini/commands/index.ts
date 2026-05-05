@@ -8,6 +8,7 @@ import { registerExtractCommand } from "./extract.js";
 import { registerGeminiGenerateSpeechCommand } from "./generate-speech.js";
 import { registerGenerateVideoCommand } from "./generate-video.js";
 import { registerGenerateCommand } from "./generate.js";
+import { registerGeminiImageToImageCommand } from "./image-to-image.js";
 import { registerGeminiImageToVideoCommand } from "./image-to-video.js";
 import { registerTranscribeCommand } from "./transcribe.js";
 
@@ -22,6 +23,7 @@ export function registerGeminiCommands(program: Command): void {
   registerTranscribeCommand(gemini);
   registerExtractCommand(gemini);
   registerGenerateCommand(gemini);
+  registerGeminiImageToImageCommand(gemini);
   registerGenerateVideoCommand(gemini);
   registerGeminiImageToVideoCommand(gemini);
   registerGeminiGenerateSpeechCommand(gemini);

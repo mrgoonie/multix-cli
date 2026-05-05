@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.0.5] - 2026-05-05
+## [0.0.7] - 2026-05-05
 
 ### Added
 - **ElevenLabs provider** — full integration with 13 subcommands:
@@ -23,6 +23,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ELEVENLABS_RECOMMENDED_VOICES` with 11 verified conversational voice IDs (Alexandra default).
 - TTS models: `eleven_multilingual_v2` (default), `eleven_flash_v2_5`, `eleven_flash_v2`, `eleven_turbo_v2_5`, `eleven_turbo_v2`, `eleven_v3`. STT: `scribe_v1`, `scribe_v1_experimental`. Voice changer: `eleven_multilingual_sts_v2`. Output formats: `mp3_*`, `pcm_*`, `ulaw_8000`.
 - `multix check` and `.env.example` document `ELEVENLABS_API_KEY`.
+
+## [0.0.6] - 2026-05-05
+
+### Added
+- `multix byteplus generate-3d` (alias `3d`) — BytePlus Hyper3D / Hitem3d 3D generation on the ARK async tasks endpoint. Models: `hyper3d-gen2-260112` (text-to-3D + image-to-3D, 1–5 refs), `hitem3d-2-0-251223` (image-to-3D). Provider-specific knobs (`--mesh_mode`, `--hd_texture`, `--material`, `--ff`, `--resolution`, …) passed via `--flags <raw>` pass-through. Auto-detects output extension (`.glb` / `.gltf` / `.zip` …) from response URL.
+- `multix byteplus status --download` extended to also fetch `content.file_url` for 3D tasks alongside `content.video_url` for video.
+- New env override: `BYTEPLUS_3D_MODEL` (default `hyper3d-gen2-260112`).
+
+## [0.0.5] - 2026-05-05
+
+### Added
+- `multix <provider> image-to-image` (alias `i2i`) for all five providers — BytePlus (Seedream multi-ref), Gemini (Nano Banana edit/compose), OpenRouter (chat-image with `image_url` parts), Leonardo (init image via existing imageId), MiniMax (subject_reference; CAVEAT: not free-form editing — preserves character identity in a new prompt).
+- Promoted `src/core/image-input.ts` (URL / local-file resolver, base64 inlining with configurable size caps) so all providers share one resolver.
 
 ## [0.0.4] - 2026-05-04
 

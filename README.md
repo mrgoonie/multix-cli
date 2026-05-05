@@ -2,7 +2,7 @@
 
 AI multimodal CLI — generate images/video/speech/music, analyze and transcribe media files, convert documents to Markdown, and optimize media with ffmpeg/ImageMagick.
 
-Supports **Gemini** (analyze, transcribe, generate, Veo video, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video), and **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment).
+Supports **Gemini** (analyze, transcribe, generate, Veo video, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), and **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment).
 
 ## Install
 
@@ -53,6 +53,7 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `BYTEPLUS_IMAGE_MODEL` | No | Default Seedream model (default `seedream-4-0-250828`) |
 | `BYTEPLUS_VIDEO_MODEL` | No | Default Seedance model (default `seedance-2.0`) |
 | `BYTEPLUS_VIDEO_PARAMS_MODE` | No | `flags` (default) or `structured` — how video params are encoded |
+| `BYTEPLUS_3D_MODEL` | No | Default 3D model (default `hyper3d-gen2-260112`) |
 | `MULTIX_OUTPUT_DIR` | No | Override default output dir (`./multix-output`) |
 | `OPENROUTER_IMAGE_MODEL` | No | Default OpenRouter model |
 | `OPENROUTER_FALLBACK_MODELS` | No | Comma-separated fallback model ids |
@@ -90,6 +91,9 @@ multix gemini extract --files report.pdf --prompt "Extract tables as JSON" [--fo
 # Generate images
 multix gemini generate --prompt "A mountain lake" [--model <id>] [--aspect-ratio 16:9] [--num-images 1] [--size 1K|2K|4K] [--output <path>] [-v]
 
+# Image-to-image (Nano Banana — edit/compose from refs, alias: i2i)
+multix gemini image-to-image --prompt "make it watercolor" --ref ./photo.jpg [--ref ./style.png] [--model gemini-2.5-flash-image] [--output <path>] [-v]
+
 # Generate video [EXPERIMENTAL — requires billing]
 multix gemini generate-video --prompt "Ocean waves" [--model veo-3.1-generate-preview] [--resolution 720p|1080p] [--aspect-ratio 16:9] [--reference-images first.png last.png] [-v]
 
@@ -120,6 +124,10 @@ multix gemini generate-speech --text "Joe: How's it going? Jane: Not too bad!" \
 # Generate image
 multix minimax generate --prompt "A cat in space" [--model image-01] [--aspect-ratio 1:1] [--num-images 1] [-v]
 
+# Image-to-image (alias: i2i) — CAVEAT: subject_reference only, NOT free-form editing
+# Preserves a character/subject's identity in a NEW scene described by --prompt.
+multix minimax image-to-image --prompt "the same character on a beach" --ref ./hero.jpg [--model image-01] [-v]
+
 # Generate video (async, polls until done)
 multix minimax generate-video --prompt "A dancer" [--model MiniMax-Hailuo-2.3] [--duration 6|10] [--resolution 720P|1080P] [--first-frame <url>] [-v]
 
@@ -136,6 +144,9 @@ multix minimax generate-music [--lyrics <str>] [--prompt <str>] [--model music-2
 
 ```bash
 multix openrouter generate --prompt "Retro robot" [--model google/gemini-3.1-flash-image-preview] [--aspect-ratio 1:1] [--image-size <sz>] [--num-images 1] [-v]
+
+# Image-to-image (alias: i2i) — refs accept URL or local path
+multix openrouter image-to-image --prompt "make it cyberpunk" --ref ./photo.jpg [--ref https://...] [--model google/gemini-2.5-flash-image] [--output <path>] [-v]
 
 # Image-to-video (async — returns job id; image input is URL only)
 multix openrouter image-to-video --prompt "camera pans left" --image-url https://... [--last-frame-url <url>] [--model google/veo-3.1] [--resolution 720p] [--aspect-ratio 16:9] [--duration <n>] [--seed <n>] [-v]
@@ -165,6 +176,10 @@ multix leonardo video-models
 # Generate images (polls until COMPLETE, downloads to MULTIX_OUTPUT_DIR)
 multix leonardo generate "a cyberpunk cat" [-m <modelId>] [-w 1024] [-h 1024] [-n 1] [--alchemy] [--ultra] [--style <uuid>] [--seed <n>] [--negative <text>] [--enhance] [--quality HIGH] [--output <path>] [--no-download] [--wait-timeout 480000] [-v]
 
+# Image-to-image (alias: i2i) — uses an existing Leonardo image id as init image
+# Direct upload from local path is not yet supported; pass an existing imageId.
+multix leonardo image-to-image --prompt "make it watercolor" --ref <imageId> [--image-type GENERATED|UPLOADED] [--init-strength 0.5] [-m <modelId>] [-w 1024] [-h 1024] [-n 1] [--seed <n>] [--negative <text>] [--output <path>] [--no-download] [-v]
+
 # Generate text-to-video (async — returns generationId)
 multix leonardo video "a dancer" [--model MOTION2|VEO3|kling-2.6|...] [--resolution RESOLUTION_720] [--enhance] [--frame-interpolation] [-v]
 
@@ -188,6 +203,9 @@ GPT Image models (`gpt-image-*`) and v2 video models (kling/hailuo/ltxv/seedance
 # Image generation (Seedream 4.0, sync)
 multix byteplus generate --prompt "a cyberpunk cat" [--model seedream-4-0-250828] [--size 2K|1024x1024] [--aspect-ratio 16:9] [-n 1] [--seed <n>] [--no-watermark] [--input-image <path|url>] [--output <path>] [-v]
 
+# Image-to-image (alias: i2i) — Seedream with one or more reference images
+multix byteplus image-to-image --prompt "make it cyberpunk" --ref ./photo.jpg [--ref https://...] [--model seedream-4-0-250828] [--size 2K] [--aspect-ratio 16:9] [-n 1] [--seed <n>] [--no-watermark] [--output <path>] [-v]
+
 # Text-to-video (Seedance 2.0, async with auto-poll)
 multix byteplus video --prompt "ocean waves" [--model seedance-2.0|seedance-2.0-fast|seedance-2.0-pro] [--resolution 1080p] [--duration 8] [--aspect-ratio 16:9] [--audio|--no-audio] [--seed <n>] [--negative <text>] [--camera-fixed] [--async] [--wait-timeout 600000] [--output <path>] [-v]
 
@@ -204,6 +222,19 @@ multix byteplus reference-to-video --prompt "..." \
   [video flags] [-v]
 # On Windows, escape literal colons in paths with `\:` or use URLs.
 
+# 3D model generation (alias: 3d) — Hyper3D / Hitem3d, async with auto-poll + download
+multix byteplus generate-3d --prompt "Quadrupedal mech robot" \
+  --flags "--mesh_mode Raw --hd_texture true --material PBR" \
+  [--model hyper3d-gen2-260112] [--seed 8648] [--async] [--output model.glb] [-v]
+
+# Image-to-3D (1–5 reference images, path or URL)
+multix byteplus 3d --input-image ./front.png ./side.png ./back.png \
+  --prompt "Generate from these views" [--model hyper3d-gen2-260112]
+
+# Hitem3d uses different flags
+multix byteplus 3d --input-image ./cat.png --model hitem3d-2-0-251223 \
+  --flags "--ff 2 --resolution 1536pro"
+
 # Poll a task / download MP4
 multix byteplus status <taskId> [--wait] [--wait-timeout 600000] [--download] [--output <path>] [-v]
 ```
@@ -211,10 +242,14 @@ multix byteplus status <taskId> [--wait] [--wait-timeout 600000] [--download] [-
 **BytePlus models:**
 - Image: `seedream-4-0-250828`
 - Video: `seedance-2.0-fast`, `seedance-2.0` (default), `seedance-2.0-pro`
+- 3D: `hyper3d-gen2-260112` (Hyper3D Gen2, default — text-to-3D + image-to-3D), `hitem3d-2-0-251223` (Hitem3d 2.0 — image-to-3D)
 
 **Notes:**
 - Auth: `BYTEPLUS_API_KEY` is preferred; `ARK_API_KEY` is accepted as a fallback for compatibility with the Volcengine ARK SDK ecosystem.
 - Video params can be encoded as flags inside the prompt text (default, e.g. `--rs 1080p --dur 8 --rt 16:9`) or as a top-level `parameters` object — set `BYTEPLUS_VIDEO_PARAMS_MODE=structured` to switch.
+- 3D model knobs are passed via `--flags <raw>`, appended to the prompt text. Hyper3D supports `--mesh_mode`, `--hd_texture`, `--material`, `--addons`, `--quality_override`, `--use_original_alpha`, `--bbox_condition`, `--TAPose`. Hitem3d supports `--ff`, `--resolution`. See [BytePlus 3D docs](https://docs.byteplus.com/en/docs/ModelArk/2279947).
+- 3D output is a textured model file (`.glb`/`.gltf`/`.zip` depending on flags). The CLI auto-detects the extension from the response URL.
+- `multix byteplus status <taskId> --download` works for both video (`content.video_url`) and 3D (`content.file_url`) tasks.
 - **Task cancellation is not supported** — there is no verified DELETE endpoint on the ARK API. Submitted tasks must run to completion.
 
 ### `multix elevenlabs`

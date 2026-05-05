@@ -4,6 +4,7 @@
 
 import path from "node:path";
 import type { Command } from "commander";
+import { resolveImageInput } from "../../../core/image-input.js";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import { maybeDownloadThumb } from "../../../core/video-thumb.js";
@@ -15,7 +16,6 @@ import {
   submitVideoTask,
   waitForVideoTask,
 } from "../generators/video.js";
-import { resolveImageInput } from "../image-input.js";
 import { BYTEPLUS_DEFAULTS } from "../models.js";
 import type { ResolvedRef } from "../types.js";
 
