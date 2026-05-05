@@ -52,6 +52,12 @@ const PROVIDERS: ProviderEntry[] = [
     optional: true,
     link: "https://console.byteplus.com/auth/api-keys",
   },
+  {
+    name: "ElevenLabs",
+    envPrimary: "ELEVENLABS_API_KEY",
+    optional: true,
+    link: "https://elevenlabs.io/app/settings/api-keys",
+  },
 ];
 
 function resolveProviderKey(p: ProviderEntry): { key?: string; envUsed?: string } {

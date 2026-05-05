@@ -2,7 +2,7 @@
 
 AI multimodal CLI — generate images/video/speech/music, analyze and transcribe media files, convert documents to Markdown, and optimize media with ffmpeg/ImageMagick.
 
-Supports **Gemini** (analyze, transcribe, generate, Veo video, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation), **Leonardo.Ai** (image, video, upscale), and **BytePlus** (Seedream image, Seedance video).
+Supports **Gemini** (analyze, transcribe, generate, Veo video, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video), and **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment).
 
 ## Install
 
@@ -47,6 +47,7 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `LEONARDO_DEFAULT_MODEL` | No | Default Leonardo image model UUID |
 | `LEONARDO_VIDEO_MODEL` | No | Default Leonardo video model (default `MOTION2`) |
 | `BYTEPLUS_API_KEY` | For BytePlus | [BytePlus](https://console.byteplus.com/auth/api-keys) |
+| `ELEVENLABS_API_KEY` | For ElevenLabs | [ElevenLabs](https://elevenlabs.io/app/settings/api-keys) |
 | `ARK_API_KEY` | No | Fallback for `BYTEPLUS_API_KEY` (Volcengine ARK shared name) |
 | `BYTEPLUS_BASE_URL` | No | Override BytePlus base (default `https://ark.ap-southeast.bytepluses.com/api/v3`) |
 | `BYTEPLUS_IMAGE_MODEL` | No | Default Seedream model (default `seedream-4-0-250828`) |
@@ -215,6 +216,74 @@ multix byteplus status <taskId> [--wait] [--wait-timeout 600000] [--download] [-
 - Auth: `BYTEPLUS_API_KEY` is preferred; `ARK_API_KEY` is accepted as a fallback for compatibility with the Volcengine ARK SDK ecosystem.
 - Video params can be encoded as flags inside the prompt text (default, e.g. `--rs 1080p --dur 8 --rt 16:9`) or as a top-level `parameters` object — set `BYTEPLUS_VIDEO_PARAMS_MODE=structured` to switch.
 - **Task cancellation is not supported** — there is no verified DELETE endpoint on the ARK API. Submitted tasks must run to completion.
+
+### `multix elevenlabs`
+
+```bash
+# Text-to-speech (sync, returns audio bytes)
+multix elevenlabs tts --text "Hello world" [--voice <voiceId>] [--model eleven_multilingual_v2] \
+  [--format mp3_44100_128] [--stability 0.5] [--similarity-boost 0.75] [--style 0.0] \
+  [--language-code en] [--seed <n>] [--output out.mp3] [-v]
+
+# Voices: list / get / search shared / design / persist / delete
+multix elevenlabs voices list [--category cloned|generated|premade|professional]
+multix elevenlabs voices get <voiceId>
+multix elevenlabs voices search [--search "calm female"] [--language en] [--gender female] [--age young] [--accent american]
+multix elevenlabs voices design --description "friendly female narrator" [--text "sample text"] [--auto-text]
+multix elevenlabs voices create-from-preview --generated-voice-id <id> --name "My Voice" --description "..."
+multix elevenlabs voices delete <voiceId>
+
+# Instant voice cloning (multipart upload of 1-3 minutes of samples)
+multix elevenlabs clone --name "My Voice" --files sample1.wav sample2.wav [--description "..."] [--remove-background-noise]
+
+# Speech-to-speech voice changer
+multix elevenlabs voice-changer --input source.mp3 --voice <voiceId> [--model eleven_multilingual_sts_v2] \
+  [--format mp3_44100_128] [--remove-background-noise] [--output changed.mp3] [-v]
+
+# Speech-to-text (Scribe)
+multix elevenlabs transcribe --input audio.mp3 [--model scribe_v1] [--language en] [--diarize] \
+  [--num-speakers 2] [--tag-audio-events] [--timestamps-granularity word] [--format text|json|srt|vtt] [--output out.txt]
+
+# Sound effects
+multix elevenlabs sfx --text "car engine starting" [--duration-seconds 5] [--prompt-influence 0.3] [--loop] \
+  [--format mp3_44100_128] [--output sfx.mp3]
+
+# Music generation
+multix elevenlabs music --prompt "dreamy synthwave loop" [--music-length-ms 30000] [--model music_v1] \
+  [--format mp3_44100_128] [--output song.mp3]
+# OR with a structured composition plan
+multix elevenlabs music --plan ./plan.json [--output song.mp3]
+
+# Dubbing (async — submit and poll, then optionally --download)
+multix elevenlabs dub --input video.mp4 --target-lang es [--source-lang en] [--num-speakers 2] \
+  [--watermark] [--start-time 0] [--end-time 60] [--highest-resolution] [--name "My Dub"] \
+  [--async] [--wait] [--download] [--poll-interval 10] [--wait-timeout 1800000] [--output dubbed.mp4]
+multix elevenlabs dub-status <dubbingId> [--download <lang>] [--output dubbed.mp4]
+
+# Voice isolator (strip background noise)
+multix elevenlabs isolate --input noisy.mp3 [--output clean.mp3]
+
+# Forced alignment (transcript ↔ audio timing)
+multix elevenlabs align --input audio.mp3 --text "transcript here" [--output alignment.json]
+# Or read transcript from file:
+multix elevenlabs align --input audio.mp3 --text-file transcript.txt
+
+# Account info / available models
+multix elevenlabs account
+multix elevenlabs models
+```
+
+**ElevenLabs models:**
+- TTS: `eleven_multilingual_v2` (default), `eleven_flash_v2_5`, `eleven_flash_v2`, `eleven_turbo_v2_5`, `eleven_turbo_v2`, `eleven_v3`
+- STT: `scribe_v1`, `scribe_v1_experimental`
+- Voice changer: `eleven_multilingual_sts_v2` (default)
+- Music: `music_v1`
+
+**Notes:**
+- Auth header is `xi-api-key`; base URL is `https://api.elevenlabs.io/v1`.
+- Most generation endpoints (TTS, SFX, Music, Voice Changer, Isolation) return audio bytes synchronously.
+- Dubbing is async: submit → poll → download per-language tracks.
+- Output format strings combine codec + sample rate + bitrate, e.g. `mp3_44100_128`, `pcm_24000`, `ulaw_8000`.
 
 ### `multix media`
 
