@@ -14,10 +14,10 @@
  */
 
 import { downloadFile } from "../../../core/http-client.js";
+import { type ResolvedImage, refUrl } from "../../../core/image-input.js";
 import type { Logger } from "../../../core/logger.js";
 import { poll } from "../../leonardo/poll.js";
 import type { BytePlusClient } from "../client.js";
-import { type ResolvedImage, refUrl } from "../image-input.js";
 import type {
   Model3DTaskRequest,
   Model3DTaskStatus,

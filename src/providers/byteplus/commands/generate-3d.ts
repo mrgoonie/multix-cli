@@ -6,6 +6,7 @@
 
 import path from "node:path";
 import type { Command } from "commander";
+import { resolveImageInput } from "../../../core/image-input.js";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import { PollFailedError, PollTimeoutError } from "../../leonardo/poll.js";
@@ -17,7 +18,6 @@ import {
   submitThreeDTask,
   waitForThreeDTask,
 } from "../generators/three-d.js";
-import { resolveImageInput } from "../image-input.js";
 import { BYTEPLUS_3D_MODELS, BYTEPLUS_DEFAULTS } from "../models.js";
 
 export function registerBytePlusGenerate3DCommand(parent: Command): void {
