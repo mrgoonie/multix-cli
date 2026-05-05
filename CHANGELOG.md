@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.5] - 2026-05-05
+
+### Added
+- **ElevenLabs provider** — full integration with 13 subcommands:
+  - `tts` — text-to-speech (sync audio bytes) with voice settings, language code, seed, context continuity, and `--no-speaker-boost` opt-out.
+  - `voices list|get|search|design|create-from-preview|delete` — voice library management and prompt-based voice design.
+  - `clone` — instant voice cloning via multipart audio sample upload.
+  - `voice-changer` — speech-to-speech voice conversion.
+  - `transcribe` — Scribe STT with diarization, audio-event tagging, and `text|json|srt|vtt` output.
+  - `sfx` — sound effects generation with prompt influence and looping.
+  - `music` — music generation (`music_v1`) from prompt or composition plan.
+  - `dub` / `dub-status` — async dubbing with `--wait` / `--download` polling and per-language audio download.
+  - `isolate` — voice isolator (background noise removal).
+  - `align` — forced alignment (transcript ↔ audio timing).
+  - `account` / `models` — usage / subscription tier and model catalog.
+- `ELEVENLABS_RECOMMENDED_VOICES` with 11 verified conversational voice IDs (Alexandra default).
+- TTS models: `eleven_multilingual_v2` (default), `eleven_flash_v2_5`, `eleven_flash_v2`, `eleven_turbo_v2_5`, `eleven_turbo_v2`, `eleven_v3`. STT: `scribe_v1`, `scribe_v1_experimental`. Voice changer: `eleven_multilingual_sts_v2`. Output formats: `mp3_*`, `pcm_*`, `ulaw_8000`.
+- `multix check` and `.env.example` document `ELEVENLABS_API_KEY`.
+
 ## [0.0.4] - 2026-05-04
 
 ### Added
