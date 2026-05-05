@@ -4,6 +4,7 @@
 
 import type { Command } from "commander";
 import { registerBytePlusGenerateCommand } from "./generate.js";
+import { registerBytePlusImageToImageCommand } from "./image-to-image.js";
 import { registerBytePlusImageToVideoCommand } from "./image-to-video.js";
 import { registerBytePlusReferenceToVideoCommand } from "./reference-to-video.js";
 import { registerBytePlusStatusCommand } from "./status.js";
@@ -15,6 +16,7 @@ export function registerBytePlusCommands(program: Command): void {
     .description("BytePlus ModelArk: Seedream image generation, Seedance video generation");
 
   registerBytePlusGenerateCommand(byteplus);
+  registerBytePlusImageToImageCommand(byteplus);
   registerBytePlusVideoCommand(byteplus);
   registerBytePlusImageToVideoCommand(byteplus);
   registerBytePlusReferenceToVideoCommand(byteplus);

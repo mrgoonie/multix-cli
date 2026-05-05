@@ -89,6 +89,9 @@ multix gemini extract --files report.pdf --prompt "Extract tables as JSON" [--fo
 # Generate images
 multix gemini generate --prompt "A mountain lake" [--model <id>] [--aspect-ratio 16:9] [--num-images 1] [--size 1K|2K|4K] [--output <path>] [-v]
 
+# Image-to-image (Nano Banana — edit/compose from refs, alias: i2i)
+multix gemini image-to-image --prompt "make it watercolor" --ref ./photo.jpg [--ref ./style.png] [--model gemini-2.5-flash-image] [--output <path>] [-v]
+
 # Generate video [EXPERIMENTAL — requires billing]
 multix gemini generate-video --prompt "Ocean waves" [--model veo-3.1-generate-preview] [--resolution 720p|1080p] [--aspect-ratio 16:9] [--reference-images first.png last.png] [-v]
 
@@ -119,6 +122,10 @@ multix gemini generate-speech --text "Joe: How's it going? Jane: Not too bad!" \
 # Generate image
 multix minimax generate --prompt "A cat in space" [--model image-01] [--aspect-ratio 1:1] [--num-images 1] [-v]
 
+# Image-to-image (alias: i2i) — CAVEAT: subject_reference only, NOT free-form editing
+# Preserves a character/subject's identity in a NEW scene described by --prompt.
+multix minimax image-to-image --prompt "the same character on a beach" --ref ./hero.jpg [--model image-01] [-v]
+
 # Generate video (async, polls until done)
 multix minimax generate-video --prompt "A dancer" [--model MiniMax-Hailuo-2.3] [--duration 6|10] [--resolution 720P|1080P] [--first-frame <url>] [-v]
 
@@ -135,6 +142,9 @@ multix minimax generate-music [--lyrics <str>] [--prompt <str>] [--model music-2
 
 ```bash
 multix openrouter generate --prompt "Retro robot" [--model google/gemini-3.1-flash-image-preview] [--aspect-ratio 1:1] [--image-size <sz>] [--num-images 1] [-v]
+
+# Image-to-image (alias: i2i) — refs accept URL or local path
+multix openrouter image-to-image --prompt "make it cyberpunk" --ref ./photo.jpg [--ref https://...] [--model google/gemini-2.5-flash-image] [--output <path>] [-v]
 
 # Image-to-video (async — returns job id; image input is URL only)
 multix openrouter image-to-video --prompt "camera pans left" --image-url https://... [--last-frame-url <url>] [--model google/veo-3.1] [--resolution 720p] [--aspect-ratio 16:9] [--duration <n>] [--seed <n>] [-v]
@@ -164,6 +174,10 @@ multix leonardo video-models
 # Generate images (polls until COMPLETE, downloads to MULTIX_OUTPUT_DIR)
 multix leonardo generate "a cyberpunk cat" [-m <modelId>] [-w 1024] [-h 1024] [-n 1] [--alchemy] [--ultra] [--style <uuid>] [--seed <n>] [--negative <text>] [--enhance] [--quality HIGH] [--output <path>] [--no-download] [--wait-timeout 480000] [-v]
 
+# Image-to-image (alias: i2i) — uses an existing Leonardo image id as init image
+# Direct upload from local path is not yet supported; pass an existing imageId.
+multix leonardo image-to-image --prompt "make it watercolor" --ref <imageId> [--image-type GENERATED|UPLOADED] [--init-strength 0.5] [-m <modelId>] [-w 1024] [-h 1024] [-n 1] [--seed <n>] [--negative <text>] [--output <path>] [--no-download] [-v]
+
 # Generate text-to-video (async — returns generationId)
 multix leonardo video "a dancer" [--model MOTION2|VEO3|kling-2.6|...] [--resolution RESOLUTION_720] [--enhance] [--frame-interpolation] [-v]
 
@@ -186,6 +200,9 @@ GPT Image models (`gpt-image-*`) and v2 video models (kling/hailuo/ltxv/seedance
 ```bash
 # Image generation (Seedream 4.0, sync)
 multix byteplus generate --prompt "a cyberpunk cat" [--model seedream-4-0-250828] [--size 2K|1024x1024] [--aspect-ratio 16:9] [-n 1] [--seed <n>] [--no-watermark] [--input-image <path|url>] [--output <path>] [-v]
+
+# Image-to-image (alias: i2i) — Seedream with one or more reference images
+multix byteplus image-to-image --prompt "make it cyberpunk" --ref ./photo.jpg [--ref https://...] [--model seedream-4-0-250828] [--size 2K] [--aspect-ratio 16:9] [-n 1] [--seed <n>] [--no-watermark] [--output <path>] [-v]
 
 # Text-to-video (Seedance 2.0, async with auto-poll)
 multix byteplus video --prompt "ocean waves" [--model seedance-2.0|seedance-2.0-fast|seedance-2.0-pro] [--resolution 1080p] [--duration 8] [--aspect-ratio 16:9] [--audio|--no-audio] [--seed <n>] [--negative <text>] [--camera-fixed] [--async] [--wait-timeout 600000] [--output <path>] [-v]

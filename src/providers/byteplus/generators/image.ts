@@ -7,10 +7,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import { downloadFile } from "../../../core/http-client.js";
+import { refUrl, resolveImageInput } from "../../../core/image-input.js";
 import type { Logger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import type { BytePlusClient } from "../client.js";
-import { refUrl, resolveImageInput } from "../image-input.js";
 import { BYTEPLUS_DEFAULTS } from "../models.js";
 import type { ImageGenerationRequest, ImageGenerationResponse } from "../types.js";
 

@@ -6,7 +6,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { resolveImageInput } from "../../../../src/providers/byteplus/image-input.js";
+import { resolveImageInput } from "../../../src/core/image-input.js";
 
 const TMP_DIR = path.join(os.tmpdir(), `byteplus-test-${Date.now()}`);
 
