@@ -1,6 +1,6 @@
 {
   "name": "@mrgoonie/multix",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "AI multimodal CLI — Gemini (incl. Flash TTS), MiniMax, OpenRouter, Leonardo, BytePlus, ffmpeg, ImageMagick, doc-to-md",
   "type": "module",
   "bin": {
@@ -14,7 +14,13 @@
       "types": "./dist/index.d.ts"
     }
   },
-  "files": ["dist", "skill", "README.md", "LICENSE", "CHANGELOG.md"],
+  "files": [
+    "dist",
+    "skill",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
   "engines": {
     "node": ">=20"
   },
