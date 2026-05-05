@@ -2,7 +2,7 @@
 
 AI multimodal CLI — generate images/video/speech/music, analyze and transcribe media files, convert documents to Markdown, and optimize media with ffmpeg/ImageMagick.
 
-Supports **Gemini** (analyze, transcribe, generate, Veo video, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation), **Leonardo.Ai** (image, video, upscale), and **BytePlus** (Seedream image, Seedance video).
+Supports **Gemini** (analyze, transcribe, generate, Veo video, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation), **Leonardo.Ai** (image, video, upscale), and **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D).
 
 ## Install
 
@@ -52,6 +52,7 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `BYTEPLUS_IMAGE_MODEL` | No | Default Seedream model (default `seedream-4-0-250828`) |
 | `BYTEPLUS_VIDEO_MODEL` | No | Default Seedance model (default `seedance-2.0`) |
 | `BYTEPLUS_VIDEO_PARAMS_MODE` | No | `flags` (default) or `structured` — how video params are encoded |
+| `BYTEPLUS_3D_MODEL` | No | Default 3D model (default `hyper3d-gen2-260112`) |
 | `MULTIX_OUTPUT_DIR` | No | Override default output dir (`./multix-output`) |
 | `OPENROUTER_IMAGE_MODEL` | No | Default OpenRouter model |
 | `OPENROUTER_FALLBACK_MODELS` | No | Comma-separated fallback model ids |
@@ -220,6 +221,19 @@ multix byteplus reference-to-video --prompt "..." \
   [video flags] [-v]
 # On Windows, escape literal colons in paths with `\:` or use URLs.
 
+# 3D model generation (alias: 3d) — Hyper3D / Hitem3d, async with auto-poll + download
+multix byteplus generate-3d --prompt "Quadrupedal mech robot" \
+  --flags "--mesh_mode Raw --hd_texture true --material PBR" \
+  [--model hyper3d-gen2-260112] [--seed 8648] [--async] [--output model.glb] [-v]
+
+# Image-to-3D (1–5 reference images, path or URL)
+multix byteplus 3d --input-image ./front.png ./side.png ./back.png \
+  --prompt "Generate from these views" [--model hyper3d-gen2-260112]
+
+# Hitem3d uses different flags
+multix byteplus 3d --input-image ./cat.png --model hitem3d-2-0-251223 \
+  --flags "--ff 2 --resolution 1536pro"
+
 # Poll a task / download MP4
 multix byteplus status <taskId> [--wait] [--wait-timeout 600000] [--download] [--output <path>] [-v]
 ```
@@ -227,10 +241,14 @@ multix byteplus status <taskId> [--wait] [--wait-timeout 600000] [--download] [-
 **BytePlus models:**
 - Image: `seedream-4-0-250828`
 - Video: `seedance-2.0-fast`, `seedance-2.0` (default), `seedance-2.0-pro`
+- 3D: `hyper3d-gen2-260112` (Hyper3D Gen2, default — text-to-3D + image-to-3D), `hitem3d-2-0-251223` (Hitem3d 2.0 — image-to-3D)
 
 **Notes:**
 - Auth: `BYTEPLUS_API_KEY` is preferred; `ARK_API_KEY` is accepted as a fallback for compatibility with the Volcengine ARK SDK ecosystem.
 - Video params can be encoded as flags inside the prompt text (default, e.g. `--rs 1080p --dur 8 --rt 16:9`) or as a top-level `parameters` object — set `BYTEPLUS_VIDEO_PARAMS_MODE=structured` to switch.
+- 3D model knobs are passed via `--flags <raw>`, appended to the prompt text. Hyper3D supports `--mesh_mode`, `--hd_texture`, `--material`, `--addons`, `--quality_override`, `--use_original_alpha`, `--bbox_condition`, `--TAPose`. Hitem3d supports `--ff`, `--resolution`. See [BytePlus 3D docs](https://docs.byteplus.com/en/docs/ModelArk/2279947).
+- 3D output is a textured model file (`.glb`/`.gltf`/`.zip` depending on flags). The CLI auto-detects the extension from the response URL.
+- `multix byteplus status <taskId> --download` works for both video (`content.video_url`) and 3D (`content.file_url`) tasks.
 - **Task cancellation is not supported** — there is no verified DELETE endpoint on the ARK API. Submitted tasks must run to completion.
 
 ### `multix media`

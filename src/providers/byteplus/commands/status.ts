@@ -11,6 +11,7 @@ import { getOutputDir } from "../../../core/output-dir.js";
 import { maybeDownloadThumb } from "../../../core/video-thumb.js";
 import { PollFailedError, PollTimeoutError } from "../../leonardo/poll.js";
 import { createBytePlusClient } from "../client.js";
+import { downloadModelFile, inferModelFileExt } from "../generators/three-d.js";
 import { downloadVideo, getVideoTaskStatus, waitForVideoTask } from "../generators/video.js";
 
 export function registerBytePlusStatusCommand(parent: Command): void {
@@ -50,20 +51,31 @@ export function registerBytePlusStatusCommand(parent: Command): void {
           console.log(JSON.stringify(status, null, 2));
 
           if (opts.download && status.status === "succeeded") {
-            const url = status.content?.video_url;
-            if (!url) {
-              logger.error("Task succeeded but no video_url present");
+            const content = status.content as { video_url?: string; file_url?: string } | undefined;
+            const videoUrl = content?.video_url;
+            const fileUrl = content?.file_url;
+            if (videoUrl) {
+              const outPath =
+                opts.output ??
+                path.join(getOutputDir(), `byteplus-video-${taskId.slice(0, 8)}.mp4`);
+              await downloadVideo(videoUrl, outPath, logger);
+              await maybeDownloadThumb(status, outPath, {
+                skip: opts.thumb === false,
+                copyTo: opts.output,
+                logger,
+              });
+              console.log(`Saved: ${outPath}`);
+            } else if (fileUrl) {
+              const ext = inferModelFileExt(fileUrl);
+              const outPath =
+                opts.output ??
+                path.join(getOutputDir(), `byteplus-3d-${taskId.slice(0, 8)}.${ext}`);
+              await downloadModelFile(fileUrl, outPath, logger);
+              console.log(`Saved: ${outPath}`);
+            } else {
+              logger.error("Task succeeded but no video_url or file_url present");
               process.exit(1);
             }
-            const outPath =
-              opts.output ?? path.join(getOutputDir(), `byteplus-video-${taskId.slice(0, 8)}.mp4`);
-            await downloadVideo(url, outPath, logger);
-            await maybeDownloadThumb(status, outPath, {
-              skip: opts.thumb === false,
-              copyTo: opts.output,
-              logger,
-            });
-            console.log(`Saved: ${outPath}`);
           }
         } catch (e) {
           if (e instanceof PollTimeoutError) {
