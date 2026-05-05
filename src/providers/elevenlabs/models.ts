@@ -33,9 +33,27 @@ export const ELEVENLABS_OUTPUT_FORMATS = [
 
 export type ElevenLabsOutputFormat = (typeof ELEVENLABS_OUTPUT_FORMATS)[number];
 
+/**
+ * Verified voice IDs from the ElevenLabs conversational voice design guide.
+ * https://elevenlabs.io/docs/eleven-agents/customization/voice/best-practices/conversational-voice-design
+ */
+export const ELEVENLABS_RECOMMENDED_VOICES = {
+  alexandra: "kdmDKE6EkgrWrrykO9Qt",
+  archer: "L0Dsvb3SLTyegXwtm47J",
+  jessica_anne_bogart: "g6xIsTj2HwM6VR4iXFCw",
+  hope: "OYTbf65OHHFELVut7v2H",
+  eryn: "dj3G1R1ilKoFKhBnWOzG",
+  stuart: "HDA9tsk27wYi3uq0fPcK",
+  mark: "1SM7GgM6IMuvQlz2BwM3",
+  angela: "PT4nqlKZfc06VW1BuClj",
+  finn: "vBKc2FfBKJfcZNyEt1n6",
+  cassidy: "56AoDkrOh6qfVPDXZ7Pt",
+  grandpa_spuds_oxley: "NOpBlnGInO9m6vDvFkFC",
+} as const;
+
 export const TASK_DEFAULTS = {
   ttsModel: "eleven_multilingual_v2",
-  ttsVoice: "JBFqnCBsd6RMkjVDRZzb", // "George" – default in ElevenLabs docs examples
+  ttsVoice: ELEVENLABS_RECOMMENDED_VOICES.alexandra,
   ttsFormat: "mp3_44100_128" as ElevenLabsOutputFormat,
   sttModel: "scribe_v1",
   voiceChangerModel: "eleven_multilingual_sts_v2",

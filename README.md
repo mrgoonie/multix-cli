@@ -223,7 +223,7 @@ multix byteplus status <taskId> [--wait] [--wait-timeout 600000] [--download] [-
 # Text-to-speech (sync, returns audio bytes)
 multix elevenlabs tts --text "Hello world" [--voice <voiceId>] [--model eleven_multilingual_v2] \
   [--format mp3_44100_128] [--stability 0.5] [--similarity-boost 0.75] [--style 0.0] \
-  [--language-code en] [--seed <n>] [--output out.mp3] [-v]
+  [--no-speaker-boost] [--language-code en] [--seed <n>] [--output out.mp3] [-v]
 
 # Voices: list / get / search shared / design / persist / delete
 multix elevenlabs voices list [--category cloned|generated|premade|professional]
@@ -278,6 +278,9 @@ multix elevenlabs models
 - STT: `scribe_v1`, `scribe_v1_experimental`
 - Voice changer: `eleven_multilingual_sts_v2` (default)
 - Music: `music_v1`
+
+**Recommended voices** (verified from ElevenLabs conversational voice design guide):
+`Alexandra` `kdmDKE6EkgrWrrykO9Qt` (default), `Archer` `L0Dsvb3SLTyegXwtm47J`, `Jessica Anne Bogart` `g6xIsTj2HwM6VR4iXFCw`, `Hope` `OYTbf65OHHFELVut7v2H`, `Eryn` `dj3G1R1ilKoFKhBnWOzG`, `Stuart` `HDA9tsk27wYi3uq0fPcK`, `Mark` `1SM7GgM6IMuvQlz2BwM3`, `Angela` `PT4nqlKZfc06VW1BuClj`, `Finn` `vBKc2FfBKJfcZNyEt1n6`, `Cassidy` `56AoDkrOh6qfVPDXZ7Pt`, `Grandpa Spuds Oxley` `NOpBlnGInO9m6vDvFkFC`. Use `multix elevenlabs voices list` for the full library.
 
 **Notes:**
 - Auth header is `xi-api-key`; base URL is `https://api.elevenlabs.io/v1`.

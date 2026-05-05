@@ -35,7 +35,7 @@ export function registerTtsCommand(parent: Command): void {
     .option("--stability <n>", "Voice stability 0..1", "0.5")
     .option("--similarity-boost <n>", "Voice similarity boost 0..1", "0.75")
     .option("--style <n>", "Style exaggeration 0..1", "0.0")
-    .option("--speaker-boost", "Use speaker boost (default true)")
+    .option("--no-speaker-boost", "Disable speaker boost (default: enabled)")
     .option("--language-code <code>", "ISO language code (Flash/Turbo/v3 only)")
     .option("--seed <n>", "Determinism seed (0..4294967295)")
     .option("--previous-text <str>", "Preceding text for context continuity")
@@ -57,7 +57,7 @@ export function registerTtsCommand(parent: Command): void {
           stability: Number.parseFloat(opts.stability),
           similarity_boost: Number.parseFloat(opts.similarityBoost),
           style: Number.parseFloat(opts.style),
-          use_speaker_boost: opts.speakerBoost !== false,
+          use_speaker_boost: opts.speakerBoost,
         },
       };
       if (opts.languageCode) payload.language_code = opts.languageCode;
