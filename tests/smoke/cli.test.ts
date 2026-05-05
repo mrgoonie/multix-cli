@@ -60,6 +60,14 @@ describe("multix --help (smoke)", () => {
     }
   });
 
+  it("lists image-to-image subcommand on every provider", async () => {
+    for (const provider of ["byteplus", "gemini", "openrouter", "leonardo", "minimax"]) {
+      const result = await execa("node", [CLI, provider, "--help"], { reject: false });
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout + result.stderr).toContain("image-to-image");
+    }
+  });
+
   it("prints version", async () => {
     const result = await execa("node", [CLI, "--version"], { reject: false });
     expect(result.exitCode).toBe(0);

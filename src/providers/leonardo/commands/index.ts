@@ -4,6 +4,7 @@
 
 import type { Command } from "commander";
 import { registerLeonardoGenerateCommand } from "./generate.js";
+import { registerLeonardoImageToImageCommand } from "./image-to-image.js";
 import { registerLeonardoImageToVideoCommand } from "./image-to-video.js";
 import { registerLeonardoMeCommand } from "./me.js";
 import { registerLeonardoModelsCommand } from "./models.js";
@@ -18,6 +19,7 @@ export function registerLeonardoCommands(program: Command): void {
     .description("Leonardo.Ai: image/video generation, upscaling, account info");
 
   registerLeonardoGenerateCommand(leonardo);
+  registerLeonardoImageToImageCommand(leonardo);
   registerLeonardoVideoCommand(leonardo);
   registerLeonardoImageToVideoCommand(leonardo);
   registerLeonardoVideoModelsCommand(leonardo);
