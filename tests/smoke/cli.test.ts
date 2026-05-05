@@ -24,6 +24,30 @@ describe("multix --help (smoke)", () => {
     expect(out).toContain("leonardo");
     expect(out).toContain("media");
     expect(out).toContain("doc");
+    expect(out).toContain("elevenlabs");
+  });
+
+  it("lists elevenlabs subcommands", async () => {
+    const result = await execa("node", [CLI, "elevenlabs", "--help"], { reject: false });
+    expect(result.exitCode).toBe(0);
+    const out = result.stdout + result.stderr;
+    for (const sub of [
+      "tts",
+      "voices",
+      "clone",
+      "voice-changer",
+      "transcribe",
+      "sfx",
+      "music",
+      "dub",
+      "dub-status",
+      "isolate",
+      "align",
+      "account",
+      "models",
+    ]) {
+      expect(out).toContain(sub);
+    }
   });
 
   it("lists gemini i2v subcommand", async () => {
