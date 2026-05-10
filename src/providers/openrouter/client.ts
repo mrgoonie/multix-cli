@@ -11,6 +11,12 @@ import { ConfigError, ProviderError } from "../../core/errors.js";
 import { fetchBytes, httpJson } from "../../core/http-client.js";
 import type { Logger } from "../../core/logger.js";
 import { getOutputDir } from "../../core/output-dir.js";
+import {
+  buildOpenRouterHeaders,
+  extractImagesFromResponse,
+  formatNoImagesError,
+  resolveModalities,
+} from "./payload.js";
 
 export const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 export const DEFAULT_OPENROUTER_MODEL = "google/gemini-3.1-flash-image-preview";
@@ -31,18 +37,6 @@ export function requireOpenRouterKey(): string {
   return key;
 }
 
-function buildHeaders(apiKey: string): Record<string, string> {
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${apiKey}`,
-    "Content-Type": "application/json",
-  };
-  const referer = resolveKey("OPENROUTER_SITE_URL");
-  const title = resolveKey("OPENROUTER_APP_NAME") ?? "multix";
-  if (referer) headers["HTTP-Referer"] = referer;
-  if (title) headers["X-Title"] = title;
-  return headers;
-}
-
 export interface GeneratePayload {
   prompt: string;
   model: string;
@@ -54,7 +48,7 @@ export interface GeneratePayload {
 function buildPayload(opts: GeneratePayload): Record<string, unknown> {
   const payload: Record<string, unknown> = {
     messages: [{ role: "user", content: opts.prompt }],
-    modalities: opts.model.includes("gemini") ? ["image", "text"] : ["image"],
+    modalities: resolveModalities(opts.model),
     image_config: { aspect_ratio: opts.aspectRatio },
   };
 
@@ -69,17 +63,6 @@ function buildPayload(opts: GeneratePayload): Record<string, unknown> {
   }
 
   return payload;
-}
-
-interface ChatChoice {
-  message?: {
-    images?: Array<{ image_url?: { url?: string } }>;
-  };
-}
-
-interface ChatCompletionResponse {
-  choices?: ChatChoice[];
-  model?: string;
 }
 
 export interface GenerateImageResult {
@@ -120,12 +103,12 @@ export async function generateOpenRouterImage(opts: {
       `OpenRouter model: ${model}${fallbackModels.length ? ` (fallbacks: ${fallbackModels.join(", ")})` : ""}`,
     );
 
-    let data: ChatCompletionResponse;
+    let data: unknown;
     try {
-      data = await httpJson<ChatCompletionResponse>({
+      data = await httpJson<unknown>({
         url: OPENROUTER_API_URL,
         method: "POST",
-        headers: buildHeaders(apiKey),
+        headers: buildOpenRouterHeaders(apiKey),
         body: payload,
         timeoutMs: 240_000,
       });
@@ -133,25 +116,13 @@ export async function generateOpenRouterImage(opts: {
       return { status: "error", error: e instanceof Error ? e.message : String(e) };
     }
 
-    const choices = data.choices ?? [];
-    if (choices.length === 0) {
-      return { status: "error", error: `No choices in response: ${JSON.stringify(data)}` };
+    const parsed = extractImagesFromResponse(data);
+    if (parsed.urls.length === 0) {
+      return { status: "error", error: formatNoImagesError(model, parsed) };
     }
 
-    const messageImages = choices[0]?.message?.images ?? [];
-    if (messageImages.length === 0) {
-      return {
-        status: "error",
-        error: `No images in response — model '${model}' may not support image generation`,
-      };
-    }
-
-    for (const img of messageImages) {
-      const url = img.image_url?.url;
-      if (url) imageUrls.push(url);
-    }
-
-    usedModel = data.model ?? usedModel;
+    imageUrls.push(...parsed.urls);
+    usedModel = parsed.model ?? usedModel;
     if (imageUrls.length >= numImages) break;
   }
 
