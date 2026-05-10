@@ -18,8 +18,22 @@
 
 import { resolveKey } from "../../core/env-loader.js";
 
-/** Model id prefixes that only output images (no text channel). */
-export const IMAGE_ONLY_MODEL_PREFIXES: readonly string[] = ["black-forest-labs/", "sourceful/"];
+/**
+ * Model id prefixes that only output images (no text channel).
+ *
+ * Verified live against OpenRouter:
+ * - `black-forest-labs/` — Flux family (flux.2-pro, flux.2-max, flux.2-flex)
+ * - `bytedance-seed/seedream` — Seedream image models (seedream-4.5)
+ * - `sourceful/` — kept per OpenRouter docs (currently no public catalog entry)
+ *
+ * NOTE: `bytedance-seed/` is NOT a blanket match — that org also publishes
+ * chat LLMs (seed-1.6, seed-2.0-lite). Match the seedream sub-prefix only.
+ */
+export const IMAGE_ONLY_MODEL_PREFIXES: readonly string[] = [
+  "black-forest-labs/",
+  "bytedance-seed/seedream",
+  "sourceful/",
+];
 
 /** Pick OpenRouter `modalities` array based on model family. */
 export function resolveModalities(model: string): string[] {

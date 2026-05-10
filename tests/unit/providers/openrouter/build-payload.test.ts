@@ -53,6 +53,17 @@ describe("resolveModalities", () => {
   it("returns image-only for Flux models", () => {
     expect(resolveModalities("black-forest-labs/flux-kontext-pro")).toEqual(["image"]);
     expect(resolveModalities("black-forest-labs/flux.2-pro")).toEqual(["image"]);
+    expect(resolveModalities("black-forest-labs/flux.2-max")).toEqual(["image"]);
+    expect(resolveModalities("black-forest-labs/flux.2-flex")).toEqual(["image"]);
+  });
+
+  it("returns image-only for Seedream models (verified via live 404)", () => {
+    expect(resolveModalities("bytedance-seed/seedream-4.5")).toEqual(["image"]);
+  });
+
+  it("returns image+text for non-seedream bytedance-seed chat models", () => {
+    expect(resolveModalities("bytedance-seed/seed-1.6")).toEqual(["image", "text"]);
+    expect(resolveModalities("bytedance-seed/seed-2.0-lite")).toEqual(["image", "text"]);
   });
 
   it("returns image-only for Sourceful models", () => {
