@@ -1,0 +1,22 @@
+name: Release Please
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+# release-please opens/updates a "Release PR" tracking conventional commits.
+# When that PR is merged, it bumps package.json + CHANGELOG.md, creates a
+# GitHub Release, and pushes a `vX.Y.Z` tag — which fires publish.yml for npm.
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json

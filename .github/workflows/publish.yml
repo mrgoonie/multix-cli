@@ -50,11 +50,5 @@ jobs:
           npm publish --access public --tag "$TAG" --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          generate_release_notes: true
-          draft: false
-          prerelease: false
+      # GitHub Release is created by release-please-action when a Release PR
+      # merges. Manual `workflow_dispatch` runs publish only to npm.
