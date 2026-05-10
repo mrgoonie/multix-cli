@@ -4,19 +4,29 @@
  * along with the text prompt.
  *
  * Default model: google/gemini-2.5-flash-image (Nano Banana via OR). Other good
- * choices: black-forest-labs/flux-kontext-pro / -max.
+ * choices: openai/gpt-image-1, black-forest-labs/flux-kontext-pro, recraft/recraft-v3.
+ *
+ * `--strength` is Recraft-specific (init-image strength 0..1).
+ * `OPENROUTER_FALLBACK_MODELS` (CSV) is honored — when set, the request uses
+ * `models: [primary, ...fallbacks]` so OpenRouter can route on availability.
  */
 
 import fs from "node:fs";
 import path from "node:path";
 import type { Command } from "commander";
 import { resolveKey } from "../../../core/env-loader.js";
-import { ProviderError } from "../../../core/errors.js";
+import { ProviderError, ValidationError } from "../../../core/errors.js";
 import { fetchBytes, httpJson } from "../../../core/http-client.js";
 import { refUrl, resolveImageInput } from "../../../core/image-input.js";
 import { type Logger, createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import { OPENROUTER_API_URL, requireOpenRouterKey } from "../client.js";
+import {
+  buildI2IPayload,
+  buildOpenRouterHeaders,
+  extractImagesFromResponse,
+  formatNoImagesError,
+} from "../payload.js";
 
 const DEFAULT_MODEL = "google/gemini-2.5-flash-image";
 const SOFT_LIMIT_BYTES = 5 * 1024 * 1024;
@@ -35,6 +45,7 @@ export function registerOpenRouterImageToImageCommand(parent: Command): void {
       [] as string[],
     )
     .option("-m, --model <id>", `OpenRouter model id (default ${DEFAULT_MODEL})`)
+    .option("--strength <n>", "Recraft init-image strength 0..1 (Recraft models only)")
     .option("--output <path>", "Save first generated image to this path")
     .option("-v, --verbose", "Verbose logging")
     .action(
@@ -42,14 +53,21 @@ export function registerOpenRouterImageToImageCommand(parent: Command): void {
         prompt: string;
         ref: string[];
         model?: string;
+        strength?: string;
         output?: string;
         verbose?: boolean;
       }) => {
         if (!opts.ref || opts.ref.length === 0) {
-          throw new Error("At least one --ref is required for image-to-image.");
+          throw new ValidationError("At least one --ref is required for image-to-image.");
         }
         const logger = createLogger({ verbose: opts.verbose ?? false });
         const model = opts.model ?? resolveKey("OPENROUTER_IMAGE_MODEL") ?? DEFAULT_MODEL;
+        const strength = parseStrength(opts.strength);
+
+        const fallbackModels = (resolveKey("OPENROUTER_FALLBACK_MODELS") ?? "")
+          .split(",")
+          .map((m) => m.trim())
+          .filter(Boolean);
 
         const resolvedRefs: string[] = [];
         for (const r of opts.ref) {
@@ -61,12 +79,18 @@ export function registerOpenRouterImageToImageCommand(parent: Command): void {
           resolvedRefs.push(refUrl(resolved));
         }
 
-        logger.debug(`OpenRouter i2i: model=${model}, refs=${resolvedRefs.length}`);
+        const strengthDbg = strength !== undefined ? `, strength=${strength}` : "";
+        const fallbacksDbg = fallbackModels.length ? `, fallbacks=${fallbackModels.join(",")}` : "";
+        logger.debug(
+          `OpenRouter i2i: model=${model}, refs=${resolvedRefs.length}${strengthDbg}${fallbacksDbg}`,
+        );
 
         const saved = await runImageToImage({
           prompt: opts.prompt,
           model,
           refs: resolvedRefs,
+          strength,
+          fallbackModels,
           output: opts.output,
           logger,
         });
@@ -82,45 +106,37 @@ function collect(value: string, prev: string[]): string[] {
   return [...prev, value];
 }
 
-interface ChatCompletionResponse {
-  choices?: Array<{
-    message?: { images?: Array<{ image_url?: { url?: string } }> };
-  }>;
-  model?: string;
+function parseStrength(raw: string | undefined): number | undefined {
+  if (raw === undefined) return undefined;
+  const n = Number.parseFloat(raw);
+  if (!Number.isFinite(n) || n < 0 || n > 1) {
+    throw new ValidationError(`--strength must be a number in [0,1], got '${raw}'`);
+  }
+  return n;
 }
 
 interface RunOpts {
   prompt: string;
   model: string;
   refs: string[];
+  strength?: number;
+  fallbackModels: string[];
   output?: string;
   logger: Logger;
 }
 
 async function runImageToImage(opts: RunOpts): Promise<string[]> {
   const apiKey = requireOpenRouterKey();
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${apiKey}`,
-    "Content-Type": "application/json",
-  };
-  const referer = resolveKey("OPENROUTER_SITE_URL");
-  const title = resolveKey("OPENROUTER_APP_NAME") ?? "multix";
-  if (referer) headers["HTTP-Referer"] = referer;
-  if (title) headers["X-Title"] = title;
-
-  const content: Array<Record<string, unknown>> = opts.refs.map((url) => ({
-    type: "image_url",
-    image_url: { url },
-  }));
-  content.push({ type: "text", text: opts.prompt });
-
-  const payload: Record<string, unknown> = {
+  const headers = buildOpenRouterHeaders(apiKey);
+  const payload = buildI2IPayload({
+    prompt: opts.prompt,
     model: opts.model,
-    messages: [{ role: "user", content }],
-    modalities: opts.model.includes("gemini") ? ["image", "text"] : ["image"],
-  };
+    refs: opts.refs,
+    strength: opts.strength,
+    fallbackModels: opts.fallbackModels,
+  });
 
-  const data = await httpJson<ChatCompletionResponse>({
+  const data = await httpJson<unknown>({
     url: OPENROUTER_API_URL,
     method: "POST",
     headers,
@@ -128,19 +144,16 @@ async function runImageToImage(opts: RunOpts): Promise<string[]> {
     timeoutMs: 240_000,
   });
 
-  const messageImages = data.choices?.[0]?.message?.images ?? [];
-  if (messageImages.length === 0) {
-    throw new ProviderError(
-      `No images in response — model '${opts.model}' may not support image-to-image`,
-      "openrouter",
-    );
+  const parsed = extractImagesFromResponse(data);
+  if (parsed.urls.length === 0) {
+    throw new ProviderError(formatNoImagesError(opts.model, parsed), "openrouter");
   }
 
   const outDir = getOutputDir();
   const ts = Date.now();
   const saved: string[] = [];
-  for (let i = 0; i < messageImages.length; i++) {
-    const url = messageImages[i]?.image_url?.url;
+  for (let i = 0; i < parsed.urls.length; i++) {
+    const url = parsed.urls[i];
     if (!url) continue;
     const bytes = await fetchBytes(url);
     const dest = path.join(outDir, `openrouter-i2i-${ts}-${i + 1}.png`);

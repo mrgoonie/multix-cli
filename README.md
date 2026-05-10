@@ -146,7 +146,7 @@ multix minimax generate-music [--lyrics <str>] [--prompt <str>] [--model music-2
 multix openrouter generate --prompt "Retro robot" [--model google/gemini-3.1-flash-image-preview] [--aspect-ratio 1:1] [--image-size <sz>] [--num-images 1] [-v]
 
 # Image-to-image (alias: i2i) — refs accept URL or local path
-multix openrouter image-to-image --prompt "make it cyberpunk" --ref ./photo.jpg [--ref https://...] [--model google/gemini-2.5-flash-image] [--output <path>] [-v]
+multix openrouter image-to-image --prompt "make it cyberpunk" --ref ./photo.jpg [--ref https://...] [--model google/gemini-2.5-flash-image] [--strength 0.7] [--output <path>] [-v]
 
 # Image-to-video (async — returns job id; image input is URL only)
 multix openrouter image-to-video --prompt "camera pans left" --image-url https://... [--last-frame-url <url>] [--model google/veo-3.1] [--resolution 720p] [--aspect-ratio 16:9] [--duration <n>] [--seed <n>] [-v]
@@ -159,7 +159,9 @@ multix openrouter video-status <jobId> [--download] [--output <path>] [-v]
 multix openrouter video-models
 ```
 
-Fallback models from `OPENROUTER_FALLBACK_MODELS` (CSV) are appended to the chat-image payload automatically. Override the default video model with `OPENROUTER_VIDEO_MODEL` (default `google/veo-3.1`).
+**Supported i2i model families:** Gemini (default) and OpenAI gpt-image return `text+image` (modalities `["image","text"]`); Recraft accepts `--strength` (init-image strength 0..1); Flux / Sourceful are image-only (`["image"]`). The CLI picks the right `modalities` automatically based on the model id prefix.
+
+Fallback models from `OPENROUTER_FALLBACK_MODELS` (CSV) are appended to the chat-image payload automatically — applies to both `generate` and `image-to-image`. Override the default video model with `OPENROUTER_VIDEO_MODEL` (default `google/veo-3.1`).
 
 ### `multix leonardo`
 
