@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.8] - 2026-05-11
+
+### Fixed
+- `multix openrouter image-to-image` previously failed for any non-Gemini text+image model (e.g. `openai/gpt-5.4-image-2`, `openai/gpt-5-image-mini`, `recraft/recraft-v3`) because the `modalities` heuristic forced `["image"]` for non-Gemini models. The new default is `["image","text"]`, with `["image"]` only emitted for verified image-only families (`black-forest-labs/`, `bytedance-seed/seedream`, `sourceful/`).
+- "No images in response" errors now include the model id, `finish_reason`, the model's text reply (if any), and a hint about modalities — previously a single generic line.
+
+### Added
+- `multix openrouter image-to-image --strength <0..1>` — Recraft init-image strength control.
+- `OPENROUTER_FALLBACK_MODELS` (CSV) now applies to `image-to-image` (previously `generate` only). Sends `models: [primary, ...fallbacks]` so OpenRouter can route on availability.
+- New shared module `src/providers/openrouter/payload.ts` — `resolveModalities`, `buildOpenRouterHeaders`, `extractImagesFromResponse`, `formatNoImagesError`, `buildI2IPayload`. DRY across `generate` + `image-to-image`.
+
+### Changed
+- README and `skill/SKILL.md` document the OpenRouter model-family matrix (Gemini / OpenAI gpt-image / Recraft → text+image; Flux 2.x / Seedream 4.5 / Sourceful → image-only) and the new flags.
+
+### Verified live
+`openai/gpt-5.4-image-2`, `openai/gpt-5-image-mini`, `google/gemini-2.5-flash-image`, `black-forest-labs/flux.2-pro`, `flux.2-max`, `flux.2-flex`, `bytedance-seed/seedream-4.5`.
+
 ## [0.0.7] - 2026-05-05
 
 ### Added
