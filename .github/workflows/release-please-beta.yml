@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write
   pull-requests: write
 
 # Beta releases are prepared from dev. release-please opens/updates a Release PR
@@ -16,8 +17,47 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: googleapis/release-please-action@v4
+        id: release
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           target-branch: dev
           config-file: release-please-beta-config.json
           manifest-file: .release-please-manifest.json
+
+      - uses: actions/checkout@v4
+        if: ${{ steps.release.outputs.release_created }}
+
+      - uses: actions/setup-node@v4
+        if: ${{ steps.release.outputs.release_created }}
+        with:
+          node-version: "20"
+          cache: npm
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install dependencies
+        if: ${{ steps.release.outputs.release_created }}
+        run: npm ci
+
+      - name: Lint
+        if: ${{ steps.release.outputs.release_created }}
+        run: npm run lint
+
+      - name: Type-check
+        if: ${{ steps.release.outputs.release_created }}
+        run: npm run typecheck
+
+      - name: Build
+        if: ${{ steps.release.outputs.release_created }}
+        run: npm run build
+
+      - name: Test
+        if: ${{ steps.release.outputs.release_created }}
+        run: npm test
+        env:
+          MULTIX_DISABLE_HOME_ENV: "1"
+
+      - name: Publish beta to npm
+        if: ${{ steps.release.outputs.release_created }}
+        run: npm publish --access public --tag beta --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
