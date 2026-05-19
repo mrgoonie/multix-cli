@@ -44,10 +44,28 @@ jobs:
         env:
           MULTIX_DISABLE_HOME_ENV: "1"
 
-      - name: Publish to npm
+      - name: Resolve npm dist-tag
+        id: dist-tag
+        shell: bash
+        env:
+          REQUESTED_DIST_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || '' }}
         run: |
-          TAG="${{ github.event.inputs.tag || 'latest' }}"
-          npm publish --access public --tag "$TAG" --provenance
+          if [ -n "$REQUESTED_DIST_TAG" ]; then
+            TAG="$REQUESTED_DIST_TAG"
+          else
+            VERSION="$(node -p "require('./package.json').version")"
+            if [[ "$VERSION" == *-* ]]; then
+              PRERELEASE="${VERSION#*-}"
+              TAG="${PRERELEASE%%.*}"
+            else
+              TAG="latest"
+            fi
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Publishing npm dist-tag: $TAG"
+
+      - name: Publish to npm
+        run: npm publish --access public --tag "${{ steps.dist-tag.outputs.tag }}" --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       # GitHub Release is created by release-please-action when a Release PR

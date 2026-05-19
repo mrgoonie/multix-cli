@@ -1,7 +1,7 @@
 {
   "name": "@mrgoonie/multix",
   "version": "0.0.8",
-  "description": "AI multimodal CLI — Gemini (incl. Flash TTS), MiniMax, OpenRouter, Leonardo, BytePlus, ElevenLabs, ffmpeg, ImageMagick, doc-to-md",
+  "description": "AI multimodal CLI — OpenAI, Gemini, MiniMax, OpenRouter, Leonardo, BytePlus, ElevenLabs, ffmpeg, ImageMagick, doc-to-md",
   "type": "module",
   "bin": {
     "multix": "./dist/cli.js"
@@ -40,6 +40,7 @@
     "ai",
     "multimodal",
     "gemini",
+    "openai",
     "minimax",
     "openrouter",
     "leonardo",
@@ -50,6 +51,7 @@
     "image-generation",
     "video-generation",
     "speech-generation",
+    "speech-to-text",
     "document-converter"
   ],
   "author": "multix-cli contributors",

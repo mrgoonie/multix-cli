@@ -10,7 +10,9 @@
       "bump-minor-pre-major": false,
       "bump-patch-for-minor-pre-major": false,
       "draft": false,
-      "prerelease": false,
+      "prerelease": true,
+      "prerelease-type": "beta",
+      "versioning": "prerelease",
       "extra-files": [
         {
           "type": "generic",
@@ -21,6 +23,9 @@
   },
   "release-type": "node",
   "include-v-in-tag": true,
+  "prerelease": true,
+  "prerelease-type": "beta",
+  "versioning": "prerelease",
   "changelog-sections": [
     { "type": "feat", "section": "Added" },
     { "type": "fix", "section": "Fixed" },

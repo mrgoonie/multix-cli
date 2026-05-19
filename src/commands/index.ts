@@ -9,6 +9,7 @@ import { registerElevenLabsCommands } from "../providers/elevenlabs/commands/ind
 import { registerGeminiCommands } from "../providers/gemini/commands/index.js";
 import { registerLeonardoCommands } from "../providers/leonardo/commands/index.js";
 import { registerMinimaxCommands } from "../providers/minimax/commands/index.js";
+import { registerOpenAICommands } from "../providers/openai/commands/index.js";
 import { registerOpenRouterCommands } from "../providers/openrouter/commands/index.js";
 import { registerCheckCommand } from "./check.js";
 import { registerDocCommands } from "./doc/index.js";
@@ -18,6 +19,7 @@ export function registerCommands(program: Command): void {
   registerCheckCommand(program);
   registerGeminiCommands(program);
   registerMinimaxCommands(program);
+  registerOpenAICommands(program);
   registerOpenRouterCommands(program);
   registerLeonardoCommands(program);
   registerBytePlusCommands(program);
