@@ -14,6 +14,11 @@ npx -p @mrgoonie/multix multix --help
 
 **Requirements:** Node >= 20. For media commands: `ffmpeg` and `magick` (ImageMagick 7+) on PATH.
 
+## Release channels
+
+- `main` uses Release Please for stable releases. It creates release PRs from conventional commits, bumps semver, updates `CHANGELOG.md`, tags `vX.Y.Z`, and publishes npm with dist-tag `latest`.
+- `dev` uses Release Please for beta releases. It creates prerelease PRs like `vX.Y.Z-beta.N` from conventional commits and publishes npm with dist-tag `beta`.
+
 ## Quick start
 
 ```bash

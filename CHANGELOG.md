@@ -5,17 +5,6 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.0-beta.1] - 2026-05-19
-
-### Added
-- **OpenAI provider** — image generation, image-to-image edits, TTS, and STT:
-  - `multix openai generate` — OpenAI Images API with `--size`, `--quality`, `--format`, `--num-images`, and optional `--driver api|codex|auto`.
-  - `multix openai image-to-image` / `i2i` — multi-reference image edits using local files or URLs.
-  - `multix openai generate-speech` — OpenAI audio speech generation with voice, format, and instruction controls.
-  - `multix openai transcribe` — OpenAI audio transcription with `text|json|diarized_json`, language, chunking, and paired known-speaker references.
-- Experimental Codex image driver: when `codex` CLI is authenticated, `--driver codex` can generate images without `OPENAI_API_KEY`; `--driver auto` falls back to Codex when the API key is unavailable.
-- `multix check` now reports `OPENAI_API_KEY` and experimental authenticated Codex CLI image capability.
-
 ## [0.0.8] - 2026-05-11
 
 ### Fixed
