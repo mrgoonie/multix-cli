@@ -1,18 +1,18 @@
 /**
  * multix check — diagnostics command.
- * Mirrors check_setup.py: tooling, API keys, Gemini live ping, setup hints.
- * Exit 0 if at least one provider key is configured (and Gemini ping passes when key present).
- * Exit 1 if no provider keys configured or Gemini auth fails.
+ * Validates tooling, API keys, Gemini live ping, setup hints, and optional
+ * authenticated Codex image-driver readiness.
  */
 
 import type { Command } from "commander";
 import { redact, resolveKey } from "../core/env-loader.js";
 import { createLogger } from "../core/logger.js";
+import { checkCodexAuthenticated } from "../providers/openai/codex-image-driver.js";
 import { checkBinary } from "./check-helpers/binary-check.js";
 import { pingGemini } from "./check-helpers/gemini-ping.js";
 import { FFMPEG_HINT, MAGICK_HINT, SETUP_HINTS } from "./check-helpers/setup-hints.js";
 
-interface ProviderEntry {
+export interface ProviderEntry {
   name: string;
   envPrimary: string;
   envFallback?: string;
@@ -32,6 +32,12 @@ const PROVIDERS: ProviderEntry[] = [
     envPrimary: "OPENROUTER_API_KEY",
     optional: true,
     link: "https://openrouter.ai/settings/keys",
+  },
+  {
+    name: "OpenAI",
+    envPrimary: "OPENAI_API_KEY",
+    optional: true,
+    link: "https://platform.openai.com/api-keys",
   },
   {
     name: "MiniMax",
@@ -68,6 +74,21 @@ function resolveProviderKey(p: ProviderEntry): { key?: string; envUsed?: string 
     if (fb) return { key: fb, envUsed: p.envFallback };
   }
   return {};
+}
+
+type CodexImageChecker = () => Promise<boolean>;
+
+export function getCheckProviders(): ProviderEntry[] {
+  return [...PROVIDERS];
+}
+
+export async function checkCodexImageReadiness(
+  hasAnyProviderKey: boolean,
+  verbose = false,
+  checker: CodexImageChecker = checkCodexAuthenticated,
+): Promise<boolean> {
+  if (hasAnyProviderKey && !verbose) return false;
+  return checker();
 }
 
 export function registerCheckCommand(program: Command): void {
@@ -119,10 +140,25 @@ export function registerCheckCommand(program: Command): void {
         }
       }
 
+      const shouldCheckCodex = !anyKey || opts.verbose;
+      let codexReady = false;
+      if (shouldCheckCodex) {
+        logger.header("Codex Image Driver");
+        logger.info("Checking Codex login status...");
+        codexReady = await checkCodexImageReadiness(anyKey, opts.verbose ?? false);
+        if (codexReady) {
+          logger.success("Codex authenticated — experimental OpenAI image driver available");
+        } else {
+          logger.info("Codex image driver unavailable (run `codex login` to enable it)");
+        }
+      }
       if (!anyKey) {
-        logger.header("No Provider Keys Configured");
-        console.log(SETUP_HINTS);
-        process.exit(1);
+        if (!codexReady) {
+          logger.header("No Provider Keys Configured");
+          console.log(SETUP_HINTS);
+          process.exit(1);
+        }
+        anyKey = true;
       }
 
       // ── Section 3: Gemini Live Ping ─────────────────────────────────────
@@ -152,9 +188,11 @@ export function registerCheckCommand(program: Command): void {
           console.log(
             "  Full Gemini multimodal setup (analyze, transcribe, generate, doc convert)",
           );
+        } else if (resolved.get("OpenAI")?.key) {
+          console.log("  OpenAI API setup available (images, TTS, STT)");
         } else {
-          console.log("  Image generation via OpenRouter/MiniMax/Leonardo/BytePlus available");
-          console.log("  Add GEMINI_API_KEY for analysis, transcription, and doc conversion");
+          console.log("  Image generation via configured providers or experimental Codex driver");
+          console.log("  Add API keys for full provider features");
         }
       } else {
         logger.error("One or more checks failed — see above");

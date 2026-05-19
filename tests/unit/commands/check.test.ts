@@ -61,3 +61,32 @@ describe("binary-check helper", () => {
     expect(result.available).toBe(false);
   });
 });
+
+describe("check command provider readiness", () => {
+  it("includes OpenAI in provider diagnostics", async () => {
+    const { getCheckProviders } = await import("../../../src/commands/check.js");
+    expect(getCheckProviders()).toContainEqual(
+      expect.objectContaining({
+        name: "OpenAI",
+        envPrimary: "OPENAI_API_KEY",
+      }),
+    );
+  });
+
+  it("counts authenticated Codex as experimental image readiness only when no provider key exists", async () => {
+    const { checkCodexImageReadiness } = await import("../../../src/commands/check.js");
+    const checker = vi.fn(async () => true);
+
+    await expect(checkCodexImageReadiness(false, false, checker)).resolves.toBe(true);
+    await expect(checkCodexImageReadiness(true, false, checker)).resolves.toBe(false);
+    expect(checker).toHaveBeenCalledTimes(1);
+  });
+
+  it("checks authenticated Codex in verbose mode even when provider keys exist", async () => {
+    const { checkCodexImageReadiness } = await import("../../../src/commands/check.js");
+    const checker = vi.fn(async () => true);
+
+    await expect(checkCodexImageReadiness(true, true, checker)).resolves.toBe(true);
+    expect(checker).toHaveBeenCalledTimes(1);
+  });
+});

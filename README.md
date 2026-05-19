@@ -2,7 +2,7 @@
 
 AI multimodal CLI — generate images/video/speech/music, analyze and transcribe media files, convert documents to Markdown, and optimize media with ffmpeg/ImageMagick.
 
-Supports **Gemini** (analyze, transcribe, generate, Veo video, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), and **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment).
+Supports **OpenAI** (image, image edits, TTS, STT, optional Codex image driver), **Gemini** (analyze, transcribe, generate, Veo video, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), and **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment).
 
 ## Install
 
@@ -23,6 +23,9 @@ multix check
 # Generate an image with Gemini
 multix gemini generate --prompt "A sunset over mountains" --aspect-ratio 16:9
 
+# Generate an image with OpenAI
+multix openai generate --prompt "A clean product photo of a glass espresso cup"
+
 # Analyze an image
 multix gemini analyze --files photo.jpg --prompt "Describe this"
 
@@ -40,6 +43,7 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | Variable | Required | Purpose |
 |---|---|---|
 | `GEMINI_API_KEY` | For Gemini | [AI Studio](https://aistudio.google.com/apikey) |
+| `OPENAI_API_KEY` | For OpenAI API | [OpenAI](https://platform.openai.com/api-keys) |
 | `OPENROUTER_API_KEY` | For OpenRouter | [OpenRouter](https://openrouter.ai/settings/keys) |
 | `MINIMAX_API_KEY` | For MiniMax | [MiniMax](https://platform.minimax.io/user-center/basic-information/interface-key) |
 | `LEONARDO_API_KEY` | For Leonardo | [Leonardo](https://app.leonardo.ai/settings/api-keys) |
@@ -57,6 +61,9 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `MULTIX_OUTPUT_DIR` | No | Override default output dir (`./multix-output`) |
 | `OPENROUTER_IMAGE_MODEL` | No | Default OpenRouter model |
 | `OPENROUTER_FALLBACK_MODELS` | No | Comma-separated fallback model ids |
+| `OPENAI_IMAGE_MODEL` | No | Default OpenAI image model (default `gpt-image-2`) |
+| `OPENAI_TTS_MODEL` | No | Default OpenAI TTS model (default `gpt-4o-mini-tts`) |
+| `OPENAI_STT_MODEL` | No | Default OpenAI STT model (default `gpt-4o-transcribe`) |
 | `IMAGE_GEN_MODEL` | No | Override Gemini image generation model |
 | `VIDEO_GEN_MODEL` | No | Override Gemini video generation model |
 | `MULTIMODAL_MODEL` | No | Override Gemini analysis model |
@@ -68,13 +75,13 @@ Priority: `process.env` > `cwd/.env` > `~/.multix/.env`.
 
 ### `multix check`
 
-Validate setup: tooling (ffmpeg, magick), API keys, Gemini live ping.
+Validate setup: tooling (ffmpeg, magick), API keys, Gemini live ping, and experimental authenticated Codex image capability. Codex is checked when no API key is configured, or in `--verbose` mode.
 
 ```
 multix check [--verbose]
 ```
 
-Exits 0 if at least one provider key is configured. Exits 1 if no keys found or Gemini auth fails.
+Exits 0 if at least one provider key is configured, or authenticated Codex image capability is available. Exits 1 if no provider is usable or Gemini auth fails.
 
 ### `multix gemini`
 
@@ -162,6 +169,47 @@ multix openrouter video-models
 **Supported i2i model families:** Gemini (default) and OpenAI gpt-image return `text+image` (modalities `["image","text"]`); Recraft accepts `--strength` (init-image strength 0..1); Flux / Sourceful are image-only (`["image"]`). The CLI picks the right `modalities` automatically based on the model id prefix.
 
 Fallback models from `OPENROUTER_FALLBACK_MODELS` (CSV) are appended to the chat-image payload automatically — applies to both `generate` and `image-to-image`. Override the default video model with `OPENROUTER_VIDEO_MODEL` (default `google/veo-3.1`).
+
+### `multix openai`
+
+```bash
+# Image generation via OpenAI Images API
+multix openai generate --prompt "A product photo of a titanium travel mug" \
+  [--model gpt-image-2] [--size 1024x1024] [--quality medium] [--format png] [--num-images 1] [--output <path>] [-v]
+
+# Use authenticated Codex CLI as an experimental image driver.
+# Requires manual `codex` login outside multix.
+multix openai generate --prompt "A poster for a midnight jazz club" --driver codex --output poster.png
+
+# Auto chooses OpenAI API when OPENAI_API_KEY exists, otherwise tries authenticated Codex.
+multix openai generate --prompt "Editorial portrait lighting" --driver auto
+
+# Image-to-image edits with one or more local/URL refs
+multix openai image-to-image --prompt "turn this into a watercolor travel sketch" --ref ./photo.jpg [--ref https://...] [--output sketch.png]
+
+# Text-to-speech
+multix openai generate-speech --text "Welcome to multix." [--voice alloy] [--output-format mp3|wav|aac|flac|opus|pcm] [--output speech.mp3]
+
+# Speech-to-text
+multix openai transcribe --input meeting.mp3 [--format text|json|diarized_json] [--language vi]
+
+# Known speaker refs must be paired by name and reference audio path/URL.
+multix openai transcribe --input call.mp3 --format json \
+  --known-speaker-name Alice --known-speaker-reference ./alice.wav \
+  --known-speaker-name Bob --known-speaker-reference ./bob.wav
+```
+
+**OpenAI models:** image `gpt-image-2` (default), TTS `gpt-4o-mini-tts` (default), STT `gpt-4o-transcribe` (default). The Codex driver is experimental and only handles image generation; `multix` does not authenticate Codex for you.
+
+**OpenAI STT format behavior:**
+
+| CLI format | Non-diarize GPT transcription models | Diarize model |
+|---|---|---|
+| `text` | Requests JSON from API, writes returned `text` | Requests JSON from API, writes returned `text` |
+| `json` | Requests JSON | Requests JSON |
+| `diarized_json` | Not supported | Requires `gpt-4o-transcribe-diarize` and defaults `chunking_strategy=auto` |
+
+Known-speaker diarization uses paired `--known-speaker-name` and `--known-speaker-reference` flags; names and references must have the same count.
 
 ### `multix leonardo`
 

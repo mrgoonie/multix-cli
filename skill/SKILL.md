@@ -1,7 +1,7 @@
 ---
 name: multix
-description: AI multimodal CLI — generate and edit images (Gemini Nano Banana, Imagen, MiniMax, OpenRouter, Leonardo, BytePlus Seedream), generate video (Veo, Hailuo, Seedance, Leonardo), TTS/music (Gemini Flash TTS, MiniMax, ElevenLabs), 3D models (Hyper3D), analyze/transcribe media, convert documents to Markdown, optimize media via ffmpeg/ImageMagick. Use whenever the user wants to create, edit, or transform images/video/audio/documents from a CLI, mentions any of: image-to-image, i2i, image edit, watercolor/cyberpunk style transfer, reference image, OpenRouter, Nano Banana, Flux, Seedream, Veo, Hailuo, ElevenLabs voice cloning, or asks for batch media optimization.
-version: 0.0.7
+description: AI multimodal CLI — generate and edit images (OpenAI, Codex driver, Gemini Nano Banana, Imagen, MiniMax, OpenRouter, Leonardo, BytePlus Seedream), generate video (Veo, Hailuo, Seedance, Leonardo), TTS/STT/music (OpenAI, Gemini Flash TTS, MiniMax, ElevenLabs), 3D models (Hyper3D), analyze/transcribe media, convert documents to Markdown, optimize media via ffmpeg/ImageMagick. Use whenever the user wants to create, edit, or transform images/video/audio/documents from a CLI, mentions any of: OpenAI, Codex image driver, image-to-image, i2i, image edit, watercolor/cyberpunk style transfer, reference image, OpenRouter, Nano Banana, Flux, Seedream, Veo, Hailuo, ElevenLabs voice cloning, or asks for batch media optimization.
+version: 0.1.0-beta.1
 ---
 
 # multix — AI Multimodal CLI
@@ -22,6 +22,7 @@ Activate this skill when the user asks to:
 
 ```
 GEMINI_API_KEY        # Google AI Studio
+OPENAI_API_KEY        # OpenAI API (image, image edit, TTS, STT)
 OPENROUTER_API_KEY    # OpenRouter (multi-model gateway)
 MINIMAX_API_KEY       # MiniMax (image/video/speech/music)
 LEONARDO_API_KEY      # Leonardo.Ai (image/video/upscale)
@@ -30,6 +31,12 @@ ELEVENLABS_API_KEY    # ElevenLabs (TTS, cloning, STT, music, dubbing)
 ```
 
 Priority: `process.env` > `cwd/.env` > `~/.multix/.env`.
+
+Codex CLI can be used as an experimental OpenAI image driver after manual `codex login`:
+
+```bash
+multix openai generate --prompt "A poster for a midnight jazz club" --driver codex
+```
 
 ## Install + diagnostics
 
@@ -42,6 +49,7 @@ multix check [--verbose]
 
 | Provider | Command | Notes |
 |---|---|---|
+| OpenAI | `multix openai generate --prompt "<text>" [--driver api\|codex\|auto] [--model gpt-image-2] [--size 1024x1024] [--quality medium] [--format png]` | API first; Codex driver is experimental image-only fallback |
 | Gemini | `multix gemini generate --prompt "<text>" [--model gemini-3.1-flash-image-preview] [--aspect-ratio 16:9] [--size 1K\|2K\|4K] [--num-images N]` | Nano Banana 2 (default), Imagen 4 (`imagen-4.0-generate-001`) |
 | MiniMax | `multix minimax generate --prompt "<text>" [--model image-01] [--aspect-ratio 1:1] [-n N]` | |
 | OpenRouter | `multix openrouter generate --prompt "<text>" [--model <id>] [--aspect-ratio 16:9] [--image-size 2K] [--num-images N]` | Default `google/gemini-3.1-flash-image-preview` |
@@ -57,6 +65,10 @@ Every supported provider exposes `image-to-image` and the alias `i2i`. Refs acce
 ```bash
 # Gemini Nano Banana — multi-ref editing/composition
 multix gemini i2i --prompt "make it watercolor" --ref ./photo.jpg [--ref ./style.png] [--model gemini-2.5-flash-image] [--output <path>] [-v]
+
+# OpenAI — API image edits or experimental Codex driver
+multix openai i2i --prompt "make it watercolor" --ref ./photo.jpg [--ref ./style.png] \
+  [--driver api|codex|auto] [--model gpt-image-2] [--output <path>] [-v]
 
 # MiniMax — CAVEAT: subject_reference only (preserves character in NEW scene, NOT free-form edit)
 multix minimax i2i --prompt "the same character on a beach" --ref ./hero.jpg [--model image-01] [-v]
@@ -146,11 +158,13 @@ All video commands accept `--wait`, `--wait-timeout <ms>`, `--download`, `--outp
 
 ```bash
 # TTS
+multix openai generate-speech --text "Hello world" [--voice alloy] [--output-format mp3]
 multix gemini generate-speech --text "Say cheerfully: Have a wonderful day!" --voice Kore
 multix minimax generate-speech --text "..." --voice <id> --emotion neutral
 multix elevenlabs tts --text "Hello world" [--voice <voiceId>] [--model eleven_multilingual_v2]
 
-# Voice cloning + STT (ElevenLabs)
+# Voice cloning + STT
+multix openai transcribe --input audio.mp3 [--format text|json|diarized_json] [--language vi]
 multix elevenlabs clone --name "My Voice" --files sample1.wav sample2.wav
 multix elevenlabs transcribe --input audio.mp3 [--diarize] [--format text|json|srt|vtt]
 
@@ -180,6 +194,7 @@ Files saved under `./multix-output/` by default. Override with `MULTIX_OUTPUT_DI
 | Variable | Purpose |
 |---|---|
 | `MULTIX_OUTPUT_DIR` | Override default output dir |
+| `OPENAI_IMAGE_MODEL` / `OPENAI_TTS_MODEL` / `OPENAI_STT_MODEL` | OpenAI model defaults |
 | `OPENROUTER_IMAGE_MODEL` | Default OpenRouter image model |
 | `OPENROUTER_FALLBACK_MODELS` | CSV; applies to `generate` AND `i2i` |
 | `OPENROUTER_VIDEO_MODEL` | Default OpenRouter video model (default `google/veo-3.1`) |
