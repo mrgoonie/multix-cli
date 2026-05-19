@@ -25,6 +25,7 @@ describe("multix --help (smoke)", () => {
     expect(out).toContain("media");
     expect(out).toContain("doc");
     expect(out).toContain("elevenlabs");
+    expect(out).toContain("openai");
   });
 
   it("lists elevenlabs subcommands", async () => {
@@ -85,16 +86,35 @@ describe("multix --help (smoke)", () => {
   });
 
   it("lists image-to-image subcommand on every provider", async () => {
-    for (const provider of ["byteplus", "gemini", "openrouter", "leonardo", "minimax"]) {
+    for (const provider of ["byteplus", "gemini", "openrouter", "leonardo", "minimax", "openai"]) {
       const result = await execa("node", [CLI, provider, "--help"], { reject: false });
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain("image-to-image");
     }
+  }, 15_000);
+
+  it("lists openai subcommands", async () => {
+    const result = await execa("node", [CLI, "openai", "--help"], { reject: false });
+    expect(result.exitCode).toBe(0);
+    const out = result.stdout + result.stderr;
+    for (const sub of ["generate", "image-to-image", "generate-speech", "transcribe"]) {
+      expect(out).toContain(sub);
+    }
+  });
+
+  it("rejects openai image-to-image without refs before auth or network work", async () => {
+    const result = await execa(
+      "node",
+      [CLI, "openai", "image-to-image", "--prompt", "test", "--driver", "api"],
+      { reject: false },
+    );
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("At least one --ref is required for image-to-image.");
   });
 
   it("prints version", async () => {
     const result = await execa("node", [CLI, "--version"], { reject: false });
     expect(result.exitCode).toBe(0);
-    expect(result.stdout.trim()).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(result.stdout.trim()).toMatch(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/);
   });
 });
