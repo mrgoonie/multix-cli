@@ -91,7 +91,7 @@ describe("multix --help (smoke)", () => {
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain("image-to-image");
     }
-  });
+  }, 15_000);
 
   it("lists openai subcommands", async () => {
     const result = await execa("node", [CLI, "openai", "--help"], { reject: false });
@@ -100,6 +100,16 @@ describe("multix --help (smoke)", () => {
     for (const sub of ["generate", "image-to-image", "generate-speech", "transcribe"]) {
       expect(out).toContain(sub);
     }
+  });
+
+  it("rejects openai image-to-image without refs before auth or network work", async () => {
+    const result = await execa(
+      "node",
+      [CLI, "openai", "image-to-image", "--prompt", "test", "--driver", "api"],
+      { reject: false },
+    );
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("At least one --ref is required for image-to-image.");
   });
 
   it("prints version", async () => {

@@ -1,5 +1,6 @@
 import type { Command } from "commander";
 import { resolveKey } from "../../../core/env-loader.js";
+import { ValidationError } from "../../../core/errors.js";
 import { createLogger } from "../../../core/logger.js";
 import { resolveImageDriver, runCodexImageGeneration } from "../codex-image-driver.js";
 import {
@@ -35,6 +36,9 @@ export function registerOpenAIImageToImageCommand(parent: Command): void {
     .option("--output <path>", "Save first image to this path")
     .option("-v, --verbose", "Verbose logging")
     .action(async (opts) => {
+      if (!opts.ref || opts.ref.length === 0) {
+        throw new ValidationError("At least one --ref is required for image-to-image.");
+      }
       const logger = createLogger({ verbose: opts.verbose ?? false });
       const outputFormat = parseImageFormat(opts.format);
       const driver = await resolveImageDriver({ requested: parseDriver(opts.driver) });
