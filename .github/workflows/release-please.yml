@@ -77,7 +77,7 @@ jobs:
         if: ${{ steps.release-pr.outputs.number != '' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh pr merge "${{ steps.release-pr.outputs.number }}" --squash --delete-branch
+        run: gh pr merge "${{ steps.release-pr.outputs.number }}" --repo "$GITHUB_REPOSITORY" --squash --delete-branch
 
       - uses: actions/checkout@v4
         if: ${{ steps.release-pr.outputs.number != '' }}
