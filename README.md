@@ -69,9 +69,9 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `OPENAI_IMAGE_MODEL` | No | Default OpenAI image model (default `gpt-image-2`) |
 | `OPENAI_TTS_MODEL` | No | Default OpenAI TTS model (default `gpt-4o-mini-tts`) |
 | `OPENAI_STT_MODEL` | No | Default OpenAI STT model (default `gpt-4o-transcribe`) |
-| `IMAGE_GEN_MODEL` | No | Override Gemini image generation model |
+| `GEMINI_MODEL` / `MULTIMODAL_MODEL` | No | Override Gemini analyze/transcribe/extract model (doc convert uses `--model`; default `gemini-3.5-flash`) |
+| `IMAGE_GEN_MODEL` / `GEMINI_IMAGE_GEN_MODEL` | No | Override Gemini image generation model |
 | `VIDEO_GEN_MODEL` | No | Override Gemini video generation model |
-| `MULTIMODAL_MODEL` | No | Override Gemini analysis model |
 | `GEMINI_TTS_MODEL` / `TTS_MODEL` | No | Override Gemini TTS model (default `gemini-3.1-flash-tts-preview`) |
 
 Priority: `process.env` > `cwd/.env` > `~/.multix/.env`.
@@ -121,10 +121,12 @@ multix gemini generate-speech --text "Joe: How's it going? Jane: Not too bad!" \
 ```
 
 **Gemini models:**
-- Analysis: `gemini-2.5-flash` (default)
+- Text output (analyze, transcribe, extract, doc convert): `gemini-3.5-flash` (default), `gemini-2.5-flash` (manual override)
 - Image gen: `gemini-3.1-flash-image-preview` (Nano Banana 2, fastest), `gemini-3-pro-image-preview` (4K text), `imagen-4.0-generate-001` (production)
 - Video: `veo-3.1-generate-preview` (requires billing)
 - TTS: `gemini-3.1-flash-tts-preview` (default), `gemini-2.5-flash-preview-tts`, `gemini-2.5-pro-preview-tts`
+
+`gemini-3.5-flash` is a text-output model. Use Nano Banana/Imagen for images, Veo for video, and Gemini Flash TTS for speech.
 
 **Aspect ratios:** `1:1 2:3 3:2 3:4 4:3 4:5 5:4 9:16 16:9 21:9`
 
@@ -399,7 +401,7 @@ multix media batch --input-dir <dir> --output-dir <dir> [--quality 85] [--max-wi
 ### `multix doc`
 
 ```bash
-multix doc convert --input <files...> [--output <path>] [--auto-name] [--model gemini-2.5-flash] [--prompt <str>] [-v]
+multix doc convert --input <files...> [--output <path>] [--auto-name] [--model gemini-3.5-flash] [--prompt <str>] [-v]
 ```
 
 Converts PDFs, DOCX/XLSX/PPTX, images, and HTML/text files to Markdown via Gemini.
