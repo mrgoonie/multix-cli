@@ -16,7 +16,7 @@ npx -p @mrgoonie/multix multix --help
 
 ## Release channels
 
-- `main` uses Release Please for stable releases. It creates release PRs from conventional commits, bumps semver, updates `CHANGELOG.md`, tags `vX.Y.Z`, and publishes npm with dist-tag `latest`.
+- `main` uses Release Please for stable releases. On a main push it creates and validates a release PR from conventional commits, merges it, tags `vX.Y.Z`, and publishes npm with dist-tag `latest`.
 - `dev` uses Release Please for beta releases. It creates prerelease PRs like `vX.Y.Z-beta.N` from conventional commits and publishes npm with dist-tag `beta`.
 
 ## Quick start
