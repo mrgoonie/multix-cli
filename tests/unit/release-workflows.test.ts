@@ -8,6 +8,7 @@ describe("release workflows", () => {
     expect(workflow).toContain("id: release");
     expect(workflow).toContain("steps.release.outputs.prs_created");
     expect(workflow).toContain("Resolve release PR");
+    expect(workflow).toContain('--repo "$GITHUB_REPOSITORY"');
     expect(workflow).toContain("Validate stable release PR");
     expect(workflow).toContain("gh pr merge");
     expect(workflow).toContain("skip-github-pull-request: true");

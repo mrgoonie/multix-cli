@@ -47,7 +47,7 @@ jobs:
           console.log(pr.number);
           NODE
           )"
-          branch="$(gh pr view "$number" --json headRefName --jq '.headRefName')"
+          branch="$(gh pr view "$number" --repo "$GITHUB_REPOSITORY" --json headRefName --jq '.headRefName')"
 
           echo "number=$number" >> "$GITHUB_OUTPUT"
           echo "branch=$branch" >> "$GITHUB_OUTPUT"
