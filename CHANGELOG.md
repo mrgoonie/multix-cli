@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0](https://github.com/mrgoonie/multix-cli/compare/v0.0.8...v0.1.0) (2026-05-20)
+
+
+### Added
+
+* **openai:** add provider media commands ([#9](https://github.com/mrgoonie/multix-cli/issues/9)) ([#11](https://github.com/mrgoonie/multix-cli/issues/11)) ([512d689](https://github.com/mrgoonie/multix-cli/commit/512d689f3fa5dcb2fb7ccce26a7d8d33b0091564))
+
+
+### Fixed
+
+* **release:** auto-complete stable releases ([#13](https://github.com/mrgoonie/multix-cli/issues/13)) ([20d65d4](https://github.com/mrgoonie/multix-cli/commit/20d65d46cbacacf28008996f7d13c0a17a00b540))
+* **release:** resolve release PR without checkout ([#14](https://github.com/mrgoonie/multix-cli/issues/14)) ([64632ad](https://github.com/mrgoonie/multix-cli/commit/64632ad08e71a3ed94ac3b12f136403cd9c15651))
+
 ## [0.0.8] - 2026-05-11
 
 ### Fixed
