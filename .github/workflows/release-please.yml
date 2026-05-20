@@ -7,16 +7,113 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  id-token: write
+  checks: read
 
-# release-please opens/updates a "Release PR" tracking conventional commits.
-# When that PR is merged, it bumps package.json + CHANGELOG.md, creates a
-# GitHub Release, and pushes a `vX.Y.Z` tag — which fires publish.yml for npm.
+# Stable releases are completed in this workflow because pushes made by
+# GITHUB_TOKEN do not trigger follow-up workflows.
 jobs:
   release-please:
     runs-on: ubuntu-latest
     steps:
       - uses: googleapis/release-please-action@v4
+        id: release
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+          target-branch: main
+
+      - name: Resolve release PR
+        id: release-pr
+        if: ${{ steps.release.outputs.prs_created == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_JSON: ${{ steps.release.outputs.pr }}
+          PRS_JSON: ${{ steps.release.outputs.prs }}
+        run: |
+          number="$(
+            node <<'NODE'
+          const prsJson = process.env.PRS_JSON || "[]";
+          const prJson = process.env.PR_JSON || "";
+          const prs = prsJson ? JSON.parse(prsJson) : [];
+          const fallback = prJson ? JSON.parse(prJson) : null;
+          const pr = Array.isArray(prs) && prs.length > 0 ? prs[0] : fallback;
+
+          if (!pr?.number) {
+            throw new Error("release-please did not expose a release PR number");
+          }
+
+          console.log(pr.number);
+          NODE
+          )"
+          branch="$(gh pr view "$number" --json headRefName --jq '.headRefName')"
+
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        if: ${{ steps.release-pr.outputs.number != '' }}
+        with:
+          ref: ${{ steps.release-pr.outputs.branch }}
+
+      - uses: actions/setup-node@v4
+        if: ${{ steps.release-pr.outputs.number != '' }}
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      - name: Validate stable release PR
+        if: ${{ steps.release-pr.outputs.number != '' }}
+        run: |
+          npm ci
+          npm run lint
+          npm run typecheck
+          npm run build
+          npm test
+
+      - name: Merge stable release PR
+        if: ${{ steps.release-pr.outputs.number != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh pr merge "${{ steps.release-pr.outputs.number }}" --squash --delete-branch
+
+      - uses: actions/checkout@v4
+        if: ${{ steps.release-pr.outputs.number != '' }}
+        with:
+          ref: main
+
+      - uses: googleapis/release-please-action@v4
+        id: merged-release
+        if: ${{ steps.release-pr.outputs.number != '' }}
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+          target-branch: main
+          skip-github-pull-request: true
+
+      - uses: actions/checkout@v4
+        if: ${{ steps.release.outputs.release_created == 'true' || steps.merged-release.outputs.release_created == 'true' }}
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v4
+        if: ${{ steps.release.outputs.release_created == 'true' || steps.merged-release.outputs.release_created == 'true' }}
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      - name: Publish stable npm release
+        if: ${{ steps.release.outputs.release_created == 'true' || steps.merged-release.outputs.release_created == 'true' }}
+        run: |
+          npm ci
+          npm run lint
+          npm run typecheck
+          npm run build
+          npm test
+          npm publish --access public --tag latest --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
