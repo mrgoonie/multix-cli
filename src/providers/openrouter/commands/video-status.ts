@@ -64,7 +64,7 @@ export async function downloadOpenRouterVideo(opts: OpenRouterDownloadOpts): Pro
 export function registerOpenRouterVideoStatusCommand(parent: Command): void {
   parent
     .command("video-status <jobId>")
-    .description("Poll an OpenRouter video generation job")
+    .description("Poll or download an OpenRouter video generation job by job ID")
     .option("--wait", "Poll until status is 'completed' or 'failed'")
     .option("--wait-timeout <ms>", "Poll timeout in ms (with --wait)", "600000")
     .option("--download", "If completed, download the video (implies --wait)")

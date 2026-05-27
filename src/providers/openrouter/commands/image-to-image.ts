@@ -36,7 +36,7 @@ export function registerOpenRouterImageToImageCommand(parent: Command): void {
   parent
     .command("image-to-image")
     .alias("i2i")
-    .description("Edit/transform images via OpenRouter (default: google/gemini-2.5-flash-image)")
+    .description("Edit/transform images via OpenRouter (image-to-image); models: Gemini, GPT-Image, Flux, Recraft, Seedream")
     .requiredOption("--prompt <text>", "Text prompt describing the edit")
     .requiredOption(
       "--ref <path>",

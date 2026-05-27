@@ -19,7 +19,7 @@ export function registerElevenLabsCommands(program: Command): void {
   const el = program
     .command("elevenlabs")
     .description(
-      "ElevenLabs: TTS, voices, cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment",
+      "ElevenLabs: text-to-speech, voice cloning, speech-to-text, voice changer, sound effects, music, dubbing, voice isolation, forced alignment",
     );
 
   registerTtsCommand(el);

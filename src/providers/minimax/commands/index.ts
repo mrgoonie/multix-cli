@@ -12,7 +12,7 @@ import { registerMinimaxImageToImageCommand } from "./image-to-image.js";
 export function registerMinimaxCommands(program: Command): void {
   const minimax = program
     .command("minimax")
-    .description("MiniMax generation: images, video, speech, and music");
+    .description("MiniMax: generate images, video (Hailuo), speech (TTS), and music");
 
   registerMinimaxGenerateCommand(minimax);
   registerMinimaxImageToImageCommand(minimax);

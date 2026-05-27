@@ -18,7 +18,7 @@ export function registerOpenRouterImageToVideoCommand(parent: Command): void {
   parent
     .command("image-to-video")
     .alias("i2v")
-    .description("Submit an image-to-video job to OpenRouter (async, returns job id)")
+    .description("Generate video from an image via OpenRouter (image-to-video, async); models: Veo, Seedance, Kling — use video-models to list all")
     .requiredOption("--prompt <text>", "Motion/scene prompt")
     .requiredOption("--image-url <url>", "First-frame image URL (https)")
     .option("--last-frame-url <url>", "Optional last-frame image URL")

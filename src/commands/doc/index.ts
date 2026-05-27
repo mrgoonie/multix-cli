@@ -10,7 +10,7 @@ import { convertDocuments } from "./convert.js";
 export function registerDocCommands(program: Command): void {
   const doc = program
     .command("doc")
-    .description("Document operations: convert PDFs, images, Office docs to Markdown via Gemini");
+    .description("Document-to-Markdown: convert PDFs, images, DOCX, PPTX, and other docs to Markdown via Gemini");
 
   doc
     .command("convert")

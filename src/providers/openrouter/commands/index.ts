@@ -12,7 +12,7 @@ import { registerOpenRouterVideoStatusCommand } from "./video-status.js";
 export function registerOpenRouterCommands(program: Command): void {
   const openrouter = program
     .command("openrouter")
-    .description("OpenRouter image + video generation");
+    .description("OpenRouter: text-to-image, image-to-image, and video generation (image-to-video) via routed models — Veo, Seedance, Kling, and others");
 
   registerOpenRouterGenerateCommand(openrouter);
   registerOpenRouterImageToImageCommand(openrouter);
