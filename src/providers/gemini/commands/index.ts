@@ -16,7 +16,7 @@ export function registerGeminiCommands(program: Command): void {
   const gemini = program
     .command("gemini")
     .description(
-      "Gemini AI operations: analyze, transcribe, extract, generate images/video/speech",
+      "Gemini: analyze, transcribe, extract data, generate images (Imagen/Nano Banana), video (Veo), and speech (Flash TTS)",
     );
 
   registerAnalyzeCommand(gemini);

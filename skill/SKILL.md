@@ -1,6 +1,6 @@
 ---
 name: multix
-description: AI multimodal CLI — generate and edit images (OpenAI, Codex driver, Gemini Nano Banana, Imagen, MiniMax, OpenRouter, Leonardo, BytePlus Seedream), generate video (Veo, Hailuo, Seedance, Leonardo), TTS/STT/music (OpenAI, Gemini Flash TTS, MiniMax, ElevenLabs), 3D models (Hyper3D), analyze/transcribe media, convert documents to Markdown, optimize media via ffmpeg/ImageMagick. Use whenever the user wants to create, edit, or transform images/video/audio/documents from a CLI, mentions any of: OpenAI, Codex image driver, image-to-image, i2i, image edit, watercolor/cyberpunk style transfer, reference image, OpenRouter, Nano Banana, Flux, Seedream, Veo, Hailuo, ElevenLabs voice cloning, or asks for batch media optimization.
+description: AI multimodal CLI — generate and edit images (OpenAI, Codex driver, Gemini Nano Banana, Imagen, MiniMax, OpenRouter, Leonardo, BytePlus Seedream), generate video (Gemini Veo, MiniMax Hailuo, OpenRouter via Veo/Seedance/Kling, Leonardo via Motion/Veo/Kling/Hailuo/Seedance/LTX, BytePlus Seedance), TTS/STT/music (OpenAI, Gemini Flash TTS, MiniMax, ElevenLabs), 3D models (BytePlus Hyper3D/Hitem3d), analyze/transcribe media, convert documents to Markdown, optimize media via ffmpeg/ImageMagick. Use whenever the user wants to create, edit, or transform images/video/audio/3D/documents from a CLI, mentions any of: OpenAI, Codex image driver, image-to-image, i2i, image edit, watercolor/cyberpunk style transfer, reference image, OpenRouter, Nano Banana, Flux, Seedream, Veo, Hailuo, Seedance, Kling, video generation, text-to-video, image-to-video, i2v, ElevenLabs voice cloning, or asks for batch media optimization.
 version: 0.1.1 # x-release-please-version
 ---
 
@@ -12,8 +12,11 @@ Activate this skill when the user asks to:
 - Generate images from a text prompt (any provider)
 - **Edit/transform an existing image with a prompt** (image-to-image, alias `i2i`)
 - Generate video from text or from a reference image (image-to-video, alias `i2v`)
+- **Generate video via OpenRouter routed models** (Veo, Seedance, Kling — use `multix openrouter video-models` to list)
+- **Generate video via BytePlus Seedance** directly (text-to-video, image-to-video, reference-to-video)
+- **Generate video via Leonardo** (Motion, Veo, Kling, Hailuo, Seedance, LTX models)
 - Generate or clone a voice, run STT, generate music or sound effects
-- Generate 3D models (Hyper3D / Hitem3d)
+- Generate 3D models (BytePlus Hyper3D / Hitem3d)
 - Analyze, transcribe, or extract structured data from media/docs
 - Convert PDFs / DOCX / images to Markdown
 - Optimize, resize, batch-convert, or split video/audio/image files
@@ -23,7 +26,7 @@ Activate this skill when the user asks to:
 ```
 GEMINI_API_KEY        # Google AI Studio
 OPENAI_API_KEY        # OpenAI API (image, image edit, TTS, STT)
-OPENROUTER_API_KEY    # OpenRouter (multi-model gateway)
+OPENROUTER_API_KEY    # OpenRouter (multi-model gateway: image + video via Veo, Seedance, Kling)
 MINIMAX_API_KEY       # MiniMax (image/video/speech/music)
 LEONARDO_API_KEY      # Leonardo.Ai (image/video/upscale)
 BYTEPLUS_API_KEY      # BytePlus / Volcengine ARK (Seedream/Seedance/Hyper3D)
@@ -138,8 +141,9 @@ multix gemini i2v ./photo.jpg --prompt "camera pans left" [--last-frame <path>]
 # MiniMax Hailuo — async with auto-poll
 multix minimax generate-video --prompt "A dancer" --duration 6 --resolution 1080P [--first-frame <url>]
 
-# OpenRouter Veo — async, returns jobId; image input is URL only
-multix openrouter i2v --prompt "<text>" --image-url https://... [--last-frame-url <url>] [--resolution 720p]
+# OpenRouter — video via routed models (Veo, Seedance, Kling); async, URL input only
+multix openrouter i2v --prompt "<text>" --image-url https://... [--model google/veo-3.1] [--resolution 720p]
+multix openrouter video-models                       # list all available video models
 multix openrouter video-status <jobId> [--download] [--output <path>]
 
 # Leonardo MOTION2 / VEO3 / kling
@@ -153,6 +157,30 @@ multix byteplus reference-to-video --prompt "<text>" --ref-image ./hero.jpg:subj
 ```
 
 All video commands accept `--wait`, `--wait-timeout <ms>`, `--download`, `--output <path>`, `--no-thumb`.
+
+### Decision tree — which provider to pick for video generation
+
+```
+User wants to generate a video?
+  ├── Text-to-video?
+  │   ├── Gemini Veo (experimental, Google billing)        → multix gemini generate-video
+  │   ├── MiniMax Hailuo (async, auto-poll)                → multix minimax generate-video
+  │   ├── Leonardo (Motion/Veo/Kling/Hailuo/Seedance/LTX) → multix leonardo video
+  │   └── BytePlus Seedance 2.0 (direct)                  → multix byteplus video
+  ├── Image-to-video?
+  │   ├── Gemini Veo (experimental)                        → multix gemini i2v
+  │   ├── OpenRouter (Veo, Seedance, Kling — URL input)   → multix openrouter i2v --image-url <url>
+  │   ├── Leonardo (needs imageId from Leonardo upload)    → multix leonardo i2v
+  │   └── BytePlus Seedance 2.0 (local file or URL)       → multix byteplus i2v
+  └── Multi-reference video (images + videos + audio)?     → multix byteplus reference-to-video
+```
+
+### Provider selection hints for agents
+
+- **OpenRouter video** supports Veo, Seedance, Kling, and more via model routing. Image input must be a URL (not a local file). Run `multix openrouter video-models` to discover available models.
+- **BytePlus Seedance** is the best choice when `BYTEPLUS_API_KEY` is available and you need text-to-video, image-to-video (local file or URL), or multi-reference video.
+- **Leonardo** offers the widest model selection (Motion, Veo, Kling, Hailuo, Seedance, LTX) but requires a Leonardo API key.
+- If one provider's key is unavailable, fall back to another that supports the same capability.
 
 ## Speech, music, voice, 3D, docs, media
 
@@ -204,6 +232,41 @@ Files saved under `./multix-output/` by default. Override with `MULTIX_OUTPUT_DI
 | `BYTEPLUS_IMAGE_MODEL` / `BYTEPLUS_VIDEO_MODEL` / `BYTEPLUS_3D_MODEL` | BytePlus model defaults |
 | `BYTEPLUS_VIDEO_PARAMS_MODE` | `flags` (default) or `structured` |
 | `MULTIX_DISABLE_HOME_ENV` | `1` to skip `~/.multix/.env` |
+
+## Quick examples for agents
+
+```bash
+# Text-to-image
+multix openai generate --prompt "A sunset over mountains"
+multix gemini generate --prompt "A sunset over mountains" --aspect-ratio 16:9
+multix openrouter generate --prompt "A sunset over mountains" --num-images 2
+multix byteplus generate --prompt "A sunset over mountains" --size 2K
+
+# Image-to-image (edit an existing image)
+multix gemini i2i --prompt "make it watercolor" --ref ./photo.jpg
+multix openrouter i2i --prompt "make it cyberpunk" --ref ./photo.jpg
+
+# Text-to-video
+multix byteplus video --prompt "Ocean waves crashing on rocks" --duration 8
+multix leonardo video "Ocean waves crashing on rocks" --model kling-2.6
+multix gemini generate-video --prompt "Ocean waves crashing on rocks"
+
+# Image-to-video
+multix openrouter i2v --prompt "camera slowly pans left" --image-url https://example.com/photo.jpg
+multix byteplus i2v ./photo.jpg --prompt "camera slowly pans left"
+
+# Transcribe / analyze media
+multix gemini analyze --files ./video.mp4 --prompt "Summarize this video"
+multix gemini transcribe --files ./audio.mp3
+multix elevenlabs transcribe --input ./audio.mp3 --diarize
+
+# Compress / split media
+multix media optimize --input large.mp4 --output small.mp4 --target-size 50
+multix media split --input long-video.mp4 --chunk-duration 600
+
+# Convert document to markdown
+multix doc convert --input report.pdf --auto-name
+```
 
 ## Security & scope
 

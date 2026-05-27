@@ -7,7 +7,9 @@ import { registerOpenAITranscribeCommand } from "./transcribe.js";
 export function registerOpenAICommands(program: Command): void {
   const openai = program
     .command("openai")
-    .description("OpenAI image generation/editing, TTS, STT, and experimental Codex image driver");
+    .description(
+      "OpenAI: image generation/editing (GPT-Image, Codex driver), text-to-speech (TTS), speech-to-text (STT)",
+    );
   registerOpenAIGenerateCommand(openai);
   registerOpenAIImageToImageCommand(openai);
   registerOpenAIGenerateSpeechCommand(openai);

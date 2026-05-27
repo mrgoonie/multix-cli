@@ -9,7 +9,9 @@ import { listVideoModels } from "../video-client.js";
 export function registerOpenRouterVideoModelsCommand(parent: Command): void {
   parent
     .command("video-models")
-    .description("List available OpenRouter video models")
+    .description(
+      "List available OpenRouter video-generation models (Veo, Seedance, Kling, and others)",
+    )
     .option("-v, --verbose", "Verbose logging")
     .action(async (opts: { verbose?: boolean }) => {
       const logger = createLogger({ verbose: opts.verbose ?? false });

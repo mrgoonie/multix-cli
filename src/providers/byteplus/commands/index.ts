@@ -15,7 +15,7 @@ export function registerBytePlusCommands(program: Command): void {
   const byteplus = program
     .command("byteplus")
     .description(
-      "BytePlus ModelArk: Seedream image, Seedance video, Hyper3D / Hitem3d 3D generation",
+      "BytePlus ModelArk: image (Seedream 4.0), video (Seedance 2.0 text/image/reference-to-video), and 3D (Hyper3D / Hitem3d)",
     );
 
   registerBytePlusGenerateCommand(byteplus);

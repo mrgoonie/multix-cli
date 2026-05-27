@@ -18,7 +18,7 @@ export function registerMediaCommands(program: Command): void {
   const media = program
     .command("media")
     .description(
-      "Media optimization: compress video/audio/images, split long videos, batch process",
+      "Media processing via ffmpeg/ImageMagick: compress video/audio/images, split long videos, batch optimize directories",
     );
 
   // ── optimize ──────────────────────────────────────────────────────────────
