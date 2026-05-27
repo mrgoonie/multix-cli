@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0](https://github.com/mrgoonie/multix-cli/compare/v0.1.1...v0.2.0) (2026-05-27)
+
+
+### Added
+
+* improve agent-facing command and skill descriptions ([#19](https://github.com/mrgoonie/multix-cli/issues/19)) ([a0f1dab](https://github.com/mrgoonie/multix-cli/commit/a0f1dab7e76295d5eb6a9d6dff237d28d2832596)), closes [#18](https://github.com/mrgoonie/multix-cli/issues/18)
+
 ## [0.1.1](https://github.com/mrgoonie/multix-cli/compare/v0.1.0...v0.1.1) (2026-05-20)
 
 
