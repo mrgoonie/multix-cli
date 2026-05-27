@@ -10,7 +10,9 @@ import { DEFAULT_OPENROUTER_MODEL, generateOpenRouterImage } from "../client.js"
 export function registerOpenRouterGenerateCommand(parent: Command): void {
   parent
     .command("generate")
-    .description("Generate images via OpenRouter (text-to-image); models: Gemini, GPT-Image, Flux, Recraft, Seedream")
+    .description(
+      "Generate images via OpenRouter (text-to-image); models: Gemini, GPT-Image, Flux, Recraft, Seedream",
+    )
     .requiredOption("--prompt <text>", "Image generation prompt")
     .option("--model <id>", "OpenRouter model id (e.g. google/gemini-3.1-flash-image-preview)")
     .option("--aspect-ratio <ratio>", "Aspect ratio (e.g. 1:1, 16:9)", "1:1")

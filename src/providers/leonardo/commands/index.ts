@@ -16,7 +16,9 @@ import { registerLeonardoVideoCommand } from "./video.js";
 export function registerLeonardoCommands(program: Command): void {
   const leonardo = program
     .command("leonardo")
-    .description("Leonardo: image generation, video (Motion, Veo, Kling, Hailuo, Seedance, LTX), upscaling, and account info");
+    .description(
+      "Leonardo: image generation, video (Motion, Veo, Kling, Hailuo, Seedance, LTX), upscaling, and account info",
+    );
 
   registerLeonardoGenerateCommand(leonardo);
   registerLeonardoImageToImageCommand(leonardo);
