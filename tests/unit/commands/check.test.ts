@@ -89,4 +89,24 @@ describe("check command provider readiness", () => {
     await expect(checkCodexImageReadiness(true, true, checker)).resolves.toBe(true);
     expect(checker).toHaveBeenCalledTimes(1);
   });
+
+  it("reports Cloudflare native and video readiness separately", async () => {
+    vi.stubEnv("CLOUDFLARE_ACCOUNT_ID", "account");
+    vi.stubEnv("CLOUDFLARE_API_TOKEN", "token");
+    const { cloudflareReadiness } = await import("../../../src/commands/check.js");
+    expect(cloudflareReadiness()).toEqual({ native: true, video: false });
+
+    vi.stubEnv("CLOUDFLARE_AI_GATEWAY_ID", "gateway");
+    vi.stubEnv("REPLICATE_API_TOKEN", "replicate");
+    expect(cloudflareReadiness()).toEqual({ native: true, video: true });
+    vi.unstubAllEnvs();
+  });
+
+  it("does not count whitespace-only Cloudflare credentials as configured", async () => {
+    vi.stubEnv("CLOUDFLARE_ACCOUNT_ID", "   ");
+    vi.stubEnv("CLOUDFLARE_API_TOKEN", "\t");
+    const { cloudflareReadiness } = await import("../../../src/commands/check.js");
+    expect(cloudflareReadiness()).toEqual({ native: false, video: false });
+    vi.unstubAllEnvs();
+  });
 });
