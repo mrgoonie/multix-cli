@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0-beta.1](https://github.com/mrgoonie/multix-cli/compare/v0.1.0-beta...v0.1.0-beta.1) (2026-07-29)
+
+
+### Added
+
+* add Gemini Omni video support ([#28](https://github.com/mrgoonie/multix-cli/issues/28)) ([c8557e6](https://github.com/mrgoonie/multix-cli/commit/c8557e64cfb9bb19b79ae50967664f11d98cb9b8))
+* **gemini:** support Gemini 3.5 Flash text defaults ([#17](https://github.com/mrgoonie/multix-cli/issues/17)) ([e31491e](https://github.com/mrgoonie/multix-cli/commit/e31491ed01f9aeb7ec52421c8cd76d26b797ddf8))
+
 ## [0.1.0-beta](https://github.com/mrgoonie/multix-cli/compare/v0.0.8...v0.1.0-beta) (2026-05-19)
 
 
