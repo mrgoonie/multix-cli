@@ -13,7 +13,15 @@ const CLI = path.resolve(__dirname, "../../dist/cli.js");
 const topLevelCommands = ["check", "gemini", "minimax", "openrouter", "openai", "media", "doc"];
 
 const subcommands: Record<string, string[]> = {
-  gemini: ["analyze", "transcribe", "extract", "generate", "generate-video", "image-to-image"],
+  gemini: [
+    "analyze",
+    "transcribe",
+    "extract",
+    "generate",
+    "generate-video",
+    "image-to-image",
+    "omni-video",
+  ],
   minimax: ["generate", "generate-video", "generate-speech", "generate-music", "image-to-image"],
   openrouter: ["generate", "image-to-image"],
   openai: ["generate", "image-to-image", "generate-speech", "transcribe"],

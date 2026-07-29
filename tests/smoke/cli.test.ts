@@ -57,6 +57,12 @@ describe("multix --help (smoke)", () => {
     expect(result.stdout + result.stderr).toContain("image-to-video");
   });
 
+  it("lists the Gemini Omni video command and its preview notice", async () => {
+    const result = await execa("node", [CLI, "gemini", "omni-video", "--help"], { reject: false });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout + result.stderr).toContain("PAID PREVIEW");
+  });
+
   it("lists openrouter video subcommands", async () => {
     const result = await execa("node", [CLI, "openrouter", "--help"], { reject: false });
     expect(result.exitCode).toBe(0);

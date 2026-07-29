@@ -112,6 +112,18 @@ multix gemini generate-video --prompt "Ocean waves" [--model veo-3.1-generate-pr
 # Image-to-video with Veo (alias: i2v) [EXPERIMENTAL]
 multix gemini image-to-video <imagePath> --prompt "camera pans left" [--last-frame <path>] [--model veo-3.1-generate-preview] [--resolution 1080p] [--aspect-ratio 16:9] [--output <path>] [-v]
 
+# Generate or edit video with Gemini Omni Flash [PAID PREVIEW]
+# Use either local image guidance or one local video, not both.
+multix gemini omni-video --prompt "A paper airplane flies through a sunlit office" \
+  [--image ./frame.png] [--video ./clip.mp4] [--previous-interaction-id <id>] \
+  [--upload-timeout 300000] [--output ./result.mp4] [-v]
+
+# Chain a Lite-generated image into a Lite edit
+multix gemini generate --model gemini-3.1-flash-lite-image \
+  --prompt "A minimal coffee package on a pale blue background" --size 1K --output package.png
+multix gemini image-to-image --model gemini-3.1-flash-lite-image \
+  --ref package.png --prompt "Add hand-drawn botanical details" --size 1K --output package-botanical.png
+
 # Text-to-speech (Gemini 3.1 Flash TTS — single & multi-speaker)
 multix gemini generate-speech (--text|--prompt) "Say cheerfully: Have a wonderful day!" [--model gemini-3.1-flash-tts-preview] [--voice Kore] [--output-format wav|pcm] [--output <path>] [-v]
 
@@ -122,13 +134,17 @@ multix gemini generate-speech --text "Joe: How's it going? Jane: Not too bad!" \
 
 **Gemini models:**
 - Text output (analyze, transcribe, extract, doc convert): `gemini-3.5-flash` (default), `gemini-2.5-flash` (manual override)
-- Image gen: `gemini-3.1-flash-image-preview` (Nano Banana 2, fastest), `gemini-3-pro-image-preview` (4K text), `imagen-4.0-generate-001` (production)
+- Image gen: `gemini-3.1-flash-image-preview` (Nano Banana 2, fastest), `gemini-3.1-flash-lite-image` (Nano Banana 2 Lite), `gemini-3-pro-image-preview` (4K text), `imagen-4.0-generate-001` (production)
 - Video: `veo-3.1-generate-preview` (requires billing)
 - TTS: `gemini-3.1-flash-tts-preview` (default), `gemini-2.5-flash-preview-tts`, `gemini-2.5-pro-preview-tts`
 
 `gemini-3.5-flash` is a text-output model. Use Nano Banana/Imagen for images, Veo for video, and Gemini Flash TTS for speech.
 
 **Aspect ratios:** `1:1 2:3 3:2 3:4 4:3 4:5 5:4 9:16 16:9 21:9`
+
+**Gemini Omni Flash video:** a paid-tier preview for prompt-to-video and edits, producing 3–10 second 720p videos. It accepts local images or one local video; audio references, multiple videos, video extension/interpolation, and voice editing are unsupported. Uploaded-video editing is unavailable in the EEA, Switzerland, and the UK. Each run prints an interaction ID; use it with `--previous-interaction-id` for a follow-up edit. The CLI keeps no local history: continuation depends on Gemini-stored interactions (`store=true`), retained for up to 55 days on the paid tier and incompatible with `store=false`. The generated MP4 is saved in the standard output directory with an adjacent `.json` sidecar containing its provider, model, prompt, input basenames, timestamp, and interaction ID; `--output` copies the MP4 to the requested path.
+
+**Nano Banana 2 Lite:** use `gemini-3.1-flash-lite-image` with `generate` or `image-to-image`. Output is always 1K—do not request 2K or 4K. Supported aspect ratios are `1:1 3:2 2:3 3:4 4:3 4:5 5:4 9:16 16:9 21:9`.
 
 **TTS voices (30 prebuilt):** Zephyr, Puck, Charon, Kore, Fenrir, Leda, Orus, Aoede, Callirrhoe, Autonoe, Enceladus, Iapetus, Umbriel, Algieba, Despina, Erinome, Algenib, Rasalgethi, Laomedeia, Achernar, Alnilam, Schedar, Gacrux, Pulcherrima, Achird, Zubenelgenubi, Vindemiatrix, Sadachbia, Sadaltager, Sulafat. Audio is PCM s16le @ 24 kHz mono — saved as WAV (default) or raw PCM. Style is controlled via natural language in the prompt (`[whispers]`, `Say excitedly:`, etc.). No streaming; max 2 speakers; ~32k token context.
 

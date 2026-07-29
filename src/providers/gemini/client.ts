@@ -22,6 +22,7 @@ const GENERATE_BASE = `${BASE}/v1beta/models`;
 export interface FileRef {
   name: string;
   uri: string;
+  downloadUri?: string;
   state: "PROCESSING" | "ACTIVE" | "FAILED";
   mimeType: string;
 }
@@ -54,7 +55,7 @@ export interface ImageGenerationResponse {
 }
 
 /** Resolve and validate GEMINI_API_KEY. */
-function requireApiKey(): string {
+export function requireGeminiApiKey(): string {
   const key = resolveKey("GEMINI_API_KEY");
   if (!key)
     throw new ConfigError(
@@ -63,8 +64,12 @@ function requireApiKey(): string {
   return key;
 }
 
-function authHeaders(apiKey: string): Record<string, string> {
+export function geminiAuthHeaders(apiKey: string): Record<string, string> {
   return { "x-goog-api-key": apiKey };
+}
+
+export function unwrapGeminiFileRef(response: FileRef | { file: FileRef }): FileRef {
+  return "file" in response ? response.file : response;
 }
 
 /**
@@ -75,7 +80,7 @@ export async function uploadFile(
   filePath: string,
   opts: { timeoutMs?: number; logger?: Logger } = {},
 ): Promise<FileRef> {
-  const apiKey = requireApiKey();
+  const apiKey = requireGeminiApiKey();
   const { timeoutMs = 300_000, logger } = opts;
 
   const mimeType = getMimeType(filePath);
@@ -126,10 +131,10 @@ export async function uploadFile(
     const deadline = Date.now() + timeoutMs;
     while (fileRef.state === "PROCESSING" && Date.now() < deadline) {
       await sleep(2000);
-      fileRef = await httpJson<{ file: FileRef }>({
+      fileRef = await httpJson<FileRef | { file: FileRef }>({
         url: `${BASE}/v1beta/${fileRef.name}`,
-        headers: authHeaders(apiKey),
-      }).then((r) => r.file);
+        headers: geminiAuthHeaders(apiKey),
+      }).then(unwrapGeminiFileRef);
       logger?.debug(`Processing... state=${fileRef.state}`);
     }
     if (fileRef.state === "FAILED")
@@ -148,11 +153,11 @@ export async function uploadFile(
 export async function generateContent(
   req: GenerateContentRequest,
 ): Promise<GenerateContentResponse> {
-  const apiKey = requireApiKey();
+  const apiKey = requireGeminiApiKey();
   return httpJson<GenerateContentResponse>({
     url: `${GENERATE_BASE}/${req.model}:generateContent`,
     method: "POST",
-    headers: authHeaders(apiKey),
+    headers: geminiAuthHeaders(apiKey),
     body: {
       contents: req.contents,
       ...(req.generationConfig ? { generationConfig: req.generationConfig } : {}),
@@ -207,7 +212,7 @@ export function extractImages(
  * List available Gemini models — used for connectivity check.
  */
 export async function listModels(timeoutMs = 10_000): Promise<string[]> {
-  const apiKey = requireApiKey();
+  const apiKey = requireGeminiApiKey();
   // biome-ignore lint/suspicious/noExplicitAny: dynamic API
   const resp = await httpJson<any>({
     url: `${BASE}/v1beta/models?key=${apiKey}`,

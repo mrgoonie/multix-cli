@@ -9,6 +9,9 @@ export const IMAGE_MODEL_DEFAULT = "gemini-3.1-flash-image-preview";
 /** Fallback if default image model fails. */
 export const IMAGE_MODEL_FALLBACK = "gemini-2.5-flash-image";
 
+/** Nano Banana 2 Lite — the stable, 1K-only low-latency image model. */
+export const IMAGE_MODEL_LITE = "gemini-3.1-flash-lite-image";
+
 /** Default video generation model (Veo). */
 export const VIDEO_MODEL_DEFAULT = "veo-3.1-generate-preview";
 
@@ -37,6 +40,7 @@ export const GEMINI_IMAGE_MODELS = new Set([
   "gemini-3-pro-image-preview",
   "gemini-2.5-flash-image",
   "gemini-2.5-flash-image-preview",
+  IMAGE_MODEL_LITE,
   ...IMAGEN_MODELS,
 ]);
 
@@ -58,6 +62,23 @@ export type AspectRatio = (typeof ASPECT_RATIOS)[number];
 /** Supported image sizes (Nano Banana / Imagen). */
 export const IMAGE_SIZES = ["1K", "2K", "4K"] as const;
 export type ImageSize = (typeof IMAGE_SIZES)[number];
+
+/** Resolve model-aware image options without altering existing model defaults. */
+export function resolveImageOptions(
+  model: string,
+  aspectRatio: AspectRatio,
+  requestedSize?: ImageSize,
+): { aspectRatio: AspectRatio; imageSize?: ImageSize } {
+  if (model !== IMAGE_MODEL_LITE) {
+    return { aspectRatio, ...(requestedSize ? { imageSize: requestedSize } : {}) };
+  }
+
+  if (requestedSize && requestedSize !== "1K") {
+    throw new Error(`${IMAGE_MODEL_LITE} supports only 1K image output.`);
+  }
+
+  return { aspectRatio, imageSize: "1K" };
+}
 
 /**
  * Get default model for a given task, with env overrides matching the Python source.
