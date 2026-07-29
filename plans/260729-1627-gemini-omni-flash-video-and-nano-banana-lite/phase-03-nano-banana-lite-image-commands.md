@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Lite image generation/editing validation and UX"
-status: pending
+status: complete
 priority: P2
 effort: "4h"
 dependencies: [1]
@@ -39,10 +39,10 @@ Make `gemini-3.1-flash-lite-image` a first-class, correctly constrained option f
 
 ## Success criteria
 
-- [ ] Lite generate and edit work through existing CLI surfaces and use the exact model ID.
-- [ ] Invalid Lite capability combinations make no HTTP request.
-- [ ] Existing image model defaults, aspect ratios, outputs, and multi-ref contract remain backward compatible.
-- [ ] Users see the Lite optimization caveat before relying on multi-ref/multi-turn workflows.
+- [x] Lite generate and edit use existing CLI surfaces and the exact model ID.
+- [x] Invalid Lite capability combinations fail before request construction.
+- [x] Existing image model defaults, aspect ratios, outputs, and multi-ref contract remain backward compatible.
+- [x] Users see the Lite optimization caveat before relying on multi-ref/multi-turn workflows.
 
 ## Risks and mitigations
 

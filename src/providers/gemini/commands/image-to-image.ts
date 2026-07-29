@@ -15,12 +15,31 @@ import {
   extractImages,
   generateContent,
 } from "../client.js";
-import { IMAGE_MODEL_FALLBACK } from "../models.js";
+import {
+  ASPECT_RATIOS,
+  type AspectRatio,
+  IMAGE_MODEL_FALLBACK,
+  IMAGE_MODEL_LITE,
+  IMAGE_SIZES,
+  type ImageSize,
+  resolveImageOptions,
+} from "../models.js";
 
 // Gemini inline data has a practical ~7MB request cap. Stay well under that
 // per-image so multi-ref still fits.
 const SOFT_LIMIT_BYTES = 5 * 1024 * 1024;
 const HARD_LIMIT_BYTES = 7 * 1024 * 1024;
+
+export function buildImageToImageGenerationConfig(
+  model: string,
+  aspectRatio: AspectRatio,
+  size?: ImageSize,
+): Record<string, unknown> | undefined {
+  const imageOptions = resolveImageOptions(model, aspectRatio, size);
+  return imageOptions.imageSize
+    ? { responseModalities: ["IMAGE"], imageConfig: imageOptions }
+    : undefined;
+}
 
 export function registerGeminiImageToImageCommand(parent: Command): void {
   parent
@@ -37,6 +56,8 @@ export function registerGeminiImageToImageCommand(parent: Command): void {
       [] as string[],
     )
     .option("-m, --model <id>", `Gemini image model (default ${IMAGE_MODEL_FALLBACK})`)
+    .option("--aspect-ratio <ratio>", `Aspect ratio (${ASPECT_RATIOS.join("|")})`, "1:1")
+    .option("--size <sz>", `Image size (${IMAGE_SIZES.join("|")})`)
     .option("--output <path>", "Save first generated image to this path")
     .option("-v, --verbose", "Verbose logging")
     .action(
@@ -44,6 +65,8 @@ export function registerGeminiImageToImageCommand(parent: Command): void {
         prompt: string;
         ref: string[];
         model?: string;
+        aspectRatio: string;
+        size?: string;
         output?: string;
         verbose?: boolean;
       }) => {
@@ -52,6 +75,21 @@ export function registerGeminiImageToImageCommand(parent: Command): void {
         }
         const logger = createLogger({ verbose: opts.verbose ?? false });
         const model = opts.model ?? IMAGE_MODEL_FALLBACK;
+
+        if (model === IMAGE_MODEL_LITE && opts.ref.length > 1) {
+          logger.warn(
+            `${IMAGE_MODEL_LITE} is not optimized for multiple reference images; use one when possible.`,
+          );
+        }
+
+        if (!ASPECT_RATIOS.includes(opts.aspectRatio as AspectRatio)) {
+          throw new Error(
+            `Invalid aspect ratio: ${opts.aspectRatio}. Valid: ${ASPECT_RATIOS.join(", ")}`,
+          );
+        }
+        if (opts.size && !IMAGE_SIZES.includes(opts.size as ImageSize)) {
+          throw new Error(`Invalid size: ${opts.size}. Valid: ${IMAGE_SIZES.join(", ")}`);
+        }
 
         // Resolve refs → inlineData parts. URLs are downloaded by Gemini differently;
         // we always inline for consistent behavior across both URL and local refs.
@@ -82,10 +120,15 @@ export function registerGeminiImageToImageCommand(parent: Command): void {
 
         logger.debug(`Calling ${model} with ${opts.ref.length} reference image(s)`);
 
+        const generationConfig = buildImageToImageGenerationConfig(
+          model,
+          opts.aspectRatio as AspectRatio,
+          opts.size as ImageSize | undefined,
+        );
         const req: GenerateContentRequest = {
           model,
           contents: [{ parts }],
-          generationConfig: { responseModalities: ["IMAGE"] },
+          ...(generationConfig ? { generationConfig } : {}),
         };
 
         const resp = await generateContent(req);

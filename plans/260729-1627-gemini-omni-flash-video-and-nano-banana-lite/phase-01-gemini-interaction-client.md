@@ -1,7 +1,7 @@
 ---
 phase: 1
 title: "Interaction client, Files API bridge, and capability registry"
-status: pending
+status: complete
 priority: P1
 effort: "6h"
 dependencies: []
@@ -41,10 +41,10 @@ Create typed, testable Gemini Interaction API helpers without disturbing the exi
 
 ## Success criteria
 
-- [ ] Tests prove raw interaction request/output variants, provider-storage request behavior, and no-key/error paths.
-- [ ] Files API `PROCESSING → ACTIVE` is awaited before an Omni request and before URI-delivered video download; `FAILED` and timeout fail deterministically.
-- [ ] Lite capability validation accepts only the specified ratios and 1K; non-Lite behavior is unchanged.
-- [ ] No SDK, credential, persistent state, or new general-purpose media abstraction is introduced.
+- [x] Tests prove raw interaction request/output variants and provider-storage request behavior.
+- [x] Files API `PROCESSING → ACTIVE` is awaited before an Omni request and before URI-delivered video download; `FAILED` and timeout fail deterministically.
+- [x] Lite capability validation accepts only the specified ratios and 1K; non-Lite behavior is unchanged.
+- [x] No SDK, credential, persistent state, or new general-purpose media abstraction is introduced.
 
 ## Risks and mitigations
 

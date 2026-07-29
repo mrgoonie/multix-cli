@@ -1,7 +1,7 @@
 ---
 title: "Gemini Omni Flash Video and Nano Banana 2 Lite"
 description: "Add paid-preview Gemini Omni video generation and iterative video editing, plus Nano Banana 2 Lite image generation and editing."
-status: pending
+status: in_progress
 priority: P1
 effort: "2-3d"
 branch: "feat/gemini-omni-video-editing"
@@ -42,6 +42,7 @@ multix gemini image-to-image --model gemini-3.1-flash-lite-image --prompt "..." 
 - A video input is uploaded and polled through Files API even below the general 20 MB inline threshold; only one video is accepted. An `ACTIVE` URI is used in the interaction request.
 - Omni request serialization includes the selected input parts and, when present, `previous_interaction_id`; fixtures assert the raw REST request and `steps[].content[]` response parsing. Response handling returns the new interaction ID plus the first generated video from inline data or a completed URI-delivered File.
 - Generated MP4 is written atomically enough for normal CLI use to the standard output directory, copied to `--output` when requested, and failures retain provider/HTTP context without printing the API key.
+- Each Omni output has a JSON sidecar containing provider, model, prompt, input basenames, timestamp, and safe interaction ID; it never contains credentials or absolute local paths.
 - Lite is selectable for both Gemini generate and image-to-image; invalid Lite size/aspect combinations fail before network work, while existing image models preserve their current size behavior.
 - Focused unit tests, CLI help smoke tests, `npm run typecheck`, `npm test`, `npm run lint`, and `npm run build` pass. A manually authorized paid beta smoke proves prompt-to-video, one iterative edit, Lite generate, and Lite single-reference edit without committing media or credentials.
 
@@ -49,10 +50,10 @@ multix gemini image-to-image --model gemini-3.1-flash-lite-image --prompt "..." 
 
 | # | File | Title | Status | Depends on |
 |---|---|---|---|---|
-| 01 | [phase-01-gemini-interaction-client.md](phase-01-gemini-interaction-client.md) | Interaction client, Files API bridge, and capability registry | pending | — |
-| 02 | [phase-02-omni-video-command.md](phase-02-omni-video-command.md) | Omni video generation and explicit conversational editing CLI | pending | 01 |
-| 03 | [phase-03-nano-banana-lite-image-commands.md](phase-03-nano-banana-lite-image-commands.md) | Lite image generation/editing validation and UX | pending | 01 |
-| 04 | [phase-04-documentation-verification-beta.md](phase-04-documentation-verification-beta.md) | README, full verification, and beta release evidence | pending | 02, 03 |
+| 01 | [phase-01-gemini-interaction-client.md](phase-01-gemini-interaction-client.md) | Interaction client, Files API bridge, and capability registry | complete | — |
+| 02 | [phase-02-omni-video-command.md](phase-02-omni-video-command.md) | Omni video generation and explicit conversational editing CLI | complete | 01 |
+| 03 | [phase-03-nano-banana-lite-image-commands.md](phase-03-nano-banana-lite-image-commands.md) | Lite image generation/editing validation and UX | complete | 01 |
+| 04 | [phase-04-documentation-verification-beta.md](phase-04-documentation-verification-beta.md) | README, full verification, and beta release evidence | in_progress | 02, 03 |
 
 ## TDD sequence
 

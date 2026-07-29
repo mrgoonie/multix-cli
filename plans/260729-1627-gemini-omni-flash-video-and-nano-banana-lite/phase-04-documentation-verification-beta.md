@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "README, full verification, and beta release evidence"
-status: pending
+status: in_progress
 priority: P1
 effort: "4h"
 dependencies: [2, 3]
@@ -35,8 +35,8 @@ Document the exact user-facing contracts and prove the feature through automated
 
 ## Success criteria
 
-- [ ] README matches actual help and describes all material constraints.
-- [ ] Automated quality gates are green on the final source, not an earlier build.
+- [x] README matches actual help and describes all material constraints.
+- [x] Automated quality gates are green on the final source, not an earlier build.
 - [ ] Paid-preview smoke has evidence for the four scoped scenarios or a documented external access blocker.
 - [ ] Beta package is released through the dev workflow, then installed and smoke-checked by exact version before any stable decision.
 

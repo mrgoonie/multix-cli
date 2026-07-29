@@ -16,7 +16,20 @@ import {
   IMAGE_SIZES,
   type ImageSize,
   getDefaultModel,
+  resolveImageOptions,
 } from "../models.js";
+
+export function buildImageGenerationConfig(
+  model: string,
+  aspectRatio: AspectRatio,
+  size?: ImageSize,
+): Record<string, unknown> {
+  const imageOptions = resolveImageOptions(model, aspectRatio, size);
+  return {
+    responseModalities: ["IMAGE"],
+    imageConfig: imageOptions,
+  };
+}
 
 export function registerGenerateCommand(parent: Command): void {
   parent
@@ -58,14 +71,11 @@ export function registerGenerateCommand(parent: Command): void {
         logger.debug(`Generating ${numImages} image(s) with model: ${model}`);
         logger.debug(`Aspect ratio: ${opts.aspectRatio}${opts.size ? `, size: ${opts.size}` : ""}`);
 
-        // Build image config
-        const imageConfig: Record<string, string> = { aspectRatio: opts.aspectRatio };
-        if (opts.size) imageConfig.imageSize = opts.size;
-
-        const generationConfig: Record<string, unknown> = {
-          responseModalities: ["IMAGE"],
-          imageConfig,
-        };
+        const generationConfig = buildImageGenerationConfig(
+          model,
+          opts.aspectRatio as AspectRatio,
+          opts.size as ImageSize | undefined,
+        );
 
         const savedFiles: string[] = [];
 
