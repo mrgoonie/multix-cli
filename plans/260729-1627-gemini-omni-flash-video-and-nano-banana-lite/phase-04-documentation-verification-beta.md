@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "README, full verification, and beta release evidence"
-status: in_progress
+status: complete
 priority: P1
 effort: "4h"
 dependencies: [2, 3]
@@ -37,8 +37,15 @@ Document the exact user-facing contracts and prove the feature through automated
 
 - [x] README matches actual help and describes all material constraints.
 - [x] Automated quality gates are green on the final source, not an earlier build.
-- [ ] Paid-preview smoke has evidence for the four scoped scenarios or a documented external access blocker.
-- [ ] Beta package is released through the dev workflow, then installed and smoke-checked by exact version before any stable decision.
+- [x] Paid-preview smoke passed prompt-to-video, iterative edit, Lite prompt-to-image, and Lite single-reference edit; MP4s were playable and sidecars were redacted.
+- [x] Beta package was released through the dev workflow and installed/smoke-checked as `@mrgoonie/multix@0.1.0-beta.1` before any stable decision.
+
+## Release evidence
+
+- Feature commit: `c8557e6` (PR #28), merged to `dev` on 2026-07-29.
+- Automated evidence: local typecheck/lint/build/full tests passed; the post-merge CI matrix passed on `dev`.
+- Paid smoke: prompt-to-video and follow-up interaction both produced playable 10-second MP4s with redacted sidecars; Lite generate and single-reference edit both produced images. No credentials, media, or interaction IDs were committed.
+- Receipt: GitHub prerelease `v0.1.0-beta.1`; npm `beta` tag resolved to `0.1.0-beta.1`; the exact package installed and exposed `gemini omni-video --help`.
 
 ## Risks and mitigations
 

@@ -1,10 +1,10 @@
 ---
 title: "Gemini Omni Flash Video and Nano Banana 2 Lite"
 description: "Add paid-preview Gemini Omni video generation and iterative video editing, plus Nano Banana 2 Lite image generation and editing."
-status: in_progress
+status: complete
 priority: P1
 effort: "2-3d"
-branch: "feat/gemini-omni-video-editing"
+branch: "dev"
 tags: [gemini, video, image, preview, tdd]
 blockedBy: []
 blocks: []
@@ -53,7 +53,7 @@ multix gemini image-to-image --model gemini-3.1-flash-lite-image --prompt "..." 
 | 01 | [phase-01-gemini-interaction-client.md](phase-01-gemini-interaction-client.md) | Interaction client, Files API bridge, and capability registry | complete | — |
 | 02 | [phase-02-omni-video-command.md](phase-02-omni-video-command.md) | Omni video generation and explicit conversational editing CLI | complete | 01 |
 | 03 | [phase-03-nano-banana-lite-image-commands.md](phase-03-nano-banana-lite-image-commands.md) | Lite image generation/editing validation and UX | complete | 01 |
-| 04 | [phase-04-documentation-verification-beta.md](phase-04-documentation-verification-beta.md) | README, full verification, and beta release evidence | in_progress | 02, 03 |
+| 04 | [phase-04-documentation-verification-beta.md](phase-04-documentation-verification-beta.md) | README, full verification, and beta release evidence | complete | 02, 03 |
 
 ## TDD sequence
 
