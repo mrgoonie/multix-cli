@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0](https://github.com/mrgoonie/multix-cli/compare/v0.2.0...v0.3.0) (2026-07-29)
+
+
+### Added
+
+* **cloudflare:** add Workers AI media generation ([#26](https://github.com/mrgoonie/multix-cli/issues/26)) ([53c1831](https://github.com/mrgoonie/multix-cli/commit/53c183187571d59f350af7c769927e488afd36aa))
+
 ## [0.2.0](https://github.com/mrgoonie/multix-cli/compare/v0.1.1...v0.2.0) (2026-05-27)
 
 
