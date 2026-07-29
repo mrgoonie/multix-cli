@@ -1,6 +1,6 @@
 ---
 name: multix
-description: AI multimodal CLI — generate and edit images (OpenAI, Codex driver, Gemini Nano Banana, Imagen, MiniMax, OpenRouter, Leonardo, BytePlus Seedream), generate video (Gemini Veo, MiniMax Hailuo, OpenRouter via Veo/Seedance/Kling, Leonardo via Motion/Veo/Kling/Hailuo/Seedance/LTX, BytePlus Seedance), TTS/STT/music (OpenAI, Gemini Flash TTS, MiniMax, ElevenLabs), 3D models (BytePlus Hyper3D/Hitem3d), analyze/transcribe media, convert documents to Markdown, optimize media via ffmpeg/ImageMagick. Use whenever the user wants to create, edit, or transform images/video/audio/3D/documents from a CLI, mentions any of: OpenAI, Codex image driver, image-to-image, i2i, image edit, watercolor/cyberpunk style transfer, reference image, OpenRouter, Nano Banana, Flux, Seedream, Veo, Hailuo, Seedance, Kling, video generation, text-to-video, image-to-video, i2v, ElevenLabs voice cloning, or asks for batch media optimization.
+description: AI multimodal CLI — generate and edit images (OpenAI, Codex driver, Gemini Nano Banana, Imagen, MiniMax, OpenRouter, Leonardo, BytePlus Seedream, Cloudflare Workers AI FLUX.1 Schnell), generate video (Gemini Veo, MiniMax Hailuo, OpenRouter via Veo/Seedance/Kling, Leonardo via Motion/Veo/Kling/Hailuo/Seedance/LTX, BytePlus Seedance, Cloudflare AI Gateway via Replicate), TTS/STT/music (OpenAI, Gemini Flash TTS, MiniMax, Cloudflare Workers AI MeloTTS, ElevenLabs), 3D models (BytePlus Hyper3D/Hitem3d), analyze/transcribe media, convert documents to Markdown, optimize media via ffmpeg/ImageMagick. Use whenever the user wants to create, edit, or transform images/video/audio/3D/documents from a CLI, mentions any of: OpenAI, Codex image driver, image-to-image, i2i, image edit, watercolor/cyberpunk style transfer, reference image, OpenRouter, Nano Banana, Flux, Seedream, Veo, Hailuo, Seedance, Kling, Cloudflare Workers AI, AI Gateway, video generation, text-to-video, image-to-video, i2v, ElevenLabs voice cloning, or asks for batch media optimization.
 version: 0.2.0 # x-release-please-version
 ---
 
@@ -15,6 +15,7 @@ Activate this skill when the user asks to:
 - **Generate video via OpenRouter routed models** (Veo, Seedance, Kling — use `multix openrouter video-models` to list)
 - **Generate video via BytePlus Seedance** directly (text-to-video, image-to-video, reference-to-video)
 - **Generate video via Leonardo** (Motion, Veo, Kling, Hailuo, Seedance, LTX models)
+- Generate images or speech with Cloudflare Workers AI, or video through Cloudflare AI Gateway's Replicate route
 - Generate or clone a voice, run STT, generate music or sound effects
 - Generate 3D models (BytePlus Hyper3D / Hitem3d)
 - Analyze, transcribe, or extract structured data from media/docs
@@ -31,6 +32,9 @@ MINIMAX_API_KEY       # MiniMax (image/video/speech/music)
 LEONARDO_API_KEY      # Leonardo.Ai (image/video/upscale)
 BYTEPLUS_API_KEY      # BytePlus / Volcengine ARK (Seedream/Seedance/Hyper3D)
 ELEVENLABS_API_KEY    # ElevenLabs (TTS, cloning, STT, music, dubbing)
+CLOUDFLARE_ACCOUNT_ID # Cloudflare Workers AI / AI Gateway account
+CLOUDFLARE_API_TOKEN  # Cloudflare Workers AI / AI Gateway token
+# Video additionally requires CLOUDFLARE_AI_GATEWAY_ID and REPLICATE_API_TOKEN.
 ```
 
 Priority: `process.env` > `cwd/.env` > `~/.multix/.env`.
@@ -58,8 +62,34 @@ multix check [--verbose]
 | OpenRouter | `multix openrouter generate --prompt "<text>" [--model <id>] [--aspect-ratio 16:9] [--image-size 2K] [--num-images N]` | Default `google/gemini-3.1-flash-image-preview` |
 | Leonardo | `multix leonardo generate "<text>" [-w 1024 -h 1024] [--alchemy] [--ultra] [--quality HIGH]` | Polls until done, downloads automatically |
 | BytePlus | `multix byteplus generate --prompt "<text>" [--model seedream-4-0-250828] [--size 2K] [--aspect-ratio 16:9] [-n N] [--input-image <path\|url>]` | Sync |
+| Cloudflare | `multix cloudflare generate --prompt "<text>" [--steps 1-8] [--seed <n>]` | Workers AI FLUX.1 Schnell only |
 
 Aspect ratios (most providers): `1:1 2:3 3:2 3:4 4:3 4:5 5:4 9:16 16:9 21:9`.
+
+## Cloudflare media
+
+Cloudflare image and speech use the [Workers AI REST API](https://developers.cloudflare.com/workers-ai/get-started/rest-api/) with `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`. `CLOUDFLARE_AI_GATEWAY_ID` is optional for those Workers AI calls, but required with `REPLICATE_API_TOKEN` for video. The CLI deliberately supports only the fixed models shown here; it does not expose an arbitrary Workers AI catalog.
+
+`CLOUDFLARE_AI_GATEWAY_COLLECT_LOG_PAYLOAD` defaults to `false`; set it to `true` only to explicitly opt in to AI Gateway request-payload collection. It controls a gateway request header, not multix CLI logging: the CLI does not log credential values or provider output URLs.
+
+```bash
+# Workers AI image (FLUX.1 Schnell; sync)
+multix cloudflare generate --prompt "a cyberpunk cat" \
+  [--model @cf/black-forest-labs/flux-1-schnell] [--steps 1-8] [--seed <n>] [--output <path>] [-v]
+
+# Workers AI speech (MeloTTS; sync, saves MP3)
+multix cloudflare generate-speech --text "Hello world" \
+  [--lang <code>] [--model @cf/myshell-ai/melotts] [--output <path>] [-v]
+
+# Replicate prunaai/p-video through Cloudflare AI Gateway; no native Workers AI video
+multix cloudflare generate-video --prompt "Ocean waves" \
+  [--duration 5] [--aspect-ratio 16:9] [--resolution 720p] [--fps 24] \
+  [--wait] [--wait-timeout 600000] [--download] [--output <path>] [-v]
+multix cloudflare video-status <predictionId> \
+  [--wait] [--wait-timeout 600000] [--download] [--output <path>] [-v]
+```
+
+Video follows Cloudflare's documented [Replicate AI Gateway route](https://developers.cloudflare.com/ai-gateway/usage/providers/replicate/). `generate-video` returns a prediction ID unless `--wait` or `--download` is passed; either waits, saves the completed MP4, and prints its local path. For `video-status`, `--wait` reports the terminal status and `--download` implies waiting plus saves the MP4. No Cloudflare video command prints the provider output URL.
 
 ## Image-to-image (edit existing image with a prompt)
 
@@ -156,7 +186,7 @@ multix byteplus i2v ./photo.jpg --prompt "<text>"
 multix byteplus reference-to-video --prompt "<text>" --ref-image ./hero.jpg:subject ...
 ```
 
-All video commands accept `--wait`, `--wait-timeout <ms>`, `--download`, `--output <path>`, `--no-thumb`.
+Most video commands accept `--wait`, `--wait-timeout <ms>`, `--download`, `--output <path>`, `--no-thumb`. Cloudflare video has no thumbnail flags; see [Cloudflare media](#cloudflare-media) for its distinct `--wait` and `--download` behavior.
 
 ### Decision tree — which provider to pick for video generation
 
@@ -231,6 +261,11 @@ Files saved under `./multix-output/` by default. Override with `MULTIX_OUTPUT_DI
 | `LEONARDO_DEFAULT_MODEL` / `LEONARDO_VIDEO_MODEL` | Leonardo model defaults |
 | `BYTEPLUS_IMAGE_MODEL` / `BYTEPLUS_VIDEO_MODEL` / `BYTEPLUS_3D_MODEL` | BytePlus model defaults |
 | `BYTEPLUS_VIDEO_PARAMS_MODE` | `flags` (default) or `structured` |
+| `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN` | Required for Cloudflare Workers AI image/speech and AI Gateway video |
+| `CLOUDFLARE_AI_GATEWAY_ID` | Optional for native Cloudflare image/speech; required for Cloudflare video |
+| `CLOUDFLARE_AI_GATEWAY_COLLECT_LOG_PAYLOAD` | Set `true` to explicitly opt in to AI Gateway request-payload collection; defaults to `false` |
+| `REPLICATE_API_TOKEN` | Required for Cloudflare AI Gateway video |
+| `CLOUDFLARE_AI_IMAGE_MODEL` / `CLOUDFLARE_AI_TTS_MODEL` | Fixed-model settings: only `@cf/black-forest-labs/flux-1-schnell` and `@cf/myshell-ai/melotts` respectively are accepted |
 | `MULTIX_DISABLE_HOME_ENV` | `1` to skip `~/.multix/.env` |
 
 ## Quick examples for agents

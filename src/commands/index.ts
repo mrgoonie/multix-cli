@@ -5,6 +5,7 @@
 
 import type { Command } from "commander";
 import { registerBytePlusCommands } from "../providers/byteplus/commands/index.js";
+import { registerCloudflareCommands } from "../providers/cloudflare/commands/index.js";
 import { registerElevenLabsCommands } from "../providers/elevenlabs/commands/index.js";
 import { registerGeminiCommands } from "../providers/gemini/commands/index.js";
 import { registerLeonardoCommands } from "../providers/leonardo/commands/index.js";
@@ -23,6 +24,7 @@ export function registerCommands(program: Command): void {
   registerOpenRouterCommands(program);
   registerLeonardoCommands(program);
   registerBytePlusCommands(program);
+  registerCloudflareCommands(program);
   registerElevenLabsCommands(program);
   registerMediaCommands(program);
   registerDocCommands(program);

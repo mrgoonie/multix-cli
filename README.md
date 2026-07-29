@@ -2,7 +2,7 @@
 
 AI multimodal CLI — generate images/video/speech/music, analyze and transcribe media files, convert documents to Markdown, and optimize media with ffmpeg/ImageMagick.
 
-Supports **OpenAI** (image, image edits, TTS, STT, optional Codex image driver), **Gemini** (analyze, transcribe, generate, Veo video, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), and **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment).
+Supports **OpenAI** (image, image edits, TTS, STT, optional Codex image driver), **Gemini** (analyze, transcribe, generate, Veo video, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), **Cloudflare** (Workers AI image and speech; AI Gateway-routed Replicate video), and **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment).
 
 ## Install
 
@@ -63,6 +63,13 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `BYTEPLUS_VIDEO_MODEL` | No | Default Seedance model (default `seedance-2.0`) |
 | `BYTEPLUS_VIDEO_PARAMS_MODE` | No | `flags` (default) or `structured` — how video params are encoded |
 | `BYTEPLUS_3D_MODEL` | No | Default 3D model (default `hyper3d-gen2-260112`) |
+| `CLOUDFLARE_ACCOUNT_ID` | For Cloudflare media | Cloudflare account ID for Workers AI and AI Gateway |
+| `CLOUDFLARE_API_TOKEN` | For Cloudflare media | Cloudflare API token for Workers AI and AI Gateway |
+| `CLOUDFLARE_AI_GATEWAY_ID` | Video only | AI Gateway ID; optional for Workers AI image/speech, required for video |
+| `CLOUDFLARE_AI_GATEWAY_COLLECT_LOG_PAYLOAD` | No | Set to `true` to explicitly opt in to AI Gateway request-payload collection; defaults to `false` |
+| `REPLICATE_API_TOKEN` | Cloudflare video only | Replicate API token used through Cloudflare AI Gateway |
+| `CLOUDFLARE_AI_IMAGE_MODEL` | No | Image model setting; only `@cf/black-forest-labs/flux-1-schnell` is accepted |
+| `CLOUDFLARE_AI_TTS_MODEL` | No | Speech model setting; only `@cf/myshell-ai/melotts` is accepted |
 | `MULTIX_OUTPUT_DIR` | No | Override default output dir (`./multix-output`) |
 | `OPENROUTER_IMAGE_MODEL` | No | Default OpenRouter model |
 | `OPENROUTER_FALLBACK_MODELS` | No | Comma-separated fallback model ids |
@@ -307,6 +314,35 @@ multix byteplus status <taskId> [--wait] [--wait-timeout 600000] [--download] [-
 - `multix byteplus status <taskId> --download` works for both video (`content.video_url`) and 3D (`content.file_url`) tasks.
 - **Task cancellation is not supported** — there is no verified DELETE endpoint on the ARK API. Submitted tasks must run to completion.
 
+### `multix cloudflare`
+
+Cloudflare image and speech use [Workers AI's REST API](https://developers.cloudflare.com/workers-ai/get-started/rest-api/) with `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`. Supplying `CLOUDFLARE_AI_GATEWAY_ID` optionally routes those Workers AI calls through AI Gateway. The CLI supports only the fixed models below; it does not expose the arbitrary Workers AI catalog.
+
+```bash
+# Image generation: Workers AI FLUX.1 Schnell (sync)
+multix cloudflare generate --prompt "a cyberpunk cat" \
+  [--model @cf/black-forest-labs/flux-1-schnell] [--steps 1-8] [--seed <n>] [--output <path>] [-v]
+
+# Text-to-speech: Workers AI MeloTTS (sync, saves MP3)
+multix cloudflare generate-speech --text "Hello world" \
+  [--lang <code>] [--model @cf/myshell-ai/melotts] [--output <path>] [-v]
+
+# Video: Replicate prunaai/p-video prediction through Cloudflare AI Gateway (async by default)
+multix cloudflare generate-video --prompt "Ocean waves" \
+  [--duration 5] [--aspect-ratio 16:9] [--resolution 720p] [--fps 24] \
+  [--wait] [--wait-timeout 600000] [--download] [--output <path>] [-v]
+
+# Inspect, wait for, or download a video prediction
+multix cloudflare video-status <predictionId> \
+  [--wait] [--wait-timeout 600000] [--download] [--output <path>] [-v]
+```
+
+Video requires all four variables: `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_AI_GATEWAY_ID`, and `REPLICATE_API_TOKEN`. It uses Cloudflare's documented [Replicate AI Gateway route](https://developers.cloudflare.com/ai-gateway/usage/providers/replicate/), not a native Workers AI video model.
+
+Without `--wait` or `--download`, `generate-video` prints the prediction ID so it can be checked with `video-status`. `--download` implies `--wait`; on `generate-video`, either flag waits for success and saves the MP4. On `video-status`, `--wait` only reports the terminal status, while `--download` waits and saves the MP4. These commands print local paths and status/IDs, never the provider output URL.
+
+Set `CLOUDFLARE_AI_GATEWAY_COLLECT_LOG_PAYLOAD=true` only to explicitly opt in to request-payload collection by AI Gateway; it defaults to `false`. This controls the gateway request header, not multix CLI logging: the CLI does not log credential values or provider output URLs.
+
 ### `multix elevenlabs`
 
 ```bash
@@ -413,7 +449,7 @@ All generated files are saved to `./multix-output/` by default. Override with `M
 
 ### Polling and downloading videos
 
-Every video-generating subcommand accepts a uniform set of polling/download flags:
+Most video-generating subcommands accept a uniform set of polling/download flags:
 
 | Flag | Description |
 |------|-------------|
@@ -426,6 +462,8 @@ Every video-generating subcommand accepts a uniform set of polling/download flag
 Thumbnail detection is automatic: if the provider response includes any of `cover_image_url`, `thumbnail_url`, `thumb_url`, `preview_url`, `first_frame_url`, `poster_url`, or `image_url` (and the value is an `https://…(.jpg|.png|.webp|.gif|.bmp)` URL), the file is downloaded next to the video as `<basename>_thumb.<ext>`. Providers that don't expose a thumbnail simply skip this step.
 
 `leonardo video`, `leonardo image-to-video`, and `openrouter image-to-video` are async-by-default for backward compatibility — pass `--wait` (or `--download`) to opt into the synchronous flow.
+
+Cloudflare video is intentionally separate: it has no thumbnail flags, and `generate-video --wait` already saves the completed MP4. See [`multix cloudflare`](#multix-cloudflare) for its exact polling and download behavior.
 
 ## Troubleshooting
 

@@ -82,6 +82,17 @@ export function getCheckProviders(): ProviderEntry[] {
   return [...PROVIDERS];
 }
 
+export function cloudflareReadiness(): { native: boolean; video: boolean } {
+  const accountId = resolveKey("CLOUDFLARE_ACCOUNT_ID")?.trim();
+  const apiToken = resolveKey("CLOUDFLARE_API_TOKEN")?.trim();
+  const gatewayId = resolveKey("CLOUDFLARE_AI_GATEWAY_ID")?.trim();
+  const replicateToken = resolveKey("REPLICATE_API_TOKEN")?.trim();
+  return {
+    native: Boolean(accountId && apiToken),
+    video: Boolean(accountId && apiToken && gatewayId && replicateToken),
+  };
+}
+
 export async function checkCodexImageReadiness(
   hasAnyProviderKey: boolean,
   verbose = false,
@@ -138,6 +149,21 @@ export function registerCheckCommand(program: Command): void {
         } else {
           logger.warn(`${p.envPrimary} not set (${p.name} features unavailable)`);
         }
+      }
+
+      const cloudflare = cloudflareReadiness();
+      if (cloudflare.native) {
+        anyKey = true;
+        logger.success("Cloudflare Workers AI credentials configured (image and speech)");
+        if (cloudflare.video) {
+          logger.success("Cloudflare AI Gateway video credentials configured");
+        } else {
+          logger.info("Cloudflare video needs CLOUDFLARE_AI_GATEWAY_ID and REPLICATE_API_TOKEN");
+        }
+      } else {
+        logger.info(
+          "Cloudflare media needs CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN (optional)",
+        );
       }
 
       const shouldCheckCodex = !anyKey || opts.verbose;

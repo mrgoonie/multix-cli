@@ -10,13 +10,23 @@ import { describe, expect, it } from "vitest";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLI = path.resolve(__dirname, "../../dist/cli.js");
 
-const topLevelCommands = ["check", "gemini", "minimax", "openrouter", "openai", "media", "doc"];
+const topLevelCommands = [
+  "check",
+  "gemini",
+  "minimax",
+  "openrouter",
+  "openai",
+  "cloudflare",
+  "media",
+  "doc",
+];
 
 const subcommands: Record<string, string[]> = {
   gemini: ["analyze", "transcribe", "extract", "generate", "generate-video", "image-to-image"],
   minimax: ["generate", "generate-video", "generate-speech", "generate-music", "image-to-image"],
   openrouter: ["generate", "image-to-image"],
   openai: ["generate", "image-to-image", "generate-speech", "transcribe"],
+  cloudflare: ["generate", "generate-speech", "generate-video", "video-status"],
   media: ["optimize", "split", "batch"],
   doc: ["convert"],
 };
