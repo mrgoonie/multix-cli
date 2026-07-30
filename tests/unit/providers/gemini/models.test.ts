@@ -48,8 +48,8 @@ describe("Gemini text-output model defaults", () => {
   beforeEach(clearGeminiModelEnv);
   afterEach(restoreGeminiModelEnv);
 
-  it("defaults text-output tasks to Gemini 3.5 Flash", () => {
-    expect(TEXT_MODEL_DEFAULT).toBe("gemini-3.5-flash");
+  it("defaults text-output tasks to Gemini 3.6 Flash", () => {
+    expect(TEXT_MODEL_DEFAULT).toBe("gemini-3.6-flash");
     expect(ANALYSIS_MODEL_DEFAULT).toBe(TEXT_MODEL_DEFAULT);
     expect(DOC_MODEL_DEFAULT).toBe(TEXT_MODEL_DEFAULT);
     expect(getDefaultModel("analyze")).toBe(TEXT_MODEL_DEFAULT);
@@ -107,7 +107,7 @@ describe("Gemini text-output model defaults", () => {
     expect(getDefaultModel("generate-speech")).toBe("custom-tts");
   });
 
-  it("keeps media generation model registries separate from Gemini 3.5 Flash", () => {
+  it("keeps media generation model registries separate from Gemini 3.6 Flash", () => {
     expect(IMAGE_MODEL_DEFAULT).not.toBe(TEXT_MODEL_DEFAULT);
     expect(VIDEO_MODEL_DEFAULT.startsWith("veo-")).toBe(true);
     expect(GEMINI_IMAGE_MODELS.has(TEXT_MODEL_DEFAULT)).toBe(false);
