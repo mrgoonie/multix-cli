@@ -1,6 +1,6 @@
 ---
 name: multix
-description: AI multimodal CLI — generate and edit images (OpenAI, Codex driver, Gemini Nano Banana, Imagen, MiniMax, OpenRouter, Leonardo, BytePlus Seedream), generate video (Veo, Hailuo, Seedance, Leonardo), TTS/STT/music (OpenAI, Gemini Flash TTS, MiniMax, ElevenLabs), 3D models (Hyper3D), analyze/transcribe/extract media with Gemini 3.5 Flash text-output models, convert documents to Markdown, optimize media via ffmpeg/ImageMagick. Use whenever the user wants to create, edit, or transform images/video/audio/documents from a CLI, mentions any of: OpenAI, Codex image driver, Gemini 3.5 Flash, image-to-image, i2i, image edit, watercolor/cyberpunk style transfer, reference image, OpenRouter, Nano Banana, Flux, Seedream, Veo, Hailuo, ElevenLabs voice cloning, or asks for batch media optimization.
+description: AI multimodal CLI — generate and edit images (OpenAI, Codex driver, Gemini Nano Banana, Imagen, MiniMax, OpenRouter, Leonardo, BytePlus Seedream), generate video (Veo, Hailuo, Seedance, Leonardo), TTS/STT/music (OpenAI, Gemini Flash TTS, MiniMax, ElevenLabs), 3D models (Hyper3D), analyze/transcribe/extract media with Gemini 3.6 Flash text-output models, convert documents to Markdown, optimize media via ffmpeg/ImageMagick. Use whenever the user wants to create, edit, or transform images/video/audio/documents from a CLI, mentions any of: OpenAI, Codex image driver, Gemini 3.6 Flash, Gemini 3.5 Flash override, image-to-image, i2i, image edit, watercolor/cyberpunk style transfer, reference image, OpenRouter, Nano Banana, Flux, Seedream, Veo, Hailuo, ElevenLabs voice cloning, or asks for batch media optimization.
 version: 0.1.0-beta.1 # x-release-please-version
 ---
 
@@ -47,13 +47,13 @@ multix check [--verbose]
 
 ## Gemini text-output tasks
 
-`gemini-3.5-flash` is the default for Gemini analyze, transcribe, extract, and doc conversion. It is text-output only; use Nano Banana/Imagen for images, Veo for video, and Gemini Flash TTS for speech. Override analyze/transcribe/extract with `GEMINI_MODEL` or `MULTIMODAL_MODEL`; override doc conversion with `--model`.
+`gemini-3.6-flash` is the default for Gemini analyze, transcribe, extract, and doc conversion. It is text-output only; use Nano Banana/Imagen for images, Veo for video, and Gemini Flash TTS for speech. Override analyze/transcribe/extract with `GEMINI_MODEL` or `MULTIMODAL_MODEL`; override doc conversion with `--model`.
 
 ```bash
-multix gemini analyze --files photo.jpg --prompt "Describe this" [--model gemini-3.5-flash]
-multix gemini transcribe --files meeting.mp4 [--model gemini-3.5-flash]
-multix gemini extract --files report.pdf --prompt "Extract tables as JSON" [--model gemini-3.5-flash]
-multix doc convert --input report.pdf [--model gemini-3.5-flash]
+multix gemini analyze --files photo.jpg --prompt "Describe this" [--model gemini-3.6-flash]
+multix gemini transcribe --files meeting.mp4 [--model gemini-3.6-flash]
+multix gemini extract --files report.pdf --prompt "Extract tables as JSON" [--model gemini-3.6-flash]
+multix doc convert --input report.pdf [--model gemini-3.6-flash]
 ```
 
 ## Image generation
@@ -188,7 +188,7 @@ multix elevenlabs sfx --text "car engine starting" [--duration-seconds 5]
 multix byteplus 3d --input-image ./front.png ./side.png --prompt "Generate from these views"
 
 # Docs → Markdown (Gemini text-output)
-multix doc convert --input report.pdf [--model gemini-3.5-flash] [--auto-name] [--output ./out.md]
+multix doc convert --input report.pdf [--model gemini-3.6-flash] [--auto-name] [--output ./out.md]
 
 # Media optimization (ffmpeg + ImageMagick)
 multix media optimize --input <file> --output <file> [--target-size <MB>] [--quality 85] [--max-width 1920]

@@ -16,7 +16,7 @@ export const IMAGE_MODEL_LITE = "gemini-3.1-flash-lite-image";
 export const VIDEO_MODEL_DEFAULT = "veo-3.1-generate-preview";
 
 /** Default text-output model for multimodal analysis, transcription, extraction, and docs. */
-export const TEXT_MODEL_DEFAULT = "gemini-3.5-flash";
+export const TEXT_MODEL_DEFAULT = "gemini-3.6-flash";
 
 /** Default multimodal analysis/transcription model. */
 export const ANALYSIS_MODEL_DEFAULT = TEXT_MODEL_DEFAULT;
