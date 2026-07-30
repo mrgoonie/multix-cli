@@ -10,6 +10,7 @@ routes when compact, source-oriented context is more useful than rendered HTML.
 
 ```text
 https://multix.zuey.me/commands/gemini.md
+https://multix.zuey.me/commands/minimax.md
 https://multix.zuey.me/reference/environment.md
 https://multix.zuey.me/llms.txt
 ```
@@ -28,9 +29,14 @@ https://multix.zuey.me/llms.txt
 
 | Need | Start with |
 | --- | --- |
-| Analyze or transcribe files | `multix gemini` |
-| Generate or edit images, speech, or transcription | `multix openai` |
-| Provider-specific image, video, speech, music, or 3D | [Other providers](/commands/providers/) |
+| Analyze or transcribe files | [Gemini](/commands/gemini/) |
+| Generate or edit images, speech, or transcription | [OpenAI](/commands/openai/) |
+| MiniMax image, video, speech, or music | [MiniMax](/commands/minimax/) |
+| Routed image or image-to-video | [OpenRouter](/commands/openrouter/) |
+| Leonardo image IDs, video, or upscale jobs | [Leonardo](/commands/leonardo/) |
+| Seedream, Seedance, reference video, or 3D | [BytePlus](/commands/byteplus/) |
+| Workers AI image/speech or AI Gateway video | [Cloudflare](/commands/cloudflare/) |
+| Voice workflows, dubbing, or generated audio | [ElevenLabs](/commands/elevenlabs/) |
 | Convert a document or optimize media locally | [Media and documents](/commands/media-and-documents/) |
 
 Treat `--help` and a successful local check as the source of truth when they

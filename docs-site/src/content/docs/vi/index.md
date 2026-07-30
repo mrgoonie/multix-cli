@@ -14,10 +14,13 @@ hero:
       icon: external
 ---
 
+![Minh hoạ kỹ thuật isometric cho các workflow media của multix](/images/multix-isometric-banner.png)
+
 ## Một CLI cho workflow media thực tế
 
 `multix` hỗ trợ OpenAI, Gemini, MiniMax, OpenRouter, Leonardo, BytePlus và
-ElevenLabs mà không biến credential provider thành framework phức tạp.
+Cloudflare, ElevenLabs mà không biến credential provider thành framework phức
+tạp.
 
 ```bash
 npm install -g @mrgoonie/multix

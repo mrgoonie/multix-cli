@@ -8,13 +8,14 @@ description: Chọn nhóm lệnh multix phù hợp với workflow media của b�
 | Lệnh | Dùng cho |
 | --- | --- |
 | `multix check` | Kiểm tra tool, credential, Gemini connectivity và Codex image. |
-| `multix gemini` | Phân tích, transcript, extract, tạo ảnh/video và Gemini TTS. |
-| `multix openai` | Tạo/chỉnh ảnh, Codex image driver, TTS và transcription. |
-| `multix minimax` | Ảnh/video, image-to-image, speech và music. |
-| `multix openrouter` | Image generation/editing và video async thông qua routing. |
-| `multix leonardo` | Account, models, ảnh/video, upscale và trạng thái job. |
-| `multix byteplus` | Seedream, Seedance, reference video và 3D. |
-| `multix elevenlabs` | Voice, TTS, clone, STT, music, SFX, dubbing và isolation. |
+| [Gemini](/vi/commands/gemini/) | Phân tích, transcript, extract, tạo ảnh/video và Gemini TTS. |
+| [OpenAI](/vi/commands/openai/) | Tạo/chỉnh ảnh, Codex image driver, TTS và transcription. |
+| [MiniMax](/vi/commands/minimax/) | Ảnh/video, i2i giữ chủ thể, speech và music. |
+| [OpenRouter](/vi/commands/openrouter/) | Image generation/editing và image-to-video async qua routing. |
+| [Leonardo](/vi/commands/leonardo/) | Account, models, ảnh/video, upscale và trạng thái job. |
+| [BytePlus](/vi/commands/byteplus/) | Seedream, Seedance, reference video và 3D. |
+| [Cloudflare](/vi/commands/cloudflare/) | Workers AI image/speech và video job qua AI Gateway. |
+| [ElevenLabs](/vi/commands/elevenlabs/) | Voice, TTS, clone, STT, music, SFX, dubbing và isolation. |
 | `multix media` | Tối ưu, cắt và batch file bằng ffmpeg/ImageMagick. |
 | `multix doc` | Chuyển tài liệu sang Markdown qua Gemini. |
 
@@ -26,3 +27,6 @@ multix --help
 multix gemini --help
 multix openai generate --help
 ```
+
+Xem [danh mục provider](/vi/commands/providers/) để so sánh nhóm lệnh và chọn
+trang provider.

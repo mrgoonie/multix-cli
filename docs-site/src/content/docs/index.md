@@ -14,10 +14,13 @@ hero:
       icon: external
 ---
 
+![Isometric technical illustration of multix media workflows](/images/multix-isometric-banner.png)
+
 ## One CLI, practical media workflows
 
 `multix` provides commands for OpenAI, Gemini, MiniMax, OpenRouter, Leonardo,
-BytePlus, and ElevenLabs without turning provider credentials into a framework.
+BytePlus, Cloudflare, and ElevenLabs without turning provider credentials into a
+framework.
 
 ```bash
 npm install -g @mrgoonie/multix

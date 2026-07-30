@@ -3,6 +3,9 @@ title: Gemini commands
 description: Use Gemini for multimodal analysis, document extraction, image/video generation, and speech.
 ---
 
+Gemini commands require `GEMINI_API_KEY`. Run `multix gemini <command> --help`
+before automating a workflow.
+
 ## Analyze, transcribe, and extract
 
 Pass one or more local files with `--files`. Choose `text`, `json`, `csv`, or

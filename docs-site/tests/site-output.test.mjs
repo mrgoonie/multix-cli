@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import test from "node:test";
 
 const readDist = (path) => readFile(new URL(`../dist/${path}`, import.meta.url), "utf8");
@@ -10,6 +10,12 @@ const documentationRoutes = [
   "commands",
   "commands/gemini",
   "commands/openai",
+  "commands/minimax",
+  "commands/openrouter",
+  "commands/leonardo",
+  "commands/byteplus",
+  "commands/cloudflare",
+  "commands/elevenlabs",
   "commands/providers",
   "commands/media-and-documents",
   "reference/environment",
@@ -33,11 +39,14 @@ test("build emits canonical Markdown routes and AI discovery files", async () =>
   assert.match(robots, /Sitemap: https:\/\/multix\.zuey\.me\/sitemap-index\.xml/);
 });
 
-test("build includes Vietnamese, structured data, and the required footer", async () => {
-  const [english, vietnamese, vietnameseMarkdown] = await Promise.all([
+test("build includes Vietnamese, structured data, the required footer, and the banner", async () => {
+  const [english, vietnamese, vietnameseMarkdown, overview, readme, banner] = await Promise.all([
     readDist("getting-started/index.html"),
     readDist("vi/getting-started/index.html"),
     readDist("vi/getting-started.md"),
+    readDist("index.html"),
+    readFile(new URL("../../README.md", import.meta.url), "utf8"),
+    stat(new URL("../public/images/multix-isometric-banner.png", import.meta.url)),
   ]);
 
   assert.match(english, /"@type":"WebSite"/);
@@ -45,6 +54,9 @@ test("build includes Vietnamese, structured data, and the required footer", asyn
   assert.match(english, /@goon_nguyen \(X\)/);
   assert.match(vietnamese, /lang="vi"/);
   assert.match(vietnameseMarkdown, /^---\ntitle: Cài đặt và cấu hình/m);
+  assert.match(overview, /images\/multix-isometric-banner\.png/);
+  assert.match(readme, /docs-site\/public\/images\/multix-isometric-banner\.png/);
+  assert.ok(banner.size > 0);
 });
 
 test("every published English page has Vietnamese and Markdown counterparts", async () => {
@@ -60,19 +72,58 @@ test("every published English page has Vietnamese and Markdown counterparts", as
   assert.equal(output.length, documentationRoutes.length * 4);
 });
 
-test("provider reference covers registered asynchronous and account commands", async () => {
-  const providers = await readDist("commands/providers.md");
+test("provider pages retain command caveats and asynchronous workflows", async () => {
+  const [
+    directory,
+    minimax,
+    openrouter,
+    leonardo,
+    byteplus,
+    cloudflare,
+    elevenlabs,
+    agentGuide,
+    vietnameseMinimax,
+    vietnameseAgentGuide,
+    llms,
+  ] = await Promise.all([
+    readDist("commands/providers.md"),
+    readDist("commands/minimax.md"),
+    readDist("commands/openrouter.md"),
+    readDist("commands/leonardo.md"),
+    readDist("commands/byteplus.md"),
+    readDist("commands/cloudflare.md"),
+    readDist("commands/elevenlabs.md"),
+    readDist("reference/for-ai-agents.md"),
+    readDist("vi/commands/minimax.md"),
+    readDist("vi/reference/for-ai-agents.md"),
+    readDist("llms.txt"),
+  ]);
 
-  for (const command of [
-    "multix leonardo video-models",
-    "multix leonardo image-to-video <imageId>",
-    "multix leonardo variation <variationId>",
-    "multix byteplus status <taskId> --wait --download",
-    "multix elevenlabs voices create-from-preview",
-    "multix elevenlabs dub-status <dubbingId> --download es",
-    "multix elevenlabs account",
-    "multix elevenlabs models",
+  assert.match(directory, /commands\/minimax/);
+  assert.match(minimax, /not free-form editing/);
+  assert.match(openrouter, /--image-url/);
+  assert.match(openrouter, /video-status <jobId> --download/);
+  assert.match(leonardo, /existing Leonardo image ID/);
+  assert.match(byteplus, /reference-to-video/);
+  assert.match(byteplus, /generate-3d/);
+  assert.match(byteplus, /status <taskId> --wait --download/);
+  assert.match(cloudflare, /CLOUDFLARE_AI_GATEWAY_ID/);
+  assert.match(cloudflare, /cloudflare video-status <predictionId>/);
+  assert.match(elevenlabs, /create-from-preview/);
+  assert.match(elevenlabs, /dub-status <dubbingId> --download es/);
+  assert.match(vietnameseMinimax, /không phải chỉnh ảnh tự do/);
+  for (const provider of [
+    "gemini",
+    "openai",
+    "minimax",
+    "openrouter",
+    "leonardo",
+    "byteplus",
+    "cloudflare",
+    "elevenlabs",
   ]) {
-    assert.match(providers, new RegExp(command.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assert.match(agentGuide, new RegExp(`/commands/${provider}/`));
+    assert.match(vietnameseAgentGuide, new RegExp(`/vi/commands/${provider}/`));
+    assert.match(llms, new RegExp(`commands/${provider}\\.md`));
   }
 });
