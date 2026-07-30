@@ -1,6 +1,6 @@
 {
   "name": "@mrgoonie/multix",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "AI multimodal CLI — OpenAI, Gemini, MiniMax, OpenRouter, Leonardo, BytePlus, ElevenLabs, ffmpeg, ImageMagick, doc-to-md",
   "type": "module",
   "bin": {
