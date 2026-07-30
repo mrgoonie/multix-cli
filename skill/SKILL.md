@@ -1,7 +1,7 @@
 ---
 name: multix
 description: AI multimodal CLI — generate and edit images (OpenAI, Codex driver, Gemini Nano Banana, Imagen, MiniMax, OpenRouter, Leonardo, BytePlus Seedream, Cloudflare Workers AI FLUX.1 Schnell), generate video (Gemini Veo, MiniMax Hailuo, OpenRouter via Veo/Seedance/Kling, Leonardo via Motion/Veo/Kling/Hailuo/Seedance/LTX, BytePlus Seedance, Cloudflare AI Gateway via Replicate), TTS/STT/music (OpenAI, Gemini Flash TTS, MiniMax, Cloudflare Workers AI MeloTTS, ElevenLabs), 3D models (BytePlus Hyper3D/Hitem3d), analyze/transcribe media, convert documents to Markdown, optimize media via ffmpeg/ImageMagick. Use whenever the user wants to create, edit, or transform images/video/audio/3D/documents from a CLI, mentions any of: OpenAI, Codex image driver, image-to-image, i2i, image edit, watercolor/cyberpunk style transfer, reference image, OpenRouter, Nano Banana, Flux, Seedream, Veo, Hailuo, Seedance, Kling, Cloudflare Workers AI, AI Gateway, video generation, text-to-video, image-to-video, i2v, ElevenLabs voice cloning, or asks for batch media optimization.
-version: 0.4.0 # x-release-please-version
+version: 0.5.0 # x-release-please-version
 ---
 
 # multix — AI Multimodal CLI
