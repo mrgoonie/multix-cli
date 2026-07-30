@@ -1,0 +1,21 @@
+{
+  "name": "multix-docs",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "astro build",
+    "check": "astro check",
+    "dev": "astro dev",
+    "preview": "astro preview",
+    "test": "node --test tests/*.test.mjs",
+    "verify": "npm run check && npm run build && npm run test",
+    "deploy": "npm run verify && wrangler deploy"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.4",
+    "@astrojs/starlight": "^0.41.5",
+    "astro": "^7.1.5",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.115.0"
+  }
+}

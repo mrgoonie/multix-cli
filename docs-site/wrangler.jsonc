@@ -1,0 +1,17 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "multix-docs",
+  "compatibility_date": "2026-07-29",
+  "workers_dev": false,
+  "assets": {
+    "directory": "./dist",
+    "html_handling": "force-trailing-slash",
+    "not_found_handling": "404-page"
+  },
+  "routes": [
+    {
+      "pattern": "multix.zuey.me",
+      "custom_domain": true
+    }
+  ]
+}
