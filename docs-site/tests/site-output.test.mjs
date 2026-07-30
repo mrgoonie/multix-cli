@@ -127,3 +127,17 @@ test("provider pages retain command caveats and asynchronous workflows", async (
     assert.match(llms, new RegExp(`commands/${provider}\\.md`));
   }
 });
+
+test("media and document guides explain the local executable prerequisites", async () => {
+  const [english, vietnamese] = await Promise.all([
+    readDist("commands/media-and-documents.md"),
+    readDist("vi/commands/media-and-documents.md"),
+  ]);
+
+  for (const guide of [english, vietnamese]) {
+    assert.match(guide, /ffmpeg -version/);
+    assert.match(guide, /magick -version/);
+    assert.match(guide, /brew install ffmpeg imagemagick/);
+    assert.match(guide, /winget install -e --id ImageMagick\.ImageMagick/);
+  }
+});
