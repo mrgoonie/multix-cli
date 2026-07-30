@@ -12,14 +12,17 @@ export const IMAGE_MODEL_FALLBACK = "gemini-2.5-flash-image";
 /** Default video generation model (Veo). */
 export const VIDEO_MODEL_DEFAULT = "veo-3.1-generate-preview";
 
+/** Default text-output model for multimodal analysis, transcription, extraction, and docs. */
+export const TEXT_MODEL_DEFAULT = "gemini-3.6-flash";
+
 /** Default multimodal analysis/transcription model. */
-export const ANALYSIS_MODEL_DEFAULT = "gemini-2.5-flash";
+export const ANALYSIS_MODEL_DEFAULT = TEXT_MODEL_DEFAULT;
 
 /** Default TTS model. */
 export const TTS_MODEL_DEFAULT = "gemini-3.1-flash-tts-preview";
 
 /** Default document conversion model. */
-export const DOC_MODEL_DEFAULT = "gemini-2.5-flash";
+export const DOC_MODEL_DEFAULT = TEXT_MODEL_DEFAULT;
 
 /** Imagen 4 model ids — require billing, use generateImages API. */
 export const IMAGEN_MODELS = new Set([
