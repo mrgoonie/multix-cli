@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0-beta.2](https://github.com/mrgoonie/multix-cli/compare/v0.1.0-beta.1...v0.1.0-beta.2) (2026-07-30)
+
+
+### Added
+
+* **gemini:** default text tasks to 3.6 Flash ([#33](https://github.com/mrgoonie/multix-cli/issues/33)) ([9ba9e2c](https://github.com/mrgoonie/multix-cli/commit/9ba9e2c9a63eb6249a5c2b7be0577510df82a014))
+
+
+### Documentation
+
+* record Gemini Omni beta release ([0c0e57b](https://github.com/mrgoonie/multix-cli/commit/0c0e57b3ec83f26ab6c9b1e3667a6c3d0ba1c778))
+
 ## [0.1.0-beta.1](https://github.com/mrgoonie/multix-cli/compare/v0.1.0-beta...v0.1.0-beta.1) (2026-07-29)
 
 
