@@ -78,9 +78,15 @@ export default defineConfig({
             { label: "Command overview", translations: { vi: "Tổng quan lệnh" }, slug: "commands" },
             { label: "Gemini", slug: "commands/gemini" },
             { label: "OpenAI", slug: "commands/openai" },
+            { label: "MiniMax", slug: "commands/minimax" },
+            { label: "OpenRouter", slug: "commands/openrouter" },
+            { label: "Leonardo", slug: "commands/leonardo" },
+            { label: "BytePlus", slug: "commands/byteplus" },
+            { label: "Cloudflare", slug: "commands/cloudflare" },
+            { label: "ElevenLabs", slug: "commands/elevenlabs" },
             {
-              label: "Other providers",
-              translations: { vi: "Provider khác" },
+              label: "Provider directory",
+              translations: { vi: "Danh mục provider" },
               slug: "commands/providers",
             },
             {

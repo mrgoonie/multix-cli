@@ -17,6 +17,8 @@ history and never commit them.
 | `MINIMAX_API_KEY` | MiniMax |
 | `LEONARDO_API_KEY` | Leonardo |
 | `BYTEPLUS_API_KEY` or `ARK_API_KEY` | BytePlus |
+| `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` | Cloudflare Workers AI |
+| `CLOUDFLARE_AI_GATEWAY_ID` and `REPLICATE_API_TOKEN` | Cloudflare AI Gateway video |
 | `ELEVENLABS_API_KEY` | ElevenLabs |
 
 ```bash
@@ -33,6 +35,12 @@ settings include `IMAGE_GEN_MODEL`, `VIDEO_GEN_MODEL`, `MULTIMODAL_MODEL`,
 `OPENAI_STT_MODEL`, `OPENROUTER_IMAGE_MODEL`, `LEONARDO_BASE_URL`,
 `BYTEPLUS_BASE_URL`, `BYTEPLUS_IMAGE_MODEL`, `BYTEPLUS_VIDEO_MODEL`, and
 `BYTEPLUS_3D_MODEL`.
+
+Cloudflare accepts only the built-in Workers AI image and speech model IDs;
+`CLOUDFLARE_AI_IMAGE_MODEL` and `CLOUDFLARE_AI_TTS_MODEL` are therefore useful
+only to make that supported choice explicit. Set
+`CLOUDFLARE_AI_GATEWAY_COLLECT_LOG_PAYLOAD=true` only when request-payload
+collection is intended.
 
 Run `multix check --verbose` after changing a credential or endpoint to see
 which providers are usable.

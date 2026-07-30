@@ -3,6 +3,9 @@ title: Lệnh Gemini
 description: Dùng Gemini để phân tích đa phương thức, extract tài liệu, tạo ảnh/video và speech.
 ---
 
+Lệnh Gemini cần `GEMINI_API_KEY`. Chạy `multix gemini <command> --help` trước
+khi tự động hóa workflow.
+
 ## Analyze, transcribe và extract
 
 Truyền một hoặc nhiều file local bằng `--files`. Khi được hỗ trợ, chọn output

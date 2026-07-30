@@ -10,6 +10,7 @@ cần context gọn, gần source hơn HTML đã render.
 
 ```text
 https://multix.zuey.me/commands/gemini.md
+https://multix.zuey.me/commands/minimax.md
 https://multix.zuey.me/reference/environment.md
 https://multix.zuey.me/llms.txt
 ```
@@ -26,9 +27,14 @@ https://multix.zuey.me/llms.txt
 
 | Nhu cầu | Bắt đầu từ |
 | --- | --- |
-| Phân tích hoặc transcribe file | `multix gemini` |
-| Sinh/sửa ảnh, speech hoặc transcription | `multix openai` |
-| Ảnh, video, speech, music hoặc 3D theo provider | [Provider khác](/vi/commands/providers/) |
+| Phân tích hoặc transcribe file | [Gemini](/vi/commands/gemini/) |
+| Sinh/sửa ảnh, speech hoặc transcription | [OpenAI](/vi/commands/openai/) |
+| Ảnh, video, speech hoặc music MiniMax | [MiniMax](/vi/commands/minimax/) |
+| Ảnh hoặc image-to-video qua routing | [OpenRouter](/vi/commands/openrouter/) |
+| Leonardo image ID, video hoặc upscale job | [Leonardo](/vi/commands/leonardo/) |
+| Seedream, Seedance, reference video hoặc 3D | [BytePlus](/vi/commands/byteplus/) |
+| Workers AI image/speech hoặc AI Gateway video | [Cloudflare](/vi/commands/cloudflare/) |
+| Voice workflow, dubbing hoặc audio generation | [ElevenLabs](/vi/commands/elevenlabs/) |
 | Convert tài liệu hoặc tối ưu media local | [Media và tài liệu](/vi/commands/media-and-documents/) |
 
 Khi khác với tài liệu đã lưu, hãy coi `--help` và `multix check` chạy thành công

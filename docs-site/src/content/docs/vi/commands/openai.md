@@ -3,6 +3,9 @@ title: Lệnh OpenAI
 description: Tạo/chỉnh ảnh, tổng hợp giọng nói và transcript audio bằng OpenAI hoặc Codex image driver đã đăng nhập.
 ---
 
+Lệnh OpenAI API cần `OPENAI_API_KEY`. Chạy `multix openai <command> --help`
+trước khi tự động hóa workflow.
+
 ## Ảnh
 
 Driver thông thường dùng `OPENAI_API_KEY`. `--driver codex` dùng Codex CLI đã

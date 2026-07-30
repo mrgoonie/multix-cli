@@ -3,6 +3,9 @@ title: OpenAI commands
 description: Generate and edit images, synthesize speech, and transcribe audio with OpenAI or an authenticated Codex image driver.
 ---
 
+OpenAI API commands require `OPENAI_API_KEY`. Run `multix openai <command>
+--help` before automating a workflow.
+
 ## Images
 
 The normal driver uses `OPENAI_API_KEY`. `--driver codex` uses an already logged
