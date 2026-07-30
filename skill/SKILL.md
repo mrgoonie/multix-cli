@@ -39,6 +39,10 @@ CLOUDFLARE_API_TOKEN  # Cloudflare Workers AI / AI Gateway token
 
 Priority: `process.env` > `cwd/.env` > `~/.multix/.env`.
 
+## Gemini text-output tasks
+
+`gemini-3.6-flash` is the default for Gemini analyze, transcribe, extract, and doc conversion. It is text-output only; use Nano Banana/Imagen for images, Veo for video, and Gemini Flash TTS for speech. Override analyze/transcribe/extract with `GEMINI_MODEL` or `MULTIMODAL_MODEL`; override doc conversion with `--model`.
+
 Codex CLI can be used as an experimental OpenAI image driver after manual `codex login`:
 
 ```bash
@@ -257,7 +261,8 @@ Files saved under `./multix-output/` by default. Override with `MULTIX_OUTPUT_DI
 | `OPENROUTER_FALLBACK_MODELS` | CSV; applies to `generate` AND `i2i` |
 | `OPENROUTER_VIDEO_MODEL` | Default OpenRouter video model (default `google/veo-3.1`) |
 | `OPENROUTER_SITE_URL` / `OPENROUTER_APP_NAME` | HTTP-Referer / X-Title headers |
-| `IMAGE_GEN_MODEL` / `VIDEO_GEN_MODEL` / `MULTIMODAL_MODEL` | Override Gemini model defaults |
+| `GEMINI_MODEL` / `MULTIMODAL_MODEL` | Override Gemini analyze/transcribe/extract defaults (doc convert uses `--model`; default `gemini-3.6-flash`) |
+| `IMAGE_GEN_MODEL` / `VIDEO_GEN_MODEL` | Override Gemini media-generation defaults |
 | `LEONARDO_DEFAULT_MODEL` / `LEONARDO_VIDEO_MODEL` | Leonardo model defaults |
 | `BYTEPLUS_IMAGE_MODEL` / `BYTEPLUS_VIDEO_MODEL` / `BYTEPLUS_3D_MODEL` | BytePlus model defaults |
 | `BYTEPLUS_VIDEO_PARAMS_MODE` | `flags` (default) or `structured` |
