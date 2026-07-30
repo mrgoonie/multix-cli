@@ -7,6 +7,27 @@ on:
     branches: [main]
 
 jobs:
+  docs:
+    name: Documentation site
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+          cache: npm
+          cache-dependency-path: docs-site/package-lock.json
+
+      - name: Install documentation dependencies
+        run: npm ci --prefix docs-site
+
+      - name: Verify documentation site
+        run: npm run verify --prefix docs-site
+
   ci:
     name: CI — Node ${{ matrix.node-version }} / ${{ matrix.os }}
     runs-on: ${{ matrix.os }}

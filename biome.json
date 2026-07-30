@@ -26,6 +26,13 @@
     }
   },
   "files": {
-    "ignore": ["dist/**", "node_modules/**", "coverage/**", "*.d.ts", "package.json"]
+    "ignore": [
+      "dist/**",
+      "node_modules/**",
+      "coverage/**",
+      "*.d.ts",
+      "package.json",
+      "docs-site/.astro/**"
+    ]
   }
 }

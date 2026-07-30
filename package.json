@@ -26,6 +26,7 @@
   },
   "scripts": {
     "build": "tsup",
+    "build:docs": "npm run build --prefix docs-site",
     "dev": "tsup --watch",
     "start": "node dist/cli.js",
     "lint": "biome check .",
@@ -33,7 +34,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:smoke": "vitest run tests/smoke"
+    "test:smoke": "vitest run tests/smoke",
+    "verify:docs": "npm run verify --prefix docs-site"
   },
   "keywords": [
     "cli",

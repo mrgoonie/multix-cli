@@ -1,0 +1,38 @@
+:root {
+  --sl-color-accent-low: #e9e6ff;
+  --sl-color-accent: #6451d4;
+  --sl-color-accent-high: #352588;
+}
+
+:root[data-theme="dark"] {
+  --sl-color-accent-low: #2f285f;
+  --sl-color-accent: #aa9dff;
+  --sl-color-accent-high: #ded9ff;
+}
+
+.multix-footer {
+  border-top: 1px solid var(--sl-color-hairline);
+  color: var(--sl-color-gray-3);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.5rem;
+  justify-content: space-between;
+  margin-top: 3rem;
+  padding: 1.5rem 0 0;
+}
+
+.multix-footer p {
+  margin: 0;
+}
+
+.multix-footer a {
+  color: inherit;
+  font-weight: 600;
+}
+
+@media (max-width: 36rem) {
+  .multix-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

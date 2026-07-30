@@ -4,6 +4,12 @@ AI multimodal CLI — generate images/video/speech/music, analyze and transcribe
 
 Supports **OpenAI** (image, image edits, TTS, STT, optional Codex image driver), **Gemini** (analyze, transcribe, generate, Veo video, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), **Cloudflare** (Workers AI image and speech; AI Gateway-routed Replicate video), and **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment).
 
+## Documentation
+
+Read the full command reference at [multix.zuey.me](https://multix.zuey.me).
+Every page also has a same-path `.md` representation for AI agents; start with
+[llms.txt](https://multix.zuey.me/llms.txt).
+
 ## Install
 
 ```bash
