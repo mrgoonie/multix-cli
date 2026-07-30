@@ -3,6 +3,47 @@ title: Media and documents
 description: Optimize media with local tooling and convert documents to Markdown with Gemini.
 ---
 
+## Prerequisites
+
+Media commands run local executables: `ffmpeg` handles audio and video, while
+the ImageMagick 7 `magick` command handles images. Install both before running
+`multix media`.
+
+### macOS (Homebrew)
+
+```bash
+brew install ffmpeg imagemagick
+```
+
+### Ubuntu or Debian
+
+```bash
+sudo apt update
+sudo apt install -y ffmpeg imagemagick
+```
+
+Some Linux distributions package ImageMagick 6, which exposes `convert` rather
+than the required `magick` executable. If the verification below cannot find
+`magick`, install ImageMagick 7 using the [official download instructions](https://imagemagick.org/download/).
+
+### Windows (winget)
+
+```powershell
+winget install -e --id Gyan.FFmpeg.Shared
+winget install -e --id ImageMagick.ImageMagick
+```
+
+Open a new terminal after installation, then verify both tools and multix:
+
+```bash
+ffmpeg -version
+magick -version
+multix check
+```
+
+For another operating system or package manager, use the [FFmpeg download
+page](https://ffmpeg.org/download.html) and [ImageMagick download page](https://imagemagick.org/download/), then ensure `ffmpeg` and `magick` are on `PATH`.
+
 ## Media utilities
 
 `multix media` chooses an appropriate ffmpeg or ImageMagick flow from the input
