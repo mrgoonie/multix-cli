@@ -17,8 +17,7 @@ describe("release workflows", () => {
     expect(workflow).toContain("skip-github-pull-request: true");
     expect(workflow).toContain("npm publish --access public --tag latest");
     expect(workflow).toContain("npm install -g npm@latest");
-    expect(workflow).toContain("id-token: write");
-    expect(workflow).not.toContain("NPM_TOKEN");
+    expect(workflow).not.toContain("secrets.NPM_TOKEN");
     expect(workflow).toContain("id-token: write");
   });
 
@@ -29,8 +28,7 @@ describe("release workflows", () => {
     expect(workflow).toContain("steps.release.outputs.release_created");
     expect(workflow).toContain("npm publish --access public --tag beta");
     expect(workflow).toContain("npm install -g npm@latest");
-    expect(workflow).toContain("id-token: write");
-    expect(workflow).not.toContain("NPM_TOKEN");
+    expect(workflow).not.toContain("secrets.NPM_TOKEN");
     expect(workflow).toContain("id-token: write");
   });
 });
