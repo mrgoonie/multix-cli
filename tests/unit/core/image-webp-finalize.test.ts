@@ -52,10 +52,10 @@ function rgbaPng(width: number, height: number): Buffer {
 describe("resolveImageFormatMode", () => {
   const saved = process.env.MULTIX_IMAGE_FORMAT;
   beforeEach(() => {
-    delete process.env.MULTIX_IMAGE_FORMAT;
+    Reflect.deleteProperty(process.env, "MULTIX_IMAGE_FORMAT");
   });
   afterEach(() => {
-    if (saved === undefined) delete process.env.MULTIX_IMAGE_FORMAT;
+    if (saved === undefined) Reflect.deleteProperty(process.env, "MULTIX_IMAGE_FORMAT");
     else process.env.MULTIX_IMAGE_FORMAT = saved;
   });
 
