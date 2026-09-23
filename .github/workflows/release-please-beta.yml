@@ -30,7 +30,7 @@ jobs:
       - uses: actions/setup-node@v4
         if: ${{ steps.release.outputs.release_created }}
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
           registry-url: "https://registry.npmjs.org"
 
@@ -58,6 +58,7 @@ jobs:
 
       - name: Publish beta to npm
         if: ${{ steps.release.outputs.release_created }}
-        run: npm publish --access public --tag beta --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        # Trusted publishing (OIDC): npm >= 11.5.1, no NPM_TOKEN.
+        run: |
+          npm install -g npm@latest
+          npm publish --access public --tag beta

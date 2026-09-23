@@ -67,6 +67,7 @@ jobs:
       - name: Validate stable release PR
         if: ${{ steps.release-pr.outputs.number != '' }}
         run: |
+          npm install -g npm@latest
           npm ci
           npm run lint
           npm run typecheck
@@ -102,18 +103,18 @@ jobs:
       - uses: actions/setup-node@v4
         if: ${{ steps.release.outputs.release_created == 'true' || steps.merged-release.outputs.release_created == 'true' }}
         with:
-          node-version: 20
+          node-version: 24
           registry-url: https://registry.npmjs.org
           cache: npm
 
+      # Trusted publishing (OIDC): npm >= 11.5.1, no NPM_TOKEN.
       - name: Publish stable npm release
         if: ${{ steps.release.outputs.release_created == 'true' || steps.merged-release.outputs.release_created == 'true' }}
         run: |
+          npm install -g npm@latest
           npm ci
           npm run lint
           npm run typecheck
           npm run build
           npm test
-          npm publish --access public --tag latest --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          npm publish --access public --tag latest
