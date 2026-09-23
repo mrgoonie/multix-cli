@@ -7,6 +7,11 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Command } from "commander";
 import { resolveImageInput } from "../../../core/image-input.js";
+import {
+  finalizeGeneratedImages,
+  imageFormatOption,
+  noWebpOption,
+} from "../../../core/image-webp-finalize.js";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import {
@@ -38,6 +43,8 @@ export function registerGeminiImageToImageCommand(parent: Command): void {
     )
     .option("-m, --model <id>", `Gemini image model (default ${IMAGE_MODEL_FALLBACK})`)
     .option("--output <path>", "Save first generated image to this path")
+    .addOption(imageFormatOption())
+    .addOption(noWebpOption())
     .option("-v, --verbose", "Verbose logging")
     .action(
       async (opts: {
@@ -45,6 +52,8 @@ export function registerGeminiImageToImageCommand(parent: Command): void {
         ref: string[];
         model?: string;
         output?: string;
+        imageFormat?: string;
+        webp?: boolean;
         verbose?: boolean;
       }) => {
         if (!opts.ref || opts.ref.length === 0) {
@@ -116,8 +125,9 @@ export function registerGeminiImageToImageCommand(parent: Command): void {
           logger.success(`Copied to: ${opts.output}`);
         }
 
-        console.log(`\nGenerated ${saved.length} image(s):`);
-        for (const f of saved) console.log(`  ${f}`);
+        const finalImages = finalizeGeneratedImages(saved, { ...opts, logger });
+        console.log(`\nGenerated ${finalImages.length} image(s):`);
+        for (const f of finalImages) console.log(`  ${f}`);
       },
     );
 }

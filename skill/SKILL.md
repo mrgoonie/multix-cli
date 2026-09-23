@@ -251,6 +251,19 @@ multix media batch --input-dir <dir> --output-dir <dir>
 
 Files saved under `./multix-output/` by default. Override with `MULTIX_OUTPUT_DIR`. Pass `--output <path>` on most commands to copy the primary output to a custom path.
 
+### Image format (WebP by default)
+
+Every image generate/edit command (`generate`, `image-to-image`) converts its result to WebP with `cwebp -q 85 -m 6 -metadata none`. The CLI verifies that width, height, and transparency match the source before reporting the `.webp` path, then deletes only the intermediate file it wrote itself; your input and reference images are never touched. If verification or `cwebp` fails, the original file is kept with a warning.
+
+Keep the provider's original format and quality with any of:
+
+- `--image-format original` or `--no-webp`
+- `MULTIX_IMAGE_FORMAT=original`
+- an `--output` path with a non-WebP extension (e.g. `--output hero.png`)
+- an explicit `openai ... --format png|jpeg|webp`
+
+Requires `cwebp` (libwebp: `brew install webp`, `apt install webp`) on `PATH`.
+
 ## Environment variables (selected)
 
 | Variable | Purpose |

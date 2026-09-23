@@ -79,6 +79,7 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `CLOUDFLARE_AI_IMAGE_MODEL` | No | Image model setting; only `@cf/black-forest-labs/flux-1-schnell` is accepted |
 | `CLOUDFLARE_AI_TTS_MODEL` | No | Speech model setting; only `@cf/myshell-ai/melotts` is accepted |
 | `MULTIX_OUTPUT_DIR` | No | Override default output dir (`./multix-output`) |
+| `MULTIX_IMAGE_FORMAT` | No | `webp` (default) or `original` to keep provider image format/quality |
 | `OPENROUTER_IMAGE_MODEL` | No | Default OpenRouter model |
 | `OPENROUTER_FALLBACK_MODELS` | No | Comma-separated fallback model ids |
 | `OPENAI_IMAGE_MODEL` | No | Default OpenAI image model (default `gpt-image-2`) |
@@ -456,6 +457,19 @@ Multiple inputs are concatenated with `---` separators into a single output.
 ## Output
 
 All generated files are saved to `./multix-output/` by default. Override with `MULTIX_OUTPUT_DIR`.
+
+### Image format (WebP by default)
+
+Every image generate/edit command (`generate`, `image-to-image`) converts its result to WebP with `cwebp -q 85 -m 6 -metadata none`. The CLI verifies that width, height, and transparency match the source before reporting the `.webp` path, then deletes only the intermediate file it wrote itself; your input and reference images are never touched. If verification or `cwebp` fails, the original file is kept with a warning.
+
+Keep the provider's original format and quality with any of:
+
+- `--image-format original` or `--no-webp`
+- `MULTIX_IMAGE_FORMAT=original`
+- an `--output` path with a non-WebP extension (e.g. `--output hero.png`)
+- an explicit `openai ... --format png|jpeg|webp`
+
+Requires `cwebp` (libwebp: `brew install webp`, `apt install webp`) on `PATH`.
 
 ### Polling and downloading videos
 

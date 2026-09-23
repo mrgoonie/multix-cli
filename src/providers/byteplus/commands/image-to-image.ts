@@ -4,6 +4,11 @@
  */
 
 import type { Command } from "commander";
+import {
+  finalizeGeneratedImages,
+  imageFormatOption,
+  noWebpOption,
+} from "../../../core/image-webp-finalize.js";
 import { createLogger } from "../../../core/logger.js";
 import { createBytePlusClient } from "../client.js";
 import { generateSeedream } from "../generators/image.js";
@@ -29,6 +34,8 @@ export function registerBytePlusImageToImageCommand(parent: Command): void {
     .option("--seed <n>", "Fixed seed")
     .option("--no-watermark", "Disable watermark")
     .option("--output <path>", "Save single image to this path")
+    .addOption(imageFormatOption())
+    .addOption(noWebpOption())
     .option("-v, --verbose", "Verbose logging")
     .action(
       async (opts: {
@@ -41,6 +48,8 @@ export function registerBytePlusImageToImageCommand(parent: Command): void {
         seed?: string;
         watermark: boolean;
         output?: string;
+        imageFormat?: string;
+        webp?: boolean;
         verbose?: boolean;
       }) => {
         if (!opts.ref || opts.ref.length === 0) {
@@ -62,8 +71,12 @@ export function registerBytePlusImageToImageCommand(parent: Command): void {
           logger,
         });
 
-        console.log(`\nGenerated ${saved.length} image(s):`);
-        for (const f of saved) console.log(`  ${f.path}`);
+        const finalImages = finalizeGeneratedImages(
+          saved.map((f) => f.path),
+          { ...opts, logger },
+        );
+        console.log(`\nGenerated ${finalImages.length} image(s):`);
+        for (const f of finalImages) console.log(`  ${f}`);
       },
     );
 }

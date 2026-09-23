@@ -1,5 +1,10 @@
 import type { Command } from "commander";
 import { ProviderError, ValidationError } from "../../../core/errors.js";
+import {
+  finalizeGeneratedImages,
+  imageFormatOption,
+  noWebpOption,
+} from "../../../core/image-webp-finalize.js";
 import { createLogger } from "../../../core/logger.js";
 import { runCloudflareJson } from "../client.js";
 import { saveBase64Image } from "../media-output.js";
@@ -18,6 +23,8 @@ export function registerCloudflareGenerateCommand(parent: Command): void {
     .option("--steps <n>", "Inference steps (1-8)", "4")
     .option("--seed <n>", "Optional non-negative integer seed")
     .option("--output <path>", "Save image at this path")
+    .addOption(imageFormatOption())
+    .addOption(noWebpOption())
     .option("-v, --verbose", "Verbose logging")
     .action(
       async (opts: {
@@ -26,6 +33,8 @@ export function registerCloudflareGenerateCommand(parent: Command): void {
         steps: string;
         seed?: string;
         output?: string;
+        imageFormat?: string;
+        webp?: boolean;
         verbose?: boolean;
       }) => {
         if (!opts.prompt.trim()) throw new ValidationError("--prompt must not be empty");
@@ -50,8 +59,9 @@ export function registerCloudflareGenerateCommand(parent: Command): void {
         if (typeof result.image !== "string") {
           throw new ProviderError("Cloudflare returned no image result", "Cloudflare");
         }
-        const destination = saveBase64Image(result.image, opts.output);
-        logger.success(`Saved ${destination}`);
+        const saved = saveBase64Image(result.image, opts.output);
+        logger.success(`Saved ${saved}`);
+        const [destination] = finalizeGeneratedImages([saved], { ...opts, logger });
         console.log(destination);
       },
     );

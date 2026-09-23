@@ -15,6 +15,11 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Command } from "commander";
 import { downloadFile } from "../../../core/http-client.js";
+import {
+  finalizeGeneratedImages,
+  imageFormatOption,
+  noWebpOption,
+} from "../../../core/image-webp-finalize.js";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import { createLeonardoClient } from "../client.js";
@@ -48,6 +53,8 @@ export function registerLeonardoImageToImageCommand(parent: Command): void {
     .option("--seed <n>", "Seed")
     .option("--negative <text>", "Negative prompt")
     .option("--output <path>", "Copy first image to this path (single-image only)")
+    .addOption(imageFormatOption())
+    .addOption(noWebpOption())
     .option("--no-download", "Skip downloading; print URLs only")
     .option("--wait-timeout <ms>", "Polling timeout in milliseconds", "480000")
     .option("-v, --verbose", "Verbose logging")
@@ -64,6 +71,8 @@ export function registerLeonardoImageToImageCommand(parent: Command): void {
         seed?: string;
         negative?: string;
         output?: string;
+        imageFormat?: string;
+        webp?: boolean;
         download: boolean;
         waitTimeout: string;
         verbose?: boolean;
@@ -154,8 +163,9 @@ export function registerLeonardoImageToImageCommand(parent: Command): void {
           logger.success(`Copied to ${dest}`);
         }
 
-        console.log(`\nGenerated ${saved.length} image(s):`);
-        for (const f of saved) console.log(`  ${f}`);
+        const finalImages = finalizeGeneratedImages(saved, { ...opts, logger });
+        console.log(`\nGenerated ${finalImages.length} image(s):`);
+        for (const f of finalImages) console.log(`  ${f}`);
       },
     );
 }
