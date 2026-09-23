@@ -1,6 +1,11 @@
 import type { Command } from "commander";
 import { resolveKey } from "../../../core/env-loader.js";
 import { ValidationError } from "../../../core/errors.js";
+import {
+  finalizeGeneratedImages,
+  imageFormatOption,
+  noWebpOption,
+} from "../../../core/image-webp-finalize.js";
 import { createLogger } from "../../../core/logger.js";
 import { resolveImageDriver, runCodexImageGeneration } from "../codex-image-driver.js";
 import {
@@ -32,15 +37,20 @@ export function registerOpenAIImageToImageCommand(parent: Command): void {
     )
     .option("--size <size>", "1024x1024|1024x1536|1536x1024|auto", "1024x1024")
     .option("--quality <q>", "low|medium|high", "medium")
-    .option("--format <fmt>", "png|jpeg|webp", "png")
+    .option(
+      "--format <fmt>",
+      "Provider output format png|jpeg|webp (explicit value keeps it; default png then WebP)",
+    )
     .option("--output <path>", "Save first image to this path")
+    .addOption(imageFormatOption())
+    .addOption(noWebpOption())
     .option("-v, --verbose", "Verbose logging")
     .action(async (opts) => {
       if (!opts.ref || opts.ref.length === 0) {
         throw new ValidationError("At least one --ref is required for image-to-image.");
       }
       const logger = createLogger({ verbose: opts.verbose ?? false });
-      const outputFormat = parseImageFormat(opts.format);
+      const outputFormat = parseImageFormat(opts.format ?? "png");
       const driver = await resolveImageDriver({ requested: parseDriver(opts.driver) });
       const saved =
         driver === "codex"
@@ -64,8 +74,13 @@ export function registerOpenAIImageToImageCommand(parent: Command): void {
               output: opts.output,
               logger,
             });
-      console.log(`\nGenerated ${saved.length} image(s):`);
-      for (const file of saved) console.log(`  ${file}`);
+      const finalImages = finalizeGeneratedImages(saved, {
+        ...opts,
+        logger,
+        explicitProviderFormat: opts.format !== undefined,
+      });
+      console.log(`\nGenerated ${finalImages.length} image(s):`);
+      for (const f of finalImages) console.log(`  ${f}`);
     });
 }
 

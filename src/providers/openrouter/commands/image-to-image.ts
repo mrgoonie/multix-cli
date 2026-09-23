@@ -18,6 +18,11 @@ import { resolveKey } from "../../../core/env-loader.js";
 import { ProviderError, ValidationError } from "../../../core/errors.js";
 import { fetchBytes, httpJson } from "../../../core/http-client.js";
 import { refUrl, resolveImageInput } from "../../../core/image-input.js";
+import {
+  finalizeGeneratedImages,
+  imageFormatOption,
+  noWebpOption,
+} from "../../../core/image-webp-finalize.js";
 import { type Logger, createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import { OPENROUTER_API_URL, requireOpenRouterKey } from "../client.js";
@@ -49,6 +54,8 @@ export function registerOpenRouterImageToImageCommand(parent: Command): void {
     .option("-m, --model <id>", `OpenRouter model id (default ${DEFAULT_MODEL})`)
     .option("--strength <n>", "Recraft init-image strength 0..1 (Recraft models only)")
     .option("--output <path>", "Save first generated image to this path")
+    .addOption(imageFormatOption())
+    .addOption(noWebpOption())
     .option("-v, --verbose", "Verbose logging")
     .action(
       async (opts: {
@@ -57,6 +64,8 @@ export function registerOpenRouterImageToImageCommand(parent: Command): void {
         model?: string;
         strength?: string;
         output?: string;
+        imageFormat?: string;
+        webp?: boolean;
         verbose?: boolean;
       }) => {
         if (!opts.ref || opts.ref.length === 0) {
@@ -97,8 +106,9 @@ export function registerOpenRouterImageToImageCommand(parent: Command): void {
           logger,
         });
 
-        console.log(`\nGenerated ${saved.length} image(s):`);
-        for (const f of saved) console.log(`  ${f}`);
+        const finalImages = finalizeGeneratedImages(saved, { ...opts, logger });
+        console.log(`\nGenerated ${finalImages.length} image(s):`);
+        for (const f of finalImages) console.log(`  ${f}`);
         console.log(`Model used: ${model}`);
       },
     );

@@ -22,6 +22,10 @@ mặc định, hoặc dùng `--output` tại lệnh hỗ trợ option này.
 multix media optimize --input source.mp4 --output optimized.mp4 --target-size 100
 ```
 
+## Định dạng ảnh
+
+Các lệnh `generate` và `image-to-image` cho ảnh mặc định chuyển kết quả sang WebP (`cwebp -q 85 -m 6 -metadata none`), kiểm tra kích thước và độ trong suốt không đổi, và chỉ xóa file trung gian do CLI tạo. Giữ định dạng/chất lượng gốc của provider bằng `--image-format original`, `--no-webp`, `MULTIX_IMAGE_FORMAT=original`, hoặc `--output` có đuôi khác WebP như `hero.png`. Nếu không có `cwebp` trên `PATH`, CLI cảnh báo và giữ file gốc.
+
 ## Cách xử lý phổ biến
 
 - **Không có provider khả dụng:** đặt ít nhất một API key được hỗ trợ rồi chạy

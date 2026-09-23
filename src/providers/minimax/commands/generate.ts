@@ -3,6 +3,11 @@
  */
 
 import type { Command } from "commander";
+import {
+  finalizeGeneratedImages,
+  imageFormatOption,
+  noWebpOption,
+} from "../../../core/image-webp-finalize.js";
 import { createLogger } from "../../../core/logger.js";
 import { requireMinimaxKey } from "../client.js";
 import { generateMinimaxImage } from "../generators/image.js";
@@ -17,6 +22,8 @@ export function registerMinimaxGenerateCommand(parent: Command): void {
     .option("--aspect-ratio <ratio>", "Aspect ratio (e.g. 1:1, 16:9)", "1:1")
     .option("--num-images <n>", "Number of images (1-9)", "1")
     .option("--output <path>", "Copy first image to this path")
+    .addOption(imageFormatOption())
+    .addOption(noWebpOption())
     .option("-v, --verbose", "Verbose logging")
     .action(
       async (opts: {
@@ -25,6 +32,8 @@ export function registerMinimaxGenerateCommand(parent: Command): void {
         aspectRatio: string;
         numImages: string;
         output?: string;
+        imageFormat?: string;
+        webp?: boolean;
         verbose?: boolean;
       }) => {
         const logger = createLogger({ verbose: opts.verbose ?? false });
@@ -47,8 +56,12 @@ export function registerMinimaxGenerateCommand(parent: Command): void {
           process.exit(1);
         }
 
-        console.log(`\nGenerated ${result.generatedImages?.length ?? 0} image(s):`);
-        for (const f of result.generatedImages ?? []) console.log(`  ${f}`);
+        const finalImages = finalizeGeneratedImages(result.generatedImages ?? [], {
+          ...opts,
+          logger,
+        });
+        console.log(`\nGenerated ${finalImages.length} image(s):`);
+        for (const f of finalImages) console.log(`  ${f}`);
       },
     );
 }

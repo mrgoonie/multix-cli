@@ -17,6 +17,11 @@ import type { Command } from "commander";
 import { ProviderError } from "../../../core/errors.js";
 import { fetchBytes } from "../../../core/http-client.js";
 import { refUrl, resolveImageInput } from "../../../core/image-input.js";
+import {
+  finalizeGeneratedImages,
+  imageFormatOption,
+  noWebpOption,
+} from "../../../core/image-webp-finalize.js";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import { apiPost, requireMinimaxKey } from "../client.js";
@@ -44,6 +49,8 @@ export function registerMinimaxImageToImageCommand(parent: Command): void {
     .option("--aspect-ratio <ratio>", "Aspect ratio (e.g. 1:1, 16:9)", "1:1")
     .option("--num-images <n>", "Number of images (1-9)", "1")
     .option("--output <path>", "Copy first image to this path")
+    .addOption(imageFormatOption())
+    .addOption(noWebpOption())
     .option("-v, --verbose", "Verbose logging")
     .action(
       async (opts: {
@@ -53,6 +60,8 @@ export function registerMinimaxImageToImageCommand(parent: Command): void {
         aspectRatio: string;
         numImages: string;
         output?: string;
+        imageFormat?: string;
+        webp?: boolean;
         verbose?: boolean;
       }) => {
         const logger = createLogger({ verbose: opts.verbose ?? false });
@@ -127,8 +136,9 @@ export function registerMinimaxImageToImageCommand(parent: Command): void {
           logger.success(`Copied to: ${opts.output}`);
         }
 
-        console.log(`\nGenerated ${saved.length} image(s):`);
-        for (const f of saved) console.log(`  ${f}`);
+        const finalImages = finalizeGeneratedImages(saved, { ...opts, logger });
+        console.log(`\nGenerated ${finalImages.length} image(s):`);
+        for (const f of finalImages) console.log(`  ${f}`);
       },
     );
 }

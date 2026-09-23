@@ -22,6 +22,10 @@ the default, or use the command's `--output` option when available.
 multix media optimize --input source.mp4 --output optimized.mp4 --target-size 100
 ```
 
+## Image format
+
+Image `generate` and `image-to-image` commands convert results to WebP by default (`cwebp -q 85 -m 6 -metadata none`), verify that size and transparency are unchanged, and delete only the intermediate file the CLI wrote. Keep the provider's original format/quality with `--image-format original`, `--no-webp`, `MULTIX_IMAGE_FORMAT=original`, or an `--output` path with a non-WebP extension such as `hero.png`. Without `cwebp` on `PATH`, the original file is kept with a warning.
+
 ## Common fixes
 
 - **No provider available:** set at least one supported provider key and rerun

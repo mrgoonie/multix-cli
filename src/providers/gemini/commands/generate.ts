@@ -7,6 +7,11 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Command } from "commander";
 import { ValidationError } from "../../../core/errors.js";
+import {
+  finalizeGeneratedImages,
+  imageFormatOption,
+  noWebpOption,
+} from "../../../core/image-webp-finalize.js";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import { extractImages, generateContent } from "../client.js";
@@ -28,6 +33,8 @@ export function registerGenerateCommand(parent: Command): void {
     .option("--num-images <n>", "Number of images to generate (1-4)", "1")
     .option("--size <sz>", `Image size (${IMAGE_SIZES.join("|")})`)
     .option("--output <path>", "Copy first generated image to this path")
+    .addOption(imageFormatOption())
+    .addOption(noWebpOption())
     .option("-v, --verbose", "Verbose logging")
     .action(
       async (opts: {
@@ -37,6 +44,8 @@ export function registerGenerateCommand(parent: Command): void {
         numImages: string;
         size?: string;
         output?: string;
+        imageFormat?: string;
+        webp?: boolean;
         verbose?: boolean;
       }) => {
         const logger = createLogger({ verbose: opts.verbose ?? false });
@@ -113,8 +122,9 @@ export function registerGenerateCommand(parent: Command): void {
           logger.success(`Copied to: ${opts.output}`);
         }
 
-        console.log(`\nGenerated ${savedFiles.length} image(s):`);
-        for (const f of savedFiles) console.log(`  ${f}`);
+        const finalImages = finalizeGeneratedImages(savedFiles, { ...opts, logger });
+        console.log(`\nGenerated ${finalImages.length} image(s):`);
+        for (const f of finalImages) console.log(`  ${f}`);
       },
     );
 }
