@@ -15,7 +15,9 @@ describe("release workflows", () => {
       'gh pr merge "${{ steps.release-pr.outputs.number }}" --repo "$GITHUB_REPOSITORY"',
     );
     expect(workflow).toContain("skip-github-pull-request: true");
-    expect(workflow).toContain("npm publish --access public --tag latest --provenance");
+    expect(workflow).toContain("npm publish --access public --tag latest");
+    expect(workflow).toContain("npm install -g npm@latest");
+    expect(workflow).not.toContain("secrets.NPM_TOKEN");
     expect(workflow).toContain("id-token: write");
   });
 
@@ -24,7 +26,9 @@ describe("release workflows", () => {
 
     expect(workflow).toContain("id: release");
     expect(workflow).toContain("steps.release.outputs.release_created");
-    expect(workflow).toContain("npm publish --access public --tag beta --provenance");
+    expect(workflow).toContain("npm publish --access public --tag beta");
+    expect(workflow).toContain("npm install -g npm@latest");
+    expect(workflow).not.toContain("secrets.NPM_TOKEN");
     expect(workflow).toContain("id-token: write");
   });
 });
