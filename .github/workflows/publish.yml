@@ -16,14 +16,14 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write # for creating GitHub releases
-      id-token: write # for npm provenance
+      id-token: write # npm trusted publishing (OIDC) + provenance
 
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
           registry-url: "https://registry.npmjs.org"
 
@@ -65,8 +65,9 @@ jobs:
           echo "Publishing npm dist-tag: $TAG"
 
       - name: Publish to npm
-        run: npm publish --access public --tag "${{ steps.dist-tag.outputs.tag }}" --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        # Trusted publishing (OIDC): npm >= 11.5.1, no NPM_TOKEN.
+        run: |
+          npm install -g npm@latest
+          npm publish --access public --tag "${{ steps.dist-tag.outputs.tag }}"
       # GitHub Release is created by release-please-action when a Release PR
       # merges. Manual `workflow_dispatch` runs publish only to npm.
