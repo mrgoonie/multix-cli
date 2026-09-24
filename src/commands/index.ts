@@ -7,6 +7,7 @@ import type { Command } from "commander";
 import { registerBytePlusCommands } from "../providers/byteplus/commands/index.js";
 import { registerCloudflareCommands } from "../providers/cloudflare/commands/index.js";
 import { registerElevenLabsCommands } from "../providers/elevenlabs/commands/index.js";
+import { registerFalCommands } from "../providers/fal/commands/index.js";
 import { registerGeminiCommands } from "../providers/gemini/commands/index.js";
 import { registerLeonardoCommands } from "../providers/leonardo/commands/index.js";
 import { registerMinimaxCommands } from "../providers/minimax/commands/index.js";
@@ -28,6 +29,7 @@ export function registerCommands(program: Command): void {
   registerBytePlusCommands(program);
   registerCloudflareCommands(program);
   registerElevenLabsCommands(program);
+  registerFalCommands(program);
   registerMediaCommands(program);
   registerDocCommands(program);
 }

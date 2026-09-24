@@ -64,6 +64,12 @@ const PROVIDERS: ProviderEntry[] = [
     optional: true,
     link: "https://elevenlabs.io/app/settings/api-keys",
   },
+  {
+    name: "fal.ai",
+    envPrimary: "FAL_KEY",
+    optional: true,
+    link: "https://fal.ai/dashboard/keys",
+  },
 ];
 
 function resolveProviderKey(p: ProviderEntry): { key?: string; envUsed?: string } {
