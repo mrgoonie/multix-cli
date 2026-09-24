@@ -4,6 +4,7 @@
  * downloadFile streams to disk without buffering the full body.
  */
 
+import { once } from "node:events";
 import fs from "node:fs";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
@@ -92,7 +93,14 @@ export async function downloadFile(
 
   const fileStream = fs.createWriteStream(dest);
   // response.body is a web ReadableStream; Node's pipeline accepts it
-  await pipeline(response.body as unknown as NodeJS.ReadableStream, fileStream);
+  try {
+    await pipeline(response.body as unknown as NodeJS.ReadableStream, fileStream);
+  } catch (err) {
+    // pipeline() rejects before the destroyed stream has released its file
+    // handle; on Windows the caller cannot remove the partial file until then.
+    if (!fileStream.closed) await once(fileStream, "close");
+    throw err;
+  }
 }
 
 /**
