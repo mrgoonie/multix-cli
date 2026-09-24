@@ -88,7 +88,7 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `IMAGE_GEN_MODEL` | No | Override Gemini image generation model |
 | `VIDEO_GEN_MODEL` | No | Override Gemini video generation model |
 | `GEMINI_MODEL` / `MULTIMODAL_MODEL` | No | Override Gemini analyze/transcribe/extract model (doc convert uses `--model`; default `gemini-3.6-flash`) |
-| `GEMINI_TTS_MODEL` / `TTS_MODEL` | No | Override Gemini TTS model (default `gemini-3.1-flash-tts-preview`) |
+| `GEMINI_TTS_MODEL` / `TTS_MODEL` | No | Override Gemini TTS model (default `gemini-3.8-flash-lite-tts`) |
 
 Priority: `process.env` > `cwd/.env` > `~/.multix/.env`.
 
@@ -129,7 +129,7 @@ multix gemini generate-video --prompt "Ocean waves" [--model veo-3.1-generate-pr
 multix gemini image-to-video <imagePath> --prompt "camera pans left" [--last-frame <path>] [--model veo-3.1-generate-preview] [--resolution 1080p] [--aspect-ratio 16:9] [--output <path>] [-v]
 
 # Text-to-speech (Gemini 3.1 Flash TTS — single & multi-speaker)
-multix gemini generate-speech (--text|--prompt) "Say cheerfully: Have a wonderful day!" [--model gemini-3.1-flash-tts-preview] [--voice Kore] [--output-format wav|pcm] [--output <path>] [-v]
+multix gemini generate-speech (--text|--prompt) "Have a wonderful day!" [--model gemini-3.8-flash-lite-tts] [--voice Kore] [--style "cheerful and friendly"] [--output-format wav|pcm] [--output <path>] [-v]
 
 # Multi-speaker (max 2): repeat --speaker name:voice; prompt should prefix lines with "<name>:"
 multix gemini generate-speech --text "Joe: How's it going? Jane: Not too bad!" \
@@ -140,7 +140,7 @@ multix gemini generate-speech --text "Joe: How's it going? Jane: Not too bad!" \
 - Text output (analyze, transcribe, extract, doc convert): `gemini-3.6-flash` (default), `gemini-3.5-flash` (manual override)
 - Image gen: `gemini-3.1-flash-image-preview` (Nano Banana 2, fastest), `gemini-3-pro-image-preview` (4K text), `imagen-4.0-generate-001` (production)
 - Video: `veo-3.1-generate-preview` (requires billing)
-- TTS: `gemini-3.1-flash-tts-preview` (default), `gemini-2.5-flash-preview-tts`, `gemini-2.5-pro-preview-tts`
+- TTS: `gemini-3.8-flash-lite-tts` (default, fast/cheap, 101 languages), `gemini-3.8-flash-tts` (highest fidelity, 130 languages), legacy `gemini-3.1-flash-tts-preview`, `gemini-2.5-flash-preview-tts`, `gemini-2.5-pro-preview-tts`. Gemini 3.8 models use the Interactions API, read the text verbatim, take delivery direction via `--style`, and also accept custom `voice_…`/`voicekey_…` voice ids.
 
 `gemini-3.6-flash` is a text-output model. Use Nano Banana/Imagen for images, Veo for video, and Gemini Flash TTS for speech.
 

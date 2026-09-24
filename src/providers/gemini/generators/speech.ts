@@ -7,14 +7,24 @@
  *
  * Single-speaker: prebuiltVoiceConfig.voiceName
  * Multi-speaker:  multiSpeakerVoiceConfig.speakerVoiceConfigs (max 2 speakers).
+ *
+ * Gemini 3.8 TTS models are served by the Interactions API instead: they read
+ * the text verbatim, take delivery direction as speech_metadata `style`, and
+ * return WAV by default. We request WAV and strip the header for `.pcm` output.
  */
 
 import fs from "node:fs";
 import path from "node:path";
 import type { Logger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
-import { extractAudio, generateContent } from "../client.js";
 import {
+  createInteraction,
+  extractAudio,
+  extractInteractionAudio,
+  generateContent,
+} from "../client.js";
+import {
+  GEMINI_INTERACTIONS_TTS_MODELS,
   TTS_PCM_BITS_PER_SAMPLE,
   TTS_PCM_CHANNELS,
   TTS_PCM_SAMPLE_RATE,
@@ -39,6 +49,8 @@ export interface GeminiSpeechOpts {
   model: string;
   voice?: string;
   speakers?: SpeakerVoice[];
+  /** Delivery direction (Gemini 3.8 only), e.g. "cheerful and friendly". */
+  style?: string;
   outputFormat: TtsOutputFormat;
   output?: string;
   logger?: Logger;
@@ -46,6 +58,10 @@ export interface GeminiSpeechOpts {
 
 export async function generateGeminiSpeech(opts: GeminiSpeechOpts): Promise<GeminiSpeechResult> {
   const { text, model, voice, speakers, outputFormat, output, logger } = opts;
+
+  if (GEMINI_INTERACTIONS_TTS_MODELS.has(model)) {
+    return generateInteractionsSpeech(opts);
+  }
 
   const speechConfig =
     speakers && speakers.length > 0
@@ -90,6 +106,83 @@ export async function generateGeminiSpeech(opts: GeminiSpeechOpts): Promise<Gemi
       ? wrapPcmInWav(pcmBytes, sampleRate, TTS_PCM_CHANNELS, TTS_PCM_BITS_PER_SAMPLE)
       : pcmBytes;
 
+  const dest = saveSpeech(outBytes, outputFormat, output, logger);
+  return { status: "success", generatedAudio: dest, model, mimeType: audio.mimeType };
+}
+
+/** Build the Interactions request body for a Gemini 3.8 TTS model. */
+export function buildInteractionsSpeechBody(
+  opts: Pick<GeminiSpeechOpts, "text" | "model" | "voice" | "speakers" | "style">,
+): Record<string, unknown> {
+  const { text, model, voice, speakers, style } = opts;
+  const speechConfig =
+    speakers && speakers.length > 0
+      ? { mode: "conversational", speakers: speakers.map((s) => ({ ...s })) }
+      : [{ voice }];
+  const content: Record<string, unknown> = { type: "text", text };
+  if (style) content.annotations = [{ type: "speech_metadata", style }];
+  return {
+    model,
+    input: [{ type: "user_input", content: [content] }],
+    response_format: { type: "audio", mime_type: "audio/wav" },
+    generation_config: { speech_config: speechConfig },
+  };
+}
+
+async function generateInteractionsSpeech(opts: GeminiSpeechOpts): Promise<GeminiSpeechResult> {
+  const { model, speakers, outputFormat, output, logger } = opts;
+  logger?.debug(
+    `Gemini TTS (interactions) model=${model} mode=${speakers?.length ? "multi" : "single"}`,
+  );
+
+  let resp: unknown;
+  try {
+    resp = await createInteraction(buildInteractionsSpeechBody(opts));
+  } catch (e) {
+    return { status: "error", error: e instanceof Error ? e.message : String(e) };
+  }
+
+  const audio = extractInteractionAudio(resp);
+  if (!audio) return { status: "error", error: "No audio in response" };
+
+  const bytes = Buffer.from(audio.data, "base64");
+  const isWav = bytes.subarray(0, 4).toString("ascii") === "RIFF";
+  let outBytes: Buffer;
+  if (outputFormat === "wav") {
+    outBytes = isWav
+      ? bytes
+      : wrapPcmInWav(
+          bytes,
+          parseSampleRate(audio.mimeType) ?? TTS_PCM_SAMPLE_RATE,
+          TTS_PCM_CHANNELS,
+          TTS_PCM_BITS_PER_SAMPLE,
+        );
+  } else {
+    outBytes = isWav ? extractWavData(bytes) : bytes;
+  }
+
+  const dest = saveSpeech(outBytes, outputFormat, output, logger);
+  return { status: "success", generatedAudio: dest, model, mimeType: audio.mimeType };
+}
+
+/** Return the `data` chunk payload of a RIFF/WAV buffer (raw PCM). */
+export function extractWavData(wav: Buffer): Buffer {
+  let offset = 12;
+  while (offset + 8 <= wav.length) {
+    const id = wav.subarray(offset, offset + 4).toString("ascii");
+    const size = wav.readUInt32LE(offset + 4);
+    if (id === "data") return wav.subarray(offset + 8, Math.min(offset + 8 + size, wav.length));
+    offset += 8 + size + (size % 2);
+  }
+  throw new Error("WAV response has no data chunk");
+}
+
+function saveSpeech(
+  outBytes: Buffer,
+  outputFormat: TtsOutputFormat,
+  output: string | undefined,
+  logger: Logger | undefined,
+): string {
   const outDir = getOutputDir();
   const dest = path.join(outDir, `gemini_speech_${Date.now()}.${outputFormat}`);
   fs.writeFileSync(dest, outBytes);
@@ -100,8 +193,7 @@ export async function generateGeminiSpeech(opts: GeminiSpeechOpts): Promise<Gemi
     fs.copyFileSync(dest, output);
     logger?.success(`Copied to: ${output}`);
   }
-
-  return { status: "success", generatedAudio: dest, model, mimeType: audio.mimeType };
+  return dest;
 }
 
 /**
