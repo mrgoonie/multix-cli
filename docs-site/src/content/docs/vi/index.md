@@ -18,9 +18,9 @@ hero:
 
 ## Một CLI cho workflow media thực tế
 
-`multix` hỗ trợ OpenAI, Gemini, MiniMax, OpenRouter, Leonardo, BytePlus và
-Cloudflare, ElevenLabs mà không biến credential provider thành framework phức
-tạp.
+`multix` hỗ trợ OpenAI, Gemini, MiniMax, OpenRouter, Leonardo, BytePlus,
+Cloudflare, ElevenLabs và fal.ai mà không biến credential provider thành
+framework phức tạp.
 
 ```bash
 npm install -g @mrgoonie/multix

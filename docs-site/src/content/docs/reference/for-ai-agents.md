@@ -37,7 +37,9 @@ https://multix.zuey.me/llms.txt
 | Seedream, Seedance, reference video, or 3D | [BytePlus](/commands/byteplus/) |
 | Workers AI image/speech or AI Gateway video | [Cloudflare](/commands/cloudflare/) |
 | Voice workflows, dubbing, or generated audio | [ElevenLabs](/commands/elevenlabs/) |
+| Any fal.ai queue model, image, or video | [fal.ai](/commands/fal/) |
 | Convert a document or optimize media locally | [Media and documents](/commands/media-and-documents/) |
+| Self-update the CLI | [Command overview](/commands/#self-update) |
 
 Treat `--help` and a successful local check as the source of truth when they
 differ from any saved documentation.

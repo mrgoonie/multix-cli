@@ -41,3 +41,17 @@ for up to two speakers.
 multix gemini generate-speech --text "Welcome to multix." --voice Kore --output-format wav
 multix gemini generate-speech --text "Joe: Hi. Jane: Hello." --speaker Joe:Kore --speaker Jane:Puck
 ```
+
+The default TTS model is `gemini-3.8-flash-lite-tts`. Other supported models
+are `gemini-3.8-flash-tts`, `gemini-3.1-flash-tts-preview`,
+`gemini-2.5-flash-preview-tts`, and `gemini-2.5-pro-preview-tts` (override
+with `--model` or `GEMINI_TTS_MODEL`). The Gemini 3.8 models (`gemini-3.8-flash-tts`,
+`gemini-3.8-flash-lite-tts`) read text verbatim and accept a `--style`
+delivery direction instead of inline prompt cues:
+
+```bash
+multix gemini generate-speech --text "Welcome to multix." \
+  --model gemini-3.8-flash-tts --voice Kore --style "cheerful and friendly"
+```
+
+`--style` requires a Gemini 3.8 TTS model and is rejected for older models.

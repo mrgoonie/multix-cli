@@ -32,3 +32,15 @@ Không commit file `.env`. Chạy setup check trước khi tạo media.
 multix check
 multix check --verbose
 ```
+
+## Cập nhật multix
+
+```bash
+multix update --check
+multix update
+```
+
+`multix update` tự nhận diện cách CLI được cài (npm, pnpm, yarn hoặc bun
+global) và chạy đúng lệnh cài đặt tương ứng. `--check` chỉ so sánh version;
+`--tag <tag>` cài một dist-tag cụ thể; `--dry-run` in lệnh thay vì chạy. Xem
+[tổng quan lệnh](/vi/commands/) để biết đầy đủ các flag.

@@ -33,3 +33,16 @@ Never commit `.env` files. Run the setup check before generating media.
 multix check
 multix check --verbose
 ```
+
+## Keep multix up to date
+
+```bash
+multix update --check
+multix update
+```
+
+`multix update` detects how the CLI was installed (npm, pnpm, yarn, or bun
+global) and runs the matching install command. `--check` only compares
+versions; `--tag <tag>` installs a specific dist-tag; `--dry-run` prints the
+command instead of running it. See [command overview](/commands/) for the
+full flag reference.
