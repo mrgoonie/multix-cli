@@ -12,6 +12,7 @@ const CLI = path.resolve(__dirname, "../../dist/cli.js");
 
 const topLevelCommands = [
   "check",
+  "update",
   "gemini",
   "minimax",
   "openrouter",

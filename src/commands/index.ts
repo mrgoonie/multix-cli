@@ -15,9 +15,11 @@ import { registerOpenRouterCommands } from "../providers/openrouter/commands/ind
 import { registerCheckCommand } from "./check.js";
 import { registerDocCommands } from "./doc/index.js";
 import { registerMediaCommands } from "./media/index.js";
+import { registerUpdateCommand } from "./update.js";
 
 export function registerCommands(program: Command): void {
   registerCheckCommand(program);
+  registerUpdateCommand(program);
   registerGeminiCommands(program);
   registerMinimaxCommands(program);
   registerOpenAICommands(program);

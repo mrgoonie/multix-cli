@@ -104,6 +104,19 @@ multix check [--verbose]
 
 Exits 0 if at least one provider key is configured, or authenticated Codex image capability is available. Exits 1 if no provider is usable or Gemini auth fails.
 
+### `multix update`
+
+Update the CLI itself to the latest (or a given dist-tag) version published on npm.
+
+```
+multix update [--check] [--tag <tag>] [--dry-run] [-v]
+```
+
+- Detects how `multix` was installed (npm, pnpm, yarn, or bun global) from the running binary's path and runs the matching global-install command, e.g. `npm i -g @mrgoonie/multix@latest`.
+- `--check` only compares the current version against the npm registry; it never installs.
+- `--tag <tag>` installs a dist-tag such as `beta` instead of `latest`.
+- `--dry-run` prints the install command instead of running it.
+
 ### `multix gemini`
 
 ```bash
