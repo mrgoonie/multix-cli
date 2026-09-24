@@ -130,16 +130,29 @@ export function buildInteractionsSpeechBody(
 }
 
 async function generateInteractionsSpeech(opts: GeminiSpeechOpts): Promise<GeminiSpeechResult> {
-  const { model, speakers, outputFormat, output, logger } = opts;
+  const { model, speakers, outputFormat, output, logger, text, style } = opts;
   logger?.debug(
     `Gemini TTS (interactions) model=${model} mode=${speakers?.length ? "multi" : "single"}`,
   );
+  // 3.8 models read the text verbatim, so an inline "Say cheerfully:" prefix is spoken aloud.
+  if (!style && /^\s*(say|read|speak)\b[^:\n]{0,80}:/i.test(text)) {
+    logger?.warn(
+      `${model} reads text verbatim; move delivery directions like "Say cheerfully:" into --style`,
+    );
+  }
 
   let resp: unknown;
   try {
     resp = await createInteraction(buildInteractionsSpeechBody(opts));
   } catch (e) {
     return { status: "error", error: e instanceof Error ? e.message : String(e) };
+  }
+
+  const interaction = resp as { status?: unknown; error?: { message?: unknown } } | null;
+  if (typeof interaction?.status === "string" && interaction.status !== "completed") {
+    const detail =
+      typeof interaction.error?.message === "string" ? `: ${interaction.error.message}` : "";
+    return { status: "error", error: `Interaction ${interaction.status}${detail}` };
   }
 
   const audio = extractInteractionAudio(resp);
