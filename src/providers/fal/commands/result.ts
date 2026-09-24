@@ -20,7 +20,15 @@ export function registerFalResultCommand(parent: Command): void {
       async (model: string, requestId: string, opts: { download?: boolean; verbose?: boolean }) => {
         const logger = createLogger({ verbose: opts.verbose ?? false });
         const client = createFalClient();
-        const result = await client.get<FalResultResponse>(resultPath(model, requestId), logger);
+
+        let result: FalResultResponse;
+        try {
+          result = await client.get<FalResultResponse>(resultPath(model, requestId), logger);
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          logger.error(`Failed to fetch result for fal request ${requestId}: ${msg}`);
+          process.exit(1);
+        }
 
         if (!opts.download) {
           console.log(JSON.stringify(result, null, 2));
@@ -36,6 +44,10 @@ export function registerFalResultCommand(parent: Command): void {
 
         const outDir = getOutputDir();
         const saved = await downloadResultMedia(urls, outDir, requestId, logger);
+        if (saved.length === 0) {
+          logger.error(`Found ${urls.length} media URL(s) but none downloaded successfully.`);
+          process.exit(1);
+        }
         console.log(`\nDownloaded ${saved.length} file(s):`);
         for (const f of saved) console.log(`  ${f}`);
       },

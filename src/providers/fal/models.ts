@@ -12,4 +12,7 @@ export const FAL_DEFAULTS = {
   imageModel: process.env.FAL_IMAGE_MODEL ?? "fal-ai/flux/schnell",
   // Stable, widely available default text-to-video model.
   videoModel: process.env.FAL_VIDEO_MODEL ?? "fal-ai/kling-video/v1.6/standard/text-to-video",
+  // Matching image-to-video model — used when --image-url is passed without -m.
+  videoImageModel:
+    process.env.FAL_VIDEO_IMAGE_MODEL ?? "fal-ai/kling-video/v1.6/standard/image-to-video",
 } as const;

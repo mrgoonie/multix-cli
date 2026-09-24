@@ -63,63 +63,75 @@ export function registerUpdateCommand(program: Command): void {
     .command("update")
     .description("Update multix to the latest (or a given dist-tag) published version")
     .option("--check", "Only compare current vs. latest version; do not install")
-    .option("--tag <tag>", "Install a specific dist-tag instead of latest", "latest")
+    .option(
+      "--tag <tag>",
+      "Install a specific dist-tag instead of latest (always installs, skipping the up-to-date check)",
+    )
     .option("--dry-run", "Print the install command instead of running it")
     .option("-v, --verbose", "Verbose logging")
-    .action(async (opts: { check?: boolean; tag: string; dryRun?: boolean; verbose?: boolean }) => {
-      const logger = createLogger({ verbose: opts.verbose ?? false });
-      const currentVersion = getCurrentVersion();
+    .action(
+      async (opts: { check?: boolean; tag?: string; dryRun?: boolean; verbose?: boolean }) => {
+        const logger = createLogger({ verbose: opts.verbose ?? false });
+        const currentVersion = getCurrentVersion();
+        const explicitTag = opts.tag !== undefined;
+        const tag = opts.tag ?? "latest";
 
-      logger.info(`Current version: ${currentVersion}`);
-      logger.info(`Checking npm registry for "${opts.tag}"...`);
+        logger.info(`Current version: ${currentVersion}`);
+        logger.info(`Checking npm registry for "${tag}"...`);
 
-      let latestVersion: string;
-      try {
-        latestVersion = await fetchRegistryVersion(opts.tag);
-      } catch (e) {
-        logger.error(e instanceof Error ? e.message : String(e));
-        process.exit(1);
-      }
-
-      const cmp = compareVersions(latestVersion, currentVersion);
-
-      if (opts.check) {
-        if (cmp > 0) {
-          logger.info(`Update available: ${currentVersion} -> ${latestVersion}`);
-          console.log(`Run \`multix update\` to install ${latestVersion}.`);
-        } else {
-          logger.success(`Already up to date (${currentVersion}).`);
+        let latestVersion: string;
+        try {
+          latestVersion = await fetchRegistryVersion(tag);
+        } catch (e) {
+          logger.error(e instanceof Error ? e.message : String(e));
+          process.exit(1);
         }
-        return;
-      }
 
-      if (cmp <= 0) {
-        logger.success(`Already up to date (${currentVersion}).`);
-        return;
-      }
+        const cmp = compareVersions(latestVersion, currentVersion);
 
-      const pm = detectPackageManager(process.argv[1] ?? process.execPath);
-      const updateCmd = buildUpdateCommand(pm, opts.tag);
-      const commandStr = formatUpdateCommand(updateCmd);
+        if (opts.check) {
+          if (cmp > 0) {
+            logger.info(`Update available: ${currentVersion} -> ${latestVersion}`);
+            console.log(`Run \`multix update\` to install ${latestVersion}.`);
+          } else {
+            logger.success(`Already up to date (${currentVersion}).`);
+          }
+          return;
+        }
 
-      logger.info(`Detected package manager: ${pm}`);
-      logger.info(`Updating ${currentVersion} -> ${latestVersion}`);
+        if (!explicitTag && cmp <= 0) {
+          logger.success(`Already up to date (${currentVersion}).`);
+          return;
+        }
+        if (explicitTag && cmp <= 0) {
+          logger.info(
+            `Requested tag "${tag}" (${latestVersion}) — installing regardless of current version (${currentVersion}).`,
+          );
+        }
 
-      if (opts.dryRun) {
-        console.log(commandStr);
-        return;
-      }
+        const pm = detectPackageManager(process.argv[1] ?? process.execPath);
+        const updateCmd = buildUpdateCommand(pm, tag);
+        const commandStr = formatUpdateCommand(updateCmd);
 
-      logger.info(`Running: ${commandStr}`);
-      try {
-        await execa(updateCmd.command, updateCmd.args, { stdio: "inherit" });
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        logger.error(`Update command failed: ${msg}`);
-        logger.info(`You can run it manually: ${commandStr}`);
-        process.exit(1);
-      }
+        logger.info(`Detected package manager: ${pm}`);
+        logger.info(`Updating ${currentVersion} -> ${latestVersion}`);
 
-      logger.success(`Updated to ${latestVersion}.`);
-    });
+        if (opts.dryRun) {
+          console.log(commandStr);
+          return;
+        }
+
+        logger.info(`Running: ${commandStr}`);
+        try {
+          await execa(updateCmd.command, updateCmd.args, { stdio: "inherit" });
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          logger.error(`Update command failed: ${msg}`);
+          logger.info(`You can run it manually: ${commandStr}`);
+          process.exit(1);
+        }
+
+        logger.success(`Updated to ${latestVersion}.`);
+      },
+    );
 }

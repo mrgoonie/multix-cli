@@ -52,6 +52,10 @@ export function registerFalRunCommand(parent: Command): void {
 
         const outDir = getOutputDir();
         const saved = await downloadResultMedia(urls, outDir, requestId, logger);
+        if (saved.length === 0) {
+          logger.error(`Found ${urls.length} media URL(s) but none downloaded successfully.`);
+          process.exit(1);
+        }
         console.log(`\nDownloaded ${saved.length} file(s):`);
         for (const f of saved) console.log(`  ${f}`);
       },

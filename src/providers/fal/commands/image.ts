@@ -81,6 +81,10 @@ export function registerFalImageCommand(parent: Command): void {
 
         const outDir = getOutputDir();
         const saved = await downloadResultMedia(urls, outDir, requestId, logger);
+        if (saved.length === 0) {
+          logger.error(`Found ${urls.length} image URL(s) but none downloaded successfully.`);
+          process.exit(1);
+        }
 
         if (opts.output && saved[0]) {
           const dest = path.resolve(opts.output);

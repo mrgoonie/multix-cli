@@ -6,14 +6,20 @@
 import type { Command } from "commander";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
+import { appIdFromModel } from "../client.js";
 import { FAL_DEFAULTS } from "../models.js";
 import { downloadResultMedia, extractMediaUrls, submitAndWait } from "../run-helpers.js";
 
 export function registerFalVideoCommand(parent: Command): void {
   parent
     .command("video <prompt>")
-    .description(`Generate video via fal.ai (default: ${FAL_DEFAULTS.videoModel})`)
-    .option("-m, --model <id>", "fal model id", FAL_DEFAULTS.videoModel)
+    .description(
+      `Generate video via fal.ai (default text-to-video: ${FAL_DEFAULTS.videoModel}; default image-to-video: ${FAL_DEFAULTS.videoImageModel})`,
+    )
+    .option(
+      "-m, --model <id>",
+      "fal model id (default depends on --image-url: text-to-video vs. image-to-video default)",
+    )
     .option("--image-url <url>", "First-frame image URL — switches to image-to-video input")
     .option("--duration <n>", "Duration in seconds (model-dependent)")
     .option("--aspect-ratio <r>", "Aspect ratio hint (e.g. 16:9, 9:16)")
@@ -25,7 +31,7 @@ export function registerFalVideoCommand(parent: Command): void {
       async (
         prompt: string,
         opts: {
-          model: string;
+          model?: string;
           imageUrl?: string;
           duration?: string;
           aspectRatio?: string;
@@ -37,6 +43,11 @@ export function registerFalVideoCommand(parent: Command): void {
       ) => {
         const logger = createLogger({ verbose: opts.verbose ?? false });
 
+        const model =
+          opts.model ?? (opts.imageUrl ? FAL_DEFAULTS.videoImageModel : FAL_DEFAULTS.videoModel);
+        // Validates the id has a well-formed "owner/alias[...]" shape before submitting.
+        appIdFromModel(model);
+
         const input: Record<string, unknown> = {
           prompt,
           ...(opts.imageUrl ? { image_url: opts.imageUrl } : {}),
@@ -45,9 +56,9 @@ export function registerFalVideoCommand(parent: Command): void {
           ...(opts.seed ? { seed: Number.parseInt(opts.seed, 10) } : {}),
         };
 
-        logger.info(`Submitting to ${opts.model}...`);
+        logger.info(`Submitting to ${model}...`);
         const { requestId, result } = await submitAndWait({
-          model: opts.model,
+          model,
           input,
           logger,
           waitTimeoutMs: Number.parseInt(opts.waitTimeout, 10) || 900_000,
@@ -67,6 +78,10 @@ export function registerFalVideoCommand(parent: Command): void {
 
         const outDir = getOutputDir();
         const saved = await downloadResultMedia(urls, outDir, requestId, logger);
+        if (saved.length === 0) {
+          logger.error(`Found ${urls.length} video URL(s) but none downloaded successfully.`);
+          process.exit(1);
+        }
         console.log(`\nGenerated ${saved.length} file(s):`);
         for (const f of saved) console.log(`  ${f}`);
       },

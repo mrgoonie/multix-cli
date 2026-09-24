@@ -30,7 +30,7 @@ Activate this skill when the user asks to:
 multix update [--check] [--tag <tag>] [--dry-run] [-v]
 ```
 
-Detects whether `multix` was installed via npm, pnpm, yarn, or bun global install (from the running binary's path) and runs the matching install command, e.g. `npm i -g @mrgoonie/multix@latest`. `--check` only compares versions against the npm registry without installing. `--tag <tag>` installs a dist-tag such as `beta`. `--dry-run` prints the command instead of running it.
+Detects whether `multix` was installed via npm, pnpm, yarn, or bun global install (from the running binary's path) and runs the matching install command, e.g. `npm i -g @mrgoonie/multix@latest`. `--check` only compares versions against the npm registry without installing. `--tag <tag>` installs a dist-tag such as `beta`, always installing that tag regardless of the current version (skipping the "already up to date" comparison used by the default `latest` flow). `--dry-run` prints the command instead of running it.
 
 ## Required env (set at least one provider key)
 
@@ -119,7 +119,8 @@ multix fal run <model> --input @input.json
 # Text-to-image (default fal-ai/flux/schnell)
 multix fal image "a cyberpunk cat" [-m <model>] [--image-size square_hd] [-n 1] [--seed <n>] [--negative-prompt <text>] [--output <path>] [-v]
 
-# Text-to-video, or image-to-video with --image-url (default fal-ai/kling-video/v1.6/standard/text-to-video)
+# Text-to-video (default fal-ai/kling-video/v1.6/standard/text-to-video), or
+# image-to-video with --image-url (default switches to fal-ai/kling-video/v1.6/standard/image-to-video when -m is omitted)
 multix fal video "a dancer under neon lights" [-m <model>] [--image-url <https-url>] [--duration <n>] [--aspect-ratio 16:9] [--seed <n>] [-v]
 
 # Inspect a request submitted any other way
