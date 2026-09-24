@@ -1,6 +1,6 @@
 ---
 name: multix
-description: AI multimodal CLI — generate and edit images (OpenAI, Codex driver, Gemini Nano Banana, Imagen, MiniMax, OpenRouter, Leonardo, BytePlus Seedream, Cloudflare Workers AI FLUX.1 Schnell), generate video (Gemini Veo, MiniMax Hailuo, OpenRouter via Veo/Seedance/Kling, Leonardo via Motion/Veo/Kling/Hailuo/Seedance/LTX, BytePlus Seedance, Cloudflare AI Gateway via Replicate), TTS/STT/music (OpenAI, Gemini Flash TTS, MiniMax, Cloudflare Workers AI MeloTTS, ElevenLabs), 3D models (BytePlus Hyper3D/Hitem3d), analyze/transcribe media, convert documents to Markdown, optimize media via ffmpeg/ImageMagick. Use whenever the user wants to create, edit, or transform images/video/audio/3D/documents from a CLI, mentions any of: OpenAI, Codex image driver, image-to-image, i2i, image edit, watercolor/cyberpunk style transfer, reference image, OpenRouter, Nano Banana, Flux, Seedream, Veo, Hailuo, Seedance, Kling, Cloudflare Workers AI, AI Gateway, video generation, text-to-video, image-to-video, i2v, ElevenLabs voice cloning, or asks for batch media optimization.
+description: AI multimodal CLI — generate and edit images (OpenAI, Codex driver, Gemini Nano Banana, Imagen, MiniMax, OpenRouter, Leonardo, BytePlus Seedream, Cloudflare Workers AI FLUX.1 Schnell, fal.ai FLUX), generate video (Gemini Veo, MiniMax Hailuo, OpenRouter via Veo/Seedance/Kling, Leonardo via Motion/Veo/Kling/Hailuo/Seedance/LTX, BytePlus Seedance, Cloudflare AI Gateway via Replicate, fal.ai queue models), TTS/STT/music (OpenAI, Gemini Flash TTS incl. Gemini 3.8 with delivery-style control, MiniMax, Cloudflare Workers AI MeloTTS, ElevenLabs), 3D models (BytePlus Hyper3D/Hitem3d), analyze/transcribe media, convert documents to Markdown, optimize media via ffmpeg/ImageMagick, and self-update the CLI. Use whenever the user wants to create, edit, or transform images/video/audio/3D/documents from a CLI, mentions any of: OpenAI, Codex image driver, image-to-image, i2i, image edit, watercolor/cyberpunk style transfer, reference image, OpenRouter, Nano Banana, Flux, Seedream, Veo, Hailuo, Seedance, Kling, Cloudflare Workers AI, AI Gateway, fal.ai, video generation, text-to-video, image-to-video, i2v, ElevenLabs voice cloning, updating/upgrading multix, or asks for batch media optimization.
 version: 0.6.0 # x-release-please-version
 ---
 
@@ -21,6 +21,16 @@ Activate this skill when the user asks to:
 - Analyze, transcribe, or extract structured data from media/docs
 - Convert PDFs / DOCX / images to Markdown
 - Optimize, resize, batch-convert, or split video/audio/image files
+- Run any fal.ai model (generic queue-API runner), or fal.ai's default image/video models
+- Update multix itself to the latest (or a given dist-tag) npm version
+
+## Self-update
+
+```bash
+multix update [--check] [--tag <tag>] [--dry-run] [-v]
+```
+
+Detects whether `multix` was installed via npm, pnpm, yarn, or bun global install (from the running binary's path) and runs the matching install command, e.g. `npm i -g @mrgoonie/multix@latest`. `--check` only compares versions against the npm registry without installing. `--tag <tag>` installs a dist-tag such as `beta`. `--dry-run` prints the command instead of running it.
 
 ## Required env (set at least one provider key)
 
@@ -32,6 +42,7 @@ MINIMAX_API_KEY       # MiniMax (image/video/speech/music)
 LEONARDO_API_KEY      # Leonardo.Ai (image/video/upscale)
 BYTEPLUS_API_KEY      # BytePlus / Volcengine ARK (Seedream/Seedance/Hyper3D)
 ELEVENLABS_API_KEY    # ElevenLabs (TTS, cloning, STT, music, dubbing)
+FAL_KEY                # fal.ai (generic queue-API model runner, image/video)
 CLOUDFLARE_ACCOUNT_ID # Cloudflare Workers AI / AI Gateway account
 CLOUDFLARE_API_TOKEN  # Cloudflare Workers AI / AI Gateway token
 # Video additionally requires CLOUDFLARE_AI_GATEWAY_ID and REPLICATE_API_TOKEN.
@@ -67,6 +78,7 @@ multix check [--verbose]
 | Leonardo | `multix leonardo generate "<text>" [-w 1024 -h 1024] [--alchemy] [--ultra] [--quality HIGH]` | Polls until done, downloads automatically |
 | BytePlus | `multix byteplus generate --prompt "<text>" [--model seedream-4-0-250828] [--size 2K] [--aspect-ratio 16:9] [-n N] [--input-image <path\|url>]` | Sync |
 | Cloudflare | `multix cloudflare generate --prompt "<text>" [--steps 1-8] [--seed <n>]` | Workers AI FLUX.1 Schnell only |
+| fal.ai | `multix fal image "<text>" [-m <model>] [--image-size square_hd] [-n N] [--seed <n>]` | Default `fal-ai/flux/schnell`; also `multix fal run <model> --input <json\|@file>` for any fal model |
 
 Aspect ratios (most providers): `1:1 2:3 3:2 3:4 4:3 4:5 5:4 9:16 16:9 21:9`.
 
@@ -94,6 +106,26 @@ multix cloudflare video-status <predictionId> \
 ```
 
 Video follows Cloudflare's documented [Replicate AI Gateway route](https://developers.cloudflare.com/ai-gateway/usage/providers/replicate/). `generate-video` returns a prediction ID unless `--wait` or `--download` is passed; either waits, saves the completed MP4, and prints its local path. For `video-status`, `--wait` reports the terminal status and `--download` implies waiting plus saves the MP4. No Cloudflare video command prints the provider output URL.
+
+## fal.ai
+
+Auth is `Authorization: Key $FAL_KEY`; base URL is `https://queue.fal.run`. All fal jobs are async (submit → poll status → fetch result); `run`/`image`/`video` handle this automatically and download any media URL found in the result.
+
+```bash
+# Generic runner — works with any fal model id
+multix fal run fal-ai/flux/schnell --input '{"prompt":"a cyberpunk cat"}' [--no-download] [--wait-timeout 480000] [-v]
+multix fal run <model> --input @input.json
+
+# Text-to-image (default fal-ai/flux/schnell)
+multix fal image "a cyberpunk cat" [-m <model>] [--image-size square_hd] [-n 1] [--seed <n>] [--negative-prompt <text>] [--output <path>] [-v]
+
+# Text-to-video, or image-to-video with --image-url (default fal-ai/kling-video/v1.6/standard/text-to-video)
+multix fal video "a dancer under neon lights" [-m <model>] [--image-url <https-url>] [--duration <n>] [--aspect-ratio 16:9] [--seed <n>] [-v]
+
+# Inspect a request submitted any other way
+multix fal status <model> <requestId>
+multix fal result <model> <requestId> [--download]
+```
 
 ## Image-to-image (edit existing image with a prompt)
 
@@ -221,7 +253,10 @@ User wants to generate a video?
 ```bash
 # TTS
 multix openai generate-speech --text "Hello world" [--voice alloy] [--output-format mp3]
-multix gemini generate-speech --text "Say cheerfully: Have a wonderful day!" --voice Kore
+multix gemini generate-speech --text "Have a wonderful day!" --voice Kore
+# Gemini 3.8 models (default gemini-3.8-flash-lite-tts) read text verbatim and take delivery
+# direction via --style instead of embedding it in the text:
+multix gemini generate-speech --text "Have a wonderful day!" --model gemini-3.8-flash-tts --style "cheerful and friendly" --voice Kore
 multix minimax generate-speech --text "..." --voice <id> --emotion neutral
 multix elevenlabs tts --text "Hello world" [--voice <voiceId>] [--model eleven_multilingual_v2]
 
@@ -279,6 +314,9 @@ Requires `cwebp` (libwebp: `brew install webp`, `apt install webp`) on `PATH`.
 | `LEONARDO_DEFAULT_MODEL` / `LEONARDO_VIDEO_MODEL` | Leonardo model defaults |
 | `BYTEPLUS_IMAGE_MODEL` / `BYTEPLUS_VIDEO_MODEL` / `BYTEPLUS_3D_MODEL` | BytePlus model defaults |
 | `BYTEPLUS_VIDEO_PARAMS_MODE` | `flags` (default) or `structured` |
+| `FAL_BASE_URL` | Override fal queue base (default `https://queue.fal.run`) |
+| `FAL_IMAGE_MODEL` / `FAL_VIDEO_MODEL` | fal.ai default model ids (default `fal-ai/flux/schnell`, `fal-ai/kling-video/v1.6/standard/text-to-video`) |
+| `GEMINI_TTS_MODEL` / `TTS_MODEL` | Override Gemini TTS model (default `gemini-3.8-flash-lite-tts`) |
 | `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN` | Required for Cloudflare Workers AI image/speech and AI Gateway video |
 | `CLOUDFLARE_AI_GATEWAY_ID` | Optional for native Cloudflare image/speech; required for Cloudflare video |
 | `CLOUDFLARE_AI_GATEWAY_COLLECT_LOG_PAYLOAD` | Set `true` to explicitly opt in to AI Gateway request-payload collection; defaults to `false` |
@@ -319,6 +357,14 @@ multix media split --input long-video.mp4 --chunk-duration 600
 
 # Convert document to markdown
 multix doc convert --input report.pdf --auto-name
+
+# fal.ai
+multix fal image "A sunset over mountains"
+multix fal run fal-ai/flux/schnell --input '{"prompt":"A sunset over mountains"}'
+
+# Self-update
+multix update --check
+multix update
 ```
 
 ## Security & scope
