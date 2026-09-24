@@ -40,3 +40,17 @@ cho tối đa hai người nói.
 ```bash
 multix gemini generate-speech --text "Welcome to multix." --voice Kore --output-format wav
 ```
+
+Model TTS mặc định là `gemini-3.8-flash-lite-tts`. Các model khác được hỗ trợ:
+`gemini-3.8-flash-tts`, `gemini-3.1-flash-tts-preview`,
+`gemini-2.5-flash-preview-tts` và `gemini-2.5-pro-preview-tts` (ghi đè bằng
+`--model` hoặc `GEMINI_TTS_MODEL`). Các model Gemini 3.8
+(`gemini-3.8-flash-tts`, `gemini-3.8-flash-lite-tts`) đọc text nguyên văn và
+nhận hướng dẫn cách đọc qua `--style` thay vì chèn chỉ dẫn vào text:
+
+```bash
+multix gemini generate-speech --text "Welcome to multix." \
+  --model gemini-3.8-flash-tts --voice Kore --style "cheerful and friendly"
+```
+
+`--style` yêu cầu model Gemini 3.8 TTS và sẽ bị từ chối với model cũ hơn.

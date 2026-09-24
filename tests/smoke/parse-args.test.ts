@@ -12,11 +12,13 @@ const CLI = path.resolve(__dirname, "../../dist/cli.js");
 
 const topLevelCommands = [
   "check",
+  "update",
   "gemini",
   "minimax",
   "openrouter",
   "openai",
   "cloudflare",
+  "fal",
   "media",
   "doc",
 ];
@@ -27,6 +29,7 @@ const subcommands: Record<string, string[]> = {
   openrouter: ["generate", "image-to-image"],
   openai: ["generate", "image-to-image", "generate-speech", "transcribe"],
   cloudflare: ["generate", "generate-speech", "generate-video", "video-status"],
+  fal: ["run", "image", "video", "status", "result"],
   media: ["optimize", "split", "batch"],
   doc: ["convert"],
 };

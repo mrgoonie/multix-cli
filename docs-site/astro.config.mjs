@@ -84,6 +84,7 @@ export default defineConfig({
             { label: "BytePlus", slug: "commands/byteplus" },
             { label: "Cloudflare", slug: "commands/cloudflare" },
             { label: "ElevenLabs", slug: "commands/elevenlabs" },
+            { label: "fal.ai", slug: "commands/fal" },
             {
               label: "Provider directory",
               translations: { vi: "Danh mục provider" },

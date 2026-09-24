@@ -4,7 +4,7 @@ AI multimodal CLI — generate images/video/speech/music, analyze and transcribe
 
 ![Isometric technical illustration of multix media workflows](docs-site/public/images/multix-isometric-banner.png)
 
-Supports **OpenAI** (image, image edits, TTS, STT, optional Codex image driver), **Gemini** (analyze, transcribe, generate, Veo video, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), **Cloudflare** (Workers AI image and speech; AI Gateway-routed Replicate video), and **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment).
+Supports **OpenAI** (image, image edits, TTS, STT, optional Codex image driver), **Gemini** (analyze, transcribe, generate, Veo video, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), **Cloudflare** (Workers AI image and speech; AI Gateway-routed Replicate video), **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment), and **fal.ai** (generic model runner, image, video via the fal queue API).
 
 ## Documentation
 
@@ -65,6 +65,11 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `LEONARDO_VIDEO_MODEL` | No | Default Leonardo video model (default `MOTION2`) |
 | `BYTEPLUS_API_KEY` | For BytePlus | [BytePlus](https://console.byteplus.com/auth/api-keys) |
 | `ELEVENLABS_API_KEY` | For ElevenLabs | [ElevenLabs](https://elevenlabs.io/app/settings/api-keys) |
+| `FAL_KEY` | For fal.ai | [fal.ai](https://fal.ai/dashboard/keys) |
+| `FAL_BASE_URL` | No | Override fal queue base (default `https://queue.fal.run`) |
+| `FAL_IMAGE_MODEL` | No | Default fal image model (default `fal-ai/flux/schnell`) |
+| `FAL_VIDEO_MODEL` | No | Default fal text-to-video model (default `fal-ai/kling-video/v1.6/standard/text-to-video`) |
+| `FAL_VIDEO_IMAGE_MODEL` | No | Default fal image-to-video model, used when `--image-url` is passed without `-m` (default `fal-ai/kling-video/v1.6/standard/image-to-video`) |
 | `ARK_API_KEY` | No | Fallback for `BYTEPLUS_API_KEY` (Volcengine ARK shared name) |
 | `BYTEPLUS_BASE_URL` | No | Override BytePlus base (default `https://ark.ap-southeast.bytepluses.com/api/v3`) |
 | `BYTEPLUS_IMAGE_MODEL` | No | Default Seedream model (default `seedream-4-0-250828`) |
@@ -103,6 +108,19 @@ multix check [--verbose]
 ```
 
 Exits 0 if at least one provider key is configured, or authenticated Codex image capability is available. Exits 1 if no provider is usable or Gemini auth fails.
+
+### `multix update`
+
+Update the CLI itself to the latest (or a given dist-tag) version published on npm.
+
+```
+multix update [--check] [--tag <tag>] [--dry-run] [-v]
+```
+
+- Detects how `multix` was installed (npm, pnpm, yarn, or bun global) from the running binary's path and runs the matching global-install command, e.g. `npm i -g @mrgoonie/multix@latest`.
+- `--check` only compares the current version against the npm registry; it never installs.
+- `--tag <tag>` installs a dist-tag such as `beta` instead of `latest`. Passing `--tag` always installs the requested tag, skipping the "already up to date" comparison that applies to the default `latest` flow.
+- `--dry-run` prints the install command instead of running it.
 
 ### `multix gemini`
 
@@ -424,6 +442,33 @@ multix elevenlabs models
 - Most generation endpoints (TTS, SFX, Music, Voice Changer, Isolation) return audio bytes synchronously.
 - Dubbing is async: submit → poll → download per-language tracks.
 - Output format strings combine codec + sample rate + bitrate, e.g. `mp3_44100_128`, `pcm_24000`, `ulaw_8000`.
+
+### `multix fal`
+
+Generic runner plus convenience commands for [fal.ai](https://fal.ai)'s queue REST API. Any model id works with `run`; `image`/`video` set sensible defaults and download media automatically.
+
+```bash
+# Generic runner — works with any fal model id
+multix fal run fal-ai/flux/schnell --input '{"prompt":"a cyberpunk cat"}' [--no-download] [--wait-timeout 480000] [-v]
+multix fal run fal-ai/flux/schnell --input @input.json
+
+# Text-to-image (default model: fal-ai/flux/schnell)
+multix fal image "a cyberpunk cat" [-m <model>] [--image-size square_hd] [-n 1] [--seed <n>] [--negative-prompt <text>] [--output <path>] [--no-download] [-v]
+
+# Text-to-video (default model: fal-ai/kling-video/v1.6/standard/text-to-video),
+# or image-to-video with --image-url (default model: fal-ai/kling-video/v1.6/standard/image-to-video).
+# Without -m, the default model switches automatically based on whether --image-url is passed.
+multix fal video "a dancer under neon lights" [-m <model>] [--image-url <https-url>] [--duration <n>] [--aspect-ratio 16:9] [--seed <n>] [--no-download] [--wait-timeout 900000] [-v]
+
+# Queue status / result for a request submitted any other way
+multix fal status <model> <requestId>
+multix fal result <model> <requestId> [--download]
+```
+
+**Notes:**
+- Auth header is `Authorization: Key $FAL_KEY`; base URL is `https://queue.fal.run`.
+- All fal jobs are async: submit → poll `status` → fetch `result`. `run`/`image`/`video` do this automatically.
+- Media URLs are extracted generically from the result JSON (any `url` field, recursively) and downloaded to `MULTIX_OUTPUT_DIR`.
 
 ### `multix media`
 

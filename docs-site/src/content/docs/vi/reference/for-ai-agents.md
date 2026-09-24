@@ -35,7 +35,9 @@ https://multix.zuey.me/llms.txt
 | Seedream, Seedance, reference video hoặc 3D | [BytePlus](/vi/commands/byteplus/) |
 | Workers AI image/speech hoặc AI Gateway video | [Cloudflare](/vi/commands/cloudflare/) |
 | Voice workflow, dubbing hoặc audio generation | [ElevenLabs](/vi/commands/elevenlabs/) |
+| Bất kỳ model queue fal.ai, ảnh hoặc video | [fal.ai](/vi/commands/fal/) |
 | Convert tài liệu hoặc tối ưu media local | [Media và tài liệu](/vi/commands/media-and-documents/) |
+| Tự cập nhật CLI | [Tổng quan lệnh](/vi/commands/#tự-cập-nhật) |
 
 Khi khác với tài liệu đã lưu, hãy coi `--help` và `multix check` chạy thành công
 là nguồn chính xác nhất.

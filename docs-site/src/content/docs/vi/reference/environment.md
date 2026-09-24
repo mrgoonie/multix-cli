@@ -19,6 +19,7 @@ chạy, rồi `~/.multix/.env`. Không commit API key hoặc đưa key vào shel
 | `CLOUDFLARE_ACCOUNT_ID` và `CLOUDFLARE_API_TOKEN` | Cloudflare Workers AI |
 | `CLOUDFLARE_AI_GATEWAY_ID` và `REPLICATE_API_TOKEN` | Cloudflare AI Gateway video |
 | `ELEVENLABS_API_KEY` | ElevenLabs |
+| `FAL_KEY` | fal.ai |
 
 ```bash
 export GEMINI_API_KEY="your-key"
@@ -32,7 +33,10 @@ Chỉ đặt override khi cần thay default. Các biến gồm `IMAGE_GEN_MODEL
 `VIDEO_GEN_MODEL`, `MULTIMODAL_MODEL`, `GEMINI_TTS_MODEL`,
 `OPENAI_IMAGE_MODEL`, `OPENAI_TTS_MODEL`, `OPENAI_STT_MODEL`,
 `OPENROUTER_IMAGE_MODEL`, `LEONARDO_BASE_URL`, `BYTEPLUS_BASE_URL`,
-`BYTEPLUS_IMAGE_MODEL`, `BYTEPLUS_VIDEO_MODEL`, và `BYTEPLUS_3D_MODEL`.
+`BYTEPLUS_IMAGE_MODEL`, `BYTEPLUS_VIDEO_MODEL`, `BYTEPLUS_3D_MODEL`,
+`FAL_BASE_URL`, `FAL_IMAGE_MODEL`, `FAL_VIDEO_MODEL` và
+`FAL_VIDEO_IMAGE_MODEL` (default image-to-video của fal, dùng khi truyền
+`multix fal video --image-url` mà không có `-m`).
 
 Cloudflare chỉ chấp nhận các model image và speech Workers AI có sẵn;
 `CLOUDFLARE_AI_IMAGE_MODEL` và `CLOUDFLARE_AI_TTS_MODEL` vì vậy chỉ dùng để
