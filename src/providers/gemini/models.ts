@@ -19,7 +19,7 @@ export const TEXT_MODEL_DEFAULT = "gemini-3.6-flash";
 export const ANALYSIS_MODEL_DEFAULT = TEXT_MODEL_DEFAULT;
 
 /** Default TTS model. */
-export const TTS_MODEL_DEFAULT = "gemini-3.1-flash-tts-preview";
+export const TTS_MODEL_DEFAULT = "gemini-3.8-flash-lite-tts";
 
 /** Default document conversion model. */
 export const DOC_MODEL_DEFAULT = TEXT_MODEL_DEFAULT;

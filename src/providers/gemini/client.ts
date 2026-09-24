@@ -161,6 +161,44 @@ export async function generateContent(
 }
 
 /**
+ * Call the Interactions endpoint (POST /v1beta/interactions) and return the raw
+ * Interaction resource. Gemini 3.8 TTS models are served here, not on generateContent.
+ */
+export async function createInteraction(body: Record<string, unknown>): Promise<unknown> {
+  const apiKey = requireApiKey();
+  return httpJson<unknown>({
+    url: `${BASE}/v1beta/interactions`,
+    method: "POST",
+    headers: authHeaders(apiKey),
+    body,
+  });
+}
+
+/**
+ * Extract the last audio content block from an Interaction resource.
+ * Audio blocks ({ type: "audio", data, mime_type }) are nested inside the
+ * interaction steps; the SDK's `output_audio` is the last one, so we match that.
+ */
+export function extractInteractionAudio(resp: unknown): { mimeType: string; data: string } | null {
+  let found: { mimeType: string; data: string } | null = null;
+  const walk = (node: unknown): void => {
+    if (Array.isArray(node)) {
+      for (const n of node) walk(n);
+      return;
+    }
+    if (!node || typeof node !== "object") return;
+    const o = node as Record<string, unknown>;
+    if (o.type === "audio" && typeof o.data === "string") {
+      const mime = (o.mime_type ?? o.mimeType ?? "audio/wav") as string;
+      found = { mimeType: mime, data: o.data };
+    }
+    for (const v of Object.values(o)) walk(v);
+  };
+  walk(resp);
+  return found;
+}
+
+/**
  * Extract text from a generateContent response.
  */
 export function extractText(resp: GenerateContentResponse): string {

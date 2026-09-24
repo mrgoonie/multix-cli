@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { extractInteractionAudio } from "../../../../src/providers/gemini/client.js";
 import {
+  buildInteractionsSpeechBody,
+  extractWavData,
   parseSampleRate,
   wrapPcmInWav,
 } from "../../../../src/providers/gemini/generators/speech.js";
@@ -8,6 +11,7 @@ import {
   GEMINI_TTS_VOICES,
   TTS_MODEL_DEFAULT,
   isValidGeminiVoice,
+  isVoiceAllowedForModel,
 } from "../../../../src/providers/gemini/voices.js";
 
 describe("Gemini TTS voices/models registry", () => {
@@ -60,5 +64,87 @@ describe("wrapPcmInWav", () => {
     expect(wav.readUInt16LE(34)).toBe(16); // bits per sample
     expect(wav.readUInt32LE(40)).toBe(pcm.length); // data size
     expect(wav.readUInt32LE(4)).toBe(36 + pcm.length); // RIFF chunk size
+  });
+});
+
+describe("Gemini 3.8 TTS (Interactions API)", () => {
+  it("registers both 3.8 models and defaults to Flash-Lite", () => {
+    expect(GEMINI_TTS_MODELS.has("gemini-3.8-flash-tts")).toBe(true);
+    expect(GEMINI_TTS_MODELS.has("gemini-3.8-flash-lite-tts")).toBe(true);
+    expect(TTS_MODEL_DEFAULT).toBe("gemini-3.8-flash-lite-tts");
+  });
+
+  it("accepts custom voice ids only for 3.8 models", () => {
+    expect(isVoiceAllowedForModel("voice_abc123", "gemini-3.8-flash-tts")).toBe(true);
+    expect(isVoiceAllowedForModel("voicekey_x-1", "gemini-3.8-flash-lite-tts")).toBe(true);
+    expect(isVoiceAllowedForModel("voice_abc123", "gemini-3.1-flash-tts-preview")).toBe(false);
+    expect(isVoiceAllowedForModel("Kore", "gemini-3.1-flash-tts-preview")).toBe(true);
+  });
+
+  it("builds a single-speaker body with style annotation", () => {
+    const body = buildInteractionsSpeechBody({
+      text: "Have a wonderful day!",
+      model: "gemini-3.8-flash-tts",
+      voice: "Kore",
+      style: "cheerful and friendly",
+    });
+    expect(body).toEqual({
+      model: "gemini-3.8-flash-tts",
+      input: [
+        {
+          type: "user_input",
+          content: [
+            {
+              type: "text",
+              text: "Have a wonderful day!",
+              annotations: [{ type: "speech_metadata", style: "cheerful and friendly" }],
+            },
+          ],
+        },
+      ],
+      response_format: { type: "audio", mime_type: "audio/wav" },
+      generation_config: { speech_config: [{ voice: "Kore" }] },
+    });
+  });
+
+  it("builds a conversational multi-speaker body without annotations", () => {
+    const body = buildInteractionsSpeechBody({
+      text: "Joe: Hi\nJane: Hello",
+      model: "gemini-3.8-flash-lite-tts",
+      speakers: [
+        { speaker: "Joe", voice: "Puck" },
+        { speaker: "Jane", voice: "Kore" },
+      ],
+    });
+    expect(body.generation_config).toEqual({
+      speech_config: {
+        mode: "conversational",
+        speakers: [
+          { speaker: "Joe", voice: "Puck" },
+          { speaker: "Jane", voice: "Kore" },
+        ],
+      },
+    });
+    const content = (body.input as Array<{ content: Array<Record<string, unknown>> }>)[0]
+      ?.content[0];
+    expect(content?.annotations).toBeUndefined();
+  });
+
+  it("extracts the last audio block from a nested interaction", () => {
+    const resp = {
+      status: "completed",
+      steps: [
+        { content: [{ type: "text", text: "x" }] },
+        { content: [{ type: "audio", data: "AAA=", mime_type: "audio/wav" }] },
+        { content: [{ type: "audio", data: "QkI=", mime_type: "audio/wav" }] },
+      ],
+    };
+    expect(extractInteractionAudio(resp)).toEqual({ mimeType: "audio/wav", data: "QkI=" });
+    expect(extractInteractionAudio({ steps: [] })).toBeNull();
+  });
+
+  it("extracts raw PCM from a WAV buffer", () => {
+    const pcm = Buffer.from([1, 2, 3, 4]);
+    expect(extractWavData(wrapPcmInWav(pcm, 24_000, 1, 16))).toEqual(pcm);
   });
 });

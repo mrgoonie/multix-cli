@@ -12,12 +12,13 @@ import { createLogger } from "../../../core/logger.js";
 import { type SpeakerVoice, generateGeminiSpeech } from "../generators/speech.js";
 import { getDefaultModel } from "../models.js";
 import {
+  GEMINI_INTERACTIONS_TTS_MODELS,
   GEMINI_TTS_MODELS,
   GEMINI_TTS_VOICES,
   TTS_OUTPUT_FORMATS,
   TTS_VOICE_DEFAULT,
   type TtsOutputFormat,
-  isValidGeminiVoice,
+  isVoiceAllowedForModel,
 } from "../voices.js";
 
 export function registerGeminiGenerateSpeechCommand(parent: Command): void {
@@ -27,7 +28,15 @@ export function registerGeminiGenerateSpeechCommand(parent: Command): void {
     .option("--text <str>", "Text to speak (use --text or --prompt)")
     .option("--prompt <str>", "Alias for --text")
     .option("--model <id>", `TTS model (${[...GEMINI_TTS_MODELS].join("|")})`)
-    .option("--voice <name>", "Prebuilt voice for single-speaker mode", TTS_VOICE_DEFAULT)
+    .option(
+      "--voice <name>",
+      "Prebuilt voice for single-speaker mode (3.8 models also accept voice_/voicekey_ ids)",
+      TTS_VOICE_DEFAULT,
+    )
+    .option(
+      "--style <text>",
+      'Delivery direction for Gemini 3.8 models, e.g. "cheerful and friendly"',
+    )
     .option(
       "--speaker <name:voice>",
       "Speaker mapping (repeatable, max 2 — switches to multi-speaker mode)",
@@ -43,6 +52,7 @@ export function registerGeminiGenerateSpeechCommand(parent: Command): void {
         prompt?: string;
         model?: string;
         voice: string;
+        style?: string;
         speaker: SpeakerVoice[];
         outputFormat: string;
         output?: string;
@@ -69,14 +79,20 @@ export function registerGeminiGenerateSpeechCommand(parent: Command): void {
           throw new ValidationError("Gemini TTS supports max 2 speakers in multi-speaker mode");
         }
 
+        if (opts.style && !GEMINI_INTERACTIONS_TTS_MODELS.has(model)) {
+          throw new ValidationError(
+            `--style requires a Gemini 3.8 TTS model (${[...GEMINI_INTERACTIONS_TTS_MODELS].join(", ")}); put directions in the text for ${model}`,
+          );
+        }
+
         // Validate voices in either mode
-        if (speakers.length === 0 && !isValidGeminiVoice(opts.voice)) {
+        if (speakers.length === 0 && !isVoiceAllowedForModel(opts.voice, model)) {
           throw new ValidationError(
             `Invalid --voice "${opts.voice}". Valid: ${GEMINI_TTS_VOICES.join(", ")}`,
           );
         }
         for (const sv of speakers) {
-          if (!isValidGeminiVoice(sv.voice)) {
+          if (!isVoiceAllowedForModel(sv.voice, model)) {
             throw new ValidationError(
               `Invalid voice "${sv.voice}" for speaker "${sv.speaker}". Valid: ${GEMINI_TTS_VOICES.join(", ")}`,
             );
@@ -88,6 +104,7 @@ export function registerGeminiGenerateSpeechCommand(parent: Command): void {
           model,
           voice: speakers.length === 0 ? opts.voice : undefined,
           speakers: speakers.length > 0 ? speakers : undefined,
+          style: opts.style,
           outputFormat: opts.outputFormat as TtsOutputFormat,
           output: opts.output,
           logger,
