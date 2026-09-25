@@ -120,7 +120,8 @@ export function registerCheckCommand(program: Command): void {
       // ── Section 1: Tooling ──────────────────────────────────────────────
       logger.header("Tooling");
 
-      const ffmpegStatus = await checkBinary("ffmpeg");
+      // ffmpeg only accepts the single-dash form; see checkBinary docstring.
+      const ffmpegStatus = await checkBinary("ffmpeg", "-version");
       const magickStatus = await checkBinary("magick");
 
       if (ffmpegStatus.available) {

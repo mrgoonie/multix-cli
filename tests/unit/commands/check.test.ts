@@ -1,3 +1,6 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 /**
@@ -60,6 +63,49 @@ describe("binary-check helper", () => {
     const result = await checkBinary("zzz_multix_fake_binary_xyz");
     expect(result.available).toBe(false);
   });
+
+  it("passes a custom version flag through to the binary", async () => {
+    const { checkBinary } = await import("../../../src/commands/check-helpers/binary-check.js");
+    const result = await checkBinary("node", "-v");
+    expect(result.available).toBe(true);
+    expect(result.version).toMatch(/^v\d+\./);
+  });
+
+  it.skipIf(process.platform === "win32")(
+    "detects a binary that rejects --version with 'not found' in stderr",
+    async () => {
+      // Regression: ffmpeg 8.x exits non-zero on `--version` with
+      // "Error splitting the argument list: Option not found". The stderr
+      // substring test used to read that as a missing binary.
+      const { checkBinary } = await import("../../../src/commands/check-helpers/binary-check.js");
+      const dir = await mkdtemp(join(tmpdir(), "multix-binary-check-"));
+      const fake = join(dir, "fake-ffmpeg");
+      await writeFile(
+        fake,
+        [
+          "#!/bin/sh",
+          'if [ "$1" = "-version" ]; then',
+          '  echo "fake-ffmpeg version 8.1.2"',
+          "  exit 0",
+          "fi",
+          'echo "Error splitting the argument list: Option not found" >&2',
+          "exit 8",
+        ].join("\n"),
+        { mode: 0o755 },
+      );
+
+      try {
+        const withDefaultFlag = await checkBinary(fake);
+        expect(withDefaultFlag.available).toBe(false); // the old, wrong answer
+
+        const withCorrectFlag = await checkBinary(fake, "-version");
+        expect(withCorrectFlag.available).toBe(true);
+        expect(withCorrectFlag.version).toBe("fake-ffmpeg version 8.1.2");
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+    },
+  );
 });
 
 describe("check command provider readiness", () => {
