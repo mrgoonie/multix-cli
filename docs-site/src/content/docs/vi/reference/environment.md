@@ -31,6 +31,12 @@ export MULTIX_OUTPUT_DIR="./multix-output"
 multix check
 ```
 
+Key chỉ được gửi tới đúng origin API của provider. Nếu một request API bị
+chuyển hướng (redirect) sang host khác, hoặc từ `https://` sang `http://`,
+multix dừng lại và báo mã HTTP 3xx thay vì đi theo. Bản tải xuống mà provider
+chuyển sang host lưu trữ vẫn hoạt động, nhưng header chứa key được gỡ bỏ trước
+khi đi theo redirect đó.
+
 ## Xoay vòng Gemini key
 
 Thêm key Gemini phụ bằng `GEMINI_API_KEY_2`, `GEMINI_API_KEY_3`, … (hậu tố số

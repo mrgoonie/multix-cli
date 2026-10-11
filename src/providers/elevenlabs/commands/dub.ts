@@ -9,7 +9,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Command } from "commander";
 import { ValidationError } from "../../../core/errors.js";
-import { downloadFile } from "../../../core/http-client.js";
+import { fetchWithValidatedRedirects } from "../../../core/http-client.js";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import {
@@ -133,9 +133,9 @@ export function registerDubCommand(parent: Command): void {
 }
 
 async function downloadDub(url: string, apiKey: string, dest: string): Promise<void> {
-  // The shared downloadFile helper does not pass auth headers; do it inline.
   fs.mkdirSync(path.dirname(dest), { recursive: true });
-  const res = await globalThis.fetch(url, {
+  // The key header is dropped if the API redirects to another origin.
+  const { response: res } = await fetchWithValidatedRedirects(url, {
     headers: { "xi-api-key": apiKey },
     signal: AbortSignal.timeout(600_000),
   });
@@ -144,6 +144,4 @@ async function downloadDub(url: string, apiKey: string, dest: string): Promise<v
   }
   const arr = new Uint8Array(await res.arrayBuffer());
   fs.writeFileSync(dest, arr);
-  // downloadFile import retained in case of future stream-based override
-  void downloadFile;
 }

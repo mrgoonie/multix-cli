@@ -23,6 +23,7 @@ import {
   fetchJson,
   httpErrorFromResponse,
 } from "../../core/fetch-json.js";
+import { fetchSameOrigin } from "../../core/redirect-fetch.js";
 import { parseModelSpec } from "./model-input.js";
 import { DEFAULT_ATLAS_BASE_URL, SUBMIT_PATHS } from "./models.js";
 import {
@@ -241,12 +242,16 @@ export class AtlasCloudClient {
     const url = `${this.baseUrl}/model/uploadMedia`;
     let response: Response;
     try {
-      response = await this.doFetch(url, {
-        method: "POST",
-        headers: this.authHeaders(),
-        body: form,
-        signal: AbortSignal.timeout(this.uploadTimeoutMs),
-      });
+      response = await fetchSameOrigin(
+        url,
+        {
+          method: "POST",
+          headers: this.authHeaders(),
+          body: form,
+          signal: AbortSignal.timeout(this.uploadTimeoutMs),
+        },
+        (input, init) => this.doFetch(input, init),
+      );
     } catch (cause) {
       throw new HttpError(0, cause instanceof Error ? cause.message : String(cause), url);
     }

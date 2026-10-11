@@ -3,6 +3,7 @@ import path from "node:path";
 import { resolveKey } from "../../core/env-loader.js";
 import { ConfigError, HttpError, ValidationError } from "../../core/errors.js";
 import { httpJson } from "../../core/http-client.js";
+import { fetchSameOrigin } from "../../core/redirect-fetch.js";
 import { OPENAI_BASE_URL } from "./models.js";
 
 const DEFAULT_TIMEOUT_MS = 240_000;
@@ -49,7 +50,7 @@ export async function postOpenAIForm<T>(
   const url = endpoint(pathname);
   let res: Response;
   try {
-    res = await globalThis.fetch(url, {
+    res = await fetchSameOrigin(url, {
       method: "POST",
       headers: authHeaders(apiKey),
       body: form,
@@ -74,7 +75,7 @@ export async function postOpenAIBinary(
   const url = endpoint(pathname);
   let res: Response;
   try {
-    res = await globalThis.fetch(url, {
+    res = await fetchSameOrigin(url, {
       method: "POST",
       headers: authHeaders(apiKey, { "Content-Type": "application/json" }),
       body: JSON.stringify(body),

@@ -5,11 +5,12 @@
  */
 
 import { HttpError } from "./errors.js";
+import { type FetchLike, fetchFollowingRedirects } from "./redirect-fetch.js";
+
+export type { FetchLike };
 
 export const DEFAULT_TIMEOUT_MS = 120_000;
 const SNIPPET_MAX = 500;
-
-export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
 export interface FetchJsonOptions {
   url: string;
@@ -57,7 +58,9 @@ export async function httpErrorFromResponse(response: Response, url: string): Pr
 
 /**
  * Make an HTTP request and parse the JSON response.
- * Throws HttpError on non-2xx status or network failure (status 0).
+ * Throws HttpError on non-2xx status or network failure (status 0). Redirects
+ * are followed within the same origin only; one to another origin is refused
+ * (HttpError with the 3xx status) so the key headers are never sent there.
  */
 export async function fetchJson<T>(opts: FetchJsonOptions): Promise<T> {
   const { url, method = "GET", headers = {}, body, timeoutMs = DEFAULT_TIMEOUT_MS } = opts;
@@ -76,13 +79,12 @@ export async function fetchJson<T>(opts: FetchJsonOptions): Promise<T> {
     init.body = JSON.stringify(body);
   }
 
-  let response: Response;
-  try {
-    response = await doFetch(url, init);
-  } catch (cause) {
-    const msg = cause instanceof Error ? cause.message : String(cause);
-    throw new HttpError(0, msg, url);
-  }
+  // Same-origin redirects only: the request headers usually carry an API key.
+  const { response } = await fetchFollowingRedirects(url, init, {
+    fetch: doFetch,
+    crossOrigin: "error",
+    wrapNetworkErrors: true,
+  });
 
   if (!response.ok) {
     throw await httpErrorFromResponse(response, url);

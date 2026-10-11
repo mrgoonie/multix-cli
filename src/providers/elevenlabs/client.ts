@@ -10,6 +10,7 @@ import { ConfigError, HttpError, ProviderError, ValidationError } from "../../co
 import { httpJson } from "../../core/http-client.js";
 import type { Logger } from "../../core/logger.js";
 import { getOutputDir } from "../../core/output-dir.js";
+import { fetchSameOrigin } from "../../core/redirect-fetch.js";
 import { ELEVENLABS_BASE_URL } from "./models.js";
 
 const DEFAULT_TIMEOUT_MS = 120_000;
@@ -66,7 +67,7 @@ export function apiPostJson<T>(
 /** DELETE. */
 export async function apiDelete(endpoint: string, apiKey: string): Promise<void> {
   const url = `${ELEVENLABS_BASE_URL}/${endpoint.replace(/^\//, "")}`;
-  const res = await globalThis.fetch(url, {
+  const res = await fetchSameOrigin(url, {
     method: "DELETE",
     headers: authHeaders(apiKey),
     signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
@@ -111,7 +112,7 @@ export async function apiPostBinary(
 
   let res: Response;
   try {
-    res = await globalThis.fetch(url.toString(), init);
+    res = await fetchSameOrigin(url.toString(), init);
   } catch (cause) {
     const msg = cause instanceof Error ? cause.message : String(cause);
     throw new HttpError(0, msg, url.toString());
@@ -137,7 +138,7 @@ export async function apiPostMultipart<T>(
   const url = `${ELEVENLABS_BASE_URL}/${endpoint.replace(/^\//, "")}`;
   let res: Response;
   try {
-    res = await globalThis.fetch(url, {
+    res = await fetchSameOrigin(url, {
       method: "POST",
       headers: authHeaders(apiKey),
       body: form,

@@ -13,6 +13,7 @@ import path from "node:path";
 import { HttpError, ProviderError } from "../../core/errors.js";
 import { downloadFile, httpJson } from "../../core/http-client.js";
 import type { Logger } from "../../core/logger.js";
+import { fetchSameOrigin } from "../../core/redirect-fetch.js";
 import { withGeminiKey } from "./key-pool.js";
 import { getMimeType, requiresProcessingWait } from "./task-resolver.js";
 
@@ -107,7 +108,7 @@ async function uploadFileWithKey(
   logger?.debug(`Uploading ${displayName} (${(fileBytes.length / 1024 / 1024).toFixed(2)} MB)`);
 
   // Use globalThis.fetch for binary body (httpJson would re-stringify)
-  const resp = await globalThis.fetch(FILES_BASE, {
+  const resp = await fetchSameOrigin(FILES_BASE, {
     method: "POST",
     headers: {
       "x-goog-api-key": apiKey,

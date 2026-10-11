@@ -8,7 +8,13 @@ import { fetchJson, parseRetryAfter } from "../../../src/core/fetch-json.js";
 import { parseJsonInput } from "../../../src/core/json-input.js";
 import { redactUrl } from "../../../src/core/redact.js";
 
-const WORKER_SAFE_MODULES = ["redact.ts", "fetch-json.ts", "async-poll.ts", "errors.ts"];
+const WORKER_SAFE_MODULES = [
+  "redact.ts",
+  "fetch-json.ts",
+  "redirect-fetch.ts",
+  "async-poll.ts",
+  "errors.ts",
+];
 
 describe("worker-safe core modules", () => {
   it.each(WORKER_SAFE_MODULES)("%s has no node:* imports", (file) => {

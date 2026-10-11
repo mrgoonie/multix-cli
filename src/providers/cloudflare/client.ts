@@ -1,5 +1,6 @@
 import { resolveKey } from "../../core/env-loader.js";
 import { ProviderError } from "../../core/errors.js";
+import { fetchSameOrigin } from "../../core/redirect-fetch.js";
 import {
   CLOUDFLARE_VIDEO_MODEL,
   type CloudflareConfig,
@@ -60,7 +61,7 @@ export async function runCloudflareJson<T>(
 ): Promise<T> {
   const config = requireCloudflareConfig();
   const useGateway = Boolean(config.gatewayId);
-  const response = await globalThis.fetch(
+  const response = await fetchSameOrigin(
     useGateway ? gatewayUrl(config.accountId) : nativeUrl(config.accountId, model),
     {
       method: "POST",
@@ -83,7 +84,7 @@ export async function runCloudflareBytes(
 ): Promise<Uint8Array> {
   const config = requireCloudflareConfig();
   const useGateway = Boolean(config.gatewayId);
-  const response = await globalThis.fetch(
+  const response = await fetchSameOrigin(
     useGateway ? gatewayUrl(config.accountId) : nativeUrl(config.accountId, model),
     {
       method: "POST",
@@ -138,7 +139,7 @@ export async function createVideoPrediction(
   wait = false,
 ): Promise<CloudflareVideoPrediction> {
   const config = requireCloudflareVideoConfig();
-  const response = await globalThis.fetch(videoUrl(config), {
+  const response = await fetchSameOrigin(videoUrl(config), {
     method: "POST",
     headers: videoHeaders(config, wait),
     body: JSON.stringify({ version: CLOUDFLARE_VIDEO_MODEL, input }),
@@ -148,7 +149,7 @@ export async function createVideoPrediction(
 
 export async function getVideoPrediction(id: string): Promise<CloudflareVideoPrediction> {
   const config = requireCloudflareVideoConfig();
-  const response = await globalThis.fetch(videoUrl(config, `/${encodeURIComponent(id)}`), {
+  const response = await fetchSameOrigin(videoUrl(config, `/${encodeURIComponent(id)}`), {
     headers: videoHeaders(config),
   });
   return prediction(await readJson<unknown>(response));
