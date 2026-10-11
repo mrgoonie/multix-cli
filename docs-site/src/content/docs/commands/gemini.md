@@ -10,8 +10,10 @@ before automating a workflow.
 
 Pass one or more local files with `--files`. Choose `text`, `json`, `csv`, or
 `markdown` output where supported. Files over 20 MB are streamed from disk to
-the Gemini Files API, which accepts files up to 2 GB; a larger file is rejected
-before anything is uploaded.
+the Gemini Files API, which accepts files up to 2 GB (2,000,000,000 bytes); a
+larger file is rejected before anything is uploaded. The upload may take as
+long as the file needs at 1 MB/s plus one minute (about 35 minutes for 2 GB)
+before it times out.
 
 ```bash
 multix gemini analyze --files photo.jpg clip.mp4 --prompt "Describe the scene"

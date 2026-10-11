@@ -240,21 +240,30 @@ describe("gemini client rotation", () => {
     fs.writeFileSync(file, "%PDF-1.4");
     const seen: string[] = [];
     vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
-      const key = (init.headers as Record<string, string>)["x-goog-api-key"] as string;
-      const kind = url.includes("/upload/") ? "upload" : "generate";
-      seen.push(`${kind}:${key}`);
-      if (kind === "upload") {
+      // The resumable session URL carries the key only for this test's bookkeeping.
+      const session = /upload_id=(.+)$/.exec(url);
+      if (session) {
+        const sessionKey = session[1];
         return new Response(
           JSON.stringify({
             file: {
-              name: `files/${key}`,
-              uri: `u-${key}`,
+              name: `files/${sessionKey}`,
+              uri: `u-${sessionKey}`,
               state: "ACTIVE",
               mimeType: "application/pdf",
             },
           }),
           { status: 200 },
         );
+      }
+      const key = (init.headers as Record<string, string>)["x-goog-api-key"] as string;
+      const kind = url.includes("/upload/") ? "upload" : "generate";
+      seen.push(`${kind}:${key}`);
+      if (kind === "upload") {
+        return new Response(null, {
+          status: 200,
+          headers: { "x-goog-upload-url": `${url}?upload_id=${key}` },
+        });
       }
       if (key === "client-key-one-0") return new Response("quota", { status: 429 });
       return new Response(JSON.stringify({ candidates: [] }), { status: 200 });

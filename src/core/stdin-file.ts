@@ -12,6 +12,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { FILES_API_MAX_BYTES } from "../providers/gemini/limits.js";
 import { ValidationError } from "./errors.js";
 
 export const STDIN_ARG = "-";
@@ -19,7 +20,7 @@ export const STDIN_ARG = "-";
 export const STDIN_LABEL = "<stdin>";
 const HEAD_BYTES = 4096;
 /** Gemini's Files API limit; larger input could never be sent. */
-export const MAX_STDIN_BYTES = 2 * 1024 ** 3;
+export const MAX_STDIN_BYTES = FILES_API_MAX_BYTES;
 const WAIT_HINT_MS = 2000;
 
 type StdinLike = AsyncIterable<Buffer | string> & { isTTY?: boolean };

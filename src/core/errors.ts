@@ -9,8 +9,9 @@ export class MultixError extends Error {
   constructor(
     message: string,
     public readonly code: string,
+    options?: ErrorOptions,
   ) {
-    super(message);
+    super(message, options);
     this.name = "MultixError";
     // Maintain proper stack trace in V8
     if (Error.captureStackTrace) {
@@ -32,8 +33,9 @@ export class ProviderError extends MultixError {
   constructor(
     message: string,
     public readonly provider: string,
+    options?: ErrorOptions,
   ) {
-    super(message, "PROVIDER_ERROR");
+    super(message, "PROVIDER_ERROR", options);
     this.name = "ProviderError";
   }
 }

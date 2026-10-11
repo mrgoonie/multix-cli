@@ -14,6 +14,7 @@ import { HttpError, ProviderError, ValidationError } from "../../core/errors.js"
 import { downloadFile, httpJson } from "../../core/http-client.js";
 import type { Logger } from "../../core/logger.js";
 import { withGeminiKey } from "./key-pool.js";
+import { FILES_API_MAX_BYTES } from "./limits.js";
 import { getMimeType, requiresProcessingWait } from "./task-resolver.js";
 
 const BASE = "https://generativelanguage.googleapis.com";
@@ -70,11 +71,29 @@ function authHeaders(apiKey: string): Record<string, string> {
   return { "x-goog-api-key": apiKey };
 }
 
-/** Files API per-file size limit (2 GB). */
-export const FILES_API_MAX_BYTES = 2 * 1024 * 1024 * 1024;
+export { FILES_API_MAX_BYTES };
+
+const DEFAULT_TIMEOUT_MS = 300_000;
+/** Slowest sustained upload speed the upload timeout allows for (1 MB/s, about 8 Mbit/s). */
+const MIN_UPLOAD_BYTES_PER_SEC = 1_000_000;
+/** Fixed allowance on top of the transfer time (connection setup, server finalize). */
+const UPLOAD_TIMEOUT_SLACK_MS = 60_000;
 
 /**
- * Upload a local file to the Gemini Files API via multipart/related.
+ * Timeout for sending the file bytes: never below `timeoutMs`, and long enough
+ * for the whole file at 1 MB/s plus 60 s, so a 2 GB file gets about 35 minutes.
+ * Processing (the ACTIVE poll) keeps its own `timeoutMs` deadline.
+ */
+export function uploadTimeoutMs(size: number, timeoutMs = DEFAULT_TIMEOUT_MS): number {
+  return Math.max(
+    timeoutMs,
+    UPLOAD_TIMEOUT_SLACK_MS + Math.ceil((size / MIN_UPLOAD_BYTES_PER_SEC) * 1000),
+  );
+}
+
+/**
+ * Upload a local file to the Gemini Files API with the resumable protocol
+ * (start a session, then send the bytes in one `upload, finalize` request).
  * The file is streamed from disk (never read whole into memory); files above
  * the 2 GB Files API limit are rejected before any request is made.
  * Polls until ACTIVE for audio/video files.
@@ -86,7 +105,7 @@ export async function uploadFile(
   const size = fs.statSync(filePath).size;
   if (size > FILES_API_MAX_BYTES) {
     throw new ValidationError(
-      `File too large for the Gemini Files API: ${path.basename(filePath)} is ${formatMb(size)} MB (limit 2048 MB)`,
+      `File too large for the Gemini Files API: ${path.basename(filePath)} is ${formatMb(size)} MB (limit 2 GB = ${FILES_API_MAX_BYTES} bytes)`,
     );
   }
   return withKey(opts, (apiKey) => uploadFileWithKey(filePath, apiKey, opts));
@@ -96,50 +115,91 @@ function formatMb(bytes: number): string {
   return (bytes / 1024 / 1024).toFixed(2);
 }
 
+/**
+ * fetch for the upload steps. A non-OK response becomes an HttpError (so quota
+ * failures rotate keys); a transport failure (timeout, refused redirect, file
+ * changed while being read) becomes a ProviderError that keeps the cause.
+ * Errors name FILES_BASE, never the session upload URL, which grants write
+ * access to the upload on its own.
+ */
+async function uploadFetch(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  let resp: Response;
+  try {
+    resp = await globalThis.fetch(url, {
+      ...init,
+      // With the default "follow", fetch clones the request body (tee) to replay
+      // it on a redirect, and that copy keeps every chunk in memory.
+      redirect: "error",
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (err) {
+    const e = err as Error & { cause?: unknown };
+    const reason =
+      e?.name === "TimeoutError"
+        ? `timed out after ${Math.round(timeoutMs / 1000)} s`
+        : e?.cause instanceof Error
+          ? `${e.message}: ${e.cause.message}`
+          : String(e?.message ?? err);
+    throw new ProviderError(`File upload failed: ${reason}`, "gemini", { cause: err });
+  }
+  if (!resp.ok) {
+    const txt = await resp.text();
+    throw new HttpError(resp.status, `File upload failed: ${txt.slice(0, 500)}`, FILES_BASE);
+  }
+  return resp;
+}
+
 async function uploadFileWithKey(
   filePath: string,
   apiKey: string,
   opts: { timeoutMs?: number; logger?: Logger },
 ): Promise<FileRef> {
-  const { timeoutMs = 300_000, logger } = opts;
+  const { timeoutMs = DEFAULT_TIMEOUT_MS, logger } = opts;
 
   const mimeType = getMimeType(filePath);
   const displayName = path.basename(filePath);
-  // File-backed Blob: fetch reads it from disk in small chunks while sending.
+  // File-backed Blob: fetch reads it from disk in small chunks while sending,
+  // and derives Content-Length from its size.
   const file = await fs.openAsBlob(filePath);
-
-  // Multipart upload: metadata part + media part
-  const boundary = `multix_${Date.now()}`;
-  const metaJson = JSON.stringify({ file: { displayName, mimeType } });
-  const body = new Blob([
-    `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metaJson}\r\n--${boundary}\r\nContent-Type: ${mimeType}\r\n\r\n`,
-    file,
-    `\r\n--${boundary}--`,
-  ]);
 
   logger?.debug(`Uploading ${displayName} (${formatMb(file.size)} MB)`);
 
-  // Use globalThis.fetch for binary body (httpJson would re-stringify).
-  // redirect "error": with the default "follow", fetch clones the request body
-  // (tee) to replay it on a redirect, and that copy keeps every chunk in memory.
-  // fetch derives Content-Length from the Blob size.
-  const resp = await globalThis.fetch(FILES_BASE, {
-    method: "POST",
-    headers: {
-      "x-goog-api-key": apiKey,
-      "Content-Type": `multipart/related; boundary=${boundary}`,
-      "X-Goog-Upload-Protocol": "multipart",
+  // Step 1: open a resumable session; the upload URL comes back in a header.
+  const start = await uploadFetch(
+    FILES_BASE,
+    {
+      method: "POST",
+      headers: {
+        "x-goog-api-key": apiKey,
+        "Content-Type": "application/json",
+        "X-Goog-Upload-Protocol": "resumable",
+        "X-Goog-Upload-Command": "start",
+        "X-Goog-Upload-Header-Content-Length": String(file.size),
+        "X-Goog-Upload-Header-Content-Type": mimeType,
+      },
+      body: JSON.stringify({ file: { display_name: displayName } }),
     },
-    body,
-    redirect: "error",
-    signal: AbortSignal.timeout(timeoutMs),
-  });
-
-  if (!resp.ok) {
-    // HttpError keeps the status so quota failures can rotate to another key.
-    const txt = await resp.text();
-    throw new HttpError(resp.status, `File upload failed: ${txt.slice(0, 500)}`, FILES_BASE);
+    timeoutMs,
+  );
+  const uploadUrl = start.headers.get("x-goog-upload-url");
+  await start.body?.cancel();
+  if (!uploadUrl) {
+    throw new ProviderError("File upload failed: the Files API returned no upload URL", "gemini");
   }
+
+  // Step 2: send the bare file bytes and finalize in the same request.
+  const resp = await uploadFetch(
+    uploadUrl,
+    {
+      method: "POST",
+      headers: {
+        "X-Goog-Upload-Offset": "0",
+        "X-Goog-Upload-Command": "upload, finalize",
+      },
+      body: file,
+    },
+    uploadTimeoutMs(file.size, timeoutMs),
+  );
 
   // biome-ignore lint/suspicious/noExplicitAny: dynamic API response
   const data = (await resp.json()) as any;

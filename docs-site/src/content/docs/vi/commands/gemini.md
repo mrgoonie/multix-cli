@@ -10,8 +10,9 @@ khi tự động hóa workflow.
 
 Truyền một hoặc nhiều file local bằng `--files`. Khi được hỗ trợ, chọn output
 `text`, `json`, `csv` hoặc `markdown`. File lớn hơn 20 MB được stream từ ổ đĩa
-lên Gemini Files API, vốn nhận file tối đa 2 GB; file lớn hơn sẽ bị từ chối
-trước khi upload.
+lên Gemini Files API, vốn nhận file tối đa 2 GB (2.000.000.000 byte); file lớn
+hơn sẽ bị từ chối trước khi upload. Thời gian chờ upload bằng thời gian gửi file
+ở tốc độ 1 MB/s cộng thêm một phút (khoảng 35 phút cho file 2 GB).
 
 ```bash
 multix gemini analyze --files photo.jpg clip.mp4 --prompt "Describe the scene"
