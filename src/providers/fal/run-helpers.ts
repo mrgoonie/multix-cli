@@ -6,6 +6,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { isRetryableServerStatus } from "../../core/async-poll.js";
+import { ProviderError } from "../../core/errors.js";
 import { downloadFile } from "../../core/http-client.js";
 import { parseJsonInput } from "../../core/json-input.js";
 import type { Logger } from "../../core/logger.js";
@@ -62,6 +63,15 @@ export async function submitAndWait(opts: SubmitAndWaitOptions): Promise<SubmitA
   const submitRes = await client.post<FalSubmitResponse>(submitPath(model), input, logger);
   const requestId = submitRes.request_id;
   logger.debug(`request_id: ${requestId}`);
+  // Refuse both follow-up URLs up front (ProviderError, host only) so the key
+  // is never sent to an untrusted host and the error is not wrapped as a poll failure.
+  for (const field of ["status_url", "response_url"] as const) {
+    const url: unknown = submitRes[field];
+    if (typeof url !== "string" || url === "") {
+      throw new ProviderError(`fal submit response is missing ${field}`, "fal");
+    }
+    client.assertTrustedUrl(url);
+  }
   logger.info("Polling for completion...");
 
   const waitTimeoutMs = opts.waitTimeoutMs ?? 480_000;

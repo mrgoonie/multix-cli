@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2](https://github.com/mrgoonie/multix-cli/compare/v1.0.1...v1.0.2) (2026-10-11)
+
+
+### Fixed
+
+* **fal:** only send the key to trusted queue status and response URLs ([#112](https://github.com/mrgoonie/multix-cli/issues/112)) ([92e61c5](https://github.com/mrgoonie/multix-cli/commit/92e61c547999e0bb30f1f4be6d9bbc1ce8226d24))
+
+## [1.0.1](https://github.com/mrgoonie/multix-cli/compare/v1.0.0...v1.0.1) (2026-10-11)
+
+
+### Changed
+
+* **gemini:** move file-system work out of the Gemini client ([#109](https://github.com/mrgoonie/multix-cli/issues/109)) ([7df49b2](https://github.com/mrgoonie/multix-cli/commit/7df49b24994bf169cb5709adbada61663a66c786))
+
 ## [1.0.0](https://github.com/mrgoonie/multix-cli/compare/v0.15.3...v1.0.0) (2026-10-11)
 
 

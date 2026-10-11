@@ -59,6 +59,11 @@ cũng dùng được ở đây.
   `https://queue.fal.run` (ghi đè bằng `FAL_BASE_URL`).
 - Submit dùng model id đầy đủ; endpoint status/result của queue lại dùng app id
   (owner/alias).
+- Key chỉ được gửi tới `status_url` / `response_url` trong response của submit
+  khi URL có cùng origin (scheme, host và port) với `FAL_BASE_URL`, hoặc là
+  `https://queue.fal.run` với port mặc định. URL khác bị từ chối bằng lỗi
+  provider nêu tên host, trước khi key được gửi. Response của submit thiếu các
+  URL này cũng báo lỗi provider.
 - Polling bị giới hạn bởi `--wait-timeout` (deadline theo thời gian thực, đơn
   vị mili-giây) và tự retry lỗi network và phản hồi 5xx tạm thời (trừ 501 và 505). Khi timeout hoặc gặp lỗi
   không khôi phục được, lệnh in request ID để bạn resume bằng
