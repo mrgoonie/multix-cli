@@ -12,9 +12,10 @@
 
 import fs from "node:fs";
 import { pollUntil } from "../../core/async-poll.js";
-import { ProviderError, ValidationError } from "../../core/errors.js";
+import { HttpError, ProviderError, ValidationError } from "../../core/errors.js";
 import { downloadFile, httpJson } from "../../core/http-client.js";
 import type { Logger } from "../../core/logger.js";
+import { withGeminiKey } from "./key-pool.js";
 import { getMimeType } from "./task-resolver.js";
 
 const API_HOST = "generativelanguage.googleapis.com";
@@ -114,6 +115,8 @@ export async function submitVeo(
       body,
     });
   } catch (e) {
+    // Keep HttpErrors intact so a 429 can rotate keys and keep its retry delay.
+    if (e instanceof HttpError) throw e;
     const msg = e instanceof Error ? e.message : String(e);
     throw new ProviderError(`Veo submit failed: ${msg}`, "gemini");
   }
@@ -166,15 +169,23 @@ export async function downloadVeoVideo(apiKey: string, uri: string, dest: string
   await downloadFile(uri, dest, 300_000, host === API_HOST ? headers(apiKey) : undefined);
 }
 
-/** Submit, wait, and download to `dest`. Returns the finished operation. */
+/**
+ * Submit, wait, and download to `dest`. Returns the finished operation.
+ * Key rotation applies to the submit only: once a job is accepted, polling and
+ * download stay on that key (the operation belongs to it), so a later 429 can
+ * never start a second, separately billed job.
+ */
 export async function runVeo(
-  apiKey: string,
   model: string,
   request: VeoRequestOptions,
   dest: string,
   logger: Logger,
 ): Promise<VeoOperation> {
-  const operation = await submitVeo(apiKey, model, buildVeoRequest(request));
+  const body = buildVeoRequest(request);
+  const { apiKey, operation } = await withGeminiKey(
+    async (key) => ({ apiKey: key, operation: await submitVeo(key, model, body) }),
+    { logger },
+  );
   logger.debug(`Operation: ${operation.name}`);
   const finalOp = await waitForVeo(apiKey, operation, logger);
   const uri = extractVeoVideoUri(finalOp);

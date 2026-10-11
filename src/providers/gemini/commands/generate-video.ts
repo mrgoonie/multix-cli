@@ -11,7 +11,6 @@ import { ValidationError } from "../../../core/errors.js";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import { maybeDownloadThumb } from "../../../core/video-thumb.js";
-import { withGeminiKey } from "../key-pool.js";
 import { ASPECT_RATIOS, type AspectRatio, getDefaultModel } from "../models.js";
 import { runVeo, veoFramesFromPaths } from "../veo.js";
 
@@ -44,6 +43,9 @@ export function registerGenerateVideoCommand(parent: Command): void {
         verbose?: boolean;
       }) => {
         const logger = createLogger({ verbose: opts.verbose ?? false });
+        if (opts.uploadTimeout !== undefined) {
+          logger.warn("--upload-timeout is deprecated and ignored (images are sent inline)");
+        }
 
         const model = opts.model ?? getDefaultModel("generate-video");
 
@@ -67,22 +69,16 @@ export function registerGenerateVideoCommand(parent: Command): void {
         // First reference image = opening frame, second = closing frame.
         const frames = veoFramesFromPaths(opts.referenceImages);
         const dest = path.join(getOutputDir(), `veo_generated_${Date.now()}.mp4`);
-        // Submit, poll and download must share one key: the operation belongs to it.
-        const finalOp = await withGeminiKey(
-          (apiKey) =>
-            runVeo(
-              apiKey,
-              model,
-              {
-                prompt: opts.prompt,
-                ...frames,
-                aspectRatio: opts.aspectRatio,
-                resolution: opts.resolution,
-              },
-              dest,
-              logger,
-            ),
-          { logger },
+        const finalOp = await runVeo(
+          model,
+          {
+            prompt: opts.prompt,
+            ...frames,
+            aspectRatio: opts.aspectRatio,
+            resolution: opts.resolution,
+          },
+          dest,
+          logger,
         );
 
         logger.success(`Saved video: ${dest}`);

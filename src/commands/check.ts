@@ -214,15 +214,19 @@ export function registerCheckCommand(program: Command): void {
         logger.header("Gemini Connectivity");
         logger.info("Pinging Gemini models endpoint...");
 
-        const ping = await pingGemini(geminiKey);
-
-        if (ping.status === "success") {
-          logger.success(`Gemini API reachable — ${ping.modelCount ?? 0} models available`);
-        } else if (ping.status === "auth_error") {
-          logger.error(`Gemini auth failed — check GEMINI_API_KEY: ${ping.error ?? ""}`);
-          exitCode = 1;
-        } else {
-          logger.warn(`Gemini network error (API may be down): ${ping.error ?? ""}`);
+        // Ping every key in the rotation pool so a broken extra key is caught early.
+        for (const key of listGeminiKeys()) {
+          const ping = await pingGemini(key.value);
+          if (ping.status === "success") {
+            logger.success(
+              `${key.name}: Gemini API reachable — ${ping.modelCount ?? 0} models available`,
+            );
+          } else if (ping.status === "auth_error") {
+            logger.error(`Gemini auth failed — check ${key.name}: ${ping.error ?? ""}`);
+            exitCode = 1;
+          } else {
+            logger.warn(`${key.name}: Gemini network error (API may be down): ${ping.error ?? ""}`);
+          }
         }
       }
 

@@ -3,8 +3,9 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PollTimeoutError } from "../../../../src/core/async-poll.js";
-import { ProviderError, ValidationError } from "../../../../src/core/errors.js";
+import { HttpError, ProviderError, ValidationError } from "../../../../src/core/errors.js";
 import { createLogger } from "../../../../src/core/logger.js";
+import { _resetGeminiKeyCooldowns } from "../../../../src/providers/gemini/key-pool.js";
 import {
   buildVeoRequest,
   downloadVeoVideo,
@@ -42,14 +43,29 @@ function stubFetch(handler: (call: Call) => Response): void {
   });
 }
 
+const savedEnv: Record<string, string | undefined> = {};
+
 beforeEach(() => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), "multix-veo-"));
   calls = [];
+  _resetGeminiKeyCooldowns();
+  // Mutate process.env in place (never replace it) and restore afterwards.
+  for (const k of Object.keys(process.env)) {
+    if (k.startsWith("GEMINI_API_KEY")) {
+      savedEnv[k] = process.env[k];
+      Reflect.deleteProperty(process.env, k);
+    }
+  }
+  process.env.GEMINI_API_KEY = KEY;
 });
 
 afterEach(() => {
   vi.unstubAllGlobals();
   fs.rmSync(tmp, { recursive: true, force: true });
+  for (const k of Object.keys(process.env)) {
+    if (k.startsWith("GEMINI_API_KEY")) Reflect.deleteProperty(process.env, k);
+  }
+  for (const [k, v] of Object.entries(savedEnv)) if (v !== undefined) process.env[k] = v;
 });
 
 describe("buildVeoRequest", () => {
@@ -208,7 +224,6 @@ describe("runVeo", () => {
 
     const dest = path.join(tmp, "out", "v.mp4");
     await runVeo(
-      KEY,
       "veo-3.1-generate-preview",
       { prompt: "a cat", aspectRatio: "16:9", resolution: "720p" },
       dest,
@@ -229,18 +244,89 @@ describe("runVeo", () => {
     expect(fs.readFileSync(dest, "utf8")).toBe("MP4DATA");
   });
 
-  it("wraps submit failures without leaking the key", async () => {
+  it("surfaces submit HTTP failures without leaking the key", async () => {
     stubFetch((call) => new Response(`not found ${call.url}`, { status: 404 }));
     const err = await runVeo(
-      KEY,
       "veo-x",
       { prompt: "p", aspectRatio: "16:9", resolution: "720p" },
       path.join(tmp, "v.mp4"),
       logger,
     ).catch((e) => e);
-    expect(err).toBeInstanceOf(ProviderError);
-    expect(String(err.message)).toContain("Veo submit failed");
+    expect(err).toBeInstanceOf(HttpError);
+    expect(err.status).toBe(404);
     expect(String(err.message)).not.toContain(KEY);
+  });
+
+  it("rotates keys on a submit 429, then polls and downloads with the accepting key", async () => {
+    process.env.GEMINI_API_KEY_2 = "second-gemini-key-00";
+    let polls = 0;
+    stubFetch((call) => {
+      if (call.method === "POST") {
+        if (call.headers["x-goog-api-key"] === KEY) {
+          return new Response('{"error":{"status":"RESOURCE_EXHAUSTED"}}', { status: 429 });
+        }
+        return new Response(JSON.stringify({ name: "op-2", done: false }), { status: 200 });
+      }
+      if (call.url.endsWith("/op-2")) {
+        polls++;
+        return new Response(
+          JSON.stringify({
+            name: "op-2",
+            done: true,
+            response: {
+              generateVideoResponse: { generatedSamples: [{ video: { uri: VIDEO_URI } }] },
+            },
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response("MP4", { status: 200 });
+    });
+    vi.useFakeTimers({ shouldAdvanceTime: true, advanceTimeDelta: 1_000 });
+    try {
+      await runVeo(
+        "veo-x",
+        { prompt: "p", aspectRatio: "16:9", resolution: "720p" },
+        path.join(tmp, "v.mp4"),
+        logger,
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+    const keysUsed = calls.map((c) => `${c.method}:${c.headers["x-goog-api-key"] ?? "-"}`);
+    expect(keysUsed).toEqual([
+      `POST:${KEY}`,
+      "POST:second-gemini-key-00",
+      "GET:second-gemini-key-00",
+      "GET:second-gemini-key-00",
+    ]);
+    expect(polls).toBe(1);
+  }, 30_000);
+
+  it("never resubmits when the download is rate-limited", async () => {
+    process.env.GEMINI_API_KEY_2 = "second-gemini-key-00";
+    stubFetch((call) => {
+      if (call.method === "POST") {
+        return new Response(
+          JSON.stringify({
+            name: "op",
+            done: true,
+            response: { generatedVideos: [{ video: { uri: VIDEO_URI } }] },
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response("slow down", { status: 429 });
+    });
+    await expect(
+      runVeo(
+        "veo-x",
+        { prompt: "p", aspectRatio: "16:9", resolution: "720p" },
+        path.join(tmp, "v.mp4"),
+        logger,
+      ),
+    ).rejects.toMatchObject({ status: 429 });
+    expect(calls.filter((c) => c.method === "POST")).toHaveLength(1);
   });
 
   it("strips a models/ prefix from the model id", async () => {
@@ -256,7 +342,6 @@ describe("runVeo", () => {
         ),
     );
     await runVeo(
-      KEY,
       "models/veo-3.1-generate-preview",
       { prompt: "p", aspectRatio: "16:9", resolution: "720p" },
       path.join(tmp, "v.mp4"),
@@ -271,7 +356,6 @@ describe("runVeo", () => {
     );
     await expect(
       runVeo(
-        KEY,
         "veo-x",
         { prompt: "p", aspectRatio: "16:9", resolution: "720p" },
         path.join(tmp, "v.mp4"),

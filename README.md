@@ -98,7 +98,7 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 
 ### Gemini key rotation
 
-Set extra keys as `GEMINI_API_KEY_2`, `GEMINI_API_KEY_3`, … (any numeric suffix). `multix` tries `GEMINI_API_KEY` first, then the numbered keys in ascending order, skipping duplicates. When a key returns HTTP 429 or `RESOURCE_EXHAUSTED`, it cools down for the server's `Retry-After` (default 60s) and the same request is retried with the next key; other errors are not retried. Multi-step requests (Files API upload + generate, Veo submit/poll/download) stay on one key. Cooldowns last for the current process only, and logs name the env var, never the key. `multix check` shows how many keys are in rotation.
+Set extra keys as `GEMINI_API_KEY_2`, `GEMINI_API_KEY_3`, … (any numeric suffix; numbered keys alone are enough). `multix` tries `GEMINI_API_KEY` first, then the numbered keys in ascending order, skipping duplicates. When a key returns HTTP 429 (or 400/403 with `RESOURCE_EXHAUSTED`), it cools down for the server's `Retry-After`/`retryDelay` (default 60s) and the same request is retried with the next ready key; other errors are not rotated. A Files API upload is repeated on the new key if the following generate call is rate-limited. Veo rotates on submit only, so a rate limit while polling or downloading never starts a second billed job. `doc convert` stops its own retries on a rate limit. Cooldowns last for the current process only, and logs name the env var, never the key. `multix check` lists the keys in rotation and pings each one. Quotas are per Google Cloud project: keys from the same project share one quota, so rotation only helps across projects.
 
 Priority: `process.env` > `cwd/.env` > `~/.multix/.env`.
 

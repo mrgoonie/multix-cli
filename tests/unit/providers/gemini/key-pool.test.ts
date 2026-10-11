@@ -56,9 +56,16 @@ describe("isGeminiRateLimitError", () => {
   it("detects 429 and RESOURCE_EXHAUSTED", () => {
     expect(isGeminiRateLimitError(rateLimited())).toBe(true);
     expect(isGeminiRateLimitError(new HttpError(400, "RESOURCE_EXHAUSTED", "u"))).toBe(true);
-    expect(isGeminiRateLimitError(new Error("File upload failed (HTTP 429): quota"))).toBe(true);
     expect(isGeminiRateLimitError(new HttpError(403, "denied", "u"))).toBe(false);
     expect(isGeminiRateLimitError("nope")).toBe(false);
+  });
+
+  it("ignores free text that merely mentions 429", () => {
+    expect(isGeminiRateLimitError(new Error("File processing failed: /a/clip-429.mp4"))).toBe(
+      false,
+    );
+    expect(isGeminiRateLimitError(new Error("RESOURCE_EXHAUSTED"))).toBe(false);
+    expect(isGeminiRateLimitError(new HttpError(500, "RESOURCE_EXHAUSTED", "u"))).toBe(false);
   });
 });
 
@@ -116,6 +123,46 @@ describe("withGeminiKey", () => {
     expect(later).toBe("GEMINI_API_KEY");
   });
 
+  it("uses RetryInfo.retryDelay from the body as the cooldown", async () => {
+    let t = 0;
+    const now = () => t;
+    const body = '{"error":{"status":"RESOURCE_EXHAUSTED","details":[{"retryDelay":"7s"}]}}';
+    await withGeminiKey(
+      async (_k, name) => {
+        if (name === "GEMINI_API_KEY") throw new HttpError(429, body, "https://x");
+        return name;
+      },
+      { env: ENV, now },
+    );
+    t = 6_999;
+    expect(await withGeminiKey(async (_k, name) => name, { env: ENV, now })).toBe(
+      "GEMINI_API_KEY_2",
+    );
+    t = 7_000;
+    expect(await withGeminiKey(async (_k, name) => name, { env: ENV, now })).toBe("GEMINI_API_KEY");
+  });
+
+  it("tries only the soonest-expiring key when every key is cooling", async () => {
+    const now = () => 0;
+    await withGeminiKey(
+      async () => {
+        throw rateLimited();
+      },
+      { env: ENV, now },
+    ).catch(() => {});
+    const used: string[] = [];
+    await expect(
+      withGeminiKey(
+        async (_k, name) => {
+          used.push(name);
+          throw rateLimited();
+        },
+        { env: ENV, now },
+      ),
+    ).rejects.toMatchObject({ status: 429 });
+    expect(used).toHaveLength(1);
+  });
+
   it("rethrows the last rate-limit error when every key is exhausted", async () => {
     const logger = fakeLogger();
     await expect(
@@ -126,24 +173,32 @@ describe("withGeminiKey", () => {
         { env: ENV, logger },
       ),
     ).rejects.toMatchObject({ status: 429 });
-    expect(logger.warnings.at(-1)).toBe("All 3 Gemini keys are rate-limited");
+    expect(logger.warnings.at(-1)).toBe("All 3 Gemini keys are rate-limited; try again later");
   });
 });
 
 describe("gemini client rotation", () => {
-  const saved = { ...process.env };
+  const saved: Record<string, string | undefined> = {};
+  const clearGeminiEnv = () => {
+    for (const k of Object.keys(process.env)) {
+      if (k.startsWith("GEMINI_API_KEY")) Reflect.deleteProperty(process.env, k);
+    }
+  };
 
   beforeEach(() => {
+    // Mutate process.env in place: replacing the object breaks Windows env semantics.
     for (const k of Object.keys(process.env)) {
-      if (k.startsWith("GEMINI_API_KEY")) delete process.env[k];
+      if (k.startsWith("GEMINI_API_KEY")) saved[k] = process.env[k];
     }
+    clearGeminiEnv();
     process.env.GEMINI_API_KEY = "client-key-one-0";
     process.env.GEMINI_API_KEY_2 = "client-key-two-0";
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
-    process.env = { ...saved };
+    clearGeminiEnv();
+    for (const [k, v] of Object.entries(saved)) if (v !== undefined) process.env[k] = v;
   });
 
   it("retries generateContent with the next key after a 429", async () => {
@@ -173,5 +228,56 @@ describe("gemini client rotation", () => {
       ),
     ).rejects.toMatchObject({ status: 429 });
     expect(keys).toEqual(["pinned-key-0000"]);
+  });
+
+  it("re-uploads on the next key when generate is rate-limited after an upload", async () => {
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const { uploadFile } = await import("../../../../src/providers/gemini/client.js");
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "multix-rot-"));
+    const file = path.join(dir, "doc.pdf");
+    fs.writeFileSync(file, "%PDF-1.4");
+    const seen: string[] = [];
+    vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
+      const key = (init.headers as Record<string, string>)["x-goog-api-key"] as string;
+      const kind = url.includes("/upload/") ? "upload" : "generate";
+      seen.push(`${kind}:${key}`);
+      if (kind === "upload") {
+        return new Response(
+          JSON.stringify({
+            file: {
+              name: `files/${key}`,
+              uri: `u-${key}`,
+              state: "ACTIVE",
+              mimeType: "application/pdf",
+            },
+          }),
+          { status: 200 },
+        );
+      }
+      if (key === "client-key-one-0") return new Response("quota", { status: 429 });
+      return new Response(JSON.stringify({ candidates: [] }), { status: 200 });
+    });
+    try {
+      await withGeminiKey(async (apiKey) => {
+        const ref = await uploadFile(file, { apiKey });
+        return generateContent(
+          {
+            model: "m",
+            contents: [{ parts: [{ fileData: { mimeType: ref.mimeType, fileUri: ref.uri } }] }],
+          },
+          { apiKey },
+        );
+      });
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+    expect(seen).toEqual([
+      "upload:client-key-one-0",
+      "generate:client-key-one-0",
+      "upload:client-key-two-0",
+      "generate:client-key-two-0",
+    ]);
   });
 });

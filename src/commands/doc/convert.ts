@@ -17,7 +17,7 @@ import {
   shouldUseFileApi,
   uploadFile,
 } from "../../providers/gemini/client.js";
-import { withGeminiKey } from "../../providers/gemini/key-pool.js";
+import { isGeminiRateLimitError, withGeminiKey } from "../../providers/gemini/key-pool.js";
 import { DOC_MODEL_DEFAULT } from "../../providers/gemini/models.js";
 import { DEFAULT_CONVERT_PROMPT } from "./default-prompt.js";
 
@@ -105,6 +105,8 @@ export async function convertDocuments(opts: ConvertOptions): Promise<void> {
         break;
       } catch (e) {
         errorMsg = e instanceof Error ? e.message : String(e);
+        // Key rotation already tried every ready key; retrying would only repeat uploads.
+        if (isGeminiRateLimitError(e)) break;
         if (attempt < 2) {
           const wait = 2 ** attempt * 1000;
           logger?.debug(`Retry ${attempt + 1} after ${wait / 1000}s: ${errorMsg}`);

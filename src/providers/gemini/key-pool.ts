@@ -2,11 +2,14 @@
  * Gemini API key rotation.
  *
  * Keys come from GEMINI_API_KEY followed by GEMINI_API_KEY_2, GEMINI_API_KEY_3, …
- * (any numeric suffix, ascending; duplicate values are dropped). Each call starts
- * with the first key that is not cooling down. A quota/rate-limit failure
- * (HTTP 429 or RESOURCE_EXHAUSTED) puts that key on cooldown for the server's
- * Retry-After, or 60s, and the same operation is retried with the next key.
- * Cooldowns live in process memory only. Logs name env vars, never key values.
+ * (any numeric suffix, ascending; duplicate values are dropped). Each call tries
+ * the keys that are not cooling down, in order. A quota/rate-limit response
+ * (HTTP 429, or RESOURCE_EXHAUSTED in the body) puts that key on cooldown for
+ * the server's retry delay, or 60s, and the same operation is retried with the
+ * next ready key. When every key is cooling, only the soonest-expiring key is
+ * tried once. Cooldowns live in process memory only. Logs name env vars, never
+ * key values. Gemini quotas are per Google Cloud project: keys from the same
+ * project share one quota, so rotating between them does not help.
  */
 
 import { ConfigError, HttpError } from "../../core/errors.js";
@@ -42,30 +45,35 @@ export function listGeminiKeys(env: NodeJS.ProcessEnv = process.env): GeminiKey[
   return keys;
 }
 
-/** True for quota and rate-limit failures that another key may not hit. */
+/**
+ * True for quota and rate-limit HTTP responses that another key may not hit.
+ * Only structured HttpErrors count, so file names or messages that merely
+ * contain "429" never trigger a rotation.
+ */
 export function isGeminiRateLimitError(error: unknown): boolean {
-  if (error instanceof HttpError) {
-    return error.status === 429 || error.snippet.includes("RESOURCE_EXHAUSTED");
-  }
-  if (error instanceof Error) {
-    return /\b429\b|RESOURCE_EXHAUSTED/.test(error.message);
-  }
-  return false;
+  if (!(error instanceof HttpError)) return false;
+  if (error.status === 429) return true;
+  return (
+    (error.status === 400 || error.status === 403) && error.snippet.includes("RESOURCE_EXHAUSTED")
+  );
 }
 
+/** Server-suggested wait: Retry-After header, else RetryInfo.retryDelay ("37s") in the body. */
 function cooldownMs(error: unknown): number {
-  if (error instanceof HttpError && error.retryAfterMs !== undefined && error.retryAfterMs > 0) {
-    return error.retryAfterMs;
-  }
+  if (!(error instanceof HttpError)) return DEFAULT_COOLDOWN_MS;
+  if (error.retryAfterMs !== undefined && error.retryAfterMs > 0) return error.retryAfterMs;
+  const delay = /"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s"/.exec(error.snippet);
+  if (delay?.[1]) return Math.ceil(Number(delay[1]) * 1000);
   return DEFAULT_COOLDOWN_MS;
 }
 
-/** Keys not cooling down first (configured order), then cooling keys by soonest expiry. */
-function orderKeys(keys: GeminiKey[], now: number): GeminiKey[] {
+/** Ready keys in configured order; if all are cooling, just the soonest-expiring one. */
+function keysToTry(keys: GeminiKey[], now: number): GeminiKey[] {
   const until = (k: GeminiKey) => cooldownUntil.get(k.value) ?? 0;
   const ready = keys.filter((k) => until(k) <= now);
-  const cooling = keys.filter((k) => until(k) > now).sort((a, b) => until(a) - until(b));
-  return [...ready, ...cooling];
+  if (ready.length > 0) return ready;
+  const soonest = [...keys].sort((a, b) => until(a) - until(b))[0];
+  return soonest ? [soonest] : [];
 }
 
 /**
@@ -85,7 +93,7 @@ export async function withGeminiKey<T>(
     );
   }
 
-  const ordered = orderKeys(keys, now());
+  const ordered = keysToTry(keys, now());
   let lastError: unknown;
   for (const [i, key] of ordered.entries()) {
     try {
@@ -98,7 +106,9 @@ export async function withGeminiKey<T>(
       if (next) opts.logger?.warn(`${key.name} is rate-limited; retrying with ${next.name}`);
     }
   }
-  if (keys.length > 1) opts.logger?.warn(`All ${keys.length} Gemini keys are rate-limited`);
+  if (keys.length > 1) {
+    opts.logger?.warn(`All ${keys.length} Gemini keys are rate-limited; try again later`);
+  }
   throw lastError;
 }
 

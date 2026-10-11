@@ -10,7 +10,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { ProviderError } from "../../core/errors.js";
+import { HttpError, ProviderError } from "../../core/errors.js";
 import { downloadFile, httpJson } from "../../core/http-client.js";
 import type { Logger } from "../../core/logger.js";
 import { withGeminiKey } from "./key-pool.js";
@@ -120,11 +120,9 @@ async function uploadFileWithKey(
   });
 
   if (!resp.ok) {
+    // HttpError keeps the status so quota failures can rotate to another key.
     const txt = await resp.text();
-    throw new ProviderError(
-      `File upload failed (HTTP ${resp.status}): ${txt.slice(0, 500)}`,
-      "gemini",
-    );
+    throw new HttpError(resp.status, `File upload failed: ${txt.slice(0, 500)}`, FILES_BASE);
   }
 
   // biome-ignore lint/suspicious/noExplicitAny: dynamic API response

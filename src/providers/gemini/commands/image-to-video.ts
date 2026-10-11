@@ -15,7 +15,6 @@ import { ValidationError } from "../../../core/errors.js";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import { maybeDownloadThumb } from "../../../core/video-thumb.js";
-import { withGeminiKey } from "../key-pool.js";
 import { ASPECT_RATIOS, type AspectRatio, getDefaultModel } from "../models.js";
 import { runVeo, veoImageFromFile } from "../veo.js";
 
@@ -67,23 +66,17 @@ export function registerGeminiImageToVideoCommand(parent: Command): void {
         );
 
         const dest = path.join(getOutputDir(), `veo_i2v_${Date.now()}.mp4`);
-        // Submit, poll and download must share one key: the operation belongs to it.
-        const finalOp = await withGeminiKey(
-          (apiKey) =>
-            runVeo(
-              apiKey,
-              model,
-              {
-                prompt: opts.prompt,
-                image: veoImageFromFile(imagePath),
-                lastFrame: opts.lastFrame ? veoImageFromFile(opts.lastFrame) : undefined,
-                aspectRatio: opts.aspectRatio,
-                resolution: opts.resolution,
-              },
-              dest,
-              logger,
-            ),
-          { logger },
+        const finalOp = await runVeo(
+          model,
+          {
+            prompt: opts.prompt,
+            image: veoImageFromFile(imagePath),
+            lastFrame: opts.lastFrame ? veoImageFromFile(opts.lastFrame) : undefined,
+            aspectRatio: opts.aspectRatio,
+            resolution: opts.resolution,
+          },
+          dest,
+          logger,
         );
         logger.success(`Saved video: ${dest}`);
 

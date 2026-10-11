@@ -32,7 +32,8 @@ describe("env-loader", () => {
     process.env.GEMINI_API_KEY = "preset-value";
     loadEnv();
     expect(process.env.GEMINI_API_KEY).toBe("preset-value");
-    process.env.GEMINI_API_KEY = undefined;
+    // Assigning undefined would store the string "undefined"; delete instead.
+    Reflect.deleteProperty(process.env, "GEMINI_API_KEY");
   });
 
   describe("redact", () => {
