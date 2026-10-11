@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0](https://github.com/mrgoonie/multix-cli/compare/v0.7.3...v0.8.0) (2026-10-11)
+
+
+### Added
+
+* **gemini:** rotate across GEMINI_API_KEY_N keys on quota errors ([#65](https://github.com/mrgoonie/multix-cli/issues/65)) ([d24efd3](https://github.com/mrgoonie/multix-cli/commit/d24efd36676d3823f9aac6e2aa0a8bd7a393b282))
+
 ## [0.7.3](https://github.com/mrgoonie/multix-cli/compare/v0.7.2...v0.7.3) (2026-10-11)
 
 
