@@ -109,7 +109,8 @@ multix atlas status <predictionId> --download [--output <path>]
 `--async` chỉ in prediction id ra stdout để script có thể lấy giá trị này bằng
 `id=$(multix atlas video "waves" --async)`. Các dòng tiến trình và lệnh tiếp tục
 được in ra stderr. Khi việc chờ bị hết thời gian, dù trong lệnh tạo nội dung hay
-`status --wait`, thông báo lỗi kèm cùng lệnh tiếp tục đó. Prediction kết thúc ở
+`status --wait`, thông báo lỗi kèm cùng lệnh tiếp tục đó, có cả `--output` nếu bạn
+đã truyền, để file được lưu vào đúng chỗ cũ. Prediction kết thúc ở
 trạng thái `failed` làm lệnh thoát với mã khác 0. Atlas Cloud không có endpoint
 hủy, nên multix không cung cấp lệnh hủy.
 
@@ -132,11 +133,13 @@ luồng, không nạp toàn bộ vào bộ nhớ.
 ## Kết quả
 
 - File được lưu vào `./multix-output/` (hoặc `MULTIX_OUTPUT_DIR`) với tên
-  `atlas-<prediction id>-NN.<ext>`. Mỗi kết quả của một prediction luôn có cùng
+  `atlas-<prediction id>-NN.<ext>`. Id có ký tự khác chữ cái, chữ số, `_` và `-`,
+  hoặc dài hơn 64 ký tự, sẽ được rút gọn và thêm một mã băm ngắn của id đầy đủ,
+  nên hai prediction không bao giờ trùng tên. Mỗi kết quả của một prediction luôn có cùng
   một tên, nên khi chạy lại `multix atlas status <id> --wait --download`, các
   file đã lưu ở lần trước được giữ nguyên (ghi là "already saved", với bất kỳ
   phần mở rộng nào, ví dụ sau khi chuyển sang WebP) và chỉ những kết quả còn
-  thiếu được tải. Không có file nào bị trùng lặp.
+  thiếu được tải. Không có file nào bị trùng lặp. File rỗng không được tính là đã lưu.
 - `--output` kết thúc bằng dấu gạch chéo, không có phần mở rộng, hoặc là thư mục
   đã tồn tại sẽ được dùng làm thư mục kết quả, với cùng cách đặt tên. Đường dẫn
   file được dùng nguyên vẹn khi chỉ có một kết quả và sẽ bị ghi đè. Khi có nhiều
@@ -161,8 +164,12 @@ luồng, không nạp toàn bộ vào bộ nhớ.
 - Mỗi file được tải vào một file tạm `.part` rồi đổi tên khi hoàn tất, nên lần tải
   thất bại không bao giờ ghi đè hay xóa file đã có. File `.part` cũng giữ chỗ
   cho tên: lần chạy thứ hai gặp cùng kết quả trong lúc đang tải sẽ dừng với lỗi
-  thay vì ghi file hai lần. Nếu không còn lượt tải nào đang chạy, hãy xóa file
-  `.part` còn sót lại rồi thử lại.
+  thay vì ghi file hai lần. File khóa `.part` ghi lại tiến trình đang giữ nó. Nếu
+  tiến trình đó không còn chạy (Ctrl+C, đóng terminal, bị crash), lần chạy sau sẽ
+  tiếp quản tên đó và xóa các file tải dở nó để lại, nên chỉ cần chạy lại. Khi
+  nhấn Ctrl+C, multix cũng xóa các file `.part` của chính nó trước khi thoát.
+- URL kết quả có phần mở rộng không phải loại media đã biết (ví dụ `.php`) sẽ được
+  đặt tên theo `Content-Type` của lần tải.
 - Nếu một số kết quả tải thất bại, multix liệt kê các file đã lưu, in lệnh tiếp
   tục và thoát với mã khác 0.
 - Ảnh được chuyển sang WebP khi đã cài `cwebp`. Truyền `--image-format original`

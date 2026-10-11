@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -12,13 +13,18 @@ import {
   resolveMediaRef,
 } from "../../../../src/providers/atlascloud/commands/env.js";
 import {
-  assertEndpoint,
   availableOutputPath,
   claimOutputPath,
+  handleInterrupt,
+  releaseClaim,
+  savedOutput,
+} from "../../../../src/providers/atlascloud/commands/output-claims.js";
+import {
+  assertEndpoint,
   executePrediction,
   loadModelSpec,
   planOutputPaths,
-  savedOutput,
+  resumeCommand,
 } from "../../../../src/providers/atlascloud/commands/prediction-runner.js";
 import { parseMediaKind } from "../../../../src/providers/atlascloud/commands/run.js";
 import { parseModelSpec } from "../../../../src/providers/atlascloud/model-input.js";
@@ -196,14 +202,25 @@ describe("executePrediction (mocked submit -> poll -> saved output)", () => {
       kind: "image",
       model: "m/x",
       body: { prompt: "x" },
-      opts: { async: true },
+      opts: { async: true, output: "my clips" },
       defaultWaitTimeoutMs: 60_000,
     });
     expect(res.files).toEqual([]);
     expect(stdout).toEqual(["async01"]);
     expect(calls).toHaveLength(1);
+    // The resume command keeps --output, so the files land where the user asked.
     expect(console.error).toHaveBeenCalledWith(
-      expect.stringContaining("multix atlas status async01 --wait --download"),
+      expect.stringContaining('multix atlas status async01 --wait --download --output "my clips"'),
+    );
+  });
+
+  it("resumeCommand adds --output only when given, quoting it when needed", () => {
+    expect(resumeCommand("p1")).toBe("multix atlas status p1 --wait --download");
+    expect(resumeCommand("p1", "out/clip.mp4")).toBe(
+      "multix atlas status p1 --wait --download --output out/clip.mp4",
+    );
+    expect(resumeCommand("p1", 'a "b" $c')).toBe(
+      'multix atlas status p1 --wait --download --output "a \\"b\\" \\$c"',
     );
   });
 
@@ -549,17 +566,66 @@ describe("download hardening", () => {
     expect(fs.readFileSync(path.join(tmp, "atlas-reuse01-01.webp"), "utf8")).toBe("OLD");
   });
 
-  it("refuses to write a name another download is still writing (.part)", async () => {
+  it("refuses a name a running process holds (.part lock with a live pid)", async () => {
     const part = path.join(tmp, "atlas-busy01-01.mp4.part");
-    fs.writeFileSync(part, "IN PROGRESS");
+    // The parent process (the test runner) is alive and is not this process.
+    const lock = JSON.stringify({ pid: process.ppid, host: os.hostname(), startedAt: "x" });
+    fs.writeFileSync(part, lock);
     stubDownloads({ "https://m.test/v.mp4": "NEW" });
     await expect(runCompleted("busy01", { outputs: ["https://m.test/v.mp4"] })).rejects.toThrow(
       ProviderError,
     );
     const warned = logger.warn.mock.calls.map((c) => String(c[0])).join("\n");
-    expect(warned).toContain("another download of this output is in progress");
-    expect(fs.readFileSync(part, "utf8")).toBe("IN PROGRESS");
+    expect(warned).toContain(`held by another multix run (pid ${process.ppid}`);
+    expect(fs.readFileSync(part, "utf8")).toBe(lock);
     expect(fs.readdirSync(tmp)).toEqual(["atlas-busy01-01.mp4.part"]);
+  });
+
+  it("takes over a lock and removes temp files left by a process that is gone (Ctrl+C, kill)", async () => {
+    const deadPid = spawnSync(process.execPath, ["-e", ""]).pid as number;
+    const dest = path.join(tmp, "atlas-stale01-01.mp4");
+    fs.writeFileSync(
+      `${dest}.part`,
+      JSON.stringify({ pid: deadPid, host: os.hostname(), startedAt: "x" }),
+    );
+    fs.writeFileSync(`${dest}.${deadPid}-1700000000000-k3x9qa.part`, "PARTIAL");
+    // An unrelated file that merely starts with the same name is never touched.
+    fs.writeFileSync(`${dest}.${deadPid}-notes.part`, "MINE");
+    stubDownloads({ "https://m.test/v.mp4": "NEW" });
+    const res = await runCompleted("stale01", { outputs: ["https://m.test/v.mp4"] });
+    expect(res.files).toEqual([dest]);
+    expect(fs.readFileSync(dest, "utf8")).toBe("NEW");
+    expect(fs.readdirSync(tmp).sort()).toEqual(
+      ["atlas-stale01-01.mp4", `atlas-stale01-01.mp4.${deadPid}-notes.part`].sort(),
+    );
+  });
+
+  it("does not count an empty file as an output already saved", async () => {
+    const dest = path.join(tmp, "atlas-empty01-01.mp4");
+    fs.writeFileSync(dest, "");
+    const fetched = stubDownloads({ "https://m.test/v.mp4": "NEW" });
+    const res = await runCompleted("empty01", { outputs: ["https://m.test/v.mp4"] });
+    expect(fetched).toEqual(["https://m.test/v.mp4"]);
+    expect(res.files).toEqual([dest]);
+    expect(fs.readFileSync(dest, "utf8")).toBe("NEW");
+    expect(savedOutput(path.join(tmp, "missing.mp4"))).toBeUndefined();
+  });
+
+  it("the interrupt handler removes this run's locks and temp files, then exits 130/143", () => {
+    const file = path.join(tmp, "atlas-int01-01.mp4");
+    expect(claimOutputPath(file, "reuse")).toBe(file);
+    const temp = `${file}.${process.pid}-1700000000000-k3x9qa.part`;
+    fs.writeFileSync(temp, "PARTIAL");
+    fs.writeFileSync(path.join(tmp, "keep.mp4"), "MINE");
+    const exit = vi.fn();
+    handleInterrupt("SIGINT", exit);
+    expect(exit).toHaveBeenCalledWith(130);
+    expect(fs.readdirSync(tmp)).toEqual(["keep.mp4"]);
+
+    claimOutputPath(file, "reuse");
+    handleInterrupt("SIGTERM", exit);
+    expect(exit).toHaveBeenLastCalledWith(143);
+    expect(fs.readdirSync(tmp)).toEqual(["keep.mp4"]);
   });
 
   it("overwrites an explicit single-file --output as asked", async () => {
@@ -646,10 +712,32 @@ describe("download hardening", () => {
   it("claimOutputPath reserves the name so a second claim cannot take it", () => {
     const file = path.join(tmp, "sub", "atlas-x-01.mp4");
     expect(claimOutputPath(file, "reuse")).toBe(file);
-    expect(fs.existsSync(`${file}.part`)).toBe(true);
-    expect(() => claimOutputPath(file, "reuse")).toThrow(/in progress/);
-    expect(claimOutputPath(file, "unique")).toBe(path.join(tmp, "sub", "atlas-x-01-1.mp4"));
+    const lock = JSON.parse(fs.readFileSync(`${file}.part`, "utf8"));
+    expect(lock).toMatchObject({ pid: process.pid, host: os.hostname() });
+    expect(() => claimOutputPath(file, "reuse")).toThrow(/held by another multix run/);
+    const second = path.join(tmp, "sub", "atlas-x-01-1.mp4");
+    expect(claimOutputPath(file, "unique")).toBe(second);
     expect(claimOutputPath(file, "overwrite")).toBe(file);
+    releaseClaim(file);
+    releaseClaim(second);
+    expect(fs.readdirSync(path.join(tmp, "sub"))).toEqual([]);
+  });
+
+  it("claimOutputPath treats an unreadable lock as held at first, then as stale", () => {
+    const file = path.join(tmp, "atlas-y-01.mp4");
+    fs.writeFileSync(`${file}.part`, "");
+    expect(() => claimOutputPath(file, "reuse")).toThrow(/held by another multix run/);
+    const old = new Date(Date.now() - 60_000);
+    fs.utimesSync(`${file}.part`, old, old);
+    expect(claimOutputPath(file, "reuse")).toBe(file);
+    releaseClaim(file);
+  });
+
+  it("claimOutputPath gives up on a multi-output name after a bounded number of attempts", () => {
+    const file = path.join(tmp, "z.mp4");
+    fs.writeFileSync(file, "x");
+    for (let n = 1; n < 1000; n++) fs.writeFileSync(path.join(tmp, `z-${n}.mp4`), "x");
+    expect(() => claimOutputPath(file, "unique")).toThrow(/No free file name .* 1000 attempts/);
   });
 
   it("saves an svg output as .svg and never converts it", async () => {

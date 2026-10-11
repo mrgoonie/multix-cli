@@ -109,7 +109,8 @@ multix atlas status <predictionId> --download [--output <path>]
 `--async` prints only the prediction id on stdout, so scripts can capture it
 with `id=$(multix atlas video "waves" --async)`. Progress lines and a resume
 command go to stderr. When a wait times out, in a generation command or in
-`status --wait`, the error includes the same resume command. A prediction that
+`status --wait`, the error includes the same resume command, with your
+`--output` if you gave one, so the files land in the same place. A prediction that
 ends in `failed` makes the command exit with a non-zero status. Atlas Cloud has
 no cancel endpoint, so multix does not offer one.
 
@@ -132,11 +133,13 @@ streamed, not loaded into memory.
 ## Output
 
 - Files are saved to `./multix-output/` (or `MULTIX_OUTPUT_DIR`) as
-  `atlas-<prediction id>-NN.<ext>`. The name is fixed for each output of a
-  prediction, so retrying with `multix atlas status <id> --wait --download`
+  `atlas-<prediction id>-NN.<ext>`. An id with characters other than letters,
+  digits, `_` and `-`, or longer than 64 characters, is shortened and gets a
+  short hash of the full id, so two predictions never share a name. The name is
+  fixed for each output of a prediction, so retrying with `multix atlas status <id> --wait --download`
   keeps the files an earlier run saved (listed as "already saved", whatever
   their extension, for example after a WebP conversion) and downloads only the
-  missing ones. Nothing is duplicated.
+  missing ones. An empty file does not count as saved. Nothing is duplicated.
 - `--output` with a trailing slash, no extension, or an existing directory is
   used as the output directory, with the same names. A file path is used as-is
   for a single output and is overwritten. With several outputs, a file path is
@@ -161,7 +164,12 @@ streamed, not loaded into memory.
   so a failed download never overwrites or deletes an existing file. The
   `.part` file also reserves the name: a second run that reaches the same
   output while it downloads stops with an error instead of writing it twice.
-  If no download is running, delete the leftover `.part` file and retry.
+  The `.part` lock records the process that holds it. If that process is gone
+  (Ctrl+C, a closed terminal, a crash), the next run takes the name over and
+  deletes the partial files it left, so a retry just works. On Ctrl+C multix
+  also removes its own `.part` files before exiting.
+- An output URL ending in an extension that is not a known media type (for
+  example `.php`) is named from the download's `Content-Type` instead.
 - If some outputs fail to download, multix lists the files it saved, prints the
   resume command and exits with a non-zero status.
 - Images are converted to WebP when `cwebp` is installed. Pass

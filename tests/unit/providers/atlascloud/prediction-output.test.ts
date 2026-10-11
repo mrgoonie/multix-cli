@@ -89,6 +89,10 @@ describe("extensions and names", () => {
     expect(outputExtension("https://cdn/x/abc.JPEG?sig=1")).toBe("jpg");
     expect(outputExtension("https://cdn/x/model.glb")).toBe("glb");
     expect(outputExtension("https://cdn/x/noext")).toBeUndefined();
+    // Only known media extensions count; anything else leaves it to the Content-Type.
+    expect(outputExtension("https://cdn/x/render.php")).toBeUndefined();
+    expect(outputExtension("https://cdn/x/file.abcde")).toBeUndefined();
+    expect(outputExtension("https://cdn/x/vector.svg")).toBe("svg");
     expect(outputExtension("data:image/png;base64,AAAA")).toBe("png");
     expect(outputCategory("https://cdn/x/a.mp4")).toBe("video");
     expect(outputCategory("https://cdn/x/a.wav")).toBe("audio");
@@ -100,14 +104,36 @@ describe("extensions and names", () => {
       "atlas-47e7acf05d7449c1874f-01.jpg",
     );
     expect(outputFileName("ab", 11, "mp3")).toBe("atlas-ab-12.mp3");
-    expect(outputFileName("../x/y", 0, "png")).toBe("atlas-xy-01.png");
+  });
+
+  it("appends a hash of the raw id when the id had to be sanitized or shortened", () => {
+    // 32-bit FNV-1a reference vector.
+    expect(outputFileName("a", 0, "png")).toBe("atlas-a-01.png");
+    expect(outputFileName("../x/y", 0, "png")).toBe("atlas-xy-357fa8e2-01.png");
+    expect(outputFileName("x/y", 0, "png")).toBe("atlas-xy-c2cc6993-01.png");
+    expect(outputFileName("xy", 0, "png")).toBe("atlas-xy-01.png");
+    expect(outputFileName("..", 0, "png")).toBe("atlas-a3d4a70d-01.png");
+    // Ids sharing their first 64 characters still get different names.
+    expect(outputFileName("a".repeat(70), 0, "png")).toBe(
+      `atlas-${"a".repeat(64)}-5904740b-01.png`,
+    );
+    expect(outputFileName("a".repeat(71), 0, "png")).toBe(
+      `atlas-${"a".repeat(64)}-8c0342de-01.png`,
+    );
+  });
+
+  it("rejects an empty or overlong prediction id from the API", () => {
+    expect(() => outputFileName("", 0, "png")).toThrow(ProviderError);
+    expect(() => outputFileName("a".repeat(129), 0, "png")).toThrow(/129 characters/);
+    expect(outputFileName("a".repeat(128), 0, "png")).toMatch(/^atlas-a{64}-[0-9a-f]{8}-01\.png$/);
   });
 
   it("maps svg, avif, bmp, audio/webm and mkv content types; svg is never an image to convert", () => {
     expect(extensionForContentType("image/svg+xml")).toBe("svg");
     expect(extensionForContentType("image/avif")).toBe("avif");
     expect(extensionForContentType("image/bmp")).toBe("bmp");
-    expect(extensionForContentType("audio/webm; codecs=opus")).toBe("webm");
+    expect(extensionForContentType("audio/webm; codecs=opus")).toBe("weba");
+    expect(outputCategory("data:audio/webm;base64,AAAA")).toBe("audio");
     expect(extensionForContentType("video/x-matroska")).toBe("mkv");
     expect(outputExtension("data:image/svg+xml;base64,PHN2Zy8+")).toBe("svg");
     expect(outputCategory("data:image/svg+xml;base64,PHN2Zy8+")).toBe("unknown");

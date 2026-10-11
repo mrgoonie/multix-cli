@@ -14,7 +14,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Command } from "commander";
 import { ProviderError, ValidationError } from "../../../core/errors.js";
-import { downloadToFile, maxDownloadBytes } from "../../../core/http-client.js";
+import { maxDownloadBytes } from "../../../core/http-client.js";
 import {
   finalizeGeneratedImages,
   imageFormatOption,
@@ -39,6 +39,9 @@ import {
   thumbnailSource,
 } from "../prediction-output.js";
 import type { AtlasMediaKind, AtlasModelSpec, AtlasPrediction } from "../types.js";
+import { type NamingPolicy, downloadClaimed, savedOutput } from "./output-claims.js";
+
+export type { NamingPolicy };
 
 export interface RunCliOpts {
   async?: boolean;
@@ -171,8 +174,16 @@ export interface ExecuteResult {
   texts: string[];
 }
 
-export function resumeCommand(id: string): string {
-  return `multix atlas status ${id} --wait --download`;
+/** The command that resumes a prediction, keeping the user's `--output` so files land in the same place. */
+export function resumeCommand(id: string, output?: string): string {
+  const base = `multix atlas status ${id} --wait --download`;
+  return output ? `${base} --output ${shellQuote(output)}` : base;
+}
+
+function shellQuote(value: string): string {
+  if (/^[\w@%+=:,./\\-]+$/.test(value)) return value;
+  // Double quotes work in POSIX shells, PowerShell and cmd; escape what POSIX expands.
+  return `"${value.replace(/(["\\$`])/g, "\\$1")}"`;
 }
 
 /** Submit, then either exit with the id (--async) or wait, verify, and deliver outputs. */
@@ -185,7 +196,7 @@ export async function executePrediction(o: ExecuteOptions): Promise<ExecuteResul
 
   if (opts.async) {
     console.log(id);
-    console.error(`Prediction submitted. Resume with: ${resumeCommand(id)}`);
+    console.error(`Prediction submitted. Resume with: ${resumeCommand(id, opts.output)}`);
     return { predictionId: id, files: [], texts: [] };
   }
 
@@ -195,11 +206,17 @@ export async function executePrediction(o: ExecuteOptions): Promise<ExecuteResul
     : await client.waitForPrediction(id, {
         timeoutMs,
         intervalMs: o.pollIntervalMs,
-        resumeHint: `Resume with: ${resumeCommand(id)}`,
+        resumeHint: `Resume with: ${resumeCommand(id, opts.output)}`,
         onPoll: (p, n) => logger.debug(`poll ${n}: ${p.status}`),
       });
   assertPredictionSucceeded(final);
-  const delivered = await deliverPrediction(final, { logger, opts, hint: o.hint });
+  // File names come from the submit-time id, which a resume also uses.
+  const delivered = await deliverPrediction(final, {
+    logger,
+    opts,
+    hint: o.hint,
+    predictionId: id,
+  });
   return { predictionId: id, prediction: final, ...delivered };
 }
 
@@ -242,9 +259,17 @@ export function planOutputPaths(
 /** Print text outputs, download media outputs, and finalize images/videos. */
 export async function deliverPrediction(
   prediction: AtlasPrediction,
-  cfg: { logger: Logger; opts: RunCliOpts; hint?: OutputCategory },
+  cfg: {
+    logger: Logger;
+    opts: RunCliOpts;
+    hint?: OutputCategory;
+    /** The id the user submitted or resumed with; names files. Defaults to the prediction's. */
+    predictionId?: string;
+  },
 ): Promise<{ files: string[]; texts: string[] }> {
   const { logger, opts } = cfg;
+  const id = cfg.predictionId ?? prediction.id;
+  const retry = resumeCommand(id, opts.output);
   if (prediction.price !== undefined && prediction.price !== "") {
     logger.info(`Cost: $${prediction.price}`);
   }
@@ -253,8 +278,8 @@ export async function deliverPrediction(
   if (classified.mode === "empty") {
     throw new ProviderError(
       hasNsfwFlag(prediction)
-        ? `Prediction ${prediction.id} returned no output: blocked by content safety (has_nsfw_contents). Try a different prompt or input.`
-        : `Prediction ${prediction.id} completed but returned no outputs.`,
+        ? `Prediction ${id} returned no output: blocked by content safety (has_nsfw_contents). Try a different prompt or input.`
+        : `Prediction ${id} completed but returned no outputs.`,
       ATLAS_PROVIDER,
     );
   }
@@ -264,7 +289,7 @@ export async function deliverPrediction(
     if (opts.output) {
       // A directory gets the deterministic name, so a rerun rewrites the same text.
       const dest = isDirectoryOutput(opts.output)
-        ? path.resolve(opts.output, outputFileName(prediction.id, 0, "txt"))
+        ? path.resolve(opts.output, outputFileName(id, 0, "txt"))
         : path.resolve(opts.output);
       fs.mkdirSync(path.dirname(dest), { recursive: true });
       fs.writeFileSync(dest, `${classified.texts.join("\n\n")}\n`, "utf8");
@@ -280,7 +305,7 @@ export async function deliverPrediction(
   }
 
   const dests = planOutputPaths(classified.urls, {
-    predictionId: prediction.id,
+    predictionId: id,
     outDir: getOutputDir,
     output: opts.output,
     hint: cfg.hint,
@@ -327,7 +352,7 @@ export async function deliverPrediction(
   }
   if (saved.length === 0) {
     throw new ProviderError(
-      `Prediction ${prediction.id} produced ${classified.urls.length} output(s) but none downloaded. Retry with: ${resumeCommand(prediction.id)}`,
+      `Prediction ${id} produced ${classified.urls.length} output(s) but none downloaded. Retry with: ${retry}`,
       ATLAS_PROVIDER,
     );
   }
@@ -363,12 +388,12 @@ export async function deliverPrediction(
     });
   }
 
-  console.log(`\nPrediction ${prediction.id}: saved ${files.length} file(s)`);
+  console.log(`\nPrediction ${id}: saved ${files.length} file(s)`);
   for (const f of files) console.log(`  ${f}${reused.has(f) ? " (already saved)" : ""}`);
   if (failed > 0) {
     // Paid-for outputs were lost: scripts must not mistake this for success.
     throw new ProviderError(
-      `Prediction ${prediction.id}: downloaded ${saved.length} of ${classified.urls.length} output(s); ${failed} failed. Saved: ${files.join(", ")}. Retry with: ${resumeCommand(prediction.id)}`,
+      `Prediction ${id}: downloaded ${saved.length} of ${classified.urls.length} output(s); ${failed} failed. Saved: ${files.join(", ")}. Retry with: ${retry}`,
       ATLAS_PROVIDER,
     );
   }
@@ -379,139 +404,9 @@ function isDataUrl(url: string): boolean {
   return /^data:/i.test(url.trim());
 }
 
-/**
- * How a planned output name treats a file that is already there:
- * - `overwrite`: a single-output `--output` file the user chose;
- * - `reuse`: a generated `atlas-<id>-NN` name (no `--output`, or a directory).
- *   It is deterministic per prediction output, so an existing file is that
- *   output, saved by an earlier run, and is kept instead of downloaded again;
- * - `unique`: the `<base>-NN` names derived from a multi-output `--output` file
- *   can match unrelated files, so a free `-N` suffix is picked instead.
- */
-export type NamingPolicy = "overwrite" | "reuse" | "unique";
-
 export function namingPolicy(output: string | undefined, outputCount: number): NamingPolicy {
   if (!output || isDirectoryOutput(output)) return "reuse";
   return outputCount === 1 ? "overwrite" : "unique";
-}
-
-const PART = ".part";
-// Windows and default macOS file systems ignore case, so names must too.
-const foldCase = process.platform === "win32" || process.platform === "darwin";
-
-// The reservation `<dest>.part`, or downloadToFile's in-flight `<dest>.<pid>-<time>-<rand>.part`.
-const PART_SUFFIX = /(?:\.\d+-\d+-[a-z0-9]+)?\.part$/i;
-
-/** Name without extension (and without a `.part` suffix), case-folded where the file system is. */
-function stemOf(name: string): string {
-  const base = name.replace(PART_SUFFIX, "");
-  const stem = base.slice(0, base.length - path.extname(base).length);
-  return foldCase ? stem.toLowerCase() : stem;
-}
-
-function listDir(dir: string): string[] {
-  try {
-    return fs.readdirSync(dir);
-  } catch {
-    return []; // the directory does not exist yet: nothing to collide with
-  }
-}
-
-/**
- * A complete file beside `file` with the same stem, whatever its extension
- * (a PNG may have become WebP), or undefined. In-progress `.part` files do not
- * count; the exact planned name wins when several match.
- */
-export function savedOutput(file: string): string | undefined {
-  const dir = path.dirname(file);
-  const stem = stemOf(path.basename(file));
-  const matches = listDir(dir).filter((n) => !PART_SUFFIX.test(n) && stemOf(n) === stem);
-  const exact = matches.find((n) => n === path.basename(file));
-  const found = exact ?? matches.sort()[0];
-  return found === undefined ? undefined : path.join(dir, found);
-}
-
-/**
- * `file`, or the first free `<stem>-N<ext>` beside it. A stem counts as taken
- * when any file in the directory shares it, whatever its extension, including
- * an in-progress `.part` download, so neither a different output type nor a
- * later WebP conversion (`.png` -> `.webp`) can overwrite an earlier output.
- */
-export function availableOutputPath(file: string): string {
-  const dir = path.dirname(file);
-  const ext = path.extname(file);
-  const stem = path.basename(file, ext);
-  const stems = new Set(listDir(dir).map(stemOf));
-  const fold = (s: string) => (foldCase ? s.toLowerCase() : s);
-  if (!stems.has(fold(stem))) return file;
-  for (let n = 1; ; n++) {
-    const candidate = `${stem}-${n}`;
-    if (!stems.has(fold(candidate))) return path.join(dir, `${candidate}${ext}`);
-  }
-}
-
-/**
- * Pick the destination for `file` under `policy` and, unless it is a file the
- * user asked to overwrite, reserve it by creating the empty lock file
- * `<dest>.part` exclusively, so two concurrent runs can never write one name.
- * The caller removes the lock once the download has finished or failed
- * (`downloadClaimed`).
- */
-export function claimOutputPath(file: string, policy: NamingPolicy): string {
-  if (policy === "overwrite") return file;
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  for (;;) {
-    const dest = policy === "unique" ? availableOutputPath(file) : file;
-    try {
-      fs.closeSync(fs.openSync(`${dest}${PART}`, "wx"));
-      return dest;
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
-      if (policy === "reuse") {
-        throw new ProviderError(
-          `${dest}${PART} exists: another download of this output is in progress. If none is running, delete that file and retry.`,
-          ATLAS_PROVIDER,
-        );
-      }
-      // unique: another run took this name since the directory was listed; the
-      // next listing sees its `.part`, so pick again.
-    }
-  }
-}
-
-/**
- * Download `url` to the name `choose` picks from the response, claimed under
- * `policy`. downloadToFile streams into its own temporary `.part` and renames
- * it into place only when complete (removing it on failure), so a failed
- * download never deletes or truncates a file the user already had. The
- * reservation lock is released either way, so no `.part` file is left behind.
- */
-async function downloadClaimed(
-  url: string,
-  choose: (response: Response) => string,
-  policy: NamingPolicy,
-  opts: { maxBytes: number; validateUrl?: (url: string) => void },
-): Promise<string> {
-  let lock: string | undefined;
-  try {
-    const { dest } = await downloadToFile(url, {
-      ...opts,
-      dest: (response) => {
-        const dest = claimOutputPath(choose(response), policy);
-        if (policy !== "overwrite") lock = `${dest}${PART}`;
-        return dest;
-      },
-    });
-    return dest;
-  } finally {
-    if (lock) {
-      try {
-        fs.rmSync(lock, { force: true });
-      } catch {
-        // best effort: never replace the result or error being reported
-      }
-    }
-  }
 }
 
 /** Swap a planned fallback extension for the one the response Content-Type names. */
