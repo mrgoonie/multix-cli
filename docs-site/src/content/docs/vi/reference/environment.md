@@ -106,6 +106,27 @@ cho file cục bộ upload lên Atlas Cloud (mặc định 200).
 `https://api.heygen.com`) cho proxy và test. Giá trị phải là `https://`;
 `http://` chỉ được chấp nhận cho `localhost`, `127.0.0.1` hoặc `[::1]`.
 
+### Ghi đè base URL và độ tin cậy
+
+Biến ghi đè `*_BASE_URL` quyết định API key của bạn được gửi tới đâu, nên
+`multix` chỉ tin giá trị này khi nó đến từ biến môi trường của shell hoặc
+`~/.multix/.env`:
+
+- `*_BASE_URL` chỉ có trong `.env` của project (thư mục hiện tại) sẽ bị bỏ qua,
+  và `multix` in một cảnh báo nêu tên biến và đường dẫn file (không bao giờ in
+  giá trị). Nếu `~/.multix/.env` cũng đặt biến đó thì giá trị ở đó được dùng;
+  nếu không, provider dùng giá trị mặc định. Nhờ vậy một repository clone về
+  không thể chuyển key của bạn sang host khác.
+- Để cho phép ghi đè từ project (ví dụ mock server cục bộ), đặt
+  `MULTIX_ALLOW_PROJECT_BASE_URL=1` trong shell hoặc `~/.multix/.env`. Biến
+  này bị bỏ qua nếu được đặt ngay trong `.env` của project.
+- Khi một base URL khác mặc định đang được dùng, `multix` in một cảnh báo mỗi
+  lần chạy, nêu provider và chỉ hostname, không bao giờ in key hay URL đầy đủ.
+  Cảnh báo được ghi ra stderr nên stdout vẫn đọc được bằng máy.
+
+Các quy tắc riêng của từng provider ở trên (ví dụ HeyGen chỉ nhận `https://`)
+vẫn được áp dụng.
+
 Cloudflare chỉ chấp nhận các model image và speech Workers AI có sẵn;
 `CLOUDFLARE_AI_IMAGE_MODEL` và `CLOUDFLARE_AI_TTS_MODEL` vì vậy chỉ dùng để
 chỉ rõ lựa chọn được hỗ trợ. Chỉ đặt

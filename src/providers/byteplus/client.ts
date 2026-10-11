@@ -4,7 +4,7 @@
  * Base URL override via BYTEPLUS_BASE_URL.
  */
 
-import { resolveKey } from "../../core/env-loader.js";
+import { resolveBaseUrl, resolveKey } from "../../core/env-loader.js";
 import { ConfigError, HttpError } from "../../core/errors.js";
 import { httpJson } from "../../core/http-client.js";
 import type { Logger } from "../../core/logger.js";
@@ -21,7 +21,7 @@ export function requireBytePlusKey(): string {
 }
 
 export function bytePlusBaseUrl(): string {
-  return resolveKey("BYTEPLUS_BASE_URL") ?? DEFAULT_BYTEPLUS_BASE_URL;
+  return resolveBaseUrl("BYTEPLUS_BASE_URL", DEFAULT_BYTEPLUS_BASE_URL);
 }
 
 export interface BytePlusRequestOptions {

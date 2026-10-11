@@ -4,7 +4,7 @@
  * REPLICATE_BASE_URL overrides the API root (mock servers, proxies, tests).
  */
 
-import { resolveFirstKey, resolveKey } from "../../core/env-loader.js";
+import { resolveBaseUrl, resolveFirstKey, resolveKey } from "../../core/env-loader.js";
 import { ConfigError } from "../../core/errors.js";
 import { ReplicateClient } from "./client.js";
 import {
@@ -33,7 +33,7 @@ export function requireReplicateToken(): string {
 }
 
 export function replicateBaseUrl(): string {
-  return resolveKey("REPLICATE_BASE_URL")?.trim() || DEFAULT_REPLICATE_BASE_URL;
+  return resolveBaseUrl("REPLICATE_BASE_URL", DEFAULT_REPLICATE_BASE_URL);
 }
 
 export function replicateImageModel(): string {

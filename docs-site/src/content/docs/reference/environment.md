@@ -106,6 +106,26 @@ local files uploaded to Atlas Cloud (default 200).
 `https://api.heygen.com`) for proxies and tests. It must be `https://`; plain
 `http://` is accepted only for `localhost`, `127.0.0.1`, or `[::1]`.
 
+### Base URL overrides and trust
+
+A `*_BASE_URL` override decides where your API key is sent, so `multix` only
+trusts it from the shell environment or `~/.multix/.env`:
+
+- A `*_BASE_URL` that comes only from the project `.env` (the current
+  directory) is ignored, and `multix` prints one warning naming the variable
+  and the file (never the value). If `~/.multix/.env` sets the same variable,
+  that value is used instead; otherwise the provider default applies. This
+  stops a cloned repository from redirecting your key to another host.
+- To allow project overrides (for example a local mock server), set
+  `MULTIX_ALLOW_PROJECT_BASE_URL=1` in your shell or `~/.multix/.env`. The
+  opt-in is ignored when it is set in the project `.env` itself.
+- Whenever a non-default base URL is in effect, `multix` prints one warning per
+  run naming the provider and only the hostname, never the key or the full URL.
+  Warnings go to stderr, so stdout stays machine-readable.
+
+The per-provider rules above (for example `https://` only for HeyGen) still
+apply.
+
 Cloudflare accepts only the built-in Workers AI image and speech model IDs;
 `CLOUDFLARE_AI_IMAGE_MODEL` and `CLOUDFLARE_AI_TTS_MODEL` are therefore useful
 only to make that supported choice explicit. Set

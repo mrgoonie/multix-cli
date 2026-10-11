@@ -6,12 +6,16 @@
 import { openAsBlob } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { resolveKey } from "../../../core/env-loader.js";
+import { resolveBaseUrl, resolveKey } from "../../../core/env-loader.js";
 import { ConfigError, ValidationError } from "../../../core/errors.js";
 import { type Logger, createLogger } from "../../../core/logger.js";
 import { redactUrl } from "../../../core/redact.js";
 import { AtlasCloudClient } from "../client.js";
-import { ATLAS_DEFAULT_MODELS, type AtlasDefaultModelKey } from "../models.js";
+import {
+  ATLAS_DEFAULT_MODELS,
+  type AtlasDefaultModelKey,
+  DEFAULT_ATLAS_BASE_URL,
+} from "../models.js";
 import { UPLOAD_EXTENSIONS, uploadMimeTypeFor } from "../upload-mime.js";
 
 export const ATLAS_KEY_URL = "https://www.atlascloud.ai/console/api-keys";
@@ -37,7 +41,8 @@ export function createAtlasClientFromEnv(): AtlasCloudClient {
   if (!apiKey) {
     throw new ConfigError(`ATLASCLOUD_API_KEY is not set. Get one at ${ATLAS_KEY_URL}`);
   }
-  return new AtlasCloudClient({ apiKey, baseUrl: resolveKey("ATLASCLOUD_BASE_URL") });
+  const baseUrl = resolveBaseUrl("ATLASCLOUD_BASE_URL", DEFAULT_ATLAS_BASE_URL);
+  return new AtlasCloudClient({ apiKey, baseUrl });
 }
 
 /**

@@ -3,13 +3,17 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  ALLOW_PROJECT_BASE_URL_ENV,
   _resetEnvLoader,
+  envFileOrigin,
   getLoadedEnvFiles,
   isLegacyAllowedName,
   legacyClaudeEnvEnabled,
   legacyClaudeEnvFiles,
   loadEnv,
+  projectBaseUrlAllowed,
   redact,
+  resolveBaseUrl,
   resolveKey,
 } from "../../../src/core/env-loader.js";
 
@@ -160,6 +164,130 @@ describe("env-loader", () => {
     it("does not list home layers twice when cwd is the home directory", () => {
       const files = legacyClaudeEnvFiles("/same", "/same");
       expect(files).toHaveLength(4);
+    });
+  });
+
+  describe("resolveBaseUrl", () => {
+    const DEFAULT = "https://api.example-default.com/v1";
+    const NAME = "TESTPROV_BASE_URL";
+    const KEY = "TESTPROV_API_KEY";
+    const VARS = [NAME, KEY, ALLOW_PROJECT_BASE_URL_ENV, "MULTIX_DISABLE_HOME_ENV"];
+    const saved: Record<string, string | undefined> = {};
+    let tmp: string;
+    let home: string;
+    let warn: ReturnType<typeof vi.spyOn>;
+
+    const writeProject = (body: string) => fs.writeFileSync(path.join(tmp, ".env"), body);
+    const writeUser = (body: string) => {
+      fs.mkdirSync(path.join(home, ".multix"), { recursive: true });
+      fs.writeFileSync(path.join(home, ".multix", ".env"), body);
+    };
+    const warnings = () => warn.mock.calls.map((c) => String(c[0]));
+
+    beforeEach(() => {
+      for (const v of VARS) saved[v] = process.env[v];
+      for (const v of VARS) Reflect.deleteProperty(process.env, v);
+      tmp = fs.mkdtempSync(path.join(os.tmpdir(), "multix-proj-"));
+      home = fs.mkdtempSync(path.join(os.tmpdir(), "multix-home-"));
+      vi.spyOn(process, "cwd").mockReturnValue(tmp);
+      vi.spyOn(os, "homedir").mockReturnValue(home);
+      warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+      for (const v of VARS) {
+        if (saved[v] === undefined) Reflect.deleteProperty(process.env, v);
+        else process.env[v] = saved[v];
+      }
+      fs.rmSync(tmp, { recursive: true, force: true });
+      fs.rmSync(home, { recursive: true, force: true });
+    });
+
+    it("returns the default silently when nothing is set", () => {
+      loadEnv();
+      expect(resolveBaseUrl(NAME, DEFAULT)).toBe(DEFAULT);
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it("ignores a project .env value and warns with the variable and file, not the value", () => {
+      writeProject(`${NAME}=https://evil.example.net/steal\n${KEY}=sk-secret-value\n`);
+      loadEnv();
+      expect(envFileOrigin(NAME)?.source).toBe("project");
+      expect(resolveBaseUrl(NAME, DEFAULT)).toBe(DEFAULT);
+      expect(resolveBaseUrl(NAME, DEFAULT)).toBe(DEFAULT);
+      expect(warn).toHaveBeenCalledTimes(1);
+      const [message] = warnings();
+      expect(message).toContain(NAME);
+      expect(message).toContain(path.join(tmp, ".env"));
+      expect(message).toContain(ALLOW_PROJECT_BASE_URL_ENV);
+      expect(message).not.toContain("evil.example.net");
+      expect(message).not.toContain("sk-secret-value");
+    });
+
+    it("honours a shell value and warns once with the hostname only", () => {
+      process.env[NAME] = "https://proxy.example.org/v1/path?token=abc";
+      process.env[KEY] = "sk-secret-value";
+      writeProject(`${NAME}=https://evil.example.net\n`);
+      loadEnv();
+      expect(resolveBaseUrl(NAME, DEFAULT)).toBe("https://proxy.example.org/v1/path?token=abc");
+      resolveBaseUrl(NAME, DEFAULT);
+      expect(warn).toHaveBeenCalledTimes(1);
+      const [message] = warnings();
+      expect(message).toContain("TESTPROV");
+      expect(message).toContain("proxy.example.org");
+      expect(message).not.toContain("/v1/path");
+      expect(message).not.toContain("token=abc");
+      expect(message).not.toContain("sk-secret-value");
+    });
+
+    it("honours a user-level value", () => {
+      writeUser(`${NAME}=https://user-proxy.example.org\n`);
+      loadEnv();
+      expect(envFileOrigin(NAME)?.source).toBe("user");
+      expect(resolveBaseUrl(NAME, DEFAULT)).toBe("https://user-proxy.example.org");
+      expect(warnings()).toHaveLength(1);
+      expect(warnings()[0]).toContain("user-proxy.example.org");
+    });
+
+    it("falls back to the user-level value when the project .env shadows it", () => {
+      writeProject(`${NAME}=https://evil.example.net\n`);
+      writeUser(`${NAME}=https://user-proxy.example.org\n`);
+      loadEnv();
+      expect(resolveBaseUrl(NAME, DEFAULT)).toBe("https://user-proxy.example.org");
+      expect(warnings()).toHaveLength(2);
+      expect(warnings().join("\n")).not.toContain("evil.example.net");
+    });
+
+    it("honours a project value when the opt-in is set in the shell or user env", () => {
+      writeProject(`${NAME}=https://local-mock.example.net\n`);
+      process.env[ALLOW_PROJECT_BASE_URL_ENV] = "1";
+      loadEnv();
+      expect(projectBaseUrlAllowed()).toBe(true);
+      expect(resolveBaseUrl(NAME, DEFAULT)).toBe("https://local-mock.example.net");
+      expect(warnings()).toHaveLength(1);
+      expect(warnings()[0]).toContain("local-mock.example.net");
+
+      _resetEnvLoader();
+      Reflect.deleteProperty(process.env, ALLOW_PROJECT_BASE_URL_ENV);
+      Reflect.deleteProperty(process.env, NAME);
+      writeUser(`${ALLOW_PROJECT_BASE_URL_ENV}=true\n`);
+      loadEnv();
+      expect(resolveBaseUrl(NAME, DEFAULT)).toBe("https://local-mock.example.net");
+    });
+
+    it("does not accept the opt-in from the project .env itself", () => {
+      writeProject(`${ALLOW_PROJECT_BASE_URL_ENV}=1\n${NAME}=https://evil.example.net\n`);
+      loadEnv();
+      expect(projectBaseUrlAllowed()).toBe(false);
+      expect(resolveBaseUrl(NAME, DEFAULT)).toBe(DEFAULT);
+    });
+
+    it("does not warn when the override equals the default", () => {
+      process.env[NAME] = `${DEFAULT}/`;
+      loadEnv();
+      expect(resolveBaseUrl(NAME, DEFAULT)).toBe(DEFAULT);
+      expect(warn).not.toHaveBeenCalled();
     });
   });
 

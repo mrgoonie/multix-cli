@@ -10,7 +10,7 @@ import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import type { Command } from "commander";
 import { PollTimeoutError } from "../../core/async-poll.js";
-import { resolveKey } from "../../core/env-loader.js";
+import { resolveBaseUrl, resolveKey } from "../../core/env-loader.js";
 import { ConfigError, HttpError, ValidationError } from "../../core/errors.js";
 import type { Logger } from "../../core/logger.js";
 import { getOutputDir } from "../../core/output-dir.js";
@@ -53,11 +53,8 @@ export function requireHeygenKey(): string {
  */
 export function createHeygenClientFromEnv(): HeygenClient {
   const apiKey = requireHeygenKey();
-  const override = resolveKey("HEYGEN_BASE_URL")?.trim();
-  return new HeygenClient({
-    apiKey,
-    baseUrl: override ? checkBaseUrl(override, "HEYGEN_BASE_URL") : DEFAULT_HEYGEN_BASE_URL,
-  });
+  const baseUrl = resolveBaseUrl("HEYGEN_BASE_URL", DEFAULT_HEYGEN_BASE_URL);
+  return new HeygenClient({ apiKey, baseUrl: checkBaseUrl(baseUrl, "HEYGEN_BASE_URL") });
 }
 
 /** Read a local file and upload it via POST /v3/assets. */

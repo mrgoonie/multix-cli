@@ -14,7 +14,7 @@
  * app id themselves via `appIdFromModel`.
  */
 
-import { resolveKey } from "../../core/env-loader.js";
+import { resolveBaseUrl, resolveKey } from "../../core/env-loader.js";
 import { ValidationError } from "../../core/errors.js";
 import { ConfigError, HttpError } from "../../core/errors.js";
 import { httpJson } from "../../core/http-client.js";
@@ -31,7 +31,7 @@ export function requireFalKey(): string {
 }
 
 export function falBaseUrl(): string {
-  return resolveKey("FAL_BASE_URL") ?? DEFAULT_FAL_BASE_URL;
+  return resolveBaseUrl("FAL_BASE_URL", DEFAULT_FAL_BASE_URL);
 }
 
 export interface FalRequestOptions {

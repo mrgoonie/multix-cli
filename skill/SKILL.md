@@ -410,6 +410,7 @@ Requires `cwebp` (libwebp: `brew install webp`, `apt install webp`) on `PATH`.
 | `CLOUDFLARE_AI_IMAGE_MODEL` / `CLOUDFLARE_AI_TTS_MODEL` | Fixed-model settings: only `@cf/black-forest-labs/flux-1-schnell` and `@cf/myshell-ai/melotts` respectively are accepted |
 | `MULTIX_DISABLE_HOME_ENV` | `1` to skip every home-directory env file (`~/.multix/.env`, `~/.claude/...`) |
 | `MULTIX_LEGACY_CLAUDE_ENV` | `1` to also read legacy `.claude` env files (credential names only) |
+| `MULTIX_ALLOW_PROJECT_BASE_URL` | `1` (shell or `~/.multix/.env` only) to honour `*_BASE_URL` overrides from the project `.env`; otherwise they are ignored with a warning |
 
 ## Quick examples for agents
 

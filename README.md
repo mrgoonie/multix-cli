@@ -115,6 +115,8 @@ Set extra keys as `GEMINI_API_KEY_2`, `GEMINI_API_KEY_3`, … (any numeric suffi
 
 Priority: `process.env` > `cwd/.env` > `~/.multix/.env`. Set `MULTIX_LEGACY_CLAUDE_ENV=1` to also read legacy AgentKit files (`.claude/skills/{ai-multimodal,ak-ai-multimodal}/.env`, `.claude/skills/.env`, `.claude/.env`, project first, then home) with the lowest priority (credential names only, never endpoint/proxy settings); `multix check -v` lists the env files that were loaded.
 
+`*_BASE_URL` overrides decide where your API key is sent, so they are only trusted from the shell or `~/.multix/.env`. A `*_BASE_URL` set only in the project `.env` is ignored with a warning (variable and file named, never the value) unless `MULTIX_ALLOW_PROJECT_BASE_URL=1` is set in the shell or `~/.multix/.env`. Whenever a non-default base URL is in effect, `multix` warns once on stderr with the provider and hostname only.
+
 ## Commands
 
 ### `multix check`
