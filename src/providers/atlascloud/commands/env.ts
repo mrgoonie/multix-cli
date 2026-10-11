@@ -17,7 +17,8 @@ import { UPLOAD_EXTENSIONS, uploadMimeTypeFor } from "../upload-mime.js";
 
 export const ATLAS_KEY_URL = "https://www.atlascloud.ai/console/api-keys";
 
-const MODEL_ENV: Record<AtlasDefaultModelKey, string> = {
+/** Env var that overrides the default model of each Atlas Cloud task. */
+export const ATLAS_MODEL_ENV: Readonly<Record<AtlasDefaultModelKey, string>> = {
   image: "ATLASCLOUD_IMAGE_MODEL",
   imageEdit: "ATLASCLOUD_IMAGE_EDIT_MODEL",
   video: "ATLASCLOUD_VIDEO_MODEL",
@@ -30,7 +31,7 @@ const MODEL_ENV: Record<AtlasDefaultModelKey, string> = {
 
 /** Default model id for a task, honouring its ATLASCLOUD_*_MODEL override. */
 export function atlasDefaultModel(key: AtlasDefaultModelKey): string {
-  return resolveKey(MODEL_ENV[key])?.trim() || ATLAS_DEFAULT_MODELS[key];
+  return resolveKey(ATLAS_MODEL_ENV[key])?.trim() || ATLAS_DEFAULT_MODELS[key];
 }
 
 export function requireAtlasKey(): string {

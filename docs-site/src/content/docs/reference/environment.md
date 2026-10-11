@@ -8,6 +8,38 @@ in the current project, then `~/.multix/.env` (plus [legacy `.claude` files](#le
 when enabled). Keep API keys out of shell
 history and never commit them.
 
+## What a project `.env` may set
+
+A project `.env` (the current directory, or a legacy `.claude` file under it)
+may only set variables that `multix` itself reads:
+
+- the provider credentials listed below, including `GEMINI_API_KEY_2`,
+  `GEMINI_API_KEY_3`, …;
+- the provider settings on this page, such as `*_BASE_URL`,
+  `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_AI_GATEWAY_ID` and the model overrides;
+- the documented `MULTIX_*` settings `MULTIX_OUTPUT_DIR` (so a project can
+  choose where generated files are written), `MULTIX_IMAGE_FORMAT`,
+  `MULTIX_MAX_DOWNLOAD_MB`, `MULTIX_UPLOAD_MIN_KBPS` and `MULTIX_DISABLE_HOME_ENV`
+  (which has no effect there), plus `NO_COLOR`.
+
+The opt-ins `MULTIX_ALLOW_PROJECT_BASE_URL` and `MULTIX_LEGACY_CLAUDE_ENV` are
+refused: a repository must not widen what it can do with your keys or pull in
+the `.claude` credentials from your home folder.
+
+[`.env.example`](https://github.com/mrgoonie/multix-cli/blob/main/.env.example)
+lists them, along with the two opt-ins. Any other name, for example `NODE_OPTIONS`, `npm_config_registry`,
+`LD_PRELOAD`, `HTTPS_PROXY` or `NODE_TLS_REJECT_UNAUTHORIZED`, is not loaded,
+so it never reaches `multix` or the tools it starts (`npm` during
+`multix update`, ffmpeg, ImageMagick, cwebp). `multix` prints one warning on
+stderr that lists the ignored names, never their values:
+
+```text
+⚠ Ignoring 2 variable(s) in project env file /repo/.env: NODE_OPTIONS, HTTPS_PROXY. A project .env may only set provider keys and documented multix settings; set anything else in your shell.
+```
+
+Set such variables in your shell instead. The shell and `~/.multix/.env` are
+not filtered. On Windows the check ignores case, as the OS does.
+
 ## Provider credentials
 
 | Variable | Used by |
@@ -70,8 +102,8 @@ without `GEMINI_API_KEY`.
 ## Legacy `.claude` env files
 
 Older AgentKit installs kept keys in `.claude` folders. Set
-`MULTIX_LEGACY_CLAUDE_ENV=1` (in the shell, the project `.env` or
-`~/.multix/.env`) to also read them. This is off by default. The files load
+`MULTIX_LEGACY_CLAUDE_ENV=1` (in the shell or `~/.multix/.env`; a project `.env`
+cannot set it) to also read them. This is off by default. The files load
 after `~/.multix/.env`, never override earlier values, and the first file that
 sets a variable wins:
 
@@ -83,7 +115,10 @@ Project folders are read first, then the same files under your home directory.
 Only credential names are taken from these files: names ending in `_API_KEY`
 (optionally numbered, such as `GEMINI_API_KEY_2`), `_API_TOKEN`, `_ACCOUNT_ID`
 or `_GATEWAY_ID`, plus `FAL_KEY` and `ARK_API_KEY`. Endpoint, proxy and runtime
-settings such as `*_BASE_URL` are ignored. Account and gateway IDs from the
+settings such as `*_BASE_URL` are ignored. Files under the current directory
+are also limited to the names `multix` reads (see
+[What a project `.env` may set](#what-a-project-env-may-set)); other names in
+them are skipped without a warning. Account and gateway IDs from the
 `.claude` files of the current directory follow the same trust rules as a
 project `.env` (see [Base URL overrides and trust](#base-url-overrides-and-trust)).
 The flag itself is ignored inside these files.
@@ -174,10 +209,10 @@ only when it cannot send someone else's key:
   variable naming the provider and only the hostname, never the key or the full
   URL. Warnings go to stderr, so stdout stays machine-readable.
 
-This protects base URLs and Cloudflare routing IDs only. A project `.env` can
-still set other process-level variables (proxy, TLS and Node settings, for
-example); see [issue #99](https://github.com/mrgoonie/multix-cli/issues/99).
-Do not run `multix` inside a repository whose `.env` you have not read.
+A project `.env` cannot set proxy, TLS or Node variables at all (see
+[What a project `.env` may set](#what-a-project-env-may-set)), but it can still
+choose models and, with its own key, endpoints. Do not run `multix` inside a
+repository whose `.env` you have not read.
 
 Cloudflare accepts only the built-in Workers AI image and speech model IDs;
 `CLOUDFLARE_AI_IMAGE_MODEL` and `CLOUDFLARE_AI_TTS_MODEL` are therefore useful

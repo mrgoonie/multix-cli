@@ -3,7 +3,7 @@
  *
  * Resolution priority (highest to lowest):
  * 1. process.env (already set at startup — never overwrite)
- * 2. cwd/.env
+ * 2. cwd/.env (only the names multix reads; see LoadEnvOptions)
  * 3. ~/.multix/.env
  * 4. Legacy Claude/AgentKit layers, only when MULTIX_LEGACY_CLAUDE_ENV=1
  *    (see legacyClaudeEnvFiles for their order; credential names only)
@@ -114,16 +114,24 @@ function parseFile(file: string): Record<string, string> | undefined {
   }
 }
 
-/** Load a file without overriding anything, recording the origin of each new variable. */
+/**
+ * Load a file without overriding anything, recording the origin of each new
+ * variable. Names `accept` refuses are skipped and passed to `onRefused`.
+ */
 function loadFile(
   file: string,
   source: EnvFileSource,
   accept: (name: string) => boolean = () => true,
+  onRefused?: (name: string) => void,
 ): Record<string, string> | undefined {
   const parsed = parseFile(file);
   if (!parsed) return undefined;
   for (const [name, value] of Object.entries(parsed)) {
-    if (!accept(name) || process.env[name] !== undefined) continue;
+    if (!accept(name)) {
+      onRefused?.(name);
+      continue;
+    }
+    if (process.env[name] !== undefined) continue;
     process.env[name] = value;
     fileOrigins.set(envNameKey(name), { source, file, value });
   }
@@ -141,8 +149,32 @@ function byNameKey(values: Record<string, string> | undefined): Record<string, s
   return out;
 }
 
-/** Load .env files once. Safe to call multiple times. */
-export function loadEnv(): void {
+/** Names shown in the refused-variables warning; the rest are counted. */
+const MAX_LISTED_NAMES = 10;
+
+function listNames(names: readonly string[]): string {
+  const shown = names.slice(0, MAX_LISTED_NAMES).join(", ");
+  const rest = names.length - MAX_LISTED_NAMES;
+  return rest > 0 ? `${shown} and ${rest} more` : shown;
+}
+
+export interface LoadEnvOptions {
+  /**
+   * Names a project env file (cwd/.env, or a legacy `.claude` file under cwd)
+   * may set: the variables multix reads (see src/project-env-names.ts). Shell
+   * variables and user-level files are not filtered.
+   */
+  isProjectEnvName: (name: string) => boolean;
+}
+
+/**
+ * Load .env files once. Safe to call multiple times.
+ *
+ * Names in cwd/.env that `isProjectEnvName` refuses are never copied into
+ * process.env (so they cannot reach spawned tools either); one warning lists
+ * them by name, never by value.
+ */
+export function loadEnv({ isProjectEnvName }: LoadEnvOptions): void {
   if (loaded) return;
   loaded = true;
   loadedFiles = [];
@@ -153,17 +185,28 @@ export function loadEnv(): void {
   const home = process.env.MULTIX_DISABLE_HOME_ENV ? undefined : os.homedir();
 
   // cwd/.env — never overrides existing process.env vars
-  loadFile(path.resolve(cwd, ".env"), "project");
+  const projectFile = path.resolve(cwd, ".env");
+  const refused: string[] = [];
+  loadFile(projectFile, "project", isProjectEnvName, (name) => refused.push(name));
+  if (refused.length > 0) {
+    warnOnce(
+      "project-env-refused",
+      `Ignoring ${refused.length} variable(s) in project env file ${projectFile}: ${listNames(refused)}. A project .env may only set provider keys and documented multix settings; set anything else in your shell.`,
+    );
+  }
 
   // ~/.multix/.env — skip in test mode
   if (home) userFileValues = byNameKey(loadFile(path.join(home, ".multix", ".env"), "user"));
 
   // Opt-in compatibility for old AgentKit installs. Checked after the files
-  // above so the flag itself may live in cwd/.env or ~/.multix/.env.
+  // above so the flag itself may live in ~/.multix/.env (the project allowlist
+  // keeps a repository from turning it on).
   if (legacyClaudeEnvEnabled()) {
     const projectLegacy = new Set(legacyFilesUnder(cwd));
+    const projectLegacyName = (name: string) => isLegacyAllowedName(name) && isProjectEnvName(name);
     for (const file of legacyClaudeEnvFiles(cwd, home)) {
-      loadFile(file, projectLegacy.has(file) ? "project" : "legacy", isLegacyAllowedName);
+      if (projectLegacy.has(file)) loadFile(file, "project", projectLegacyName);
+      else loadFile(file, "legacy", isLegacyAllowedName);
     }
   }
 }

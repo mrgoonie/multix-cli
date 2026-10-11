@@ -2,9 +2,10 @@ import { createRequire } from "node:module";
 import { Command } from "commander";
 import { registerCommands } from "./commands/index.js";
 import { loadEnv } from "./core/index.js";
+import { isProjectEnvName } from "./project-env-names.js";
 
 // Load .env files before parsing flags so env-dependent defaults work
-loadEnv();
+loadEnv({ isProjectEnvName });
 
 const require = createRequire(import.meta.url);
 // biome-ignore lint/suspicious/noExplicitAny: JSON import

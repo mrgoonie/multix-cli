@@ -38,88 +38,9 @@ import { checkBinary } from "./check-helpers/binary-check.js";
 import { pingGemini } from "./check-helpers/gemini-ping.js";
 import { FFMPEG_HINT, MAGICK_HINT, SETUP_HINTS } from "./check-helpers/setup-hints.js";
 
-export interface ProviderEntry {
-  name: string;
-  envPrimary: string;
-  envFallback?: string;
-  optional: boolean;
-  link: string;
-}
+import { PROVIDER_KEYS, type ProviderEntry } from "../providers/provider-keys.js";
 
-/** Key names of a provider that exports its BaseUrlRouting, in the order it reads them. */
-function keyNames(routing: BaseUrlRouting): Pick<ProviderEntry, "envPrimary" | "envFallback"> {
-  const [envPrimary, envFallback] = routing.keyEnvs;
-  return envFallback ? { envPrimary, envFallback } : { envPrimary };
-}
-
-const PROVIDERS: ProviderEntry[] = [
-  {
-    name: "Gemini",
-    envPrimary: "GEMINI_API_KEY",
-    optional: false,
-    link: "https://aistudio.google.com/apikey",
-  },
-  {
-    name: "OpenRouter",
-    envPrimary: "OPENROUTER_API_KEY",
-    optional: true,
-    link: "https://openrouter.ai/settings/keys",
-  },
-  {
-    name: "OpenAI",
-    envPrimary: "OPENAI_API_KEY",
-    optional: true,
-    link: "https://platform.openai.com/api-keys",
-  },
-  {
-    name: "MiniMax",
-    envPrimary: "MINIMAX_API_KEY",
-    optional: true,
-    link: "https://platform.minimax.io/user-center/basic-information/interface-key",
-  },
-  {
-    name: "Leonardo.Ai",
-    ...keyNames(LEONARDO_ROUTING),
-    optional: true,
-    link: "https://app.leonardo.ai/settings/api-keys",
-  },
-  {
-    name: "BytePlus",
-    ...keyNames(BYTEPLUS_ROUTING),
-    optional: true,
-    link: "https://console.byteplus.com/auth/api-keys",
-  },
-  {
-    name: "ElevenLabs",
-    envPrimary: "ELEVENLABS_API_KEY",
-    optional: true,
-    link: "https://elevenlabs.io/app/settings/api-keys",
-  },
-  {
-    name: "fal.ai",
-    ...keyNames(FAL_ROUTING),
-    optional: true,
-    link: "https://fal.ai/dashboard/keys",
-  },
-  {
-    name: "Atlas Cloud",
-    ...keyNames(ATLAS_ROUTING),
-    optional: true,
-    link: "https://www.atlascloud.ai/console/api-keys",
-  },
-  {
-    name: "Replicate",
-    ...keyNames(REPLICATE_ROUTING),
-    optional: true,
-    link: "https://replicate.com/account/api-tokens",
-  },
-  {
-    name: "HeyGen",
-    ...keyNames(HEYGEN_ROUTING),
-    optional: true,
-    link: "https://app.heygen.com/developers/api",
-  },
-];
+export type { ProviderEntry } from "../providers/provider-keys.js";
 
 /** Same trimmed primary→fallback resolution the providers use, so check never disagrees. */
 export function resolveProviderKey(p: ProviderEntry): { key?: string; envUsed?: string } {
@@ -136,7 +57,7 @@ export function resolveProviderKey(p: ProviderEntry): { key?: string; envUsed?: 
 type CodexImageChecker = () => Promise<boolean>;
 
 export function getCheckProviders(): ProviderEntry[] {
-  return [...PROVIDERS];
+  return [...PROVIDER_KEYS];
 }
 
 /** Cloudflare readiness from the same inspection the commands run before they send anything. */
@@ -287,7 +208,7 @@ export function registerCheckCommand(program: Command): void {
 
       let anyKey = false;
       const resolved = new Map<string, { key?: string; envUsed?: string }>();
-      for (const p of PROVIDERS) {
+      for (const p of PROVIDER_KEYS) {
         const r = resolveProviderKey(p);
         resolved.set(p.name, r);
         if (r.key) anyKey = true;
