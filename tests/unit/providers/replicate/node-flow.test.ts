@@ -212,11 +212,39 @@ describe("executePrediction", () => {
         opts: flowOpts,
         logger: createLogger({ verbose: true }),
       }),
-    ).rejects.toThrow(/none could be downloaded/);
+    ).rejects.toThrow(/none of 1 output file\(s\) could be downloaded/);
     const text = output.join("\n");
     expect(text).not.toContain(TOKEN);
     expect(text).not.toContain("SIGSECRET");
     expect(text).toContain("?[redacted]");
+  });
+});
+
+describe("partial download failure", () => {
+  it("keeps the saved files but exits non-zero with a retry command", async () => {
+    const { client } = setup({
+      "POST /models/o/m/predictions": [{ status: 201, json: prediction(ID, "starting") }],
+      [`GET /predictions/${ID}`]: [
+        {
+          json: prediction(ID, "succeeded", {
+            output: ["https://r.test/ok.png", "https://r.test/gone.png"],
+          }),
+        },
+      ],
+      "GET https://r.test/ok.png": [{ bytes: PNG }],
+      "GET https://r.test/gone.png": [{ status: 404, text: "expired" }],
+    });
+    const err = await executePrediction({
+      client,
+      model: parseModelRef("o/m"),
+      input: {},
+      opts: flowOpts,
+      logger: createLogger({ verbose: false }),
+    }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).message).toContain("1 of 2 output file(s) failed to download ([1])");
+    expect((err as Error).message).toContain(`multix replicate status ${ID} --download`);
+    expect(fs.readdirSync(path.join(tmp, "out"))).toEqual(["replicate-pred0001-01.png"]);
   });
 });
 

@@ -14,7 +14,12 @@
 import { PollTimeoutError, isTransientHttpError, pollUntil } from "../../core/async-poll.js";
 import { HttpError, ProviderError } from "../../core/errors.js";
 import { type FetchLike, fetchJson, httpErrorFromResponse } from "../../core/fetch-json.js";
-import { DEFAULT_REPLICATE_BASE_URL, assertPredictionId, isTerminalStatus } from "./models.js";
+import {
+  DEFAULT_REPLICATE_BASE_URL,
+  assertPredictionId,
+  isTerminalStatus,
+  isValidPredictionId,
+} from "./models.js";
 import type { ModelRef, ReplicateFile, ReplicatePrediction } from "./types.js";
 
 const PROVIDER = "replicate";
@@ -112,6 +117,10 @@ export function validatePrediction(value: unknown): ReplicatePrediction {
     typeof (value as ReplicatePrediction).status !== "string"
   ) {
     throw new ProviderError("Malformed Replicate response: missing prediction id/status", PROVIDER);
+  }
+  // Server-supplied ids flow into URL paths, file names, and printed commands.
+  if (!isValidPredictionId((value as ReplicatePrediction).id)) {
+    throw new ProviderError("Malformed Replicate response: invalid prediction id", PROVIDER);
   }
   return value as ReplicatePrediction;
 }
@@ -264,8 +273,17 @@ export class ReplicateClient {
     const safeId = assertPredictionId(typeof prediction === "string" ? prediction : prediction.id);
     try {
       return await pollUntil<ReplicatePrediction>({
-        fetchStatus: async () =>
-          validatePrediction(await this.raw<unknown>(`/predictions/${safeId}`, "GET")),
+        fetchStatus: async ({ remainingMs }) =>
+          validatePrediction(
+            await this.raw<unknown>(
+              `/predictions/${safeId}`,
+              "GET",
+              undefined,
+              undefined,
+              // AbortSignal.timeout needs a positive integer; clocks may be fractional.
+              Math.max(1, Math.ceil(Math.min(REQUEST_TIMEOUT_MS, remainingMs))),
+            ),
+          ),
         isTerminal: (p) => isTerminalStatus(p.status),
         isTransientError: isTransientHttpError,
         timeoutMs: opts.timeoutMs,

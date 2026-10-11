@@ -168,6 +168,34 @@ describe("check command provider readiness", () => {
     vi.unstubAllEnvs();
   });
 
+  it("resolves Replicate tokens like the provider: trimmed, then fallback", async () => {
+    const { getCheckProviders, resolveProviderKey } = await import(
+      "../../../src/commands/check.js"
+    );
+    const replicate = getCheckProviders().find((p) => p.name === "Replicate");
+    if (!replicate) throw new Error("Replicate provider entry missing");
+    vi.stubEnv("REPLICATE_API_TOKEN", "   ");
+    vi.stubEnv("REPLICATE_API_KEY", " key-value ");
+    expect(resolveProviderKey(replicate)).toEqual({
+      key: "key-value",
+      envUsed: "REPLICATE_API_KEY",
+    });
+    vi.stubEnv("REPLICATE_API_KEY", "");
+    expect(resolveProviderKey(replicate)).toEqual({});
+    vi.unstubAllEnvs();
+  });
+
+  it("does not let REPLICATE_API_KEY alone make Cloudflare video ready", async () => {
+    vi.stubEnv("CLOUDFLARE_ACCOUNT_ID", "account");
+    vi.stubEnv("CLOUDFLARE_API_TOKEN", "token");
+    vi.stubEnv("CLOUDFLARE_AI_GATEWAY_ID", "gateway");
+    vi.stubEnv("REPLICATE_API_TOKEN", "");
+    vi.stubEnv("REPLICATE_API_KEY", "replicate-key");
+    const { cloudflareReadiness } = await import("../../../src/commands/check.js");
+    expect(cloudflareReadiness()).toEqual({ native: true, video: false });
+    vi.unstubAllEnvs();
+  });
+
   it("does not count whitespace-only Cloudflare credentials as configured", async () => {
     vi.stubEnv("CLOUDFLARE_ACCOUNT_ID", "   ");
     vi.stubEnv("CLOUDFLARE_API_TOKEN", "\t");

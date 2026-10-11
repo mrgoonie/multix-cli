@@ -47,9 +47,15 @@ multix replicate video "a cinematic establishing shot" \
 Wrapper flags map to common input names (`prompt`, `aspect_ratio`,
 `num_outputs`, `seed`, `output_format`, `duration`, `resolution`, `image`).
 Use `--input` for any other field, `--image-key` when a model names its image
-input differently, or `replicate run` for a fully custom schema. Images are
-converted to WebP by default; pass `--image-format original` or `--no-webp` to
-keep the provider format.
+input differently, or `replicate run` for a fully custom schema.
+
+`replicate image` converts saved images to WebP by default (`cwebp -q 85`).
+The provider's original format is kept when you pass `--image-format original`
+or `--no-webp`, set `MULTIX_IMAGE_FORMAT=original`, pass an explicit
+`--output-format`, or give `--output` a non-`.webp` image extension (for
+example `cat.png`). If `cwebp` is not on `PATH`, or a conversion fails
+verification, the original file is kept with a warning. `replicate run` and
+`replicate video` never convert.
 
 ## Async jobs: resume and cancel
 
@@ -67,6 +73,10 @@ multix replicate cancel <id>
 
 - Terminal statuses are `succeeded`, `failed`, `canceled`, and `aborted`.
   Only `succeeded` exits 0; the others exit non-zero with Replicate's error.
+  A one-shot `status <id>` on a job that is still running exits 0.
+- If any output file fails to download, the files that did download are kept,
+  but the command exits non-zero and prints
+  `multix replicate status <id> --download` to retry while the URLs are live.
 - `--wait-timeout <ms>` bounds polling (defaults: run 10 min, image 5 min,
   video 15 min). A timeout prints the resume command; the job keeps running.
 - `--prefer-wait [seconds]` sends `Prefer: wait=N` (1–60 s) so short jobs can
@@ -76,8 +86,9 @@ multix replicate cancel <id>
 
 - Outputs may be a URL, a list of URLs, nested objects, or text. Every media
   URL is downloaded; text values are printed.
-- Files are saved as `replicate-<id>-NN.<ext>` in `MULTIX_OUTPUT_DIR`
-  (default `./multix-output`). The extension comes from the URL or the
+- Files are saved as `replicate-<id8>-NN.<ext>` in `MULTIX_OUTPUT_DIR`
+  (default `./multix-output`), where `<id8>` is the first 8 characters of the
+  prediction ID. The extension comes from the URL or the
   response content type.
 - `--output <file>` saves a single output to that path (multiple outputs
   become `<file>-NN.<ext>`); `--output <dir>/` saves into a directory.

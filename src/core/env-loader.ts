@@ -135,6 +135,20 @@ export function resolveKey(name: string): string | undefined {
   return process.env[name] || undefined;
 }
 
+/**
+ * Resolve the first non-blank variable among `names` (values are trimmed).
+ * Returns the value and which variable supplied it.
+ */
+export function resolveFirstKey(
+  ...names: string[]
+): { value: string; envUsed: string } | undefined {
+  for (const name of names) {
+    const value = resolveKey(name)?.trim();
+    if (value) return { value, envUsed: name };
+  }
+  return undefined;
+}
+
 export { redact } from "./redact.js";
 
 /** Reset loaded state — for testing only. */

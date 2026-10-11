@@ -189,6 +189,17 @@ describe("waitForPrediction and terminal states", () => {
     await expect(client(fake).getPrediction("p7")).rejects.toThrow(/Malformed Replicate response/);
   });
 
+  it("rejects server-supplied prediction ids that could traverse paths", async () => {
+    const fake = createFakeReplicate({
+      "POST /models/o/m/predictions": [
+        { status: 201, json: prediction("/../../x", "succeeded", { output: "https://r/1.png" }) },
+      ],
+    });
+    await expect(
+      client(fake).createPrediction({ model: parseModelRef("o/m"), input: {} }),
+    ).rejects.toThrow(/invalid prediction id/);
+  });
+
   it("rejects prediction ids that could alter the request path", async () => {
     const fake = createFakeReplicate({});
     await expect(client(fake).getPrediction("../models")).rejects.toThrow(/Invalid Replicate/);

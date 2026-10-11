@@ -25,6 +25,8 @@ export interface SaveMediaOptions {
   outDir: string;
   output?: string;
   logger: Logger;
+  /** Appended to the partial-failure error, e.g. a resume command. */
+  retryHint?: string;
   /** Injectable for tests; defaults to globalThis.fetch. */
   fetch?: (url: string, init?: RequestInit) => Promise<Response>;
 }
@@ -122,8 +124,8 @@ async function saveOne(
 }
 
 /**
- * Download every media output. Individual failures are warned (with the URL
- * redacted) and skipped; throws when media existed but nothing was saved.
+ * Download every media output. Each failure is warned (with the URL redacted);
+ * after trying all outputs, throws if any failed so the command exits non-zero.
  */
 export async function saveMediaOutputs(
   predictionId: string,
@@ -131,6 +133,7 @@ export async function saveMediaOutputs(
   opts: SaveMediaOptions,
 ): Promise<string[]> {
   const saved: string[] = [];
+  const failed: string[] = [];
   for (let i = 0; i < media.length; i++) {
     const item = media[i];
     if (!item) continue;
@@ -140,14 +143,17 @@ export async function saveMediaOutputs(
       saved.push(dest);
       opts.logger.success(`Saved ${dest}`);
     } catch (e) {
+      failed.push(item.path);
       opts.logger.warn(`Download failed for ${item.path}: ${e instanceof Error ? e.message : e}`);
     }
   }
-  if (media.length > 0 && saved.length === 0) {
-    throw new ProviderError(
-      `Prediction ${predictionId} produced ${media.length} output file(s) but none could be downloaded`,
-      "replicate",
-    );
+  if (failed.length > 0) {
+    const what =
+      saved.length === 0
+        ? `none of ${media.length} output file(s) could be downloaded`
+        : `${failed.length} of ${media.length} output file(s) failed to download (${failed.join(", ")})`;
+    const hint = opts.retryHint ? `. ${opts.retryHint}` : "";
+    throw new ProviderError(`Prediction ${predictionId}: ${what}${hint}`, "replicate");
   }
   return saved;
 }

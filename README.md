@@ -506,7 +506,8 @@ multix replicate cancel <prediction-id>
 - Auth: `Authorization: Bearer $REPLICATE_API_TOKEN` (`REPLICATE_API_KEY` accepted as fallback).
 - Default behavior waits with bounded polling; `--async` prints the prediction id plus resume/cancel commands. `--prefer-wait` sends `Prefer: wait=N` and keeps polling if the job is still running.
 - Only `succeeded` exits 0; `failed`, `canceled`, and `aborted` exit non-zero with Replicate's error.
-- Every media URL in the output (string, list, or nested object) is downloaded as `replicate-<id>-NN.<ext>`; text outputs are printed. Output URLs expire, so download promptly.
+- Every media URL in the output (string, list, or nested object) is downloaded as `replicate-<id8>-NN.<ext>` (`<id8>` = first 8 characters of the prediction id); text outputs are printed. Output URLs expire, so download promptly. If any download fails, the command exits non-zero and prints `multix replicate status <id> --download` to retry.
+- `replicate image` converts images to WebP by default; `--image-format original`, `--no-webp`, `MULTIX_IMAGE_FORMAT=original`, an explicit `--output-format`, or a non-`.webp` `--output` extension keeps the provider format.
 - Local files (`--image`, `--file key=path`) up to 256 KB are inlined as data URIs; larger files (< 100 MB) are uploaded via the Replicate Files API.
 
 ### `multix media`

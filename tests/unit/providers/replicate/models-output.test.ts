@@ -131,6 +131,8 @@ describe("file type inference", () => {
   it("names outputs replicate-<id8>-NN<ext>", () => {
     expect(outputFilename("abcdefghijk", 0, ".png")).toBe("replicate-abcdefgh-01.png");
     expect(outputFilename("abcdefghijk", 11, ".mp4")).toBe("replicate-abcdefgh-12.mp4");
+    expect(outputFilename("/../../x", 0, ".png")).toBe("replicate-x-01.png");
+    expect(outputFilename("../..", 0, ".png")).toBe("replicate-output-01.png");
   });
 });
 

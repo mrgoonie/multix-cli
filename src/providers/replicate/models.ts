@@ -84,6 +84,11 @@ export function describeModelRef(ref: ModelRef): string {
 
 const PREDICTION_ID_RE = /^[a-z0-9]+$/i;
 
+/** True for opaque alphanumeric prediction ids (safe in URL paths and file names). */
+export function isValidPredictionId(id: unknown): id is string {
+  return typeof id === "string" && PREDICTION_ID_RE.test(id);
+}
+
 /** Prediction ids are opaque alphanumerics; reject anything that could alter the URL path. */
 export function assertPredictionId(id: string): string {
   const trimmed = id.trim();

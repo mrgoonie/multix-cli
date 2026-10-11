@@ -185,7 +185,11 @@ export function redactOutputUrls(value: unknown): unknown {
   return value;
 }
 
-/** `replicate-<first 8 of id>-NN<ext>` — the default saved-output file name. */
+/**
+ * `replicate-<first 8 of id>-NN<ext>` — the default saved-output file name.
+ * Non-alphanumerics are stripped so an id can never introduce path segments.
+ */
 export function outputFilename(predictionId: string, index: number, ext: string): string {
-  return `replicate-${predictionId.slice(0, 8)}-${String(index + 1).padStart(2, "0")}${ext}`;
+  const prefix = predictionId.replace(/[^a-z0-9]/gi, "").slice(0, 8) || "output";
+  return `replicate-${prefix}-${String(index + 1).padStart(2, "0")}${ext}`;
 }

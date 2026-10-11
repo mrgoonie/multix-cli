@@ -48,8 +48,15 @@ Các flag của lệnh tiện lợi ánh xạ sang tên input phổ biến (`pro
 `aspect_ratio`, `num_outputs`, `seed`, `output_format`, `duration`,
 `resolution`, `image`). Dùng `--input` cho các trường khác, `--image-key` khi
 model đặt tên input ảnh khác đi, hoặc `replicate run` cho schema tùy biến hoàn
-toàn. Ảnh mặc định được chuyển sang WebP; truyền `--image-format original`
-hoặc `--no-webp` để giữ định dạng gốc của provider.
+toàn.
+
+`replicate image` mặc định chuyển ảnh đã lưu sang WebP (`cwebp -q 85`). Định
+dạng gốc của provider được giữ nguyên khi bạn truyền `--image-format original`
+hoặc `--no-webp`, đặt `MULTIX_IMAGE_FORMAT=original`, truyền `--output-format`
+một cách tường minh, hoặc dùng `--output` với phần mở rộng ảnh khác `.webp`
+(ví dụ `cat.png`). Nếu không có `cwebp` trong `PATH`, hoặc ảnh chuyển đổi
+không qua bước kiểm tra, file gốc được giữ lại kèm cảnh báo. `replicate run` và
+`replicate video` không bao giờ chuyển đổi.
 
 ## Job bất đồng bộ: tiếp tục và hủy
 
@@ -67,7 +74,11 @@ multix replicate cancel <id>
 
 - Trạng thái kết thúc gồm `succeeded`, `failed`, `canceled` và `aborted`.
   Chỉ `succeeded` thoát với mã 0; các trạng thái còn lại thoát với mã khác 0
-  kèm lỗi từ Replicate.
+  kèm lỗi từ Replicate. Lệnh `status <id>` xem một lần với job đang chạy thoát
+  với mã 0.
+- Nếu có file output nào tải về thất bại, các file đã tải được vẫn được giữ,
+  nhưng lệnh thoát với mã khác 0 và in `multix replicate status <id> --download`
+  để thử lại khi URL còn hiệu lực.
 - `--wait-timeout <ms>` giới hạn thời gian poll (mặc định: run 10 phút, image
   5 phút, video 15 phút). Khi hết giờ, CLI in lệnh để tiếp tục; job vẫn chạy.
 - `--prefer-wait [seconds]` gửi `Prefer: wait=N` (1–60 giây) để job ngắn có
@@ -77,8 +88,9 @@ multix replicate cancel <id>
 
 - Output có thể là một URL, danh sách URL, object lồng nhau hoặc văn bản. Mọi
   media URL đều được tải về; giá trị văn bản được in ra.
-- File được lưu dạng `replicate-<id>-NN.<ext>` trong `MULTIX_OUTPUT_DIR`
-  (mặc định `./multix-output`). Phần mở rộng lấy từ URL hoặc content type của
+- File được lưu dạng `replicate-<id8>-NN.<ext>` trong `MULTIX_OUTPUT_DIR`
+  (mặc định `./multix-output`), trong đó `<id8>` là 8 ký tự đầu của prediction
+  ID. Phần mở rộng lấy từ URL hoặc content type của
   response.
 - `--output <file>` lưu một output vào đúng đường dẫn đó (nhiều output sẽ
   thành `<file>-NN.<ext>`); `--output <dir>/` lưu vào thư mục.

@@ -133,7 +133,7 @@ multix fal result <model> <requestId> [--download]
 
 ## Replicate
 
-Direct Replicate API (`Authorization: Bearer $REPLICATE_API_TOKEN`, fallback `REPLICATE_API_KEY`), separate from the Cloudflare AI Gateway route. Official models (`owner/name`) run on the model endpoint; community models need `owner/name:version`, a bare version id, or `--version`. Commands wait with bounded polling by default and download every media output as `replicate-<id>-NN.<ext>`.
+Direct Replicate API (`Authorization: Bearer $REPLICATE_API_TOKEN`, fallback `REPLICATE_API_KEY`), separate from the Cloudflare AI Gateway route. Official models (`owner/name`) run on the model endpoint; community models need `owner/name:version`, a bare version id, or `--version`. Commands wait with bounded polling by default and download every media output as `replicate-<id8>-NN.<ext>` (first 8 characters of the prediction id). A partial download failure exits non-zero with a `status <id> --download` retry command. `replicate image` converts to WebP unless `--image-format original`/`--no-webp`, an explicit `--output-format`, or a non-`.webp` `--output` is given.
 
 ```bash
 # Generic runner (input is passed through unchanged; --file uploads local files into an input key)

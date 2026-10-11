@@ -4,7 +4,7 @@
  * REPLICATE_BASE_URL overrides the API root (mock servers, proxies, tests).
  */
 
-import { resolveKey } from "../../core/env-loader.js";
+import { resolveFirstKey, resolveKey } from "../../core/env-loader.js";
 import { ConfigError } from "../../core/errors.js";
 import { ReplicateClient } from "./client.js";
 import {
@@ -18,11 +18,8 @@ export const REPLICATE_TOKEN_FALLBACK_ENV = "REPLICATE_API_KEY";
 
 /** The configured token and which env var supplied it, or undefined. */
 export function resolveReplicateToken(): { token: string; envUsed: string } | undefined {
-  for (const name of [REPLICATE_TOKEN_ENV, REPLICATE_TOKEN_FALLBACK_ENV]) {
-    const value = resolveKey(name)?.trim();
-    if (value) return { token: value, envUsed: name };
-  }
-  return undefined;
+  const found = resolveFirstKey(REPLICATE_TOKEN_ENV, REPLICATE_TOKEN_FALLBACK_ENV);
+  return found ? { token: found.value, envUsed: found.envUsed } : undefined;
 }
 
 export function requireReplicateToken(): string {
