@@ -26,6 +26,29 @@ describe("multix --help (smoke)", () => {
     expect(out).toContain("doc");
     expect(out).toContain("elevenlabs");
     expect(out).toContain("openai");
+    expect(out).toContain("replicate");
+  });
+
+  it("lists replicate subcommands", async () => {
+    const result = await execa("node", [CLI, "replicate", "--help"], { reject: false });
+    expect(result.exitCode).toBe(0);
+    const out = result.stdout + result.stderr;
+    for (const sub of ["run", "image", "video", "status", "cancel"]) {
+      expect(out).toContain(sub);
+    }
+  });
+
+  it("accepts --version as a replicate run option without printing the CLI version", async () => {
+    const result = await execa(
+      "node",
+      [CLI, "replicate", "run", "owner/model", "--version", "abc", "--input", "{}"],
+      {
+        reject: false,
+        env: { REPLICATE_API_TOKEN: "", REPLICATE_API_KEY: "", MULTIX_DISABLE_HOME_ENV: "1" },
+      },
+    );
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("REPLICATE_API_TOKEN is not set");
   });
 
   it("lists elevenlabs subcommands", async () => {

@@ -79,6 +79,13 @@ const PROVIDERS: ProviderEntry[] = [
     optional: true,
     link: "https://fal.ai/dashboard/keys",
   },
+  {
+    name: "Replicate",
+    envPrimary: "REPLICATE_API_TOKEN",
+    envFallback: "REPLICATE_API_KEY",
+    optional: true,
+    link: "https://replicate.com/account/api-tokens",
+  },
 ];
 
 function resolveProviderKey(p: ProviderEntry): { key?: string; envUsed?: string } {

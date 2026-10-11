@@ -148,6 +148,26 @@ describe("check command provider readiness", () => {
     vi.unstubAllEnvs();
   });
 
+  it("reports direct Replicate readiness separately from Cloudflare AI Gateway video", async () => {
+    const { getCheckProviders, cloudflareReadiness } = await import(
+      "../../../src/commands/check.js"
+    );
+    expect(getCheckProviders()).toContainEqual(
+      expect.objectContaining({
+        name: "Replicate",
+        envPrimary: "REPLICATE_API_TOKEN",
+        envFallback: "REPLICATE_API_KEY",
+        optional: true,
+      }),
+    );
+    // A Replicate token alone does not make Cloudflare video ready.
+    vi.stubEnv("CLOUDFLARE_ACCOUNT_ID", "");
+    vi.stubEnv("CLOUDFLARE_API_TOKEN", "");
+    vi.stubEnv("REPLICATE_API_TOKEN", "replicate");
+    expect(cloudflareReadiness()).toEqual({ native: false, video: false });
+    vi.unstubAllEnvs();
+  });
+
   it("does not count whitespace-only Cloudflare credentials as configured", async () => {
     vi.stubEnv("CLOUDFLARE_ACCOUNT_ID", "   ");
     vi.stubEnv("CLOUDFLARE_API_TOKEN", "\t");

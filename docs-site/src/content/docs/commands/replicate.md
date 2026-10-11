@@ -1,0 +1,100 @@
+---
+title: Replicate commands
+description: Run any Replicate model through the direct API, generate images and video, and resume or cancel predictions by ID.
+---
+
+Replicate commands call the direct Replicate API (`https://api.replicate.com/v1`)
+and require `REPLICATE_API_TOKEN` (`REPLICATE_API_KEY` is accepted as a
+fallback). They are independent of `multix cloudflare generate-video`, which
+reaches Replicate through Cloudflare AI Gateway.
+
+## Run any model
+
+```bash
+# Official model (owner/name) — uses the model's predictions endpoint
+multix replicate run black-forest-labs/flux-schnell --input '{"prompt":"a cyberpunk cat"}'
+
+# Community model pinned to a version — uses POST /predictions with that version
+multix replicate run owner/model:<version-id> --input @payload.json
+multix replicate run owner/model --version <version-id> --input @payload.json
+
+# Attach local files to model inputs (repeatable)
+multix replicate run owner/model --input '{"prompt":"..."}' --file image=./photo.png
+```
+
+`--input` accepts inline JSON or `@path/to/file.json` and is sent unchanged,
+so every model's own input schema works. Official models run without a
+version; community models need `owner/name:version`, a bare version ID, or
+`--version`.
+
+## Images and video
+
+```bash
+multix replicate image "a futuristic city at dusk" \
+  [-m <owner/name>] [--aspect-ratio 16:9] [-n 1] [--seed <n>] \
+  [--output-format webp|jpg|png] [--input '{"go_fast":false}'] [--output <path>]
+
+multix replicate video "a cinematic establishing shot" \
+  [-m <owner/name>] [--image <path|url>] [--duration 5] [--aspect-ratio 16:9] \
+  [--resolution 720p] [--seed <n>] [--input '{"draft":true}'] [--async]
+```
+
+| Command | Default model | Override |
+| --- | --- | --- |
+| `image` | `black-forest-labs/flux-schnell` | `-m` or `REPLICATE_IMAGE_MODEL` |
+| `video` | `prunaai/p-video` (text-to-video, or image-to-video with `--image`) | `-m` or `REPLICATE_VIDEO_MODEL` |
+
+Wrapper flags map to common input names (`prompt`, `aspect_ratio`,
+`num_outputs`, `seed`, `output_format`, `duration`, `resolution`, `image`).
+Use `--input` for any other field, `--image-key` when a model names its image
+input differently, or `replicate run` for a fully custom schema. Images are
+converted to WebP by default; pass `--image-format original` or `--no-webp` to
+keep the provider format.
+
+## Async jobs: resume and cancel
+
+Every run waits by default: submit, poll with back-off until a terminal status,
+then download. `--async` prints the prediction ID and returns immediately.
+
+```bash
+multix replicate video "a slow pan over mountains" --async
+# Prediction submitted: <id> (status: starting)
+
+multix replicate status <id>                       # one-shot status (JSON)
+multix replicate status <id> --wait --download     # resume without re-running
+multix replicate cancel <id>
+```
+
+- Terminal statuses are `succeeded`, `failed`, `canceled`, and `aborted`.
+  Only `succeeded` exits 0; the others exit non-zero with Replicate's error.
+- `--wait-timeout <ms>` bounds polling (defaults: run 10 min, image 5 min,
+  video 15 min). A timeout prints the resume command; the job keeps running.
+- `--prefer-wait [seconds]` sends `Prefer: wait=N` (1–60 s) so short jobs can
+  finish in the create request; if the job is still running, polling continues.
+
+## Outputs
+
+- Outputs may be a URL, a list of URLs, nested objects, or text. Every media
+  URL is downloaded; text values are printed.
+- Files are saved as `replicate-<id>-NN.<ext>` in `MULTIX_OUTPUT_DIR`
+  (default `./multix-output`). The extension comes from the URL or the
+  response content type.
+- `--output <file>` saves a single output to that path (multiple outputs
+  become `<file>-NN.<ext>`); `--output <dir>/` saves into a directory.
+- `--no-download` prints the output URLs instead. Replicate output URLs
+  expire (about an hour for API predictions), so download promptly.
+
+## Local files
+
+`--image` and `--file key=path` accept a local path or an `https://` URL.
+Local files up to 256 KB are sent inline as data URIs; larger files are
+uploaded through the Replicate Files API. Files must be under 100 MB.
+
+## Errors and privacy
+
+- 401 points at the token, 404 at the model (or a missing version for
+  community models), 422 at the model's input schema, and 429 honours
+  `Retry-After`; network, 429, and 5xx errors are retried while polling.
+- The token is never logged. `status` JSON omits prediction inputs and logs
+  and strips signed query strings from output URLs; verbose logs redact them
+  too.

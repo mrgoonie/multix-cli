@@ -21,6 +21,7 @@ bật). Không commit API key hoặc đưa key vào shell history.
 | `CLOUDFLARE_AI_GATEWAY_ID` và `REPLICATE_API_TOKEN` | Cloudflare AI Gateway video |
 | `ELEVENLABS_API_KEY` | ElevenLabs |
 | `FAL_KEY` | fal.ai |
+| `REPLICATE_API_TOKEN` hoặc `REPLICATE_API_KEY` | Replicate (API trực tiếp) |
 
 ```bash
 export GEMINI_API_KEY="your-key"
@@ -84,7 +85,11 @@ Chỉ đặt override khi cần thay default. Các biến gồm `IMAGE_GEN_MODEL
 `BYTEPLUS_IMAGE_MODEL`, `BYTEPLUS_VIDEO_MODEL`, `BYTEPLUS_3D_MODEL`,
 `FAL_BASE_URL`, `FAL_IMAGE_MODEL`, `FAL_VIDEO_MODEL` và
 `FAL_VIDEO_IMAGE_MODEL` (default image-to-video của fal, dùng khi truyền
-`multix fal video --image-url` mà không có `-m`).
+`multix fal video --image-url` mà không có `-m`). Replicate nhận
+`REPLICATE_BASE_URL` (API root cho mock hoặc proxy), `REPLICATE_IMAGE_MODEL`
+(mặc định `black-forest-labs/flux-schnell`) và `REPLICATE_VIDEO_MODEL`
+(mặc định `prunaai/p-video`). Video qua Cloudflare AI Gateway chỉ đọc
+`REPLICATE_API_TOKEN`.
 
 Cloudflare chỉ chấp nhận các model image và speech Workers AI có sẵn;
 `CLOUDFLARE_AI_IMAGE_MODEL` và `CLOUDFLARE_AI_TTS_MODEL` vì vậy chỉ dùng để

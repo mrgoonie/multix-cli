@@ -85,6 +85,7 @@ export default defineConfig({
             { label: "Cloudflare", slug: "commands/cloudflare" },
             { label: "ElevenLabs", slug: "commands/elevenlabs" },
             { label: "fal.ai", slug: "commands/fal" },
+            { label: "Replicate", slug: "commands/replicate" },
             {
               label: "Provider directory",
               translations: { vi: "Danh mục provider" },

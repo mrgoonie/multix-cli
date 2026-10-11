@@ -4,7 +4,7 @@ AI multimodal CLI — generate images/video/speech/music, analyze and transcribe
 
 ![Isometric technical illustration of multix media workflows](docs-site/public/images/multix-isometric-banner.png)
 
-Supports **OpenAI** (image, image edits, TTS, STT, optional Codex image driver), **Gemini** (analyze, transcribe, generate, Veo video, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), **Cloudflare** (Workers AI image and speech; AI Gateway-routed Replicate video), **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment), and **fal.ai** (generic model runner, image, video via the fal queue API).
+Supports **OpenAI** (image, image edits, TTS, STT, optional Codex image driver), **Gemini** (analyze, transcribe, generate, Veo video, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), **Cloudflare** (Workers AI image and speech; AI Gateway-routed Replicate video), **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment), **fal.ai** (generic model runner, image, video via the fal queue API), and **Replicate** (generic model runner, image, video, async prediction status/cancel via the direct Replicate API).
 
 ## Documentation
 
@@ -81,7 +81,11 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `CLOUDFLARE_API_TOKEN` | For Cloudflare media | Cloudflare API token for Workers AI and AI Gateway |
 | `CLOUDFLARE_AI_GATEWAY_ID` | Video only | AI Gateway ID; optional for Workers AI image/speech, required for video |
 | `CLOUDFLARE_AI_GATEWAY_COLLECT_LOG_PAYLOAD` | No | Set to `true` to explicitly opt in to AI Gateway request-payload collection; defaults to `false` |
-| `REPLICATE_API_TOKEN` | Cloudflare video only | Replicate API token used through Cloudflare AI Gateway |
+| `REPLICATE_API_TOKEN` | For Replicate / Cloudflare video | [Replicate](https://replicate.com/account/api-tokens) token for `multix replicate`; also used by Cloudflare AI Gateway video |
+| `REPLICATE_API_KEY` | No | Fallback for `REPLICATE_API_TOKEN` (direct `multix replicate` only) |
+| `REPLICATE_BASE_URL` | No | Override Replicate API root (default `https://api.replicate.com/v1`) |
+| `REPLICATE_IMAGE_MODEL` | No | Default `multix replicate image` model (default `black-forest-labs/flux-schnell`) |
+| `REPLICATE_VIDEO_MODEL` | No | Default `multix replicate video` model (default `prunaai/p-video`) |
 | `CLOUDFLARE_AI_IMAGE_MODEL` | No | Image model setting; only `@cf/black-forest-labs/flux-1-schnell` is accepted |
 | `CLOUDFLARE_AI_TTS_MODEL` | No | Speech model setting; only `@cf/myshell-ai/melotts` is accepted |
 | `MULTIX_OUTPUT_DIR` | No | Override default output dir (`./multix-output`) |
@@ -474,6 +478,36 @@ multix fal result <model> <requestId> [--download]
 - Auth header is `Authorization: Key $FAL_KEY`; base URL is `https://queue.fal.run`.
 - All fal jobs are async: submit → poll `status` → fetch `result`. `run`/`image`/`video` do this automatically.
 - Media URLs are extracted generically from the result JSON (any `url` field, recursively) and downloaded to `MULTIX_OUTPUT_DIR`.
+
+### `multix replicate`
+
+Direct [Replicate](https://replicate.com) API provider (independent of the Cloudflare AI Gateway route). `run` accepts any model; `image`/`video` set defaults; every job can be resumed or canceled by prediction ID.
+
+```bash
+# Generic runner — official models (owner/name) use the model endpoint;
+# owner/name:version, a bare version id, or --version use POST /predictions.
+multix replicate run black-forest-labs/flux-schnell --input '{"prompt":"a cyberpunk cat"}'
+multix replicate run owner/model:<version-id> --input @payload.json [--file image=./photo.png]
+
+# Text-to-image (default model: black-forest-labs/flux-schnell)
+multix replicate image "a futuristic city" [-m <owner/name>] [--aspect-ratio 16:9] [-n 1] [--seed <n>] [--output-format webp|jpg|png] [--input <json>] [--output <path>]
+
+# Text-to-video, or image-to-video with --image (default model: prunaai/p-video)
+multix replicate video "a cinematic establishing shot" [-m <owner/name>] [--image <path|url>] [--duration 5] [--aspect-ratio 16:9] [--resolution 720p] [--input '{"draft":true}']
+
+# Shared flags: [--async] [--wait] [--prefer-wait [seconds]] [--wait-timeout <ms>] [--no-download] [--output <path>] [-v]
+
+# Resume or cancel a prediction by id without re-running inference
+multix replicate status <prediction-id> [--wait] [--download] [--output <path>]
+multix replicate cancel <prediction-id>
+```
+
+**Notes:**
+- Auth: `Authorization: Bearer $REPLICATE_API_TOKEN` (`REPLICATE_API_KEY` accepted as fallback).
+- Default behavior waits with bounded polling; `--async` prints the prediction id plus resume/cancel commands. `--prefer-wait` sends `Prefer: wait=N` and keeps polling if the job is still running.
+- Only `succeeded` exits 0; `failed`, `canceled`, and `aborted` exit non-zero with Replicate's error.
+- Every media URL in the output (string, list, or nested object) is downloaded as `replicate-<id>-NN.<ext>`; text outputs are printed. Output URLs expire, so download promptly.
+- Local files (`--image`, `--file key=path`) up to 256 KB are inlined as data URIs; larger files (< 100 MB) are uploaded via the Replicate Files API.
 
 ### `multix media`
 

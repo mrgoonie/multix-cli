@@ -22,6 +22,7 @@ history and never commit them.
 | `CLOUDFLARE_AI_GATEWAY_ID` and `REPLICATE_API_TOKEN` | Cloudflare AI Gateway video |
 | `ELEVENLABS_API_KEY` | ElevenLabs |
 | `FAL_KEY` | fal.ai |
+| `REPLICATE_API_TOKEN` or `REPLICATE_API_KEY` | Replicate (direct API) |
 
 ```bash
 export GEMINI_API_KEY="your-key"
@@ -84,7 +85,11 @@ settings include `IMAGE_GEN_MODEL`, `VIDEO_GEN_MODEL`, `MULTIMODAL_MODEL`,
 `BYTEPLUS_BASE_URL`, `BYTEPLUS_IMAGE_MODEL`, `BYTEPLUS_VIDEO_MODEL`,
 `BYTEPLUS_3D_MODEL`, `FAL_BASE_URL`, `FAL_IMAGE_MODEL`, `FAL_VIDEO_MODEL`, and
 `FAL_VIDEO_IMAGE_MODEL` (fal's image-to-video default, used when
-`multix fal video --image-url` is passed without `-m`).
+`multix fal video --image-url` is passed without `-m`). Replicate accepts
+`REPLICATE_BASE_URL` (API root for mocks or proxies), `REPLICATE_IMAGE_MODEL`
+(default `black-forest-labs/flux-schnell`), and `REPLICATE_VIDEO_MODEL`
+(default `prunaai/p-video`). Cloudflare AI Gateway video reads only
+`REPLICATE_API_TOKEN`.
 
 Cloudflare accepts only the built-in Workers AI image and speech model IDs;
 `CLOUDFLARE_AI_IMAGE_MODEL` and `CLOUDFLARE_AI_TTS_MODEL` are therefore useful
