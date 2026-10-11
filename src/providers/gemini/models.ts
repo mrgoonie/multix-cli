@@ -3,6 +3,8 @@
  * Mirrors the Python source model registry.
  */
 
+import { envDefault } from "../../core/env-default.js";
+
 /** Default image generation model (Nano Banana 2 — fastest, ~95% Pro quality). */
 export const IMAGE_MODEL_DEFAULT = "gemini-3.1-flash-image-preview";
 
@@ -65,15 +67,16 @@ export type ImageSize = (typeof IMAGE_SIZES)[number];
 export function getDefaultModel(
   task: "generate" | "generate-video" | "generate-speech" | "analyze" | "transcribe" | "extract",
 ): string {
+  // A blank name (as in a copied .env.example) falls through to the next one.
   if (task === "generate") {
-    return process.env.IMAGE_GEN_MODEL ?? process.env.GEMINI_IMAGE_GEN_MODEL ?? IMAGE_MODEL_DEFAULT;
+    return envDefault("IMAGE_GEN_MODEL", envDefault("GEMINI_IMAGE_GEN_MODEL", IMAGE_MODEL_DEFAULT));
   }
   if (task === "generate-video") {
-    return process.env.VIDEO_GEN_MODEL ?? VIDEO_MODEL_DEFAULT;
+    return envDefault("VIDEO_GEN_MODEL", VIDEO_MODEL_DEFAULT);
   }
   if (task === "generate-speech") {
-    return process.env.GEMINI_TTS_MODEL ?? process.env.TTS_MODEL ?? TTS_MODEL_DEFAULT;
+    return envDefault("GEMINI_TTS_MODEL", envDefault("TTS_MODEL", TTS_MODEL_DEFAULT));
   }
   // analyze / transcribe / extract
-  return process.env.MULTIMODAL_MODEL ?? process.env.GEMINI_MODEL ?? ANALYSIS_MODEL_DEFAULT;
+  return envDefault("MULTIMODAL_MODEL", envDefault("GEMINI_MODEL", ANALYSIS_MODEL_DEFAULT));
 }

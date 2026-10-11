@@ -14,8 +14,31 @@ import { _resetEnvLoader, loadEnv } from "../../../src/core/env-loader.js";
 import { _resetOutputDir } from "../../../src/core/output-dir.js";
 import { registerBytePlusCommands } from "../../../src/providers/byteplus/commands/index.js";
 import { registerFalCommands } from "../../../src/providers/fal/commands/index.js";
+import { registerGeminiCommands } from "../../../src/providers/gemini/commands/index.js";
+import {
+  ANALYSIS_MODEL_DEFAULT,
+  IMAGE_MODEL_DEFAULT,
+  TTS_MODEL_DEFAULT,
+  VIDEO_MODEL_DEFAULT,
+  getDefaultModel,
+} from "../../../src/providers/gemini/models.js";
 import { registerLeonardoCommands } from "../../../src/providers/leonardo/commands/index.js";
 import { registerMinimaxCommands } from "../../../src/providers/minimax/commands/index.js";
+import { registerOpenAICommands } from "../../../src/providers/openai/commands/index.js";
+import {
+  DEFAULT_OPENAI_STT_MODEL,
+  DEFAULT_OPENAI_TTS_MODEL,
+} from "../../../src/providers/openai/models.js";
+
+const GEMINI_MODEL_ENVS = [
+  "IMAGE_GEN_MODEL",
+  "GEMINI_IMAGE_GEN_MODEL",
+  "VIDEO_GEN_MODEL",
+  "GEMINI_TTS_MODEL",
+  "TTS_MODEL",
+  "MULTIMODAL_MODEL",
+  "GEMINI_MODEL",
+];
 
 const MANAGED = [
   "LEONARDO_API_KEY",
@@ -39,6 +62,13 @@ const MANAGED = [
   "BYTEPLUS_VIDEO_MODEL",
   "BYTEPLUS_3D_MODEL",
   "BYTEPLUS_BASE_URL",
+  "OPENAI_API_KEY",
+  "OPENAI_BASE_URL",
+  "OPENAI_TTS_MODEL",
+  "OPENAI_STT_MODEL",
+  "GEMINI_API_KEY",
+  "GEMINI_BASE_URL",
+  ...GEMINI_MODEL_ENVS,
   "MULTIX_OUTPUT_DIR",
 ];
 
@@ -60,6 +90,8 @@ beforeEach(() => {
   process.env.MINIMAX_API_KEY = "test-minimax-key";
   process.env.FAL_KEY = "test-fal-key";
   process.env.BYTEPLUS_API_KEY = "test-byteplus-key";
+  process.env.OPENAI_API_KEY = "test-openai-key";
+  process.env.GEMINI_API_KEY = "test-gemini-key";
   process.env.MULTIX_OUTPUT_DIR = path.join(tmp, "out");
   vi.spyOn(process, "cwd").mockReturnValue(tmp);
   vi.spyOn(console, "log").mockImplementation(() => {});
@@ -72,7 +104,13 @@ beforeEach(() => {
   // Record the request, then fail it so the command stops after one call.
   vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-    const body = typeof init?.body === "string" ? JSON.parse(init.body) : undefined;
+    const raw = init?.body;
+    const body =
+      typeof raw === "string"
+        ? JSON.parse(raw)
+        : raw instanceof FormData
+          ? Object.fromEntries([...raw.entries()].filter(([, v]) => typeof v === "string"))
+          : undefined;
     calls.push({ url, body });
     return new Response(JSON.stringify({ error: "stop" }), {
       status: 400,
@@ -106,6 +144,8 @@ async function runWithEnvFile(envFile: string, args: string[]): Promise<Call> {
   registerMinimaxCommands(program);
   registerFalCommands(program);
   registerBytePlusCommands(program);
+  registerOpenAICommands(program);
+  registerGeminiCommands(program);
   await program.parseAsync(["node", "multix", ...args]).catch(() => {});
   const first = calls[0];
   if (!first) throw new Error("command sent no request");
@@ -223,5 +263,68 @@ describe("model defaults from a .env file", () => {
       "a cat",
     ]);
     expect(call.body?.model).toBe("image-01");
+  });
+});
+
+describe("blank model overrides in a .env file (as in a copied .env.example)", () => {
+  it("openai generate-speech falls back to the built-in TTS model", async () => {
+    const call = await runWithEnvFile("OPENAI_TTS_MODEL=\n", [
+      "openai",
+      "generate-speech",
+      "--text",
+      "hello",
+    ]);
+    expect(call.body?.model).toBe(DEFAULT_OPENAI_TTS_MODEL);
+  });
+
+  it("openai generate-speech still uses a non-blank .env value", async () => {
+    const call = await runWithEnvFile("OPENAI_TTS_MODEL=tts-1\n", [
+      "openai",
+      "generate-speech",
+      "--text",
+      "hello",
+    ]);
+    expect(call.body?.model).toBe("tts-1");
+  });
+
+  it("openai transcribe falls back to the built-in STT model", async () => {
+    const audio = path.join(tmp, "clip.mp3");
+    fs.writeFileSync(audio, new Uint8Array([0xff, 0xfb, 0x90, 0x00]));
+    const call = await runWithEnvFile("OPENAI_STT_MODEL=\n", [
+      "openai",
+      "transcribe",
+      "--input",
+      audio,
+    ]);
+    expect(call.body?.model).toBe(DEFAULT_OPENAI_STT_MODEL);
+  });
+
+  it("gemini generate falls back to the built-in image model in the request URL", async () => {
+    const call = await runWithEnvFile("IMAGE_GEN_MODEL=\nGEMINI_IMAGE_GEN_MODEL=\n", [
+      "gemini",
+      "generate",
+      "--prompt",
+      "a cat",
+    ]);
+    expect(call.url).toContain(`models/${IMAGE_MODEL_DEFAULT}:`);
+  });
+
+  it("gemini defaults skip a blank primary name and fall back per task", () => {
+    fs.writeFileSync(
+      path.join(tmp, ".env"),
+      `${GEMINI_MODEL_ENVS.map((name) => `${name}=`).join("\n")}\nGEMINI_IMAGE_GEN_MODEL=file-image\n`,
+    );
+    loadEnv();
+    expect(getDefaultModel("generate")).toBe("file-image");
+    expect(getDefaultModel("generate-video")).toBe(VIDEO_MODEL_DEFAULT);
+    expect(getDefaultModel("generate-speech")).toBe(TTS_MODEL_DEFAULT);
+    expect(getDefaultModel("analyze")).toBe(ANALYSIS_MODEL_DEFAULT);
+  });
+
+  it("gemini shell value still wins over the .env file", () => {
+    process.env.GEMINI_MODEL = "shell-model";
+    fs.writeFileSync(path.join(tmp, ".env"), "GEMINI_MODEL=file-model\n");
+    loadEnv();
+    expect(getDefaultModel("analyze")).toBe("shell-model");
   });
 });

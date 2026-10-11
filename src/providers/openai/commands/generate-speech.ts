@@ -1,4 +1,5 @@
 import type { Command } from "commander";
+import { envDefault } from "../../../core/env-default.js";
 import { ValidationError } from "../../../core/errors.js";
 import { createLogger } from "../../../core/logger.js";
 import { DEFAULT_OPENAI_TTS_MODEL, parseTtsFormat, validateTtsVoice } from "../models.js";
@@ -10,7 +11,7 @@ export function registerOpenAIGenerateSpeechCommand(parent: Command): void {
     .description("Generate speech with OpenAI TTS")
     .option("--text <str>", "Text to speak")
     .option("--prompt <str>", "Alias for --text")
-    .option("--model <id>", "TTS model", process.env.OPENAI_TTS_MODEL ?? DEFAULT_OPENAI_TTS_MODEL)
+    .option("--model <id>", "TTS model", envDefault("OPENAI_TTS_MODEL", DEFAULT_OPENAI_TTS_MODEL))
     .option("--voice <name>", "OpenAI voice", "marin")
     .option("--instructions <text>", "Voice/style instructions")
     .option("--output-format <fmt>", "mp3|opus|aac|flac|wav|pcm", "mp3")

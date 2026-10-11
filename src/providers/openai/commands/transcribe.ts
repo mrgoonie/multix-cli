@@ -1,4 +1,5 @@
 import type { Command } from "commander";
+import { envDefault } from "../../../core/env-default.js";
 import { createLogger } from "../../../core/logger.js";
 import { DEFAULT_OPENAI_STT_MODEL, parseTranscriptFormat } from "../models.js";
 import { transcribeOpenAIAudio } from "../openai-audio.js";
@@ -8,7 +9,7 @@ export function registerOpenAITranscribeCommand(parent: Command): void {
     .command("transcribe")
     .description("Transcribe audio/video with OpenAI STT")
     .requiredOption("--input <path>", "Audio or video file")
-    .option("--model <id>", "STT model", process.env.OPENAI_STT_MODEL ?? DEFAULT_OPENAI_STT_MODEL)
+    .option("--model <id>", "STT model", envDefault("OPENAI_STT_MODEL", DEFAULT_OPENAI_STT_MODEL))
     .option("--format <fmt>", "json|text|diarized_json", "text")
     .option("--language <code>", "ISO language code")
     .option("--chunking-strategy <strategy>", "e.g. auto")
