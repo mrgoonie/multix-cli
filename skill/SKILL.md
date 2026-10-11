@@ -194,7 +194,7 @@ multix heygen video-agent "45-second explainer for a note app" [--avatar <look-i
 multix heygen avatars [--type photo_avatar] [--cursor <token>]
 multix heygen voices [--language English]
 multix heygen video "Hello!" --avatar <look-id> [--voice <id>] [--aspect-ratio 9:16] [--engine avatar_iv|avatar_v|avatar_iii] [--burn-captions]
-multix heygen translate <ref> --languages "Spanish, Chinese (Cantonese, Traditional)" [--output <dir>]
+multix heygen translate <ref> --languages "Spanish, Chinese (Cantonese, Traditional)" [--output <dir|dub.mp4>]   # several languages: dub.mp4 -> dub-Spanish.mp4, ...
 multix heygen lipsync --video <ref> --audio <ref>
 multix heygen tts "Hello" --voice <voice-id>
 multix heygen template <template-id> --input @vars.json

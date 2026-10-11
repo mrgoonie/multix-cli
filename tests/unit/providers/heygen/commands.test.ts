@@ -283,6 +283,41 @@ describe("heygen translate", () => {
     expect(printed()).not.toContain("TOPSECRETSIG");
   });
 
+  it("derives per-language file names when --output has a media extension", async () => {
+    const translation = (id: string, language: string) => ({
+      body: {
+        data: {
+          id,
+          status: "completed",
+          output_language: language,
+          video_url: `${FILES}/tr/${id}.mp4`,
+        },
+      },
+    });
+    useApi({
+      "POST /v3/video-translations": { body: { data: { video_translation_ids: ["t1", "t2"] } } },
+      "GET /v3/video-translations/t1": translation("t1", "Spanish"),
+      "GET /v3/video-translations/t2": translation("t2", "French (France)"),
+      "GET /tr/t1.mp4": { raw: "ES" },
+      "GET /tr/t2.mp4": { raw: "FR" },
+    });
+    const outDir = path.join(tmp, "out");
+
+    await run(
+      "translate",
+      "asset:src1",
+      "--languages",
+      "Spanish,French (France)",
+      "--output",
+      path.join(outDir, "dub.mp4"),
+      "--poll-interval",
+      "1",
+    );
+
+    expect(fs.readdirSync(outDir).sort()).toEqual(["dub-French-France.mp4", "dub-Spanish.mp4"]);
+    expect(fs.readFileSync(path.join(outDir, "dub-Spanish.mp4"), "utf8")).toBe("ES");
+  });
+
   it("downloads successes but still fails when one language fails", async () => {
     useApi({
       "POST /v3/video-translations": { body: { data: { video_translation_ids: ["t1", "t2"] } } },
@@ -495,6 +530,73 @@ describe("heygen delivery safety", () => {
     expect(err.message).not.toContain("TOPSECRETSIG");
     expect(fs.readFileSync(path.join(tmp, "heygen-translation-French-t2.mp4"), "utf8")).toBe("FR");
     expect(printed()).toContain("heygen-translation-French-t2.mp4");
+  });
+
+  it("refuses an http:// HEYGEN_BASE_URL for a non-loopback host before any request", async () => {
+    vi.stubEnv("HEYGEN_BASE_URL", "http://proxy.example/heygen");
+    useApi({});
+    const err = await run("video", "Hello", "--avatar", "look1").catch((e) => e);
+    expect(err).toBeInstanceOf(ConfigError);
+    expect(err.message).toMatch(/HEYGEN_BASE_URL must use https:\/\//);
+    expect(err.message).not.toContain(KEY);
+    expect(fake.calls).toHaveLength(0);
+  });
+
+  it("allows an http:// HEYGEN_BASE_URL on loopback for local mocks", async () => {
+    vi.stubEnv("HEYGEN_BASE_URL", "http://127.0.0.1:8787");
+    useApi({ "POST /v3/videos": { body: { data: { video_id: "v1", status: "waiting" } } } });
+    await run("video", "Hello", "--avatar", "look1", "--async", "--json");
+    expect(fake.calls[0]?.url).toBe("http://127.0.0.1:8787/v3/videos");
+  });
+
+  it("refuses to download a non-https output URL and redacts it", async () => {
+    useApi({
+      "GET /v3/videos/v7": completed({ video_url: `http://files.heygen.test/out/v7.mp4?${SIG}` }),
+    });
+    const err = await run("status", "v7", "--type", "video", "--download", "--no-thumb").catch(
+      (e) => e,
+    );
+    expect(err.message).toMatch(/non-https URL \(http:\/\/files\.heygen\.test\/out\/v7\.mp4/);
+    expect(err.message).not.toContain("TOPSECRETSIG");
+    expect(fake.callsTo("GET /out/v7.mp4")).toHaveLength(0);
+    expect(fs.readdirSync(tmp)).toEqual([]);
+  });
+
+  it("refuses a non-https caption URL", async () => {
+    useApi({
+      "GET /v3/videos/v7": completed({
+        video_url: `${FILES}/out/v7.mp4`,
+        subtitle_url: `http://files.heygen.test/out/v7.srt?${SIG}`,
+      }),
+      "GET /out/v7.mp4": { raw: "V7" },
+    });
+    const err = await run(
+      "status",
+      "v7",
+      "--type",
+      "video",
+      "--download",
+      "--captions",
+      "--no-thumb",
+    ).catch((e) => e);
+    expect(err.message).toMatch(/non-https URL/);
+    expect(err.message).not.toContain("TOPSECRETSIG");
+    expect(fake.callsTo("GET /out/v7.srt")).toHaveLength(0);
+  });
+
+  it("skips a non-https thumbnail with a warning but keeps the video", async () => {
+    useApi({
+      "GET /v3/videos/v7": completed({
+        video_url: `${FILES}/out/v7.mp4`,
+        thumbnail_url: `http://files.heygen.test/out/v7.jpg?${SIG}`,
+      }),
+      "GET /out/v7.mp4": { raw: "V7" },
+    });
+    await run("status", "v7", "--type", "video", "--download");
+    expect(fs.readdirSync(tmp)).toEqual(["heygen-video-v7.mp4"]);
+    expect(fake.callsTo("GET /out/v7.jpg")).toHaveLength(0);
+    expect(printed()).toMatch(/Skipping thumbnail from a non-https URL/);
+    expect(printed()).not.toContain("TOPSECRETSIG");
   });
 
   it("reports a create response without a job ID instead of polling", async () => {

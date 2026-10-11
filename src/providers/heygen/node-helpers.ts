@@ -14,7 +14,7 @@ import { downloadFile } from "../../core/http-client.js";
 import type { Logger } from "../../core/logger.js";
 import { getOutputDir } from "../../core/output-dir.js";
 import { redactUrl } from "../../core/redact.js";
-import { maybeDownloadThumb } from "../../core/video-thumb.js";
+import { detectThumbUrl, maybeDownloadThumb } from "../../core/video-thumb.js";
 import { HeygenClient } from "./client.js";
 import { HeygenJobFailedError } from "./heygen-errors.js";
 import {
@@ -22,6 +22,7 @@ import {
   type HeygenJobState,
   assertJobSucceeded,
   resumeCommand,
+  staggerOffsetMs,
   waitForJob,
 } from "./jobs.js";
 import {
@@ -31,7 +32,7 @@ import {
   type HeygenJobKind,
   LIMITS,
 } from "./models.js";
-import { classifyMediaRef } from "./request-builders.js";
+import { checkBaseUrl, classifyMediaRef, isHttpsUrl } from "./request-builders.js";
 import type { HeygenAssetInput } from "./types.js";
 
 export function requireHeygenKey(): string {
@@ -44,11 +45,17 @@ export function requireHeygenKey(): string {
   return key;
 }
 
-/** Build a client from env. `HEYGEN_BASE_URL` exists for tests and proxies. */
+/**
+ * Build a client from env. `HEYGEN_BASE_URL` exists for tests and proxies; it
+ * must be https:// (plain http:// only for loopback hosts) so the key is never
+ * sent in cleartext.
+ */
 export function createHeygenClientFromEnv(): HeygenClient {
+  const apiKey = requireHeygenKey();
+  const override = resolveKey("HEYGEN_BASE_URL")?.trim();
   return new HeygenClient({
-    apiKey: requireHeygenKey(),
-    baseUrl: resolveKey("HEYGEN_BASE_URL") ?? DEFAULT_HEYGEN_BASE_URL,
+    apiKey,
+    baseUrl: override ? checkBaseUrl(override, "HEYGEN_BASE_URL") : DEFAULT_HEYGEN_BASE_URL,
   });
 }
 
@@ -155,7 +162,10 @@ export function addWaitOptions(cmd: Command, defaultTimeoutMs = DEFAULT_WAIT_TIM
       String(DEFAULT_POLL_INTERVAL_MS),
     )
     .option("--no-download", "Do not download outputs; print output URLs instead")
-    .option("--output <path>", "Output file (or directory when several outputs are produced)")
+    .option(
+      "--output <path>",
+      "Output file. With several outputs, a media file name gets a per-language suffix (dub.mp4 -> dub-Spanish.mp4); any other path is a directory",
+    )
     .option("--captions", "Also download the caption/subtitle file when one is available")
     .option("--no-thumb", "Skip downloading the video thumbnail")
     .option("--json", "Print a JSON summary instead of human-readable output")
@@ -196,8 +206,10 @@ export async function downloadOutput(
   if (!url) {
     throw new ValidationError(`HeyGen reported success but returned no output URL. ${resumeHint}`);
   }
-  if (!/^https?:\/\//i.test(url)) {
-    throw new ValidationError(`HeyGen returned an invalid output URL (${redactUrl(url)})`);
+  if (!isHttpsUrl(url)) {
+    throw new ValidationError(
+      `Refusing to download HeyGen output from a non-https URL (${redactUrl(url)})`,
+    );
   }
   const tmp = `${dest}.${process.pid}-${Date.now()}.part`;
   try {
@@ -220,20 +232,29 @@ export function defaultOutputPath(state: HeygenJobState, ext: string): string {
   return path.join(getOutputDir(), `heygen-${state.kind}${lang}-${safeSlug(state.id)}.${ext}`);
 }
 
-/** Resolve the destination for one of `count` outputs. `--output` is a dir when count > 1. */
+/**
+ * Resolve the destination for one of `count` outputs. With a single output,
+ * `--output` is the file. With several, an `--output` ending in a media
+ * extension is a name template (`dub.mp4` -> `dub-Spanish.mp4`, suffixed with
+ * the output language or job ID); anything else is a directory.
+ */
 function outputPathFor(
   state: HeygenJobState,
   ext: string,
   output: string | undefined,
   count: number,
-) {
+): string {
   if (!output) return defaultOutputPath(state, ext);
-  if (count > 1) {
-    const dir = path.resolve(output);
-    fs.mkdirSync(dir, { recursive: true });
-    return path.join(dir, path.basename(defaultOutputPath(state, ext)));
+  const target = path.resolve(output);
+  if (count <= 1) return target;
+  const givenExt = path.extname(target);
+  if (OUTPUT_EXTS.has(givenExt.slice(1).toLowerCase())) {
+    const base = path.basename(target, givenExt);
+    const suffix = safeSlug(state.outputLanguage ?? state.id);
+    return path.join(path.dirname(target), `${base}-${suffix}${givenExt}`);
   }
-  return path.resolve(output);
+  fs.mkdirSync(target, { recursive: true });
+  return path.join(target, path.basename(defaultOutputPath(state, ext)));
 }
 
 /** Secret-free summary of a job state (signed URLs reduced to origin+path). */
@@ -309,12 +330,14 @@ async function deliverOne(
     logger.warn(`No caption file available for ${state.kind} ${state.id}`);
   }
 
-  if (state.kind === "video" || state.kind === "agent") {
-    const thumb = await maybeDownloadThumb(state.raw, dest, {
-      skip: opts.thumb === false,
-      logger,
-    });
-    if (thumb) files.push(thumb);
+  if ((state.kind === "video" || state.kind === "agent") && opts.thumb !== false) {
+    const thumbUrl = detectThumbUrl(state.raw);
+    if (thumbUrl && !isHttpsUrl(thumbUrl)) {
+      logger.warn(`Skipping thumbnail from a non-https URL (${redactUrl(thumbUrl)})`);
+    } else {
+      const thumb = await maybeDownloadThumb(state.raw, dest, { logger });
+      if (thumb) files.push(thumb);
+    }
   }
   return { state, files };
 }
@@ -402,10 +425,11 @@ export async function completeJobs(
   );
 
   const settled = await Promise.allSettled(
-    ids.map((id) =>
+    ids.map((id, index) =>
       waitForJob(client, kind, id, {
         timeoutMs,
         intervalMs,
+        startDelayMs: staggerOffsetMs(index, intervalMs),
         maxIntervalMs: Math.max(intervalMs, 30_000),
         burnCaptions: opts.burnCaptions,
         resumeHint: `Resume with: ${resumeCommand(kind, id, opts)}`,

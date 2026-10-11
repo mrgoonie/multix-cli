@@ -77,7 +77,8 @@ multix heygen video --avatar <look-id> --audio ./voiceover.mp3
   `--background-*`.
 - Khi yêu cầu phụ đề, file phụ đề luôn được tạo. `--burn-captions` còn in phụ
   đề vào video và tải về bản render có phụ đề (`captioned_video_url`); lệnh sẽ
-  báo lỗi nếu HeyGen không trả về bản này. `--captions` tải file phụ đề về cạnh
+  báo lỗi nếu HeyGen không trả về bản này. `--captions` yêu cầu HeyGen tạo phụ
+  đề (thêm object `caption` vào request tạo video) và tải file phụ đề về cạnh
   video.
 - Các biến thể khác của `POST /v3/videos` (image, cinematic avatar, studio)
   dùng qua `heygen run video --input <json>`.
@@ -106,7 +107,7 @@ multix heygen languages
 multix heygen translate ./talk.mp4 --languages "Spanish, French, Chinese (Cantonese, Traditional)" \
   [--mode speed|precision] [--input-language <code>] [--audio-only] [--audio <ref>] \
   [--speakers <n>] [--keep-format] [--no-dynamic-duration] [--disable-music] [--enhance-speech] \
-  [--start <s>] [--end <s>] [--brand-glossary <id>] [--captions] [--output <dir>]
+  [--start <s>] [--end <s>] [--brand-glossary <id>] [--captions] [--output <dir|name.mp4>]
 
 multix heygen lipsync --video <ref> --audio <ref> [--mode speed|precision] [--start <s>] [--end <s>]
 ```
@@ -115,9 +116,12 @@ multix heygen lipsync --video <ref> --audio <ref> [--mode speed|precision] [--st
   ngoặc đơn được giữ nguyên, nên `Chinese (Cantonese, Traditional)` vẫn là một
   ngôn ngữ.
 - Mỗi ngôn ngữ tạo một job dịch riêng. CLI chờ tất cả các job, tải về mọi kết
-  quả thành công (`--output` được hiểu là thư mục khi có nhiều kết quả), và
-  thoát với mã khác 0 nếu có ngôn ngữ nào hoặc lượt tải nào thất bại. Một lượt
-  tải lỗi không chặn việc tải các ngôn ngữ còn lại.
+  quả thành công, và thoát với mã khác 0 nếu có ngôn ngữ nào hoặc lượt tải nào
+  thất bại. Một lượt tải lỗi không chặn việc tải các ngôn ngữ còn lại.
+- Khi dịch sang nhiều ngôn ngữ, `--output` có đuôi media (`.mp4`, `.webm`,
+  `.mov`, `.mp3`, `.wav`, `.m4a`, `.aac`, `.srt`, `.vtt`) được hiểu là mẫu tên
+  tệp: `--output dub.mp4` lưu thành `dub-Spanish.mp4`, `dub-French.mp4`, v.v.
+  Mọi `--output` khác được hiểu là thư mục chứa các tệp với tên mặc định.
 
 ## Chuyển văn bản thành giọng nói
 
@@ -198,6 +202,9 @@ multix heygen status <id> --type agent|video|translation|lipsync|model-video [--
   `multix heygen status ... --wait --download` để tiếp tục.
 - URL kết quả có chữ ký và sẽ hết hạn. Nếu tải về lỗi 403/404/410, hãy chạy lại
   `status ... --download` để lấy URL mới.
+- Kết quả, file phụ đề và thumbnail chỉ được tải từ URL `https://`. URL kết
+  quả hoặc phụ đề không phải HTTPS sẽ làm lượt giao kết quả của job đó thất
+  bại; thumbnail không phải HTTPS được bỏ qua kèm cảnh báo.
 
 ## Webhook
 
@@ -251,6 +258,6 @@ bao giờ báo thành công cho job thất bại hoặc bị hủy.
 | Biến | Bắt buộc | Mô tả |
 | --- | --- | --- |
 | `HEYGEN_API_KEY` | Cho HeyGen | API key, gửi qua header `X-Api-Key` |
-| `HEYGEN_BASE_URL` | Không | Ghi đè API base (mặc định `https://api.heygen.com`), dùng cho proxy và test |
+| `HEYGEN_BASE_URL` | Không | Ghi đè API base (mặc định `https://api.heygen.com`), dùng cho proxy và test. Phải là `https://`; `http://` chỉ được chấp nhận cho `localhost`, `127.0.0.1` hoặc `[::1]` |
 
 Provider này không hỗ trợ tạo digital twin hay clone giọng nói.

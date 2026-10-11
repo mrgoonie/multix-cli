@@ -71,7 +71,7 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `FAL_IMAGE_MODEL` | No | Default fal image model (default `fal-ai/flux/schnell`) |
 | `FAL_VIDEO_MODEL` | No | Default fal text-to-video model (default `fal-ai/kling-video/v1.6/standard/text-to-video`) |
 | `HEYGEN_API_KEY` | For HeyGen | [HeyGen API settings](https://app.heygen.com/developers/api). API usage is billed separately from HeyGen web plans |
-| `HEYGEN_BASE_URL` | No | Override the HeyGen API base (default `https://api.heygen.com`; proxies/tests) |
+| `HEYGEN_BASE_URL` | No | Override the HeyGen API base (default `https://api.heygen.com`; proxies/tests). Must be `https://`, except `http://` on `localhost`/`127.0.0.1`/`[::1]` |
 | `FAL_VIDEO_IMAGE_MODEL` | No | Default fal image-to-video model, used when `--image-url` is passed without `-m` (default `fal-ai/kling-video/v1.6/standard/image-to-video`) |
 | `ATLASCLOUD_API_KEY` | For Atlas Cloud | [Atlas Cloud](https://www.atlascloud.ai/console/api-keys) |
 | `ATLASCLOUD_BASE_URL` | No | Override Atlas Cloud media API base (default `https://api.atlascloud.ai/api/v1`) |
@@ -581,7 +581,7 @@ multix heygen video --avatar <look-id> --audio ./voiceover.mp3
 
 # Translation (one job per language; all are downloaded), lipsync, TTS
 multix heygen languages
-multix heygen translate ./talk.mp4 --languages "Spanish, Chinese (Cantonese, Traditional)" [--mode speed|precision] [--output <dir>]
+multix heygen translate ./talk.mp4 --languages "Spanish, Chinese (Cantonese, Traditional)" [--mode speed|precision] [--output <dir|dub.mp4>]   # dub.mp4 -> dub-Spanish.mp4, ...
 multix heygen lipsync --video <ref> --audio <ref>
 multix heygen tts "Welcome to the show." --voice <voice-id> [--output hello.mp3]
 
