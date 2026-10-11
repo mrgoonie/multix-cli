@@ -17,6 +17,16 @@ multix gemini transcribe --files interview.mp3 --format markdown
 multix gemini extract --files report.pdf --prompt "Extract tables as JSON" --format json
 ```
 
+Use `-` as a file name to read piped stdin. The type is detected from the
+content (common image, audio, video, PDF and text formats); set it with
+`--stdin-ext` when detection cannot tell. `-` may appear once and can be mixed
+with other files. The temporary copy is private and is deleted after the run.
+
+```bash
+cat screenshot.png | multix gemini analyze --files - --prompt "What is shown?"
+curl -s https://example.com/talk.mp3 | multix gemini transcribe --files - --stdin-ext mp3
+```
+
 ## Images and video
 
 `generate` supports `--model`, `--aspect-ratio`, `--num-images`, `--size`, and

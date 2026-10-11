@@ -17,6 +17,16 @@ multix gemini transcribe --files interview.mp3 --format markdown
 multix gemini extract --files report.pdf --prompt "Extract tables as JSON" --format json
 ```
 
+Dùng `-` làm tên file để đọc dữ liệu pipe qua stdin. Định dạng được nhận diện từ
+nội dung (các định dạng ảnh, audio, video, PDF và text phổ biến); dùng
+`--stdin-ext` khi không nhận diện được. `-` chỉ được xuất hiện một lần và có thể
+dùng cùng file khác. Bản sao tạm là riêng tư và bị xóa sau khi chạy xong.
+
+```bash
+cat screenshot.png | multix gemini analyze --files - --prompt "What is shown?"
+curl -s https://example.com/talk.mp3 | multix gemini transcribe --files - --stdin-ext mp3
+```
+
 ## Ảnh và video
 
 `generate` hỗ trợ `--model`, `--aspect-ratio`, `--num-images`, `--size` và

@@ -118,3 +118,44 @@ describe("multix --help (smoke)", () => {
     expect(result.stdout.trim()).toMatch(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/);
   });
 });
+
+describe("gemini --files - (smoke)", () => {
+  it("reads piped stdin, labels it, and removes the temp file", async () => {
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "multix-smoke-stdin-"));
+    try {
+      const result = await execa("node", [CLI, "gemini", "analyze", "--files", "-"], {
+        input: "piped notes for analysis",
+        cwd: tmp,
+        reject: false,
+        env: {
+          MULTIX_DISABLE_HOME_ENV: "1",
+          GEMINI_API_KEY: "",
+          TMP: tmp,
+          TEMP: tmp,
+          TMPDIR: tmp,
+        },
+      });
+      const out = result.stdout + result.stderr;
+      // No key is configured, so the request fails after stdin was materialized.
+      expect(result.exitCode).toBe(1);
+      expect(out).toContain("Failed: stdin");
+      expect(out).toContain("GEMINI_API_KEY is not set");
+      expect(out).not.toContain("piped notes");
+      expect(fs.readdirSync(tmp).filter((d) => d.startsWith("multix-stdin-"))).toEqual([]);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects an empty pipe", async () => {
+    const result = await execa("node", [CLI, "gemini", "transcribe", "--files", "-"], {
+      input: "",
+      reject: false,
+      env: { MULTIX_DISABLE_HOME_ENV: "1" },
+    });
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stdout + result.stderr).toContain("stdin was empty");
+  });
+});

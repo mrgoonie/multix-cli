@@ -350,6 +350,7 @@ multix byteplus i2v ./photo.jpg --prompt "camera slowly pans left"
 # Transcribe / analyze media
 multix gemini analyze --files ./video.mp4 --prompt "Summarize this video"
 multix gemini transcribe --files ./audio.mp3
+cat ./shot.png | multix gemini analyze --files - --prompt "Describe"   # "-" reads stdin; --stdin-ext <ext> if undetected
 multix elevenlabs transcribe --input ./audio.mp3 --diarize
 
 # Compress / split media

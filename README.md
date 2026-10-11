@@ -139,6 +139,9 @@ multix gemini transcribe --files audio.mp3 [--prompt <str>] [--model <id>] [--fo
 # Extract structured information
 multix gemini extract --files report.pdf --prompt "Extract tables as JSON" [--format json] [-v]
 
+# Read piped stdin with "-" (type auto-detected; override with --stdin-ext)
+cat photo.png | multix gemini analyze --files - --prompt "Describe this"
+
 # Generate images
 multix gemini generate --prompt "A mountain lake" [--model <id>] [--aspect-ratio 16:9] [--num-images 1] [--size 1K|2K|4K] [--output <path>] [-v]
 

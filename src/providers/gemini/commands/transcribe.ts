@@ -2,10 +2,9 @@
  * multix gemini transcribe — transcribe audio/video files with Gemini.
  */
 
-import fs from "node:fs";
 import type { Command } from "commander";
-import { ValidationError } from "../../../core/errors.js";
 import { createLogger } from "../../../core/logger.js";
+import { type FileInput, resolveFileInputs } from "../../../core/stdin-file.js";
 import {
   type ContentPart,
   extractText,
@@ -23,7 +22,14 @@ export function registerTranscribeCommand(parent: Command): void {
   parent
     .command("transcribe")
     .description("Transcribe audio or video files with Gemini")
-    .requiredOption("--files <paths...>", "Audio/video file paths to transcribe")
+    .requiredOption(
+      "--files <paths...>",
+      "Audio/video file paths to transcribe (use - to read piped stdin)",
+    )
+    .option(
+      "--stdin-ext <ext>",
+      "Extension for piped stdin when auto-detection is wrong (e.g. .md)",
+    )
     .option("--prompt <text>", "Transcription prompt", "Generate a transcript with timestamps")
     .option("--model <id>", "Gemini model to use")
     .option("--format <fmt>", "Output format: text|json|csv|markdown", "text")
@@ -32,6 +38,7 @@ export function registerTranscribeCommand(parent: Command): void {
     .action(
       async (opts: {
         files: string[];
+        stdinExt?: string;
         prompt: string;
         model?: string;
         format: OutputFormat;
@@ -41,15 +48,15 @@ export function registerTranscribeCommand(parent: Command): void {
         const logger = createLogger({ verbose: opts.verbose ?? false });
         const model = opts.model ?? getDefaultModel("transcribe");
 
-        for (const f of opts.files) {
-          if (!fs.existsSync(f)) throw new ValidationError(`File not found: ${f}`);
-        }
+        const { inputs, cleanup } = await resolveFileInputs(opts.files, {
+          stdinExt: opts.stdinExt,
+        });
 
         const results: AnalysisResult[] = [];
 
-        for (let i = 0; i < opts.files.length; i++) {
-          const filePath = opts.files[i] as string;
-          logger.debug(`[${i + 1}/${opts.files.length}] Transcribing: ${filePath}`);
+        for (let i = 0; i < inputs.length; i++) {
+          const { path: filePath, label } = inputs[i] as FileInput;
+          logger.debug(`[${i + 1}/${inputs.length}] Transcribing: ${label}`);
 
           try {
             // One key per file: an uploaded file only exists for the key that uploaded it.
@@ -81,17 +88,18 @@ export function registerTranscribeCommand(parent: Command): void {
             );
 
             results.push({
-              file: filePath,
+              file: label,
               status: "success",
               response: extractText(resp),
             });
           } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
-            logger.error(`Failed: ${filePath} — ${msg}`);
-            results.push({ file: filePath, status: "error", error: msg });
+            logger.error(`Failed: ${label} — ${msg}`);
+            results.push({ file: label, status: "error", error: msg });
           }
         }
 
+        cleanup();
         formatResults(results, opts.format, opts.output);
 
         const failed = results.filter((r) => r.status === "error").length;
