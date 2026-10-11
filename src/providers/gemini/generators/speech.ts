@@ -23,6 +23,7 @@ import {
   extractInteractionAudio,
   generateContent,
 } from "../client.js";
+import { withGeminiKey } from "../key-pool.js";
 import {
   GEMINI_INTERACTIONS_TTS_MODELS,
   TTS_PCM_BITS_PER_SAMPLE,
@@ -86,12 +87,16 @@ export async function generateGeminiSpeech(opts: GeminiSpeechOpts): Promise<Gemi
 
   let resp: Awaited<ReturnType<typeof generateContent>>;
   try {
-    resp = await generateContent(
-      {
-        model,
-        contents: [{ parts: [{ text }] }],
-        generationConfig,
-      },
+    resp = await withGeminiKey(
+      (apiKey) =>
+        generateContent(
+          {
+            model,
+            contents: [{ parts: [{ text }] }],
+            generationConfig,
+          },
+          { apiKey, logger },
+        ),
       { logger },
     );
   } catch (e) {
@@ -146,7 +151,10 @@ async function generateInteractionsSpeech(opts: GeminiSpeechOpts): Promise<Gemin
 
   let resp: unknown;
   try {
-    resp = await createInteraction(buildInteractionsSpeechBody(opts), { logger });
+    resp = await withGeminiKey(
+      (apiKey) => createInteraction(buildInteractionsSpeechBody(opts), { apiKey, logger }),
+      { logger },
+    );
   } catch (e) {
     return { status: "error", error: e instanceof Error ? e.message : String(e) };
   }

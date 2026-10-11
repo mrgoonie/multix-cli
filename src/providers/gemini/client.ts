@@ -1,22 +1,22 @@
 /**
  * GeminiClient — thin REST wrapper around Gemini generateContent + Files API.
- * Uses httpJson from core (undici fetch). No google-genai SDK dependency.
+ * Uses fetchJson from core (global fetch). No google-genai SDK dependency.
  *
- * Auth: x-goog-api-key header (preferred over ?key= query param). Keys come
- * from the rotation pool in key-pool.ts; pass `apiKey` to pin one key across a
- * multi-step flow (an uploaded file only exists for the key that uploaded it).
+ * Runtime-neutral: no node:* imports and no env, key-pool or disk access, so a
+ * Cloudflare Worker can reuse it. Callers pass `apiKey`; the CLI picks it from
+ * the rotation pool (key-pool.ts) and keeps one key across a multi-step flow
+ * (an uploaded file only exists for the key that uploaded it). Local files
+ * are handled by local-files.ts.
+ *
+ * Auth: x-goog-api-key header (preferred over ?key= query param).
  * Base: https://generativelanguage.googleapis.com
  */
 
-import fs from "node:fs";
-import path from "node:path";
-import { resolveKey } from "../../core/env-loader.js";
-import { ConfigError, HttpError, ProviderError, ValidationError } from "../../core/errors.js";
-import { downloadFile, httpJson } from "../../core/http-client.js";
+import { HttpError, ProviderError, ValidationError } from "../../core/errors.js";
+import { fetchJson } from "../../core/fetch-json.js";
 import { FILES_API_MAX_BYTES } from "../../core/limits.js";
 import type { Logger } from "../../core/logger.js";
-import { withGeminiKey } from "./key-pool.js";
-import { getMimeType, requiresProcessingWait } from "./task-resolver.js";
+import { requiresProcessingWait } from "./media-types.js";
 
 const BASE = "https://generativelanguage.googleapis.com";
 const FILES_BASE = `${BASE}/upload/v1beta/files`;
@@ -58,14 +58,9 @@ export interface ImageGenerationResponse {
 }
 
 export interface GeminiCallOptions {
-  /** Use this key instead of picking one from the rotation pool. */
-  apiKey?: string;
+  /** Gemini API key; the CLI picks it from the rotation pool (`withGeminiKey`). */
+  apiKey: string;
   logger?: Logger;
-}
-
-/** Run with the pinned key, or with key rotation when none was given. */
-function withKey<T>(opts: GeminiCallOptions, fn: (apiKey: string) => Promise<T>): Promise<T> {
-  return opts.apiKey ? fn(opts.apiKey) : withGeminiKey(fn, { logger: opts.logger });
 }
 
 function authHeaders(apiKey: string): Record<string, string> {
@@ -75,27 +70,10 @@ function authHeaders(apiKey: string): Record<string, string> {
 export { FILES_API_MAX_BYTES };
 
 const DEFAULT_TIMEOUT_MS = 300_000;
-export const UPLOAD_MIN_KBPS_ENV = "MULTIX_UPLOAD_MIN_KBPS";
 /** Default slowest sustained upload speed the upload timeout allows for (1 MB/s, about 8 Mbit/s). */
-const DEFAULT_MIN_UPLOAD_BYTES_PER_SEC = 1_000_000;
+export const DEFAULT_MIN_UPLOAD_BYTES_PER_SEC = 1_000_000;
 /** Fixed allowance on top of the transfer time (connection setup, server finalize). */
 const UPLOAD_TIMEOUT_SLACK_MS = 60_000;
-
-/**
- * Slowest upload speed to allow for, in bytes per second: MULTIX_UPLOAD_MIN_KBPS
- * (kilobytes of 1,000 bytes per second), default 1000 (1 MB/s).
- */
-export function minUploadBytesPerSec(): number {
-  const raw = resolveKey(UPLOAD_MIN_KBPS_ENV)?.trim();
-  if (!raw) return DEFAULT_MIN_UPLOAD_BYTES_PER_SEC;
-  const kbps = Number(raw);
-  if (!Number.isFinite(kbps) || kbps < 1) {
-    throw new ConfigError(
-      `${UPLOAD_MIN_KBPS_ENV} must be a number of kilobytes per second, at least 1, got "${raw}"`,
-    );
-  }
-  return kbps * 1000;
-}
 
 /**
  * Timeout for sending the file bytes: never below `timeoutMs`, and long enough
@@ -111,26 +89,44 @@ export function uploadTimeoutMs(
   return Math.max(timeoutMs, UPLOAD_TIMEOUT_SLACK_MS + Math.ceil((size / bytesPerSec) * 1000));
 }
 
+/** Bytes and metadata for a Files API upload. */
+export interface UploadSource {
+  /**
+   * The bytes to send. A file-backed Blob (Node's `fs.openAsBlob`) is streamed
+   * from disk in small chunks; a Worker can pass its own Blob or File. Its
+   * `type` is ignored: `mimeType` is what the Files API stores.
+   */
+  blob: Blob;
+  /** File name stored with the upload and shown in messages. */
+  displayName: string;
+  mimeType: string;
+  /** Name used in processing errors (e.g. the local path); defaults to `displayName`. */
+  label?: string;
+}
+
 /**
- * Upload a local file to the Gemini Files API with the resumable protocol
+ * Upload a Blob to the Gemini Files API with the resumable protocol
  * (start a session, then send the bytes in one `upload, finalize` request).
- * The file is streamed from disk (never read whole into memory); files above
- * the 2 GB Files API limit are rejected before any request is made.
+ * The Blob is streamed (never copied whole into memory); Blobs above the
+ * 2 GB Files API limit are rejected before any request is made.
  * Polls until ACTIVE for audio/video files.
  */
 export async function uploadFile(
-  filePath: string,
-  opts: GeminiCallOptions & { timeoutMs?: number } = {},
+  source: UploadSource,
+  opts: GeminiCallOptions & {
+    timeoutMs?: number;
+    /** Slowest upload speed to allow for, in bytes per second (default 1 MB/s). */
+    minUploadBytesPerSec?: number;
+  },
 ): Promise<FileRef> {
-  const size = fs.statSync(filePath).size;
+  const size = source.blob.size;
   if (size > FILES_API_MAX_BYTES) {
     throw new ValidationError(
-      `File too large for the Gemini Files API: ${path.basename(filePath)} is ${formatMb(size)} MB (limit 2 GB = ${FILES_API_MAX_BYTES} bytes)`,
+      `File too large for the Gemini Files API: ${source.displayName} is ${formatMb(size)} MB (limit 2 GB = ${FILES_API_MAX_BYTES} bytes)`,
     );
   }
-  // Read before any request so a bad value fails fast and is never retried.
-  const bytesPerSec = minUploadBytesPerSec();
-  return withKey(opts, (apiKey) => uploadFileWithKey(filePath, apiKey, { ...opts, bytesPerSec }));
+  const { apiKey, minUploadBytesPerSec = DEFAULT_MIN_UPLOAD_BYTES_PER_SEC } = opts;
+  return uploadFileWithKey(source, apiKey, { ...opts, bytesPerSec: minUploadBytesPerSec });
 }
 
 function formatMb(bytes: number): string {
@@ -216,17 +212,17 @@ async function readFinalizedFile(resp: Response): Promise<FileRef> {
 }
 
 async function uploadFileWithKey(
-  filePath: string,
+  source: UploadSource,
   apiKey: string,
   opts: { timeoutMs?: number; logger?: Logger; bytesPerSec: number },
 ): Promise<FileRef> {
   const { timeoutMs = DEFAULT_TIMEOUT_MS, logger, bytesPerSec } = opts;
 
-  const mimeType = getMimeType(filePath);
-  const displayName = path.basename(filePath);
-  // File-backed Blob: fetch reads it from disk in small chunks while sending,
-  // and derives Content-Length from its size.
-  const file = await fs.openAsBlob(filePath);
+  const { mimeType, displayName, label = source.displayName } = source;
+  // fetch streams the Blob while sending and derives Content-Length from its size.
+  // A typed Blob would also add a Content-Type header, so drop the type to send
+  // the same request for every caller (slice keeps a file-backed Blob lazy).
+  const file = source.blob.type ? source.blob.slice(0, source.blob.size, "") : source.blob;
 
   logger?.debug(`Uploading ${displayName} (${formatMb(file.size)} MB)`);
 
@@ -276,16 +272,16 @@ async function uploadFileWithKey(
     const deadline = Date.now() + timeoutMs;
     while (fileRef.state === "PROCESSING" && Date.now() < deadline) {
       await sleep(2000);
-      fileRef = await httpJson<{ file: FileRef }>({
+      fileRef = await fetchJson<{ file: FileRef }>({
         url: `${BASE}/v1beta/${fileRef.name}`,
         headers: authHeaders(apiKey),
       }).then((r) => r.file);
       logger?.debug(`Processing... state=${fileRef.state}`);
     }
     if (fileRef.state === "FAILED")
-      throw new ProviderError(`File processing failed: ${filePath}`, "gemini");
+      throw new ProviderError(`File processing failed: ${label}`, "gemini");
     if (fileRef.state === "PROCESSING")
-      throw new ProviderError(`Processing timeout: ${filePath}`, "gemini");
+      throw new ProviderError(`Processing timeout: ${label}`, "gemini");
   }
 
   logger?.debug(`Uploaded: ${fileRef.name} (${fileRef.uri})`);
@@ -297,19 +293,17 @@ async function uploadFileWithKey(
  */
 export async function generateContent(
   req: GenerateContentRequest,
-  opts: GeminiCallOptions = {},
+  opts: GeminiCallOptions,
 ): Promise<GenerateContentResponse> {
-  return withKey(opts, (apiKey) =>
-    httpJson<GenerateContentResponse>({
-      url: `${GENERATE_BASE}/${req.model}:generateContent`,
-      method: "POST",
-      headers: authHeaders(apiKey),
-      body: {
-        contents: req.contents,
-        ...(req.generationConfig ? { generationConfig: req.generationConfig } : {}),
-      },
-    }),
-  );
+  return fetchJson<GenerateContentResponse>({
+    url: `${GENERATE_BASE}/${req.model}:generateContent`,
+    method: "POST",
+    headers: authHeaders(opts.apiKey),
+    body: {
+      contents: req.contents,
+      ...(req.generationConfig ? { generationConfig: req.generationConfig } : {}),
+    },
+  });
 }
 
 /**
@@ -318,16 +312,14 @@ export async function generateContent(
  */
 export async function createInteraction(
   body: Record<string, unknown>,
-  opts: GeminiCallOptions = {},
+  opts: GeminiCallOptions,
 ): Promise<unknown> {
-  return withKey(opts, (apiKey) =>
-    httpJson<unknown>({
-      url: `${BASE}/v1beta/interactions`,
-      method: "POST",
-      headers: authHeaders(apiKey),
-      body,
-    }),
-  );
+  return fetchJson<unknown>({
+    url: `${BASE}/v1beta/interactions`,
+    method: "POST",
+    headers: authHeaders(opts.apiKey),
+    body,
+  });
 }
 
 /**
@@ -400,35 +392,16 @@ export function extractImages(
 /**
  * List available Gemini models — used for connectivity check.
  */
-export async function listModels(timeoutMs = 10_000): Promise<string[]> {
+export async function listModels(opts: { apiKey: string; timeoutMs?: number }): Promise<string[]> {
+  const { apiKey, timeoutMs = 10_000 } = opts;
   // biome-ignore lint/suspicious/noExplicitAny: dynamic API
-  const resp = await withGeminiKey<any>((apiKey) =>
-    httpJson({ url: `${BASE}/v1beta/models`, headers: authHeaders(apiKey), timeoutMs }),
-  );
+  const resp = await fetchJson<any>({
+    url: `${BASE}/v1beta/models`,
+    headers: authHeaders(apiKey),
+    timeoutMs,
+  });
   // biome-ignore lint/suspicious/noExplicitAny: dynamic API
   return ((resp.models ?? []) as any[]).map((m: any) => m.name as string);
-}
-
-/**
- * Build a ContentPart for an inline file (< 20 MB).
- */
-export function inlinePart(filePath: string): ContentPart {
-  const data = fs.readFileSync(filePath).toString("base64");
-  const mimeType = getMimeType(filePath);
-  return { inlineData: { mimeType, data } };
-}
-
-/** True if file should use Files API (> 20 MB). */
-export function shouldUseFileApi(filePath: string): boolean {
-  const stat = fs.statSync(filePath);
-  return stat.size > 20 * 1024 * 1024;
-}
-
-/**
- * Download a generated video from the Files API to a local path.
- */
-export async function downloadGeneratedFile(fileUri: string, dest: string): Promise<void> {
-  await downloadFile(fileUri, dest);
 }
 
 function sleep(ms: number): Promise<void> {

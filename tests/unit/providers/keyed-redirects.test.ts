@@ -20,8 +20,8 @@ import {
 } from "../../../src/providers/cloudflare/video-client.js";
 import { apiPostBinary } from "../../../src/providers/elevenlabs/client.js";
 import { downloadDub } from "../../../src/providers/elevenlabs/commands/dub.js";
-import { uploadFile } from "../../../src/providers/gemini/client.js";
 import { _resetGeminiKeyCooldowns } from "../../../src/providers/gemini/key-pool.js";
+import { uploadLocalFile } from "../../../src/providers/gemini/local-files.js";
 import { downloadVeoVideo } from "../../../src/providers/gemini/veo.js";
 import { HeygenClient } from "../../../src/providers/heygen/client.js";
 import { postOpenAIForm } from "../../../src/providers/openai/client.js";
@@ -242,7 +242,7 @@ describe("Gemini Files upload (x-goog-api-key)", () => {
       );
       const file = path.join(dir, "doc.pdf");
       fs.writeFileSync(file, "%PDF-1.4");
-      const err = await uploadFile(file, { apiKey: KEY }).catch((e) => e);
+      const err = await uploadLocalFile(file, { apiKey: KEY }).catch((e) => e);
       expect(err).toBeInstanceOf(ProviderError);
       expect(reached).toEqual([]);
     } finally {

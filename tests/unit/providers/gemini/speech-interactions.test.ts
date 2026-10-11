@@ -1,9 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const createInteraction = vi.fn();
 vi.mock("../../../../src/providers/gemini/client.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../../src/providers/gemini/client.js")>()),
-  createInteraction: (body: Record<string, unknown>) => createInteraction(body),
+  createInteraction: (body: Record<string, unknown>, opts: unknown) =>
+    createInteraction(body, opts),
 }));
 
 const { generateGeminiSpeech } = await import(
@@ -15,7 +16,12 @@ function makeLogger() {
 }
 
 describe("generateGeminiSpeech via the Interactions API", () => {
-  beforeEach(() => createInteraction.mockReset());
+  beforeEach(() => {
+    createInteraction.mockReset();
+    vi.stubEnv("GEMINI_API_KEY", "speech-key-0000");
+  });
+
+  afterEach(() => vi.unstubAllEnvs());
 
   it("reports a non-completed interaction status instead of a generic no-audio error", async () => {
     createInteraction.mockResolvedValue({ status: "failed", error: { message: "quota exceeded" } });
@@ -25,6 +31,11 @@ describe("generateGeminiSpeech via the Interactions API", () => {
       outputFormat: "wav",
     });
     expect(result).toEqual({ status: "error", error: "Interaction failed: quota exceeded" });
+    // The command layer picks the key from the pool and passes it to the client.
+    expect(createInteraction).toHaveBeenCalledWith(
+      expect.objectContaining({ model: "gemini-3.8-flash-lite-tts" }),
+      expect.objectContaining({ apiKey: "speech-key-0000" }),
+    );
   });
 
   it("warns when an inline delivery direction would be read aloud verbatim", async () => {
