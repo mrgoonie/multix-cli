@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.9](https://github.com/mrgoonie/multix-cli/compare/v1.0.8...v1.0.9) (2026-10-11)
+
+
+### Fixed
+
+* **build:** ship the programmatic entry point declared in package.json ([#132](https://github.com/mrgoonie/multix-cli/issues/132)) ([1c41397](https://github.com/mrgoonie/multix-cli/commit/1c41397c0b8fda141311fef0fbc5c278b660a67f))
+
 ## [1.0.8](https://github.com/mrgoonie/multix-cli/compare/v1.0.7...v1.0.8) (2026-10-11)
 
 
