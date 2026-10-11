@@ -1,9 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { ProviderError } from "../../../../src/core/errors.js";
 import {
+  checkOutputUrl,
   classifyOutputs,
   collectOutputs,
+  extensionForContentType,
   hasNsfwFlag,
   isFailureStatus,
   isSuccessStatus,
@@ -12,6 +15,7 @@ import {
   outputExtension,
   outputFileName,
   predictionErrorMessage,
+  thumbnailSource,
 } from "../../../../src/providers/atlascloud/prediction-output.js";
 import { guessUploadMimeType } from "../../../../src/providers/atlascloud/upload-mime.js";
 
@@ -85,15 +89,83 @@ describe("extensions and names", () => {
     expect(outputExtension("https://cdn/x/abc.JPEG?sig=1")).toBe("jpg");
     expect(outputExtension("https://cdn/x/model.glb")).toBe("glb");
     expect(outputExtension("https://cdn/x/noext")).toBeUndefined();
+    // Only known media extensions count; anything else leaves it to the Content-Type.
+    expect(outputExtension("https://cdn/x/render.php")).toBeUndefined();
+    expect(outputExtension("https://cdn/x/file.abcde")).toBeUndefined();
+    expect(outputExtension("https://cdn/x/vector.svg")).toBe("svg");
     expect(outputExtension("data:image/png;base64,AAAA")).toBe("png");
     expect(outputCategory("https://cdn/x/a.mp4")).toBe("video");
     expect(outputCategory("https://cdn/x/a.wav")).toBe("audio");
     expect(outputCategory("https://cdn/x/a.zip")).toBe("3d");
   });
 
-  it("names multi-output files atlas-<idprefix>-NN.<ext>", () => {
-    expect(outputFileName("47e7acf05d7449c1874f", 0, "jpg")).toBe("atlas-47e7acf0-01.jpg");
+  it("names multi-output files atlas-<prediction id>-NN.<ext>", () => {
+    expect(outputFileName("47e7acf05d7449c1874f", 0, "jpg")).toBe(
+      "atlas-47e7acf05d7449c1874f-01.jpg",
+    );
     expect(outputFileName("ab", 11, "mp3")).toBe("atlas-ab-12.mp3");
+  });
+
+  it("appends a hash of the raw id when the id had to be sanitized or shortened", () => {
+    // 32-bit FNV-1a reference vector.
+    expect(outputFileName("a", 0, "png")).toBe("atlas-a-01.png");
+    expect(outputFileName("../x/y", 0, "png")).toBe("atlas-xy-357fa8e2-01.png");
+    expect(outputFileName("x/y", 0, "png")).toBe("atlas-xy-c2cc6993-01.png");
+    expect(outputFileName("xy", 0, "png")).toBe("atlas-xy-01.png");
+    expect(outputFileName("..", 0, "png")).toBe("atlas-a3d4a70d-01.png");
+    // Ids sharing their first 64 characters still get different names.
+    expect(outputFileName("a".repeat(70), 0, "png")).toBe(
+      `atlas-${"a".repeat(64)}-5904740b-01.png`,
+    );
+    expect(outputFileName("a".repeat(71), 0, "png")).toBe(
+      `atlas-${"a".repeat(64)}-8c0342de-01.png`,
+    );
+  });
+
+  it("rejects an empty or overlong prediction id from the API", () => {
+    expect(() => outputFileName("", 0, "png")).toThrow(ProviderError);
+    expect(() => outputFileName("a".repeat(129), 0, "png")).toThrow(/129 characters/);
+    expect(outputFileName("a".repeat(128), 0, "png")).toMatch(/^atlas-a{64}-[0-9a-f]{8}-01\.png$/);
+  });
+
+  it("maps svg, avif, bmp, audio/webm and mkv content types; svg is never an image to convert", () => {
+    expect(extensionForContentType("image/svg+xml")).toBe("svg");
+    expect(extensionForContentType("image/avif")).toBe("avif");
+    expect(extensionForContentType("image/bmp")).toBe("bmp");
+    expect(extensionForContentType("audio/webm; codecs=opus")).toBe("weba");
+    expect(outputCategory("data:audio/webm;base64,AAAA")).toBe("audio");
+    expect(extensionForContentType("video/x-matroska")).toBe("mkv");
+    expect(outputExtension("data:image/svg+xml;base64,PHN2Zy8+")).toBe("svg");
+    expect(outputCategory("data:image/svg+xml;base64,PHN2Zy8+")).toBe("unknown");
+    expect(outputCategory("data:image/avif;base64,AAAA")).toBe("image");
+  });
+
+  it("checkOutputUrl allows public https only and never echoes the signed path", () => {
+    expect(() => checkOutputUrl("https://cdn.atlas.test/a.png?sig=1")).not.toThrow();
+    for (const bad of [
+      "http://cdn.atlas.test/a.png",
+      "https://192.168.1.10/a.png",
+      "https://[::ffff:127.0.0.1]/a.png",
+      "ftp://cdn.atlas.test/a.png",
+    ]) {
+      expect(() => checkOutputUrl(bad)).toThrow(ProviderError);
+    }
+    expect(() => checkOutputUrl("http://cdn.atlas.test/secret-path?sig=TOKEN")).toThrow(
+      /^(?!.*(secret-path|TOKEN)).*cdn\.atlas\.test/,
+    );
+  });
+
+  it("thumbnailSource returns only the outputs, never the echoed input", () => {
+    const outputs = [{ url: "https://m/v.mp4", thumbnail_url: "https://m/t.jpg" }];
+    expect(
+      thumbnailSource({
+        id: "p",
+        status: "completed",
+        outputs,
+        input: { image_url: "https://u/ref.png" },
+      } as never),
+    ).toBe(outputs);
+    expect(thumbnailSource({ id: "p", status: "completed" } as never)).toBeNull();
   });
 
   it("guesses upload content types by extension", () => {
@@ -124,6 +196,7 @@ describe("runtime neutrality", () => {
     "async-poll.js",
     "redact.js",
     "redirect-fetch.js",
+    "url-safety.js",
   ]);
 
   it.each(NEUTRAL)("%s has no node:* or Node-only imports", (file) => {

@@ -9,6 +9,9 @@
 
 import type { AtlasMediaKind } from "./types.js";
 
+/** Provider name used in errors and URL-policy messages. */
+export const ATLAS_PROVIDER = "atlascloud";
+
 /** Media API base (image/video/audio/upload/predictions). The LLM base is /v1 and is not used. */
 export const DEFAULT_ATLAS_BASE_URL = "https://api.atlascloud.ai/api/v1";
 
