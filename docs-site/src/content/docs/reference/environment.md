@@ -17,17 +17,24 @@ may only set variables that `multix` itself reads:
   `GEMINI_API_KEY_3`, …;
 - the provider settings on this page, such as `*_BASE_URL`,
   `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_AI_GATEWAY_ID` and the model overrides;
-- any `MULTIX_*` setting, plus `NO_COLOR`.
+- the documented `MULTIX_*` settings `MULTIX_OUTPUT_DIR` (so a project can
+  choose where generated files are written), `MULTIX_IMAGE_FORMAT`,
+  `MULTIX_MAX_DOWNLOAD_MB`, `MULTIX_UPLOAD_MIN_KBPS` and `MULTIX_DISABLE_HOME_ENV`
+  (which has no effect there), plus `NO_COLOR`.
+
+The opt-ins `MULTIX_ALLOW_PROJECT_BASE_URL` and `MULTIX_LEGACY_CLAUDE_ENV` are
+refused: a repository must not widen what it can do with your keys or pull in
+the `.claude` credentials from your home folder.
 
 [`.env.example`](https://github.com/mrgoonie/multix-cli/blob/main/.env.example)
-lists them. Any other name, for example `NODE_OPTIONS`, `npm_config_registry`,
+lists them, along with the two opt-ins. Any other name, for example `NODE_OPTIONS`, `npm_config_registry`,
 `LD_PRELOAD`, `HTTPS_PROXY` or `NODE_TLS_REJECT_UNAUTHORIZED`, is not loaded,
 so it never reaches `multix` or the tools it starts (`npm` during
 `multix update`, ffmpeg, ImageMagick, cwebp). `multix` prints one warning on
 stderr that lists the ignored names, never their values:
 
 ```text
-⚠ Ignoring 2 variable(s) in project env file /repo/.env that multix does not read: NODE_OPTIONS, HTTPS_PROXY. A project .env may only set provider keys and multix settings; set anything else in your shell.
+⚠ Ignoring 2 variable(s) in project env file /repo/.env: NODE_OPTIONS, HTTPS_PROXY. A project .env may only set provider keys and documented multix settings; set anything else in your shell.
 ```
 
 Set such variables in your shell instead. The shell and `~/.multix/.env` are
@@ -93,8 +100,8 @@ without `GEMINI_API_KEY`.
 ## Legacy `.claude` env files
 
 Older AgentKit installs kept keys in `.claude` folders. Set
-`MULTIX_LEGACY_CLAUDE_ENV=1` (in the shell, the project `.env` or
-`~/.multix/.env`) to also read them. This is off by default. The files load
+`MULTIX_LEGACY_CLAUDE_ENV=1` (in the shell or `~/.multix/.env`; a project `.env`
+cannot set it) to also read them. This is off by default. The files load
 after `~/.multix/.env`, never override earlier values, and the first file that
 sets a variable wins:
 

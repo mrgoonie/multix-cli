@@ -54,7 +54,7 @@ CLOUDFLARE_API_TOKEN  # Cloudflare Workers AI / AI Gateway token
 # Video additionally requires CLOUDFLARE_AI_GATEWAY_ID and REPLICATE_API_TOKEN.
 ```
 
-Priority: `process.env` > `cwd/.env` > `~/.multix/.env`. Set `MULTIX_LEGACY_CLAUDE_ENV=1` to also read legacy AgentKit `.claude` env files (credential names only, lowest priority); `multix check -v` lists loaded env files. A project `.env` may only set names multix reads (provider keys and settings from `.env.example`, `MULTIX_*`, `NO_COLOR`); anything else there (`NODE_OPTIONS`, `npm_config_*`, `LD_PRELOAD`, proxy/TLS variables) is not loaded, with one stderr warning naming the ignored variables. Put such variables in the shell.
+Priority: `process.env` > `cwd/.env` > `~/.multix/.env`. Set `MULTIX_LEGACY_CLAUDE_ENV=1` to also read legacy AgentKit `.claude` env files (credential names only, lowest priority); `multix check -v` lists loaded env files. A project `.env` may only set names multix reads (provider keys and settings from `.env.example`, the documented `MULTIX_*` settings such as `MULTIX_OUTPUT_DIR`, `NO_COLOR`; never `MULTIX_ALLOW_PROJECT_BASE_URL` or `MULTIX_LEGACY_CLAUDE_ENV`); anything else there (`NODE_OPTIONS`, `npm_config_*`, `LD_PRELOAD`, proxy/TLS variables) is not loaded, with one stderr warning naming the ignored variables. Put such variables in the shell.
 
 ## Gemini text-output tasks
 
@@ -413,7 +413,7 @@ Requires `cwebp` (libwebp: `brew install webp`, `apt install webp`) on `PATH`.
 | `REPLICATE_IMAGE_MODEL` / `REPLICATE_VIDEO_MODEL` | Replicate default models (default `black-forest-labs/flux-schnell`, `prunaai/p-video`) |
 | `CLOUDFLARE_AI_IMAGE_MODEL` / `CLOUDFLARE_AI_TTS_MODEL` | Fixed-model settings: only `@cf/black-forest-labs/flux-1-schnell` and `@cf/myshell-ai/melotts` respectively are accepted |
 | `MULTIX_DISABLE_HOME_ENV` | `1` to skip every home-directory env file (`~/.multix/.env`, `~/.claude/...`) |
-| `MULTIX_LEGACY_CLAUDE_ENV` | `1` to also read legacy `.claude` env files (credential names only) |
+| `MULTIX_LEGACY_CLAUDE_ENV` | `1` to also read legacy `.claude` env files (credential names only); shell or `~/.multix/.env` only, ignored in a project `.env` |
 | `MULTIX_ALLOW_PROJECT_BASE_URL` | Set `1` for one command (`MULTIX_ALLOW_PROJECT_BASE_URL=1 multix ...`) to honour `*_BASE_URL`, `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_AI_GATEWAY_ID` from the project `.env` even when the key comes from elsewhere. Without it, a project value is used only when every key sent with it is in the same project file (a project `.env` that ships its own key and base URL then receives that project's prompts and uploaded files, and its key replaces yours, so review a cloned repo's `.env` first); otherwise the `~/.multix/.env` value is used with a warning, or the command stops with a config error. `multix check` shows the effective state. Ignored in a project `.env`; avoid `~/.multix/.env` (it trusts every directory). Non-default base URLs must be `https://` (http only for localhost/127.0.0.1/[::1]) |
 
 ## Quick examples for agents

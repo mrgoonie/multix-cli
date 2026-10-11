@@ -149,6 +149,15 @@ function byNameKey(values: Record<string, string> | undefined): Record<string, s
   return out;
 }
 
+/** Names shown in the refused-variables warning; the rest are counted. */
+const MAX_LISTED_NAMES = 10;
+
+function listNames(names: readonly string[]): string {
+  const shown = names.slice(0, MAX_LISTED_NAMES).join(", ");
+  const rest = names.length - MAX_LISTED_NAMES;
+  return rest > 0 ? `${shown} and ${rest} more` : shown;
+}
+
 export interface LoadEnvOptions {
   /**
    * Names a project env file (cwd/.env, or a legacy `.claude` file under cwd)
@@ -182,7 +191,7 @@ export function loadEnv({ isProjectEnvName }: LoadEnvOptions): void {
   if (refused.length > 0) {
     warnOnce(
       "project-env-refused",
-      `Ignoring ${refused.length} variable(s) in project env file ${projectFile} that multix does not read: ${refused.join(", ")}. A project .env may only set provider keys and multix settings; set anything else in your shell.`,
+      `Ignoring ${refused.length} variable(s) in project env file ${projectFile}: ${listNames(refused)}. A project .env may only set provider keys and documented multix settings; set anything else in your shell.`,
     );
   }
 
@@ -190,7 +199,8 @@ export function loadEnv({ isProjectEnvName }: LoadEnvOptions): void {
   if (home) userFileValues = byNameKey(loadFile(path.join(home, ".multix", ".env"), "user"));
 
   // Opt-in compatibility for old AgentKit installs. Checked after the files
-  // above so the flag itself may live in cwd/.env or ~/.multix/.env.
+  // above so the flag itself may live in ~/.multix/.env (the project allowlist
+  // keeps a repository from turning it on).
   if (legacyClaudeEnvEnabled()) {
     const projectLegacy = new Set(legacyFilesUnder(cwd));
     const projectLegacyName = (name: string) => isLegacyAllowedName(name) && isProjectEnvName(name);

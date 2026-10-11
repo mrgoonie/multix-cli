@@ -1,16 +1,19 @@
 /**
  * Variable names a project-level `.env` may set: the names multix itself
- * reads. Anything else in a project `.env` (NODE_OPTIONS, npm_config_*,
- * LD_PRELOAD, proxy and TLS settings, …) is ignored by loadEnv, so a cloned
- * repository cannot change how multix or the tools it spawns behave.
+ * reads, minus the opt-ins a repository must not switch on for the user.
+ * Anything else in a project `.env` (NODE_OPTIONS, npm_config_*, LD_PRELOAD,
+ * proxy and TLS settings, …) is ignored by loadEnv, so a cloned repository
+ * cannot change how multix or the tools it spawns behave.
  *
  * Built from the constants the providers export where they exist; settings
- * that are read inline are listed in INLINE_SETTINGS. A unit test scans `src/`
- * and `.env.example` so a newly read variable cannot be left out.
+ * that are read inline are listed by hand below. Unit tests check the list
+ * against `.env.example` and against the names the source reads in the
+ * common forms (process.env reads, resolveKey calls, *_ENV constants, any
+ * `MULTIX_*` literal); a name read some other way must be added here by hand.
  */
 
-import { getCheckProviders } from "./commands/check.js";
-import { envNameKey } from "./core/env-loader.js";
+import { ALLOW_PROJECT_BASE_URL_ENV, envNameKey } from "./core/env-loader.js";
+import { MAX_DOWNLOAD_ENV } from "./core/http-client.js";
 import { ATLAS_MODEL_ENV, MAX_UPLOAD_ENV } from "./providers/atlascloud/commands/env.js";
 import { ATLAS_ROUTING } from "./providers/atlascloud/models.js";
 import { BYTEPLUS_ROUTING } from "./providers/byteplus/models.js";
@@ -20,9 +23,32 @@ import {
   CLOUDFLARE_VIDEO_CREDENTIALS,
 } from "./providers/cloudflare/models.js";
 import { FAL_ROUTING } from "./providers/fal/models.js";
+import { UPLOAD_MIN_KBPS_ENV } from "./providers/gemini/local-files.js";
 import { HEYGEN_ROUTING } from "./providers/heygen/models.js";
 import { LEONARDO_ROUTING } from "./providers/leonardo/models.js";
+import { PROVIDER_KEYS } from "./providers/provider-keys.js";
 import { REPLICATE_ROUTING } from "./providers/replicate/models.js";
+
+/**
+ * Names multix reads that a project `.env` may NOT set: opt-ins that widen
+ * what a repository can do with the user's keys. MULTIX_LEGACY_CLAUDE_ENV
+ * would load credentials from the home folder's `.claude` files into a run
+ * the repository controls. Set these in the shell or ~/.multix/.env.
+ */
+export const PROJECT_ENV_EXCLUDED: ReadonlySet<string> = new Set([
+  ALLOW_PROJECT_BASE_URL_ENV,
+  "MULTIX_LEGACY_CLAUDE_ENV",
+]);
+
+/** The documented MULTIX_* settings a project may choose. */
+const OWN_SETTINGS = [
+  "MULTIX_OUTPUT_DIR",
+  "MULTIX_IMAGE_FORMAT",
+  MAX_DOWNLOAD_ENV,
+  UPLOAD_MIN_KBPS_ENV,
+  // Read before the project file loads, so setting it there has no effect.
+  "MULTIX_DISABLE_HOME_ENV",
+] as const;
 
 /** Model defaults and other provider settings that are read by name in place. */
 const INLINE_SETTINGS = [
@@ -58,6 +84,7 @@ const INLINE_SETTINGS = [
   "REPLICATE_VIDEO_MODEL",
   "CLOUDFLARE_AI_IMAGE_MODEL",
   "CLOUDFLARE_AI_TTS_MODEL",
+  // Read in providers/cloudflare/client.ts (collectPayloadHeader).
   "CLOUDFLARE_AI_GATEWAY_COLLECT_LOG_PAYLOAD",
   "NO_COLOR",
 ] as const;
@@ -71,22 +98,21 @@ const ROUTING = [
   REPLICATE_ROUTING,
 ];
 
-/** Every fixed name multix reads (MULTIX_* and numbered Gemini keys are matched by pattern). */
+/** Every fixed name a project `.env` may set (numbered Gemini keys are matched by pattern). */
 export const PROJECT_ENV_NAMES: ReadonlySet<string> = new Set([
-  ...getCheckProviders().flatMap((p) =>
-    p.envFallback ? [p.envPrimary, p.envFallback] : [p.envPrimary],
-  ),
+  ...PROVIDER_KEYS.flatMap((p) => (p.envFallback ? [p.envPrimary, p.envFallback] : [p.envPrimary])),
   ...ROUTING.flatMap((r) => [r.name, ...r.keyEnvs]),
   CLOUDFLARE_ACCOUNT_ID_ENV,
   CLOUDFLARE_GATEWAY_ID_ENV,
   ...CLOUDFLARE_VIDEO_CREDENTIALS,
   ...Object.values(ATLAS_MODEL_ENV),
   MAX_UPLOAD_ENV,
+  ...OWN_SETTINGS,
   ...INLINE_SETTINGS,
 ]);
 
-/** `MULTIX_*` settings and the Gemini rotation keys `GEMINI_API_KEY_2`, `_3`, … */
-const PROJECT_ENV_PATTERN = /^(MULTIX_[A-Z0-9_]+|GEMINI_API_KEY_\d+)$/;
+/** The Gemini rotation keys `GEMINI_API_KEY_2`, `_3`, … */
+const GEMINI_NUMBERED_KEY = /^GEMINI_API_KEY_\d+$/;
 
 /**
  * True when a project `.env` may set `name`. On Windows env names are
@@ -97,5 +123,5 @@ export function isProjectEnvName(
   platform: NodeJS.Platform = process.platform,
 ): boolean {
   const key = envNameKey(name, platform);
-  return PROJECT_ENV_NAMES.has(key) || PROJECT_ENV_PATTERN.test(key);
+  return PROJECT_ENV_NAMES.has(key) || GEMINI_NUMBERED_KEY.test(key);
 }

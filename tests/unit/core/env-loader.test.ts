@@ -37,7 +37,10 @@ import { LEONARDO_ROUTING } from "../../../src/providers/leonardo/models.js";
 import { REPLICATE_ROUTING } from "../../../src/providers/replicate/models.js";
 import { requireReplicateToken } from "../../../src/providers/replicate/node-client.js";
 
-/** Existing tests use made-up names; the project allowlist has its own tests below. */
+/**
+ * These tests use made-up variable names, so they accept every name. The real
+ * project allowlist is tested in tests/unit/project-env-names.test.ts.
+ */
 const ALLOW_ALL = { isProjectEnvName: () => true };
 
 describe("env-loader", () => {

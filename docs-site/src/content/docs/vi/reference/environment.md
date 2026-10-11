@@ -16,17 +16,24 @@ chỉ được đặt những biến mà chính `multix` đọc:
   `GEMINI_API_KEY_3`, …;
 - các thiết lập provider trong trang này, như `*_BASE_URL`,
   `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_AI_GATEWAY_ID` và các biến ghi đè model;
-- mọi thiết lập `MULTIX_*`, cùng `NO_COLOR`.
+- các thiết lập `MULTIX_*` có trong tài liệu: `MULTIX_OUTPUT_DIR` (nên project
+  có thể chọn nơi ghi file được tạo), `MULTIX_IMAGE_FORMAT`,
+  `MULTIX_MAX_DOWNLOAD_MB`, `MULTIX_UPLOAD_MIN_KBPS` và `MULTIX_DISABLE_HOME_ENV`
+  (không có tác dụng ở đó), cùng `NO_COLOR`.
+
+Hai biến opt-in `MULTIX_ALLOW_PROJECT_BASE_URL` và `MULTIX_LEGACY_CLAUDE_ENV` bị
+từ chối: repository không được nới rộng những gì nó có thể làm với key của bạn
+hay kéo theo credential trong các file `.claude` ở thư mục home.
 
 [`.env.example`](https://github.com/mrgoonie/multix-cli/blob/main/.env.example)
-liệt kê các biến này. Mọi tên khác, ví dụ `NODE_OPTIONS`, `npm_config_registry`,
+liệt kê các biến này, cùng hai biến opt-in. Mọi tên khác, ví dụ `NODE_OPTIONS`, `npm_config_registry`,
 `LD_PRELOAD`, `HTTPS_PROXY` hay `NODE_TLS_REJECT_UNAUTHORIZED`, không được nạp,
 nên không bao giờ tới được `multix` hay các công cụ nó khởi chạy (`npm` khi chạy
 `multix update`, ffmpeg, ImageMagick, cwebp). `multix` in một cảnh báo duy nhất
 ra stderr, liệt kê tên các biến bị bỏ qua, không bao giờ in giá trị:
 
 ```text
-⚠ Ignoring 2 variable(s) in project env file /repo/.env that multix does not read: NODE_OPTIONS, HTTPS_PROXY. A project .env may only set provider keys and multix settings; set anything else in your shell.
+⚠ Ignoring 2 variable(s) in project env file /repo/.env: NODE_OPTIONS, HTTPS_PROXY. A project .env may only set provider keys and documented multix settings; set anything else in your shell.
 ```
 
 Hãy đặt những biến đó trong shell. Shell và `~/.multix/.env` không bị lọc. Trên
@@ -91,8 +98,8 @@ bắt buộc có `GEMINI_API_KEY`.
 ## File env `.claude` cũ
 
 Bản cài AgentKit cũ lưu key trong các thư mục `.claude`. Đặt
-`MULTIX_LEGACY_CLAUDE_ENV=1` (trong shell, `.env` của project hoặc
-`~/.multix/.env`) để đọc thêm các file này. Mặc định tính năng này tắt. Các file
+`MULTIX_LEGACY_CLAUDE_ENV=1` (trong shell hoặc `~/.multix/.env`; `.env` của project
+không thể đặt biến này) để đọc thêm các file này. Mặc định tính năng này tắt. Các file
 được nạp sau `~/.multix/.env`, không bao giờ ghi đè giá trị đã có, và file đầu
 tiên đặt một biến sẽ thắng:
 
