@@ -11,8 +11,10 @@ import { isolatedEnv } from "./child-env.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLI = path.resolve(__dirname, "../../dist/cli.js");
+/** Each test spawns `node`; cold starts under a parallel full-suite run can exceed vitest's 5 s default. */
+const SPAWN_TIMEOUT = 15_000;
 
-describe("multix --help (smoke)", () => {
+describe("multix --help (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
   it("exits 0 and lists all top-level commands", async () => {
     const result = await execa("node", [CLI, "--help"], { reject: false });
     expect(result.exitCode).toBe(0);
@@ -174,13 +176,24 @@ describe("multix --help (smoke)", () => {
     }
   });
 
-  it("lists image-to-image subcommand on every provider", async () => {
-    for (const provider of ["byteplus", "gemini", "openrouter", "leonardo", "minimax", "openai"]) {
-      const result = await execa("node", [CLI, provider, "--help"], { reject: false });
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain("image-to-image");
-    }
-  }, 15_000);
+  it(
+    "lists image-to-image subcommand on every provider",
+    async () => {
+      for (const provider of [
+        "byteplus",
+        "gemini",
+        "openrouter",
+        "leonardo",
+        "minimax",
+        "openai",
+      ]) {
+        const result = await execa("node", [CLI, provider, "--help"], { reject: false });
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout + result.stderr).toContain("image-to-image");
+      }
+    },
+    6 * SPAWN_TIMEOUT,
+  );
 
   it("lists openai subcommands", async () => {
     const result = await execa("node", [CLI, "openai", "--help"], { reject: false });
@@ -208,7 +221,7 @@ describe("multix --help (smoke)", () => {
   });
 });
 
-describe("gemini --files - (smoke)", () => {
+describe("gemini --files - (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
   it("reads piped stdin, labels it, and removes the temp file", async () => {
     const fs = await import("node:fs");
     const os = await import("node:os");
@@ -234,41 +247,56 @@ describe("gemini --files - (smoke)", () => {
   });
 
   it("rejects an empty pipe", async () => {
-    const result = await execa("node", [CLI, "gemini", "transcribe", "--files", "-"], {
-      input: "",
-      reject: false,
-      env: { MULTIX_DISABLE_HOME_ENV: "1" },
-    });
-    expect(result.exitCode).not.toBe(0);
-    expect(result.stdout + result.stderr).toContain("stdin was empty");
-  });
-});
-
-describe("doc convert --input - (smoke)", () => {
-  // Without a key each attempt fails fast, but the retry backoff adds ~3 s.
-  it("reads piped stdin, labels it, and removes the temp file", { timeout: 15_000 }, async () => {
     const fs = await import("node:fs");
     const os = await import("node:os");
-    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "multix-smoke-doc-stdin-"));
+    // Private temp root: the child's stdin temp dir must not appear in the shared tmpdir.
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "multix-smoke-empty-stdin-"));
     try {
-      const result = await execa("node", [CLI, "doc", "convert", "--input", "-"], {
-        input: "piped notes for conversion",
+      const result = await execa("node", [CLI, "gemini", "transcribe", "--files", "-"], {
+        input: "",
         cwd: tmp,
         reject: false,
         extendEnv: false,
         env: isolatedEnv(tmp),
       });
-      const out = result.stdout + result.stderr;
-      // No key is configured, so the request fails after stdin was materialized.
-      expect(result.exitCode).toBe(1);
-      expect(out).toContain("Failed: <stdin>");
-      expect(out).toContain("GEMINI_API_KEY is not set");
-      expect(out).not.toContain("piped notes");
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stdout + result.stderr).toContain("stdin was empty");
       expect(fs.readdirSync(tmp).filter((d) => d.startsWith("multix-stdin-"))).toEqual([]);
-      // MULTIX_OUTPUT_DIR is pinned to the test dir, never the user's own.
-      expect(fs.existsSync(path.join(tmp, "document-extraction.md"))).toBe(true);
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
   });
+});
+
+describe("doc convert --input - (smoke)", () => {
+  // Without a key each attempt fails fast, but the retry backoff adds ~3 s.
+  it(
+    "reads piped stdin, labels it, and removes the temp file",
+    { timeout: 2 * SPAWN_TIMEOUT },
+    async () => {
+      const fs = await import("node:fs");
+      const os = await import("node:os");
+      const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "multix-smoke-doc-stdin-"));
+      try {
+        const result = await execa("node", [CLI, "doc", "convert", "--input", "-"], {
+          input: "piped notes for conversion",
+          cwd: tmp,
+          reject: false,
+          extendEnv: false,
+          env: isolatedEnv(tmp),
+        });
+        const out = result.stdout + result.stderr;
+        // No key is configured, so the request fails after stdin was materialized.
+        expect(result.exitCode).toBe(1);
+        expect(out).toContain("Failed: <stdin>");
+        expect(out).toContain("GEMINI_API_KEY is not set");
+        expect(out).not.toContain("piped notes");
+        expect(fs.readdirSync(tmp).filter((d) => d.startsWith("multix-stdin-"))).toEqual([]);
+        // MULTIX_OUTPUT_DIR is pinned to the test dir, never the user's own.
+        expect(fs.existsSync(path.join(tmp, "document-extraction.md"))).toBe(true);
+      } finally {
+        fs.rmSync(tmp, { recursive: true, force: true });
+      }
+    },
+  );
 });

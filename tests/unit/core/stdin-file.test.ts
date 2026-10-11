@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ValidationError } from "../../../src/core/errors.js";
 import {
   detectExtension,
@@ -17,6 +17,25 @@ const bytes = (...parts: Array<string | number[]>) =>
   );
 
 const piped = (...chunks: Buffer[]) => Readable.from(chunks);
+
+/**
+ * Point os.tmpdir() at a private directory for each test so temp-dir cleanup
+ * can be asserted exactly, without racing other test files that pipe stdin.
+ */
+function usePrivateTmpRoot(): () => string {
+  let root = "";
+  beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), "multix-stdin-test-"));
+    vi.stubEnv("TMPDIR", root);
+    vi.stubEnv("TEMP", root);
+    vi.stubEnv("TMP", root);
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+  return () => root;
+}
 
 describe("detectExtension", () => {
   it.each([
@@ -46,6 +65,8 @@ describe("detectExtension", () => {
 });
 
 describe("stdinToTempFile", () => {
+  const tmpRoot = usePrivateTmpRoot();
+
   it("writes all chunks to a private temp file named by the detected type", async () => {
     const png = bytes([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], "rest");
     const file = await stdinToTempFile({ input: piped(png.subarray(0, 3), png.subarray(3)) });
@@ -81,9 +102,6 @@ describe("stdinToTempFile", () => {
   });
 
   it("removes the temp directory when reading fails", async () => {
-    const before = new Set(
-      fs.readdirSync(os.tmpdir()).filter((d) => d.startsWith("multix-stdin-")),
-    );
     const failing = Readable.from(
       (async function* () {
         yield Buffer.from("partial");
@@ -91,8 +109,7 @@ describe("stdinToTempFile", () => {
       })(),
     );
     await expect(stdinToTempFile({ input: failing })).rejects.toThrow("pipe broke");
-    const after = fs.readdirSync(os.tmpdir()).filter((d) => d.startsWith("multix-stdin-"));
-    expect(after.filter((d) => !before.has(d))).toEqual([]);
+    expect(fs.readdirSync(tmpRoot())).toEqual([]);
   });
 });
 
@@ -145,6 +162,7 @@ describe("resolveFileInputs", () => {
   });
 
   describe("review hardening", () => {
+    const tmpRoot = usePrivateTmpRoot();
     const pipe = (...chunks: Buffer[]) =>
       Object.assign(
         (async function* () {
@@ -189,17 +207,28 @@ describe("resolveFileInputs", () => {
     });
 
     it("stops reading past the size limit and removes the temp dir", async () => {
-      const before = fs
-        .readdirSync(os.tmpdir())
-        .filter((n) => n.startsWith("multix-stdin-")).length;
-      await expect(
-        resolveFileInputs(["-"], {
-          input: pipe(Buffer.alloc(10, 0x61), Buffer.alloc(10, 0x61)),
-          maxBytes: 15,
-        }),
-      ).rejects.toThrow(/exceeds/);
-      const after = fs.readdirSync(os.tmpdir()).filter((n) => n.startsWith("multix-stdin-")).length;
-      expect(after).toBeLessThanOrEqual(before);
+      // Explicit chunks: the third must never be pulled once the second crosses the limit.
+      let pulled = 0;
+      let closed = false;
+      const input = Object.assign(
+        (async function* () {
+          try {
+            for (const c of [Buffer.alloc(10, 0x61), Buffer.alloc(10, 0x61), Buffer.alloc(10)]) {
+              pulled++;
+              yield c;
+            }
+          } finally {
+            closed = true;
+          }
+        })(),
+        { isTTY: false },
+      );
+      const read = resolveFileInputs(["-"], { input, maxBytes: 15 });
+      await expect(read).rejects.toBeInstanceOf(ValidationError);
+      await expect(read).rejects.toThrow(/exceeds/);
+      expect(pulled).toBe(2);
+      expect(closed).toBe(true);
+      expect(fs.readdirSync(tmpRoot())).toEqual([]);
     });
 
     it("registers signal cleanup while the file exists and unregisters it after", async () => {
