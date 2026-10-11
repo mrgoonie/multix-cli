@@ -16,6 +16,8 @@ description: Chọn tài liệu lệnh có đối chiếu source cho từng AI p
 | Cloudflare | [Lệnh](/vi/commands/cloudflare/) | Workers AI image/speech và AI Gateway video | Video cần AI Gateway ID và Replicate token. |
 | ElevenLabs | [Lệnh](/vi/commands/elevenlabs/) | Voice, speech, audio và dubbing | Dubbing có workflow job/status. |
 | fal.ai | [Lệnh](/vi/commands/fal/) | Bất kỳ model queue nào, cộng lệnh tiện lợi image/video | Status/result dùng app id của model (hai segment đầu path), không phải model id đầy đủ. |
+| Atlas Cloud | [Lệnh](/vi/commands/atlascloud/) | Mọi model: ảnh, chỉnh sửa ảnh, video, âm thanh và 3D | Đầu vào được kiểm tra theo schema của từng model; `--async` cùng `status --wait --download` để tiếp tục job. |
+| Replicate | [Lệnh](/vi/commands/replicate/) | Bất kỳ model nào qua API trực tiếp, cộng lệnh tiện lợi image/video | Model cộng đồng cần version; tiếp tục hoặc hủy job theo prediction ID. |
 | HeyGen | [Lệnh](/vi/commands/heygen/) | Video Agent (tạo video từ prompt), video avatar theo kịch bản, dịch video, lipsync, TTS, template | Credit API tính riêng với gói web của HeyGen; dùng `status --type` khớp với job (`agent` nhận session ID). |
 
 Chạy `multix <provider> --help` và `--help` của từng subcommand trước khi tự

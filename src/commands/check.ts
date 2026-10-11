@@ -4,8 +4,17 @@
  * authenticated Codex image-driver readiness.
  */
 
+import fs from "node:fs";
+import os from "node:os";
 import type { Command } from "commander";
-import { redact, resolveKey } from "../core/env-loader.js";
+import {
+  getLoadedEnvFiles,
+  legacyClaudeEnvEnabled,
+  legacyClaudeEnvFiles,
+  redact,
+  resolveFirstKey,
+  resolveKey,
+} from "../core/env-loader.js";
 import { createLogger } from "../core/logger.js";
 import { listGeminiKeys } from "../providers/gemini/key-pool.js";
 import { checkCodexAuthenticated } from "../providers/openai/codex-image-driver.js";
@@ -72,6 +81,19 @@ const PROVIDERS: ProviderEntry[] = [
     link: "https://fal.ai/dashboard/keys",
   },
   {
+    name: "Atlas Cloud",
+    envPrimary: "ATLASCLOUD_API_KEY",
+    optional: true,
+    link: "https://www.atlascloud.ai/console/api-keys",
+  },
+  {
+    name: "Replicate",
+    envPrimary: "REPLICATE_API_TOKEN",
+    envFallback: "REPLICATE_API_KEY",
+    optional: true,
+    link: "https://replicate.com/account/api-tokens",
+  },
+  {
     name: "HeyGen",
     envPrimary: "HEYGEN_API_KEY",
     optional: true,
@@ -79,19 +101,16 @@ const PROVIDERS: ProviderEntry[] = [
   },
 ];
 
-function resolveProviderKey(p: ProviderEntry): { key?: string; envUsed?: string } {
+/** Same trimmed primary→fallback resolution the providers use, so check never disagrees. */
+export function resolveProviderKey(p: ProviderEntry): { key?: string; envUsed?: string } {
   if (p.envPrimary === "GEMINI_API_KEY") {
     // Rotation pool: GEMINI_API_KEY first, then GEMINI_API_KEY_2, _3, …
     const first = listGeminiKeys()[0];
     return first ? { key: first.value, envUsed: first.name } : {};
   }
-  const primary = resolveKey(p.envPrimary);
-  if (primary) return { key: primary, envUsed: p.envPrimary };
-  if (p.envFallback) {
-    const fb = resolveKey(p.envFallback);
-    if (fb) return { key: fb, envUsed: p.envFallback };
-  }
-  return {};
+  const names = p.envFallback ? [p.envPrimary, p.envFallback] : [p.envPrimary];
+  const found = resolveFirstKey(...names);
+  return found ? { key: found.value, envUsed: found.envUsed } : {};
 }
 
 type CodexImageChecker = () => Promise<boolean>;
@@ -152,6 +171,20 @@ export function registerCheckCommand(program: Command): void {
 
       // ── Section 2: API Keys ─────────────────────────────────────────────
       logger.header("API Keys");
+
+      if (opts.verbose) {
+        const files = getLoadedEnvFiles();
+        logger.info(`Env files loaded: ${files.length > 0 ? files.join(", ") : "none"}`);
+      }
+      if (!legacyClaudeEnvEnabled()) {
+        const home = process.env.MULTIX_DISABLE_HOME_ENV ? undefined : os.homedir();
+        const legacy = legacyClaudeEnvFiles(process.cwd(), home).filter((f) => fs.existsSync(f));
+        if (legacy.length > 0) {
+          logger.info(
+            `Found ${legacy.length} legacy .claude env file(s); set MULTIX_LEGACY_CLAUDE_ENV=1 to load them`,
+          );
+        }
+      }
 
       let anyKey = false;
       const resolved = new Map<string, { key?: string; envUsed?: string }>();

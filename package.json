@@ -1,7 +1,7 @@
 {
   "name": "@mrgoonie/multix",
-  "version": "0.8.0",
-  "description": "AI multimodal CLI — OpenAI, Gemini, MiniMax, OpenRouter, Leonardo, BytePlus, ElevenLabs, fal.ai, HeyGen, ffmpeg, ImageMagick, doc-to-md",
+  "version": "0.11.0",
+  "description": "AI multimodal CLI — OpenAI, Gemini, MiniMax, OpenRouter, Leonardo, BytePlus, ElevenLabs, fal.ai, Atlas Cloud, Replicate, HeyGen, ffmpeg, ImageMagick, doc-to-md",
   "type": "module",
   "bin": {
     "multix": "./dist/cli.js"
@@ -49,6 +49,8 @@
     "leonardo-ai",
     "fal",
     "fal-ai",
+    "atlascloud",
+    "replicate",
     "heygen",
     "ai-avatar",
     "video-translation",

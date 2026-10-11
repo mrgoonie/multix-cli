@@ -19,7 +19,7 @@ hero:
 ## One CLI, practical media workflows
 
 `multix` provides commands for OpenAI, Gemini, MiniMax, OpenRouter, Leonardo,
-BytePlus, Cloudflare, ElevenLabs, and fal.ai without turning provider
+BytePlus, Cloudflare, ElevenLabs, fal.ai, and Replicate without turning provider
 credentials into a framework.
 
 ```bash

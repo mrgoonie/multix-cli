@@ -4,7 +4,7 @@ AI multimodal CLI — generate images/video/speech/music, analyze and transcribe
 
 ![Isometric technical illustration of multix media workflows](docs-site/public/images/multix-isometric-banner.png)
 
-Supports **OpenAI** (image, image edits, TTS, STT, optional Codex image driver), **Gemini** (analyze, transcribe, generate, Veo video, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), **Cloudflare** (Workers AI image and speech; AI Gateway-routed Replicate video), **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment), **fal.ai** (generic model runner, image, video via the fal queue API), and **HeyGen** (v3 Video Agent prompt-to-video, scripted avatar videos, video translation, lipsync, TTS).
+Supports **OpenAI** (image, image edits, TTS, STT, optional Codex image driver), **Gemini** (analyze, transcribe, generate, Veo video, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), **Cloudflare** (Workers AI image and speech; AI Gateway-routed Replicate video), **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment), **fal.ai** (generic model runner, image, video via the fal queue API), and **Atlas Cloud** (any model: image, image edit, video, audio, 3D, with resumable async predictions), **Replicate** (generic model runner, image, video, async prediction status/cancel via the direct Replicate API), **HeyGen** (v3 Video Agent prompt-to-video, scripted avatar videos, video translation, lipsync, TTS).
 
 ## Documentation
 
@@ -73,6 +73,13 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `HEYGEN_API_KEY` | For HeyGen | [HeyGen API settings](https://app.heygen.com/developers/api). API usage is billed separately from HeyGen web plans |
 | `HEYGEN_BASE_URL` | No | Override the HeyGen API base (default `https://api.heygen.com`; proxies/tests) |
 | `FAL_VIDEO_IMAGE_MODEL` | No | Default fal image-to-video model, used when `--image-url` is passed without `-m` (default `fal-ai/kling-video/v1.6/standard/image-to-video`) |
+| `ATLASCLOUD_API_KEY` | For Atlas Cloud | [Atlas Cloud](https://www.atlascloud.ai/console/api-keys) |
+| `ATLASCLOUD_BASE_URL` | No | Override Atlas Cloud media API base (default `https://api.atlascloud.ai/api/v1`) |
+| `ATLASCLOUD_IMAGE_MODEL` / `ATLASCLOUD_IMAGE_EDIT_MODEL` | No | Atlas image defaults (`black-forest-labs/flux-schnell`, `openai/gpt-image-1-mini/edit`) |
+| `ATLASCLOUD_VIDEO_MODEL` / `ATLASCLOUD_IMAGE_TO_VIDEO_MODEL` | No | Atlas video defaults (`bytedance/seedance-v1-pro-fast/text-to-video`, `.../image-to-video`) |
+| `ATLASCLOUD_TTS_MODEL` / `ATLASCLOUD_STT_MODEL` | No | Atlas audio defaults (`xai/tts-v1`, `bytedance/seed-asr-2.0`) |
+| `ATLASCLOUD_TEXT_TO_3D_MODEL` / `ATLASCLOUD_IMAGE_TO_3D_MODEL` | No | Atlas 3D defaults (`tencent/hunyuan3d-rapid/text-to-3d`, `.../image-to-3d`) |
+| `ATLASCLOUD_MAX_UPLOAD_MB` | No | Size limit for local files uploaded to Atlas Cloud (default `200`) |
 | `ARK_API_KEY` | No | Fallback for `BYTEPLUS_API_KEY` (Volcengine ARK shared name) |
 | `BYTEPLUS_BASE_URL` | No | Override BytePlus base (default `https://ark.ap-southeast.bytepluses.com/api/v3`) |
 | `BYTEPLUS_IMAGE_MODEL` | No | Default Seedream model (default `seedream-4-0-250828`) |
@@ -83,7 +90,11 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `CLOUDFLARE_API_TOKEN` | For Cloudflare media | Cloudflare API token for Workers AI and AI Gateway |
 | `CLOUDFLARE_AI_GATEWAY_ID` | Video only | AI Gateway ID; optional for Workers AI image/speech, required for video |
 | `CLOUDFLARE_AI_GATEWAY_COLLECT_LOG_PAYLOAD` | No | Set to `true` to explicitly opt in to AI Gateway request-payload collection; defaults to `false` |
-| `REPLICATE_API_TOKEN` | Cloudflare video only | Replicate API token used through Cloudflare AI Gateway |
+| `REPLICATE_API_TOKEN` | For Replicate / Cloudflare video | [Replicate](https://replicate.com/account/api-tokens) token for `multix replicate`; also used by Cloudflare AI Gateway video |
+| `REPLICATE_API_KEY` | No | Fallback for `REPLICATE_API_TOKEN` (direct `multix replicate` only) |
+| `REPLICATE_BASE_URL` | No | Override Replicate API root (default `https://api.replicate.com/v1`) |
+| `REPLICATE_IMAGE_MODEL` | No | Default `multix replicate image` model (default `black-forest-labs/flux-schnell`) |
+| `REPLICATE_VIDEO_MODEL` | No | Default `multix replicate video` model (default `prunaai/p-video`) |
 | `CLOUDFLARE_AI_IMAGE_MODEL` | No | Image model setting; only `@cf/black-forest-labs/flux-1-schnell` is accepted |
 | `CLOUDFLARE_AI_TTS_MODEL` | No | Speech model setting; only `@cf/myshell-ai/melotts` is accepted |
 | `MULTIX_OUTPUT_DIR` | No | Override default output dir (`./multix-output`) |
@@ -102,7 +113,7 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 
 Set extra keys as `GEMINI_API_KEY_2`, `GEMINI_API_KEY_3`, … (any numeric suffix; numbered keys alone are enough). `multix` tries `GEMINI_API_KEY` first, then the numbered keys in ascending order, skipping duplicates. When a key returns HTTP 429 (or 400/403 with `RESOURCE_EXHAUSTED`), it cools down for the server's `Retry-After`/`retryDelay` (default 60s) and the same request is retried with the next ready key; other errors are not rotated. A Files API upload is repeated on the new key if the following generate call is rate-limited. Veo rotates on submit only, so a rate limit while polling or downloading never starts a second billed job. `doc convert` stops its own retries on a rate limit. Cooldowns last for the current process only, and logs name the env var, never the key. `multix check` lists the keys in rotation and pings each one. Quotas are per Google Cloud project: keys from the same project share one quota, so rotation only helps across projects.
 
-Priority: `process.env` > `cwd/.env` > `~/.multix/.env`.
+Priority: `process.env` > `cwd/.env` > `~/.multix/.env`. Set `MULTIX_LEGACY_CLAUDE_ENV=1` to also read legacy AgentKit files (`.claude/skills/{ai-multimodal,ak-ai-multimodal}/.env`, `.claude/skills/.env`, `.claude/.env`, project first, then home) with the lowest priority (credential names only, never endpoint/proxy settings); `multix check -v` lists the env files that were loaded.
 
 ## Commands
 
@@ -140,6 +151,9 @@ multix gemini transcribe --files audio.mp3 [--prompt <str>] [--model <id>] [--fo
 
 # Extract structured information
 multix gemini extract --files report.pdf --prompt "Extract tables as JSON" [--format json] [-v]
+
+# Read piped stdin with "-" (type auto-detected, else pass --stdin-ext; max 2 GB; labelled <stdin>)
+cat photo.png | multix gemini analyze --files - --prompt "Describe this"
 
 # Generate images
 multix gemini generate --prompt "A mountain lake" [--model <id>] [--aspect-ratio 16:9] [--num-images 1] [--size 1K|2K|4K] [--output <path>] [-v]
@@ -476,6 +490,77 @@ multix fal result <model> <requestId> [--download]
 - Auth header is `Authorization: Key $FAL_KEY`; base URL is `https://queue.fal.run`.
 - All fal jobs are async: submit → poll `status` → fetch `result`. `run`/`image`/`video` do this automatically.
 - Media URLs are extracted generically from the result JSON (any `url` field, recursively) and downloaded to `MULTIX_OUTPUT_DIR`.
+
+### `multix atlas`
+
+Image, image-edit, video, audio and 3D generation through [Atlas Cloud](https://www.atlascloud.ai)'s prediction API, plus a generic runner for any Atlas model. `atlascloud` is an alias for the group.
+
+```bash
+# Image (default black-forest-labs/flux-schnell) and image edit (default openai/gpt-image-1-mini/edit)
+multix atlas image "a red fox in the snow" [-m <model>] [--size <size>] [--aspect-ratio 1:1] [--resolution 2k] [-n 1] [--seed <n>] [--negative-prompt <text>]
+multix atlas image-to-image --prompt "make it dusk" --ref ./photo.png [--ref https://...] [-m <model>]
+
+# Video (defaults bytedance/seedance-v1-pro-fast/text-to-video and .../image-to-video)
+multix atlas video "waves at sunset" [-m <model>] [--duration <s>] [--resolution 720p] [--aspect-ratio 16:9]
+multix atlas image-to-video --ref ./first-frame.png [--prompt "slow pan"]
+
+# Audio: TTS (default xai/tts-v1), or STT with --audio (default bytedance/seed-asr-2.0; transcript printed)
+multix atlas audio "Hello from multix" [--voice <id>] [--format mp3]
+multix atlas audio --audio ./meeting.mp3 [--output transcript.txt]
+
+# 3D (defaults tencent/hunyuan3d-rapid/text-to-3d, or .../image-to-3d with --ref)
+multix atlas 3d "a low-poly treasure chest" [--format GLB]
+
+# Any model, raw JSON input (fields per the model's docs; `model` is added for you)
+multix atlas run <modelId> --input '{"prompt":"a cat"}' [--type image|video|audio]
+
+# Async: submit now, resume later
+multix atlas image "a paper boat" --async        # prints the prediction id
+multix atlas status <predictionId> [--wait] [--download] [--output <path>]
+
+# Upload a local file and print its temporary URL
+multix atlas upload ./photo.png
+```
+
+**Notes:**
+- Auth is `Authorization: Bearer $ATLASCLOUD_API_KEY`; the media API base is `https://api.atlascloud.ai/api/v1`.
+- Generation commands and `run` accept `--async`, `--wait-timeout <ms>`, `--output <path>`, `--no-download` and `--no-validate`. By default the command waits, then downloads to `MULTIX_OUTPUT_DIR` as `atlas-<idprefix>-NN.<ext>`.
+- Inputs are model-specific. multix reads each model's published schema, maps flags onto that model's field names, and rejects unsupported flags or invalid values before submitting. Use `--no-validate` to skip this check.
+- `--async` prints only the prediction id on stdout and `upload` prints only the URL; progress goes to stderr, so `id=$(multix atlas video "waves" --async)` works.
+- `--ref` takes one value per flag; repeat it for several references. Local `--ref` / `--audio` files are uploaded first: only image, video and audio files, up to 200 MB (`ATLASCLOUD_MAX_UPLOAD_MB`).
+- Text outputs (transcripts, lyrics) are printed instead of downloaded. A failed prediction, or a download where some outputs fail, exits non-zero with the resume command. Atlas Cloud has no cancel endpoint.
+- `run --no-validate` skips the schema, so pass `--type` with it.
+
+### `multix replicate`
+
+Direct [Replicate](https://replicate.com) API provider (independent of the Cloudflare AI Gateway route). `run` accepts any model; `image`/`video` set defaults; every job can be resumed or canceled by prediction ID.
+
+```bash
+# Generic runner — official models (owner/name) use the model endpoint;
+# owner/name:version, a bare version id, or --version use POST /predictions.
+multix replicate run black-forest-labs/flux-schnell --input '{"prompt":"a cyberpunk cat"}'
+multix replicate run owner/model:<version-id> --input @payload.json [--file image=./photo.png]
+
+# Text-to-image (default model: black-forest-labs/flux-schnell)
+multix replicate image "a futuristic city" [-m <owner/name>] [--aspect-ratio 16:9] [-n 1] [--seed <n>] [--output-format webp|jpg|png] [--input <json>] [--output <path>]
+
+# Text-to-video, or image-to-video with --image (default model: prunaai/p-video)
+multix replicate video "a cinematic establishing shot" [-m <owner/name>] [--image <path|url>] [--duration 5] [--aspect-ratio 16:9] [--resolution 720p] [--input '{"draft":true}']
+
+# Shared flags: [--async] [--wait] [--prefer-wait [seconds]] [--wait-timeout <ms>] [--no-download] [--output <path>] [-v]
+
+# Resume or cancel a prediction by id without re-running inference
+multix replicate status <prediction-id> [--wait] [--download] [--output <path>]
+multix replicate cancel <prediction-id>
+```
+
+**Notes:**
+- Auth: `Authorization: Bearer $REPLICATE_API_TOKEN` (`REPLICATE_API_KEY` accepted as fallback).
+- Default behavior waits with bounded polling; `--async` prints the prediction id plus resume/cancel commands. `--prefer-wait` sends `Prefer: wait=N` and keeps polling if the job is still running.
+- Only `succeeded` exits 0; `failed`, `canceled`, and `aborted` exit non-zero with Replicate's error.
+- Every media URL in the output (string, list, or nested object) is downloaded as `replicate-<id8>-NN.<ext>` (`<id8>` = first 8 characters of the prediction id); text outputs are printed. Output URLs expire, so download promptly. If any download fails, the command exits non-zero and prints `multix replicate status <id> --download` to retry.
+- `replicate image` converts images to WebP by default; `--image-format original`, `--no-webp`, `MULTIX_IMAGE_FORMAT=original`, an explicit `--output-format`, or a non-`.webp` `--output` extension keeps the provider format.
+- Local files (`--image`, `--file key=path`) up to 256 KB are inlined as data URIs; larger files (< 100 MB) are uploaded via the Replicate Files API.
 
 ### `multix heygen`
 

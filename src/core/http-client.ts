@@ -28,13 +28,15 @@ export async function httpJson<T>(opts: HttpJsonOptions): Promise<T> {
 /**
  * Download a URL to a local file path, streaming to avoid large memory usage.
  * Parent directory is created if it does not exist.
+ * Resolves with the response Content-Type (if any) so callers can name
+ * extensionless outputs.
  */
 export async function downloadFile(
   url: string,
   dest: string,
   timeoutMs = DEFAULT_TIMEOUT_MS,
   headers?: Record<string, string>,
-): Promise<void> {
+): Promise<string | undefined> {
   fs.mkdirSync(path.dirname(dest), { recursive: true });
 
   let response: Response;
@@ -66,6 +68,7 @@ export async function downloadFile(
     if (!fileStream.closed) await once(fileStream, "close");
     throw err;
   }
+  return response.headers.get("content-type") ?? undefined;
 }
 
 /**

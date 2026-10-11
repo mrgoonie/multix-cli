@@ -4,7 +4,8 @@ description: Configure multix credentials, model defaults, and output location w
 ---
 
 `multix` reads configuration in this order: process environment, a `.env` file
-in the current project, then `~/.multix/.env`. Keep API keys out of shell
+in the current project, then `~/.multix/.env` (plus [legacy `.claude` files](#legacy-claude-env-files)
+when enabled). Keep API keys out of shell
 history and never commit them.
 
 ## Provider credentials
@@ -21,6 +22,8 @@ history and never commit them.
 | `CLOUDFLARE_AI_GATEWAY_ID` and `REPLICATE_API_TOKEN` | Cloudflare AI Gateway video |
 | `ELEVENLABS_API_KEY` | ElevenLabs |
 | `FAL_KEY` | fal.ai |
+| `ATLASCLOUD_API_KEY` | Atlas Cloud |
+| `REPLICATE_API_TOKEN` or `REPLICATE_API_KEY` | Replicate (direct API) |
 | `HEYGEN_API_KEY` | HeyGen (API credits are billed separately from web plans) |
 
 ```bash
@@ -53,6 +56,28 @@ without `GEMINI_API_KEY`.
 - Gemini quotas apply per Google Cloud project. Keys from the same project share
   one quota, so rotation only helps with keys from different projects.
 
+## Legacy `.claude` env files
+
+Older AgentKit installs kept keys in `.claude` folders. Set
+`MULTIX_LEGACY_CLAUDE_ENV=1` (in the shell, the project `.env` or
+`~/.multix/.env`) to also read them. This is off by default. The files load
+after `~/.multix/.env`, never override earlier values, and the first file that
+sets a variable wins:
+
+1. `.claude/skills/ai-multimodal/.env`, then `.claude/skills/ak-ai-multimodal/.env`
+2. `.claude/skills/.env`
+3. `.claude/.env`
+
+Project folders are read first, then the same files under your home directory.
+Only credential names are taken from these files: names ending in `_API_KEY`
+(optionally numbered, such as `GEMINI_API_KEY_2`), `_API_TOKEN`, `_ACCOUNT_ID`
+or `_GATEWAY_ID`, plus `FAL_KEY` and `ARK_API_KEY`. Endpoint, proxy and runtime
+settings such as `*_BASE_URL` are ignored, so a cloned repository cannot send
+your keys to another host. The flag itself is ignored inside these files.
+`multix check` mentions legacy files it finds while the flag is off, and
+`multix check -v` lists every env file that was loaded (paths only, never
+values). Moving the keys to `.env` or `~/.multix/.env` is still recommended.
+
 ## Model and endpoint overrides
 
 Use explicit overrides only when you need a different default. Available
@@ -62,9 +87,23 @@ settings include `IMAGE_GEN_MODEL`, `VIDEO_GEN_MODEL`, `MULTIMODAL_MODEL`,
 `BYTEPLUS_BASE_URL`, `BYTEPLUS_IMAGE_MODEL`, `BYTEPLUS_VIDEO_MODEL`,
 `BYTEPLUS_3D_MODEL`, `FAL_BASE_URL`, `FAL_IMAGE_MODEL`, `FAL_VIDEO_MODEL`, and
 `FAL_VIDEO_IMAGE_MODEL` (fal's image-to-video default, used when
-`multix fal video --image-url` is passed without `-m`). `HEYGEN_BASE_URL`
-overrides the HeyGen API base (default `https://api.heygen.com`) for proxies
-and tests.
+`multix fal video --image-url` is passed without `-m`). Replicate accepts
+`REPLICATE_BASE_URL` (API root for mocks or proxies), `REPLICATE_IMAGE_MODEL`
+(default `black-forest-labs/flux-schnell`), and `REPLICATE_VIDEO_MODEL`
+(default `prunaai/p-video`). Cloudflare AI Gateway video reads only
+`REPLICATE_API_TOKEN`.
+
+Atlas Cloud accepts `ATLASCLOUD_BASE_URL` (media API base, default
+`https://api.atlascloud.ai/api/v1`) and one default-model override per command:
+`ATLASCLOUD_IMAGE_MODEL`, `ATLASCLOUD_IMAGE_EDIT_MODEL`,
+`ATLASCLOUD_VIDEO_MODEL`, `ATLASCLOUD_IMAGE_TO_VIDEO_MODEL`,
+`ATLASCLOUD_TTS_MODEL`, `ATLASCLOUD_STT_MODEL`, `ATLASCLOUD_TEXT_TO_3D_MODEL`,
+and `ATLASCLOUD_IMAGE_TO_3D_MODEL`. See [Atlas Cloud](/commands/atlascloud/)
+for the built-in defaults. `ATLASCLOUD_MAX_UPLOAD_MB` sets the size limit for
+local files uploaded to Atlas Cloud (default 200).
+
+`HEYGEN_BASE_URL` overrides the HeyGen API base (default
+`https://api.heygen.com`) for proxies and tests.
 
 Cloudflare accepts only the built-in Workers AI image and speech model IDs;
 `CLOUDFLARE_AI_IMAGE_MODEL` and `CLOUDFLARE_AI_TTS_MODEL` are therefore useful

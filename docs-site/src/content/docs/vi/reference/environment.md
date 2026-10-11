@@ -4,7 +4,8 @@ description: Cấu hình credential, model mặc định và thư mục output c
 ---
 
 `multix` đọc cấu hình theo thứ tự: environment hiện tại, `.env` ở project đang
-chạy, rồi `~/.multix/.env`. Không commit API key hoặc đưa key vào shell history.
+chạy, rồi `~/.multix/.env` (cùng [file `.claude` cũ](#file-env-claude-cũ) khi được
+bật). Không commit API key hoặc đưa key vào shell history.
 
 ## Credential provider
 
@@ -20,6 +21,8 @@ chạy, rồi `~/.multix/.env`. Không commit API key hoặc đưa key vào shel
 | `CLOUDFLARE_AI_GATEWAY_ID` và `REPLICATE_API_TOKEN` | Cloudflare AI Gateway video |
 | `ELEVENLABS_API_KEY` | ElevenLabs |
 | `FAL_KEY` | fal.ai |
+| `ATLASCLOUD_API_KEY` | Atlas Cloud |
+| `REPLICATE_API_TOKEN` hoặc `REPLICATE_API_KEY` | Replicate (API trực tiếp) |
 | `HEYGEN_API_KEY` | HeyGen (credit API tính riêng với gói web) |
 
 ```bash
@@ -52,6 +55,29 @@ bắt buộc có `GEMINI_API_KEY`.
 - Quota Gemini tính theo từng Google Cloud project. Các key cùng project dùng
   chung quota, nên xoay vòng chỉ có ích với key thuộc các project khác nhau.
 
+## File env `.claude` cũ
+
+Bản cài AgentKit cũ lưu key trong các thư mục `.claude`. Đặt
+`MULTIX_LEGACY_CLAUDE_ENV=1` (trong shell, `.env` của project hoặc
+`~/.multix/.env`) để đọc thêm các file này. Mặc định tính năng này tắt. Các file
+được nạp sau `~/.multix/.env`, không bao giờ ghi đè giá trị đã có, và file đầu
+tiên đặt một biến sẽ thắng:
+
+1. `.claude/skills/ai-multimodal/.env`, rồi `.claude/skills/ak-ai-multimodal/.env`
+2. `.claude/skills/.env`
+3. `.claude/.env`
+
+Thư mục project được đọc trước, sau đó là các file tương tự trong thư mục home.
+Chỉ các tên dạng credential được lấy từ những file này: tên kết thúc bằng
+`_API_KEY` (có thể đánh số, như `GEMINI_API_KEY_2`), `_API_TOKEN`, `_ACCOUNT_ID`
+hoặc `_GATEWAY_ID`, cùng `FAL_KEY` và `ARK_API_KEY`. Các thiết lập endpoint,
+proxy và runtime như `*_BASE_URL` bị bỏ qua, nên một repository clone về không
+thể gửi key của bạn tới host khác. Bản thân cờ này bị bỏ qua nếu đặt trong các
+file đó.
+`multix check` báo khi tìm thấy file cũ lúc cờ đang tắt, còn `multix check -v`
+liệt kê mọi file env đã nạp (chỉ đường dẫn, không bao giờ in giá trị). Vẫn nên
+chuyển key sang `.env` hoặc `~/.multix/.env`.
+
 ## Ghi đè model và endpoint
 
 Chỉ đặt override khi cần thay default. Các biến gồm `IMAGE_GEN_MODEL`,
@@ -61,8 +87,23 @@ Chỉ đặt override khi cần thay default. Các biến gồm `IMAGE_GEN_MODEL
 `BYTEPLUS_IMAGE_MODEL`, `BYTEPLUS_VIDEO_MODEL`, `BYTEPLUS_3D_MODEL`,
 `FAL_BASE_URL`, `FAL_IMAGE_MODEL`, `FAL_VIDEO_MODEL` và
 `FAL_VIDEO_IMAGE_MODEL` (default image-to-video của fal, dùng khi truyền
-`multix fal video --image-url` mà không có `-m`). `HEYGEN_BASE_URL` ghi đè
-API base của HeyGen (mặc định `https://api.heygen.com`) cho proxy và test.
+`multix fal video --image-url` mà không có `-m`). Replicate nhận
+`REPLICATE_BASE_URL` (API root cho mock hoặc proxy), `REPLICATE_IMAGE_MODEL`
+(mặc định `black-forest-labs/flux-schnell`) và `REPLICATE_VIDEO_MODEL`
+(mặc định `prunaai/p-video`). Video qua Cloudflare AI Gateway chỉ đọc
+`REPLICATE_API_TOKEN`.
+
+Atlas Cloud nhận `ATLASCLOUD_BASE_URL` (base của media API, mặc định
+`https://api.atlascloud.ai/api/v1`) và một biến ghi đè model mặc định cho mỗi
+lệnh: `ATLASCLOUD_IMAGE_MODEL`, `ATLASCLOUD_IMAGE_EDIT_MODEL`,
+`ATLASCLOUD_VIDEO_MODEL`, `ATLASCLOUD_IMAGE_TO_VIDEO_MODEL`,
+`ATLASCLOUD_TTS_MODEL`, `ATLASCLOUD_STT_MODEL`, `ATLASCLOUD_TEXT_TO_3D_MODEL`
+và `ATLASCLOUD_IMAGE_TO_3D_MODEL`. Xem [Atlas Cloud](/vi/commands/atlascloud/)
+để biết các model mặc định. `ATLASCLOUD_MAX_UPLOAD_MB` đặt giới hạn dung lượng
+cho file cục bộ upload lên Atlas Cloud (mặc định 200).
+
+`HEYGEN_BASE_URL` ghi đè API base của HeyGen (mặc định
+`https://api.heygen.com`) cho proxy và test.
 
 Cloudflare chỉ chấp nhận các model image và speech Workers AI có sẵn;
 `CLOUDFLARE_AI_IMAGE_MODEL` và `CLOUDFLARE_AI_TTS_MODEL` vì vậy chỉ dùng để

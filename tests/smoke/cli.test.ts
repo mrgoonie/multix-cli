@@ -26,6 +26,8 @@ describe("multix --help (smoke)", () => {
     expect(out).toContain("doc");
     expect(out).toContain("elevenlabs");
     expect(out).toContain("openai");
+    expect(out).toContain("atlas");
+    expect(out).toContain("replicate");
     expect(out).toContain("heygen");
   });
 
@@ -53,6 +55,34 @@ describe("multix --help (smoke)", () => {
     }
   });
 
+  it("lists replicate subcommands", async () => {
+    const result = await execa("node", [CLI, "replicate", "--help"], { reject: false });
+    expect(result.exitCode).toBe(0);
+    const out = result.stdout + result.stderr;
+    for (const sub of ["run", "image", "video", "status", "cancel"]) {
+      expect(out).toContain(sub);
+    }
+  });
+
+  it("lists atlas subcommands", async () => {
+    const result = await execa("node", [CLI, "atlas", "--help"], { reject: false });
+    expect(result.exitCode).toBe(0);
+    const out = result.stdout + result.stderr;
+    for (const sub of [
+      "image",
+      "image-to-image",
+      "video",
+      "image-to-video",
+      "audio",
+      "3d",
+      "run",
+      "status",
+      "upload",
+    ]) {
+      expect(out).toContain(sub);
+    }
+  });
+
   it("fails heygen commands without HEYGEN_API_KEY with a config error, not a stack trace", async () => {
     const result = await execa("node", [CLI, "heygen", "me"], {
       reject: false,
@@ -61,6 +91,29 @@ describe("multix --help (smoke)", () => {
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain("HEYGEN_API_KEY is not set");
     expect(result.stderr).not.toMatch(/\n\s+at /);
+  });
+
+  it("accepts --version as a replicate run option without printing the CLI version", async () => {
+    const result = await execa(
+      "node",
+      [CLI, "replicate", "run", "owner/model", "--version", "abc", "--input", "{}"],
+      {
+        reject: false,
+        env: { REPLICATE_API_TOKEN: "", REPLICATE_API_KEY: "", MULTIX_DISABLE_HOME_ENV: "1" },
+      },
+    );
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("REPLICATE_API_TOKEN is not set");
+  });
+
+  it("atlas image without ATLASCLOUD_API_KEY exits non-zero with a setup hint", async () => {
+    const result = await execa("node", [CLI, "atlas", "image", "a cat"], {
+      reject: false,
+      cwd: path.resolve(__dirname, "../.."),
+      env: { ATLASCLOUD_API_KEY: "", MULTIX_DISABLE_HOME_ENV: "1" },
+    });
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain("ATLASCLOUD_API_KEY");
   });
 
   it("lists elevenlabs subcommands", async () => {
@@ -151,5 +204,46 @@ describe("multix --help (smoke)", () => {
     const result = await execa("node", [CLI, "--version"], { reject: false });
     expect(result.exitCode).toBe(0);
     expect(result.stdout.trim()).toMatch(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/);
+  });
+});
+
+describe("gemini --files - (smoke)", () => {
+  it("reads piped stdin, labels it, and removes the temp file", async () => {
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "multix-smoke-stdin-"));
+    try {
+      const result = await execa("node", [CLI, "gemini", "analyze", "--files", "-"], {
+        input: "piped notes for analysis",
+        cwd: tmp,
+        reject: false,
+        env: {
+          MULTIX_DISABLE_HOME_ENV: "1",
+          GEMINI_API_KEY: "",
+          TMP: tmp,
+          TEMP: tmp,
+          TMPDIR: tmp,
+        },
+      });
+      const out = result.stdout + result.stderr;
+      // No key is configured, so the request fails after stdin was materialized.
+      expect(result.exitCode).toBe(1);
+      expect(out).toContain("Failed: <stdin>");
+      expect(out).toContain("GEMINI_API_KEY is not set");
+      expect(out).not.toContain("piped notes");
+      expect(fs.readdirSync(tmp).filter((d) => d.startsWith("multix-stdin-"))).toEqual([]);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects an empty pipe", async () => {
+    const result = await execa("node", [CLI, "gemini", "transcribe", "--files", "-"], {
+      input: "",
+      reject: false,
+      env: { MULTIX_DISABLE_HOME_ENV: "1" },
+    });
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stdout + result.stderr).toContain("stdin was empty");
   });
 });

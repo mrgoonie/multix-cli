@@ -4,6 +4,7 @@
  */
 
 import type { Command } from "commander";
+import { registerAtlasCloudCommands } from "../providers/atlascloud/commands/index.js";
 import { registerBytePlusCommands } from "../providers/byteplus/commands/index.js";
 import { registerCloudflareCommands } from "../providers/cloudflare/commands/index.js";
 import { registerElevenLabsCommands } from "../providers/elevenlabs/commands/index.js";
@@ -14,6 +15,7 @@ import { registerLeonardoCommands } from "../providers/leonardo/commands/index.j
 import { registerMinimaxCommands } from "../providers/minimax/commands/index.js";
 import { registerOpenAICommands } from "../providers/openai/commands/index.js";
 import { registerOpenRouterCommands } from "../providers/openrouter/commands/index.js";
+import { registerReplicateCommands } from "../providers/replicate/commands/index.js";
 import { registerCheckCommand } from "./check.js";
 import { registerDocCommands } from "./doc/index.js";
 import { registerMediaCommands } from "./media/index.js";
@@ -31,6 +33,8 @@ export function registerCommands(program: Command): void {
   registerCloudflareCommands(program);
   registerElevenLabsCommands(program);
   registerFalCommands(program);
+  registerAtlasCloudCommands(program);
+  registerReplicateCommands(program);
   registerHeygenCommands(program);
   registerMediaCommands(program);
   registerDocCommands(program);

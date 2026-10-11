@@ -17,6 +17,21 @@ multix gemini transcribe --files interview.mp3 --format markdown
 multix gemini extract --files report.pdf --prompt "Extract tables as JSON" --format json
 ```
 
+Use `-` as a file name to read piped stdin. The type is detected from the
+content (common image, audio, video, PDF and UTF-8 text formats). When it
+cannot be detected the command stops and asks for `--stdin-ext`. `-` may appear
+once and can be mixed with other files, and results label it `<stdin>`. Piped
+input is limited to 2 GB. It is copied to a private temporary file that is
+removed when the command finishes or is interrupted with Ctrl+C; a hard kill
+can leave it in the system temp folder. If nothing arrives on stdin, a hint is
+printed after two seconds. In Windows PowerShell 5.1, piping binary data between
+programs corrupts it; use PowerShell 7.4+, cmd or Git Bash instead.
+
+```bash
+cat screenshot.png | multix gemini analyze --files - --prompt "What is shown?"
+curl -s https://example.com/talk.mp3 | multix gemini transcribe --files - --stdin-ext mp3
+```
+
 ## Images and video
 
 `generate` supports `--model`, `--aspect-ratio`, `--num-images`, `--size`, and

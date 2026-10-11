@@ -17,6 +17,21 @@ multix gemini transcribe --files interview.mp3 --format markdown
 multix gemini extract --files report.pdf --prompt "Extract tables as JSON" --format json
 ```
 
+Dùng `-` làm tên file để đọc dữ liệu pipe qua stdin. Định dạng được nhận diện từ
+nội dung (các định dạng ảnh, audio, video, PDF và text UTF-8 phổ biến). Khi
+không nhận diện được, lệnh dừng lại và yêu cầu `--stdin-ext`. `-` chỉ được xuất
+hiện một lần, có thể dùng cùng file khác, và kết quả gắn nhãn `<stdin>`. Dữ liệu
+pipe tối đa 2 GB. Dữ liệu được chép vào một file tạm riêng tư, bị xóa khi lệnh
+kết thúc hoặc bị ngắt bằng Ctrl+C; nếu process bị kill cứng, file có thể còn lại
+trong thư mục temp của hệ thống. Nếu stdin không có dữ liệu, một gợi ý được in ra
+sau hai giây. Trên Windows PowerShell 5.1, pipe dữ liệu nhị phân giữa các chương
+trình sẽ làm hỏng dữ liệu; hãy dùng PowerShell 7.4+, cmd hoặc Git Bash.
+
+```bash
+cat screenshot.png | multix gemini analyze --files - --prompt "What is shown?"
+curl -s https://example.com/talk.mp3 | multix gemini transcribe --files - --stdin-ext mp3
+```
+
 ## Ảnh và video
 
 `generate` hỗ trợ `--model`, `--aspect-ratio`, `--num-images`, `--size` và
