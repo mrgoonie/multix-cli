@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.2](https://github.com/mrgoonie/multix-cli/compare/v0.15.1...v0.15.2) (2026-10-11)
+
+
+### Fixed
+
+* **doc:** do not retry configuration and non-transient errors ([#96](https://github.com/mrgoonie/multix-cli/issues/96)) ([6c505a6](https://github.com/mrgoonie/multix-cli/commit/6c505a64f88cbcc3ee992ca4112473400189305f))
+
 ## [0.15.1](https://github.com/mrgoonie/multix-cli/compare/v0.15.0...v0.15.1) (2026-10-11)
 
 
