@@ -35,7 +35,7 @@ Detects whether `multix` was installed via npm, pnpm, yarn, or bun global instal
 ## Required env (set at least one provider key)
 
 ```
-GEMINI_API_KEY        # Google AI Studio
+GEMINI_API_KEY        # Google AI Studio (extra keys: GEMINI_API_KEY_2, _3, … rotate on 429/RESOURCE_EXHAUSTED)
 OPENAI_API_KEY        # OpenAI API (image, image edit, TTS, STT)
 OPENROUTER_API_KEY    # OpenRouter (multi-model gateway: image + video via Veo, Seedance, Kling)
 MINIMAX_API_KEY       # MiniMax (image/video/speech/music)

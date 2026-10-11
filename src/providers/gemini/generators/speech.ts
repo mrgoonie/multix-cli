@@ -86,11 +86,14 @@ export async function generateGeminiSpeech(opts: GeminiSpeechOpts): Promise<Gemi
 
   let resp: Awaited<ReturnType<typeof generateContent>>;
   try {
-    resp = await generateContent({
-      model,
-      contents: [{ parts: [{ text }] }],
-      generationConfig,
-    });
+    resp = await generateContent(
+      {
+        model,
+        contents: [{ parts: [{ text }] }],
+        generationConfig,
+      },
+      { logger },
+    );
   } catch (e) {
     return { status: "error", error: e instanceof Error ? e.message : String(e) };
   }
@@ -143,7 +146,7 @@ async function generateInteractionsSpeech(opts: GeminiSpeechOpts): Promise<Gemin
 
   let resp: unknown;
   try {
-    resp = await createInteraction(buildInteractionsSpeechBody(opts));
+    resp = await createInteraction(buildInteractionsSpeechBody(opts), { logger });
   } catch (e) {
     return { status: "error", error: e instanceof Error ? e.message : String(e) };
   }

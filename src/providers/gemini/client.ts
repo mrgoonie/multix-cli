@@ -2,16 +2,18 @@
  * GeminiClient — thin REST wrapper around Gemini generateContent + Files API.
  * Uses httpJson from core (undici fetch). No google-genai SDK dependency.
  *
- * Auth: x-goog-api-key header (preferred over ?key= query param).
+ * Auth: x-goog-api-key header (preferred over ?key= query param). Keys come
+ * from the rotation pool in key-pool.ts; pass `apiKey` to pin one key across a
+ * multi-step flow (an uploaded file only exists for the key that uploaded it).
  * Base: https://generativelanguage.googleapis.com
  */
 
 import fs from "node:fs";
 import path from "node:path";
-import { resolveKey } from "../../core/env-loader.js";
-import { ConfigError, ProviderError } from "../../core/errors.js";
+import { ProviderError } from "../../core/errors.js";
 import { downloadFile, httpJson } from "../../core/http-client.js";
 import type { Logger } from "../../core/logger.js";
+import { withGeminiKey } from "./key-pool.js";
 import { getMimeType, requiresProcessingWait } from "./task-resolver.js";
 
 const BASE = "https://generativelanguage.googleapis.com";
@@ -53,14 +55,15 @@ export interface ImageGenerationResponse {
   images?: Array<{ imageBytes: string; mimeType: string }>;
 }
 
-/** Resolve and validate GEMINI_API_KEY. */
-function requireApiKey(): string {
-  const key = resolveKey("GEMINI_API_KEY");
-  if (!key)
-    throw new ConfigError(
-      "GEMINI_API_KEY is not set. Get one at https://aistudio.google.com/apikey",
-    );
-  return key;
+export interface GeminiCallOptions {
+  /** Use this key instead of picking one from the rotation pool. */
+  apiKey?: string;
+  logger?: Logger;
+}
+
+/** Run with the pinned key, or with key rotation when none was given. */
+function withKey<T>(opts: GeminiCallOptions, fn: (apiKey: string) => Promise<T>): Promise<T> {
+  return opts.apiKey ? fn(opts.apiKey) : withGeminiKey(fn, { logger: opts.logger });
 }
 
 function authHeaders(apiKey: string): Record<string, string> {
@@ -73,9 +76,16 @@ function authHeaders(apiKey: string): Record<string, string> {
  */
 export async function uploadFile(
   filePath: string,
-  opts: { timeoutMs?: number; logger?: Logger } = {},
+  opts: GeminiCallOptions & { timeoutMs?: number } = {},
 ): Promise<FileRef> {
-  const apiKey = requireApiKey();
+  return withKey(opts, (apiKey) => uploadFileWithKey(filePath, apiKey, opts));
+}
+
+async function uploadFileWithKey(
+  filePath: string,
+  apiKey: string,
+  opts: { timeoutMs?: number; logger?: Logger },
+): Promise<FileRef> {
   const { timeoutMs = 300_000, logger } = opts;
 
   const mimeType = getMimeType(filePath);
@@ -147,31 +157,37 @@ export async function uploadFile(
  */
 export async function generateContent(
   req: GenerateContentRequest,
+  opts: GeminiCallOptions = {},
 ): Promise<GenerateContentResponse> {
-  const apiKey = requireApiKey();
-  return httpJson<GenerateContentResponse>({
-    url: `${GENERATE_BASE}/${req.model}:generateContent`,
-    method: "POST",
-    headers: authHeaders(apiKey),
-    body: {
-      contents: req.contents,
-      ...(req.generationConfig ? { generationConfig: req.generationConfig } : {}),
-    },
-  });
+  return withKey(opts, (apiKey) =>
+    httpJson<GenerateContentResponse>({
+      url: `${GENERATE_BASE}/${req.model}:generateContent`,
+      method: "POST",
+      headers: authHeaders(apiKey),
+      body: {
+        contents: req.contents,
+        ...(req.generationConfig ? { generationConfig: req.generationConfig } : {}),
+      },
+    }),
+  );
 }
 
 /**
  * Call the Interactions endpoint (POST /v1beta/interactions) and return the raw
  * Interaction resource. Gemini 3.8 TTS models are served here, not on generateContent.
  */
-export async function createInteraction(body: Record<string, unknown>): Promise<unknown> {
-  const apiKey = requireApiKey();
-  return httpJson<unknown>({
-    url: `${BASE}/v1beta/interactions`,
-    method: "POST",
-    headers: authHeaders(apiKey),
-    body,
-  });
+export async function createInteraction(
+  body: Record<string, unknown>,
+  opts: GeminiCallOptions = {},
+): Promise<unknown> {
+  return withKey(opts, (apiKey) =>
+    httpJson<unknown>({
+      url: `${BASE}/v1beta/interactions`,
+      method: "POST",
+      headers: authHeaders(apiKey),
+      body,
+    }),
+  );
 }
 
 /**
@@ -245,13 +261,10 @@ export function extractImages(
  * List available Gemini models — used for connectivity check.
  */
 export async function listModels(timeoutMs = 10_000): Promise<string[]> {
-  const apiKey = requireApiKey();
   // biome-ignore lint/suspicious/noExplicitAny: dynamic API
-  const resp = await httpJson<any>({
-    url: `${BASE}/v1beta/models`,
-    headers: authHeaders(apiKey),
-    timeoutMs,
-  });
+  const resp = await withGeminiKey<any>((apiKey) =>
+    httpJson({ url: `${BASE}/v1beta/models`, headers: authHeaders(apiKey), timeoutMs }),
+  );
   // biome-ignore lint/suspicious/noExplicitAny: dynamic API
   return ((resp.models ?? []) as any[]).map((m: any) => m.name as string);
 }

@@ -97,7 +97,7 @@ export function registerGeminiImageToImageCommand(parent: Command): void {
           generationConfig: { responseModalities: ["IMAGE"] },
         };
 
-        const resp = await generateContent(req);
+        const resp = await generateContent(req, { logger });
         const images = extractImages(resp);
         if (images.length === 0) {
           logger.error(

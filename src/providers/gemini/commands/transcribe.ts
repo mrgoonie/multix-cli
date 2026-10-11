@@ -14,6 +14,7 @@ import {
   shouldUseFileApi,
   uploadFile,
 } from "../client.js";
+import { withGeminiKey } from "../key-pool.js";
 import { getDefaultModel } from "../models.js";
 import { formatResults } from "../result-formatter.js";
 import type { AnalysisResult, OutputFormat } from "../result-formatter.js";
@@ -51,24 +52,33 @@ export function registerTranscribeCommand(parent: Command): void {
           logger.debug(`[${i + 1}/${opts.files.length}] Transcribing: ${filePath}`);
 
           try {
-            const useApi = shouldUseFileApi(filePath);
-            let contentParts: ContentPart[];
+            // One key per file: an uploaded file only exists for the key that uploaded it.
+            const resp = await withGeminiKey(
+              async (apiKey) => {
+                const useApi = shouldUseFileApi(filePath);
+                let contentParts: ContentPart[];
 
-            if (useApi) {
-              logger.debug("File >20MB — using Files API");
-              const ref = await uploadFile(filePath, { logger });
-              contentParts = [
-                { text: opts.prompt },
-                { fileData: { mimeType: ref.mimeType, fileUri: ref.uri } },
-              ];
-            } else {
-              contentParts = [{ text: opts.prompt }, inlinePart(filePath)];
-            }
+                if (useApi) {
+                  logger.debug("File >20MB — using Files API");
+                  const ref = await uploadFile(filePath, { logger, apiKey });
+                  contentParts = [
+                    { text: opts.prompt },
+                    { fileData: { mimeType: ref.mimeType, fileUri: ref.uri } },
+                  ];
+                } else {
+                  contentParts = [{ text: opts.prompt }, inlinePart(filePath)];
+                }
 
-            const resp = await generateContent({
-              model,
-              contents: [{ parts: contentParts }],
-            });
+                return generateContent(
+                  {
+                    model,
+                    contents: [{ parts: contentParts }],
+                  },
+                  { apiKey },
+                );
+              },
+              { logger },
+            );
 
             results.push({
               file: filePath,

@@ -80,11 +80,14 @@ export function registerGenerateCommand(parent: Command): void {
 
         for (let i = 0; i < numImages; i++) {
           try {
-            const resp = await generateContent({
-              model,
-              contents: [{ parts: [{ text: opts.prompt }] }],
-              generationConfig,
-            });
+            const resp = await generateContent(
+              {
+                model,
+                contents: [{ parts: [{ text: opts.prompt }] }],
+                generationConfig,
+              },
+              { logger },
+            );
 
             const images = extractImages(resp);
             if (images.length === 0) {

@@ -11,11 +11,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Command } from "commander";
-import { resolveKey } from "../../../core/env-loader.js";
 import { ValidationError } from "../../../core/errors.js";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import { maybeDownloadThumb } from "../../../core/video-thumb.js";
+import { withGeminiKey } from "../key-pool.js";
 import { ASPECT_RATIOS, type AspectRatio, getDefaultModel } from "../models.js";
 import { runVeo, veoImageFromFile } from "../veo.js";
 
@@ -48,9 +48,6 @@ export function registerGeminiImageToVideoCommand(parent: Command): void {
       ) => {
         const logger = createLogger({ verbose: opts.verbose ?? false });
 
-        const apiKey = resolveKey("GEMINI_API_KEY");
-        if (!apiKey) throw new ValidationError("GEMINI_API_KEY is not set");
-
         const model = opts.model ?? getDefaultModel("generate-video");
         if (!model.startsWith("veo-")) {
           throw new ValidationError(
@@ -70,18 +67,23 @@ export function registerGeminiImageToVideoCommand(parent: Command): void {
         );
 
         const dest = path.join(getOutputDir(), `veo_i2v_${Date.now()}.mp4`);
-        const finalOp = await runVeo(
-          apiKey,
-          model,
-          {
-            prompt: opts.prompt,
-            image: veoImageFromFile(imagePath),
-            lastFrame: opts.lastFrame ? veoImageFromFile(opts.lastFrame) : undefined,
-            aspectRatio: opts.aspectRatio,
-            resolution: opts.resolution,
-          },
-          dest,
-          logger,
+        // Submit, poll and download must share one key: the operation belongs to it.
+        const finalOp = await withGeminiKey(
+          (apiKey) =>
+            runVeo(
+              apiKey,
+              model,
+              {
+                prompt: opts.prompt,
+                image: veoImageFromFile(imagePath),
+                lastFrame: opts.lastFrame ? veoImageFromFile(opts.lastFrame) : undefined,
+                aspectRatio: opts.aspectRatio,
+                resolution: opts.resolution,
+              },
+              dest,
+              logger,
+            ),
+          { logger },
         );
         logger.success(`Saved video: ${dest}`);
 

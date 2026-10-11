@@ -10,7 +10,7 @@ chạy, rồi `~/.multix/.env`. Không commit API key hoặc đưa key vào shel
 
 | Biến | Dùng cho |
 | --- | --- |
-| `GEMINI_API_KEY` | Gemini |
+| `GEMINI_API_KEY` (và tùy chọn `GEMINI_API_KEY_2`, `GEMINI_API_KEY_3`, …) | Gemini |
 | `OPENAI_API_KEY` | OpenAI |
 | `OPENROUTER_API_KEY` | OpenRouter |
 | `MINIMAX_API_KEY` | MiniMax |
@@ -26,6 +26,21 @@ export GEMINI_API_KEY="your-key"
 export MULTIX_OUTPUT_DIR="./multix-output"
 multix check
 ```
+
+## Xoay vòng Gemini key
+
+Thêm key Gemini phụ bằng `GEMINI_API_KEY_2`, `GEMINI_API_KEY_3`, … (hậu tố số
+bất kỳ). `multix` dùng `GEMINI_API_KEY` trước, sau đó các key đánh số theo thứ
+tự tăng dần; giá trị trùng lặp bị bỏ qua.
+
+- Key trả về HTTP 429 hoặc `RESOURCE_EXHAUSTED` sẽ tạm nghỉ theo `Retry-After`
+  của server, hoặc 60 giây, và chính request đó được thử lại với key kế tiếp.
+  Các lỗi khác thất bại ngay.
+- Request nhiều bước giữ nguyên một key: upload qua Files API cùng lệnh generate
+  dùng file đó, và Veo submit, polling, download.
+- Thời gian nghỉ chỉ tồn tại trong process hiện tại. Log chỉ ghi tên biến môi
+  trường, không bao giờ ghi giá trị key.
+- `multix check` hiển thị số key đang xoay vòng.
 
 ## Ghi đè model và endpoint
 

@@ -7,6 +7,7 @@
 import type { Command } from "commander";
 import { redact, resolveKey } from "../core/env-loader.js";
 import { createLogger } from "../core/logger.js";
+import { listGeminiKeys } from "../providers/gemini/key-pool.js";
 import { checkCodexAuthenticated } from "../providers/openai/codex-image-driver.js";
 import { checkBinary } from "./check-helpers/binary-check.js";
 import { pingGemini } from "./check-helpers/gemini-ping.js";
@@ -73,6 +74,11 @@ const PROVIDERS: ProviderEntry[] = [
 ];
 
 function resolveProviderKey(p: ProviderEntry): { key?: string; envUsed?: string } {
+  if (p.envPrimary === "GEMINI_API_KEY") {
+    // Rotation pool: GEMINI_API_KEY first, then GEMINI_API_KEY_2, _3, …
+    const first = listGeminiKeys()[0];
+    return first ? { key: first.value, envUsed: first.name } : {};
+  }
   const primary = resolveKey(p.envPrimary);
   if (primary) return { key: primary, envUsed: p.envPrimary };
   if (p.envFallback) {
@@ -150,6 +156,14 @@ export function registerCheckCommand(program: Command): void {
         const envLabel = r.envUsed ?? p.envPrimary;
         if (r.key) {
           logger.success(`${envLabel} found — ${redact(r.key)}`);
+          if (p.name === "Gemini") {
+            const pool = listGeminiKeys();
+            if (pool.length > 1) {
+              logger.info(
+                `Gemini key rotation: ${pool.length} keys (${pool.map((k) => k.name).join(", ")})`,
+              );
+            }
+          }
         } else if (p.optional) {
           const fbNote = p.envFallback ? ` (or ${p.envFallback})` : "";
           logger.info(`${p.envPrimary}${fbNote} not set (optional)`);

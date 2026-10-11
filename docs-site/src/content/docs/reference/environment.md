@@ -11,7 +11,7 @@ history and never commit them.
 
 | Variable | Used by |
 | --- | --- |
-| `GEMINI_API_KEY` | Gemini |
+| `GEMINI_API_KEY` (plus optional `GEMINI_API_KEY_2`, `GEMINI_API_KEY_3`, …) | Gemini |
 | `OPENAI_API_KEY` | OpenAI |
 | `OPENROUTER_API_KEY` | OpenRouter |
 | `MINIMAX_API_KEY` | MiniMax |
@@ -27,6 +27,21 @@ export GEMINI_API_KEY="your-key"
 export MULTIX_OUTPUT_DIR="./multix-output"
 multix check
 ```
+
+## Gemini key rotation
+
+Add extra Gemini keys as `GEMINI_API_KEY_2`, `GEMINI_API_KEY_3`, and so on (any
+numeric suffix). `multix` uses `GEMINI_API_KEY` first, then the numbered keys in
+ascending order; duplicate values are ignored.
+
+- A key that returns HTTP 429 or `RESOURCE_EXHAUSTED` cools down for the
+  server's `Retry-After`, or 60 seconds, and the same request is retried with
+  the next key. Other errors fail immediately.
+- Multi-step requests stay on one key: a Files API upload and the generate call
+  that references it, and Veo submit, polling and download.
+- Cooldowns last for the current process only. Logs name the env var, never the
+  key value.
+- `multix check` reports how many keys are in rotation.
 
 ## Model and endpoint overrides
 
