@@ -9,3 +9,5 @@ coverage/
 .DS_Store
 .claude/
 docs-site/.astro/
+.wrangler/
+.dev.vars

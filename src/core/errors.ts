@@ -13,10 +13,12 @@ export class MultixError extends Error {
   ) {
     super(message, options);
     this.name = "MultixError";
-    // Maintain proper stack trace in V8
-    if (Error.captureStackTrace) {
-      Error.captureStackTrace(this, this.constructor);
-    }
+    // Maintain proper stack trace in V8. Typed locally so the file also
+    // type-checks without Node typings (the Cloudflare Worker build).
+    (Error as { captureStackTrace?: (target: object, ctor?: unknown) => void }).captureStackTrace?.(
+      this,
+      this.constructor,
+    );
   }
 }
 

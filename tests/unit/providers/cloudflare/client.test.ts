@@ -110,6 +110,42 @@ describe("Cloudflare client", () => {
     });
   });
 
+  it("keeps polling a running video whose output is still null", async () => {
+    configureNative();
+    vi.stubEnv("CLOUDFLARE_AI_GATEWAY_ID", "gateway-id");
+    vi.stubEnv("REPLICATE_API_TOKEN", "replicate-token");
+    const responses = [
+      { id: "prediction-id", status: "processing", output: null },
+      { id: "prediction-id", status: "succeeded", output: ["https://example.test/video.mp4"] },
+    ];
+    const fetch = vi.fn(
+      async (_url: string, _init?: RequestInit) =>
+        new Response(JSON.stringify(responses.shift()), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetch);
+    vi.useFakeTimers();
+    try {
+      const { waitForVideo } = await import(
+        "../../../../src/providers/cloudflare/commands/video-helpers.js"
+      );
+      const statuses: string[] = [];
+      const done = waitForVideo({ id: "prediction-id", status: "starting" }, 60_000, (s) =>
+        statuses.push(s),
+      );
+      await vi.advanceTimersByTimeAsync(10_000);
+      await expect(done).resolves.toEqual({
+        id: "prediction-id",
+        status: "succeeded",
+        output: ["https://example.test/video.mp4"],
+      });
+      expect(statuses).toEqual(["processing", "succeeded"]);
+      expect(fetch).toHaveBeenCalledTimes(2);
+      expect((fetch.mock.calls[0]?.[1] as RequestInit).signal).toBeInstanceOf(AbortSignal);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("rejects malformed prediction output before it reaches command logging", async () => {
     configureNative();
     vi.stubEnv("CLOUDFLARE_AI_GATEWAY_ID", "gateway-id");

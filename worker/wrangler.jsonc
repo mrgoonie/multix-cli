@@ -1,0 +1,26 @@
+// multix remote MCP server. Separate from docs-site/wrangler.jsonc (the docs site).
+// Secrets are never stored here: set them with `npx wrangler secret put <NAME>`.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "multix-mcp",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  // No nodejs_compat: the bundle must not depend on Node built-ins.
+  "observability": { "enabled": true },
+  // Approximate per-IP limit for /mcp: Workers rate limiting is per Cloudflare
+  // location and eventually consistent, so it is not an exact budget.
+  // namespace_id must be unique per account: pick another integer if any other
+  // Worker on your account already uses 1001, or the two will share counters.
+  "ratelimits": [
+    {
+      "name": "MCP_RATE_LIMITER",
+      "namespace_id": "1001",
+      "simple": { "limit": 60, "period": 60 }
+    }
+  ],
+  "vars": {
+    "MULTIX_MCP_MAX_OUTPUTS": "4",
+    "MULTIX_MCP_MAX_VIDEO_SECONDS": "10",
+    "MULTIX_MCP_ALLOWED_RESOLUTIONS": "480p,720p,1080p"
+  }
+}
