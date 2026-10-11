@@ -385,7 +385,14 @@ describe("submitAndWait", () => {
       expect(calls).toHaveLength(3);
     });
 
-    it.each(["https://10.0.0.5", "http://fal-proxy.internal:8080"])(
+    it("refuses an http non-loopback FAL_BASE_URL before any request (base-URL trust rules)", async () => {
+      process.env.FAL_BASE_URL = "http://fal-proxy.internal:8080";
+      const calls = mockSubmit(STATUS_URL, RESPONSE_URL);
+      await expect(run()).rejects.toThrow(/FAL_BASE_URL must use https/);
+      expect(calls).toHaveLength(0);
+    });
+
+    it.each(["https://10.0.0.5", "http://[::1]:8787"])(
       "allows follow-up URLs on the %s base origin and refuses a foreign host",
       async (base) => {
         process.env.FAL_BASE_URL = base;

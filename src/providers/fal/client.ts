@@ -14,13 +14,13 @@
  * app id themselves via `appIdFromModel`.
  */
 
-import { resolveKey } from "../../core/env-loader.js";
+import { resolveProviderBaseUrl, resolveRoutedKey } from "../../core/env-loader.js";
 import { ProviderError, ValidationError } from "../../core/errors.js";
 import { ConfigError, HttpError } from "../../core/errors.js";
 import { httpJson } from "../../core/http-client.js";
 import type { Logger } from "../../core/logger.js";
 import { redactUrl } from "../../core/redact.js";
-import { DEFAULT_FAL_BASE_URL } from "./models.js";
+import { FAL_ROUTING } from "./models.js";
 
 /**
  * fal's documented queue host. Submit responses point `status_url` /
@@ -52,8 +52,8 @@ function normalizedOrigin(u: URL): string {
  * Throws a ProviderError unless `url` may receive the fal key. Two cases are
  * trusted:
  * - the same origin (scheme, host, port) as FAL_BASE_URL — the key already
- *   goes there on submit, so this adds no new exposure (covers local dev
- *   servers and http or private-address proxies the operator configured);
+ *   goes there on submit, and which base URLs are accepted (https, or http to
+ *   loopback; project-file trust) is decided by `resolveProviderBaseUrl`;
  * - https on exactly {@link FAL_QUEUE_HOST} with the default port.
  * Messages name the host only, never the path, query string or key.
  */
@@ -73,7 +73,7 @@ export function assertTrustedFalUrl(url: string, baseUrl: string): void {
 }
 
 export function requireFalKey(): string {
-  const key = resolveKey("FAL_KEY");
+  const key = resolveRoutedKey(FAL_ROUTING);
   if (!key) {
     throw new ConfigError("FAL_KEY is not set. Get one at https://fal.ai/dashboard/keys");
   }
@@ -81,7 +81,7 @@ export function requireFalKey(): string {
 }
 
 export function falBaseUrl(): string {
-  return resolveKey("FAL_BASE_URL") ?? DEFAULT_FAL_BASE_URL;
+  return resolveProviderBaseUrl(FAL_ROUTING);
 }
 
 export interface FalRequestOptions {

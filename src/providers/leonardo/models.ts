@@ -6,6 +6,17 @@
 
 export const DEFAULT_LEONARDO_BASE_URL = "https://cloud.leonardo.ai/api/rest/v1";
 
+/**
+ * Base URL override and the key env names in the order the provider reads
+ * them (first non-blank wins). Shared by the key lookup, the base URL trust
+ * check and `multix check`, so the three cannot drift apart.
+ */
+export const LEONARDO_ROUTING = {
+  name: "LEONARDO_BASE_URL",
+  defaultUrl: DEFAULT_LEONARDO_BASE_URL,
+  keyEnvs: ["LEONARDO_API_KEY"],
+} as const;
+
 // Lucid Origin — fast, broadly available default image model.
 export const DEFAULT_LEONARDO_MODEL_ID = "7b592283-e8a7-4c5a-9ba6-d18c31f258b9";
 

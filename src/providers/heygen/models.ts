@@ -6,6 +6,17 @@
 
 export const DEFAULT_HEYGEN_BASE_URL = "https://api.heygen.com";
 
+/**
+ * Base URL override and the key env names in the order the provider reads
+ * them (first non-blank wins). Shared by the key lookup, the base URL trust
+ * check and `multix check`, so the three cannot drift apart.
+ */
+export const HEYGEN_ROUTING = {
+  name: "HEYGEN_BASE_URL",
+  defaultUrl: DEFAULT_HEYGEN_BASE_URL,
+  keyEnvs: ["HEYGEN_API_KEY"],
+} as const;
+
 /** Where users create or manage API keys and API credits (separate from web plans). */
 export const HEYGEN_API_SETTINGS_URL = "https://app.heygen.com/developers/api";
 export const HEYGEN_USAGE_URL = "https://app.heygen.com/developers/usage";
