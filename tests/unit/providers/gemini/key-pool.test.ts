@@ -253,7 +253,7 @@ describe("gemini client rotation", () => {
               mimeType: "application/pdf",
             },
           }),
-          { status: 200 },
+          { status: 200, headers: { "x-goog-upload-status": "final" } },
         );
       }
       const key = (init.headers as Record<string, string>)["x-goog-api-key"] as string;

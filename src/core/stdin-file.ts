@@ -13,8 +13,8 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { FILES_API_MAX_BYTES } from "../providers/gemini/limits.js";
 import { ValidationError } from "./errors.js";
+import { FILES_API_MAX_BYTES } from "./limits.js";
 
 export const STDIN_ARG = "-";
 /** Result label for piped input; angle brackets keep it distinct from a real file named "stdin". */
@@ -23,6 +23,14 @@ const HEAD_BYTES = 4096;
 /** Gemini's Files API limit; larger input could never be sent. */
 export const MAX_STDIN_BYTES = FILES_API_MAX_BYTES;
 const WAIT_HINT_MS = 2000;
+
+/** The default cap is the Files API limit, so a file of that size would be rejected too. */
+export function stdinTooLargeMessage(maxBytes: number): string {
+  const bytes = maxBytes.toLocaleString("en-US");
+  return maxBytes === FILES_API_MAX_BYTES
+    ? `Piped stdin exceeds the Gemini Files API limit of 2 GB (${bytes} bytes)`
+    : `Piped stdin exceeds the ${bytes}-byte limit`;
+}
 
 export type StdinLike = AsyncIterable<Buffer | string> & { isTTY?: boolean };
 
@@ -233,9 +241,7 @@ export async function stdinToTempFile(
         clearTimeout(hint);
         const buf = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
         if (size + buf.length > maxBytes) {
-          throw new ValidationError(
-            `Piped stdin exceeds ${Math.floor(maxBytes / 1024 ** 2)} MB; save it to a file instead`,
-          );
+          throw new ValidationError(stdinTooLargeMessage(maxBytes));
         }
         if (head.length < HEAD_BYTES) {
           head = Buffer.concat([head, buf.subarray(0, HEAD_BYTES - head.length)]);

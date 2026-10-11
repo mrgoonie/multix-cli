@@ -12,7 +12,9 @@ Truyền một hoặc nhiều file local bằng `--files`. Khi được hỗ tr�
 `text`, `json`, `csv` hoặc `markdown`. File lớn hơn 20 MB được stream từ ổ đĩa
 lên Gemini Files API, vốn nhận file tối đa 2 GB (2.000.000.000 byte); file lớn
 hơn sẽ bị từ chối trước khi upload. Thời gian chờ upload bằng thời gian gửi file
-ở tốc độ 1 MB/s cộng thêm một phút (khoảng 35 phút cho file 2 GB).
+ở tốc độ 1 MB/s cộng thêm một phút (khoảng 35 phút cho file 2 GB). Với đường truyền
+chậm hơn, đặt `MULTIX_UPLOAD_MIN_KBPS` bằng tốc độ cần cho phép, tính theo kilobyte
+mỗi giây (ví dụ `500` cho 0,5 MB/s).
 
 ```bash
 multix gemini analyze --files photo.jpg clip.mp4 --prompt "Describe the scene"

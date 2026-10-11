@@ -5,10 +5,12 @@ import { Readable } from "node:stream";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ValidationError } from "../../../src/core/errors.js";
 import {
+  MAX_STDIN_BYTES,
   detectExtension,
   labelError,
   resolveFileInputs,
   stdinToTempFile,
+  stdinTooLargeMessage,
 } from "../../../src/core/stdin-file.js";
 
 const bytes = (...parts: Array<string | number[]>) =>
@@ -197,9 +199,18 @@ describe("resolveFileInputs", () => {
           input: pipe(Buffer.alloc(10, 0x61), Buffer.alloc(10, 0x61)),
           maxBytes: 15,
         }),
-      ).rejects.toThrow(/exceeds/);
+      ).rejects.toThrow("Piped stdin exceeds the 15-byte limit");
       const after = fs.readdirSync(os.tmpdir()).filter((n) => n.startsWith("multix-stdin-")).length;
       expect(after).toBeLessThanOrEqual(before);
+    });
+
+    it("names the 2 GB Files API limit for the default cap, as the docs do", () => {
+      expect(MAX_STDIN_BYTES).toBe(2_000_000_000);
+      const msg = stdinTooLargeMessage(MAX_STDIN_BYTES);
+      expect(msg).toBe(
+        "Piped stdin exceeds the Gemini Files API limit of 2 GB (2,000,000,000 bytes)",
+      );
+      expect(msg).not.toMatch(/save it to a file/);
     });
 
     it("registers signal cleanup while the file exists and unregisters it after", async () => {

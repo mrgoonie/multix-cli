@@ -65,8 +65,9 @@ export class HttpError extends MultixError {
     url: string,
     /** Parsed Retry-After header (ms), when the server sent one. */
     public readonly retryAfterMs?: number,
+    options?: ErrorOptions,
   ) {
-    super(`HTTP ${status} from ${redactUrl(url)}: ${snippet}`, "HTTP_ERROR");
+    super(`HTTP ${status} from ${redactUrl(url)}: ${snippet}`, "HTTP_ERROR", options);
     this.url = redactUrl(url);
     Object.defineProperty(this, "rawUrl", { value: url, enumerable: false });
     this.name = "HttpError";

@@ -99,6 +99,7 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `CLOUDFLARE_AI_TTS_MODEL` | No | Speech model setting; only `@cf/myshell-ai/melotts` is accepted |
 | `MULTIX_OUTPUT_DIR` | No | Override default output dir (`./multix-output`) |
 | `MULTIX_MAX_DOWNLOAD_MB` | No | Size limit per downloaded Replicate output file (default `2048`) |
+| `MULTIX_UPLOAD_MIN_KBPS` | No | Slowest Gemini Files API upload speed to allow for, in KB/s (default `1000`); lower it on slow links |
 | `MULTIX_IMAGE_FORMAT` | No | `webp` (default) or `original` to keep provider image format/quality |
 | `OPENROUTER_IMAGE_MODEL` | No | Default OpenRouter model |
 | `OPENROUTER_FALLBACK_MODELS` | No | Comma-separated fallback model ids |

@@ -95,6 +95,12 @@ Chỉ đặt override khi cần thay default. Các biến gồm `IMAGE_GEN_MODEL
 mỗi file output Replicate được tải về (mặc định 2048); xem
 [Replicate](/vi/commands/replicate/) để biết chính sách tải file.
 
+`MULTIX_UPLOAD_MIN_KBPS` đặt tốc độ upload chậm nhất, tính theo kilobyte (1.000
+byte) mỗi giây, mà một lần upload lên Gemini Files API được cho đủ thời gian
+(mặc định `1000`, tức 1 MB/s cộng thêm một phút; tối thiểu `1`). Giảm giá trị
+này khi đường truyền chậm để file lớn không bị hết thời gian chờ; xem
+[Gemini](/vi/commands/gemini/).
+
 Atlas Cloud nhận `ATLASCLOUD_BASE_URL` (base của media API, mặc định
 `https://api.atlascloud.ai/api/v1`) và một biến ghi đè model mặc định cho mỗi
 lệnh: `ATLASCLOUD_IMAGE_MODEL`, `ATLASCLOUD_IMAGE_EDIT_MODEL`,

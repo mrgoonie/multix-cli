@@ -95,6 +95,11 @@ settings include `IMAGE_GEN_MODEL`, `VIDEO_GEN_MODEL`, `MULTIMODAL_MODEL`,
 downloaded Replicate output file (default 2048); see
 [Replicate](/commands/replicate/#outputs) for the download policy.
 
+`MULTIX_UPLOAD_MIN_KBPS` sets the slowest upload speed, in kilobytes (1,000
+bytes) per second, that a Gemini Files API upload is given time for (default
+`1000`, so 1 MB/s plus one minute; at least `1`). Lower it on a slow link so
+large uploads do not time out; see [Gemini](/commands/gemini/).
+
 Atlas Cloud accepts `ATLASCLOUD_BASE_URL` (media API base, default
 `https://api.atlascloud.ai/api/v1`) and one default-model override per command:
 `ATLASCLOUD_IMAGE_MODEL`, `ATLASCLOUD_IMAGE_EDIT_MODEL`,

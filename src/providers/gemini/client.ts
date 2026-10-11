@@ -10,11 +10,12 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { HttpError, ProviderError, ValidationError } from "../../core/errors.js";
+import { resolveKey } from "../../core/env-loader.js";
+import { ConfigError, HttpError, ProviderError, ValidationError } from "../../core/errors.js";
 import { downloadFile, httpJson } from "../../core/http-client.js";
+import { FILES_API_MAX_BYTES } from "../../core/limits.js";
 import type { Logger } from "../../core/logger.js";
 import { withGeminiKey } from "./key-pool.js";
-import { FILES_API_MAX_BYTES } from "./limits.js";
 import { getMimeType, requiresProcessingWait } from "./task-resolver.js";
 
 const BASE = "https://generativelanguage.googleapis.com";
@@ -74,21 +75,40 @@ function authHeaders(apiKey: string): Record<string, string> {
 export { FILES_API_MAX_BYTES };
 
 const DEFAULT_TIMEOUT_MS = 300_000;
-/** Slowest sustained upload speed the upload timeout allows for (1 MB/s, about 8 Mbit/s). */
-const MIN_UPLOAD_BYTES_PER_SEC = 1_000_000;
+export const UPLOAD_MIN_KBPS_ENV = "MULTIX_UPLOAD_MIN_KBPS";
+/** Default slowest sustained upload speed the upload timeout allows for (1 MB/s, about 8 Mbit/s). */
+const DEFAULT_MIN_UPLOAD_BYTES_PER_SEC = 1_000_000;
 /** Fixed allowance on top of the transfer time (connection setup, server finalize). */
 const UPLOAD_TIMEOUT_SLACK_MS = 60_000;
 
 /**
- * Timeout for sending the file bytes: never below `timeoutMs`, and long enough
- * for the whole file at 1 MB/s plus 60 s, so a 2 GB file gets about 35 minutes.
- * Processing (the ACTIVE poll) keeps its own `timeoutMs` deadline.
+ * Slowest upload speed to allow for, in bytes per second: MULTIX_UPLOAD_MIN_KBPS
+ * (kilobytes of 1,000 bytes per second), default 1000 (1 MB/s).
  */
-export function uploadTimeoutMs(size: number, timeoutMs = DEFAULT_TIMEOUT_MS): number {
-  return Math.max(
-    timeoutMs,
-    UPLOAD_TIMEOUT_SLACK_MS + Math.ceil((size / MIN_UPLOAD_BYTES_PER_SEC) * 1000),
-  );
+export function minUploadBytesPerSec(): number {
+  const raw = resolveKey(UPLOAD_MIN_KBPS_ENV)?.trim();
+  if (!raw) return DEFAULT_MIN_UPLOAD_BYTES_PER_SEC;
+  const kbps = Number(raw);
+  if (!Number.isFinite(kbps) || kbps < 1) {
+    throw new ConfigError(
+      `${UPLOAD_MIN_KBPS_ENV} must be a number of kilobytes per second, at least 1, got "${raw}"`,
+    );
+  }
+  return kbps * 1000;
+}
+
+/**
+ * Timeout for sending the file bytes: never below `timeoutMs`, and long enough
+ * for the whole file at `bytesPerSec` (default 1 MB/s) plus 60 s, so a 2 GB
+ * file gets about 35 minutes. Processing (the ACTIVE poll) keeps its own
+ * `timeoutMs` deadline.
+ */
+export function uploadTimeoutMs(
+  size: number,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+  bytesPerSec = DEFAULT_MIN_UPLOAD_BYTES_PER_SEC,
+): number {
+  return Math.max(timeoutMs, UPLOAD_TIMEOUT_SLACK_MS + Math.ceil((size / bytesPerSec) * 1000));
 }
 
 /**
@@ -108,7 +128,9 @@ export async function uploadFile(
       `File too large for the Gemini Files API: ${path.basename(filePath)} is ${formatMb(size)} MB (limit 2 GB = ${FILES_API_MAX_BYTES} bytes)`,
     );
   }
-  return withKey(opts, (apiKey) => uploadFileWithKey(filePath, apiKey, opts));
+  // Read before any request so a bad value fails fast and is never retried.
+  const bytesPerSec = minUploadBytesPerSec();
+  return withKey(opts, (apiKey) => uploadFileWithKey(filePath, apiKey, { ...opts, bytesPerSec }));
 }
 
 function formatMb(bytes: number): string {
@@ -116,13 +138,23 @@ function formatMb(bytes: number): string {
 }
 
 /**
- * fetch for the upload steps. A non-OK response becomes an HttpError (so quota
- * failures rotate keys); a transport failure (timeout, refused redirect, file
- * changed while being read) becomes a ProviderError that keeps the cause.
- * Errors name FILES_BASE, never the session upload URL, which grants write
- * access to the upload on its own.
+ * fetch for the upload steps. Errors name FILES_BASE, never the session upload
+ * URL, which grants write access to the upload on its own.
+ *
+ * - Non-OK response: HttpError with its status (quota failures rotate keys).
+ * - Network failure (connection reset, DNS, a timed-out `start` request):
+ *   HttpError with status 0, which callers such as `doc convert` treat as
+ *   transient and retry.
+ * - Refused redirect or a timed-out byte upload: ProviderError, never retried,
+ *   so a deterministic failure or a slow multi-GB upload is not sent again.
+ * Transport errors keep the original error as `cause`.
  */
-async function uploadFetch(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+async function uploadFetch(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+  step: "start" | "upload",
+): Promise<Response> {
   let resp: Response;
   try {
     resp = await globalThis.fetch(url, {
@@ -134,13 +166,18 @@ async function uploadFetch(url: string, init: RequestInit, timeoutMs: number): P
     });
   } catch (err) {
     const e = err as Error & { cause?: unknown };
-    const reason =
-      e?.name === "TimeoutError"
-        ? `timed out after ${Math.round(timeoutMs / 1000)} s`
-        : e?.cause instanceof Error
-          ? `${e.message}: ${e.cause.message}`
-          : String(e?.message ?? err);
-    throw new ProviderError(`File upload failed: ${reason}`, "gemini", { cause: err });
+    const timedOut = e?.name === "TimeoutError";
+    const redirected = e?.cause instanceof Error && e.cause.message === "unexpected redirect";
+    const reason = timedOut
+      ? `timed out after ${Math.round(timeoutMs / 1000)} s`
+      : e?.cause instanceof Error
+        ? `${e.message}: ${e.cause.message}`
+        : String(e?.message ?? err);
+    const message = `File upload failed: ${reason}`;
+    if (redirected || (timedOut && step === "upload")) {
+      throw new ProviderError(message, "gemini", { cause: err });
+    }
+    throw new HttpError(0, message, FILES_BASE, undefined, { cause: err });
   }
   if (!resp.ok) {
     const txt = await resp.text();
@@ -149,12 +186,41 @@ async function uploadFetch(url: string, init: RequestInit, timeoutMs: number): P
   return resp;
 }
 
+/**
+ * Read the `upload, finalize` response. The upload only counts when the server
+ * reports `X-Goog-Upload-Status: final` and returns a file with a name and URI;
+ * anything else fails here instead of as an undefined fileUri later. The
+ * message never includes the response body or the session URL.
+ */
+async function readFinalizedFile(resp: Response): Promise<FileRef> {
+  const status = resp.headers.get("x-goog-upload-status")?.trim().toLowerCase();
+  let file: Partial<FileRef> | undefined;
+  let readError: unknown;
+  try {
+    file = ((await resp.json()) as { file?: Partial<FileRef> } | null)?.file;
+  } catch (err) {
+    readError = err;
+  }
+  if (status !== "final" || typeof file?.uri !== "string" || typeof file?.name !== "string") {
+    const detail =
+      status !== "final"
+        ? `upload status is "${status?.slice(0, 40) ?? "missing"}"`
+        : readError
+          ? "unreadable response body"
+          : "no file in the response";
+    throw new ProviderError(`File upload failed: upload was not finalized (${detail})`, "gemini", {
+      cause: readError,
+    });
+  }
+  return file as FileRef;
+}
+
 async function uploadFileWithKey(
   filePath: string,
   apiKey: string,
-  opts: { timeoutMs?: number; logger?: Logger },
+  opts: { timeoutMs?: number; logger?: Logger; bytesPerSec: number },
 ): Promise<FileRef> {
-  const { timeoutMs = DEFAULT_TIMEOUT_MS, logger } = opts;
+  const { timeoutMs = DEFAULT_TIMEOUT_MS, logger, bytesPerSec } = opts;
 
   const mimeType = getMimeType(filePath);
   const displayName = path.basename(filePath);
@@ -180,6 +246,7 @@ async function uploadFileWithKey(
       body: JSON.stringify({ file: { display_name: displayName } }),
     },
     timeoutMs,
+    "start",
   );
   const uploadUrl = start.headers.get("x-goog-upload-url");
   await start.body?.cancel();
@@ -198,12 +265,11 @@ async function uploadFileWithKey(
       },
       body: file,
     },
-    uploadTimeoutMs(file.size, timeoutMs),
+    uploadTimeoutMs(file.size, timeoutMs, bytesPerSec),
+    "upload",
   );
 
-  // biome-ignore lint/suspicious/noExplicitAny: dynamic API response
-  const data = (await resp.json()) as any;
-  let fileRef: FileRef = data.file as FileRef;
+  let fileRef = await readFinalizedFile(resp);
 
   // Poll for audio/video processing
   if (requiresProcessingWait(mimeType)) {

@@ -387,6 +387,7 @@ Requires `cwebp` (libwebp: `brew install webp`, `apt install webp`) on `PATH`.
 |---|---|
 | `MULTIX_OUTPUT_DIR` | Override default output dir |
 | `MULTIX_MAX_DOWNLOAD_MB` | Size limit per downloaded Replicate output file (default 2048) |
+| `MULTIX_UPLOAD_MIN_KBPS` | Slowest Gemini Files API upload speed to allow for, in KB/s (default 1000); lower it on slow links |
 | `OPENAI_IMAGE_MODEL` / `OPENAI_TTS_MODEL` / `OPENAI_STT_MODEL` | OpenAI model defaults |
 | `OPENROUTER_IMAGE_MODEL` | Default OpenRouter image model |
 | `OPENROUTER_FALLBACK_MODELS` | CSV; applies to `generate` AND `i2i` |
