@@ -4,14 +4,14 @@
  * Routes prefixed with `v2:/` swap the v1 base for v2 (e.g. /api/rest/v2).
  */
 
-import { resolveKey } from "../../core/env-loader.js";
+import { resolveProviderBaseUrl, resolveRoutedKey } from "../../core/env-loader.js";
 import { ConfigError, HttpError } from "../../core/errors.js";
 import { httpJson } from "../../core/http-client.js";
 import type { Logger } from "../../core/logger.js";
-import { DEFAULT_LEONARDO_BASE_URL } from "./models.js";
+import { LEONARDO_ROUTING } from "./models.js";
 
 export function requireLeonardoKey(): string {
-  const key = resolveKey("LEONARDO_API_KEY");
+  const key = resolveRoutedKey(LEONARDO_ROUTING);
   if (!key) {
     throw new ConfigError(
       "LEONARDO_API_KEY is not set. Get one at https://app.leonardo.ai/settings/api-keys",
@@ -21,7 +21,7 @@ export function requireLeonardoKey(): string {
 }
 
 export function leonardoBaseUrl(): string {
-  return resolveKey("LEONARDO_BASE_URL") ?? DEFAULT_LEONARDO_BASE_URL;
+  return resolveProviderBaseUrl(LEONARDO_ROUTING);
 }
 
 export interface LeonardoRequestOptions {

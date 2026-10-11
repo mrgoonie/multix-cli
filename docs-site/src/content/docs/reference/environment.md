@@ -81,8 +81,10 @@ Project folders are read first, then the same files under your home directory.
 Only credential names are taken from these files: names ending in `_API_KEY`
 (optionally numbered, such as `GEMINI_API_KEY_2`), `_API_TOKEN`, `_ACCOUNT_ID`
 or `_GATEWAY_ID`, plus `FAL_KEY` and `ARK_API_KEY`. Endpoint, proxy and runtime
-settings such as `*_BASE_URL` are ignored, so a cloned repository cannot send
-your keys to another host. The flag itself is ignored inside these files.
+settings such as `*_BASE_URL` are ignored. Account and gateway IDs from the
+`.claude` files of the current directory follow the same trust rules as a
+project `.env` (see [Base URL overrides and trust](#base-url-overrides-and-trust)).
+The flag itself is ignored inside these files.
 `multix check` mentions legacy files it finds while the flag is off, and
 `multix check -v` lists every env file that was loaded (paths only, never
 values). Moving the keys to `.env` or `~/.multix/.env` is still recommended.
@@ -121,6 +123,56 @@ local files uploaded to Atlas Cloud (default 200).
 `HEYGEN_BASE_URL` overrides the HeyGen API base (default
 `https://api.heygen.com`) for proxies and tests. It must be `https://`; plain
 `http://` is accepted only for `localhost`, `127.0.0.1`, or `[::1]`.
+
+### Base URL overrides and trust
+
+A `*_BASE_URL` override decides where your API key is sent. So do
+`CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_AI_GATEWAY_ID`, which choose whose
+Cloudflare account and AI Gateway receive your tokens. Values from the shell
+environment or `~/.multix/.env` are always used. A value from the project
+`.env` (the current directory, or a legacy `.claude` file under it) is used
+only when it cannot send someone else's key:
+
+- It is used when every key the provider sends with that request comes from
+  the same project file, because then the only key that travels is the
+  repository's own. For example, `FAL_BASE_URL` and `FAL_KEY` both in the
+  project `.env`, or `CLOUDFLARE_API_TOKEN` with the account and gateway IDs.
+  Cloudflare video also sends `REPLICATE_API_TOKEN`, so that token must come
+  from the same file too. This protects your key, not your data: a project
+  `.env` that ships its own key and base URL routes that project's requests,
+  including your prompts and any files you upload, to that host, and its key
+  replaces yours from `~/.multix/.env`. Review a cloned repository's `.env`
+  before running `multix` in it.
+- It is ignored when a key comes from somewhere else: the shell,
+  `~/.multix/.env`, a legacy file under your home directory, or a different
+  project file. If `~/.multix/.env` sets the same variable, that value is used
+  and `multix` prints a warning naming the variable, the file and where the key
+  comes from (never the value). Otherwise the command stops with an error
+  before any request is sent. It does not fall back to the vendor default, so a
+  request you meant for a mock server never reaches the paid API.
+- An empty project value never hides the `~/.multix/.env` value.
+- `multix check` lists each of these settings that is set, and whether it is in
+  effect or ignored (for example
+  `FAL_BASE_URL ignored: set in project .env while FAL_KEY comes from the shell`).
+  It uses the same checks as the commands, so it also flags a base URL that
+  breaks the `https://` rule and a Cloudflare ID that works for image and
+  speech but not for video.
+- To use a project value (for example a local mock server), opt in for a single
+  command from your shell:
+  `MULTIX_ALLOW_PROJECT_BASE_URL=1 multix ...`. Avoid putting the opt-in in
+  `~/.multix/.env`: that turns the protection off for every directory you run
+  `multix` in. The opt-in is ignored when it is set in the project `.env`
+  itself.
+- A non-default base URL must use `https://`; plain `http://` is accepted only
+  for `localhost`, `127.0.0.1`, or `[::1]`.
+- Whenever a non-default base URL is in effect, `multix` prints one warning per
+  variable naming the provider and only the hostname, never the key or the full
+  URL. Warnings go to stderr, so stdout stays machine-readable.
+
+This protects base URLs and Cloudflare routing IDs only. A project `.env` can
+still set other process-level variables (proxy, TLS and Node settings, for
+example); see [issue #99](https://github.com/mrgoonie/multix-cli/issues/99).
+Do not run `multix` inside a repository whose `.env` you have not read.
 
 Cloudflare accepts only the built-in Workers AI image and speech model IDs;
 `CLOUDFLARE_AI_IMAGE_MODEL` and `CLOUDFLARE_AI_TTS_MODEL` are therefore useful
