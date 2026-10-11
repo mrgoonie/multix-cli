@@ -201,7 +201,7 @@ export class AtlasCloudClient {
 
   /**
    * Poll until the prediction is terminal (success or failure) or the deadline
-   * passes. Network errors, 429 (honouring Retry-After) and 5xx are retried.
+   * passes. Network errors, 408, 429 (honouring Retry-After) and 5xx are retried.
    * Throws PollTimeoutError on timeout; returns the terminal prediction otherwise.
    */
   async waitForPrediction(id: string, opts: WaitOptions): Promise<AtlasPrediction> {
