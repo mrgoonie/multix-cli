@@ -3,21 +3,30 @@
  * Replicate output URLs expire (about an hour for API predictions), so the CLI
  * downloads them as soon as the prediction succeeds.
  *
+ * Downloads are https-only, never reach local/private addresses (checked on
+ * every redirect hop), warn for hosts other than replicate.delivery, and stop
+ * at MULTIX_MAX_DOWNLOAD_MB.
+ *
  * Naming: `replicate-<id8>-NN.<ext>` in the output dir, or `--output`:
  * - an existing directory (or a path ending in a separator) → files go inside it
  * - a file path with one output → exactly that path (extension inferred if missing)
  * - a file path with several outputs → `<base>-NN.<ext>` beside it
  */
 
-import { once } from "node:events";
 import fs from "node:fs";
 import path from "node:path";
-import { Readable } from "node:stream";
-import { pipeline } from "node:stream/promises";
 import { HttpError, ProviderError } from "../../core/errors.js";
+import { downloadToFile, maxDownloadBytes } from "../../core/http-client.js";
 import type { Logger } from "../../core/logger.js";
 import { redactUrl } from "../../core/redact.js";
-import { type MediaOutput, extFromContentType, extFromUrl, outputFilename } from "./output.js";
+import {
+  type MediaOutput,
+  REPLICATE_DELIVERY_HOST,
+  checkOutputUrl,
+  extFromContentType,
+  extFromUrl,
+  outputFilename,
+} from "./output.js";
 
 const DOWNLOAD_TIMEOUT_MS = 300_000;
 
@@ -57,27 +66,12 @@ export function resolveDestination(
   return `${base}-${String(index + 1).padStart(2, "0")}${ext}`;
 }
 
-async function writeResponse(response: Response, dest: string): Promise<void> {
-  if (!response.body) throw new HttpError(0, "Response body is null", response.url);
-  const fileStream = fs.createWriteStream(dest);
-  try {
-    await pipeline(
-      Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]),
-      fileStream,
-    );
-  } catch (err) {
-    // Windows keeps the handle until close; wait so the partial file can be removed.
-    if (!fileStream.closed) await once(fileStream, "close");
-    throw err;
-  }
-}
-
 async function saveOne(
   item: MediaOutput,
   predictionId: string,
   index: number,
   count: number,
-  opts: SaveMediaOptions,
+  opts: SaveMediaOptions & { maxBytes: number },
 ): Promise<string> {
   if (item.url.startsWith("data:")) {
     const comma = item.url.indexOf(",");
@@ -98,29 +92,36 @@ async function saveOne(
     return dest;
   }
 
-  const doFetch = opts.fetch ?? ((url, init) => globalThis.fetch(url, init));
-  let response: Response;
+  const warned = new Set<string>();
   try {
-    response = await doFetch(item.url, { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
-  } catch (cause) {
-    throw new HttpError(0, cause instanceof Error ? cause.message : String(cause), item.url);
-  }
-  if (!response.ok) {
-    const hint =
-      response.status === 404 || response.status === 410 ? " (output may have expired)" : "";
-    throw new HttpError(response.status, `download failed${hint}`, item.url);
-  }
-  const ext =
-    extFromUrl(item.url) ?? extFromContentType(response.headers.get("content-type")) ?? ".bin";
-  const dest = resolveDestination(predictionId, index, count, ext, opts);
-  fs.mkdirSync(path.dirname(dest), { recursive: true });
-  try {
-    await writeResponse(response, dest);
+    const { dest } = await downloadToFile(item.url, {
+      dest: (response) => {
+        const ext =
+          extFromUrl(item.url) ??
+          extFromContentType(response.headers.get("content-type")) ??
+          ".bin";
+        return resolveDestination(predictionId, index, count, ext, opts);
+      },
+      timeoutMs: DOWNLOAD_TIMEOUT_MS,
+      maxBytes: opts.maxBytes,
+      fetch: opts.fetch,
+      validateUrl: (url) => {
+        const { host, trusted } = checkOutputUrl(url);
+        if (!trusted && !warned.has(host)) {
+          warned.add(host);
+          opts.logger.warn(
+            `Output ${item.path} is served from ${host}, not ${REPLICATE_DELIVERY_HOST}`,
+          );
+        }
+      },
+    });
+    return dest;
   } catch (err) {
-    fs.rmSync(dest, { force: true });
+    if (err instanceof HttpError && (err.status === 404 || err.status === 410)) {
+      throw new HttpError(err.status, "download failed (output may have expired)", item.url);
+    }
     throw err;
   }
-  return dest;
 }
 
 /**
@@ -132,6 +133,8 @@ export async function saveMediaOutputs(
   media: MediaOutput[],
   opts: SaveMediaOptions,
 ): Promise<string[]> {
+  // Read the cap up front so a bad MULTIX_MAX_DOWNLOAD_MB fails before any download.
+  const withCap = { ...opts, maxBytes: maxDownloadBytes() };
   const saved: string[] = [];
   const failed: string[] = [];
   for (let i = 0; i < media.length; i++) {
@@ -139,7 +142,7 @@ export async function saveMediaOutputs(
     if (!item) continue;
     opts.logger.debug(`Downloading ${item.path} from ${redactUrl(item.url).slice(0, 200)}`);
     try {
-      const dest = await saveOne(item, predictionId, i, media.length, opts);
+      const dest = await saveOne(item, predictionId, i, media.length, withCap);
       saved.push(dest);
       opts.logger.success(`Saved ${dest}`);
     } catch (e) {

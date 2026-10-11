@@ -108,6 +108,24 @@ export function mapReplicateError(error: unknown, subject: string): unknown {
   return new ReplicateApiError(message, status, retryAfterMs);
 }
 
+export const ORPHAN_HINT =
+  "The prediction may have been created anyway (Replicate has no idempotency key); check https://replicate.com/predictions before retrying to avoid paying twice";
+
+/**
+ * A network error, timeout, or 5xx on create can happen after Replicate has
+ * already created (and started billing) the prediction, leaving no id to
+ * resume or cancel. Point the user at the dashboard before they retry.
+ */
+function withOrphanHint(error: unknown): unknown {
+  if (!(error instanceof ReplicateApiError)) return error;
+  if (error.status !== 0 && error.status < 500) return error;
+  return new ReplicateApiError(
+    `${error.message}. ${ORPHAN_HINT}`,
+    error.status,
+    error.retryAfterMs,
+  );
+}
+
 /** Reject responses that are not prediction-shaped instead of trusting them. */
 export function validatePrediction(value: unknown): ReplicatePrediction {
   if (
@@ -236,7 +254,7 @@ export class ReplicateClient {
           await this.sleep(delay);
           continue;
         }
-        throw mapReplicateError(error, subject);
+        throw withOrphanHint(mapReplicateError(error, subject));
       }
     }
   }

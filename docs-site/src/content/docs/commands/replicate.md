@@ -79,8 +79,15 @@ multix replicate cancel <id>
   `multix replicate status <id> --download` to retry while the URLs are live.
 - `--wait-timeout <ms>` bounds polling (defaults: run 10 min, image 5 min,
   video 15 min). A timeout prints the resume command; the job keeps running.
-- `--prefer-wait [seconds]` sends `Prefer: wait=N` (1–60 s) so short jobs can
-  finish in the create request; if the job is still running, polling continues.
+- `--prefer-wait <seconds>` sends `Prefer: wait=N` (an integer from 1 to 60)
+  so short jobs can finish in the create request; if the job is still running,
+  polling continues. The value is required, so
+  `multix replicate image --prefer-wait "a cat"` is rejected rather than
+  treating the prompt as the value.
+- If submitting fails with a network error, timeout, or 5xx response, the
+  prediction may still have been created, and it is billed while it runs.
+  Replicate has no idempotency key, so check
+  [your predictions](https://replicate.com/predictions) before retrying.
 
 ## Outputs
 
@@ -94,6 +101,13 @@ multix replicate cancel <id>
   become `<file>-NN.<ext>`); `--output <dir>/` saves into a directory.
 - `--no-download` prints the output URLs instead. Replicate output URLs
   expire (about an hour for API predictions), so download promptly.
+- Downloads use `https://` only. URLs that point to `localhost` or to a
+  loopback, private, link-local, or unspecified IP address are refused, and
+  every redirect is checked the same way. Hosts other than
+  `replicate.delivery` (for example a proxy behind `REPLICATE_BASE_URL`) are
+  downloaded with a warning that names only the host.
+- Each file is capped at `MULTIX_MAX_DOWNLOAD_MB` (default 2048 MB); a larger
+  download is stopped and the partial file removed.
 
 ## Local files
 

@@ -4,7 +4,7 @@
  * with commands to resume or cancel the job by id.
  */
 
-import type { Command } from "commander";
+import { type Command, InvalidArgumentError } from "commander";
 import { ValidationError } from "../../../core/errors.js";
 import type { Logger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
@@ -21,8 +21,21 @@ export interface FlowOptions {
   /** undefined (no flag) and true both mean "download". */
   download?: boolean;
   output?: string;
-  preferWait?: boolean | string;
+  /** Seconds for `Prefer: wait=N`, already validated by parsePreferWaitSeconds. */
+  preferWait?: number;
   verbose?: boolean;
+}
+
+/**
+ * Commander parser for `--prefer-wait <seconds>`: an integer from 1 to 60.
+ * The value is required so the flag can never swallow a following prompt.
+ */
+export function parsePreferWaitSeconds(raw: string): number {
+  const n = Number(raw);
+  if (!/^\d+$/.test(raw.trim()) || n < 1 || n > 60) {
+    throw new InvalidArgumentError("Expected an integer number of seconds from 1 to 60.");
+  }
+  return n;
 }
 
 /** Register the submit/wait/download flags shared by run, image, and video. */
@@ -31,8 +44,9 @@ export function addFlowOptions(cmd: Command, defaultTimeoutMs: number): Command 
     .option("--async", "Submit and return immediately with the prediction id")
     .option("--wait", "Wait for a terminal status (default unless --async)")
     .option(
-      "--prefer-wait [seconds]",
-      "Ask Replicate to hold the create request open (1-60s, default 60); keeps polling if still running",
+      "--prefer-wait <seconds>",
+      "Ask Replicate to hold the create request open for 1-60s; keeps polling if still running",
+      parsePreferWaitSeconds,
     )
     .option("--wait-timeout <ms>", "Polling timeout in milliseconds", String(defaultTimeoutMs))
     .option("--download", "Download media outputs (default)")
@@ -49,12 +63,6 @@ export function parsePositiveInt(raw: string, flag: string, max?: number): numbe
     );
   }
   return n;
-}
-
-function parsePreferWait(value: boolean | string | undefined): number | undefined {
-  if (value === undefined || value === false) return undefined;
-  if (value === true) return 60;
-  return parsePositiveInt(value, "--prefer-wait", 60);
 }
 
 export function resumeCommand(id: string): string {
@@ -141,14 +149,17 @@ export async function executePrediction(params: {
   const { client, model, input, opts, logger } = params;
   if (opts.async && opts.wait)
     throw new ValidationError("--async and --wait are mutually exclusive");
-  if (opts.async && opts.preferWait) {
+  if (opts.async && opts.preferWait !== undefined) {
     throw new ValidationError("--async and --prefer-wait are mutually exclusive");
   }
   const waitTimeoutMs = parsePositiveInt(opts.waitTimeout, "--wait-timeout");
-  const preferWaitSeconds = parsePreferWait(opts.preferWait);
 
   logger.info(`Submitting to Replicate ${describeModelRef(model)}...`);
-  const prediction = await client.createPrediction({ model, input, preferWaitSeconds });
+  const prediction = await client.createPrediction({
+    model,
+    input,
+    preferWaitSeconds: opts.preferWait,
+  });
 
   if (opts.async) {
     printAsyncHandle(prediction);

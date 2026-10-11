@@ -81,8 +81,15 @@ multix replicate cancel <id>
   để thử lại khi URL còn hiệu lực.
 - `--wait-timeout <ms>` giới hạn thời gian poll (mặc định: run 10 phút, image
   5 phút, video 15 phút). Khi hết giờ, CLI in lệnh để tiếp tục; job vẫn chạy.
-- `--prefer-wait [seconds]` gửi `Prefer: wait=N` (1–60 giây) để job ngắn có
-  thể hoàn tất ngay trong request tạo; nếu job vẫn đang chạy, CLI tiếp tục poll.
+- `--prefer-wait <seconds>` gửi `Prefer: wait=N` (số nguyên từ 1 đến 60) để
+  job ngắn có thể hoàn tất ngay trong request tạo; nếu job vẫn đang chạy, CLI
+  tiếp tục poll. Giá trị là bắt buộc, nên
+  `multix replicate image --prefer-wait "a cat"` bị từ chối thay vì coi prompt
+  là giá trị của cờ.
+- Nếu việc gửi prediction gặp lỗi mạng, hết thời gian chờ hoặc lỗi 5xx,
+  prediction vẫn có thể đã được tạo và bị tính phí trong lúc chạy. Replicate
+  không có idempotency key, nên hãy kiểm tra
+  [danh sách prediction](https://replicate.com/predictions) trước khi thử lại.
 
 ## Kết quả
 
@@ -96,6 +103,13 @@ multix replicate cancel <id>
   thành `<file>-NN.<ext>`); `--output <dir>/` lưu vào thư mục.
 - `--no-download` in URL output thay vì tải. URL output của Replicate sẽ hết
   hạn (khoảng một giờ với prediction tạo qua API), nên hãy tải sớm.
+- Chỉ tải qua `https://`. URL trỏ tới `localhost` hoặc tới địa chỉ IP
+  loopback, private, link-local hay unspecified đều bị từ chối, và mọi
+  redirect cũng được kiểm tra như vậy. Host khác `replicate.delivery` (ví dụ
+  proxy sau `REPLICATE_BASE_URL`) vẫn được tải nhưng kèm cảnh báo chỉ nêu tên
+  host.
+- Mỗi file bị giới hạn bởi `MULTIX_MAX_DOWNLOAD_MB` (mặc định 2048 MB); lượt
+  tải vượt giới hạn bị dừng và file dở dang bị xóa.
 
 ## File cục bộ
 
