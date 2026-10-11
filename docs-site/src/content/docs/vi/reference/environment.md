@@ -60,11 +60,17 @@ Bản cài AgentKit cũ lưu key trong các thư mục `.claude`. Đặt
 được nạp sau `~/.multix/.env`, không bao giờ ghi đè giá trị đã có, và file đầu
 tiên đặt một biến sẽ thắng:
 
-1. `.claude/skills/ai-multimodal/.env` và `.claude/skills/ak-ai-multimodal/.env`
+1. `.claude/skills/ai-multimodal/.env`, rồi `.claude/skills/ak-ai-multimodal/.env`
 2. `.claude/skills/.env`
 3. `.claude/.env`
 
 Thư mục project được đọc trước, sau đó là các file tương tự trong thư mục home.
+Chỉ các tên dạng credential được lấy từ những file này: tên kết thúc bằng
+`_API_KEY` (có thể đánh số, như `GEMINI_API_KEY_2`), `_API_TOKEN`, `_ACCOUNT_ID`
+hoặc `_GATEWAY_ID`, cùng `FAL_KEY` và `ARK_API_KEY`. Các thiết lập endpoint,
+proxy và runtime như `*_BASE_URL` bị bỏ qua, nên một repository clone về không
+thể gửi key của bạn tới host khác. Bản thân cờ này bị bỏ qua nếu đặt trong các
+file đó.
 `multix check` báo khi tìm thấy file cũ lúc cờ đang tắt, còn `multix check -v`
 liệt kê mọi file env đã nạp (chỉ đường dẫn, không bao giờ in giá trị). Vẫn nên
 chuyển key sang `.env` hoặc `~/.multix/.env`.

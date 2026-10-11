@@ -6,7 +6,7 @@
  * 2. cwd/.env
  * 3. ~/.multix/.env
  * 4. Legacy Claude/AgentKit layers, only when MULTIX_LEGACY_CLAUDE_ENV=1
- *    (see legacyClaudeEnvFiles for their order)
+ *    (see legacyClaudeEnvFiles for their order; credential names only)
  *
  * dotenv is called with override:false so earlier layers always win.
  * Set MULTIX_DISABLE_HOME_ENV=1 to skip every file under the home directory
@@ -16,7 +16,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { config as dotenvConfig } from "dotenv";
+import { config as dotenvConfig, parse as dotenvParse } from "dotenv";
 
 let loaded = false;
 let loadedFiles: string[] = [];
@@ -37,20 +37,66 @@ function legacyFilesUnder(root: string): string[] {
   ];
 }
 
+function samePath(a: string, b: string): boolean {
+  const norm = (p: string) => {
+    const r = path.resolve(p);
+    return process.platform === "win32" ? r.toLowerCase() : r;
+  };
+  return norm(a) === norm(b);
+}
+
 /** Legacy candidates: project layers first, then the same layers under home. */
 export function legacyClaudeEnvFiles(cwd: string, home?: string): string[] {
   const files = legacyFilesUnder(cwd);
-  if (home && path.resolve(home) !== path.resolve(cwd)) files.push(...legacyFilesUnder(home));
+  if (home && !samePath(home, cwd)) files.push(...legacyFilesUnder(home));
   return files;
 }
 
-function isTruthy(value: string | undefined): boolean {
+/** True when MULTIX_LEGACY_CLAUDE_ENV opts in to the legacy `.claude` layers. */
+export function legacyClaudeEnvEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  const value = env.MULTIX_LEGACY_CLAUDE_ENV;
   return value !== undefined && ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
 }
 
+/**
+ * Legacy `.claude` files often sit in cloned repos and hold unrelated
+ * settings, so only credential-shaped names are taken from them. Endpoint,
+ * proxy and runtime variables (e.g. *_BASE_URL, HTTPS_PROXY, NODE_OPTIONS)
+ * are ignored so a repo cannot redirect a key to another host.
+ */
+const LEGACY_ALLOWED_NAME =
+  /^[A-Z][A-Z0-9_]*_(API_KEY(_\d+)?|API_TOKEN|ACCOUNT_ID|GATEWAY_ID)$|^(FAL_KEY|ARK_API_KEY)$/;
+
+export function isLegacyAllowedName(name: string): boolean {
+  return LEGACY_ALLOWED_NAME.test(name);
+}
+
+function isReadableFile(file: string): boolean {
+  try {
+    return fs.statSync(file).isFile();
+  } catch {
+    return false;
+  }
+}
+
 function loadFile(file: string): void {
-  if (!fs.existsSync(file)) return;
-  dotenvConfig({ path: file, override: false });
+  if (!isReadableFile(file)) return;
+  const result = dotenvConfig({ path: file, override: false });
+  if (!result.error) loadedFiles.push(file);
+}
+
+/** Load credential-shaped names from a legacy file without overriding anything. */
+function loadLegacyFile(file: string): void {
+  if (!isReadableFile(file)) return;
+  let parsed: Record<string, string>;
+  try {
+    parsed = dotenvParse(fs.readFileSync(file));
+  } catch {
+    return;
+  }
+  for (const [name, value] of Object.entries(parsed)) {
+    if (isLegacyAllowedName(name) && process.env[name] === undefined) process.env[name] = value;
+  }
   loadedFiles.push(file);
 }
 
@@ -71,8 +117,8 @@ export function loadEnv(): void {
 
   // Opt-in compatibility for old AgentKit installs. Checked after the files
   // above so the flag itself may live in cwd/.env or ~/.multix/.env.
-  if (isTruthy(process.env.MULTIX_LEGACY_CLAUDE_ENV)) {
-    for (const file of legacyClaudeEnvFiles(cwd, home)) loadFile(file);
+  if (legacyClaudeEnvEnabled()) {
+    for (const file of legacyClaudeEnvFiles(cwd, home)) loadLegacyFile(file);
   }
 }
 

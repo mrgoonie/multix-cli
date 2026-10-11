@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   _resetEnvLoader,
   getLoadedEnvFiles,
+  isLegacyAllowedName,
+  legacyClaudeEnvEnabled,
   legacyClaudeEnvFiles,
   loadEnv,
   redact,
@@ -48,7 +50,14 @@ describe("env-loader", () => {
 
   describe("legacy .claude layers", () => {
     let tmp: string;
-    const VARS = ["MULTIX_LEGACY_CLAUDE_ENV", "LEGACY_A", "LEGACY_B", "LEGACY_C", "LEGACY_D"];
+    const VARS = [
+      "MULTIX_LEGACY_CLAUDE_ENV",
+      "LEGACY_A_API_KEY",
+      "LEGACY_B_API_KEY",
+      "LEGACY_C_API_KEY",
+      "LEGACY_D_API_KEY",
+      "LEGACY_BASE_URL",
+    ];
 
     const write = (rel: string, body: string) => {
       const file = path.join(tmp, rel);
@@ -85,32 +94,72 @@ describe("env-loader", () => {
       ]);
     });
 
-    it("ignores legacy files unless MULTIX_LEGACY_CLAUDE_ENV is set", () => {
-      write(".claude/.env", "LEGACY_A=from-claude\n");
+    it("ignores legacy files unless MULTIX_LEGACY_CLAUDE_ENV is truthy", () => {
+      write(".claude/.env", "LEGACY_A_API_KEY=from-claude\n");
+      process.env.MULTIX_LEGACY_CLAUDE_ENV = "0";
       loadEnv();
-      expect(process.env.LEGACY_A).toBeUndefined();
+      expect(process.env.LEGACY_A_API_KEY).toBeUndefined();
       expect(getLoadedEnvFiles()).toEqual([]);
     });
 
-    it("loads legacy layers after cwd/.env with the most specific file winning", () => {
-      const cwdEnv = write(".env", "MULTIX_LEGACY_CLAUDE_ENV=1\nLEGACY_A=from-cwd\n");
-      const skill = write(".claude/skills/ai-multimodal/.env", "LEGACY_A=skill\nLEGACY_B=skill\n");
-      const skills = write(".claude/skills/.env", "LEGACY_B=skills\nLEGACY_C=skills\n");
-      const claude = write(".claude/.env", "LEGACY_C=claude\nLEGACY_D=claude\n");
-      loadEnv();
-      expect(process.env.LEGACY_A).toBe("from-cwd");
-      expect(process.env.LEGACY_B).toBe("skill");
-      expect(process.env.LEGACY_C).toBe("skills");
-      expect(process.env.LEGACY_D).toBe("claude");
-      expect(getLoadedEnvFiles()).toEqual([cwdEnv, skill, skills, claude]);
+    it("parses the flag like the loader does", () => {
+      for (const v of ["1", "true", "TRUE", " yes ", "on"]) {
+        expect(legacyClaudeEnvEnabled({ MULTIX_LEGACY_CLAUDE_ENV: v })).toBe(true);
+      }
+      for (const v of [undefined, "", "0", "false", "off"]) {
+        expect(legacyClaudeEnvEnabled({ MULTIX_LEGACY_CLAUDE_ENV: v })).toBe(false);
+      }
     });
 
-    it("never overrides process.env", () => {
-      process.env.MULTIX_LEGACY_CLAUDE_ENV = "true";
-      process.env.LEGACY_A = "shell";
-      write(".claude/.env", "LEGACY_A=file\n");
+    it("loads legacy layers after cwd/.env with the most specific file winning", () => {
+      const cwdEnv = write(".env", "MULTIX_LEGACY_CLAUDE_ENV=1\nLEGACY_A_API_KEY=from-cwd\n");
+      const skill = write(
+        ".claude/skills/ai-multimodal/.env",
+        "LEGACY_A_API_KEY=skill\nLEGACY_B_API_KEY=skill\n",
+      );
+      const akSkill = write(".claude/skills/ak-ai-multimodal/.env", "LEGACY_B_API_KEY=ak-skill\n");
+      const skills = write(
+        ".claude/skills/.env",
+        "LEGACY_B_API_KEY=skills\nLEGACY_C_API_KEY=skills\n",
+      );
+      const claude = write(".claude/.env", "LEGACY_C_API_KEY=claude\nLEGACY_D_API_KEY=claude\n");
       loadEnv();
-      expect(process.env.LEGACY_A).toBe("shell");
+      expect(process.env.LEGACY_A_API_KEY).toBe("from-cwd");
+      expect(process.env.LEGACY_B_API_KEY).toBe("skill");
+      expect(process.env.LEGACY_C_API_KEY).toBe("skills");
+      expect(process.env.LEGACY_D_API_KEY).toBe("claude");
+      expect(getLoadedEnvFiles()).toEqual([cwdEnv, skill, akSkill, skills, claude]);
+    });
+
+    it("takes only credential-shaped names from legacy files", () => {
+      process.env.MULTIX_LEGACY_CLAUDE_ENV = "1";
+      write(".claude/.env", "LEGACY_A_API_KEY=ok\nLEGACY_BASE_URL=https://evil.example\n");
+      loadEnv();
+      expect(process.env.LEGACY_A_API_KEY).toBe("ok");
+      expect(process.env.LEGACY_BASE_URL).toBeUndefined();
+      expect(isLegacyAllowedName("GEMINI_API_KEY_2")).toBe(true);
+      expect(isLegacyAllowedName("FAL_KEY")).toBe(true);
+      expect(isLegacyAllowedName("CLOUDFLARE_ACCOUNT_ID")).toBe(true);
+      expect(isLegacyAllowedName("REPLICATE_API_TOKEN")).toBe(true);
+      expect(isLegacyAllowedName("FAL_BASE_URL")).toBe(false);
+      expect(isLegacyAllowedName("HTTPS_PROXY")).toBe(false);
+      expect(isLegacyAllowedName("NODE_OPTIONS")).toBe(false);
+      expect(isLegacyAllowedName("MULTIX_OUTPUT_DIR")).toBe(false);
+    });
+
+    it("skips directories named .env and never overrides process.env", () => {
+      process.env.MULTIX_LEGACY_CLAUDE_ENV = "true";
+      process.env.LEGACY_A_API_KEY = "shell";
+      fs.mkdirSync(path.join(tmp, ".claude", "skills", ".env"), { recursive: true });
+      const claude = write(".claude/.env", "LEGACY_A_API_KEY=file\n");
+      loadEnv();
+      expect(process.env.LEGACY_A_API_KEY).toBe("shell");
+      expect(getLoadedEnvFiles()).toEqual([claude]);
+    });
+
+    it("does not list home layers twice when cwd is the home directory", () => {
+      const files = legacyClaudeEnvFiles("/same", "/same");
+      expect(files).toHaveLength(4);
     });
   });
 
