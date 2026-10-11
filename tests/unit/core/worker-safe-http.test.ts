@@ -2,7 +2,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { PollTimeoutError, isTransientHttpError, pollUntil } from "../../../src/core/async-poll.js";
+import {
+  PollTimeoutError,
+  isRetryableServerStatus,
+  isTransientHttpError,
+  pollUntil,
+} from "../../../src/core/async-poll.js";
 import {
   ConfigError,
   HttpError,
@@ -306,6 +311,14 @@ describe("pollUntil", () => {
     expect(isTransientHttpError(new Error("x"))).toBe(false);
   });
 
+  it("shares one server-status rule across retry policies", () => {
+    for (const status of [0, 500, 502, 503, 504])
+      expect(isRetryableServerStatus(status)).toBe(true);
+    for (const status of [400, 408, 429, 501, 505]) {
+      expect(isRetryableServerStatus(status)).toBe(false);
+    }
+  });
+
   it("does not poll again after a 501", async () => {
     const fetchStatus = vi.fn(async () => {
       throw new HttpError(501, "not implemented", "https://api.example.com/jobs/1");
@@ -344,8 +357,21 @@ describe("toFetchError", () => {
         cause: new AggregateError([withCode("connect", "ECONNREFUSED")], "all failed"),
       }),
     ],
+    [
+      "connect-attempt timeout cause",
+      new TypeError("fetch failed", {
+        cause: withCode("connect timed out", "ERR_SOCKET_CONNECTION_TIMEOUT"),
+      }),
+    ],
+    ["ENETDOWN cause", new TypeError("fetch failed", { cause: withCode("down", "ENETDOWN") })],
+    ["EPROTO cause", new TypeError("fetch failed", { cause: withCode("handshake", "EPROTO") })],
     ["TimeoutError", new DOMException("timed out", "TimeoutError")],
     ["AbortError", new DOMException("aborted", "AbortError")],
+    // Cloudflare Workers reject without Node error codes.
+    ["codeless Worker Error", new Error("Network connection lost.")],
+    ["codeless Worker TypeError", new TypeError("Network connection lost.")],
+    ["codeless cause", new TypeError("fetch failed", { cause: new Error("bad port") })],
+    ["non-Error value", "boom"],
   ])("maps a %s to a transient HttpError(0) keeping the cause", (_label, failure) => {
     expect(isNetworkFetchFailure(failure)).toBe(true);
     const err = toFetchError(failure, url);
@@ -381,17 +407,67 @@ describe("toFetchError", () => {
     expect(err.cause).toBe(failure);
   });
 
-  it("maps any other rejection to a non-transient ProviderError", () => {
-    const failure = new TypeError("fetch failed", { cause: new Error("bad port") });
+  it.each([
+    ["ERR_INVALID_URL", withCode("Invalid URL", "ERR_INVALID_URL")],
+    [
+      "ERR_INVALID_CHAR",
+      withCode('Invalid character in header content ["x-api-key"]', "ERR_INVALID_CHAR"),
+    ],
+    [
+      "ERR_INVALID_HTTP_TOKEN",
+      withCode("Header name must be a valid HTTP token", "ERR_INVALID_HTTP_TOKEN"),
+    ],
+    ["legal header value", new TypeError("'abc\nsecret' is not a legal HTTP header value")],
+  ])("maps %s to a non-transient ConfigError", (_label, failure) => {
     expect(isNetworkFetchFailure(failure)).toBe(false);
-    const err = toFetchError(failure, url, "replicate");
+    const err = toFetchError(failure, url);
+    expect(err).toBeInstanceOf(ConfigError);
+    expect(isTransientHttpError(err)).toBe(false);
+    expect(err.message).not.toContain("secret");
+    expect(err.message).not.toContain("SECRET");
+  });
+
+  it.each([
+    ["CERT_HAS_EXPIRED", "certificate has expired"],
+    ["UNABLE_TO_VERIFY_LEAF_SIGNATURE", "unable to verify the first certificate"],
+    ["SELF_SIGNED_CERT_IN_CHAIN", "self-signed certificate in certificate chain"],
+    ["DEPTH_ZERO_SELF_SIGNED_CERT", "self-signed certificate"],
+    ["ERR_TLS_CERT_ALTNAME_INVALID", "Hostname/IP does not match certificate's altnames"],
+    ["UND_ERR_INVALID_ARG", "invalid upgrade header"],
+    ["UND_ERR_NOT_SUPPORTED", "not supported"],
+  ])("maps a %s cause to a non-transient ProviderError naming it", (code, message) => {
+    const failure = new TypeError("fetch failed", { cause: withCode(message, code) });
+    expect(isNetworkFetchFailure(failure)).toBe(false);
+    const err = toFetchError(failure, url, { provider: "replicate" });
     expect(err).toBeInstanceOf(ProviderError);
     expect((err as ProviderError).provider).toBe("replicate");
     expect(isTransientHttpError(err)).toBe(false);
     expect(err.message).toBe(
-      "Request to https://api.example.com/v1/x?[redacted] failed: TypeError: fetch failed",
+      `Request to https://api.example.com/v1/x?[redacted] failed: fetch failed: ${message}`,
     );
     expect(err.cause).toBe(failure);
+  });
+
+  it.each([
+    "duplex option is required",
+    "Request with GET/HEAD method cannot have body",
+    "unexpected redirect",
+  ])("does not retry a request fetch refuses to send (%s)", (message) => {
+    const failure = new TypeError("fetch failed", { cause: new TypeError(message) });
+    expect(toFetchError(failure, url)).toBeInstanceOf(ProviderError);
+  });
+
+  it("applies a prefix and target, and scrubs URLs containing spaces", () => {
+    const failure = new TypeError("fetch failed", {
+      cause: withCode("bad cert for https://h.test/a b?token=SECRET&x=1", "CERT_HAS_EXPIRED"),
+    });
+    const err = toFetchError(failure, url, {
+      prefix: "File upload failed: ",
+      target: "the upload session URL",
+    });
+    expect(err.message).toBe(
+      "File upload failed: Request to the upload session URL failed: fetch failed: bad cert for https://h.test/a b?[redacted]",
+    );
   });
 
   it("makes fetchJson fail once on an invalid header instead of reporting a network error", async () => {

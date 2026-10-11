@@ -260,8 +260,8 @@ failed or cancelled job as success.
 | 404 | Unknown ID | Check the ID and that `--type` matches it |
 | 429 | Rate/concurrency limit or `quota_exceeded` | The CLI honours `Retry-After`; reduce parallel jobs |
 
-- Rate-limited (429) create requests are retried after `Retry-After`. Server
-  errors are retried only on endpoints that document an `Idempotency-Key`
+- Rate-limited (429) create requests are retried after `Retry-After`. Network
+  failures and server errors (5xx except 501 and 505) are retried only on endpoints that document an `Idempotency-Key`
   (videos, translations, lipsyncs, templates, assets, model videos), which the
   CLI sends automatically. Video Agent and speech creates are never replayed.
 - Pay-as-you-go API accounts can run about 10 concurrent workflows. HeyGen

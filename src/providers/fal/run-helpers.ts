@@ -5,6 +5,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { isRetryableServerStatus } from "../../core/async-poll.js";
 import { downloadFile } from "../../core/http-client.js";
 import { parseJsonInput } from "../../core/json-input.js";
 import type { Logger } from "../../core/logger.js";
@@ -31,9 +32,9 @@ export interface SubmitAndWaitResult {
   result: FalResultResponse;
 }
 
-/** True for errors worth retrying while polling: network failures and 5xx responses. */
+/** True for errors worth retrying while polling: network failures and 5xx responses except 501/505. */
 function isTransientError(e: unknown): boolean {
-  if (e instanceof HttpError) return e.status === 0 || e.status >= 500;
+  if (e instanceof HttpError) return isRetryableServerStatus(e.status);
   return false;
 }
 

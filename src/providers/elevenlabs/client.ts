@@ -68,11 +68,17 @@ export function apiPostJson<T>(
 /** DELETE. */
 export async function apiDelete(endpoint: string, apiKey: string): Promise<void> {
   const url = `${ELEVENLABS_BASE_URL}/${endpoint.replace(/^\//, "")}`;
-  const res = await fetchSameOrigin(url, {
-    method: "DELETE",
-    headers: authHeaders(apiKey),
-    signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
-  });
+  let res: Response;
+  try {
+    res = await fetchSameOrigin(url, {
+      method: "DELETE",
+      headers: authHeaders(apiKey),
+      signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
+    });
+  } catch (cause) {
+    if (cause instanceof HttpError) throw cause;
+    throw toFetchError(cause, url, { provider: "elevenlabs" });
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new HttpError(res.status, text.slice(0, 500), url);
@@ -116,7 +122,7 @@ export async function apiPostBinary(
     res = await fetchSameOrigin(url.toString(), init);
   } catch (cause) {
     if (cause instanceof HttpError) throw cause;
-    throw toFetchError(cause, url.toString(), "elevenlabs");
+    throw toFetchError(cause, url.toString(), { provider: "elevenlabs" });
   }
 
   if (!res.ok) {
@@ -147,7 +153,7 @@ export async function apiPostMultipart<T>(
     });
   } catch (cause) {
     if (cause instanceof HttpError) throw cause;
-    throw toFetchError(cause, url, "elevenlabs");
+    throw toFetchError(cause, url, { provider: "elevenlabs" });
   }
   if (!res.ok) {
     const text = await res.text().catch(() => "");

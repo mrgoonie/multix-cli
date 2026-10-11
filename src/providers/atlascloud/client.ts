@@ -255,7 +255,7 @@ export class AtlasCloudClient {
       );
     } catch (cause) {
       if (cause instanceof HttpError) throw cause;
-      throw toFetchError(cause, url, "atlascloud");
+      throw toFetchError(cause, url, { provider: "atlascloud" });
     }
     if (!response.ok) throw await httpErrorFromResponse(response, url);
 

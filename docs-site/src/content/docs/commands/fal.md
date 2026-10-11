@@ -60,7 +60,7 @@ path segments, e.g. `fal-ai/kling-video`); the full model id used for `run`,
 - Submission uses the full model id; the queue's status/result endpoints are
   keyed by the app id (owner/alias) instead.
 - Polling is bounded by `--wait-timeout` (a wall-clock deadline, in
-  milliseconds) and retries transient network/5xx errors. A timeout or
+  milliseconds) and retries transient network errors and 5xx responses other than 501 and 505. A timeout or
   unrecoverable error prints the request ID so you can resume with
   `multix fal status` or `multix fal result`.
 - Media extraction prefers known result fields (`images[].url`, `video.url`,

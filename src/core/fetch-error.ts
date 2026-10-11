@@ -1,115 +1,165 @@
 /**
  * Classify a rejected `fetch` call. Runtime-neutral (no node:* imports).
  *
- * `fetch` rejects with a TypeError both for real network failures and for
- * local, deterministic faults (a header value that is not a ByteString, an
- * invalid URL). Only the former is worth retrying, so only it becomes the
- * status-0 HttpError that `isTransientHttpError` treats as transient.
+ * `fetch` rejects for real transport failures and for local, deterministic
+ * faults (a header value that is not a ByteString, an invalid URL, a TLS
+ * certificate the runtime will never accept). Runtimes describe transport
+ * failures differently: undici attaches Node error codes to the cause, while
+ * a Cloudflare Worker throws codeless errors such as "Network connection
+ * lost.". So a rejection is treated as a transient network failure by
+ * default, and only the known-deterministic shapes below are not retried.
  */
 
 import { ConfigError, HttpError, ProviderError } from "./errors.js";
 import { redactUrl } from "./redact.js";
 
-const NETWORK_CODES = new Set([
-  "ECONNRESET",
-  "ECONNREFUSED",
-  "ECONNABORTED",
-  "ENOTFOUND",
-  "EAI_AGAIN",
-  "ETIMEDOUT",
-  "EPIPE",
-  "ENETUNREACH",
-  "EHOSTUNREACH",
-]);
+type DeterministicKind = "url" | "header" | "tls" | "request";
+
 const MAX_CAUSE_DEPTH = 4;
 
-type ErrorLike = { name?: unknown; message?: unknown; code?: unknown; cause?: unknown };
+const TLS_CODES = new Set([
+  "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+  "SELF_SIGNED_CERT_IN_CHAIN",
+  "DEPTH_ZERO_SELF_SIGNED_CERT",
+  "ERR_TLS_CERT_ALTNAME_INVALID",
+]);
 
-function isNetworkCode(code: unknown): boolean {
-  return typeof code === "string" && (code.startsWith("UND_ERR_") || NETWORK_CODES.has(code));
-}
+type ErrorLike = {
+  name?: unknown;
+  message?: unknown;
+  code?: unknown;
+  cause?: unknown;
+  errors?: unknown;
+};
 
-/** True when `err` or one of its causes (a few levels deep) carries a network error code. */
-function hasNetworkCause(err: unknown): boolean {
-  let current: unknown = err;
-  for (let depth = 0; depth <= MAX_CAUSE_DEPTH && current; depth++) {
-    const e = current as ErrorLike & { errors?: unknown };
-    if (isNetworkCode(e.code)) return true;
-    // Node reports a failed multi-address connect as an AggregateError.
-    if (Array.isArray(e.errors) && e.errors.some((x) => isNetworkCode((x as ErrorLike)?.code))) {
-      return true;
-    }
-    current = e.cause;
+function kindOfCode(code: unknown): DeterministicKind | undefined {
+  if (typeof code !== "string") return undefined;
+  if (code === "ERR_INVALID_URL") return "url";
+  if (code === "ERR_INVALID_CHAR" || code === "ERR_INVALID_HTTP_TOKEN") return "header";
+  if (TLS_CODES.has(code) || code.startsWith("CERT_") || code.startsWith("UNABLE_TO_")) {
+    return "tls";
   }
-  return false;
+  if (code === "UND_ERR_INVALID_ARG" || code === "UND_ERR_NOT_SUPPORTED") return "request";
+  return undefined;
 }
 
-/**
- * True for failures worth retrying: a timeout or abort, or a TypeError whose
- * cause chain carries a network error code (connection reset, DNS, ...).
- */
-export function isNetworkFetchFailure(err: unknown): boolean {
-  const e = err as ErrorLike | null | undefined;
-  if (!e || typeof e !== "object") return false;
-  if (e.name === "TimeoutError" || e.name === "AbortError") return true;
-  return e instanceof TypeError && hasNetworkCause(e.cause);
+function kindOfMessage(message: unknown): DeterministicKind | undefined {
+  if (typeof message !== "string") return undefined;
+  if (/Invalid URL|Failed to parse URL/i.test(message)) return "url";
+  if (
+    /ByteString|is not a legal HTTP header value|invalid header value|invalid header name/i.test(
+      message,
+    )
+  ) {
+    return "header";
+  }
+  if (/duplex option is required|cannot have body|unexpected redirect/i.test(message)) {
+    return "request";
+  }
+  return undefined;
 }
 
-/** Error message with every embedded URL stripped of its query string. */
-function safeMessage(err: unknown): string {
-  const e = err as ErrorLike | null | undefined;
-  const msg = typeof e?.message === "string" ? e.message : String(err);
-  return msg.replace(/\b[a-z][a-z0-9+.-]*:\/\/\S+/gi, (u) => redactUrl(u));
-}
-
+/** The error and its causes, a few levels deep (AggregateError members included). */
 function causeChain(err: unknown): ErrorLike[] {
   const out: ErrorLike[] = [];
   let current: unknown = err;
   for (let depth = 0; depth <= MAX_CAUSE_DEPTH && current && typeof current === "object"; depth++) {
-    out.push(current as ErrorLike);
-    current = (current as ErrorLike).cause;
+    const e = current as ErrorLike;
+    out.push(e);
+    // Node reports a failed multi-address connect as an AggregateError.
+    if (Array.isArray(e.errors)) {
+      for (const member of e.errors) if (member && typeof member === "object") out.push(member);
+    }
+    current = e.cause;
   }
   return out;
+}
+
+/** Which deterministic fault the rejection describes, or undefined for a transient one. */
+function deterministicKind(err: unknown): DeterministicKind | undefined {
+  for (const e of causeChain(err)) {
+    const kind = kindOfCode(e.code) ?? kindOfMessage(e.message);
+    if (kind) return kind;
+  }
+  return undefined;
+}
+
+/**
+ * True unless the rejection is a known deterministic fault (invalid URL or
+ * header value, TLS certificate error, a request fetch refuses to send).
+ * Timeouts, connection failures and unknown errors are worth retrying.
+ * An AbortError counts as transient because every caller aborts only through
+ * `AbortSignal.timeout`; a caller that passes a user cancellation signal must
+ * check `signal.aborted` itself before retrying.
+ */
+export function isNetworkFetchFailure(err: unknown): boolean {
+  return deterministicKind(err) === undefined;
+}
+
+/**
+ * Error message with URLs stripped of their query string and fragment, and any
+ * other `?key=value` tail (e.g. after a URL containing a space) removed.
+ */
+function scrub(message: string): string {
+  return message
+    .replace(/\b[a-z][a-z0-9+.-]*:\/\/[^\s"'<>]+/gi, (u) => redactUrl(u))
+    .replace(/[?#](?!\[redacted\])[^\s"'<>]*=[^\s"'<>]*/g, "?[redacted]");
+}
+
+function messageOf(e: ErrorLike | undefined): string {
+  return typeof e?.message === "string" ? scrub(e.message) : "";
+}
+
+/** "fetch failed: <first cause>" style detail, scrubbed. */
+function detailOf(err: unknown): string {
+  const chain = causeChain(err);
+  const parts = [messageOf(chain[0]), messageOf(chain[1])].filter(Boolean);
+  return parts.length > 0 ? parts.join(": ") : scrub(String(err));
+}
+
+export interface FetchErrorOptions {
+  /** Provider name for a ProviderError. Default "http". */
+  provider?: string;
+  /** Prepended to every message, e.g. "File upload failed: ". */
+  prefix?: string;
+  /** How messages name the request target. Default: the URL with its query string redacted. */
+  target?: string;
 }
 
 /**
  * Turn a `fetch` rejection into a multix error that keeps the original as
  * `cause`:
- * - network failure or timeout: HttpError with status 0 (transient);
- * - invalid header value or URL: ConfigError (not retried);
- * - anything else: ProviderError (not retried).
+ * - invalid URL or header value: ConfigError (not retried);
+ * - TLS certificate error or a request fetch refuses to send: ProviderError
+ *   (not retried), naming the first cause;
+ * - anything else (connection failure, timeout, unknown): HttpError with
+ *   status 0, which `isTransientHttpError` retries.
  * Messages never echo header values or a URL's query string.
  */
 export function toFetchError(
   err: unknown,
   url: string,
-  provider = "http",
+  opts: FetchErrorOptions = {},
 ): HttpError | ConfigError | ProviderError {
   const options = { cause: err };
-  if (isNetworkFetchFailure(err)) {
-    const chain = causeChain(err);
-    const detail = chain.length > 1 ? `${safeMessage(chain[0])}: ${safeMessage(chain[1])}` : "";
-    return new HttpError(0, detail || safeMessage(err), url, undefined, options);
-  }
-  const target = redactUrl(url);
-  if (err instanceof TypeError) {
-    const chain = causeChain(err);
-    const text = chain.map((e) => String(e.message ?? "")).join(" ");
-    if (chain.some((e) => e.code === "ERR_INVALID_URL") || /\bURL\b/.test(text)) {
-      return new ConfigError(`Invalid request URL: ${target}`, options);
-    }
-    if (/ByteString|header/i.test(text)) {
+  const prefix = opts.prefix ?? "";
+  const target = opts.target ?? redactUrl(url);
+  switch (deterministicKind(err)) {
+    case "url":
+      return new ConfigError(`${prefix}Invalid request URL: ${target}`, options);
+    case "header":
       return new ConfigError(
-        `Invalid HTTP header value in the request to ${target}. Check the API key and other header values for non-ASCII characters such as smart quotes.`,
+        `${prefix}Invalid HTTP header value in the request to ${target}. Check the API key and other header values for non-ASCII characters such as smart quotes, or line breaks.`,
         options,
       );
-    }
+    case "tls":
+    case "request":
+      return new ProviderError(
+        `${prefix}Request to ${target} failed: ${detailOf(err)}`,
+        opts.provider ?? "http",
+        options,
+      );
+    default:
+      return new HttpError(0, `${prefix}${detailOf(err)}`, url, undefined, options);
   }
-  const name = (err as ErrorLike | null)?.name;
-  const prefix = typeof name === "string" && name !== "Error" ? `${name}: ` : "";
-  return new ProviderError(
-    `Request to ${target} failed: ${prefix}${safeMessage(err)}`,
-    provider,
-    options,
-  );
 }

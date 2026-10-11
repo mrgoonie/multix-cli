@@ -37,8 +37,9 @@ export class ReplicateApiError extends ProviderError {
     message: string,
     public readonly status: number,
     public readonly retryAfterMs?: number,
+    options?: ErrorOptions,
   ) {
-    super(message, PROVIDER);
+    super(message, PROVIDER, options);
     this.name = "ReplicateApiError";
   }
 }
@@ -107,7 +108,7 @@ export function mapReplicateError(error: unknown, subject: string): unknown {
   } else {
     message = `Replicate request for ${subject} failed (${status})${suffix}`;
   }
-  return new ReplicateApiError(message, status, retryAfterMs);
+  return new ReplicateApiError(message, status, retryAfterMs, { cause: error });
 }
 
 export const ORPHAN_HINT =
@@ -124,10 +125,14 @@ function withOrphanHint(error: unknown): unknown {
     const { status } = error;
     const mayExist = status === 0 || (status >= 200 && status < 300) || status >= 500;
     if (!mayExist) return error;
-    return new ReplicateApiError(`${error.message}. ${ORPHAN_HINT}`, status, error.retryAfterMs);
+    return new ReplicateApiError(`${error.message}. ${ORPHAN_HINT}`, status, error.retryAfterMs, {
+      cause: error.cause,
+    });
   }
   if (error instanceof ProviderError) {
-    return new ProviderError(`${error.message}. ${ORPHAN_HINT}`, error.provider);
+    return new ProviderError(`${error.message}. ${ORPHAN_HINT}`, error.provider, {
+      cause: error.cause,
+    });
   }
   return error;
 }
@@ -351,7 +356,7 @@ export class ReplicateClient {
       );
     } catch (cause) {
       if (cause instanceof HttpError) throw mapReplicateError(cause, subject);
-      throw mapReplicateError(toFetchError(cause, url, PROVIDER), subject);
+      throw mapReplicateError(toFetchError(cause, url, { provider: PROVIDER }), subject);
     }
     if (!response.ok) {
       if (response.status === 413) {

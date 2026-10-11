@@ -57,8 +57,17 @@ export interface PollOptions<T> {
 export function isTransientHttpError(error: unknown): boolean {
   if (!(error instanceof HttpError)) return false;
   const { status } = error;
+  return status === 408 || status === 429 || isRetryableServerStatus(status);
+}
+
+/**
+ * Network failure (status 0) or a server error worth retrying: every 5xx
+ * except 501 Not Implemented and 505 HTTP Version Not Supported, which fail
+ * the same way on every attempt. Shared by every retry policy.
+ */
+export function isRetryableServerStatus(status: number): boolean {
   if (status === 501 || status === 505) return false;
-  return status === 0 || status === 408 || status === 429 || status >= 500;
+  return status === 0 || status >= 500;
 }
 
 const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));

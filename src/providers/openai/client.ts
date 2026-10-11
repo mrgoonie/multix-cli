@@ -59,7 +59,7 @@ export async function postOpenAIForm<T>(
     });
   } catch (cause) {
     if (cause instanceof HttpError) throw cause;
-    throw toFetchError(cause, url, "openai");
+    throw toFetchError(cause, url, { provider: "openai" });
   }
   if (!res.ok) {
     const text = await res.text().catch(() => "");
@@ -85,7 +85,7 @@ export async function postOpenAIBinary(
     });
   } catch (cause) {
     if (cause instanceof HttpError) throw cause;
-    throw toFetchError(cause, url, "openai");
+    throw toFetchError(cause, url, { provider: "openai" });
   }
   if (!res.ok) {
     const text = await res.text().catch(() => "");
