@@ -10,6 +10,7 @@ import { resolveKey } from "../../../core/env-loader.js";
 import { ConfigError, ValidationError } from "../../../core/errors.js";
 import { type Logger, createLogger } from "../../../core/logger.js";
 import { redactUrl } from "../../../core/redact.js";
+import { checkBaseUrl } from "../../../core/url-safety.js";
 import { AtlasCloudClient } from "../client.js";
 import { ATLAS_DEFAULT_MODELS, type AtlasDefaultModelKey } from "../models.js";
 import { UPLOAD_EXTENSIONS, uploadMimeTypeFor } from "../upload-mime.js";
@@ -37,7 +38,9 @@ export function createAtlasClientFromEnv(): AtlasCloudClient {
   if (!apiKey) {
     throw new ConfigError(`ATLASCLOUD_API_KEY is not set. Get one at ${ATLAS_KEY_URL}`);
   }
-  return new AtlasCloudClient({ apiKey, baseUrl: resolveKey("ATLASCLOUD_BASE_URL") });
+  const override = resolveKey("ATLASCLOUD_BASE_URL")?.trim();
+  const baseUrl = override ? checkBaseUrl(override, "ATLASCLOUD_BASE_URL") : undefined;
+  return new AtlasCloudClient({ apiKey, baseUrl });
 }
 
 /**
@@ -86,28 +89,16 @@ export async function resolveMediaRef(
 
 export const MAX_UPLOAD_ENV = "ATLASCLOUD_MAX_UPLOAD_MB";
 const DEFAULT_MAX_UPLOAD_MB = 200;
-export const MAX_DOWNLOAD_ENV = "ATLASCLOUD_MAX_DOWNLOAD_MB";
-const DEFAULT_MAX_DOWNLOAD_MB = 2048;
-
-/** Read a positive megabyte count from `name` (default `fallbackMb`) as bytes. */
-function megabytesFromEnv(name: string, fallbackMb: number): number {
-  const raw = resolveKey(name)?.trim();
-  if (!raw) return fallbackMb * 1024 * 1024;
-  const mb = Number(raw);
-  if (!Number.isFinite(mb) || mb <= 0) {
-    throw new ConfigError(`${name} must be a positive number of megabytes, got "${raw}"`);
-  }
-  return Math.max(1, Math.floor(mb * 1024 * 1024));
-}
 
 /** Upload size cap in bytes: ATLASCLOUD_MAX_UPLOAD_MB, default 200 MB. */
 export function maxUploadBytes(): number {
-  return megabytesFromEnv(MAX_UPLOAD_ENV, DEFAULT_MAX_UPLOAD_MB);
-}
-
-/** Per-file cap for downloaded prediction outputs: ATLASCLOUD_MAX_DOWNLOAD_MB, default 2048 MB. */
-export function maxDownloadBytes(): number {
-  return megabytesFromEnv(MAX_DOWNLOAD_ENV, DEFAULT_MAX_DOWNLOAD_MB);
+  const raw = resolveKey(MAX_UPLOAD_ENV)?.trim();
+  if (!raw) return DEFAULT_MAX_UPLOAD_MB * 1024 * 1024;
+  const mb = Number(raw);
+  if (!Number.isFinite(mb) || mb <= 0) {
+    throw new ConfigError(`${MAX_UPLOAD_ENV} must be a positive number of megabytes, got "${raw}"`);
+  }
+  return Math.floor(mb * 1024 * 1024);
 }
 
 function formatMb(bytes: number): string {

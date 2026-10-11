@@ -8,6 +8,7 @@
  * set (processing/completed/failed) and the aliases some schemas list are handled.
  */
 
+import { checkUrlSafety } from "../../core/url-safety.js";
 import type { AtlasPrediction } from "./types.js";
 
 const SUCCESS_STATUSES = new Set(["completed", "succeeded", "success"]);
@@ -68,6 +69,18 @@ export function collectOutputs(prediction: AtlasPrediction): string[] {
     }
   }
   return out;
+}
+
+/**
+ * Policy for fetching an output (or thumbnail) URL, applied to every redirect
+ * hop: https only, never localhost or a private/special-purpose IP literal, so
+ * a spoofed payload or redirect cannot pull from an internal address or
+ * downgrade to http. Atlas does not document its output hosts, so no host
+ * allow-list is applied. Inline `data:` outputs are not fetched over the
+ * network and are not passed through this check. Messages name the host only.
+ */
+export function checkOutputUrl(url: string): void {
+  checkUrlSafety(url, { provider: "atlascloud" });
 }
 
 /** An output is media when it is an http(s) or data: URI; anything else is text content. */
@@ -214,7 +227,8 @@ export function thumbnailSource(prediction: AtlasPrediction): unknown {
 /**
  * `atlas-<first 8 of id>-NN.<ext>` — distinct names for the outputs of one
  * prediction. Two predictions can share an id prefix, so callers writing into
- * an existing directory pick a free name with a numeric suffix.
+ * an existing directory pick a free name with a numeric suffix
+ * (`availableOutputPath` in the command layer).
  */
 export function outputFileName(predictionId: string, index: number, ext: string): string {
   const prefix = predictionId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 8) || "output";

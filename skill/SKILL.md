@@ -138,7 +138,7 @@ multix fal result <model> <requestId> [--download]
 
 ## Atlas Cloud
 
-Auth is `Authorization: Bearer $ATLASCLOUD_API_KEY`; the media API base is `https://api.atlascloud.ai/api/v1`. Each job is an async prediction: commands wait (bounded by `--wait-timeout`) and download to `MULTIX_OUTPUT_DIR` as `atlas-<idprefix>-NN.<ext>`. `--async` prints only the prediction id on stdout (progress goes to stderr) so scripts can capture it. A failed prediction, or a partial download, exits non-zero with a resume command.
+Auth is `Authorization: Bearer $ATLASCLOUD_API_KEY`; the media API base is `https://api.atlascloud.ai/api/v1`. Each job is an async prediction: commands wait (bounded by `--wait-timeout`) and download to `MULTIX_OUTPUT_DIR` as `atlas-<idprefix>-NN.<ext>`; a generated name never overwrites an existing file (a `-1`, `-2`, ... suffix is added), while an explicit file `--output` is overwritten. `--async` prints only the prediction id on stdout (progress goes to stderr) so scripts can capture it. A failed prediction, or a partial download, exits non-zero with a resume command. Output and thumbnail downloads are https-only, refuse local/private address literals (also on redirects) and stop at `MULTIX_MAX_DOWNLOAD_MB` (default 2048); inline `data:` outputs are still saved. Thumbnails come only from the prediction's outputs, never from echoed input.
 
 Inputs are model-specific. multix reads the model's published schema and maps flags onto its field names (`size`/`image_size`, `images[]`/`image`, `audio_url`/`audio`). Unsupported flags and invalid values fail before anything is billed, and the error lists the accepted values. Pass `--no-validate` to skip this check.
 
@@ -386,7 +386,7 @@ Requires `cwebp` (libwebp: `brew install webp`, `apt install webp`) on `PATH`.
 | Variable | Purpose |
 |---|---|
 | `MULTIX_OUTPUT_DIR` | Override default output dir |
-| `MULTIX_MAX_DOWNLOAD_MB` | Size limit per downloaded Replicate output file (default 2048) |
+| `MULTIX_MAX_DOWNLOAD_MB` | Size limit per downloaded Replicate or Atlas Cloud output file (default 2048) |
 | `OPENAI_IMAGE_MODEL` / `OPENAI_TTS_MODEL` / `OPENAI_STT_MODEL` | OpenAI model defaults |
 | `OPENROUTER_IMAGE_MODEL` | Default OpenRouter image model |
 | `OPENROUTER_FALLBACK_MODELS` | CSV; applies to `generate` AND `i2i` |
@@ -399,7 +399,7 @@ Requires `cwebp` (libwebp: `brew install webp`, `apt install webp`) on `PATH`.
 | `BYTEPLUS_VIDEO_PARAMS_MODE` | `flags` (default) or `structured` |
 | `FAL_BASE_URL` | Override fal queue base (default `https://queue.fal.run`) |
 | `FAL_IMAGE_MODEL` / `FAL_VIDEO_MODEL` | fal.ai default model ids (default `fal-ai/flux/schnell`, `fal-ai/kling-video/v1.6/standard/text-to-video`) |
-| `ATLASCLOUD_BASE_URL` | Override Atlas Cloud media API base (default `https://api.atlascloud.ai/api/v1`) |
+| `ATLASCLOUD_BASE_URL` | Override Atlas Cloud media API base (default `https://api.atlascloud.ai/api/v1`; `https://` required, `http://` only for localhost, 127.0.0.1 or [::1]) |
 | `ATLASCLOUD_IMAGE_MODEL` / `ATLASCLOUD_IMAGE_EDIT_MODEL` / `ATLASCLOUD_VIDEO_MODEL` / `ATLASCLOUD_IMAGE_TO_VIDEO_MODEL` / `ATLASCLOUD_TTS_MODEL` / `ATLASCLOUD_STT_MODEL` / `ATLASCLOUD_TEXT_TO_3D_MODEL` / `ATLASCLOUD_IMAGE_TO_3D_MODEL` | Atlas Cloud default model ids per command |
 | `ATLASCLOUD_MAX_UPLOAD_MB` | Size limit for local files uploaded to Atlas Cloud (default 200) |
 | `GEMINI_TTS_MODEL` / `TTS_MODEL` | Override Gemini TTS model (default `gemini-3.8-flash-lite-tts`) |

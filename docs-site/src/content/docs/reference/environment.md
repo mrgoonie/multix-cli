@@ -92,11 +92,14 @@ settings include `IMAGE_GEN_MODEL`, `VIDEO_GEN_MODEL`, `MULTIMODAL_MODEL`,
 (default `black-forest-labs/flux-schnell`), and `REPLICATE_VIDEO_MODEL`
 (default `prunaai/p-video`). Cloudflare AI Gateway video reads only
 `REPLICATE_API_TOKEN`. `MULTIX_MAX_DOWNLOAD_MB` sets the size limit for each
-downloaded Replicate output file (default 2048); see
-[Replicate](/commands/replicate/#outputs) for the download policy.
+downloaded Replicate or Atlas Cloud output file (default 2048); see
+[Replicate](/commands/replicate/#outputs) and [Atlas Cloud](/commands/atlascloud/#output)
+for the download policy.
 
 Atlas Cloud accepts `ATLASCLOUD_BASE_URL` (media API base, default
-`https://api.atlascloud.ai/api/v1`) and one default-model override per command:
+`https://api.atlascloud.ai/api/v1`; it must use `https://`, and plain `http://`
+is accepted only for `localhost`, `127.0.0.1` or `[::1]`) and one default-model
+override per command:
 `ATLASCLOUD_IMAGE_MODEL`, `ATLASCLOUD_IMAGE_EDIT_MODEL`,
 `ATLASCLOUD_VIDEO_MODEL`, `ATLASCLOUD_IMAGE_TO_VIDEO_MODEL`,
 `ATLASCLOUD_TTS_MODEL`, `ATLASCLOUD_STT_MODEL`, `ATLASCLOUD_TEXT_TO_3D_MODEL`,

@@ -1,7 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { ProviderError } from "../../../../src/core/errors.js";
 import {
+  checkOutputUrl,
   classifyOutputs,
   collectOutputs,
   hasNsfwFlag,
@@ -12,6 +14,7 @@ import {
   outputExtension,
   outputFileName,
   predictionErrorMessage,
+  thumbnailSource,
 } from "../../../../src/providers/atlascloud/prediction-output.js";
 import { guessUploadMimeType } from "../../../../src/providers/atlascloud/upload-mime.js";
 
@@ -96,6 +99,34 @@ describe("extensions and names", () => {
     expect(outputFileName("ab", 11, "mp3")).toBe("atlas-ab-12.mp3");
   });
 
+  it("checkOutputUrl allows public https only and never echoes the signed path", () => {
+    expect(() => checkOutputUrl("https://cdn.atlas.test/a.png?sig=1")).not.toThrow();
+    for (const bad of [
+      "http://cdn.atlas.test/a.png",
+      "https://192.168.1.10/a.png",
+      "https://[::ffff:127.0.0.1]/a.png",
+      "ftp://cdn.atlas.test/a.png",
+    ]) {
+      expect(() => checkOutputUrl(bad)).toThrow(ProviderError);
+    }
+    expect(() => checkOutputUrl("http://cdn.atlas.test/secret-path?sig=TOKEN")).toThrow(
+      /^(?!.*(secret-path|TOKEN)).*cdn\.atlas\.test/,
+    );
+  });
+
+  it("thumbnailSource returns only the outputs, never the echoed input", () => {
+    const outputs = [{ url: "https://m/v.mp4", thumbnail_url: "https://m/t.jpg" }];
+    expect(
+      thumbnailSource({
+        id: "p",
+        status: "completed",
+        outputs,
+        input: { image_url: "https://u/ref.png" },
+      } as never),
+    ).toBe(outputs);
+    expect(thumbnailSource({ id: "p", status: "completed" } as never)).toBeNull();
+  });
+
   it("guesses upload content types by extension", () => {
     expect(guessUploadMimeType("Photo.JPG")).toBe("image/jpeg");
     expect(guessUploadMimeType("clip.mov")).toBe("video/quicktime");
@@ -117,7 +148,13 @@ describe("runtime neutrality", () => {
   ];
   const FORBIDDEN =
     /from\s+["'](node:[^"']+|[^"']*\/(env-loader|http-client|logger|output-dir|json-input|image-input)\.js)["']/;
-  const WORKER_SAFE_CORE = new Set(["errors.js", "fetch-json.js", "async-poll.js", "redact.js"]);
+  const WORKER_SAFE_CORE = new Set([
+    "errors.js",
+    "fetch-json.js",
+    "async-poll.js",
+    "redact.js",
+    "url-safety.js",
+  ]);
 
   it.each(NEUTRAL)("%s has no node:* or Node-only imports", (file) => {
     const src = fs.readFileSync(path.resolve("src/providers/atlascloud", file), "utf8");

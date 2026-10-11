@@ -3,13 +3,17 @@
  * schema loading, submit -> (async exit | bounded poll) -> terminal check ->
  * output delivery (text printed, media downloaded with normalized names,
  * images finalized to WebP like other providers, video thumbnails).
+ *
+ * Output and thumbnail downloads are https-only, never reach a local/private
+ * address (checked on every redirect hop), stop at MULTIX_MAX_DOWNLOAD_MB, and
+ * never overwrite an existing file under a generated name.
  */
 
 import fs from "node:fs";
 import path from "node:path";
 import type { Command } from "commander";
 import { ProviderError, ValidationError } from "../../../core/errors.js";
-import { downloadFile } from "../../../core/http-client.js";
+import { downloadToFile, maxDownloadBytes } from "../../../core/http-client.js";
 import {
   finalizeGeneratedImages,
   imageFormatOption,
@@ -22,6 +26,7 @@ import { maybeDownloadThumb } from "../../../core/video-thumb.js";
 import { ATLAS_PROVIDER, type AtlasCloudClient, assertPredictionSucceeded } from "../client.js";
 import {
   type OutputCategory,
+  checkOutputUrl,
   classifyOutputs,
   defaultExtensionFor,
   extensionForContentType,
@@ -30,6 +35,7 @@ import {
   outputCategory,
   outputExtension,
   outputFileName,
+  thumbnailSource,
 } from "../prediction-output.js";
 import type { AtlasMediaKind, AtlasModelSpec, AtlasPrediction } from "../types.js";
 
@@ -256,7 +262,7 @@ export async function deliverPrediction(
   if (classified.mode === "text") {
     if (opts.output) {
       const dest = isDirectoryOutput(opts.output)
-        ? path.resolve(opts.output, outputFileName(prediction.id, 0, "txt"))
+        ? availableOutputPath(path.resolve(opts.output, outputFileName(prediction.id, 0, "txt")))
         : path.resolve(opts.output);
       fs.mkdirSync(path.dirname(dest), { recursive: true });
       fs.writeFileSync(dest, `${classified.texts.join("\n\n")}\n`, "utf8");
@@ -280,25 +286,34 @@ export async function deliverPrediction(
   // An explicit single-file --output keeps the user's chosen name and extension.
   const explicitFile =
     classified.urls.length === 1 && opts.output !== undefined && !isDirectoryOutput(opts.output);
+  // Generated names (no --output, or a directory) never replace an existing file;
+  // a user-chosen file path is overwritten as asked.
+  const generatedNames = !opts.output || isDirectoryOutput(opts.output);
+  // Read the cap up front so a bad MULTIX_MAX_DOWNLOAD_MB fails before any download.
+  const maxBytes = maxDownloadBytes();
   const saved: string[] = [];
   let failed = 0;
   for (let i = 0; i < classified.urls.length; i++) {
     const url = classified.urls[i] as string;
     const planned = dests[i] as string;
-    // Download beside the target and rename on success, so a failed download
-    // never deletes or truncates a file the user already had at that path.
-    const part = `${planned}.part`;
     try {
-      const contentType = await downloadFile(url, part);
-      const dest =
-        explicitFile || outputExtension(url)
-          ? planned
-          : withContentTypeExtension(planned, contentType);
-      fs.renameSync(part, dest);
+      // downloadToFile writes `<dest>.part` and renames on success, so a failed
+      // download never deletes or truncates a file the user already had.
+      const { dest } = await downloadToFile(url, {
+        dest: (response) => {
+          const named =
+            explicitFile || outputExtension(url)
+              ? planned
+              : withContentTypeExtension(planned, response.headers.get("content-type"));
+          return generatedNames ? availableOutputPath(named) : named;
+        },
+        maxBytes,
+        // Inline data: outputs are decoded by fetch, never sent over the network.
+        validateUrl: isDataUrl(url) ? undefined : checkOutputUrl,
+      });
       saved.push(dest);
       logger.debug(`Downloaded ${redactUrl(url)} -> ${dest}`);
     } catch (e) {
-      fs.rmSync(part, { force: true });
       failed++;
       logger.warn(
         `Download failed (${redactUrl(url)}): ${e instanceof Error ? e.message : String(e)}`,
@@ -325,7 +340,14 @@ export async function deliverPrediction(
 
   const firstVideo = files.find((f) => outputCategory(f) === "video");
   if (firstVideo) {
-    await maybeDownloadThumb(prediction, firstVideo, { skip: opts.thumb === false, logger });
+    // Only the outputs may name a thumbnail: the rest of the payload can echo
+    // request input such as a reference image. Same URL policy as the outputs.
+    await maybeDownloadThumb(thumbnailSource(prediction), firstVideo, {
+      skip: opts.thumb === false,
+      logger,
+      download: (thumbUrl, dest) =>
+        downloadToFile(thumbUrl, { dest, maxBytes, validateUrl: checkOutputUrl }),
+    });
   }
 
   console.log(`\nPrediction ${prediction.id}: saved ${files.length} file(s)`);
@@ -340,8 +362,36 @@ export async function deliverPrediction(
   return { files, texts: classified.texts };
 }
 
+function isDataUrl(url: string): boolean {
+  return /^data:/i.test(url.trim());
+}
+
+/**
+ * `file`, or the first free `<stem>-N<ext>` beside it. A stem counts as taken
+ * when any file in the directory shares it, whatever its extension, so neither
+ * a different output type nor a later WebP conversion (`.png` -> `.webp`) can
+ * overwrite an earlier output.
+ */
+export function availableOutputPath(file: string): string {
+  const dir = path.dirname(file);
+  const ext = path.extname(file);
+  const stem = path.basename(file, ext);
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(dir);
+  } catch {
+    return file; // the directory does not exist yet: nothing to collide with
+  }
+  const stems = new Set(entries.map((n) => n.slice(0, n.length - path.extname(n).length)));
+  if (!stems.has(stem)) return file;
+  for (let n = 1; ; n++) {
+    const candidate = `${stem}-${n}`;
+    if (!stems.has(candidate)) return path.join(dir, `${candidate}${ext}`);
+  }
+}
+
 /** Swap a planned fallback extension for the one the response Content-Type names. */
-function withContentTypeExtension(planned: string, contentType: string | undefined): string {
+function withContentTypeExtension(planned: string, contentType: string | null): string {
   const ext = extensionForContentType(contentType);
   if (!ext) return planned;
   const current = path.extname(planned);

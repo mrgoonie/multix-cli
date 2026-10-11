@@ -132,11 +132,26 @@ luồng, không nạp toàn bộ vào bộ nhớ.
 ## Kết quả
 
 - File được lưu vào `./multix-output/` (hoặc `MULTIX_OUTPUT_DIR`) với tên
-  `atlas-<8 ký tự đầu của prediction id>-NN.<ext>`.
+  `atlas-<8 ký tự đầu của prediction id>-NN.<ext>`. Tên tự sinh này không bao
+  giờ ghi đè file đã có: khi đã tồn tại file cùng tên, với bất kỳ phần mở rộng
+  nào, multix thêm `-1`, `-2`, ... vào tên. Quy tắc này cũng áp dụng khi ảnh
+  được chuyển sang WebP sau đó.
 - `--output` kết thúc bằng dấu gạch chéo, không có phần mở rộng, hoặc là thư mục
   đã tồn tại sẽ được dùng làm thư mục kết quả. Đường dẫn file được dùng nguyên
   vẹn khi chỉ có một kết quả, và làm phần gốc của tên `<name>-NN.<ext>` khi có
-  nhiều kết quả.
+  nhiều kết quả. Đường dẫn file do bạn chọn sẽ bị ghi đè.
+- URL kết quả đến từ phản hồi của API, nên multix kiểm tra trước khi tải: chỉ tải
+  URL `https://`, và từ chối `localhost` hoặc địa chỉ IP loopback, private,
+  link-local hay địa chỉ dùng cho mục đích đặc biệt khác. Mọi lần redirect đều
+  được kiểm tra như vậy, nên lượt tải không thể bị chuyển hướng sang `http://`
+  hay sang địa chỉ nội bộ. Tên miền không được phân giải. Kết quả `data:` nhúng
+  sẵn vẫn được lưu.
+- Mỗi file tải về bị giới hạn 2048 MB; đặt `MULTIX_MAX_DOWNLOAD_MB` để thay đổi
+  giới hạn. Lượt tải lớn hơn sẽ bị dừng và file tạm bị xóa.
+- Thumbnail của video chỉ được lưu khi phần kết quả (outputs) của prediction có
+  thumbnail. Các phần khác của payload, vốn có thể lặp lại đầu vào của bạn như
+  ảnh tham chiếu, bị bỏ qua. Việc tải thumbnail tuân theo cùng quy tắc như kết
+  quả. Truyền `--no-thumb` để bỏ qua.
 - URL kết quả không có phần mở rộng sẽ được đặt tên theo `Content-Type` của lần
   tải, nên job tiếp tục sau cũng có tên `.mp4` hay `.png` giống job chờ trực tiếp.
 - Mỗi file được tải vào một file tạm `.part` rồi đổi tên khi hoàn tất, nên lần tải
@@ -165,6 +180,9 @@ field và kiểu dữ liệu thông thường của từng flag (ví dụ `image
 
 - Xác thực dùng `Authorization: Bearer <ATLASCLOUD_API_KEY>`. Base của media API
   là `https://api.atlascloud.ai/api/v1` (ghi đè bằng `ATLASCLOUD_BASE_URL`).
+  Giá trị ghi đè phải dùng `https://`, vì API key được gửi kèm mọi request.
+  `http://` thường chỉ được chấp nhận cho `localhost`, `127.0.0.1` và `[::1]`,
+  dành cho mock server cục bộ.
 - Khi poll, multix tự thử lại khi bị giới hạn tốc độ (tôn trọng `Retry-After`),
   khi gặp phản hồi 5xx và lỗi mạng, cho đến khi hết `--wait-timeout`. Mỗi request
   poll chỉ được dùng phần thời gian còn lại. Atlas báo một số job thất bại bằng

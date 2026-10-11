@@ -13,6 +13,7 @@ import {
 } from "../../../../src/providers/atlascloud/commands/env.js";
 import {
   assertEndpoint,
+  availableOutputPath,
   executePrediction,
   loadModelSpec,
   planOutputPaths,
@@ -403,10 +404,164 @@ describe("references and env", () => {
     Reflect.deleteProperty(process.env, "ATLASCLOUD_API_KEY");
     expect(() => createAtlasClientFromEnv()).toThrow(ConfigError);
     process.env.ATLASCLOUD_API_KEY = TEST_KEY;
-    process.env.ATLASCLOUD_BASE_URL = "http://mock.local/api/v1";
-    expect(createAtlasClientFromEnv().baseUrl).toBe("http://mock.local/api/v1");
+    process.env.ATLASCLOUD_BASE_URL = "http://127.0.0.1:8787/api/v1";
+    expect(createAtlasClientFromEnv().baseUrl).toBe("http://127.0.0.1:8787/api/v1");
     expect(atlasDefaultModel("video")).toBe("bytedance/seedance-v1-pro-fast/text-to-video");
     process.env.ATLASCLOUD_VIDEO_MODEL = "kwaivgi/kling-v2.6-pro/text-to-video";
     expect(atlasDefaultModel("video")).toBe("kwaivgi/kling-v2.6-pro/text-to-video");
+  });
+
+  it("requires https for ATLASCLOUD_BASE_URL, allowing http only on loopback", () => {
+    _resetEnvLoader();
+    process.env.ATLASCLOUD_API_KEY = TEST_KEY;
+    for (const ok of [
+      "https://proxy.example.com/api/v1",
+      "http://localhost:8787/api/v1",
+      "http://[::1]:8787/api/v1",
+    ]) {
+      process.env.ATLASCLOUD_BASE_URL = ok;
+      expect(createAtlasClientFromEnv().baseUrl).toBe(ok);
+    }
+    for (const bad of ["http://mock.local/api/v1", "http://10.0.0.5/api/v1", "not a url"]) {
+      process.env.ATLASCLOUD_BASE_URL = bad;
+      expect(() => createAtlasClientFromEnv()).toThrow(ConfigError);
+      expect(() => createAtlasClientFromEnv()).toThrow(/ATLASCLOUD_BASE_URL/);
+    }
+  });
+});
+
+describe("download hardening", () => {
+  /** Run a prediction that completes immediately with `extra` (outputs, input...). */
+  function runCompleted(id: string, extra: Record<string, unknown>, opts = {}) {
+    const { client } = createFakeAtlas({
+      "POST /model/generateVideo": { body: prediction(id, "completed", extra) },
+    });
+    return executePrediction({
+      client,
+      logger,
+      kind: "video",
+      model: "m/v",
+      body: { prompt: "x" },
+      opts: { imageFormat: "original", ...opts },
+      hint: "video",
+      defaultWaitTimeoutMs: 60_000,
+    });
+  }
+
+  it("refuses http and private-address outputs without fetching them", async () => {
+    const fetched = stubDownloads({});
+    for (const url of [
+      "http://m.test/a.mp4",
+      "https://169.254.169.254/latest/meta-data.mp4",
+      "https://[::1]/a.mp4",
+      "https://localhost/a.mp4",
+    ]) {
+      await expect(runCompleted("unsafe01", { outputs: [url] })).rejects.toThrow(ProviderError);
+    }
+    expect(fetched).toEqual([]);
+    const warned = logger.warn.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(warned).toContain("only https:// URLs are allowed");
+    expect(warned).toContain("local or private address");
+    expect(fs.readdirSync(tmp)).toEqual([]);
+  });
+
+  it("refuses a redirect from https to http or to an internal address", async () => {
+    const start = "https://m.test/a.mp4";
+    for (const target of ["http://m.test/a.mp4", "https://10.0.0.7/a.mp4"]) {
+      const fetched: string[] = [];
+      vi.stubGlobal("fetch", async (url: string) => {
+        fetched.push(url);
+        if (url === start)
+          return new Response(null, { status: 302, headers: { location: target } });
+        return new Response("LEAKED", { status: 200 });
+      });
+      await expect(runCompleted("redir01", { outputs: [start] })).rejects.toThrow(ProviderError);
+      expect(fetched).toEqual([start]);
+    }
+    expect(fs.readdirSync(tmp)).toEqual([]);
+  });
+
+  it("stops at MULTIX_MAX_DOWNLOAD_MB (declared and streamed sizes)", async () => {
+    process.env.MULTIX_MAX_DOWNLOAD_MB = String(4 / (1024 * 1024)); // 4 bytes
+    _resetEnvLoader();
+    const declared = "https://m.test/declared.mp4";
+    const streamed = "https://m.test/streamed.mp4";
+    vi.stubGlobal("fetch", async (url: string) => {
+      if (url === declared) {
+        return new Response("12345678", { headers: { "content-length": "8" } });
+      }
+      // No Content-Length: the cap must apply to the bytes actually received.
+      const body = new ReadableStream({
+        start(c) {
+          c.enqueue(new TextEncoder().encode("12345678"));
+          c.close();
+        },
+      });
+      return new Response(body);
+    });
+    for (const url of [declared, streamed]) {
+      await expect(runCompleted("big01", { outputs: [url] })).rejects.toThrow(ProviderError);
+    }
+    const warned = logger.warn.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(warned).toContain("MULTIX_MAX_DOWNLOAD_MB");
+    expect(fs.readdirSync(tmp)).toEqual([]);
+  });
+
+  it("still saves inline data: outputs", async () => {
+    const res = await runCompleted("data01", {
+      outputs: [`data:audio/mpeg;base64,${Buffer.from("MP3DATA").toString("base64")}`],
+    });
+    expect(res.files).toEqual([path.join(tmp, "atlas-data01-01.mp3")]);
+    expect(fs.readFileSync(res.files[0] as string, "utf8")).toBe("MP3DATA");
+  });
+
+  it("never overwrites an earlier output that shares the generated name, whatever its extension", async () => {
+    // e.g. an earlier prediction with the same 8-character id prefix whose PNG became WebP.
+    fs.writeFileSync(path.join(tmp, "atlas-same0001-01.webp"), "OLD");
+    fs.writeFileSync(path.join(tmp, "atlas-same0001-01-1.mp4"), "OLDER");
+    const url = "https://m.test/v.mp4";
+    stubDownloads({ [url]: "NEW" });
+    const res = await runCompleted("same0001-bbbb", { outputs: [url] }, { thumb: false });
+    expect(res.files).toEqual([path.join(tmp, "atlas-same0001-01-2.mp4")]);
+    expect(fs.readFileSync(path.join(tmp, "atlas-same0001-01.webp"), "utf8")).toBe("OLD");
+    expect(fs.readFileSync(path.join(tmp, "atlas-same0001-01-1.mp4"), "utf8")).toBe("OLDER");
+  });
+
+  it("availableOutputPath returns the path itself when the stem is free", () => {
+    expect(availableOutputPath(path.join(tmp, "a.png"))).toBe(path.join(tmp, "a.png"));
+    expect(availableOutputPath(path.join(tmp, "missing-dir", "a.png"))).toBe(
+      path.join(tmp, "missing-dir", "a.png"),
+    );
+    fs.writeFileSync(path.join(tmp, "a.txt"), "x");
+    expect(availableOutputPath(path.join(tmp, "a.png"))).toBe(path.join(tmp, "a-1.png"));
+  });
+
+  it("ignores image URLs echoed from the request input when looking for a thumbnail", async () => {
+    const video = "https://m.test/v.mp4";
+    const fetched = stubDownloads({ [video]: "MP4" });
+    const res = await runCompleted("thumb01", {
+      outputs: [video],
+      input: { image_url: "https://cdn.test/u/my-reference.png" },
+      urls: { thumbnail_url: "https://cdn.test/u/other.jpg" },
+    });
+    expect(fetched).toEqual([video]);
+    expect(res.files).toEqual([path.join(tmp, "atlas-thumb01-01.mp4")]);
+    expect(fs.readdirSync(tmp)).toEqual(["atlas-thumb01-01.mp4"]);
+  });
+
+  it("downloads a thumbnail named in the outputs, under the same URL policy", async () => {
+    const video = "https://m.test/v.mp4";
+    const thumb = "https://m.test/t.jpg";
+    const fetched = stubDownloads({ [video]: "MP4", [thumb]: "JPG" });
+    await runCompleted("thumb02", { outputs: [{ url: video, thumbnail_url: thumb }] });
+    expect(fetched).toEqual([video, thumb]);
+    expect(fs.readFileSync(path.join(tmp, "atlas-thumb02-01_thumb.jpg"), "utf8")).toBe("JPG");
+
+    const unsafe = "http://169.254.169.254/t.jpg";
+    const fetched2 = stubDownloads({ [video]: "MP4" });
+    const res = await runCompleted("thumb03", { outputs: [{ url: video, thumbnail_url: unsafe }] });
+    expect(fetched2).toEqual([video]);
+    expect(res.files).toEqual([path.join(tmp, "atlas-thumb03-01.mp4")]);
+    expect(fs.existsSync(path.join(tmp, "atlas-thumb03-01_thumb.jpg"))).toBe(false);
   });
 });

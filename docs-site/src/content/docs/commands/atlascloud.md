@@ -132,10 +132,26 @@ streamed, not loaded into memory.
 ## Output
 
 - Files are saved to `./multix-output/` (or `MULTIX_OUTPUT_DIR`) as
-  `atlas-<first 8 chars of the prediction id>-NN.<ext>`.
+  `atlas-<first 8 chars of the prediction id>-NN.<ext>`. Such a generated name
+  never overwrites an existing file: when a file with the same name already
+  exists, whatever its extension, multix adds `-1`, `-2`, ... instead. This also
+  covers a later WebP conversion.
 - `--output` with a trailing slash, no extension, or an existing directory is
   used as the output directory. A file path is used as-is for a single output,
-  and as the stem for `<name>-NN.<ext>` when there are several.
+  and as the stem for `<name>-NN.<ext>` when there are several. A file path
+  you choose is overwritten.
+- Output URLs come from the API response, so multix checks them before
+  downloading: only `https://` URLs are fetched, and `localhost` or a loopback,
+  private, link-local or other special-purpose IP address is refused. Every
+  redirect is checked the same way, so a download cannot be redirected to
+  `http://` or to an internal address. Host names are not resolved. Inline
+  `data:` outputs are still saved.
+- Each downloaded file is limited to 2048 MB; set `MULTIX_MAX_DOWNLOAD_MB` to
+  change the limit. A larger download is stopped and its partial file removed.
+- A video thumbnail is saved only when the prediction's outputs name one. Other
+  parts of the payload, which can echo your input such as a reference image,
+  are ignored. The thumbnail download follows the same rules as the outputs.
+  Pass `--no-thumb` to skip it.
 - An output URL without a file extension is named from the download's
   `Content-Type`, so a resumed job gets the same `.mp4` or `.png` name as a
   waited one.
@@ -164,7 +180,10 @@ submits anyway, using each flag's usual field name and type (for example a singl
 ## Notes
 
 - Auth uses `Authorization: Bearer <ATLASCLOUD_API_KEY>`. The media API base is
-  `https://api.atlascloud.ai/api/v1` (override with `ATLASCLOUD_BASE_URL`).
+  `https://api.atlascloud.ai/api/v1` (override with `ATLASCLOUD_BASE_URL`). The
+  override must use `https://`, because the API key is sent with every request.
+  Plain `http://` is accepted only for `localhost`, `127.0.0.1` and `[::1]`, for
+  local mock servers.
 - Polling retries rate limits (honouring `Retry-After`), 5xx responses and
   network errors until `--wait-timeout` expires. Each poll request is limited
   to the time left. Atlas reports some failed jobs as an HTTP 5xx whose body

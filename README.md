@@ -74,7 +74,7 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `HEYGEN_BASE_URL` | No | Override the HeyGen API base (default `https://api.heygen.com`; proxies/tests). Must be `https://`, except `http://` on `localhost`/`127.0.0.1`/`[::1]` |
 | `FAL_VIDEO_IMAGE_MODEL` | No | Default fal image-to-video model, used when `--image-url` is passed without `-m` (default `fal-ai/kling-video/v1.6/standard/image-to-video`) |
 | `ATLASCLOUD_API_KEY` | For Atlas Cloud | [Atlas Cloud](https://www.atlascloud.ai/console/api-keys) |
-| `ATLASCLOUD_BASE_URL` | No | Override Atlas Cloud media API base (default `https://api.atlascloud.ai/api/v1`) |
+| `ATLASCLOUD_BASE_URL` | No | Override Atlas Cloud media API base (default `https://api.atlascloud.ai/api/v1`; `https://` required, `http://` only for localhost) |
 | `ATLASCLOUD_IMAGE_MODEL` / `ATLASCLOUD_IMAGE_EDIT_MODEL` | No | Atlas image defaults (`black-forest-labs/flux-schnell`, `openai/gpt-image-1-mini/edit`) |
 | `ATLASCLOUD_VIDEO_MODEL` / `ATLASCLOUD_IMAGE_TO_VIDEO_MODEL` | No | Atlas video defaults (`bytedance/seedance-v1-pro-fast/text-to-video`, `.../image-to-video`) |
 | `ATLASCLOUD_TTS_MODEL` / `ATLASCLOUD_STT_MODEL` | No | Atlas audio defaults (`xai/tts-v1`, `bytedance/seed-asr-2.0`) |
@@ -98,7 +98,7 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `CLOUDFLARE_AI_IMAGE_MODEL` | No | Image model setting; only `@cf/black-forest-labs/flux-1-schnell` is accepted |
 | `CLOUDFLARE_AI_TTS_MODEL` | No | Speech model setting; only `@cf/myshell-ai/melotts` is accepted |
 | `MULTIX_OUTPUT_DIR` | No | Override default output dir (`./multix-output`) |
-| `MULTIX_MAX_DOWNLOAD_MB` | No | Size limit per downloaded Replicate output file (default `2048`) |
+| `MULTIX_MAX_DOWNLOAD_MB` | No | Size limit per downloaded Replicate or Atlas Cloud output file (default `2048`) |
 | `MULTIX_IMAGE_FORMAT` | No | `webp` (default) or `original` to keep provider image format/quality |
 | `OPENROUTER_IMAGE_MODEL` | No | Default OpenRouter model |
 | `OPENROUTER_FALLBACK_MODELS` | No | Comma-separated fallback model ids |
@@ -524,8 +524,9 @@ multix atlas upload ./photo.png
 ```
 
 **Notes:**
-- Auth is `Authorization: Bearer $ATLASCLOUD_API_KEY`; the media API base is `https://api.atlascloud.ai/api/v1`.
-- Generation commands and `run` accept `--async`, `--wait-timeout <ms>`, `--output <path>`, `--no-download` and `--no-validate`. By default the command waits, then downloads to `MULTIX_OUTPUT_DIR` as `atlas-<idprefix>-NN.<ext>`.
+- Auth is `Authorization: Bearer $ATLASCLOUD_API_KEY`; the media API base is `https://api.atlascloud.ai/api/v1`. An `ATLASCLOUD_BASE_URL` override must use `https://`; plain `http://` is accepted only for `localhost`, `127.0.0.1` or `[::1]`.
+- Generation commands and `run` accept `--async`, `--wait-timeout <ms>`, `--output <path>`, `--no-download` and `--no-validate`. By default the command waits, then downloads to `MULTIX_OUTPUT_DIR` as `atlas-<idprefix>-NN.<ext>`. A generated name never overwrites an existing file (whatever its extension): a `-1`, `-2`, ... suffix is added instead. An explicit file `--output` is overwritten as asked.
+- Output and thumbnail downloads use `https://` only and refuse `localhost` and loopback, private, link-local, or other special-purpose IP literals (hostnames are not resolved), including on redirects. Inline `data:` outputs are still saved. Each file is capped at `MULTIX_MAX_DOWNLOAD_MB` (default 2048). A video thumbnail is taken only from the prediction's outputs, never from echoed request input such as a reference image.
 - Inputs are model-specific. multix reads each model's published schema, maps flags onto that model's field names, and rejects unsupported flags or invalid values before submitting. Use `--no-validate` to skip this check.
 - `--async` prints only the prediction id on stdout and `upload` prints only the URL; progress goes to stderr, so `id=$(multix atlas video "waves" --async)` works.
 - `--ref` takes one value per flag; repeat it for several references. Local `--ref` / `--audio` files are uploaded first: only image, video and audio files, up to 200 MB (`ATLASCLOUD_MAX_UPLOAD_MB`).
