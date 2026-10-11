@@ -5,7 +5,7 @@
 
 import type { Command } from "commander";
 import { createLogger } from "../../../core/logger.js";
-import { type FileInput, resolveFileInputs } from "../../../core/stdin-file.js";
+import { type FileInput, labelError, resolveFileInputs } from "../../../core/stdin-file.js";
 import {
   type ContentPart,
   extractText,
@@ -25,10 +25,7 @@ export function registerAnalyzeCommand(parent: Command): void {
     .command("analyze")
     .description("Analyze files with Gemini (images, video, audio, documents)")
     .requiredOption("--files <paths...>", "Input file paths to analyze (use - to read piped stdin)")
-    .option(
-      "--stdin-ext <ext>",
-      "Extension for piped stdin when auto-detection is wrong (e.g. .md)",
-    )
+    .option("--stdin-ext <ext>", "Extension for piped stdin when auto-detection fails (e.g. mp3)")
     .option("--prompt <text>", "Analysis prompt", "Analyze this content")
     .option("--model <id>", "Gemini model to use")
     .option("--format <fmt>", "Output format: text|json|csv|markdown", "text")
@@ -92,14 +89,17 @@ export function registerAnalyzeCommand(parent: Command): void {
               response: extractText(resp),
             });
           } catch (e) {
-            const msg = e instanceof Error ? e.message : String(e);
+            const msg = labelError(
+              e instanceof Error ? e.message : String(e),
+              inputs[i] as FileInput,
+            );
             logger.error(`Failed: ${label} — ${msg}`);
             results.push({ file: label, status: "error", error: msg });
           }
         }
 
-        cleanup();
         formatResults(results, opts.format, opts.output);
+        cleanup();
         logger.debug(
           `Done: ${results.filter((r) => r.status === "success").length}/${results.length} succeeded`,
         );

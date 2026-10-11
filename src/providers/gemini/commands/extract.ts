@@ -4,7 +4,7 @@
 
 import type { Command } from "commander";
 import { createLogger } from "../../../core/logger.js";
-import { type FileInput, resolveFileInputs } from "../../../core/stdin-file.js";
+import { type FileInput, labelError, resolveFileInputs } from "../../../core/stdin-file.js";
 import {
   type ContentPart,
   extractText,
@@ -23,10 +23,7 @@ export function registerExtractCommand(parent: Command): void {
     .command("extract")
     .description("Extract structured information from files with Gemini")
     .requiredOption("--files <paths...>", "Input file paths (use - to read piped stdin)")
-    .option(
-      "--stdin-ext <ext>",
-      "Extension for piped stdin when auto-detection is wrong (e.g. .md)",
-    )
+    .option("--stdin-ext <ext>", "Extension for piped stdin when auto-detection fails (e.g. mp3)")
     .requiredOption("--prompt <text>", "Extraction prompt (required)")
     .option("--model <id>", "Gemini model to use")
     .option("--format <fmt>", "Output format: text|json|csv|markdown", "text")
@@ -89,14 +86,17 @@ export function registerExtractCommand(parent: Command): void {
 
             results.push({ file: label, status: "success", response: extractText(resp) });
           } catch (e) {
-            const msg = e instanceof Error ? e.message : String(e);
+            const msg = labelError(
+              e instanceof Error ? e.message : String(e),
+              inputs[i] as FileInput,
+            );
             logger.error(`Failed: ${label} — ${msg}`);
             results.push({ file: label, status: "error", error: msg });
           }
         }
 
-        cleanup();
         formatResults(results, opts.format, opts.output);
+        cleanup();
 
         const failed = results.filter((r) => r.status === "error").length;
         if (failed > 0) process.exit(1);

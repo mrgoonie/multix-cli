@@ -139,7 +139,7 @@ multix gemini transcribe --files audio.mp3 [--prompt <str>] [--model <id>] [--fo
 # Extract structured information
 multix gemini extract --files report.pdf --prompt "Extract tables as JSON" [--format json] [-v]
 
-# Read piped stdin with "-" (type auto-detected; override with --stdin-ext)
+# Read piped stdin with "-" (type auto-detected, else pass --stdin-ext; max 2 GB; labelled <stdin>)
 cat photo.png | multix gemini analyze --files - --prompt "Describe this"
 
 # Generate images

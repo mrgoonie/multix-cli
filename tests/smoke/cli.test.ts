@@ -140,7 +140,7 @@ describe("gemini --files - (smoke)", () => {
       const out = result.stdout + result.stderr;
       // No key is configured, so the request fails after stdin was materialized.
       expect(result.exitCode).toBe(1);
-      expect(out).toContain("Failed: stdin");
+      expect(out).toContain("Failed: <stdin>");
       expect(out).toContain("GEMINI_API_KEY is not set");
       expect(out).not.toContain("piped notes");
       expect(fs.readdirSync(tmp).filter((d) => d.startsWith("multix-stdin-"))).toEqual([]);
@@ -159,3 +159,4 @@ describe("gemini --files - (smoke)", () => {
     expect(result.stdout + result.stderr).toContain("stdin was empty");
   });
 });
+
