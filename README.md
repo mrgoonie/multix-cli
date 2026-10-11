@@ -667,6 +667,34 @@ Thumbnail detection is automatic: if the provider response includes any of `cove
 
 Cloudflare video is intentionally separate: it has no thumbnail flags, and `generate-video --wait` already saves the completed MP4. See [`multix cloudflare`](#multix-cloudflare) for its exact polling and download behavior.
 
+## Remote MCP server (Cloudflare Workers)
+
+`worker/` contains an optional, stateless MCP server that exposes remote-safe
+image and video tools over Streamable HTTP at `/mcp`, for agents that cannot
+run the CLI locally. It is a separate package and is not included in the npm
+CLI.
+
+- Tools: `multix_list_providers`, `multix_generate_image` (Replicate, Atlas
+  Cloud), `multix_generate_video` (Replicate, Atlas Cloud, HeyGen, Cloudflare
+  AI Gateway; returns an ID without blocking), `multix_prediction_status`,
+  `multix_prediction_cancel` (Replicate). Results are provider URLs, not bytes.
+- Auth: `Authorization: Bearer <MCP_AUTH_TOKEN>` (at least 32 characters; the
+  server returns `503` if it is unset). `/health` is public.
+- Single-tenant: provider keys are Worker secrets, and every caller spends the
+  deployer's credits. Limit exposure with `MULTIX_MCP_ALLOWED_PROVIDERS`,
+  `MULTIX_MCP_ALLOWED_MODELS`, `MULTIX_MCP_MAX_OUTPUTS`,
+  `MULTIX_MCP_MAX_VIDEO_SECONDS`, `MULTIX_MCP_ALLOWED_ORIGINS`, and the
+  per-IP rate limiter.
+
+```bash
+npm ci --prefix worker
+cd worker && openssl rand -hex 32 | npx wrangler secret put MCP_AUTH_TOKEN
+npx wrangler secret put REPLICATE_API_TOKEN   # and any other provider keys
+cd .. && npm run deploy:mcp                   # or: npm run dev:mcp (local, port 8787)
+```
+
+Full guide: [Remote MCP server](https://multix.zuey.me/guides/mcp-server/).
+
 ## Troubleshooting
 
 **No API key found:** Run `multix check` — it prints setup instructions.

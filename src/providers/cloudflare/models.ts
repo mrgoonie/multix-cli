@@ -1,9 +1,14 @@
 import { resolveKey } from "../../core/env-loader.js";
 import { ConfigError, ValidationError } from "../../core/errors.js";
+import { CLOUDFLARE_IMAGE_MODEL, CLOUDFLARE_TTS_MODEL } from "./model-ids.js";
+import type { CloudflareVideoConfig } from "./video-client.js";
 
-export const CLOUDFLARE_IMAGE_MODEL = "@cf/black-forest-labs/flux-1-schnell";
-export const CLOUDFLARE_TTS_MODEL = "@cf/myshell-ai/melotts";
-export const CLOUDFLARE_VIDEO_MODEL = "prunaai/p-video";
+export {
+  CLOUDFLARE_IMAGE_MODEL,
+  CLOUDFLARE_TTS_MODEL,
+  CLOUDFLARE_VIDEO_MODEL,
+} from "./model-ids.js";
+export type { CloudflareVideoConfig } from "./video-client.js";
 
 type NativeMediaKind = "image" | "speech";
 
@@ -11,10 +16,6 @@ export interface CloudflareConfig {
   accountId: string;
   apiToken: string;
   gatewayId?: string;
-}
-
-export interface CloudflareVideoConfig extends Required<CloudflareConfig> {
-  replicateApiToken: string;
 }
 
 function required(name: string): string {

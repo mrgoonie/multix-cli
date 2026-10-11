@@ -462,6 +462,16 @@ multix update --check
 multix update
 ```
 
+## Remote MCP server
+
+If the user cannot run the CLI locally but has deployed the optional multix
+MCP Worker (`worker/` in the repo; guide: https://multix.zuey.me/guides/mcp-server/),
+call its tools instead: `multix_list_providers` first, then
+`multix_generate_image` / `multix_generate_video`, and poll
+`multix_prediction_status` until `done` is true. It returns provider URLs (no
+local files), supports only Replicate, Atlas Cloud, HeyGen, and Cloudflare
+video, and accepts only public `https://` image URLs.
+
 ## Security & scope
 
 This skill produces shell commands for the local `multix` CLI. It does NOT execute the commands itself, exfiltrate API keys, or modify provider accounts.

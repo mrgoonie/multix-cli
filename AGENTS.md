@@ -76,6 +76,11 @@ npm run verify:docs  # when docs-site/ changed (needs `npm ci --prefix docs-site
   layer.
 - Never log API keys, signed URLs, or full prompts at info level. Use
   `redact()` from `src/core/env-loader.ts` for keys.
+- `worker/` is a separate package (remote MCP server for Cloudflare Workers)
+  that imports runtime-neutral provider clients from `src/providers/**`. It is
+  not published with the CLI. When you change a client it uses, run
+  `npm run check:mcp` (worker typecheck, tests, and a bundle check that fails
+  on `node:fs`, `node:child_process`, `commander`, `execa`, or CLI code).
 
 ## Documentation
 
