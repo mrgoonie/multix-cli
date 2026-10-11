@@ -6,7 +6,6 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { ValidationError } from "../../core/errors.js";
 import type { Logger } from "../../core/logger.js";
 import { getOutputDir } from "../../core/output-dir.js";
 import {
@@ -35,7 +34,7 @@ export interface ConvertOptions {
   autoName?: boolean;
   model?: string;
   prompt?: string;
-  /** Extension for piped stdin when auto-detection fails (e.g. docx). */
+  /** Extension for piped stdin when auto-detection fails (e.g. pdf). */
   stdinExt?: string;
   /** Stdin source override (tests); defaults to process.stdin. */
   stdin?: StdinLike;
@@ -62,34 +61,28 @@ export async function convertDocuments(opts: ConvertOptions): Promise<void> {
   const model = opts.model ?? DOC_MODEL_DEFAULT;
   const prompt = opts.prompt ?? DEFAULT_CONVERT_PROMPT;
 
-  // Validate all inputs exist before touching stdin
-  for (const f of opts.inputs) {
-    if (f !== STDIN_ARG && !fs.existsSync(f)) {
-      throw new ValidationError(`Input file not found: ${f}`);
-    }
-  }
-
-  // Resolve output path
-  let outputPath: string;
-  if (output) {
-    outputPath = path.resolve(output);
-  } else if (autoName && opts.inputs.length === 1 && opts.inputs[0]) {
-    outputPath = path.join(getOutputDir(), `${autoNameBase(opts.inputs[0])}-extraction.md`);
-  } else {
-    outputPath = path.join(getOutputDir(), "document-extraction.md");
-  }
-
-  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-
+  // Checks that real files exist before reading stdin, then materializes `-`.
   const { inputs, cleanup } = await resolveFileInputs(opts.inputs, {
     stdinExt: opts.stdinExt,
     input: opts.stdin,
     flag: "--input",
     example: "cat report.pdf | multix doc convert --input -",
+    extExample: "pdf",
   });
 
   let failed: number;
   try {
+    // Resolved only after input validation so a rejected run leaves no empty output dir.
+    let outputPath: string;
+    if (output) {
+      outputPath = path.resolve(output);
+    } else if (autoName && opts.inputs.length === 1 && opts.inputs[0]) {
+      outputPath = path.join(getOutputDir(), `${autoNameBase(opts.inputs[0])}-extraction.md`);
+    } else {
+      outputPath = path.join(getOutputDir(), "document-extraction.md");
+    }
+    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+
     failed = await convertResolved(inputs, { outputPath, model, prompt, verbose, logger });
   } finally {
     cleanup();

@@ -626,7 +626,7 @@ multix media batch --input-dir <dir> --output-dir <dir> [--quality 85] [--max-wi
 ```bash
 multix doc convert --input <files...> [--output <path>] [--auto-name] [--stdin-ext <ext>] [--model gemini-3.6-flash] [--prompt <str>] [-v]
 
-# Read piped stdin with "-" (PDF, images and text auto-detected; pass --stdin-ext docx/pptx/xlsx otherwise)
+# Read piped stdin with "-" (PDF, images and text auto-detected; else pass --stdin-ext, e.g. pdf; "-" only once, ./- for a file named -)
 cat report.pdf | multix doc convert --input - --output report.md
 ```
 

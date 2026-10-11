@@ -7,6 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { execa } from "execa";
 import { beforeAll, describe, expect, it } from "vitest";
+import { isolatedEnv } from "./child-env.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLI = path.resolve(__dirname, "../../dist/cli.js");
@@ -217,13 +218,8 @@ describe("gemini --files - (smoke)", () => {
         input: "piped notes for analysis",
         cwd: tmp,
         reject: false,
-        env: {
-          MULTIX_DISABLE_HOME_ENV: "1",
-          GEMINI_API_KEY: "",
-          TMP: tmp,
-          TEMP: tmp,
-          TMPDIR: tmp,
-        },
+        extendEnv: false,
+        env: isolatedEnv(tmp),
       });
       const out = result.stdout + result.stderr;
       // No key is configured, so the request fails after stdin was materialized.
@@ -259,13 +255,8 @@ describe("doc convert --input - (smoke)", () => {
         input: "piped notes for conversion",
         cwd: tmp,
         reject: false,
-        env: {
-          MULTIX_DISABLE_HOME_ENV: "1",
-          GEMINI_API_KEY: "",
-          TMP: tmp,
-          TEMP: tmp,
-          TMPDIR: tmp,
-        },
+        extendEnv: false,
+        env: isolatedEnv(tmp),
       });
       const out = result.stdout + result.stderr;
       // No key is configured, so the request fails after stdin was materialized.
@@ -274,6 +265,8 @@ describe("doc convert --input - (smoke)", () => {
       expect(out).toContain("GEMINI_API_KEY is not set");
       expect(out).not.toContain("piped notes");
       expect(fs.readdirSync(tmp).filter((d) => d.startsWith("multix-stdin-"))).toEqual([]);
+      // MULTIX_OUTPUT_DIR is pinned to the test dir, never the user's own.
+      expect(fs.existsSync(path.join(tmp, "document-extraction.md"))).toBe(true);
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }

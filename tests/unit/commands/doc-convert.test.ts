@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { convertDocuments } from "../../../src/commands/doc/convert.js";
 import type { Logger } from "../../../src/core/logger.js";
 import { _resetOutputDir } from "../../../src/core/output-dir.js";
+import { _resetGeminiKeyCooldowns } from "../../../src/providers/gemini/key-pool.js";
 
 const piped = (text: string) => Readable.from([Buffer.from(text)]);
 
@@ -48,6 +49,7 @@ describe("convertDocuments with piped stdin", () => {
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
     _resetOutputDir();
+    _resetGeminiKeyCooldowns();
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
@@ -118,13 +120,113 @@ describe("convertDocuments with piped stdin", () => {
     expect(fs.readdirSync(tmp)).toEqual([]);
   });
 
-  it("rejects a missing real file before reading stdin", async () => {
+  it("rejects a missing real file before reading stdin or creating the output dir", async () => {
     const stdin = piped("never read");
     const read = vi.spyOn(stdin, Symbol.asyncIterator);
     await expect(
       convertDocuments({ inputs: [path.join(dir, "missing.pdf"), "-"], stdin }),
-    ).rejects.toThrow(/Input file not found/);
+    ).rejects.toThrow(/^File not found: /);
     expect(read).not.toHaveBeenCalled();
     expect(fs.readdirSync(tmp)).toEqual([]);
+    expect(fs.existsSync(path.join(dir, "out"))).toBe(false);
+  });
+
+  it("suggests a document --stdin-ext when the piped type is unknown, leaving no output dir", async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    await expect(
+      convertDocuments({ inputs: ["-"], stdin: Readable.from([Buffer.from([0, 1, 2, 3])]) }),
+    ).rejects.toThrow("--stdin-ext pdf");
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(fs.readdirSync(tmp)).toEqual([]);
+    expect(fs.existsSync(path.join(dir, "out"))).toBe(false);
+  });
+
+  it("applies --stdin-ext to undetectable piped input", async () => {
+    vi.stubEnv("GEMINI_API_KEY", "test-key-stdin-ext");
+    const seen: SeenRequest[] = [];
+    vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
+      seen.push({ url, body: JSON.parse(String(init.body)) });
+      return new Response(
+        JSON.stringify({ candidates: [{ content: { parts: [{ text: "ok" }] } }] }),
+        { status: 200 },
+      );
+    });
+
+    const output = path.join(dir, "ext.md");
+    await convertDocuments({
+      inputs: ["-"],
+      output,
+      stdinExt: "pdf",
+      stdin: Readable.from([Buffer.from([0, 1, 2, 3])]),
+    });
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0]?.body.contents[0]?.parts[1]?.inlineData?.mimeType).toBe("application/pdf");
+    expect(exitSpy).not.toHaveBeenCalled();
+    expect(fs.readdirSync(tmp)).toEqual([]);
+  });
+
+  describe("stdin larger than 20 MB (Files API)", () => {
+    const big = () => Readable.from([Buffer.alloc(21 * 1024 * 1024, "a")]);
+
+    it("uploads as stdin.<ext> without exposing the temp path", async () => {
+      vi.stubEnv("GEMINI_API_KEY", "test-key-upload");
+      let uploadBody = "";
+      const generateBodies: SeenRequest["body"][] = [];
+      vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
+        if (url.includes("/upload/")) {
+          // Only the multipart metadata matters; skip the 21 MB payload.
+          uploadBody = (init.body as Buffer).subarray(0, 512).toString("latin1");
+          return new Response(
+            JSON.stringify({
+              file: {
+                name: "files/abc",
+                uri: "https://files.example/abc",
+                mimeType: "text/plain",
+                state: "ACTIVE",
+              },
+            }),
+            { status: 200 },
+          );
+        }
+        generateBodies.push(JSON.parse(String(init.body)));
+        return new Response(
+          JSON.stringify({ candidates: [{ content: { parts: [{ text: "# Big" }] } }] }),
+          { status: 200 },
+        );
+      });
+
+      const output = path.join(dir, "big.md");
+      await convertDocuments({ inputs: ["-"], output, stdin: big() });
+
+      expect(uploadBody).toContain('"displayName":"stdin.txt"');
+      expect(uploadBody).not.toContain(tmp);
+      const parts = generateBodies[0]?.contents[0]?.parts as Array<Record<string, unknown>>;
+      expect(parts?.[1]).toEqual({
+        fileData: { mimeType: "text/plain", fileUri: "https://files.example/abc" },
+      });
+      const md = fs.readFileSync(output, "utf8");
+      expect(md).toContain("# Big");
+      expect(exitSpy).not.toHaveBeenCalled();
+      expect(fs.readdirSync(tmp)).toEqual([]);
+    });
+
+    it("labels upload failures <stdin> and cleans up", async () => {
+      vi.stubEnv("GEMINI_API_KEY", "test-key-upload-fail");
+      // 429 skips the per-file retry backoff, keeping the test fast.
+      vi.stubGlobal("fetch", async () => new Response("quota exceeded", { status: 429 }));
+      const logger = makeLogger();
+
+      const output = path.join(dir, "big-failed.md");
+      await convertDocuments({ inputs: ["-"], output, stdin: big(), logger });
+
+      expect(logger.error).toHaveBeenCalledWith(expect.stringMatching(/^Failed: <stdin> — /));
+      const md = fs.readFileSync(output, "utf8");
+      expect(md).toContain("**Error**:");
+      expect(md).not.toContain(tmp);
+      expect(exitSpy).toHaveBeenCalledWith(1);
+      expect(fs.readdirSync(tmp)).toEqual([]);
+    });
   });
 });

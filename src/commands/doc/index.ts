@@ -26,7 +26,7 @@ export function registerDocCommands(program: Command): void {
     .alias("-i")
     .option(
       "--stdin-ext <ext>",
-      "Extension for piped stdin when auto-detection fails (e.g. docx, pptx)",
+      "Extension for piped stdin when auto-detection fails (e.g. pdf, txt)",
     )
     .option("--output <path>", "Output markdown file path")
     .option(

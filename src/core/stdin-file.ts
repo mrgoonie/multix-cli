@@ -190,10 +190,13 @@ export interface StdinUsage {
   flag?: string;
   /** Example command line shown when stdin is a terminal. */
   example?: string;
+  /** Extension suggested when the piped type cannot be detected, e.g. "mp3" or "pdf". */
+  extExample?: string;
 }
 
 const DEFAULT_FLAG = "--files";
 const DEFAULT_EXAMPLE = "cat clip.mp3 | multix gemini transcribe --files -";
+const DEFAULT_EXT_EXAMPLE = "mp3";
 
 /** Read all of stdin into a private temp file. */
 export async function stdinToTempFile(
@@ -301,7 +304,7 @@ export async function resolveFileInputs(
   if (!stdin.detected) {
     stdin.cleanup();
     throw new ValidationError(
-      "Could not detect the type of piped stdin; pass --stdin-ext (e.g. --stdin-ext mp3)",
+      `Could not detect the type of piped stdin; pass --stdin-ext (e.g. --stdin-ext ${opts.extExample ?? DEFAULT_EXT_EXAMPLE})`,
     );
   }
   return {

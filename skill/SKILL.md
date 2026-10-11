@@ -354,7 +354,7 @@ multix byteplus 3d --input-image ./front.png ./side.png --prompt "Generate from 
 
 # Docs → Markdown (Gemini)
 multix doc convert --input report.pdf [--auto-name] [--output ./out.md]
-cat report.pdf | multix doc convert --input - --output ./out.md   # "-" reads stdin; --stdin-ext docx|pptx|xlsx if undetected
+cat report.pdf | multix doc convert --input - --output ./out.md   # "-" reads stdin; --stdin-ext <ext> (e.g. pdf) if undetected
 
 # Media optimization (ffmpeg + ImageMagick)
 multix media optimize --input <file> --output <file> [--target-size <MB>] [--quality 85] [--max-width 1920]
