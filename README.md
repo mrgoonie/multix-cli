@@ -4,7 +4,7 @@ AI multimodal CLI — generate images/video/speech/music, analyze and transcribe
 
 ![Isometric technical illustration of multix media workflows](docs-site/public/images/multix-isometric-banner.png)
 
-Supports **OpenAI** (image, image edits, TTS, STT, optional Codex image driver), **Gemini** (analyze, transcribe, generate, Veo video, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), **Cloudflare** (Workers AI image and speech; AI Gateway-routed Replicate video), **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment), and **fal.ai** (generic model runner, image, video via the fal queue API).
+Supports **OpenAI** (image, image edits, TTS, STT, optional Codex image driver), **Gemini** (analyze, transcribe, generate, Veo video, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), **Cloudflare** (Workers AI image and speech; AI Gateway-routed Replicate video), **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment), **fal.ai** (generic model runner, image, video via the fal queue API), and **Atlas Cloud** (any model: image, image edit, video, audio, 3D, with resumable async predictions).
 
 ## Documentation
 
@@ -71,6 +71,12 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `FAL_IMAGE_MODEL` | No | Default fal image model (default `fal-ai/flux/schnell`) |
 | `FAL_VIDEO_MODEL` | No | Default fal text-to-video model (default `fal-ai/kling-video/v1.6/standard/text-to-video`) |
 | `FAL_VIDEO_IMAGE_MODEL` | No | Default fal image-to-video model, used when `--image-url` is passed without `-m` (default `fal-ai/kling-video/v1.6/standard/image-to-video`) |
+| `ATLASCLOUD_API_KEY` | For Atlas Cloud | [Atlas Cloud](https://www.atlascloud.ai/console/api-keys) |
+| `ATLASCLOUD_BASE_URL` | No | Override Atlas Cloud media API base (default `https://api.atlascloud.ai/api/v1`) |
+| `ATLASCLOUD_IMAGE_MODEL` / `ATLASCLOUD_IMAGE_EDIT_MODEL` | No | Atlas image defaults (`black-forest-labs/flux-schnell`, `openai/gpt-image-1-mini/edit`) |
+| `ATLASCLOUD_VIDEO_MODEL` / `ATLASCLOUD_IMAGE_TO_VIDEO_MODEL` | No | Atlas video defaults (`bytedance/seedance-v1-pro-fast/text-to-video`, `.../image-to-video`) |
+| `ATLASCLOUD_TTS_MODEL` / `ATLASCLOUD_STT_MODEL` | No | Atlas audio defaults (`xai/tts-v1`, `bytedance/seed-asr-2.0`) |
+| `ATLASCLOUD_TEXT_TO_3D_MODEL` / `ATLASCLOUD_IMAGE_TO_3D_MODEL` | No | Atlas 3D defaults (`tencent/hunyuan3d-rapid/text-to-3d`, `.../image-to-3d`) |
 | `ARK_API_KEY` | No | Fallback for `BYTEPLUS_API_KEY` (Volcengine ARK shared name) |
 | `BYTEPLUS_BASE_URL` | No | Override BytePlus base (default `https://ark.ap-southeast.bytepluses.com/api/v3`) |
 | `BYTEPLUS_IMAGE_MODEL` | No | Default Seedream model (default `seedream-4-0-250828`) |
@@ -477,6 +483,43 @@ multix fal result <model> <requestId> [--download]
 - Auth header is `Authorization: Key $FAL_KEY`; base URL is `https://queue.fal.run`.
 - All fal jobs are async: submit → poll `status` → fetch `result`. `run`/`image`/`video` do this automatically.
 - Media URLs are extracted generically from the result JSON (any `url` field, recursively) and downloaded to `MULTIX_OUTPUT_DIR`.
+
+### `multix atlas`
+
+Image, image-edit, video, audio and 3D generation through [Atlas Cloud](https://www.atlascloud.ai)'s prediction API, plus a generic runner for any Atlas model. `atlascloud` is an alias for the group.
+
+```bash
+# Image (default black-forest-labs/flux-schnell) and image edit (default openai/gpt-image-1-mini/edit)
+multix atlas image "a red fox in the snow" [-m <model>] [--size <size>] [--aspect-ratio 1:1] [--resolution 2k] [-n 1] [--seed <n>] [--negative-prompt <text>]
+multix atlas image-to-image --prompt "make it dusk" --ref ./photo.png [--ref https://...] [-m <model>]
+
+# Video (defaults bytedance/seedance-v1-pro-fast/text-to-video and .../image-to-video)
+multix atlas video "waves at sunset" [-m <model>] [--duration <s>] [--resolution 720p] [--aspect-ratio 16:9]
+multix atlas image-to-video --ref ./first-frame.png [--prompt "slow pan"]
+
+# Audio: TTS (default xai/tts-v1), or STT with --audio (default bytedance/seed-asr-2.0; transcript printed)
+multix atlas audio "Hello from multix" [--voice <id>] [--format mp3]
+multix atlas audio --audio ./meeting.mp3 [--output transcript.txt]
+
+# 3D (defaults tencent/hunyuan3d-rapid/text-to-3d, or .../image-to-3d with --ref)
+multix atlas 3d "a low-poly treasure chest" [--format GLB]
+
+# Any model, raw JSON input (fields per the model's docs; `model` is added for you)
+multix atlas run <modelId> --input '{"prompt":"a cat"}' [--type image|video|audio]
+
+# Async: submit now, resume later
+multix atlas image "a paper boat" --async        # prints the prediction id
+multix atlas status <predictionId> [--wait] [--download] [--output <path>]
+
+# Upload a local file and print its temporary URL
+multix atlas upload ./photo.png
+```
+
+**Notes:**
+- Auth is `Authorization: Bearer $ATLASCLOUD_API_KEY`; the media API base is `https://api.atlascloud.ai/api/v1`.
+- Generation commands and `run` accept `--async`, `--wait-timeout <ms>`, `--output <path>`, `--no-download` and `--no-validate`. By default the command waits, then downloads to `MULTIX_OUTPUT_DIR` as `atlas-<idprefix>-NN.<ext>`.
+- Inputs are model-specific. multix reads each model's published schema, maps flags onto that model's field names, and rejects unsupported flags or invalid values before submitting. Use `--no-validate` to skip this check.
+- Local `--ref` / `--audio` files are uploaded first. Text outputs (transcripts, lyrics) are printed instead of downloaded. A failed prediction exits non-zero. Atlas Cloud has no cancel endpoint.
 
 ### `multix media`
 

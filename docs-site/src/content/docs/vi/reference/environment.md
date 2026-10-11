@@ -21,6 +21,7 @@ bật). Không commit API key hoặc đưa key vào shell history.
 | `CLOUDFLARE_AI_GATEWAY_ID` và `REPLICATE_API_TOKEN` | Cloudflare AI Gateway video |
 | `ELEVENLABS_API_KEY` | ElevenLabs |
 | `FAL_KEY` | fal.ai |
+| `ATLASCLOUD_API_KEY` | Atlas Cloud |
 
 ```bash
 export GEMINI_API_KEY="your-key"
@@ -85,6 +86,14 @@ Chỉ đặt override khi cần thay default. Các biến gồm `IMAGE_GEN_MODEL
 `FAL_BASE_URL`, `FAL_IMAGE_MODEL`, `FAL_VIDEO_MODEL` và
 `FAL_VIDEO_IMAGE_MODEL` (default image-to-video của fal, dùng khi truyền
 `multix fal video --image-url` mà không có `-m`).
+
+Atlas Cloud nhận `ATLASCLOUD_BASE_URL` (base của media API, mặc định
+`https://api.atlascloud.ai/api/v1`) và một biến ghi đè model mặc định cho mỗi
+lệnh: `ATLASCLOUD_IMAGE_MODEL`, `ATLASCLOUD_IMAGE_EDIT_MODEL`,
+`ATLASCLOUD_VIDEO_MODEL`, `ATLASCLOUD_IMAGE_TO_VIDEO_MODEL`,
+`ATLASCLOUD_TTS_MODEL`, `ATLASCLOUD_STT_MODEL`, `ATLASCLOUD_TEXT_TO_3D_MODEL`
+và `ATLASCLOUD_IMAGE_TO_3D_MODEL`. Xem [Atlas Cloud](/vi/commands/atlascloud/)
+để biết các model mặc định.
 
 Cloudflare chỉ chấp nhận các model image và speech Workers AI có sẵn;
 `CLOUDFLARE_AI_IMAGE_MODEL` và `CLOUDFLARE_AI_TTS_MODEL` vì vậy chỉ dùng để

@@ -36,6 +36,7 @@ https://multix.zuey.me/llms.txt
 | Workers AI image/speech hoặc AI Gateway video | [Cloudflare](/vi/commands/cloudflare/) |
 | Voice workflow, dubbing hoặc audio generation | [ElevenLabs](/vi/commands/elevenlabs/) |
 | Bất kỳ model queue fal.ai, ảnh hoặc video | [fal.ai](/vi/commands/fal/) |
+| Bất kỳ model Atlas Cloud nào, hoặc job ảnh/video/âm thanh/3D bất đồng bộ cần tiếp tục sau | [Atlas Cloud](/vi/commands/atlascloud/) |
 | Convert tài liệu hoặc tối ưu media local | [Media và tài liệu](/vi/commands/media-and-documents/) |
 | Tự cập nhật CLI | [Tổng quan lệnh](/vi/commands/#tự-cập-nhật) |
 

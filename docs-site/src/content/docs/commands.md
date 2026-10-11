@@ -17,6 +17,7 @@ description: Choose the multix command group that matches your media workflow.
 | [Cloudflare](/commands/cloudflare/) | Workers AI image/speech and AI Gateway video jobs. |
 | [ElevenLabs](/commands/elevenlabs/) | Voices, TTS, cloning, STT, music, SFX, dubbing, isolation, and alignment. |
 | [fal.ai](/commands/fal/) | Any fal queue model, plus image/video convenience commands. |
+| [Atlas Cloud](/commands/atlascloud/) | Any Atlas Cloud model: image, image edit, video, audio, 3D, and resumable async predictions. |
 | `multix media` | Optimize, split, and batch-process files with ffmpeg/ImageMagick. |
 | `multix doc` | Convert supported documents to Markdown through Gemini. |
 | `multix update` | Self-update multix to the latest, or a specific, published version. |
