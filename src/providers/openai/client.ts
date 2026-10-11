@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { resolveKey } from "../../core/env-loader.js";
 import { ConfigError, HttpError, ValidationError } from "../../core/errors.js";
+import { toFetchError } from "../../core/fetch-error.js";
 import { httpJson } from "../../core/http-client.js";
 import { fetchSameOrigin } from "../../core/redirect-fetch.js";
 import { OPENAI_BASE_URL } from "./models.js";
@@ -58,7 +59,7 @@ export async function postOpenAIForm<T>(
     });
   } catch (cause) {
     if (cause instanceof HttpError) throw cause;
-    throw new HttpError(0, cause instanceof Error ? cause.message : String(cause), url);
+    throw toFetchError(cause, url, "openai");
   }
   if (!res.ok) {
     const text = await res.text().catch(() => "");
@@ -84,7 +85,7 @@ export async function postOpenAIBinary(
     });
   } catch (cause) {
     if (cause instanceof HttpError) throw cause;
-    throw new HttpError(0, cause instanceof Error ? cause.message : String(cause), url);
+    throw toFetchError(cause, url, "openai");
   }
   if (!res.ok) {
     const text = await res.text().catch(() => "");

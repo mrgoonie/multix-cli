@@ -8,6 +8,7 @@
  */
 
 import { HttpError, ProviderError, ValidationError } from "../../core/errors.js";
+import { toFetchError } from "../../core/fetch-error.js";
 import { type FetchLike, fetchJson, httpErrorFromResponse } from "../../core/fetch-json.js";
 import { redactUrl } from "../../core/redact.js";
 import { fetchSameOrigin } from "../../core/redirect-fetch.js";
@@ -432,8 +433,9 @@ export class HeygenClient {
       } catch (cause) {
         // A redirect loop is not a network failure: report it, do not retry.
         if (cause instanceof HttpError) throw toHeygenApiError(cause);
-        const msg = cause instanceof Error ? cause.message : String(cause);
-        const err = toHeygenApiError(new HttpError(0, msg, url));
+        const failure = toFetchError(cause, url, "heygen");
+        if (!(failure instanceof HttpError)) throw failure;
+        const err = toHeygenApiError(failure);
         if (attempt >= this.maxAttempts) throw err;
         await this.sleep(this.retryDelay(err, key, attempt) ?? 1000);
         continue;

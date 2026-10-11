@@ -119,6 +119,7 @@ describe("runtime neutrality", () => {
     /from\s+["'](node:[^"']+|[^"']*\/(env-loader|http-client|logger|output-dir|json-input|image-input)\.js)["']/;
   const WORKER_SAFE_CORE = new Set([
     "errors.js",
+    "fetch-error.js",
     "fetch-json.js",
     "async-poll.js",
     "redact.js",

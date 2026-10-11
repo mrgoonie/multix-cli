@@ -7,6 +7,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { resolveKey } from "../../core/env-loader.js";
 import { ConfigError, HttpError, ProviderError, ValidationError } from "../../core/errors.js";
+import { toFetchError } from "../../core/fetch-error.js";
 import { httpJson } from "../../core/http-client.js";
 import type { Logger } from "../../core/logger.js";
 import { getOutputDir } from "../../core/output-dir.js";
@@ -115,8 +116,7 @@ export async function apiPostBinary(
     res = await fetchSameOrigin(url.toString(), init);
   } catch (cause) {
     if (cause instanceof HttpError) throw cause;
-    const msg = cause instanceof Error ? cause.message : String(cause);
-    throw new HttpError(0, msg, url.toString());
+    throw toFetchError(cause, url.toString(), "elevenlabs");
   }
 
   if (!res.ok) {
@@ -147,8 +147,7 @@ export async function apiPostMultipart<T>(
     });
   } catch (cause) {
     if (cause instanceof HttpError) throw cause;
-    const msg = cause instanceof Error ? cause.message : String(cause);
-    throw new HttpError(0, msg, url);
+    throw toFetchError(cause, url, "elevenlabs");
   }
   if (!res.ok) {
     const text = await res.text().catch(() => "");

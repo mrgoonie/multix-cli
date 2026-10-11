@@ -24,8 +24,8 @@ export class MultixError extends Error {
 
 /** Missing or invalid configuration (env vars, flags). */
 export class ConfigError extends MultixError {
-  constructor(message: string) {
-    super(message, "CONFIG_ERROR");
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, "CONFIG_ERROR", options);
     this.name = "ConfigError";
   }
 }

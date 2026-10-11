@@ -166,7 +166,7 @@ submits anyway, using each flag's usual field name and type (for example a singl
 - Auth uses `Authorization: Bearer <ATLASCLOUD_API_KEY>`. The media API base is
   `https://api.atlascloud.ai/api/v1` (override with `ATLASCLOUD_BASE_URL`).
 - Polling retries rate limits (honouring `Retry-After`), 408 and 5xx responses
-  and network errors until `--wait-timeout` expires. Each poll request is limited
+  (except 501 and 505) and network errors until `--wait-timeout` expires. Each poll request is limited
   to the time left. Atlas reports some failed jobs as an HTTP 5xx whose body
   holds `data.status: "failed"`; only that shape ends polling as a failure.
 - multix never logs the API key, signed output URLs or prompts. Debug output

@@ -13,6 +13,7 @@
 
 import { PollTimeoutError, isTransientHttpError, pollUntil } from "../../core/async-poll.js";
 import { HttpError, ProviderError } from "../../core/errors.js";
+import { toFetchError } from "../../core/fetch-error.js";
 import { type FetchLike, fetchJson, httpErrorFromResponse } from "../../core/fetch-json.js";
 import { fetchSameOrigin } from "../../core/redirect-fetch.js";
 import {
@@ -350,8 +351,7 @@ export class ReplicateClient {
       );
     } catch (cause) {
       if (cause instanceof HttpError) throw mapReplicateError(cause, subject);
-      const msg = cause instanceof Error ? cause.message : String(cause);
-      throw mapReplicateError(new HttpError(0, msg, url), subject);
+      throw mapReplicateError(toFetchError(cause, url, PROVIDER), subject);
     }
     if (!response.ok) {
       if (response.status === 413) {

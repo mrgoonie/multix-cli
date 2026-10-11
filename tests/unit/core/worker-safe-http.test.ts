@@ -9,6 +9,7 @@ import {
   ProviderError,
   ValidationError,
 } from "../../../src/core/errors.js";
+import { isNetworkFetchFailure, toFetchError } from "../../../src/core/fetch-error.js";
 import { fetchJson, parseRetryAfter } from "../../../src/core/fetch-json.js";
 import { parseJsonInput } from "../../../src/core/json-input.js";
 import { redactUrl } from "../../../src/core/redact.js";
@@ -16,6 +17,7 @@ import { redactUrl } from "../../../src/core/redact.js";
 const WORKER_SAFE_MODULES = [
   "redact.ts",
   "fetch-json.ts",
+  "fetch-error.ts",
   "redirect-fetch.ts",
   "async-poll.ts",
   "errors.ts",
@@ -257,13 +259,114 @@ describe("pollUntil", () => {
     expect(isTransientHttpError(new HttpError(429, "", "u"))).toBe(true);
     expect(isTransientHttpError(new HttpError(502, "", "u"))).toBe(true);
     expect(isTransientHttpError(new HttpError(408, "", "u"))).toBe(true);
-    for (const status of [400, 401, 403, 404, 422]) {
+    expect(isTransientHttpError(new HttpError(500, "", "u"))).toBe(true);
+    expect(isTransientHttpError(new HttpError(504, "", "u"))).toBe(true);
+    for (const status of [400, 401, 403, 404, 422, 501, 505]) {
       expect(isTransientHttpError(new HttpError(status, "", "u"))).toBe(false);
     }
     expect(isTransientHttpError(new ConfigError("GEMINI_API_KEY is not set"))).toBe(false);
     expect(isTransientHttpError(new ValidationError("bad flag"))).toBe(false);
     expect(isTransientHttpError(new ProviderError("File upload failed", "gemini"))).toBe(false);
     expect(isTransientHttpError(new Error("x"))).toBe(false);
+  });
+
+  it("does not poll again after a 501", async () => {
+    const fetchStatus = vi.fn(async () => {
+      throw new HttpError(501, "not implemented", "https://api.example.com/jobs/1");
+    });
+    await expect(
+      pollUntil({
+        fetchStatus,
+        isTerminal: () => true,
+        timeoutMs: 60_000,
+        sleep: async () => {},
+      }),
+    ).rejects.toThrow(/HTTP 501/);
+    expect(fetchStatus).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("toFetchError", () => {
+  const url = "https://api.example.com/v1/x?key=SECRET";
+  const withCode = (message: string, code: string) => Object.assign(new Error(message), { code });
+
+  it.each([
+    ["ECONNRESET cause", new TypeError("fetch failed", { cause: withCode("read", "ECONNRESET") })],
+    [
+      "undici socket cause",
+      new TypeError("fetch failed", { cause: withCode("x", "UND_ERR_SOCKET") }),
+    ],
+    [
+      "nested DNS cause",
+      new TypeError("fetch failed", {
+        cause: new Error("wrapped", { cause: withCode("getaddrinfo", "ENOTFOUND") }),
+      }),
+    ],
+    [
+      "AggregateError cause",
+      new TypeError("fetch failed", {
+        cause: new AggregateError([withCode("connect", "ECONNREFUSED")], "all failed"),
+      }),
+    ],
+    ["TimeoutError", new DOMException("timed out", "TimeoutError")],
+    ["AbortError", new DOMException("aborted", "AbortError")],
+  ])("maps a %s to a transient HttpError(0) keeping the cause", (_label, failure) => {
+    expect(isNetworkFetchFailure(failure)).toBe(true);
+    const err = toFetchError(failure, url);
+    expect(err).toBeInstanceOf(HttpError);
+    expect((err as HttpError).status).toBe(0);
+    expect(isTransientHttpError(err)).toBe(true);
+    expect(err.cause).toBe(failure);
+    expect(err.message).not.toContain("SECRET");
+  });
+
+  it("maps an invalid header value to a ConfigError without echoing it", async () => {
+    let failure: unknown;
+    try {
+      new Headers({ "x-api-key": "abc“secret-value" });
+    } catch (e) {
+      failure = e;
+    }
+    expect(failure).toBeInstanceOf(TypeError);
+    const err = toFetchError(failure, url);
+    expect(err).toBeInstanceOf(ConfigError);
+    expect(isTransientHttpError(err)).toBe(false);
+    expect(err.message).toMatch(/Invalid HTTP header value/);
+    expect(err.message).not.toContain("secret-value");
+    expect(err.message).not.toContain("SECRET");
+    expect(err.cause).toBe(failure);
+  });
+
+  it("maps an invalid URL to a ConfigError with the query string redacted", async () => {
+    const failure = await fetch("ht tp://bad url?key=SECRET").catch((e: unknown) => e);
+    const err = toFetchError(failure, "ht tp://bad url?key=SECRET");
+    expect(err).toBeInstanceOf(ConfigError);
+    expect(err.message).toBe("Invalid request URL: ht tp://bad url?[redacted]");
+    expect(err.cause).toBe(failure);
+  });
+
+  it("maps any other rejection to a non-transient ProviderError", () => {
+    const failure = new TypeError("fetch failed", { cause: new Error("bad port") });
+    expect(isNetworkFetchFailure(failure)).toBe(false);
+    const err = toFetchError(failure, url, "replicate");
+    expect(err).toBeInstanceOf(ProviderError);
+    expect((err as ProviderError).provider).toBe("replicate");
+    expect(isTransientHttpError(err)).toBe(false);
+    expect(err.message).toBe(
+      "Request to https://api.example.com/v1/x?[redacted] failed: TypeError: fetch failed",
+    );
+    expect(err.cause).toBe(failure);
+  });
+
+  it("makes fetchJson fail once on an invalid header instead of reporting a network error", async () => {
+    const doFetch = vi.fn(async (_input: string, init?: RequestInit) => {
+      new Headers(init?.headers);
+      return new Response("{}");
+    });
+    await expect(
+      fetchJson({ url, headers: { "x-api-key": "bad’key" }, fetch: doFetch }),
+    ).rejects.toBeInstanceOf(ConfigError);
+    expect(doFetch).toHaveBeenCalledTimes(1);
   });
 });
 

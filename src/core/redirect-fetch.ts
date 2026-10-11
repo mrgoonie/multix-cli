@@ -11,6 +11,7 @@
  */
 
 import { HttpError } from "./errors.js";
+import { toFetchError } from "./fetch-error.js";
 import type { UrlValidator } from "./url-safety.js";
 
 /** Minimal fetch signature (matches globalThis.fetch for string URLs). */
@@ -40,7 +41,11 @@ export interface FollowRedirectsOptions {
    * sends one.
    */
   crossOrigin?: "drop-headers" | "error" | "stop";
-  /** Turn network failures into HttpError(0) naming the hop. Default false (rethrow as is). */
+  /**
+   * Map fetch rejections with `toFetchError`: network failures become
+   * HttpError(0) naming the hop, deterministic ones a ConfigError or
+   * ProviderError. Default false (rethrow as is).
+   */
   wrapNetworkErrors?: boolean;
 }
 
@@ -82,8 +87,7 @@ export async function fetchFollowingRedirects(
       response = await doFetch(current, hopInit);
     } catch (cause) {
       if (!opts.wrapNetworkErrors) throw cause;
-      const msg = cause instanceof Error ? cause.message : String(cause);
-      throw new HttpError(0, msg, current);
+      throw toFetchError(cause, current);
     }
     // A runtime that followed a redirect despite "manual" reports where it ended up.
     if (validateUrl && response.url && response.url !== current) {
@@ -177,7 +181,8 @@ export interface RedirectFetchOptions {
 /**
  * GET a URL, following redirects one hop at a time so every target is
  * validated before it is requested and headers never reach another origin.
- * Network failures become HttpError(0) naming the hop that failed.
+ * Network failures become HttpError(0) naming the hop that failed; other
+ * fetch rejections are mapped by `toFetchError`.
  */
 export async function fetchWithValidatedRedirects(
   url: string,
@@ -190,8 +195,7 @@ export async function fetchWithValidatedRedirects(
     try {
       return { response: await doFetch(url, init), url };
     } catch (cause) {
-      const msg = cause instanceof Error ? cause.message : String(cause);
-      throw new HttpError(0, msg, url);
+      throw toFetchError(cause, url);
     }
   }
   return fetchFollowingRedirects(url, init, {

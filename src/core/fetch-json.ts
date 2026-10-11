@@ -66,7 +66,9 @@ function carriesCredentialHeaders(headers: Record<string, string>): boolean {
 
 /**
  * Make an HTTP request and parse the JSON response.
- * Throws HttpError on non-2xx status or network failure (status 0). When the
+ * Throws HttpError on non-2xx status or network failure (status 0); a
+ * deterministic fetch rejection (invalid header or URL) becomes a
+ * non-retryable ConfigError or ProviderError (see `toFetchError`). When the
  * request carries a header that may be a credential (anything but Accept,
  * Accept-Language, Content-Type, User-Agent), redirects are followed within
  * the same origin only; one to another origin is refused (HttpError with the
