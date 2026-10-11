@@ -86,6 +86,7 @@ const MANAGED = [
 interface Call {
   url: string;
   body: Record<string, unknown> | undefined;
+  headers: Headers;
 }
 
 let tmp: string;
@@ -124,7 +125,7 @@ beforeEach(() => {
         : raw instanceof FormData
           ? Object.fromEntries([...raw.entries()].filter(([, v]) => typeof v === "string"))
           : undefined;
-    calls.push({ url, body });
+    calls.push({ url, body, headers: new Headers(init?.headers) });
     return new Response(JSON.stringify({ error: "stop" }), {
       status: 400,
       headers: { "Content-Type": "application/json" },
@@ -409,6 +410,8 @@ describe("a blank project .env value does not hide ~/.multix/.env", () => {
     writeHome("FAL_KEY=home-fal-key\nFAL_IMAGE_MODEL=fal-ai/flux-pro\n");
     const call = await runWithEnvFile("FAL_KEY=\nFAL_IMAGE_MODEL=  \n", ["fal", "image", "a cat"]);
     expect(call.url).toContain("/fal-ai/flux-pro");
+    // The key from ~/.multix/.env is the one on the outgoing request.
+    expect(call.headers.get("authorization")).toBe("Key home-fal-key");
     expect(process.env.FAL_KEY).toBe("home-fal-key");
     expect(envFileOrigin("FAL_KEY")).toEqual({
       source: "user",

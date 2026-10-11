@@ -80,7 +80,9 @@ khi đi theo redirect đó.
 Thêm key Gemini phụ bằng `GEMINI_API_KEY_2`, `GEMINI_API_KEY_3`, … (hậu tố số
 bất kỳ). `multix` dùng `GEMINI_API_KEY` trước, sau đó các key đánh số theo thứ
 tự tăng dần; giá trị trùng lặp bị bỏ qua. Chỉ cần các key đánh số cũng đủ, không
-bắt buộc có `GEMINI_API_KEY`.
+bắt buộc có `GEMINI_API_KEY`. Nếu `.env` của project để trống `GEMINI_API_KEY`
+và `~/.multix/.env` có đặt biến này, key trong home sẽ tham gia xoay vòng của
+project đó và được thử trước tiên.
 
 - Key trả về HTTP 429, hoặc 400/403 kèm `RESOURCE_EXHAUSTED`, sẽ tạm nghỉ theo
   `Retry-After` hoặc `retryDelay` của server, nếu không có thì 60 giây, và chính
