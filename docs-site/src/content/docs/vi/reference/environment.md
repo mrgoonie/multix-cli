@@ -96,6 +96,12 @@ mỗi file output Replicate hoặc Atlas Cloud được tải về (mặc địn
 [Replicate](/vi/commands/replicate/) và [Atlas Cloud](/vi/commands/atlascloud/)
 để biết chính sách tải file.
 
+`MULTIX_UPLOAD_MIN_KBPS` đặt tốc độ upload chậm nhất, tính theo kilobyte (1.000
+byte) mỗi giây, mà một lần upload lên Gemini Files API được cho đủ thời gian
+(mặc định `1000`, tức 1 MB/s cộng thêm một phút; tối thiểu `1`). Giảm giá trị
+này khi đường truyền chậm để file lớn không bị hết thời gian chờ; xem
+[Gemini](/vi/commands/gemini/).
+
 Atlas Cloud nhận `ATLASCLOUD_BASE_URL` (base của media API, mặc định
 `https://api.atlascloud.ai/api/v1`; phải dùng `https://`, còn `http://` chỉ được
 chấp nhận cho `localhost`, `127.0.0.1` hoặc `[::1]`) và một biến ghi đè model
