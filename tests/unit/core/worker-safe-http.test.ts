@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PollTimeoutError, isTransientHttpError, pollUntil } from "../../../src/core/async-poll.js";
-import { HttpError, ValidationError } from "../../../src/core/errors.js";
+import { ConfigError, HttpError, ValidationError } from "../../../src/core/errors.js";
 import { fetchJson, parseRetryAfter } from "../../../src/core/fetch-json.js";
 import { parseJsonInput } from "../../../src/core/json-input.js";
 import { redactUrl } from "../../../src/core/redact.js";
@@ -245,7 +245,12 @@ describe("pollUntil", () => {
     expect(isTransientHttpError(new HttpError(0, "net", "u"))).toBe(true);
     expect(isTransientHttpError(new HttpError(429, "", "u"))).toBe(true);
     expect(isTransientHttpError(new HttpError(502, "", "u"))).toBe(true);
-    expect(isTransientHttpError(new HttpError(422, "", "u"))).toBe(false);
+    expect(isTransientHttpError(new HttpError(408, "", "u"))).toBe(true);
+    for (const status of [400, 401, 403, 404, 422]) {
+      expect(isTransientHttpError(new HttpError(status, "", "u"))).toBe(false);
+    }
+    expect(isTransientHttpError(new ConfigError("GEMINI_API_KEY is not set"))).toBe(false);
+    expect(isTransientHttpError(new ValidationError("bad flag"))).toBe(false);
     expect(isTransientHttpError(new Error("x"))).toBe(false);
   });
 });

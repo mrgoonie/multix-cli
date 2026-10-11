@@ -107,17 +107,24 @@ async function uploadFileWithKey(
   logger?.debug(`Uploading ${displayName} (${(fileBytes.length / 1024 / 1024).toFixed(2)} MB)`);
 
   // Use globalThis.fetch for binary body (httpJson would re-stringify)
-  const resp = await globalThis.fetch(FILES_BASE, {
-    method: "POST",
-    headers: {
-      "x-goog-api-key": apiKey,
-      "Content-Type": `multipart/related; boundary=${boundary}`,
-      "Content-Length": String(body.length),
-      "X-Goog-Upload-Protocol": "multipart",
-    },
-    body,
-    signal: AbortSignal.timeout(timeoutMs),
-  });
+  let resp: Response;
+  try {
+    resp = await globalThis.fetch(FILES_BASE, {
+      method: "POST",
+      headers: {
+        "x-goog-api-key": apiKey,
+        "Content-Type": `multipart/related; boundary=${boundary}`,
+        "Content-Length": String(body.length),
+        "X-Goog-Upload-Protocol": "multipart",
+      },
+      body,
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (cause) {
+    // Status 0 marks network failures and timeouts, as httpJson does, so callers can retry them.
+    const msg = cause instanceof Error ? cause.message : String(cause);
+    throw new HttpError(0, `File upload failed: ${msg}`, FILES_BASE);
+  }
 
   if (!resp.ok) {
     // HttpError keeps the status so quota failures can rotate to another key.

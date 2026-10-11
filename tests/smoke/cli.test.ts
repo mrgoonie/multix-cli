@@ -245,8 +245,7 @@ describe("gemini --files - (smoke)", () => {
 });
 
 describe("doc convert --input - (smoke)", () => {
-  // Without a key each attempt fails fast, but the retry backoff adds ~3 s.
-  it("reads piped stdin, labels it, and removes the temp file", { timeout: 15_000 }, async () => {
+  it("reads piped stdin, labels it, and removes the temp file", async () => {
     const fs = await import("node:fs");
     const os = await import("node:os");
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "multix-smoke-doc-stdin-"));
