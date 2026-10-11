@@ -11,7 +11,7 @@ import os from "node:os";
 import path from "node:path";
 import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { _resetEnvLoader, loadEnv } from "../../../src/core/env-loader.js";
+import { _resetEnvLoader, envFileOrigin, loadEnv } from "../../../src/core/env-loader.js";
 import { _resetOutputDir } from "../../../src/core/output-dir.js";
 import { isProjectEnvName } from "../../../src/project-env-names.js";
 import { registerBytePlusCommands } from "../../../src/providers/byteplus/commands/index.js";
@@ -28,9 +28,12 @@ import { registerLeonardoCommands } from "../../../src/providers/leonardo/comman
 import { registerMinimaxCommands } from "../../../src/providers/minimax/commands/index.js";
 import { registerOpenAICommands } from "../../../src/providers/openai/commands/index.js";
 import {
+  DEFAULT_OPENAI_IMAGE_MODEL,
   DEFAULT_OPENAI_STT_MODEL,
   DEFAULT_OPENAI_TTS_MODEL,
 } from "../../../src/providers/openai/models.js";
+import { DEFAULT_OPENROUTER_MODEL } from "../../../src/providers/openrouter/client.js";
+import { registerOpenRouterCommands } from "../../../src/providers/openrouter/commands/index.js";
 
 const GEMINI_MODEL_ENVS = [
   "IMAGE_GEN_MODEL",
@@ -68,10 +71,16 @@ const MANAGED = [
   "OPENAI_BASE_URL",
   "OPENAI_TTS_MODEL",
   "OPENAI_STT_MODEL",
+  "OPENAI_IMAGE_MODEL",
+  "OPENROUTER_API_KEY",
+  "OPENROUTER_IMAGE_MODEL",
+  "OPENROUTER_VIDEO_MODEL",
+  "OPENROUTER_FALLBACK_MODELS",
   "GEMINI_API_KEY",
   "GEMINI_BASE_URL",
   ...GEMINI_MODEL_ENVS,
   "MULTIX_OUTPUT_DIR",
+  "MULTIX_DISABLE_HOME_ENV",
 ];
 
 interface Call {
@@ -94,6 +103,8 @@ beforeEach(() => {
   process.env.BYTEPLUS_API_KEY = "test-byteplus-key";
   process.env.OPENAI_API_KEY = "test-openai-key";
   process.env.GEMINI_API_KEY = "test-gemini-key";
+  process.env.OPENROUTER_API_KEY = "test-openrouter-key";
+  process.env.MULTIX_DISABLE_HOME_ENV = "1";
   process.env.MULTIX_OUTPUT_DIR = path.join(tmp, "out");
   vi.spyOn(process, "cwd").mockReturnValue(tmp);
   vi.spyOn(console, "log").mockImplementation(() => {});
@@ -148,6 +159,7 @@ async function runWithEnvFile(envFile: string, args: string[]): Promise<Call> {
   registerBytePlusCommands(program);
   registerOpenAICommands(program);
   registerGeminiCommands(program);
+  registerOpenRouterCommands(program);
   await program.parseAsync(["node", "multix", ...args]).catch(() => {});
   const first = calls[0];
   if (!first) throw new Error("command sent no request");
@@ -328,5 +340,97 @@ describe("blank model overrides in a .env file (as in a copied .env.example)", (
     fs.writeFileSync(path.join(tmp, ".env"), "GEMINI_MODEL=file-model\n");
     loadEnv({ isProjectEnvName });
     expect(getDefaultModel("analyze")).toBe("shell-model");
+  });
+});
+
+describe("whitespace model overrides fall back and padded ones are trimmed", () => {
+  it("openai generate", async () => {
+    const blank = await runWithEnvFile("OPENAI_IMAGE_MODEL=   \n", [
+      "openai",
+      "generate",
+      "--driver",
+      "api",
+      "--prompt",
+      "a cat",
+    ]);
+    expect(blank.body?.model).toBe(DEFAULT_OPENAI_IMAGE_MODEL);
+    calls = [];
+    // The first load put the blank value in process.env, where it now reads like a shell value.
+    Reflect.deleteProperty(process.env, "OPENAI_IMAGE_MODEL");
+    _resetEnvLoader();
+    const padded = await runWithEnvFile('OPENAI_IMAGE_MODEL="  gpt-image-1  "\n', [
+      "openai",
+      "generate",
+      "--driver",
+      "api",
+      "--prompt",
+      "a cat",
+    ]);
+    expect(padded.body?.model).toBe("gpt-image-1");
+  });
+
+  it("openrouter generate", async () => {
+    const call = await runWithEnvFile('OPENROUTER_IMAGE_MODEL="  "\n', [
+      "openrouter",
+      "generate",
+      "--prompt",
+      "a cat",
+    ]);
+    expect(call.body?.model).toBe(DEFAULT_OPENROUTER_MODEL);
+  });
+
+  it("openrouter image-to-video", async () => {
+    const call = await runWithEnvFile('OPENROUTER_VIDEO_MODEL=" kwaivgi/kling-v3 "\n', [
+      "openrouter",
+      "image-to-video",
+      "--prompt",
+      "a cat",
+      "--image-url",
+      "https://example.com/cat.png",
+    ]);
+    expect(call.body?.model).toBe("kwaivgi/kling-v3");
+  });
+});
+
+describe("a blank project .env value does not hide ~/.multix/.env", () => {
+  let home: string;
+
+  beforeEach(() => {
+    home = path.join(tmp, "home");
+    fs.mkdirSync(path.join(home, ".multix"), { recursive: true });
+    vi.spyOn(os, "homedir").mockReturnValue(home);
+    Reflect.deleteProperty(process.env, "MULTIX_DISABLE_HOME_ENV");
+  });
+
+  const writeHome = (body: string) => fs.writeFileSync(path.join(home, ".multix", ".env"), body);
+
+  it("uses the home model default and API key behind blank project lines", async () => {
+    Reflect.deleteProperty(process.env, "FAL_KEY");
+    writeHome("FAL_KEY=home-fal-key\nFAL_IMAGE_MODEL=fal-ai/flux-pro\n");
+    const call = await runWithEnvFile("FAL_KEY=\nFAL_IMAGE_MODEL=  \n", ["fal", "image", "a cat"]);
+    expect(call.url).toContain("/fal-ai/flux-pro");
+    expect(process.env.FAL_KEY).toBe("home-fal-key");
+    expect(envFileOrigin("FAL_KEY")).toEqual({
+      source: "user",
+      file: path.join(home, ".multix", ".env"),
+    });
+    expect(envFileOrigin("FAL_IMAGE_MODEL")?.source).toBe("user");
+  });
+
+  it("a non-blank project value still wins over home", async () => {
+    writeHome("FAL_IMAGE_MODEL=fal-ai/flux-pro\n");
+    const call = await runWithEnvFile("FAL_IMAGE_MODEL=fal-ai/project-model\n", [
+      "fal",
+      "image",
+      "a cat",
+    ]);
+    expect(call.url).toContain("/fal-ai/project-model");
+  });
+
+  it("a shell value still wins over both files", async () => {
+    process.env.FAL_IMAGE_MODEL = "fal-ai/shell-model";
+    writeHome("FAL_IMAGE_MODEL=fal-ai/flux-pro\n");
+    const call = await runWithEnvFile("FAL_IMAGE_MODEL=\n", ["fal", "image", "a cat"]);
+    expect(call.url).toContain("/fal-ai/shell-model");
   });
 });

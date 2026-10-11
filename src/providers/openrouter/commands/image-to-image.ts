@@ -14,6 +14,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Command } from "commander";
+import { envDefault } from "../../../core/env-default.js";
 import { resolveKey } from "../../../core/env-loader.js";
 import { ProviderError, ValidationError } from "../../../core/errors.js";
 import { fetchBytes, httpJson } from "../../../core/http-client.js";
@@ -72,7 +73,7 @@ export function registerOpenRouterImageToImageCommand(parent: Command): void {
           throw new ValidationError("At least one --ref is required for image-to-image.");
         }
         const logger = createLogger({ verbose: opts.verbose ?? false });
-        const model = opts.model ?? resolveKey("OPENROUTER_IMAGE_MODEL") ?? DEFAULT_MODEL;
+        const model = opts.model ?? envDefault("OPENROUTER_IMAGE_MODEL", DEFAULT_MODEL);
         const strength = parseStrength(opts.strength);
 
         const fallbackModels = (resolveKey("OPENROUTER_FALLBACK_MODELS") ?? "")

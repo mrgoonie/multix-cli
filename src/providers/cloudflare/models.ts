@@ -1,3 +1,4 @@
+import { envDefault } from "../../core/env-default.js";
 import {
   type TrustedSettingState,
   applyTrustedSetting,
@@ -43,7 +44,7 @@ export type CloudflareUse = "native" | "video";
 export function getCloudflareModel(kind: NativeMediaKind, requested?: string): string {
   const expected = kind === "image" ? CLOUDFLARE_IMAGE_MODEL : CLOUDFLARE_TTS_MODEL;
   const overrideName = kind === "image" ? "CLOUDFLARE_AI_IMAGE_MODEL" : "CLOUDFLARE_AI_TTS_MODEL";
-  const model = requested ?? resolveKey(overrideName) ?? expected;
+  const model = requested ?? envDefault(overrideName, expected);
   if (model !== expected) {
     throw new ValidationError(`Unsupported Cloudflare ${kind} model: ${model}`);
   }

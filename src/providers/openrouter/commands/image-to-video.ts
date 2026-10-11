@@ -8,7 +8,7 @@
  */
 
 import type { Command } from "commander";
-import { resolveKey } from "../../../core/env-loader.js";
+import { envDefault } from "../../../core/env-default.js";
 import { createLogger } from "../../../core/logger.js";
 import { PollFailedError, PollTimeoutError, poll } from "../../leonardo/poll.js";
 import { type OpenRouterVideoPollResponse, pollVideoJob, submitVideoJob } from "../video-client.js";
@@ -53,7 +53,7 @@ export function registerOpenRouterImageToVideoCommand(parent: Command): void {
         verbose?: boolean;
       }) => {
         const logger = createLogger({ verbose: opts.verbose ?? false });
-        const model = opts.model ?? resolveKey("OPENROUTER_VIDEO_MODEL") ?? "google/veo-3.1";
+        const model = opts.model ?? envDefault("OPENROUTER_VIDEO_MODEL", "google/veo-3.1");
 
         const frame_images: Array<Record<string, unknown>> = [
           {

@@ -54,7 +54,7 @@ CLOUDFLARE_API_TOKEN  # Cloudflare Workers AI / AI Gateway token
 # Video additionally requires CLOUDFLARE_AI_GATEWAY_ID and REPLICATE_API_TOKEN.
 ```
 
-Priority: `process.env` > `cwd/.env` > `~/.multix/.env`. Set `MULTIX_LEGACY_CLAUDE_ENV=1` to also read legacy AgentKit `.claude` env files (credential names only, lowest priority); `multix check -v` lists loaded env files. A project `.env` may only set names multix reads (provider keys and settings from `.env.example`, the documented `MULTIX_*` settings such as `MULTIX_OUTPUT_DIR`, `NO_COLOR`; never `MULTIX_ALLOW_PROJECT_BASE_URL` or `MULTIX_LEGACY_CLAUDE_ENV`); anything else there (`NODE_OPTIONS`, `npm_config_*`, `LD_PRELOAD`, proxy/TLS variables) is not loaded, with one stderr warning naming the ignored variables. Put such variables in the shell.
+Priority: `process.env` > `cwd/.env` > `~/.multix/.env`; a blank value in a `.env` file does not count as set, so a later file can fill it (a shell value wins even when blank). Set `MULTIX_LEGACY_CLAUDE_ENV=1` to also read legacy AgentKit `.claude` env files (credential names only, lowest priority); `multix check -v` lists loaded env files. A project `.env` may only set names multix reads (provider keys and settings from `.env.example`, the documented `MULTIX_*` settings such as `MULTIX_OUTPUT_DIR`, `NO_COLOR`; never `MULTIX_ALLOW_PROJECT_BASE_URL` or `MULTIX_LEGACY_CLAUDE_ENV`); anything else there (`NODE_OPTIONS`, `npm_config_*`, `LD_PRELOAD`, proxy/TLS variables) is not loaded, with one stderr warning naming the ignored variables. Put such variables in the shell.
 
 ## Gemini text-output tasks
 

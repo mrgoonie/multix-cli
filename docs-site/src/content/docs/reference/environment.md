@@ -8,6 +8,13 @@ in the current project, then `~/.multix/.env` (plus [legacy `.claude` files](#le
 when enabled). Keep API keys out of shell
 history and never commit them.
 
+The first source that sets a variable wins. A blank or whitespace-only value in
+a `.env` file does not count as set, so a project `.env` copied from
+`.env.example` (for example `GEMINI_API_KEY=` or `FAL_IMAGE_MODEL=`) does not
+hide the value in `~/.multix/.env`. A shell variable always wins, even when it
+is blank: run `GEMINI_API_KEY= multix ...` to ignore the key in your `.env`
+files for one command.
+
 ## What a project `.env` may set
 
 A project `.env` (the current directory, or a legacy `.claude` file under it)
@@ -104,8 +111,8 @@ without `GEMINI_API_KEY`.
 Older AgentKit installs kept keys in `.claude` folders. Set
 `MULTIX_LEGACY_CLAUDE_ENV=1` (in the shell or `~/.multix/.env`; a project `.env`
 cannot set it) to also read them. This is off by default. The files load
-after `~/.multix/.env`, never override earlier values, and the first file that
-sets a variable wins:
+after `~/.multix/.env`, never override earlier non-blank values, and the first
+file that sets a variable wins:
 
 1. `.claude/skills/ai-multimodal/.env`, then `.claude/skills/ak-ai-multimodal/.env`
 2. `.claude/skills/.env`

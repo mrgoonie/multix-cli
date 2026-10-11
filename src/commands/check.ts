@@ -113,11 +113,10 @@ function settingLine(
   if (state.status === "used") {
     return { level: "info", message: `${label} in effect (from ${usedFrom(state)})` };
   }
-  const why =
-    state.reason === "it is empty"
-      ? "set empty in project .env"
-      : `set in project .env while ${state.reason}`;
-  return { level: "warn", message: `${label} ignored: ${why}; using ~/.multix/.env` };
+  return {
+    level: "warn",
+    message: `${label} ignored: set in project .env while ${state.reason}; using ~/.multix/.env`,
+  };
 }
 
 const sameState = (a: TrustedSettingState, b: TrustedSettingState) =>
