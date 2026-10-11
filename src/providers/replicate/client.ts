@@ -285,7 +285,7 @@ export class ReplicateClient {
   /**
    * Poll until the prediction reaches a terminal status (succeeded, failed,
    * canceled, aborted) and return it — callers decide success via
-   * assertSucceeded. Retries network/429/5xx; throws PollTimeoutError on deadline.
+   * assertSucceeded. Retries network/408/429/5xx; throws PollTimeoutError on deadline.
    */
   async waitForPrediction(
     prediction: ReplicatePrediction | string,

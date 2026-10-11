@@ -37,7 +37,7 @@ export interface PollOptions<T> {
   jitter?: boolean;
   /** Lower bound for any delay, including Retry-After: 0. Default 500ms. */
   minIntervalMs?: number;
-  /** Errors that should be retried instead of aborting. Default: network, 429, 5xx. */
+  /** Errors that should be retried instead of aborting. Default: network/timeout, 408, 429, 5xx. */
   isTransientError?: (error: unknown) => boolean;
   /** Called after each successful status fetch. */
   onPoll?: (state: T, attempt: number) => void;
@@ -48,10 +48,15 @@ export interface PollOptions<T> {
   random?: () => number;
 }
 
-/** Network failures (status 0), rate limits and server errors are worth retrying. */
+/**
+ * Network failures and timeouts (status 0), 408, rate limits and server errors
+ * are worth retrying. Anything else — ConfigError, ValidationError, other 4xx,
+ * plain errors — fails the same way on every attempt.
+ */
 export function isTransientHttpError(error: unknown): boolean {
   if (!(error instanceof HttpError)) return false;
-  return error.status === 0 || error.status === 429 || error.status >= 500;
+  const { status } = error;
+  return status === 0 || status === 408 || status === 429 || status >= 500;
 }
 
 const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));

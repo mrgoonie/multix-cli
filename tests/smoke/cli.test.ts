@@ -278,35 +278,27 @@ describe("gemini --files - (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
   });
 });
 
-describe("doc convert --input - (smoke)", () => {
-  // Without a key each attempt fails fast, but the retry backoff adds ~3 s.
-  const DOC_TIMEOUT = 2 * SPAWN_TIMEOUT;
-
-  it(
-    "reads piped stdin, labels it, and removes the temp file",
-    { timeout: DOC_TIMEOUT },
-    async () => {
-      const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "multix-smoke-doc-stdin-"));
-      try {
-        const result = await run(["doc", "convert", "--input", "-"], {
-          input: "piped notes for conversion",
-          cwd: tmp,
-          extendEnv: false,
-          env: isolatedEnv(tmp),
-          timeout: DOC_TIMEOUT - 1_000,
-        });
-        const out = result.stdout + result.stderr;
-        // No key is configured, so the request fails after stdin was materialized.
-        expect(result.exitCode).toBe(1);
-        expect(out).toContain("Failed: <stdin>");
-        expect(out).toContain("GEMINI_API_KEY is not set");
-        expect(out).not.toContain("piped notes");
-        expect(stdinDirs(tmp)).toEqual([]);
-        // MULTIX_OUTPUT_DIR is pinned to the test dir, never the user's own.
-        expect(fs.existsSync(path.join(tmp, "document-extraction.md"))).toBe(true);
-      } finally {
-        fs.rmSync(tmp, { recursive: true, force: true });
-      }
-    },
-  );
+describe("doc convert --input - (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
+  it("reads piped stdin, labels it, and removes the temp file", async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "multix-smoke-doc-stdin-"));
+    try {
+      const result = await run(["doc", "convert", "--input", "-"], {
+        input: "piped notes for conversion",
+        cwd: tmp,
+        extendEnv: false,
+        env: isolatedEnv(tmp),
+      });
+      const out = result.stdout + result.stderr;
+      // No key is configured: the run fails on the first attempt, with no retry backoff.
+      expect(result.exitCode).toBe(1);
+      expect(out).toContain("Failed: <stdin>");
+      expect(out).toContain("GEMINI_API_KEY is not set");
+      expect(out).not.toContain("piped notes");
+      expect(stdinDirs(tmp)).toEqual([]);
+      // MULTIX_OUTPUT_DIR is pinned to the test dir, never the user's own.
+      expect(fs.existsSync(path.join(tmp, "document-extraction.md"))).toBe(true);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
 });

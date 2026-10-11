@@ -48,8 +48,11 @@ without `GEMINI_API_KEY`.
   uploaded file belongs to the key that created it.
 - Veo rotates only on submit. Once a job is accepted, polling and download use
   that key, so a later rate limit never starts a second, separately billed job.
-- `multix doc convert` stops its own retries on a rate limit, because rotation
-  already tried every ready key.
+- `multix doc convert` retries a file only after network errors, timeouts, 408
+  and 5xx responses. It stops on a rate limit, because rotation already tried
+  every ready key, and fails at once on a missing key or any other 4xx. A Files
+  API upload that times out while sending the file bytes, or that the server
+  redirects, is not retried either.
 - Cooldowns last for the current process only. Logs name the env var, never the
   key value.
 - `multix check` lists the keys in rotation and pings each one.

@@ -47,8 +47,10 @@ bắt buộc có `GEMINI_API_KEY`.
   về key tạo ra nó.
 - Veo chỉ xoay vòng ở bước submit. Khi job đã được nhận, polling và download dùng
   đúng key đó, nên giới hạn về sau không bao giờ tạo job thứ hai bị tính phí riêng.
-- `multix doc convert` dừng vòng thử lại của chính nó khi gặp giới hạn, vì xoay
-  vòng đã thử mọi key sẵn sàng.
+- `multix doc convert` chỉ thử lại một file sau lỗi mạng, timeout, 408 và 5xx.
+  Lệnh dừng khi gặp giới hạn, vì xoay vòng đã thử mọi key sẵn sàng, và báo lỗi
+  ngay khi thiếu key hoặc gặp mã 4xx khác. Lượt upload qua Files API bị timeout
+  khi đang gửi dữ liệu file, hoặc bị server chuyển hướng, cũng không được thử lại.
 - Thời gian nghỉ chỉ tồn tại trong process hiện tại. Log chỉ ghi tên biến môi
   trường, không bao giờ ghi giá trị key.
 - `multix check` liệt kê các key đang xoay vòng và ping từng key.

@@ -189,8 +189,8 @@ submits anyway, using each flag's usual field name and type (for example a singl
   override must use `https://`, because the API key is sent with every request.
   Plain `http://` is accepted only for `localhost`, `127.0.0.1` and `[::1]`, for
   local mock servers.
-- Polling retries rate limits (honouring `Retry-After`), 5xx responses and
-  network errors until `--wait-timeout` expires. Each poll request is limited
+- Polling retries rate limits (honouring `Retry-After`), 408 and 5xx responses
+  and network errors until `--wait-timeout` expires. Each poll request is limited
   to the time left. Atlas reports some failed jobs as an HTTP 5xx whose body
   holds `data.status: "failed"`; only that shape ends polling as a failure.
 - multix never logs the API key, signed output URLs or prompts. Debug output

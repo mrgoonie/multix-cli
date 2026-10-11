@@ -39,6 +39,10 @@ describe("convertDocuments with piped stdin", () => {
     vi.stubEnv("TEMP", tmp);
     vi.stubEnv("TMP", tmp);
     vi.stubEnv("MULTIX_OUTPUT_DIR", path.join(dir, "out"));
+    // Numbered keys from the developer's shell would join the rotation pool.
+    for (const name of Object.keys(process.env)) {
+      if (/^GEMINI_API_KEY_\d+$/.test(name)) vi.stubEnv(name, "");
+    }
     _resetOutputDir();
     exitSpy = vi.spyOn(process, "exit").mockImplementation((() => undefined) as never);
     logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -118,6 +122,142 @@ describe("convertDocuments with piped stdin", () => {
     expect(md).not.toContain(tmp);
     expect(exitSpy).toHaveBeenCalledWith(1);
     expect(fs.readdirSync(tmp)).toEqual([]);
+  });
+
+  describe("retry policy", () => {
+    const ok = () =>
+      new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: "# Ok" }] } }] }), {
+        status: 200,
+      });
+
+    beforeEach(() => {
+      // Only setTimeout is faked: a backoff sleep never resolves unless the test advances the
+      // clock, so a run that completes without advancing proves no retry delay was taken.
+      vi.useFakeTimers({ toFake: ["setTimeout"] });
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("fails a missing key immediately without sleeping or calling the API", async () => {
+      vi.stubEnv("GEMINI_API_KEY", "");
+      const fetchSpy = vi.fn();
+      vi.stubGlobal("fetch", fetchSpy);
+      const logger = makeLogger();
+
+      await convertDocuments({
+        inputs: ["-"],
+        output: path.join(dir, "no-key.md"),
+        stdin: piped("notes"),
+        logger,
+      });
+
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(logger.error).toHaveBeenCalledTimes(1);
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining("GEMINI_API_KEY is not set"),
+      );
+      expect(logger.debug).not.toHaveBeenCalledWith(expect.stringMatching(/^Retry /));
+      expect(exitSpy).toHaveBeenCalledWith(1);
+    });
+
+    for (const status of [400, 401, 403, 404]) {
+      it(`does not retry HTTP ${status}`, async () => {
+        vi.stubEnv("GEMINI_API_KEY", `test-key-${status}`);
+        const fetchSpy = vi.fn(async () => new Response("bad request", { status }));
+        vi.stubGlobal("fetch", fetchSpy);
+        const logger = makeLogger();
+
+        await convertDocuments({
+          inputs: ["-"],
+          output: path.join(dir, `http-${status}.md`),
+          stdin: piped("notes"),
+          logger,
+        });
+
+        expect(fetchSpy).toHaveBeenCalledTimes(1);
+        expect(logger.debug).not.toHaveBeenCalledWith(expect.stringMatching(/^Retry /));
+        expect(logger.error).toHaveBeenCalledWith(expect.stringContaining(`HTTP ${status}`));
+        expect(exitSpy).toHaveBeenCalledWith(1);
+      });
+    }
+
+    it("retries HTTP 503 with backoff and succeeds", async () => {
+      vi.stubEnv("GEMINI_API_KEY", "test-key-503");
+      const fetchSpy = vi
+        .fn()
+        .mockResolvedValueOnce(new Response("unavailable", { status: 503 }))
+        .mockResolvedValueOnce(new Response("unavailable", { status: 503 }))
+        .mockResolvedValueOnce(ok());
+      vi.stubGlobal("fetch", fetchSpy);
+      const logger = makeLogger();
+      const output = path.join(dir, "retry-503.md");
+
+      const run = convertDocuments({ inputs: ["-"], output, stdin: piped("notes"), logger });
+      await vi.runAllTimersAsync();
+      await run;
+
+      expect(fetchSpy).toHaveBeenCalledTimes(3);
+      expect(logger.debug).toHaveBeenCalledWith(expect.stringMatching(/^Retry 1 after 1s: /));
+      expect(logger.debug).toHaveBeenCalledWith(expect.stringMatching(/^Retry 2 after 2s: /));
+      expect(fs.readFileSync(output, "utf8")).toContain("# Ok");
+      expect(exitSpy).not.toHaveBeenCalled();
+    });
+
+    it("retries HTTP 408", async () => {
+      vi.stubEnv("GEMINI_API_KEY", "test-key-408");
+      const fetchSpy = vi
+        .fn()
+        .mockResolvedValueOnce(new Response("request timeout", { status: 408 }))
+        .mockResolvedValueOnce(ok());
+      vi.stubGlobal("fetch", fetchSpy);
+      const output = path.join(dir, "retry-408.md");
+
+      const run = convertDocuments({ inputs: ["-"], output, stdin: piped("notes") });
+      await vi.runAllTimersAsync();
+      await run;
+
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+      expect(fs.readFileSync(output, "utf8")).toContain("# Ok");
+      expect(exitSpy).not.toHaveBeenCalled();
+    });
+
+    it("retries network failures", async () => {
+      vi.stubEnv("GEMINI_API_KEY", "test-key-network");
+      const fetchSpy = vi
+        .fn()
+        .mockRejectedValueOnce(new TypeError("fetch failed"))
+        .mockResolvedValueOnce(ok());
+      vi.stubGlobal("fetch", fetchSpy);
+      const output = path.join(dir, "retry-network.md");
+
+      const run = convertDocuments({ inputs: ["-"], output, stdin: piped("notes") });
+      await vi.runAllTimersAsync();
+      await run;
+
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+      expect(fs.readFileSync(output, "utf8")).toContain("# Ok");
+      expect(exitSpy).not.toHaveBeenCalled();
+    });
+
+    it("rotates to the next key on 429 without a backoff sleep", async () => {
+      vi.stubEnv("GEMINI_API_KEY", "test-key-limited");
+      vi.stubEnv("GEMINI_API_KEY_2", "test-key-spare");
+      const keys: string[] = [];
+      vi.stubGlobal("fetch", async (_url: string, init: RequestInit) => {
+        const key = (init.headers as Record<string, string>)["x-goog-api-key"] ?? "";
+        keys.push(key);
+        return key === "test-key-limited" ? new Response("quota", { status: 429 }) : ok();
+      });
+      const output = path.join(dir, "rotate.md");
+
+      await convertDocuments({ inputs: ["-"], output, stdin: piped("notes") });
+
+      expect(keys).toEqual(["test-key-limited", "test-key-spare"]);
+      expect(fs.readFileSync(output, "utf8")).toContain("# Ok");
+      expect(exitSpy).not.toHaveBeenCalled();
+    });
   });
 
   it("rejects a missing real file before reading stdin or creating the output dir", async () => {
@@ -216,6 +356,107 @@ describe("convertDocuments with piped stdin", () => {
       expect(md).toContain("# Big");
       expect(exitSpy).not.toHaveBeenCalled();
       expect(fs.readdirSync(tmp)).toEqual([]);
+    });
+
+    /**
+     * Resumable upload mock: `start` returns the session URL, the session request
+     * (`upload_id=`) finalizes, and generateContent answers "# Up". `fail` picks
+     * which step throws a network error on its first call.
+     */
+    const resumableFetch = (
+      fail: "start" | "upload",
+      calls: { start: number; upload: number; generate: number },
+    ) =>
+      vi.fn(async (url: string) => {
+        if (url.includes("upload_id=")) {
+          calls.upload++;
+          if (fail === "upload" && calls.upload === 1) throw new TypeError("fetch failed");
+          return new Response(
+            JSON.stringify({
+              file: { name: "files/n", uri: "https://files.example/n", mimeType: "text/plain" },
+            }),
+            { status: 200, headers: { "x-goog-upload-status": "final" } },
+          );
+        }
+        if (url.includes("/upload/")) {
+          calls.start++;
+          if (fail === "start" && calls.start === 1) throw new TypeError("fetch failed");
+          return new Response(null, {
+            status: 200,
+            headers: { "x-goog-upload-url": `${url}?upload_id=session` },
+          });
+        }
+        calls.generate++;
+        return new Response(
+          JSON.stringify({ candidates: [{ content: { parts: [{ text: "# Up" }] } }] }),
+          { status: 200 },
+        );
+      });
+
+    const runWithFakeTimers = async (output: string, logger?: Logger) => {
+      vi.useFakeTimers({ toFake: ["setTimeout"] });
+      try {
+        const run = convertDocuments({ inputs: ["-"], output, stdin: big(), logger });
+        await vi.runAllTimersAsync();
+        await run;
+      } finally {
+        vi.useRealTimers();
+      }
+    };
+
+    it("restarts the whole upload session when sending the bytes fails at the network layer", async () => {
+      vi.stubEnv("GEMINI_API_KEY", "test-key-upload-network");
+      const calls = { start: 0, upload: 0, generate: 0 };
+      vi.stubGlobal("fetch", resumableFetch("upload", calls));
+      const logger = makeLogger();
+
+      const output = path.join(dir, "upload-retry.md");
+      await runWithFakeTimers(output, logger);
+
+      expect(calls).toEqual({ start: 2, upload: 2, generate: 1 });
+      expect(logger.debug).toHaveBeenCalledWith(
+        expect.stringMatching(/^Retry 1 after 1s: .*File upload failed: fetch failed/),
+      );
+      expect(fs.readFileSync(output, "utf8")).toContain("# Up");
+      expect(exitSpy).not.toHaveBeenCalled();
+    });
+
+    it("retries when starting the upload session fails at the network layer", async () => {
+      vi.stubEnv("GEMINI_API_KEY", "test-key-start-network");
+      const calls = { start: 0, upload: 0, generate: 0 };
+      vi.stubGlobal("fetch", resumableFetch("start", calls));
+
+      const output = path.join(dir, "start-retry.md");
+      await runWithFakeTimers(output);
+
+      expect(calls).toEqual({ start: 2, upload: 1, generate: 1 });
+      expect(fs.readFileSync(output, "utf8")).toContain("# Up");
+      expect(exitSpy).not.toHaveBeenCalled();
+    });
+
+    it("does not retry an upload the server did not finalize", async () => {
+      vi.stubEnv("GEMINI_API_KEY", "test-key-not-final");
+      let starts = 0;
+      vi.stubGlobal("fetch", async (url: string) => {
+        if (url.includes("upload_id=")) {
+          // No x-goog-upload-status: final, so the client raises a ProviderError.
+          return new Response(JSON.stringify({ file: {} }), { status: 200 });
+        }
+        starts++;
+        return new Response(null, {
+          status: 200,
+          headers: { "x-goog-upload-url": `${url}?upload_id=session` },
+        });
+      });
+      const logger = makeLogger();
+
+      const output = path.join(dir, "not-final.md");
+      await runWithFakeTimers(output, logger);
+
+      expect(starts).toBe(1);
+      expect(logger.debug).not.toHaveBeenCalledWith(expect.stringMatching(/^Retry /));
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining("was not finalized"));
+      expect(exitSpy).toHaveBeenCalledWith(1);
     });
 
     it("labels upload failures <stdin> and cleans up", async () => {
