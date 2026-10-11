@@ -5,6 +5,8 @@
  * Sourced from https://docs.fal.ai — keep the defaults in sync.
  */
 
+import { envDefault } from "../../core/env-default.js";
+
 export const DEFAULT_FAL_BASE_URL = "https://queue.fal.run";
 
 /**
@@ -18,12 +20,18 @@ export const FAL_ROUTING = {
   keyEnvs: ["FAL_KEY"],
 } as const;
 
+// Getters, so the env is read when a command runs, after loadEnv().
 export const FAL_DEFAULTS = {
   // FLUX.1 [schnell] — fast, low-cost default text-to-image model.
-  imageModel: process.env.FAL_IMAGE_MODEL ?? "fal-ai/flux/schnell",
+  get imageModel() {
+    return envDefault("FAL_IMAGE_MODEL", "fal-ai/flux/schnell");
+  },
   // Stable, widely available default text-to-video model.
-  videoModel: process.env.FAL_VIDEO_MODEL ?? "fal-ai/kling-video/v1.6/standard/text-to-video",
+  get videoModel() {
+    return envDefault("FAL_VIDEO_MODEL", "fal-ai/kling-video/v1.6/standard/text-to-video");
+  },
   // Matching image-to-video model — used when --image-url is passed without -m.
-  videoImageModel:
-    process.env.FAL_VIDEO_IMAGE_MODEL ?? "fal-ai/kling-video/v1.6/standard/image-to-video",
+  get videoImageModel() {
+    return envDefault("FAL_VIDEO_IMAGE_MODEL", "fal-ai/kling-video/v1.6/standard/image-to-video");
+  },
 } as const;

@@ -3,6 +3,8 @@
  * Mirrors minimax_generate.py model sets exactly.
  */
 
+import { envDefault } from "../../core/env-default.js";
+
 export const MINIMAX_IMAGE_MODELS = new Set(["image-01", "image-01-live"]);
 
 export const MINIMAX_VIDEO_MODELS = new Set([
@@ -30,12 +32,23 @@ export const ALL_MINIMAX_MODELS = new Set([
   ...MINIMAX_MUSIC_MODELS,
 ]);
 
-/** Task-level defaults (from env or hardcoded fallback). */
+/**
+ * Task-level defaults (from env or hardcoded fallback). Getters, so the env is
+ * read when a command runs, after loadEnv() has applied `.env` files.
+ */
 export const TASK_DEFAULTS = {
-  image: process.env.MINIMAX_IMAGE_MODEL ?? "image-01",
-  video: process.env.MINIMAX_VIDEO_MODEL ?? "MiniMax-Hailuo-2.3",
-  speech: process.env.MINIMAX_SPEECH_MODEL ?? "speech-2.8-hd",
-  music: process.env.MINIMAX_MUSIC_MODEL ?? "music-2.5",
+  get image() {
+    return envDefault("MINIMAX_IMAGE_MODEL", "image-01");
+  },
+  get video() {
+    return envDefault("MINIMAX_VIDEO_MODEL", "MiniMax-Hailuo-2.3");
+  },
+  get speech() {
+    return envDefault("MINIMAX_SPEECH_MODEL", "speech-2.8-hd");
+  },
+  get music() {
+    return envDefault("MINIMAX_MUSIC_MODEL", "music-2.5");
+  },
 } as const;
 
 /** Heuristic: is this a MiniMax model id? */

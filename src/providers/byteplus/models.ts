@@ -5,6 +5,8 @@
  * Sourced from BytePlus ModelArk docs; keep in sync when new model variants ship.
  */
 
+import { envDefault } from "../../core/env-default.js";
+
 export const DEFAULT_BYTEPLUS_BASE_URL = "https://ark.ap-southeast.bytepluses.com/api/v3";
 
 /**
@@ -40,10 +42,17 @@ export const BYTEPLUS_3D_MODELS = [
   { id: "hitem3d-2-0-251223", name: "Hitem3d 2.0", family: "hitem3d" },
 ] as const;
 
+// Env-backed fields are getters: read when a command runs, after loadEnv().
 export const BYTEPLUS_DEFAULTS = {
-  imageModel: process.env.BYTEPLUS_IMAGE_MODEL ?? DEFAULT_BYTEPLUS_IMAGE_MODEL,
-  videoModel: process.env.BYTEPLUS_VIDEO_MODEL ?? DEFAULT_BYTEPLUS_VIDEO_MODEL,
-  threeDModel: process.env.BYTEPLUS_3D_MODEL ?? DEFAULT_BYTEPLUS_3D_MODEL,
+  get imageModel() {
+    return envDefault("BYTEPLUS_IMAGE_MODEL", DEFAULT_BYTEPLUS_IMAGE_MODEL);
+  },
+  get videoModel() {
+    return envDefault("BYTEPLUS_VIDEO_MODEL", DEFAULT_BYTEPLUS_VIDEO_MODEL);
+  },
+  get threeDModel() {
+    return envDefault("BYTEPLUS_3D_MODEL", DEFAULT_BYTEPLUS_3D_MODEL);
+  },
   videoResolution: "1080p",
   videoDuration: 8,
   videoAspectRatio: "16:9",

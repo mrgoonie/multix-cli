@@ -302,3 +302,26 @@ describe("doc convert --input - (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     }
   });
 });
+
+describe("model defaults from a project .env (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
+  it("shows the .env model as the --model default", async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "multix-smoke-env-model-"));
+    try {
+      fs.writeFileSync(
+        path.join(tmp, ".env"),
+        "FAL_IMAGE_MODEL=fal-ai/env-file-model\nBYTEPLUS_VIDEO_MODEL=seedance-2.0-fast\n",
+      );
+      // Drop shell values so the .env file is the only source.
+      const { FAL_IMAGE_MODEL, BYTEPLUS_VIDEO_MODEL, ...env } = isolatedEnv(tmp);
+      const opts = { cwd: tmp, extendEnv: false, env };
+      const fal = await run(["fal", "image", "--help"], opts);
+      expect(fal.exitCode).toBe(0);
+      expect(fal.stdout).toContain('(default: "fal-ai/env-file-model")');
+      const byteplus = await run(["byteplus", "video", "--help"], opts);
+      expect(byteplus.exitCode).toBe(0);
+      expect(byteplus.stdout).toContain('(default: "seedance-2.0-fast")');
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+});
