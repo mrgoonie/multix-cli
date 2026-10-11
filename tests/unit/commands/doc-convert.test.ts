@@ -175,9 +175,15 @@ describe("convertDocuments with piped stdin", () => {
       let uploadBody = "";
       const generateBodies: SeenRequest["body"][] = [];
       vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
-        if (url.includes("/upload/")) {
-          // Only the multipart metadata matters; skip the 21 MB payload.
-          uploadBody = (init.body as Buffer).subarray(0, 512).toString("latin1");
+        if (url.includes("/upload/") && !url.includes("upload_id=")) {
+          // Resumable start: only the JSON metadata matters, the bytes follow separately.
+          uploadBody = String(init.body);
+          return new Response(null, {
+            status: 200,
+            headers: { "x-goog-upload-url": `${url}?upload_id=session` },
+          });
+        }
+        if (url.includes("upload_id=")) {
           return new Response(
             JSON.stringify({
               file: {
@@ -200,7 +206,7 @@ describe("convertDocuments with piped stdin", () => {
       const output = path.join(dir, "big.md");
       await convertDocuments({ inputs: ["-"], output, stdin: big() });
 
-      expect(uploadBody).toContain('"displayName":"stdin.txt"');
+      expect(uploadBody).toContain('"display_name":"stdin.txt"');
       expect(uploadBody).not.toContain(tmp);
       const parts = generateBodies[0]?.contents[0]?.parts as Array<Record<string, unknown>>;
       expect(parts?.[1]).toEqual({
