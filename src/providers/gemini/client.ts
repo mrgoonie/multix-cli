@@ -8,15 +8,13 @@
  * Base: https://generativelanguage.googleapis.com
  */
 
-import fs from "node:fs";
-import path from "node:path";
 import { resolveKey } from "../../core/env-loader.js";
 import { ConfigError, HttpError, ProviderError, ValidationError } from "../../core/errors.js";
 import { downloadFile, httpJson } from "../../core/http-client.js";
 import { FILES_API_MAX_BYTES } from "../../core/limits.js";
 import type { Logger } from "../../core/logger.js";
 import { withGeminiKey } from "./key-pool.js";
-import { getMimeType, requiresProcessingWait } from "./task-resolver.js";
+import { requiresProcessingWait } from "./task-resolver.js";
 
 const BASE = "https://generativelanguage.googleapis.com";
 const FILES_BASE = `${BASE}/upload/v1beta/files`;
@@ -111,26 +109,40 @@ export function uploadTimeoutMs(
   return Math.max(timeoutMs, UPLOAD_TIMEOUT_SLACK_MS + Math.ceil((size / bytesPerSec) * 1000));
 }
 
+/** Bytes and metadata for a Files API upload. */
+export interface UploadSource {
+  /**
+   * The bytes to send. A file-backed Blob (Node's `fs.openAsBlob`) is streamed
+   * from disk in small chunks; a Worker can pass its own Blob or File.
+   */
+  blob: Blob;
+  /** File name stored with the upload and shown in messages. */
+  displayName: string;
+  mimeType: string;
+  /** Name used in processing errors (e.g. the local path); defaults to `displayName`. */
+  label?: string;
+}
+
 /**
- * Upload a local file to the Gemini Files API with the resumable protocol
+ * Upload a Blob to the Gemini Files API with the resumable protocol
  * (start a session, then send the bytes in one `upload, finalize` request).
- * The file is streamed from disk (never read whole into memory); files above
- * the 2 GB Files API limit are rejected before any request is made.
+ * The Blob is streamed (never copied whole into memory); Blobs above the
+ * 2 GB Files API limit are rejected before any request is made.
  * Polls until ACTIVE for audio/video files.
  */
 export async function uploadFile(
-  filePath: string,
+  source: UploadSource,
   opts: GeminiCallOptions & { timeoutMs?: number } = {},
 ): Promise<FileRef> {
-  const size = fs.statSync(filePath).size;
+  const size = source.blob.size;
   if (size > FILES_API_MAX_BYTES) {
     throw new ValidationError(
-      `File too large for the Gemini Files API: ${path.basename(filePath)} is ${formatMb(size)} MB (limit 2 GB = ${FILES_API_MAX_BYTES} bytes)`,
+      `File too large for the Gemini Files API: ${source.displayName} is ${formatMb(size)} MB (limit 2 GB = ${FILES_API_MAX_BYTES} bytes)`,
     );
   }
   // Read before any request so a bad value fails fast and is never retried.
   const bytesPerSec = minUploadBytesPerSec();
-  return withKey(opts, (apiKey) => uploadFileWithKey(filePath, apiKey, { ...opts, bytesPerSec }));
+  return withKey(opts, (apiKey) => uploadFileWithKey(source, apiKey, { ...opts, bytesPerSec }));
 }
 
 function formatMb(bytes: number): string {
@@ -216,17 +228,15 @@ async function readFinalizedFile(resp: Response): Promise<FileRef> {
 }
 
 async function uploadFileWithKey(
-  filePath: string,
+  source: UploadSource,
   apiKey: string,
   opts: { timeoutMs?: number; logger?: Logger; bytesPerSec: number },
 ): Promise<FileRef> {
   const { timeoutMs = DEFAULT_TIMEOUT_MS, logger, bytesPerSec } = opts;
 
-  const mimeType = getMimeType(filePath);
-  const displayName = path.basename(filePath);
-  // File-backed Blob: fetch reads it from disk in small chunks while sending,
-  // and derives Content-Length from its size.
-  const file = await fs.openAsBlob(filePath);
+  const { mimeType, displayName, label = source.displayName } = source;
+  // fetch streams the Blob while sending and derives Content-Length from its size.
+  const file = source.blob;
 
   logger?.debug(`Uploading ${displayName} (${formatMb(file.size)} MB)`);
 
@@ -283,9 +293,9 @@ async function uploadFileWithKey(
       logger?.debug(`Processing... state=${fileRef.state}`);
     }
     if (fileRef.state === "FAILED")
-      throw new ProviderError(`File processing failed: ${filePath}`, "gemini");
+      throw new ProviderError(`File processing failed: ${label}`, "gemini");
     if (fileRef.state === "PROCESSING")
-      throw new ProviderError(`Processing timeout: ${filePath}`, "gemini");
+      throw new ProviderError(`Processing timeout: ${label}`, "gemini");
   }
 
   logger?.debug(`Uploaded: ${fileRef.name} (${fileRef.uri})`);
@@ -407,21 +417,6 @@ export async function listModels(timeoutMs = 10_000): Promise<string[]> {
   );
   // biome-ignore lint/suspicious/noExplicitAny: dynamic API
   return ((resp.models ?? []) as any[]).map((m: any) => m.name as string);
-}
-
-/**
- * Build a ContentPart for an inline file (< 20 MB).
- */
-export function inlinePart(filePath: string): ContentPart {
-  const data = fs.readFileSync(filePath).toString("base64");
-  const mimeType = getMimeType(filePath);
-  return { inlineData: { mimeType, data } };
-}
-
-/** True if file should use Files API (> 20 MB). */
-export function shouldUseFileApi(filePath: string): boolean {
-  const stat = fs.statSync(filePath);
-  return stat.size > 20 * 1024 * 1024;
 }
 
 /**

@@ -234,7 +234,7 @@ describe("gemini client rotation", () => {
     const fs = await import("node:fs");
     const os = await import("node:os");
     const path = await import("node:path");
-    const { uploadFile } = await import("../../../../src/providers/gemini/client.js");
+    const { uploadLocalFile } = await import("../../../../src/providers/gemini/local-files.js");
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "multix-rot-"));
     const file = path.join(dir, "doc.pdf");
     fs.writeFileSync(file, "%PDF-1.4");
@@ -270,7 +270,7 @@ describe("gemini client rotation", () => {
     });
     try {
       await withGeminiKey(async (apiKey) => {
-        const ref = await uploadFile(file, { apiKey });
+        const ref = await uploadLocalFile(file, { apiKey });
         return generateContent(
           {
             model: "m",

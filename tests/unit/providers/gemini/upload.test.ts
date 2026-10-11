@@ -18,6 +18,7 @@ import {
   uploadTimeoutMs,
 } from "../../../../src/providers/gemini/client.js";
 import { _resetGeminiKeyCooldowns } from "../../../../src/providers/gemini/key-pool.js";
+import { uploadLocalFile } from "../../../../src/providers/gemini/local-files.js";
 
 const GOOGLE = "https://generativelanguage.googleapis.com";
 const SESSION_PATH = "/upload/v1beta/files?upload_id=session-secret";
@@ -127,7 +128,7 @@ describe("gemini uploadFile (resumable, streamed)", () => {
         peak = Math.max(peak, process.memoryUsage().arrayBuffers);
       }, 1);
 
-      const ref = await uploadFile(file, { apiKey: "test-key-0000" });
+      const ref = await uploadLocalFile(file, { apiKey: "test-key-0000" });
       expect(ref).toEqual(FILE_REF);
     } finally {
       clearInterval(sampler);
@@ -166,22 +167,47 @@ describe("gemini uploadFile (resumable, streamed)", () => {
     expect(upload.headers["content-length"]).toBe(String(size));
   }, 30_000);
 
-  it("rejects files above the 2 GB Files API limit before any request", async () => {
-    const file = path.join(dir, "huge.mp4");
-    fs.writeFileSync(file, "x");
-    const realStat = fs.statSync;
-    vi.spyOn(fs, "statSync").mockImplementation(((p: fs.PathLike, o?: fs.StatSyncOptions) => {
-      const st = realStat(p, o) as fs.Stats;
-      return p === file ? Object.assign(st, { size: FILES_API_MAX_BYTES + 1 }) : st;
-    }) as typeof fs.statSync);
+  it("rejects Blobs above the 2 GB Files API limit before any request", async () => {
+    class HugeBlob extends Blob {
+      override get size(): number {
+        return FILES_API_MAX_BYTES + 1;
+      }
+    }
     const fetchSpy = vi.fn();
     vi.stubGlobal("fetch", fetchSpy);
 
     expect(FILES_API_MAX_BYTES).toBe(2_000_000_000);
-    const err = await uploadFile(file, { apiKey: "test-key-0000" }).catch((e: unknown) => e);
+    const err = await uploadFile(
+      { blob: new HugeBlob(["x"]), displayName: "huge.mp4", mimeType: "video/mp4" },
+      { apiKey: "test-key-0000" },
+    ).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ValidationError);
     expect((err as Error).message).toMatch(/huge\.mp4 .*limit 2 GB/);
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("uploads an in-memory Blob with the given name and type (no file system)", async () => {
+    const bodies: unknown[] = [];
+    const starts: RequestInit[] = [];
+    vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
+      if (url.includes("upload_id=")) {
+        bodies.push(init.body);
+        return finalized();
+      }
+      starts.push(init);
+      return started();
+    });
+
+    const blob = new Blob(["%PDF-1.4"], { type: "application/pdf" });
+    const ref = await uploadFile(
+      { blob, displayName: "report.pdf", mimeType: "application/pdf" },
+      { apiKey: "test-key-0000" },
+    );
+    expect(ref).toEqual(FILE_REF);
+    expect(bodies).toEqual([blob]);
+    expect(headerOf(starts[0], "x-goog-upload-header-content-length")).toBe("8");
+    expect(headerOf(starts[0], "x-goog-upload-header-content-type")).toBe("application/pdf");
+    expect(JSON.parse(String(starts[0]?.body))).toEqual({ file: { display_name: "report.pdf" } });
   });
 
   it("rotates to the next key when the upload is rate-limited", async () => {
@@ -202,7 +228,7 @@ describe("gemini uploadFile (resumable, streamed)", () => {
       });
     });
 
-    const ref = await uploadFile(file);
+    const ref = await uploadLocalFile(file);
     expect(ref).toEqual(FILE_REF);
     expect(keys).toEqual(["key-a", "key-b"]);
   });
@@ -219,7 +245,7 @@ describe("gemini uploadFile (resumable, streamed)", () => {
           }),
     );
 
-    const err = await uploadFile(file, { apiKey: "test-key-0000" }).catch((e: unknown) => e);
+    const err = await uploadLocalFile(file, { apiKey: "test-key-0000" }).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(HttpError);
     expect((err as HttpError).status).toBe(503);
     expect((err as HttpError).rawUrl).not.toContain("upload_id");
@@ -231,7 +257,7 @@ describe("gemini uploadFile (resumable, streamed)", () => {
     fs.writeFileSync(file, "%PDF-1.4");
     vi.stubGlobal("fetch", async () => new Response(null, { status: 200 }));
 
-    const err = await uploadFile(file, { apiKey: "test-key-0000" }).catch((e: unknown) => e);
+    const err = await uploadLocalFile(file, { apiKey: "test-key-0000" }).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ProviderError);
     expect((err as Error).message).toMatch(/no upload URL/);
   });
@@ -245,7 +271,7 @@ describe("gemini uploadFile (resumable, streamed)", () => {
       if ((step === "upload") === isUpload) throw failure;
       return isUpload ? finalized() : started();
     });
-    return uploadFile(file, { apiKey: "test-key-0000" }).catch((e: unknown) => e);
+    return uploadLocalFile(file, { apiKey: "test-key-0000" }).catch((e: unknown) => e);
   }
 
   const timeout = () =>
@@ -312,7 +338,7 @@ describe("gemini uploadFile (resumable, streamed)", () => {
       url.includes("upload_id=") ? finalized(status, body) : started(),
     );
 
-    const err = await uploadFile(file, { apiKey: "test-key-0000" }).catch((e: unknown) => e);
+    const err = await uploadLocalFile(file, { apiKey: "test-key-0000" }).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ProviderError);
     expect((err as Error).message).toMatch(/^File upload failed: upload was not finalized/);
     expect((err as Error).message).toMatch(detail);
@@ -331,7 +357,7 @@ describe("gemini uploadFile (resumable, streamed)", () => {
         : started(),
     );
 
-    const err = await uploadFile(file, { apiKey: "test-key-0000" }).catch((e: unknown) => e);
+    const err = await uploadLocalFile(file, { apiKey: "test-key-0000" }).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ProviderError);
     expect((err as Error).message).toBe(
       "File upload failed: upload was not finalized (unreadable response body)",
@@ -346,7 +372,7 @@ describe("gemini uploadFile (resumable, streamed)", () => {
       url.includes("upload_id=") ? finalized("FINAL") : started(),
     );
 
-    await expect(uploadFile(file, { apiKey: "test-key-0000" })).resolves.toEqual(FILE_REF);
+    await expect(uploadLocalFile(file, { apiKey: "test-key-0000" })).resolves.toEqual(FILE_REF);
   });
 
   it.each(["abc", "0", "-5", "0.5", "Infinity"])(
@@ -358,12 +384,19 @@ describe("gemini uploadFile (resumable, streamed)", () => {
       const fetchSpy = vi.fn();
       vi.stubGlobal("fetch", fetchSpy);
 
-      const err = await uploadFile(file, { apiKey: "test-key-0000" }).catch((e: unknown) => e);
+      const err = await uploadLocalFile(file, { apiKey: "test-key-0000" }).catch((e: unknown) => e);
       expect(err).toBeInstanceOf(ConfigError);
       expect((err as Error).message).toContain("MULTIX_UPLOAD_MIN_KBPS");
       expect(fetchSpy).not.toHaveBeenCalled();
     },
   );
+});
+
+describe("gemini client runtime neutrality", () => {
+  it("client.ts has no node:* imports", () => {
+    const src = fs.readFileSync(path.resolve("src/providers/gemini/client.ts"), "utf8");
+    expect(src).not.toMatch(/(from\s+|import\s*\(?\s*)["']node:/);
+  });
 });
 
 describe("uploadTimeoutMs", () => {
