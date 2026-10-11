@@ -124,9 +124,9 @@ Set these as `vars` in `worker/wrangler.jsonc` or as secrets:
 | `MULTIX_MCP_ALLOWED_PROVIDERS` | all | Comma-separated provider allowlist, e.g. `replicate,heygen`. |
 | `MULTIX_MCP_ALLOWED_MODELS` | any | Comma-separated `provider:model` allowlist, e.g. `replicate:black-forest-labs/flux-schnell,heygen:heygen-video-1`. When set, every model (including defaults) must be listed. |
 | `MULTIX_MCP_MAX_OUTPUTS` | `4` (ceiling 10) | Maximum `num_outputs` per image call. |
-| `MULTIX_MCP_MAX_VIDEO_SECONDS` | `10` (ceiling 15) | Maximum video `duration`. When a caller omits `duration`, the server sends `min(5, cap)` seconds explicitly instead of the provider default. |
-| `MULTIX_MCP_ALLOWED_RESOLUTIONS` | `480p,720p,1080p` | Video resolutions a caller may request. Anything else (for example `4k`) is rejected before the provider call. An omitted resolution uses the model default. |
-| `MULTIX_MCP_ALLOWED_ORIGINS` | none | Browser origins allowed to call `/mcp`. Requests with any other `Origin` header get `403`; requests without an `Origin` (server-side clients) are allowed. Listed origins get CORS headers, and their `OPTIONS` preflight is answered without a token. The real request still needs the bearer token. |
+| `MULTIX_MCP_MAX_VIDEO_SECONDS` | `10` (ceiling 15) | Maximum video `duration`. When a caller omits `duration`, the server sends a length explicitly instead of leaving the provider default: `min(5, cap)` seconds on Replicate, HeyGen and Cloudflare; on Atlas Cloud see [Spend guard](#security-model). |
+| `MULTIX_MCP_ALLOWED_RESOLUTIONS` | `480p,720p,768p,1080p` | Video resolutions a caller may request (`768p` is a HeyGen Video size). Anything else (for example `4k`) is rejected before the provider call. An omitted resolution uses the model default; on Atlas Cloud that default is checked against this list too. |
+| `MULTIX_MCP_ALLOWED_ORIGINS` | none | Exact browser origins (for example `https://app.example.com`) allowed to call `/mcp`. `*` and other wildcards are not supported: `*` only matches a literal `*` origin, which browsers never send. Requests with any other `Origin` header get `403`; requests without an `Origin` (server-side clients) are allowed. Listed origins get CORS headers, and their `OPTIONS` preflight is answered without a token. The real request still needs the bearer token. |
 
 The `MCP_RATE_LIMITER` binding in `wrangler.jsonc` uses the
 [Workers Rate Limiting API](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/)
@@ -152,13 +152,33 @@ different integer, or the two Workers will share counters.
   `.local`/`.internal` style names, and cloud metadata hosts are rejected
   before any provider call.
 - **Spend guard:** output count, video duration, and video resolution are
-  capped, and video calls never wait. A video `duration` is always sent
-  explicitly (the caller's value or `min(5, cap)`), so a provider default can
-  never exceed the cap. Atlas Cloud fills the duration from the model schema
-  and re-checks it before submit. If the schema cannot be loaded and the caller
-  omitted `duration`, the call is rejected (fail closed). Replicate models that
-  name their length input something other than `duration` cannot be capped this
-  way. Use `MULTIX_MCP_ALLOWED_MODELS` to pin vetted models.
+  capped, and video calls never wait. On Replicate, HeyGen and Cloudflare a
+  video `duration` is always sent explicitly (the caller's value or
+  `min(5, cap)`), so a provider default can never exceed the cap. Replicate
+  models that name their length input something other than `duration` cannot
+  be capped this way.
+
+  Atlas Cloud fills any field left out from the model schema, so the Worker
+  reads the schema first and applies these rules before submit:
+
+  - **Length fields:** `duration`, `seconds`, `length`, `num_seconds` and
+    `video_length`, when the schema declares them as numbers (by type, a
+    numeric enum such as `"4"`/`"8"`, or a numeric default).
+  - **Caller passed `duration`:** it goes to the first such field.
+  - **Every other length field is sent explicitly:** its schema default when
+    that is within the cap, the cap when the default is longer, and
+    `min(5, cap)` when there is no default. The value is snapped to the
+    schema's allowed values: the largest enum value at or below it (else the
+    smallest one within the cap), inside `minimum`/`maximum`. If no allowed
+    value fits within the cap, the call is rejected.
+  - **Final check:** every length field in the request body must be at most
+    the cap, and the `resolution` that will be rendered (the caller's value or
+    the schema default) must be in `MULTIX_MCP_ALLOWED_RESOLUTIONS`.
+  - **No schema:** if the schema cannot be loaded and the caller omitted
+    `duration`, the call is rejected (fail closed).
+
+  A length set any other way (for example a frame count) is not capped. Use
+  `MULTIX_MCP_ALLOWED_MODELS` to pin vetted models.
 - **Logging and redaction:** successful calls are logged at `info` with tool
   name, provider, model, outcome, and latency only. Prompts are never logged as
   a field. Failed calls are logged at `warn` (expected errors) or `error`, with

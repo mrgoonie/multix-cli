@@ -122,6 +122,17 @@ function jobPayload(job: JobResult, model?: string): Record<string, unknown> {
 }
 
 /**
+ * Validation messages from code shared with the CLI name CLI flags
+ * (`--aspect-ratio`); report them as tool argument names (`aspect_ratio`).
+ */
+export function toolArgWording(message: string): string {
+  return message.replace(
+    /(^|[\s(`"'])--([a-z][a-z0-9-]*)/g,
+    (_match, before: string, flag: string) => `${before}${flag.replace(/-/g, "_")}`,
+  );
+}
+
+/**
  * Run a tool body, turning failures into MCP tool errors. Expected errors
  * (validation, config, provider, HTTP) keep their message after secret and
  * signed-URL scrubbing; anything else becomes a generic message.
@@ -140,7 +151,8 @@ async function runTool(
   } catch (error) {
     const secrets = secretValues(env);
     const expected = error instanceof MultixError || error instanceof PollTimeoutError;
-    const raw = error instanceof Error ? error.message : String(error);
+    const text = error instanceof Error ? error.message : String(error);
+    const raw = error instanceof ValidationError ? toolArgWording(text) : text;
     const message = sanitizeText(raw, secrets);
     logEvent(expected ? "warn" : "error", "tool_call", {
       tool,

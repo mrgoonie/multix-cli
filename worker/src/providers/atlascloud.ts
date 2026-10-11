@@ -18,6 +18,7 @@ import type {
   AtlasMediaKind,
   AtlasModelSpec,
   AtlasPrediction,
+  AtlasSchemaProperty,
 } from "../../../src/providers/atlascloud/types.js";
 import type { Env } from "../config.js";
 import { type JobResult, type ProviderAdapter, splitOutputs } from "./types.js";
@@ -58,37 +59,141 @@ async function loadSpec(
   }
 }
 
-/** How a video request's duration is bounded on Atlas, where the API silently fills defaults. */
-interface DurationPolicy {
-  max: number;
-  /** Server default used when the caller omitted `duration`. */
-  fallback: number;
-  requested: boolean;
+/** Spend limits for an Atlas video request; the Atlas API silently fills any field left out. */
+interface VideoPolicy {
+  maxSeconds: number;
+  /** Seconds used when the caller omitted `duration` and the schema has no default. */
+  fallbackSeconds: number;
+  /** The caller's duration, or undefined when omitted. */
+  requestedSeconds?: number;
+  /** Lower-case resolutions this server allows. */
+  allowedResolutions: string[];
+}
+
+/** Schema fields that set a video's length in seconds, in preference order. */
+const LENGTH_FIELDS = ["duration", "seconds", "length", "num_seconds", "video_length"];
+
+function numericValue(value: unknown): number | undefined {
+  if (typeof value === "number") return Number.isFinite(value) ? value : undefined;
+  if (typeof value !== "string" || value.trim() === "") return undefined;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+/** True when a length-named field holds a number of seconds (numeric type, enum or default). */
+function isNumericLength(prop: AtlasSchemaProperty | undefined): boolean {
+  if (!prop) return false;
+  if (prop.type === "integer" || prop.type === "number") return true;
+  if (Array.isArray(prop.enum) && prop.enum.length > 0) {
+    return prop.enum.every((e) => numericValue(e) !== undefined);
+  }
+  return numericValue(prop.default) !== undefined;
 }
 
 /**
- * Pick the duration to send. Without a schema the model's own default is
- * unknown, so an omitted duration fails closed. With a schema that declares
- * no duration field, the model has no length control and nothing is sent.
+ * Length for a field the caller did not set: the schema default when it is
+ * within the cap, the cap when the default exceeds it, or the server fallback
+ * when there is no default. The result is snapped to the schema's enum (the
+ * largest value at or below it, else the smallest within the cap) and range;
+ * when no allowed value fits within the cap the request is rejected.
  */
-function durationToSend(
-  spec: AtlasModelSpec | undefined,
+function lengthToSend(
   model: string,
-  policy: DurationPolicy,
-  requested: number,
-): number | undefined {
-  if (policy.requested) return requested;
-  if (!spec) {
+  field: string,
+  prop: AtlasSchemaProperty,
+  policy: VideoPolicy,
+): number {
+  const max = policy.maxSeconds;
+  const schemaDefault = numericValue(prop.default);
+  const target =
+    schemaDefault === undefined ? policy.fallbackSeconds : Math.min(schemaDefault, max);
+  const lo = prop.minimum ?? 0;
+  const hi = Math.min(prop.maximum ?? max, max);
+  const enumValues = Array.isArray(prop.enum)
+    ? prop.enum.map(numericValue).filter((n): n is number => n !== undefined)
+    : [];
+  let value: number | undefined;
+  if (enumValues.length > 0) {
+    const fitting = enumValues.filter((n) => n >= lo && n <= hi).sort((a, b) => a - b);
+    value = fitting.filter((n) => n <= target).pop() ?? fitting[0];
+  } else if (lo <= hi) {
+    const clamped = Math.min(Math.max(target, lo), hi);
+    value = prop.type === "integer" ? Math.floor(clamped) : clamped;
+    if (value < lo) value = undefined;
+  }
+  if (value === undefined) {
     throw new ValidationError(
-      `Model ${model}: its schema is unavailable, so its default length is unknown; pass duration (at most ${policy.max}s)`,
+      `Model ${model}: field "${field}" has no allowed value within this server's cap of ${max}s`,
     );
   }
-  const field = F.duration.find((name) => spec.properties[name] !== undefined);
-  if (!field) return undefined;
-  const schemaDefault = spec.properties[field]?.default;
-  return typeof schemaDefault === "number" && schemaDefault <= policy.max
-    ? schemaDefault
-    : policy.fallback;
+  return value;
+}
+
+/**
+ * Length requests for a video. The caller's duration goes to the first
+ * numeric length field the schema declares; every other one is sent
+ * explicitly too (see lengthToSend), so the API never fills a longer default.
+ * Without a schema the model's defaults are unknown, so an omitted duration
+ * fails closed.
+ */
+function lengthRequests(
+  spec: AtlasModelSpec | undefined,
+  model: string,
+  policy: VideoPolicy,
+): FieldRequest[] {
+  const requested = policy.requestedSeconds;
+  if (!spec) {
+    if (requested === undefined) {
+      throw new ValidationError(
+        `Model ${model}: its schema is unavailable, so its default length is unknown; pass duration (at most ${policy.maxSeconds}s)`,
+      );
+    }
+    return [{ flag: "duration", value: requested, candidates: F.duration }];
+  }
+  const fields = LENGTH_FIELDS.filter((name) => isNumericLength(spec.properties[name]));
+  const requests: FieldRequest[] = fields.map((field, i) => ({
+    flag: "duration",
+    value:
+      i === 0 && requested !== undefined
+        ? requested
+        : lengthToSend(model, field, spec.properties[field] as AtlasSchemaProperty, policy),
+    candidates: [field],
+  }));
+  // A requested duration on a model without a length field fails with "does not accept".
+  if (fields.length === 0 && requested !== undefined) {
+    requests.push({ flag: "duration", value: requested, candidates: F.duration });
+  }
+  return requests;
+}
+
+/** Re-check what will actually be billed, including values the schema filled in. */
+function assertVideoBodyWithinLimits(
+  spec: AtlasModelSpec | undefined,
+  model: string,
+  body: Record<string, unknown>,
+  policy: VideoPolicy,
+): void {
+  for (const field of LENGTH_FIELDS) {
+    const seconds = numericValue(body[field]);
+    if (seconds !== undefined && seconds > policy.maxSeconds) {
+      throw new ValidationError(
+        `Model ${model} would render ${seconds}s; this server allows at most ${policy.maxSeconds}s`,
+      );
+    }
+  }
+  for (const field of F.resolution) {
+    // A field left out is filled by the API from the schema default.
+    const resolution = body[field] ?? spec?.properties[field]?.default;
+    if (
+      typeof resolution === "string" &&
+      resolution !== "" &&
+      !policy.allowedResolutions.includes(resolution.toLowerCase())
+    ) {
+      throw new ValidationError(
+        `Model ${model} would render at ${resolution}; pass a resolution this server allows (${policy.allowedResolutions.join(", ")})`,
+      );
+    }
+  }
 }
 
 async function submit(
@@ -96,27 +201,12 @@ async function submit(
   model: string,
   fallbackKind: AtlasMediaKind,
   requests: FieldRequest[],
-  duration?: { policy: DurationPolicy; value: number },
+  video?: VideoPolicy,
 ): Promise<AtlasPrediction> {
   const spec = await loadSpec(atlas, model);
-  const all = duration
-    ? [
-        ...requests,
-        {
-          flag: "duration",
-          value: durationToSend(spec, model, duration.policy, duration.value),
-          candidates: F.duration,
-        },
-      ]
-    : requests;
+  const all = video ? [...requests, ...lengthRequests(spec, model, video)] : requests;
   const body = buildModelInput(spec, all);
-  // Schema defaults are filled in too, so re-check the duration that will actually be billed.
-  const billed = body.duration;
-  if (duration && typeof billed === "number" && billed > duration.policy.max) {
-    throw new ValidationError(
-      `Model ${model} would render ${billed}s; this server allows at most ${duration.policy.max}s`,
-    );
-  }
+  if (video) assertVideoBodyWithinLimits(spec, model, body, video);
   return atlas.submit(spec?.endpoint ?? fallbackKind, { model, ...body });
 }
 export const atlasCloudAdapter: ProviderAdapter = {
@@ -173,12 +263,10 @@ export const atlasCloudAdapter: ProviderAdapter = {
         },
       ],
       {
-        policy: {
-          max: ctx.limits.maxVideoSeconds,
-          fallback: ctx.limits.defaultVideoSeconds,
-          requested: req.durationRequested,
-        },
-        value: req.duration,
+        maxSeconds: ctx.limits.maxVideoSeconds,
+        fallbackSeconds: ctx.limits.defaultVideoSeconds,
+        requestedSeconds: req.durationRequested ? req.duration : undefined,
+        allowedResolutions: ctx.limits.allowedResolutions,
       },
     );
     return atlasJob(submitted);

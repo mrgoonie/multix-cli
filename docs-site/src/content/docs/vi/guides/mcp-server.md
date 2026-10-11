@@ -123,9 +123,9 @@ Luồng video thường gặp: `multix_generate_video` → gọi lại
 | `MULTIX_MCP_ALLOWED_PROVIDERS` | tất cả | Allowlist provider, phân tách bằng dấu phẩy, ví dụ `replicate,heygen`. |
 | `MULTIX_MCP_ALLOWED_MODELS` | bất kỳ | Allowlist `provider:model`, ví dụ `replicate:black-forest-labs/flux-schnell,heygen:heygen-video-1`. Khi đặt, mọi model (kể cả model mặc định) phải có trong danh sách. |
 | `MULTIX_MCP_MAX_OUTPUTS` | `4` (tối đa 10) | Số `num_outputs` tối đa mỗi lần tạo ảnh. |
-| `MULTIX_MCP_MAX_VIDEO_SECONDS` | `10` (tối đa 15) | `duration` video tối đa. Khi caller bỏ qua `duration`, server gửi rõ `min(5, giới hạn)` giây thay cho mặc định của provider. |
-| `MULTIX_MCP_ALLOWED_RESOLUTIONS` | `480p,720p,1080p` | Độ phân giải video caller được yêu cầu. Giá trị khác (ví dụ `4k`) bị từ chối trước khi gọi provider. Nếu bỏ qua resolution, model dùng mặc định của nó. |
-| `MULTIX_MCP_ALLOWED_ORIGINS` | không có | Origin trình duyệt được phép gọi `/mcp`. Request có header `Origin` khác nhận `403`; request không có `Origin` (client phía server) được chấp nhận. Origin trong danh sách nhận header CORS, và preflight `OPTIONS` của chúng được trả lời mà không cần token. Request thật vẫn cần bearer token. |
+| `MULTIX_MCP_MAX_VIDEO_SECONDS` | `10` (tối đa 15) | `duration` video tối đa. Khi caller bỏ qua `duration`, server gửi rõ một thời lượng thay vì để mặc định của provider: `min(5, giới hạn)` giây với Replicate, HeyGen và Cloudflare; với Atlas Cloud xem [Giới hạn chi phí](#mô-hình-bảo-mật). |
+| `MULTIX_MCP_ALLOWED_RESOLUTIONS` | `480p,720p,768p,1080p` | Độ phân giải video caller được yêu cầu (`768p` là kích thước của HeyGen Video). Giá trị khác (ví dụ `4k`) bị từ chối trước khi gọi provider. Nếu bỏ qua resolution, model dùng mặc định của nó; với Atlas Cloud, mặc định đó cũng được kiểm tra theo danh sách này. |
+| `MULTIX_MCP_ALLOWED_ORIGINS` | không có | Origin trình duyệt chính xác (ví dụ `https://app.example.com`) được phép gọi `/mcp`. Không hỗ trợ `*` hay wildcard khác: `*` chỉ khớp origin `*` theo nghĩa đen, thứ trình duyệt không bao giờ gửi. Request có header `Origin` khác nhận `403`; request không có `Origin` (client phía server) được chấp nhận. Origin trong danh sách nhận header CORS, và preflight `OPTIONS` của chúng được trả lời mà không cần token. Request thật vẫn cần bearer token. |
 
 Binding `MCP_RATE_LIMITER` trong `wrangler.jsonc` dùng
 [Workers Rate Limiting API](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/)
@@ -151,13 +151,34 @@ phải là duy nhất trong tài khoản Cloudflare của bạn. Nếu Worker kh
   `.local`/`.internal` và host metadata của cloud bị từ chối trước khi gọi
   provider.
 - **Giới hạn chi phí:** số output, thời lượng video và độ phân giải video có
-  giới hạn, và lệnh tạo video không bao giờ chờ. `duration` của video luôn được
-  gửi rõ ràng (giá trị của caller hoặc `min(5, giới hạn)`), nên mặc định của
-  provider không thể vượt giới hạn. Atlas Cloud lấy thời lượng từ schema của
-  model và kiểm tra lại trước khi submit. Nếu không tải được schema và caller bỏ
-  qua `duration`, lệnh gọi bị từ chối (fail closed). Model Replicate đặt tên
-  input thời lượng khác `duration` thì không giới hạn được theo cách này. Hãy
-  dùng `MULTIX_MCP_ALLOWED_MODELS` để chỉ cho phép model đã kiểm duyệt.
+  giới hạn, và lệnh tạo video không bao giờ chờ. Với Replicate, HeyGen và
+  Cloudflare, `duration` của video luôn được gửi rõ ràng (giá trị của caller
+  hoặc `min(5, giới hạn)`), nên mặc định của provider không thể vượt giới hạn.
+  Model Replicate đặt tên input thời lượng khác `duration` thì không giới hạn
+  được theo cách này.
+
+  Atlas Cloud tự điền mọi trường bị bỏ trống từ schema của model, nên Worker
+  đọc schema trước và áp dụng các quy tắc sau trước khi submit:
+
+  - **Trường thời lượng:** `duration`, `seconds`, `length`, `num_seconds` và
+    `video_length`, khi schema khai báo chúng là số (theo type, enum số như
+    `"4"`/`"8"`, hoặc giá trị mặc định là số).
+  - **Caller truyền `duration`:** giá trị được gửi vào trường đầu tiên trong số
+    đó.
+  - **Mọi trường thời lượng khác đều được gửi rõ ràng:** mặc định của schema
+    nếu nằm trong giới hạn, chính giới hạn nếu mặc định dài hơn, và
+    `min(5, giới hạn)` nếu không có mặc định. Giá trị được làm tròn theo các giá
+    trị schema cho phép: giá trị enum lớn nhất không vượt nó (nếu không có thì
+    giá trị nhỏ nhất trong giới hạn), trong khoảng `minimum`/`maximum`. Nếu
+    không có giá trị hợp lệ nào nằm trong giới hạn, lệnh gọi bị từ chối.
+  - **Kiểm tra cuối:** mọi trường thời lượng trong body phải không vượt giới
+    hạn, và `resolution` sẽ được render (giá trị của caller hoặc mặc định của
+    schema) phải nằm trong `MULTIX_MCP_ALLOWED_RESOLUTIONS`.
+  - **Không có schema:** nếu không tải được schema và caller bỏ qua
+    `duration`, lệnh gọi bị từ chối (fail closed).
+
+  Thời lượng đặt theo cách khác (ví dụ số frame) không bị giới hạn. Hãy dùng
+  `MULTIX_MCP_ALLOWED_MODELS` để chỉ cho phép model đã kiểm duyệt.
 - **Log và che thông tin nhạy cảm:** lệnh gọi thành công được log ở mức `info`,
   chỉ gồm tên tool, provider, model, kết quả và độ trễ. Prompt không bao giờ
   được log thành một trường riêng. Lệnh gọi thất bại được log ở mức `warn` (lỗi

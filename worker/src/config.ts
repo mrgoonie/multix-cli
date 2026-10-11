@@ -31,7 +31,7 @@ export interface Env {
   MULTIX_MCP_MAX_OUTPUTS?: string;
   /** Max video duration in seconds (default 10, hard cap 15). */
   MULTIX_MCP_MAX_VIDEO_SECONDS?: string;
-  /** Comma-separated video resolutions callers may request (default 480p,720p,1080p). */
+  /** Comma-separated video resolutions callers may request (default 480p,720p,768p,1080p). */
   MULTIX_MCP_ALLOWED_RESOLUTIONS?: string;
   /** Comma-separated browser origins allowed to call /mcp. Requests with other Origins get 403. */
   MULTIX_MCP_ALLOWED_ORIGINS?: string;
@@ -56,7 +56,8 @@ const VIDEO_SECONDS_DEFAULT = 10;
 const VIDEO_SECONDS_CEILING = 15;
 /** Duration sent when the caller omits one, so a provider default can never exceed the cap. */
 const VIDEO_SECONDS_WHEN_OMITTED = 5;
-const RESOLUTIONS_DEFAULT = ["480p", "720p", "1080p"];
+/** 768p is a HeyGen Video resolution between 720p and 1080p. */
+const RESOLUTIONS_DEFAULT = ["480p", "720p", "768p", "1080p"];
 
 export function csv(value: string | undefined): string[] {
   return (value ?? "")

@@ -73,7 +73,7 @@ describe("multix_list_providers", () => {
       max_outputs: 4,
       max_video_seconds: 10,
       default_video_seconds: 5,
-      allowed_resolutions: ["480p", "720p", "1080p"],
+      allowed_resolutions: ["480p", "720p", "768p", "1080p"],
     });
   });
 });
@@ -361,14 +361,15 @@ describe("multix_generate_video", () => {
     expect(calls.some((c) => c.method === "POST")).toBe(false);
   });
 
-  it("sends an explicit capped duration on Atlas Cloud when the schema default is too long", async () => {
-    const model = "vendor/long-video";
-    const schemaUrl = "https://schemas.example.com/long-video.json";
-    const { fetch, calls } = mockFetch(
+  /** Atlas catalog + schema + submit routes for one video model with the given inputs. */
+  function atlasVideoModel(properties: Record<string, unknown>, required: string[] = ["prompt"]) {
+    const model = "vendor/test-video";
+    const schemaUrl = "https://schemas.example.com/test-video.json";
+    const mock = mockFetch(
       route("GET", /\/api\/v1\/models$/, () =>
         jsonResponse({ code: 200, data: [{ model, schema: schemaUrl }] }),
       ),
-      route("GET", /long-video\.json$/, () =>
+      route("GET", /test-video\.json$/, () =>
         jsonResponse({
           paths: {
             "/api/v1/model/generateVideo": {
@@ -377,11 +378,8 @@ describe("multix_generate_video", () => {
                   content: {
                     "application/json": {
                       schema: {
-                        properties: {
-                          prompt: { type: "string" },
-                          duration: { type: "integer", default: 12 },
-                        },
-                        required: ["prompt"],
+                        properties: { prompt: { type: "string" }, ...properties },
+                        required,
                       },
                     },
                   },
@@ -395,6 +393,14 @@ describe("multix_generate_video", () => {
         jsonResponse({ code: 200, data: { id: "atv-2", status: "processing" } }),
       ),
     );
+    const submitted = () => mock.calls.find((c) => c.url === `${ATLAS}/model/generateVideo`)?.body;
+    return { model, ...mock, submitted };
+  }
+
+  it("sends the cap on Atlas Cloud when the schema default is longer", async () => {
+    const { model, fetch, submitted } = atlasVideoModel({
+      duration: { type: "integer", default: 12 },
+    });
     const result = await callTool(
       fullEnv(),
       "multix_generate_video",
@@ -402,11 +408,127 @@ describe("multix_generate_video", () => {
       { fetch },
     );
     expect(result.isError).toBeFalsy();
-    expect(calls.find((c) => c.url === `${ATLAS}/model/generateVideo`)?.body).toEqual({
-      model,
-      prompt: "pan",
-      duration: 5,
+    expect(submitted()).toEqual({ model, prompt: "pan", duration: 10 });
+  });
+
+  it("sends an Atlas schema default within the cap, and the server default when there is none", async () => {
+    const withDefault = atlasVideoModel({ duration: { type: "integer", default: 8 } });
+    await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "atlascloud", model: withDefault.model, prompt: "pan" },
+      { fetch: withDefault.fetch },
+    );
+    expect(withDefault.submitted()).toMatchObject({ duration: 8 });
+
+    const noDefault = atlasVideoModel({ duration: { type: "number" } });
+    await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "atlascloud", model: noDefault.model, prompt: "pan" },
+      { fetch: noDefault.fetch },
+    );
+    expect(noDefault.submitted()).toMatchObject({ duration: 5 });
+  });
+
+  it("caps Atlas length fields with other names, snapping to the largest enum value within the cap", async () => {
+    const { model, fetch, submitted } = atlasVideoModel({
+      seconds: { type: "string", enum: ["4", "8", "12"], default: "12" },
+      video_length: { type: "integer", minimum: 2, maximum: 20, default: 15 },
     });
+    const result = await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "atlascloud", model, prompt: "pan" },
+      { fetch },
+    );
+    expect(result.isError).toBeFalsy();
+    expect(submitted()).toEqual({ model, prompt: "pan", seconds: "8", video_length: 10 });
+  });
+
+  it("maps a requested duration onto the Atlas model's own length field", async () => {
+    const { model, fetch, submitted } = atlasVideoModel({
+      seconds: { type: "string", enum: ["4", "8", "12"], default: "12" },
+    });
+    const result = await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "atlascloud", model, prompt: "pan", duration: 4 },
+      { fetch },
+    );
+    expect(result.isError).toBeFalsy();
+    expect(submitted()).toEqual({ model, prompt: "pan", seconds: "4" });
+  });
+
+  it.each([
+    ["a minimum above the cap", { video_length: { type: "integer", minimum: 12, default: 12 } }],
+    ["no enum value within the cap", { duration: { type: "integer", enum: [12, 15] } }],
+  ])("rejects an Atlas model whose length field has %s before submit", async (_label, props) => {
+    const { model, fetch, calls } = atlasVideoModel(props);
+    const result = await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "atlascloud", model, prompt: "pan" },
+      { fetch },
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/no allowed value within this server's cap of 10s/);
+    expect(calls.some((c) => c.method === "POST")).toBe(false);
+  });
+
+  it.each([
+    ["a required", ["prompt", "resolution"]],
+    ["an optional", ["prompt"]],
+  ])(
+    "rejects %s Atlas resolution whose schema default is outside the allowlist",
+    async (_label, required) => {
+      const { model, fetch, calls } = atlasVideoModel(
+        {
+          duration: { type: "integer", default: 5 },
+          resolution: { type: "string", enum: ["720p", "4k"], default: "4k" },
+        },
+        required,
+      );
+      const result = await callTool(
+        fullEnv(),
+        "multix_generate_video",
+        { provider: "atlascloud", model, prompt: "pan" },
+        { fetch },
+      );
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toMatch(/would render at 4k; pass a resolution/);
+      expect(calls.some((c) => c.method === "POST")).toBe(false);
+    },
+  );
+
+  it("accepts an Atlas resolution default inside the allowlist", async () => {
+    const { model, fetch, submitted } = atlasVideoModel(
+      {
+        duration: { type: "integer", default: 5 },
+        resolution: { type: "string", enum: ["720p", "1080p"], default: "1080p" },
+      },
+      ["prompt", "resolution"],
+    );
+    const result = await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "atlascloud", model, prompt: "pan" },
+      { fetch },
+    );
+    expect(result.isError).toBeFalsy();
+    expect(submitted()).toEqual({ model, prompt: "pan", duration: 5, resolution: "1080p" });
+  });
+
+  it("words Atlas field errors for MCP clients, without CLI hints", async () => {
+    const { model, fetch } = atlasVideoModel({});
+    const result = await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "atlascloud", model, prompt: "pan", duration: 5 },
+      { fetch },
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/does not accept duration\. Its inputs: prompt\.$/);
   });
 
   it("starts and polls a HeyGen video, returning the output URL as given", async () => {
@@ -467,6 +589,38 @@ describe("multix_generate_video", () => {
     expect(calls[0]?.body).toMatchObject({ input: { prompt: "rain", duration: 5 } });
   });
 
+  it("reports a Cloudflare network failure as a provider error, not an internal error", async () => {
+    const fetch = async (): Promise<Response> => {
+      throw new TypeError("fetch failed");
+    };
+    const result = await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "cloudflare", prompt: "rain" },
+      { fetch },
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toBe(
+      "HTTP 0 from https://gateway.ai.cloudflare.com/: network error: fetch failed",
+    );
+  });
+
+  it("accepts HeyGen's 768p resolution by default", async () => {
+    const { fetch, calls } = mockFetch(
+      route("POST", /\/v3\/models\/videos$/, () =>
+        jsonResponse({ data: { video_id: "hg2", status: "pending" } }),
+      ),
+    );
+    const result = await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "heygen", prompt: "x", duration: 5, resolution: "768p" },
+      { fetch },
+    );
+    expect(result.isError).toBeFalsy();
+    expect(calls[0]?.body).toMatchObject({ resolution: "768p" });
+  });
+
   it.each(["replicate", "heygen"])(
     "sends the server default duration to %s when the caller omits it",
     async (provider) => {
@@ -489,6 +643,8 @@ describe("multix_generate_video", () => {
       } else {
         // HeyGen's minimum is 5s, so a 4s cap fails closed instead of billing the default.
         expect(result.isError).toBe(true);
+        // Shared CLI validation names the tool argument, not the CLI flag.
+        expect(result.content[0].text).toMatch(/^duration must be an integer between 5 and 15/);
         expect(calls).toHaveLength(0);
       }
     },
@@ -505,7 +661,7 @@ describe("multix_generate_video", () => {
       { fetch },
     );
     expect(denied.isError).toBe(true);
-    expect(denied.content[0].text).toMatch(/resolution must be one of 480p, 720p, 1080p/);
+    expect(denied.content[0].text).toMatch(/resolution must be one of 480p, 720p, 768p, 1080p/);
     expect(calls).toHaveLength(0);
 
     const allowed = await callTool(

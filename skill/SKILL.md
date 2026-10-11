@@ -479,7 +479,8 @@ local files), supports only Replicate, Atlas Cloud, HeyGen, and Cloudflare
 video, and accepts only public `https://` image URLs. Check `limits` from
 `multix_list_providers` before a video call: `duration` above
 `max_video_seconds` or a `resolution` outside `allowed_resolutions` is
-rejected, and an omitted `duration` becomes `default_video_seconds`.
+rejected, and an omitted `duration` becomes `default_video_seconds` (on Atlas
+Cloud, the model's own default when it is within `max_video_seconds`).
 
 ## Security & scope
 

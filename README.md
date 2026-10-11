@@ -697,7 +697,7 @@ CLI.
   `MULTIX_MCP_ALLOWED_MODELS`, `MULTIX_MCP_MAX_OUTPUTS`,
   `MULTIX_MCP_MAX_VIDEO_SECONDS` (also sent as `min(5, cap)` when a caller
   omits `duration`), `MULTIX_MCP_ALLOWED_RESOLUTIONS` (default
-  `480p,720p,1080p`), `MULTIX_MCP_ALLOWED_ORIGINS` (browser origins, with
+  `480p,720p,768p,1080p`), `MULTIX_MCP_ALLOWED_ORIGINS` (exact browser origins, with
   CORS), and the approximate per-IP rate limiter. JSON-RPC batches are
   rejected.
 

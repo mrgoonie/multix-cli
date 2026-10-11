@@ -111,7 +111,7 @@ const FALLBACK_FIELD_TYPES: Record<string, string> = {
 
 /** One convenience flag and the schema fields it may map onto, in preference order. */
 export interface FieldRequest {
-  /** CLI flag shown in errors, e.g. "--duration". */
+  /** Input name shown in errors: a CLI flag ("--duration") or a tool argument ("duration"). */
   flag: string;
   value: string | number | boolean | string[] | undefined;
   candidates: readonly string[];
@@ -233,8 +233,12 @@ export function buildModelInput(
     }
     const field = pickField(spec, req);
     if (!field) {
+      // The `atlas run` hint applies to the CLI only, whose flags start with "--".
+      const hint = req.flag.startsWith("--")
+        ? ` Use \`multix atlas run ${spec.model} --input '{...}'\` for model-specific fields.`
+        : "";
       throw new ValidationError(
-        `Model ${spec.model} does not accept ${req.flag}. Its inputs: ${listInputs(spec)}. Use \`multix atlas run ${spec.model} --input '{...}'\` for model-specific fields.`,
+        `Model ${spec.model} does not accept ${req.flag}. Its inputs: ${listInputs(spec)}.${hint}`,
       );
     }
     const prop = spec.properties[field] as AtlasSchemaProperty;
