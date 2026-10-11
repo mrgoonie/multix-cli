@@ -1,21 +1,19 @@
 /**
  * multix gemini generate-video — generate video with Veo via Gemini API.
  * EXPERIMENTAL: Veo endpoints require billing and may change.
- * Uses the operations polling pattern (submit → poll until done → download).
+ * Uses the predictLongRunning operation pattern (submit → poll until done → download).
  */
 
 import fs from "node:fs";
 import path from "node:path";
 import type { Command } from "commander";
 import { resolveKey } from "../../../core/env-loader.js";
-import { ProviderError, ValidationError } from "../../../core/errors.js";
-import { httpJson } from "../../../core/http-client.js";
+import { ValidationError } from "../../../core/errors.js";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import { maybeDownloadThumb } from "../../../core/video-thumb.js";
 import { ASPECT_RATIOS, type AspectRatio, getDefaultModel } from "../models.js";
-
-const BASE = "https://generativelanguage.googleapis.com";
+import { runVeo, veoImageFromFile } from "../veo.js";
 
 export function registerGenerateVideoCommand(parent: Command): void {
   parent
@@ -69,88 +67,22 @@ export function registerGenerateVideoCommand(parent: Command): void {
         logger.debug(`Submitting video generation with ${model}...`);
         logger.info("This may take 30s–6 minutes. Veo requires billing.");
 
-        // Build request payload
-        const config: Record<string, unknown> = {
-          aspectRatio: opts.aspectRatio,
-          resolution: opts.resolution,
-        };
-
-        // Reference images: inline as base64
-        const contentParts: Array<Record<string, unknown>> = [{ text: opts.prompt }];
-
-        if (opts.referenceImages?.length) {
-          for (const imgPath of opts.referenceImages.slice(0, 2)) {
-            if (!fs.existsSync(imgPath))
-              throw new ValidationError(`Reference image not found: ${imgPath}`);
-            const data = fs.readFileSync(imgPath).toString("base64");
-            const ext = path.extname(imgPath).toLowerCase();
-            const mimeType = ext === ".png" ? "image/png" : "image/jpeg";
-            contentParts.push({ inlineData: { mimeType, data } });
-          }
-        }
-
-        const headers = { "x-goog-api-key": apiKey, "Content-Type": "application/json" };
-
-        // Submit generation operation
-        // biome-ignore lint/suspicious/noExplicitAny: dynamic API
-        let operation: any;
-        try {
-          operation = await httpJson({
-            url: `${BASE}/v1beta/models/${model}:generateVideos`,
-            method: "POST",
-            headers,
-            body: {
-              contents: [{ parts: contentParts }],
-              generationConfig: config,
-            },
-          });
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : String(e);
-          throw new ProviderError(`Video generation submit failed: ${msg}`, "gemini");
-        }
-
-        const operationName: string = operation.name;
-        logger.debug(`Operation: ${operationName}`);
-
-        // Poll operation until done (max 10 min)
-        const deadline = Date.now() + 10 * 60 * 1000;
-        let done = false;
-        // biome-ignore lint/suspicious/noExplicitAny: dynamic API
-        let finalOp: any = operation;
-
-        while (!done && Date.now() < deadline) {
-          await sleep(10_000);
-          finalOp = await httpJson({
-            url: `${BASE}/v1beta/${operationName}`,
-            headers,
-          });
-          done = finalOp.done === true;
-          if (!done)
-            logger.debug(
-              `Still generating... (${Math.round((deadline - Date.now()) / 1000)}s left)`,
-            );
-        }
-
-        if (!done) throw new ProviderError("Video generation timed out after 10 minutes", "gemini");
-        if (finalOp.error)
-          throw new ProviderError(`Veo error: ${JSON.stringify(finalOp.error)}`, "gemini");
-
-        // Extract video URI from operation response
-        const videoUri: string | undefined =
-          finalOp.response?.generatedSamples?.[0]?.video?.uri ??
-          finalOp.response?.generatedVideos?.[0]?.video?.uri;
-
-        if (!videoUri) {
-          throw new ProviderError(
-            `Unexpected Veo response structure: ${JSON.stringify(finalOp.response)}`,
-            "gemini",
-          );
-        }
-
-        const outDir = getOutputDir();
-        const dest = path.join(outDir, `veo_generated_${Date.now()}.mp4`);
-        const { downloadFile } = await import("../../../core/http-client.js");
-        await downloadFile(videoUri, dest);
+        // First reference image = opening frame, second = closing frame.
+        const [first, last] = opts.referenceImages ?? [];
+        const dest = path.join(getOutputDir(), `veo_generated_${Date.now()}.mp4`);
+        const finalOp = await runVeo(
+          apiKey,
+          model,
+          {
+            prompt: opts.prompt,
+            image: first ? veoImageFromFile(first) : undefined,
+            lastFrame: last ? veoImageFromFile(last) : undefined,
+            aspectRatio: opts.aspectRatio,
+            resolution: opts.resolution,
+          },
+          dest,
+          logger,
+        );
 
         logger.success(`Saved video: ${dest}`);
 
@@ -169,8 +101,4 @@ export function registerGenerateVideoCommand(parent: Command): void {
         console.log(`\nGenerated video: ${dest}`);
       },
     );
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
 }

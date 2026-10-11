@@ -12,28 +12,12 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Command } from "commander";
 import { resolveKey } from "../../../core/env-loader.js";
-import { ProviderError, ValidationError } from "../../../core/errors.js";
-import { downloadFile, httpJson } from "../../../core/http-client.js";
+import { ValidationError } from "../../../core/errors.js";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import { maybeDownloadThumb } from "../../../core/video-thumb.js";
 import { ASPECT_RATIOS, type AspectRatio, getDefaultModel } from "../models.js";
-
-const BASE = "https://generativelanguage.googleapis.com";
-
-function imagePart(imgPath: string): Record<string, unknown> {
-  if (!fs.existsSync(imgPath)) {
-    throw new ValidationError(`Image not found: ${imgPath}`);
-  }
-  const data = fs.readFileSync(imgPath).toString("base64");
-  const ext = path.extname(imgPath).toLowerCase();
-  const mimeType = ext === ".png" ? "image/png" : "image/jpeg";
-  return { inlineData: { mimeType, data } };
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
-}
+import { runVeo, veoImageFromFile } from "../veo.js";
 
 export function registerGeminiImageToVideoCommand(parent: Command): void {
   parent
@@ -81,68 +65,24 @@ export function registerGeminiImageToVideoCommand(parent: Command): void {
           throw new ValidationError(`Invalid aspect ratio: ${opts.aspectRatio}`);
         }
 
-        const contentParts: Array<Record<string, unknown>> = [
-          { text: opts.prompt },
-          imagePart(imagePath),
-        ];
-        if (opts.lastFrame) contentParts.push(imagePart(opts.lastFrame));
-
-        const headers = { "x-goog-api-key": apiKey, "Content-Type": "application/json" };
-
         logger.info(
           "Submitting image-to-video. This may take 30s–6 minutes. Veo requires billing.",
         );
 
-        // biome-ignore lint/suspicious/noExplicitAny: dynamic API
-        let operation: any;
-        try {
-          operation = await httpJson({
-            url: `${BASE}/v1beta/models/${model}:generateVideos`,
-            method: "POST",
-            headers,
-            body: {
-              contents: [{ parts: contentParts }],
-              generationConfig: { aspectRatio: opts.aspectRatio, resolution: opts.resolution },
-            },
-          });
-        } catch (e) {
-          throw new ProviderError(
-            `Submit failed: ${e instanceof Error ? e.message : String(e)}`,
-            "gemini",
-          );
-        }
-
-        const operationName: string = operation.name;
-        logger.debug(`Operation: ${operationName}`);
-
-        const deadline = Date.now() + 10 * 60 * 1000;
-        // biome-ignore lint/suspicious/noExplicitAny: dynamic API
-        let finalOp: any = operation;
-        while (!finalOp.done && Date.now() < deadline) {
-          await sleep(10_000);
-          finalOp = await httpJson({ url: `${BASE}/v1beta/${operationName}`, headers });
-          if (!finalOp.done) {
-            logger.debug(`Still generating... ${Math.round((deadline - Date.now()) / 1000)}s left`);
-          }
-        }
-
-        if (!finalOp.done) throw new ProviderError("Veo timed out after 10 minutes", "gemini");
-        if (finalOp.error) {
-          throw new ProviderError(`Veo error: ${JSON.stringify(finalOp.error)}`, "gemini");
-        }
-
-        const videoUri: string | undefined =
-          finalOp.response?.generatedSamples?.[0]?.video?.uri ??
-          finalOp.response?.generatedVideos?.[0]?.video?.uri;
-        if (!videoUri) {
-          throw new ProviderError(
-            `Unexpected Veo response: ${JSON.stringify(finalOp.response)}`,
-            "gemini",
-          );
-        }
-
         const dest = path.join(getOutputDir(), `veo_i2v_${Date.now()}.mp4`);
-        await downloadFile(videoUri, dest);
+        const finalOp = await runVeo(
+          apiKey,
+          model,
+          {
+            prompt: opts.prompt,
+            image: veoImageFromFile(imagePath),
+            lastFrame: opts.lastFrame ? veoImageFromFile(opts.lastFrame) : undefined,
+            aspectRatio: opts.aspectRatio,
+            resolution: opts.resolution,
+          },
+          dest,
+          logger,
+        );
         logger.success(`Saved video: ${dest}`);
 
         if (opts.output) {
