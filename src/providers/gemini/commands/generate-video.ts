@@ -13,7 +13,7 @@ import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import { maybeDownloadThumb } from "../../../core/video-thumb.js";
 import { ASPECT_RATIOS, type AspectRatio, getDefaultModel } from "../models.js";
-import { runVeo, veoImageFromFile } from "../veo.js";
+import { runVeo, veoFramesFromPaths } from "../veo.js";
 
 export function registerGenerateVideoCommand(parent: Command): void {
   parent
@@ -68,15 +68,14 @@ export function registerGenerateVideoCommand(parent: Command): void {
         logger.info("This may take 30s–6 minutes. Veo requires billing.");
 
         // First reference image = opening frame, second = closing frame.
-        const [first, last] = opts.referenceImages ?? [];
+        const frames = veoFramesFromPaths(opts.referenceImages);
         const dest = path.join(getOutputDir(), `veo_generated_${Date.now()}.mp4`);
         const finalOp = await runVeo(
           apiKey,
           model,
           {
             prompt: opts.prompt,
-            image: first ? veoImageFromFile(first) : undefined,
-            lastFrame: last ? veoImageFromFile(last) : undefined,
+            ...frames,
             aspectRatio: opts.aspectRatio,
             resolution: opts.resolution,
           },

@@ -3,6 +3,8 @@
  * Contract (https://ai.google.dev/gemini-api/docs/veo):
  *   POST /v1beta/models/{model}:predictLongRunning
  *     { instances: [{ prompt, image?, lastFrame? }], parameters: { aspectRatio, resolution } }
+ *   Images use { bytesBase64Encoded, mimeType }, the shape Google's official
+ *   js-genai SDK sends to this endpoint.
  *   GET  /v1beta/{operation.name} until done
  *   video URI at response.generateVideoResponse.generatedSamples[0].video.uri,
  *   downloaded with the same x-goog-api-key header.
@@ -15,11 +17,14 @@ import { downloadFile, httpJson } from "../../core/http-client.js";
 import type { Logger } from "../../core/logger.js";
 import { getMimeType } from "./task-resolver.js";
 
-const BASE = "https://generativelanguage.googleapis.com/v1beta";
+const API_HOST = "generativelanguage.googleapis.com";
+const BASE = `https://${API_HOST}/v1beta`;
+const VEO_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const VEO_TIMEOUT_MS = 10 * 60 * 1000;
 
 export interface VeoImage {
-  inlineData: { mimeType: string; data: string };
+  bytesBase64Encoded: string;
+  mimeType: string;
 }
 
 export interface VeoRequestOptions {
@@ -43,10 +48,32 @@ export function veoImageFromFile(imgPath: string): VeoImage {
   const detected = getMimeType(imgPath);
   // Unknown extensions keep the historical JPEG assumption; known non-images are rejected.
   const mimeType = detected === "application/octet-stream" ? "image/jpeg" : detected;
-  if (!mimeType.startsWith("image/")) {
-    throw new ValidationError(`Not an image file: ${imgPath} (${mimeType})`);
+  if (!VEO_IMAGE_TYPES.has(mimeType)) {
+    throw new ValidationError(`Veo accepts JPEG, PNG or WebP images: ${imgPath} (${mimeType})`);
   }
-  return { inlineData: { mimeType, data: fs.readFileSync(imgPath).toString("base64") } };
+  return { bytesBase64Encoded: fs.readFileSync(imgPath).toString("base64"), mimeType };
+}
+
+/** Map `--reference-images` to opening/closing frames (at most two). */
+export function veoFramesFromPaths(paths: string[] = []): {
+  image?: VeoImage;
+  lastFrame?: VeoImage;
+} {
+  if (paths.length > 2) {
+    throw new ValidationError(
+      "--reference-images accepts at most two images (opening frame, closing frame)",
+    );
+  }
+  const [first, last] = paths;
+  return {
+    image: first ? veoImageFromFile(first) : undefined,
+    lastFrame: last ? veoImageFromFile(last) : undefined,
+  };
+}
+
+/** Accept both "veo-3.1-…" and "models/veo-3.1-…". */
+function modelPath(model: string): string {
+  return model.replace(/^models\//, "");
 }
 
 export function buildVeoRequest(opts: VeoRequestOptions): Record<string, unknown> {
@@ -81,7 +108,7 @@ export async function submitVeo(
 ): Promise<VeoOperation> {
   try {
     return await httpJson<VeoOperation>({
-      url: `${BASE}/models/${model}:predictLongRunning`,
+      url: `${BASE}/models/${modelPath(model)}:predictLongRunning`,
       method: "POST",
       headers: headers(apiKey),
       body,
@@ -115,7 +142,7 @@ export async function waitForVeo(
     onPoll: (op, attempt) => {
       if (!op.done) logger.debug(`Still generating... (poll ${attempt})`);
     },
-    resumeHint: `Operation: ${operation.name}`,
+    resumeHint: `Operation (still running server-side): ${operation.name}`,
   });
   return checkVeoResult(finalOp);
 }
@@ -125,9 +152,18 @@ function checkVeoResult(op: VeoOperation): VeoOperation {
   return op;
 }
 
-/** Download the generated video with the API key header (the URI requires auth). */
+/**
+ * Download the generated video. Gemini file URIs require the API key header;
+ * it is only attached for the Gemini API host so the key never goes elsewhere.
+ */
 export async function downloadVeoVideo(apiKey: string, uri: string, dest: string): Promise<void> {
-  await downloadFile(uri, dest, 300_000, headers(apiKey));
+  let host = "";
+  try {
+    host = new URL(uri).hostname;
+  } catch {
+    throw new ProviderError("Veo returned an invalid video URI", "gemini");
+  }
+  await downloadFile(uri, dest, 300_000, host === API_HOST ? headers(apiKey) : undefined);
 }
 
 /** Submit, wait, and download to `dest`. Returns the finished operation. */
