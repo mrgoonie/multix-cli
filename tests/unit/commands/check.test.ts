@@ -109,6 +109,11 @@ describe("binary-check helper", () => {
 });
 
 describe("check command provider readiness", () => {
+  // Restore env even when an assertion fails mid-test.
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it("includes OpenAI in provider diagnostics", async () => {
     const { getCheckProviders } = await import("../../../src/commands/check.js");
     expect(getCheckProviders()).toContainEqual(
@@ -145,7 +150,6 @@ describe("check command provider readiness", () => {
     vi.stubEnv("CLOUDFLARE_AI_GATEWAY_ID", "gateway");
     vi.stubEnv("REPLICATE_API_TOKEN", "replicate");
     expect(cloudflareReadiness()).toEqual({ native: true, video: true });
-    vi.unstubAllEnvs();
   });
 
   it("reports direct Replicate readiness separately from Cloudflare AI Gateway video", async () => {
@@ -165,7 +169,6 @@ describe("check command provider readiness", () => {
     vi.stubEnv("CLOUDFLARE_API_TOKEN", "");
     vi.stubEnv("REPLICATE_API_TOKEN", "replicate");
     expect(cloudflareReadiness()).toEqual({ native: false, video: false });
-    vi.unstubAllEnvs();
   });
 
   it("resolves Replicate tokens like the provider: trimmed, then fallback", async () => {
@@ -182,7 +185,6 @@ describe("check command provider readiness", () => {
     });
     vi.stubEnv("REPLICATE_API_KEY", "");
     expect(resolveProviderKey(replicate)).toEqual({});
-    vi.unstubAllEnvs();
   });
 
   it("does not let REPLICATE_API_KEY alone make Cloudflare video ready", async () => {
@@ -193,7 +195,6 @@ describe("check command provider readiness", () => {
     vi.stubEnv("REPLICATE_API_KEY", "replicate-key");
     const { cloudflareReadiness } = await import("../../../src/commands/check.js");
     expect(cloudflareReadiness()).toEqual({ native: true, video: false });
-    vi.unstubAllEnvs();
   });
 
   it("does not count whitespace-only Cloudflare credentials as configured", async () => {
@@ -201,6 +202,5 @@ describe("check command provider readiness", () => {
     vi.stubEnv("CLOUDFLARE_API_TOKEN", "\t");
     const { cloudflareReadiness } = await import("../../../src/commands/check.js");
     expect(cloudflareReadiness()).toEqual({ native: false, video: false });
-    vi.unstubAllEnvs();
   });
 });
