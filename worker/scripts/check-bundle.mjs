@@ -6,9 +6,18 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
+/** Node built-ins a bundle could still reference by bare name (without the node: prefix). */
+const BARE_BUILTINS =
+  "fs|fs/promises|child_process|path|os|net|tls|http|https|http2|dns|stream|zlib|worker_threads|module|process|readline|url|util|crypto|buffer|events";
+
 const FORBIDDEN = [
-  { label: "node:fs", re: /["'](?:node:)?fs(?:\/promises)?["']/ },
-  { label: "node:child_process", re: /["'](?:node:)?child_process["']/ },
+  { label: "node:* module", re: /["']node:[a-z_/]+["']/ },
+  {
+    label: "bare Node built-in import",
+    re: new RegExp(
+      `(?:\\bfrom\\s*|\\bimport\\s*\\(\\s*|\\brequire\\s*\\(\\s*|\\bimport\\s+)["'](?:${BARE_BUILTINS})["']`,
+    ),
+  },
   { label: "commander", re: /["']commander["']|\bCommanderError\b/ },
   { label: "execa", re: /["']execa["']/ },
   { label: "src/cli.ts", re: /\.name\(\s*["']multix["']\s*\)/ },

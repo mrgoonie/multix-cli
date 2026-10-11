@@ -34,7 +34,13 @@ export interface VideoRequest {
   negativePrompt?: string;
   aspectRatio?: string;
   resolution?: string;
-  duration?: number;
+  /**
+   * Seconds, always at most the server cap. When the caller omitted it, this is
+   * the server default so a provider-side default can never exceed the cap.
+   */
+  duration: number;
+  /** True when the caller passed `duration`; false when `duration` is the server default. */
+  durationRequested: boolean;
   seed?: number;
   /** Already SSRF-checked https URL used as the first frame / reference image. */
   imageUrl?: string;

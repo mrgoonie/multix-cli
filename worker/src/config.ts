@@ -31,6 +31,8 @@ export interface Env {
   MULTIX_MCP_MAX_OUTPUTS?: string;
   /** Max video duration in seconds (default 10, hard cap 15). */
   MULTIX_MCP_MAX_VIDEO_SECONDS?: string;
+  /** Comma-separated video resolutions callers may request (default 480p,720p,1080p). */
+  MULTIX_MCP_ALLOWED_RESOLUTIONS?: string;
   /** Comma-separated browser origins allowed to call /mcp. Requests with other Origins get 403. */
   MULTIX_MCP_ALLOWED_ORIGINS?: string;
 
@@ -52,6 +54,9 @@ const OUTPUTS_DEFAULT = 4;
 const OUTPUTS_CEILING = 10;
 const VIDEO_SECONDS_DEFAULT = 10;
 const VIDEO_SECONDS_CEILING = 15;
+/** Duration sent when the caller omits one, so a provider default can never exceed the cap. */
+const VIDEO_SECONDS_WHEN_OMITTED = 5;
+const RESOLUTIONS_DEFAULT = ["480p", "720p", "1080p"];
 
 export function csv(value: string | undefined): string[] {
   return (value ?? "")
@@ -69,16 +74,24 @@ function boundedInt(raw: string | undefined, fallback: number, ceiling: number):
 export interface Limits {
   maxOutputs: number;
   maxVideoSeconds: number;
+  /** Duration used when the caller omits one: min(5, maxVideoSeconds). */
+  defaultVideoSeconds: number;
+  /** Lower-case resolutions callers may request. */
+  allowedResolutions: string[];
 }
 
 export function limitsFrom(env: Env): Limits {
+  const maxVideoSeconds = boundedInt(
+    env.MULTIX_MCP_MAX_VIDEO_SECONDS,
+    VIDEO_SECONDS_DEFAULT,
+    VIDEO_SECONDS_CEILING,
+  );
+  const resolutions = csv(env.MULTIX_MCP_ALLOWED_RESOLUTIONS).map((r) => r.toLowerCase());
   return {
     maxOutputs: boundedInt(env.MULTIX_MCP_MAX_OUTPUTS, OUTPUTS_DEFAULT, OUTPUTS_CEILING),
-    maxVideoSeconds: boundedInt(
-      env.MULTIX_MCP_MAX_VIDEO_SECONDS,
-      VIDEO_SECONDS_DEFAULT,
-      VIDEO_SECONDS_CEILING,
-    ),
+    maxVideoSeconds,
+    defaultVideoSeconds: Math.min(VIDEO_SECONDS_WHEN_OMITTED, maxVideoSeconds),
+    allowedResolutions: resolutions.length > 0 ? resolutions : RESOLUTIONS_DEFAULT,
   };
 }
 

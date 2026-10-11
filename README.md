@@ -687,8 +687,11 @@ CLI.
 - Single-tenant: provider keys are Worker secrets, and every caller spends the
   deployer's credits. Limit exposure with `MULTIX_MCP_ALLOWED_PROVIDERS`,
   `MULTIX_MCP_ALLOWED_MODELS`, `MULTIX_MCP_MAX_OUTPUTS`,
-  `MULTIX_MCP_MAX_VIDEO_SECONDS`, `MULTIX_MCP_ALLOWED_ORIGINS`, and the
-  per-IP rate limiter.
+  `MULTIX_MCP_MAX_VIDEO_SECONDS` (also sent as `min(5, cap)` when a caller
+  omits `duration`), `MULTIX_MCP_ALLOWED_RESOLUTIONS` (default
+  `480p,720p,1080p`), `MULTIX_MCP_ALLOWED_ORIGINS` (browser origins, with
+  CORS), and the approximate per-IP rate limiter. JSON-RPC batches are
+  rejected.
 
 ```bash
 npm ci --prefix worker

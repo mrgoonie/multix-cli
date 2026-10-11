@@ -7,7 +7,7 @@
  */
 
 import { ProviderError } from "../../core/errors.js";
-import type { FetchLike } from "../../core/fetch-json.js";
+import { DEFAULT_TIMEOUT_MS, type FetchLike } from "../../core/fetch-json.js";
 import { CLOUDFLARE_VIDEO_MODEL } from "./model-ids.js";
 
 export interface CloudflareVideoConfig {
@@ -30,6 +30,8 @@ export interface CloudflareVideoRequestOptions {
   collectLogPayload?: boolean;
   /** Send `Prefer: wait` on create. */
   wait?: boolean;
+  /** Per-request timeout. Default 120s. */
+  timeoutMs?: number;
 }
 
 export function cloudflareProviderFailure(status: number): ProviderError {
@@ -65,7 +67,11 @@ function videoHeaders(
 function send(opts: CloudflareVideoRequestOptions, url: string, init: RequestInit) {
   // Call without a receiver: Workers' native fetch rejects foreign `this`.
   const f = opts.fetch;
-  return f ? f(url, init) : globalThis.fetch(url, init);
+  const withTimeout = {
+    ...init,
+    signal: AbortSignal.timeout(opts.timeoutMs ?? DEFAULT_TIMEOUT_MS),
+  };
+  return f ? f(url, withTimeout) : globalThis.fetch(url, withTimeout);
 }
 
 /** Reject responses that are not prediction-shaped before they reach logs or callers. */

@@ -46,7 +46,7 @@ function client(env: Env, fetch: FetchLike | undefined): AtlasCloudClient {
   return new AtlasCloudClient({ apiKey, fetch });
 }
 
-/** The published schema validates and maps fields before any billable submit; it is advisory if unavailable. */
+/** The published schema validates and maps fields before any billable submit. */
 async function loadSpec(
   atlas: AtlasCloudClient,
   model: string,
@@ -58,29 +58,67 @@ async function loadSpec(
   }
 }
 
+/** How a video request's duration is bounded on Atlas, where the API silently fills defaults. */
+interface DurationPolicy {
+  max: number;
+  /** Server default used when the caller omitted `duration`. */
+  fallback: number;
+  requested: boolean;
+}
+
+/**
+ * Pick the duration to send. Without a schema the model's own default is
+ * unknown, so an omitted duration fails closed. With a schema that declares
+ * no duration field, the model has no length control and nothing is sent.
+ */
+function durationToSend(
+  spec: AtlasModelSpec | undefined,
+  model: string,
+  policy: DurationPolicy,
+  requested: number,
+): number | undefined {
+  if (policy.requested) return requested;
+  if (!spec) {
+    throw new ValidationError(
+      `Model ${model}: its schema is unavailable, so its default length is unknown; pass duration (at most ${policy.max}s)`,
+    );
+  }
+  const field = F.duration.find((name) => spec.properties[name] !== undefined);
+  if (!field) return undefined;
+  const schemaDefault = spec.properties[field]?.default;
+  return typeof schemaDefault === "number" && schemaDefault <= policy.max
+    ? schemaDefault
+    : policy.fallback;
+}
+
 async function submit(
   atlas: AtlasCloudClient,
   model: string,
   fallbackKind: AtlasMediaKind,
   requests: FieldRequest[],
-  maxDurationSeconds?: number,
+  duration?: { policy: DurationPolicy; value: number },
 ): Promise<AtlasPrediction> {
   const spec = await loadSpec(atlas, model);
-  const body = buildModelInput(spec, requests);
+  const all = duration
+    ? [
+        ...requests,
+        {
+          flag: "duration",
+          value: durationToSend(spec, model, duration.policy, duration.value),
+          candidates: F.duration,
+        },
+      ]
+    : requests;
+  const body = buildModelInput(spec, all);
   // Schema defaults are filled in too, so re-check the duration that will actually be billed.
-  const duration = body.duration;
-  if (
-    maxDurationSeconds !== undefined &&
-    typeof duration === "number" &&
-    duration > maxDurationSeconds
-  ) {
+  const billed = body.duration;
+  if (duration && typeof billed === "number" && billed > duration.policy.max) {
     throw new ValidationError(
-      `Model ${model} would render ${duration}s; this server allows at most ${maxDurationSeconds}s`,
+      `Model ${model} would render ${billed}s; this server allows at most ${duration.policy.max}s`,
     );
   }
   return atlas.submit(spec?.endpoint ?? fallbackKind, { model, ...body });
 }
-
 export const atlasCloudAdapter: ProviderAdapter = {
   id: "atlascloud",
   isConfigured: (env) => Boolean(env.ATLASCLOUD_API_KEY?.trim()),
@@ -127,7 +165,6 @@ export const atlasCloudAdapter: ProviderAdapter = {
         { flag: "negative_prompt", value: req.negativePrompt, candidates: F.negativePrompt },
         { flag: "aspect_ratio", value: req.aspectRatio, candidates: F.aspectRatio },
         { flag: "resolution", value: req.resolution, candidates: F.resolution },
-        { flag: "duration", value: req.duration, candidates: F.duration },
         { flag: "seed", value: req.seed, candidates: F.seed },
         {
           flag: "image_url",
@@ -135,7 +172,14 @@ export const atlasCloudAdapter: ProviderAdapter = {
           candidates: F.primaryImage,
         },
       ],
-      ctx.limits.maxVideoSeconds,
+      {
+        policy: {
+          max: ctx.limits.maxVideoSeconds,
+          fallback: ctx.limits.defaultVideoSeconds,
+          requested: req.durationRequested,
+        },
+        value: req.duration,
+      },
     );
     return atlasJob(submitted);
   },

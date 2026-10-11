@@ -192,6 +192,8 @@ export function createMcpServer(env: Env, deps: ServerDeps): McpServer {
           limits: {
             max_outputs: limits.maxOutputs,
             max_video_seconds: limits.maxVideoSeconds,
+            default_video_seconds: limits.defaultVideoSeconds,
+            allowed_resolutions: limits.allowedResolutions,
             max_prompt_chars: MAX_PROMPT_CHARS,
           },
         };
@@ -261,8 +263,15 @@ export function createMcpServer(env: Env, deps: ServerDeps): McpServer {
         resolution: z
           .string()
           .regex(/^(\d{3,4}p|2k|4k)$/i, "resolution must look like 720p")
-          .optional(),
-        duration: z.number().int().min(1).max(15).optional().describe("Seconds"),
+          .optional()
+          .describe("Output resolution; the server accepts only its allowlist (see limits)"),
+        duration: z
+          .number()
+          .int()
+          .min(1)
+          .max(15)
+          .optional()
+          .describe("Seconds; when omitted the server sends its default (see limits)"),
         seed: seedSchema.optional(),
       },
       annotations: { readOnlyHint: false, openWorldHint: true },
@@ -276,6 +285,12 @@ export function createMcpServer(env: Env, deps: ServerDeps): McpServer {
           if (args.duration !== undefined && args.duration > limits.maxVideoSeconds) {
             throw new ToolInputError(`duration must be at most ${limits.maxVideoSeconds} seconds`);
           }
+          const resolution = args.resolution?.toLowerCase();
+          if (resolution !== undefined && !limits.allowedResolutions.includes(resolution)) {
+            throw new ToolInputError(
+              `resolution must be one of ${limits.allowedResolutions.join(", ")} on this server`,
+            );
+          }
           const imageUrl =
             args.image_url === undefined
               ? undefined
@@ -288,8 +303,9 @@ export function createMcpServer(env: Env, deps: ServerDeps): McpServer {
             prompt: args.prompt,
             negativePrompt: args.negative_prompt,
             aspectRatio: args.aspect_ratio,
-            resolution: args.resolution,
-            duration: args.duration,
+            resolution,
+            duration: args.duration ?? limits.defaultVideoSeconds,
+            durationRequested: args.duration !== undefined,
             seed: args.seed,
             imageUrl,
           });

@@ -471,7 +471,10 @@ call its tools instead: `multix_list_providers` first, then
 `multix_generate_image` / `multix_generate_video`, and poll
 `multix_prediction_status` until `done` is true. It returns provider URLs (no
 local files), supports only Replicate, Atlas Cloud, HeyGen, and Cloudflare
-video, and accepts only public `https://` image URLs.
+video, and accepts only public `https://` image URLs. Check `limits` from
+`multix_list_providers` before a video call: `duration` above
+`max_video_seconds` or a `resolution` outside `allowed_resolutions` is
+rejected, and an omitted `duration` becomes `default_video_seconds`.
 
 ## Security & scope
 

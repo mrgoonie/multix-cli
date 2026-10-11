@@ -1,14 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
-import { version } from "../../package.json";
 import { MAX_BODY_BYTES } from "../src/config.js";
 import { handleRequest } from "../src/index.js";
 import { TOKEN, fullEnv, mcpRequest } from "./helpers.js";
 
 describe("/health", () => {
-  it("is public and returns only ok + version", async () => {
+  it("is public and returns only ok (no version fingerprint)", async () => {
     const response = await handleRequest(new Request("https://mcp.example.com/health"), {});
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ ok: true, version });
+    expect(await response.json()).toEqual({ ok: true });
   });
 
   it("rejects other methods", async () => {
@@ -70,6 +69,58 @@ describe("/mcp authentication", () => {
     expect(good.status).toBe(200);
   });
 
+  it("answers CORS preflight without auth only for allowed origins", async () => {
+    const env = fullEnv({ MULTIX_MCP_ALLOWED_ORIGINS: "https://app.example.com" });
+    const limit = vi.fn(async () => ({ success: true }));
+    const preflight = (origin: string) =>
+      handleRequest(
+        new Request("https://mcp.example.com/mcp", {
+          method: "OPTIONS",
+          headers: {
+            origin,
+            "access-control-request-method": "POST",
+            "access-control-request-headers": "authorization, content-type",
+          },
+        }),
+        { ...env, MCP_RATE_LIMITER: { limit } },
+      );
+    const good = await preflight("https://app.example.com");
+    expect(good.status).toBe(204);
+    expect(good.headers.get("access-control-allow-origin")).toBe("https://app.example.com");
+    expect(good.headers.get("access-control-allow-methods")).toContain("POST");
+    expect(good.headers.get("access-control-allow-headers")).toContain("authorization");
+    expect(good.headers.get("vary")).toBe("Origin");
+    const evil = await preflight("https://evil.example");
+    expect(evil.status).toBe(403);
+    expect(evil.headers.get("access-control-allow-origin")).toBeNull();
+    expect(limit).not.toHaveBeenCalled();
+  });
+
+  it("adds CORS headers to responses for allowed origins, including 401s", async () => {
+    const env = fullEnv({ MULTIX_MCP_ALLOWED_ORIGINS: "https://app.example.com" });
+    const origin = { origin: "https://app.example.com" };
+    const ok = await handleRequest(mcpRequest("tools/list", {}, origin), env);
+    expect(ok.status).toBe(200);
+    expect(ok.headers.get("access-control-allow-origin")).toBe("https://app.example.com");
+    expect(ok.headers.get("cache-control")).toBe("no-store");
+    const denied = await handleRequest(
+      mcpRequest("tools/list", {}, { ...origin, authorization: "Bearer wrong" }),
+      env,
+    );
+    expect(denied.status).toBe(401);
+    expect(denied.headers.get("access-control-allow-origin")).toBe("https://app.example.com");
+    const cli = await handleRequest(mcpRequest("tools/list"), env);
+    expect(cli.headers.get("access-control-allow-origin")).toBeNull();
+  });
+
+  it("does not answer preflight for non-browser callers without auth", async () => {
+    const response = await handleRequest(
+      new Request("https://mcp.example.com/mcp", { method: "OPTIONS" }),
+      fullEnv(),
+    );
+    expect(response.status).toBe(401);
+  });
+
   it("applies the optional rate limiter before authentication", async () => {
     const limit = vi.fn(async () => ({ success: false }));
     const response = await handleRequest(
@@ -116,6 +167,28 @@ describe("/mcp request handling", () => {
     expect(response.status).toBe(400);
     const body = (await response.json()) as { error: { code: number } };
     expect(body.error.code).toBe(-32700);
+  });
+
+  it("rejects JSON-RPC batches before they reach the MCP transport", async () => {
+    const call = (id: number) => ({
+      jsonrpc: "2.0",
+      id,
+      method: "tools/call",
+      params: { name: "multix_list_providers", arguments: {} },
+    });
+    const request = new Request("https://mcp.example.com/mcp", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${TOKEN}`,
+        accept: "application/json, text/event-stream",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify([call(1), call(2)]),
+    });
+    const response = await handleRequest(request, fullEnv());
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as { error: { code: number; message: string } };
+    expect(body.error).toEqual({ code: -32600, message: "Batch requests are not supported" });
   });
 
   it("returns 404 for unknown paths", async () => {

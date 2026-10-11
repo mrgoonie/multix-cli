@@ -72,6 +72,8 @@ describe("multix_list_providers", () => {
     expect(result.structuredContent.limits).toMatchObject({
       max_outputs: 4,
       max_video_seconds: 10,
+      default_video_seconds: 5,
+      allowed_resolutions: ["480p", "720p", "1080p"],
     });
   });
 });
@@ -325,7 +327,12 @@ describe("multix_generate_video", () => {
     const result = await callTool(
       fullEnv(),
       "multix_generate_video",
-      { provider: "atlascloud", prompt: "pan", image_url: "https://images.example.com/a.png" },
+      {
+        provider: "atlascloud",
+        prompt: "pan",
+        image_url: "https://images.example.com/a.png",
+        duration: 5,
+      },
       { fetch },
     );
     expect(result.structuredContent).toMatchObject({
@@ -335,6 +342,70 @@ describe("multix_generate_video", () => {
     });
     expect(calls.find((c) => c.url === `${ATLAS}/model/generateVideo`)?.body).toMatchObject({
       image: "https://images.example.com/a.png",
+      duration: 5,
+    });
+  });
+
+  it("fails closed on Atlas Cloud when the schema is unavailable and duration is omitted", async () => {
+    const { fetch, calls } = mockFetch(
+      route("GET", /\/api\/v1\/models$/, () => jsonResponse({ code: 500 }, 500)),
+    );
+    const result = await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "atlascloud", prompt: "pan" },
+      { fetch },
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/pass duration \(at most 10s\)/);
+    expect(calls.some((c) => c.method === "POST")).toBe(false);
+  });
+
+  it("sends an explicit capped duration on Atlas Cloud when the schema default is too long", async () => {
+    const model = "vendor/long-video";
+    const schemaUrl = "https://schemas.example.com/long-video.json";
+    const { fetch, calls } = mockFetch(
+      route("GET", /\/api\/v1\/models$/, () =>
+        jsonResponse({ code: 200, data: [{ model, schema: schemaUrl }] }),
+      ),
+      route("GET", /long-video\.json$/, () =>
+        jsonResponse({
+          paths: {
+            "/api/v1/model/generateVideo": {
+              post: {
+                requestBody: {
+                  content: {
+                    "application/json": {
+                      schema: {
+                        properties: {
+                          prompt: { type: "string" },
+                          duration: { type: "integer", default: 12 },
+                        },
+                        required: ["prompt"],
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        }),
+      ),
+      route("POST", /\/model\/generateVideo$/, () =>
+        jsonResponse({ code: 200, data: { id: "atv-2", status: "processing" } }),
+      ),
+    );
+    const result = await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "atlascloud", model, prompt: "pan" },
+      { fetch },
+    );
+    expect(result.isError).toBeFalsy();
+    expect(calls.find((c) => c.url === `${ATLAS}/model/generateVideo`)?.body).toEqual({
+      model,
+      prompt: "pan",
+      duration: 5,
     });
   });
 
@@ -392,6 +463,59 @@ describe("multix_generate_video", () => {
     });
     expect(calls[0]?.headers["cf-aig-authorization"]).toBe(`Bearer ${CF_TOKEN}`);
     expect(calls[0]?.headers["cf-aig-collect-log-payload"]).toBe("false");
+    // duration omitted: the server default is sent so the provider default cannot exceed the cap.
+    expect(calls[0]?.body).toMatchObject({ input: { prompt: "rain", duration: 5 } });
+  });
+
+  it.each(["replicate", "heygen"])(
+    "sends the server default duration to %s when the caller omits it",
+    async (provider) => {
+      const { fetch, calls } = mockFetch(
+        route("POST", /\/predictions$/, () => jsonResponse({ id: "v1", status: "starting" })),
+        route("POST", /\/v3\/models\/videos$/, () =>
+          jsonResponse({ data: { video_id: "v1", status: "pending" } }),
+        ),
+      );
+      const result = await callTool(
+        fullEnv({ MULTIX_MCP_MAX_VIDEO_SECONDS: "4" }),
+        "multix_generate_video",
+        { provider, prompt: "x" },
+        { fetch },
+      );
+      const body = calls[0]?.body as { input?: { duration?: number }; duration?: number };
+      if (provider === "replicate") {
+        expect(result.isError).toBeFalsy();
+        expect(body.input?.duration).toBe(4);
+      } else {
+        // HeyGen's minimum is 5s, so a 4s cap fails closed instead of billing the default.
+        expect(result.isError).toBe(true);
+        expect(calls).toHaveLength(0);
+      }
+    },
+  );
+
+  it("enforces the resolution allowlist", async () => {
+    const { fetch, calls } = mockFetch(
+      route("POST", /\/predictions$/, () => jsonResponse({ id: "v4k", status: "starting" })),
+    );
+    const denied = await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "replicate", prompt: "x", resolution: "4k" },
+      { fetch },
+    );
+    expect(denied.isError).toBe(true);
+    expect(denied.content[0].text).toMatch(/resolution must be one of 480p, 720p, 1080p/);
+    expect(calls).toHaveLength(0);
+
+    const allowed = await callTool(
+      fullEnv({ MULTIX_MCP_ALLOWED_RESOLUTIONS: "720p, 4K" }),
+      "multix_generate_video",
+      { provider: "replicate", prompt: "x", resolution: "4K" },
+      { fetch },
+    );
+    expect(allowed.isError).toBeFalsy();
+    expect(calls[0]?.body).toMatchObject({ input: { resolution: "4k" } });
   });
 
   it("enforces the duration cap", async () => {

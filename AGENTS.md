@@ -80,7 +80,7 @@ npm run verify:docs  # when docs-site/ changed (needs `npm ci --prefix docs-site
   that imports runtime-neutral provider clients from `src/providers/**`. It is
   not published with the CLI. When you change a client it uses, run
   `npm run check:mcp` (worker typecheck, tests, and a bundle check that fails
-  on `node:fs`, `node:child_process`, `commander`, `execa`, or CLI code).
+  on any `node:*` or bare Node built-in import, `commander`, `execa`, or CLI code).
 
 ## Documentation
 

@@ -71,7 +71,7 @@ cd ..
 npm run deploy:mcp
 ```
 
-Check it is up (this endpoint is public and returns only `{ "ok": true, "version": "…" }`):
+Check it is up (this endpoint is public and returns only `{ "ok": true }`):
 
 ```bash
 curl https://multix-mcp.<your-subdomain>.workers.dev/health
@@ -124,13 +124,18 @@ Set these as `vars` in `worker/wrangler.jsonc` or as secrets:
 | `MULTIX_MCP_ALLOWED_PROVIDERS` | all | Comma-separated provider allowlist, e.g. `replicate,heygen`. |
 | `MULTIX_MCP_ALLOWED_MODELS` | any | Comma-separated `provider:model` allowlist, e.g. `replicate:black-forest-labs/flux-schnell,heygen:heygen-video-1`. When set, every model (including defaults) must be listed. |
 | `MULTIX_MCP_MAX_OUTPUTS` | `4` (ceiling 10) | Maximum `num_outputs` per image call. |
-| `MULTIX_MCP_MAX_VIDEO_SECONDS` | `10` (ceiling 15) | Maximum video `duration`. |
-| `MULTIX_MCP_ALLOWED_ORIGINS` | none | Browser origins allowed to call `/mcp`. Requests with any other `Origin` header get `403`; requests without an `Origin` (server-side clients) are allowed. |
+| `MULTIX_MCP_MAX_VIDEO_SECONDS` | `10` (ceiling 15) | Maximum video `duration`. When a caller omits `duration`, the server sends `min(5, cap)` seconds explicitly instead of the provider default. |
+| `MULTIX_MCP_ALLOWED_RESOLUTIONS` | `480p,720p,1080p` | Video resolutions a caller may request. Anything else (for example `4k`) is rejected before the provider call. An omitted resolution uses the model default. |
+| `MULTIX_MCP_ALLOWED_ORIGINS` | none | Browser origins allowed to call `/mcp`. Requests with any other `Origin` header get `403`; requests without an `Origin` (server-side clients) are allowed. Listed origins get CORS headers, and their `OPTIONS` preflight is answered without a token. The real request still needs the bearer token. |
 
 The `MCP_RATE_LIMITER` binding in `wrangler.jsonc` uses the
 [Workers Rate Limiting API](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/)
-to allow 60 requests per minute per client IP; excess requests get `429`.
-Adjust `simple.limit`/`simple.period` there.
+to allow about 60 requests per minute per client IP; excess requests get `429`.
+The limit is approximate: Cloudflare counts per location and the counters are
+eventually consistent, so treat it as abuse protection, not an exact budget.
+Adjust `simple.limit`/`simple.period` there. `namespace_id` must be unique
+within your Cloudflare account. If another Worker already uses `1001`, pick a
+different integer, or the two Workers will share counters.
 
 ## Security model
 
@@ -139,20 +144,45 @@ Adjust `simple.limit`/`simple.period` there.
   `401` with no detail.
 - **Input validation:** all tool arguments are validated with zod schemas
   (prompt ≤ 4000 characters, IDs restricted to `[A-Za-z0-9_-]`, bounded
-  numbers). Request bodies over 64 KiB are rejected with `413`.
+  numbers). Request bodies over 64 KiB are rejected with `413`. JSON-RPC
+  batches (array bodies) are rejected with `400` / `-32600`, so one HTTP
+  request is always one tool call and the rate limit bounds calls too.
 - **SSRF guard:** `image_url` must be `https://` on the default port, with a
   public DNS host name. IP literals, credentials in the URL, `localhost`,
   `.local`/`.internal` style names, and cloud metadata hosts are rejected
   before any provider call.
-- **Spend guard:** output count and video duration are capped, Atlas Cloud
-  schema defaults are re-checked before submit, and video calls never wait.
-  Replicate models that apply their own default duration cannot be inspected
-  in advance; use `MULTIX_MCP_ALLOWED_MODELS` to pin vetted models.
-- **Redaction:** logs are structured JSON with tool name, provider, model,
-  outcome, and latency only. Prompts are never logged. Provider error text is
-  scrubbed of configured secrets, bearer tokens, and URL query strings before
-  it reaches logs or clients.
+- **Spend guard:** output count, video duration, and video resolution are
+  capped, and video calls never wait. A video `duration` is always sent
+  explicitly (the caller's value or `min(5, cap)`), so a provider default can
+  never exceed the cap. Atlas Cloud fills the duration from the model schema
+  and re-checks it before submit. If the schema cannot be loaded and the caller
+  omitted `duration`, the call is rejected (fail closed). Replicate models that
+  name their length input something other than `duration` cannot be capped this
+  way. Use `MULTIX_MCP_ALLOWED_MODELS` to pin vetted models.
+- **Logging and redaction:** successful calls are logged at `info` with tool
+  name, provider, model, outcome, and latency only. Prompts are never logged as
+  a field. Failed calls are logged at `warn` (expected errors) or `error`, with
+  an extra `detail` field. It holds the provider or validation error message,
+  scrubbed of configured secrets, bearer tokens, and URL query strings, and
+  truncated. A provider error that echoes part of a prompt (for example a
+  moderation message) can therefore appear there. The same scrubbed text is
+  returned to the client.
 - **Stateless:** no sessions, no storage. Each request builds a fresh server.
 
-The Worker bundle is checked in CI to contain no `node:fs`,
-`node:child_process`, `commander`, `execa`, or CLI entry code.
+The Worker bundle is checked in CI to contain no `node:*` module, no bare Node
+built-in import (`fs`, `child_process`, `path`, …), no `commander` or `execa`,
+and no CLI entry code. The Worker source is also type-checked without Node
+typings.
+
+## Live smoke test
+
+CI uses mocked provider calls only. To check a real provider end to end, run
+the opt-in live test. It is skipped unless both `MULTIX_MCP_LIVE=1` and a
+Replicate token are set. It runs the Worker handler in-process: `tools/list`,
+then one single-output image. Add `MULTIX_MCP_LIVE_VIDEO=1` to also start a
+video, read its status, and cancel it. It spends a few cents and never prints
+credential values.
+
+```bash
+MULTIX_MCP_LIVE=1 REPLICATE_API_TOKEN=r8_... npm test --prefix worker -- live-smoke
+```

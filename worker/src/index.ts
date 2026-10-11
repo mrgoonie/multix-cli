@@ -1,7 +1,7 @@
 /**
  * multix remote MCP server for Cloudflare Workers.
  *
- *   GET  /health  public, minimal: { ok, version }
+ *   GET  /health  public, minimal: { ok: true }
  *   POST /mcp     MCP Streamable HTTP (stateless, JSON responses), bearer auth required
  *
  * The Worker never spawns the CLI and never touches a file system: tools call
@@ -50,6 +50,26 @@ function jsonRpcError(status: number, code: number, message: string): Response {
   return json(status, { jsonrpc: "2.0", error: { code, message }, id: null });
 }
 
+/** Request headers a browser MCP client sends on /mcp. */
+const CORS_ALLOW_HEADERS = "authorization, content-type, accept, mcp-protocol-version";
+
+/** CORS headers for an allowed browser Origin; empty for non-browser callers. */
+function corsHeaders(origin: string | null): Record<string, string> {
+  if (origin === null) return {};
+  return {
+    "access-control-allow-origin": origin,
+    "access-control-expose-headers": "www-authenticate, retry-after",
+    vary: "Origin",
+  };
+}
+
+function withHeaders(response: Response, extra: Record<string, string>): Response {
+  if (Object.keys(extra).length === 0) return response;
+  const headers = new Headers(response.headers);
+  for (const [k, v] of Object.entries(extra)) headers.set(k, v);
+  return new Response(response.body, { status: response.status, headers });
+}
+
 async function handleMcp(request: Request, env: Env, deps: HandlerDeps): Promise<Response> {
   // Fail closed: without a strong token there is no way to tell callers apart.
   const expected = env.MCP_AUTH_TOKEN?.trim();
@@ -61,7 +81,34 @@ async function handleMcp(request: Request, env: Env, deps: HandlerDeps): Promise
   if (!originAllowed(request, csv(env.MULTIX_MCP_ALLOWED_ORIGINS))) {
     return text(403, "Forbidden");
   }
+  // From here on the Origin is absent (non-browser client) or explicitly allowed.
+  const origin = request.headers.get("origin");
+  const cors = corsHeaders(origin);
 
+  // CORS preflight carries no Authorization header, so it is answered before auth,
+  // and only for an allowed Origin. It grants nothing: the real request still needs the token.
+  if (request.method === "OPTIONS" && origin !== null) {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        ...SECURITY_HEADERS,
+        ...cors,
+        "access-control-allow-methods": "POST, OPTIONS",
+        "access-control-allow-headers": CORS_ALLOW_HEADERS,
+        "access-control-max-age": "600",
+      },
+    });
+  }
+
+  return withHeaders(await handleAuthorizedMcp(request, env, deps, expected), cors);
+}
+
+async function handleAuthorizedMcp(
+  request: Request,
+  env: Env,
+  deps: HandlerDeps,
+  expected: string,
+): Promise<Response> {
   if (env.MCP_RATE_LIMITER) {
     const key = request.headers.get("cf-connecting-ip") ?? "unknown";
     const { success } = await env.MCP_RATE_LIMITER.limit({ key });
@@ -86,6 +133,11 @@ async function handleMcp(request: Request, env: Env, deps: HandlerDeps): Promise
       return jsonRpcError(413, -32600, "Request body too large");
     }
     return jsonRpcError(400, -32700, "Parse error");
+  }
+  // One HTTP request must be one JSON-RPC message, so the rate limit also bounds
+  // tool calls. Batching was removed from MCP in protocol 2025-06-18.
+  if (Array.isArray(parsedBody)) {
+    return jsonRpcError(400, -32600, "Batch requests are not supported");
   }
 
   const server = createMcpServer(env, { fetch: deps.fetch, version });
@@ -114,7 +166,7 @@ export async function handleRequest(
     if (request.method !== "GET" && request.method !== "HEAD") {
       return text(405, "Method Not Allowed", { allow: "GET, HEAD" });
     }
-    return json(200, { ok: true, version });
+    return json(200, { ok: true });
   }
   if (pathname === "/mcp") return handleMcp(request, env, deps);
   return text(404, "Not Found");

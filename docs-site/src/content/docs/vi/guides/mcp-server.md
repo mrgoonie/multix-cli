@@ -70,7 +70,7 @@ cd ..
 npm run deploy:mcp
 ```
 
-Kiểm tra server (endpoint này công khai và chỉ trả về `{ "ok": true, "version": "…" }`):
+Kiểm tra server (endpoint này công khai và chỉ trả về `{ "ok": true }`):
 
 ```bash
 curl https://multix-mcp.<your-subdomain>.workers.dev/health
@@ -123,13 +123,18 @@ Luồng video thường gặp: `multix_generate_video` → gọi lại
 | `MULTIX_MCP_ALLOWED_PROVIDERS` | tất cả | Allowlist provider, phân tách bằng dấu phẩy, ví dụ `replicate,heygen`. |
 | `MULTIX_MCP_ALLOWED_MODELS` | bất kỳ | Allowlist `provider:model`, ví dụ `replicate:black-forest-labs/flux-schnell,heygen:heygen-video-1`. Khi đặt, mọi model (kể cả model mặc định) phải có trong danh sách. |
 | `MULTIX_MCP_MAX_OUTPUTS` | `4` (tối đa 10) | Số `num_outputs` tối đa mỗi lần tạo ảnh. |
-| `MULTIX_MCP_MAX_VIDEO_SECONDS` | `10` (tối đa 15) | `duration` video tối đa. |
-| `MULTIX_MCP_ALLOWED_ORIGINS` | không có | Origin trình duyệt được phép gọi `/mcp`. Request có header `Origin` khác nhận `403`; request không có `Origin` (client phía server) được chấp nhận. |
+| `MULTIX_MCP_MAX_VIDEO_SECONDS` | `10` (tối đa 15) | `duration` video tối đa. Khi caller bỏ qua `duration`, server gửi rõ `min(5, giới hạn)` giây thay cho mặc định của provider. |
+| `MULTIX_MCP_ALLOWED_RESOLUTIONS` | `480p,720p,1080p` | Độ phân giải video caller được yêu cầu. Giá trị khác (ví dụ `4k`) bị từ chối trước khi gọi provider. Nếu bỏ qua resolution, model dùng mặc định của nó. |
+| `MULTIX_MCP_ALLOWED_ORIGINS` | không có | Origin trình duyệt được phép gọi `/mcp`. Request có header `Origin` khác nhận `403`; request không có `Origin` (client phía server) được chấp nhận. Origin trong danh sách nhận header CORS, và preflight `OPTIONS` của chúng được trả lời mà không cần token. Request thật vẫn cần bearer token. |
 
 Binding `MCP_RATE_LIMITER` trong `wrangler.jsonc` dùng
 [Workers Rate Limiting API](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/)
-cho phép 60 request mỗi phút cho mỗi IP client; request vượt mức nhận `429`.
-Điều chỉnh `simple.limit`/`simple.period` tại đó.
+cho phép khoảng 60 request mỗi phút cho mỗi IP client; request vượt mức nhận
+`429`. Giới hạn này chỉ gần đúng: Cloudflare đếm theo từng location và bộ đếm
+chỉ nhất quán dần, nên hãy xem nó là lớp chống lạm dụng, không phải ngân sách
+chính xác. Điều chỉnh `simple.limit`/`simple.period` tại đó. `namespace_id`
+phải là duy nhất trong tài khoản Cloudflare của bạn. Nếu Worker khác đã dùng
+`1001`, hãy chọn số nguyên khác, nếu không hai Worker sẽ dùng chung bộ đếm.
 
 ## Mô hình bảo mật
 
@@ -138,21 +143,45 @@ cho phép 60 request mỗi phút cho mỗi IP client; request vượt mức nh�
   `401` không kèm chi tiết.
 - **Kiểm tra input:** mọi tham số tool được kiểm tra bằng schema zod (prompt ≤
   4000 ký tự, ID chỉ gồm `[A-Za-z0-9_-]`, số có giới hạn). Body lớn hơn 64 KiB
-  bị từ chối với `413`.
+  bị từ chối với `413`. JSON-RPC batch (body dạng mảng) bị từ chối với `400` /
+  `-32600`, nên mỗi request HTTP luôn là một lần gọi tool và rate limit cũng
+  giới hạn số lần gọi.
 - **Chống SSRF:** `image_url` phải là `https://` trên cổng mặc định, với tên
   miền DNS công khai. Địa chỉ IP, credential trong URL, `localhost`, tên kiểu
   `.local`/`.internal` và host metadata của cloud bị từ chối trước khi gọi
   provider.
-- **Giới hạn chi phí:** số output và thời lượng video có giới hạn, giá trị mặc
-  định từ schema Atlas Cloud được kiểm tra lại trước khi submit, và lệnh tạo
-  video không bao giờ chờ. Không thể biết trước thời lượng mặc định của model
-  Replicate; hãy dùng `MULTIX_MCP_ALLOWED_MODELS` để chỉ cho phép model đã kiểm
-  duyệt.
-- **Che thông tin nhạy cảm:** log là JSON có cấu trúc, chỉ gồm tên tool,
-  provider, model, kết quả và độ trễ. Prompt không bao giờ được log. Nội dung
-  lỗi từ provider được loại bỏ secret đã cấu hình, bearer token và query string
-  của URL trước khi tới log hoặc client.
+- **Giới hạn chi phí:** số output, thời lượng video và độ phân giải video có
+  giới hạn, và lệnh tạo video không bao giờ chờ. `duration` của video luôn được
+  gửi rõ ràng (giá trị của caller hoặc `min(5, giới hạn)`), nên mặc định của
+  provider không thể vượt giới hạn. Atlas Cloud lấy thời lượng từ schema của
+  model và kiểm tra lại trước khi submit. Nếu không tải được schema và caller bỏ
+  qua `duration`, lệnh gọi bị từ chối (fail closed). Model Replicate đặt tên
+  input thời lượng khác `duration` thì không giới hạn được theo cách này. Hãy
+  dùng `MULTIX_MCP_ALLOWED_MODELS` để chỉ cho phép model đã kiểm duyệt.
+- **Log và che thông tin nhạy cảm:** lệnh gọi thành công được log ở mức `info`,
+  chỉ gồm tên tool, provider, model, kết quả và độ trễ. Prompt không bao giờ
+  được log thành một trường riêng. Lệnh gọi thất bại được log ở mức `warn` (lỗi
+  dự kiến) hoặc `error`, kèm thêm trường `detail`. Trường này chứa thông báo lỗi
+  từ provider hoặc từ bước kiểm tra input, đã loại bỏ secret đã cấu hình,
+  bearer token và query string của URL, và bị cắt ngắn. Vì vậy lỗi provider có
+  lặp lại một phần prompt (ví dụ thông báo kiểm duyệt nội dung) có thể xuất
+  hiện ở đó. Client nhận cùng nội dung đã làm sạch này.
 - **Stateless:** không session, không lưu trữ. Mỗi request tạo một server mới.
 
-Trong CI, bundle Worker được kiểm tra để bảo đảm không chứa `node:fs`,
-`node:child_process`, `commander`, `execa` hoặc mã entry của CLI.
+Trong CI, bundle Worker được kiểm tra để bảo đảm không chứa module `node:*`,
+không import module có sẵn của Node theo tên trần (`fs`, `child_process`,
+`path`, …), không có `commander` hay `execa`, và không có mã entry của CLI. Mã
+nguồn Worker cũng được kiểm tra kiểu mà không có typings của Node.
+
+## Kiểm thử live
+
+CI chỉ dùng lệnh gọi provider giả lập. Để kiểm tra provider thật từ đầu đến
+cuối, hãy chạy bài test live tùy chọn. Bài test bị bỏ qua trừ khi đặt cả
+`MULTIX_MCP_LIVE=1` và token Replicate. Nó chạy handler của Worker ngay trong
+tiến trình: `tools/list`, rồi tạo một ảnh duy nhất. Thêm
+`MULTIX_MCP_LIVE_VIDEO=1` để bắt đầu thêm một video, đọc trạng thái và hủy nó.
+Bài test tốn vài cent và không bao giờ in giá trị credential.
+
+```bash
+MULTIX_MCP_LIVE=1 REPLICATE_API_TOKEN=r8_... npm test --prefix worker -- live-smoke
+```
