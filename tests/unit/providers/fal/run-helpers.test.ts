@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ValidationError } from "../../../../src/core/errors.js";
+import { ProviderError, ValidationError } from "../../../../src/core/errors.js";
 import {
   downloadResultMedia,
   extractMediaUrls,
@@ -278,6 +278,99 @@ describe("submitAndWait", () => {
         pollIntervalMs: 5,
       }),
     ).rejects.toThrow(/req-1/);
+  });
+
+  /** Fetch mock whose submit returns the given follow-up URLs; records every keyed request. */
+  function mockSubmit(statusUrl: string, responseUrl: string) {
+    const calls: { url: string; auth: string | undefined }[] = [];
+    globalThis.fetch = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      const u = String(url);
+      const auth = (init?.headers as Record<string, string> | undefined)?.authorization;
+      calls.push({ url: u, auth });
+      if (u.endsWith("/fal-ai/flux/schnell")) {
+        return new Response(
+          JSON.stringify({ request_id: "req-1", status_url: statusUrl, response_url: responseUrl }),
+          { status: 200 },
+        );
+      }
+      if (u === statusUrl) {
+        return new Response(JSON.stringify({ status: "COMPLETED" }), { status: 200 });
+      }
+      if (u === responseUrl) {
+        return new Response(JSON.stringify({ images: [] }), { status: 200 });
+      }
+      throw new Error(`unexpected fetch: ${u}`);
+    }) as unknown as typeof fetch;
+    return calls;
+  }
+
+  const run = () =>
+    submitAndWait({
+      model: "fal-ai/flux/schnell",
+      input: { prompt: "x" },
+      logger: noopLogger,
+      pollIntervalMs: 5,
+    });
+
+  it("polls a trusted status_url/response_url with the key", async () => {
+    const calls = mockSubmit(STATUS_URL, RESPONSE_URL);
+    await run();
+    expect(calls.map((c) => c.url)).toEqual([
+      "https://queue.fal.run/fal-ai/flux/schnell",
+      STATUS_URL,
+      RESPONSE_URL,
+    ]);
+    expect(calls.every((c) => c.auth === "Key test-key")).toBe(true);
+  });
+
+  it("refuses a foreign status_url with a ProviderError and sends it nothing", async () => {
+    const calls = mockSubmit("https://evil.example/status?sig=secret", RESPONSE_URL);
+    const err = await run().catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ProviderError);
+    expect((err as Error).message).toContain("evil.example");
+    expect((err as Error).message).not.toContain("secret");
+    expect(calls.some((c) => c.url.includes("evil.example"))).toBe(false);
+    expect(calls).toHaveLength(1); // the submit only
+  });
+
+  it("refuses a foreign response_url before polling", async () => {
+    const calls = mockSubmit(STATUS_URL, "https://evil.example/result");
+    await expect(run()).rejects.toBeInstanceOf(ProviderError);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("refuses a plain-http status_url on a public host", async () => {
+    const calls = mockSubmit(
+      "http://queue.fal.run/fal-ai/flux/requests/req-1/status",
+      RESPONSE_URL,
+    );
+    await expect(run()).rejects.toThrow(/only https/);
+    expect(calls).toHaveLength(1);
+  });
+
+  describe("with a loopback FAL_BASE_URL", () => {
+    const originalBase = process.env.FAL_BASE_URL;
+    afterEach(() => {
+      if (originalBase === undefined) Reflect.deleteProperty(process.env, "FAL_BASE_URL");
+      else process.env.FAL_BASE_URL = originalBase;
+    });
+
+    it("allows http loopback follow-up URLs on the base host", async () => {
+      process.env.FAL_BASE_URL = "http://127.0.0.1:8787";
+      const calls = mockSubmit(
+        "http://127.0.0.1:8787/fal-ai/flux/requests/req-1/status",
+        "http://127.0.0.1:8787/fal-ai/flux/requests/req-1",
+      );
+      await run();
+      expect(calls).toHaveLength(3);
+    });
+
+    it("still refuses http loopback when the base URL is the public fal host", async () => {
+      process.env.FAL_BASE_URL = "https://queue.fal.run";
+      const calls = mockSubmit("http://127.0.0.1:8787/status", RESPONSE_URL);
+      await expect(run()).rejects.toBeInstanceOf(ProviderError);
+      expect(calls).toHaveLength(1);
+    });
   });
 });
 

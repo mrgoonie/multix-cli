@@ -61,6 +61,10 @@ export async function submitAndWait(opts: SubmitAndWaitOptions): Promise<SubmitA
   const submitRes = await client.post<FalSubmitResponse>(submitPath(model), input, logger);
   const requestId = submitRes.request_id;
   logger.debug(`request_id: ${requestId}`);
+  // Refuse both follow-up URLs up front (ProviderError, host only) so the key
+  // is never sent to an untrusted host and the error is not wrapped as a poll failure.
+  client.assertTrustedUrl(submitRes.status_url);
+  client.assertTrustedUrl(submitRes.response_url);
   logger.info("Polling for completion...");
 
   const waitTimeoutMs = opts.waitTimeoutMs ?? 480_000;

@@ -15,12 +15,49 @@
  */
 
 import { resolveKey } from "../../core/env-loader.js";
-import { ValidationError } from "../../core/errors.js";
+import { ProviderError, ValidationError } from "../../core/errors.js";
 import { ConfigError, HttpError } from "../../core/errors.js";
 import { httpJson } from "../../core/http-client.js";
 import type { Logger } from "../../core/logger.js";
 import { redactUrl } from "../../core/redact.js";
+import { checkUrlSafety, isLoopbackHost } from "../../core/url-safety.js";
 import { DEFAULT_FAL_BASE_URL } from "./models.js";
+
+/**
+ * fal's documented queue host. Submit responses point `status_url` /
+ * `response_url` here, so it stays trusted even when FAL_BASE_URL is a proxy.
+ * Kept to this exact host (no wildcard subdomains): it is the only host the
+ * queue API uses today.
+ */
+export const FAL_QUEUE_HOST = "queue.fal.run";
+
+/**
+ * Throws a ProviderError unless `url` is safe to receive the fal key: https
+ * and on the configured base URL's host or {@link FAL_QUEUE_HOST}. Plain http
+ * is accepted only for a loopback URL, and only when the base URL itself is
+ * loopback (local dev servers and tests). Messages name the host only, never
+ * the path or query string.
+ */
+export function assertTrustedFalUrl(url: string, baseUrl: string): void {
+  let base: URL | undefined;
+  try {
+    base = new URL(baseUrl);
+  } catch {
+    base = undefined;
+  }
+  const baseHost = base?.hostname.toLowerCase().replace(/\.$/, "");
+  const { host } = checkUrlSafety(url, {
+    provider: "fal",
+    allowLocalhostHttp: base !== undefined && isLoopbackHost(base.hostname),
+    action: "send the fal key to",
+  });
+  if (host !== FAL_QUEUE_HOST && host !== baseHost) {
+    throw new ProviderError(
+      `Refusing to send the fal key to ${host}: not the fal queue host or FAL_BASE_URL host`,
+      "fal",
+    );
+  }
+}
 
 export function requireFalKey(): string {
   const key = resolveKey("FAL_KEY");
@@ -51,11 +88,25 @@ export class FalClient {
   async request<T = unknown>(path: string, opts: FalRequestOptions = {}): Promise<T> {
     const base = this.baseUrl.replace(/\/$/, "");
     const suffix = path.startsWith("/") ? path : `/${path}`;
-    return this.requestAbsolute<T>(base + suffix, opts);
+    return this.send<T>(base + suffix, opts);
   }
 
-  /** Same auth/headers as `request`, but `url` is used verbatim (e.g. a status_url/response_url returned by submit). */
+  /**
+   * Same auth/headers as `request`, but `url` is used verbatim (e.g. a
+   * status_url/response_url returned by submit). The URL must pass
+   * {@link assertTrustedFalUrl} before the key is sent.
+   */
   async requestAbsolute<T = unknown>(url: string, opts: FalRequestOptions = {}): Promise<T> {
+    assertTrustedFalUrl(url, this.baseUrl);
+    return this.send<T>(url, opts);
+  }
+
+  /** Throws a ProviderError when `url` may not receive the key (see {@link assertTrustedFalUrl}). */
+  assertTrustedUrl(url: string): void {
+    assertTrustedFalUrl(url, this.baseUrl);
+  }
+
+  private async send<T>(url: string, opts: FalRequestOptions): Promise<T> {
     opts.logger?.debug(`${opts.method ?? "GET"} ${redactUrl(url)}`);
 
     return httpJson<T>({
