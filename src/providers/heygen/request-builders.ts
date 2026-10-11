@@ -390,6 +390,12 @@ export function buildModelVideoRequest(input: ModelVideoInput): CreateModelVideo
       `At most ${LIMITS.modelVideoReferenceAudioMax} reference audio files`,
     );
   }
+  const refTotal = refImages.length + refVideos.length + refAudio.length;
+  if (refTotal > LIMITS.modelVideoReferenceTotalMax) {
+    throw new ValidationError(
+      `At most ${LIMITS.modelVideoReferenceTotalMax} reference files in total (got ${refTotal})`,
+    );
+  }
 
   const body: CreateModelVideoRequest = { model: HEYGEN_VIDEO_MODEL, mode, prompt };
   const duration = numberInRange(

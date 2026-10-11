@@ -7,6 +7,7 @@ import {
   assertJobSucceeded,
   getJobState,
   resumeCommand,
+  videoState,
   waitForJob,
 } from "../../../../src/providers/heygen/jobs.js";
 import { type FakeReply, fakeHeygen, noSleep } from "./fake-heygen.js";
@@ -71,7 +72,7 @@ describe("status by type", () => {
 });
 
 describe("Video Agent session -> video lifecycle", () => {
-  it("follows the session to its video and then polls only the video", async () => {
+  it("follows the session to its video, re-reading the session each poll", async () => {
     const { c, fake } = client({
       "GET /v3/video-agents/s1": [
         { body: { data: { session_id: "s1", status: "thinking" } } },
@@ -104,10 +105,59 @@ describe("Video Agent session -> video lifecycle", () => {
       succeeded: true,
       outputUrl: "https://f.test/v9.mp4?sig=abc",
     });
-    // Session read twice (until video_id appears), then cached.
-    expect(fake.callsTo("GET /v3/video-agents/s1")).toHaveLength(2);
+    // One session read per poll; the video is read once a video_id exists.
+    expect(fake.callsTo("GET /v3/video-agents/s1")).toHaveLength(3);
     expect(fake.callsTo("GET /v3/videos/v9")).toHaveLength(2);
     expect(onPoll).toHaveBeenCalledTimes(3);
+  });
+
+  it("ends the wait when the session fails after its video was assigned", async () => {
+    const { c, fake } = client({
+      "GET /v3/video-agents/s2": [
+        { body: { data: { session_id: "s2", status: "generating", video_id: "v2" } } },
+        {
+          body: {
+            data: {
+              session_id: "s2",
+              status: "failed",
+              video_id: "v2",
+              error: { code: "paid_tier_quota_exceeded", message: "Quota exceeded" },
+            },
+          },
+        },
+      ],
+      // The video never leaves processing; only the session reports the failure.
+      "GET /v3/videos/v2": { body: { data: { id: "v2", status: "processing" } } },
+    });
+    const state = await waitForJob(c, "agent", "s2", fast);
+    expect(state).toMatchObject({
+      done: true,
+      succeeded: false,
+      failureCode: "paid_tier_quota_exceeded",
+      failureMessage: "Quota exceeded",
+    });
+    expect(fake.callsTo("GET /v3/video-agents/s2")).toHaveLength(2);
+  });
+
+  it("keeps waiting when the session hit context_limit_exceeded but the video renders", async () => {
+    const { c } = client({
+      "GET /v3/video-agents/s3": {
+        body: {
+          data: {
+            session_id: "s3",
+            status: "failed",
+            video_id: "v3",
+            error: { code: "context_limit_exceeded", message: "chat full" },
+          },
+        },
+      },
+      "GET /v3/videos/v3": [
+        { body: { data: { id: "v3", status: "processing" } } },
+        { body: { data: { id: "v3", status: "completed", video_url: "https://f.test/v3.mp4" } } },
+      ],
+    });
+    const state = await waitForJob(c, "agent", "s3", fast);
+    expect(state.succeeded).toBe(true);
   });
 
   it("treats waiting_for_input before a video as a terminal failure", () => {
@@ -145,6 +195,52 @@ describe("Video Agent session -> video lifecycle", () => {
       { id: "v", status: "processing" } as never,
     );
     expect(bad).toMatchObject({ done: true, succeeded: false, failureCode: "render_failed" });
+  });
+});
+
+describe("burned-in captions", () => {
+  const both = {
+    id: "v1",
+    status: "completed",
+    video_url: "https://f.test/clean.mp4",
+    captioned_video_url: "https://f.test/burned.mp4",
+  };
+
+  it("delivers captioned_video_url when burn captions were requested", () => {
+    expect(videoState(both as never).outputUrl).toBe("https://f.test/clean.mp4");
+    const s = videoState(both as never, "video", "v1", { burnCaptions: true });
+    expect(s).toMatchObject({ succeeded: true, outputUrl: "https://f.test/burned.mp4" });
+  });
+
+  it("fails clearly when the captioned render is missing", () => {
+    const s = videoState({ ...both, captioned_video_url: undefined } as never, "video", "v1", {
+      burnCaptions: true,
+    });
+    expect(s).toMatchObject({
+      done: true,
+      succeeded: false,
+      failureCode: "captioned_video_missing",
+    });
+    expect(s.outputUrl).toBeUndefined();
+  });
+
+  it("keeps polling while the video is still rendering", () => {
+    const s = videoState({ id: "v1", status: "processing" } as never, "video", "v1", {
+      burnCaptions: true,
+    });
+    expect(s.done).toBe(false);
+  });
+});
+
+describe("resumeCommand", () => {
+  it("quotes IDs that are not shell-safe and carries --burn-captions", () => {
+    expect(resumeCommand("video", "abc_123-x")).toBe(
+      "multix heygen status abc_123-x --type video --wait --download",
+    );
+    expect(resumeCommand("video", "a b;rm -rf'x")).toBe(
+      "multix heygen status 'a b;rm -rf'\\''x' --type video --wait --download",
+    );
+    expect(resumeCommand("video", "v1", { burnCaptions: true })).toMatch(/--burn-captions$/);
   });
 });
 

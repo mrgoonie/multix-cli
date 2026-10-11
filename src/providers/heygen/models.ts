@@ -48,6 +48,8 @@ export const LIMITS = {
   modelVideoReferenceImagesMax: 9,
   modelVideoReferenceVideosMax: 3,
   modelVideoReferenceAudioMax: 3,
+  /** Combined cap across reference images, videos and audio. */
+  modelVideoReferenceTotalMax: 12,
   avatarListMax: 50,
   voiceListMax: 100,
   stylesListMax: 100,

@@ -9,6 +9,7 @@
 
 import { HttpError, ProviderError, ValidationError } from "../../core/errors.js";
 import { type FetchLike, fetchJson, httpErrorFromResponse } from "../../core/fetch-json.js";
+import { redactUrl } from "../../core/redact.js";
 import { HeygenApiError, toHeygenApiError } from "./heygen-errors.js";
 import { DEFAULT_HEYGEN_BASE_URL, LIMITS } from "./models.js";
 import type {
@@ -65,6 +66,13 @@ export interface HeygenRequestOptions {
    * `true` generates a UUID once for this call; a string is used verbatim.
    */
   idempotencyKey?: boolean | string;
+  /** Per-request timeout, capped at the client's timeout. Polling passes the remaining wait. */
+  timeoutMs?: number;
+}
+
+/** Per-call options for status getters. */
+export interface HeygenCallOptions {
+  timeoutMs?: number;
 }
 
 /** Upload input. Bytes or a Blob only — reading local files is the caller's job. */
@@ -77,11 +85,44 @@ export interface HeygenUploadInput {
 const MAX_RETRY_WAIT_MS = 60_000;
 const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-/** `encodeURIComponent` for path segments; rejects empty IDs early. */
-function seg(id: string, label: string): string {
+/**
+ * `encodeURIComponent` for path segments. Rejects non-strings, empty IDs and
+ * dot segments (URL normalisation would turn `/v3/videos/..` into `/v3/`).
+ */
+function seg(id: unknown, label: string): string {
+  if (typeof id !== "string") throw new ValidationError(`${label} must be a string`);
   const trimmed = id.trim();
   if (!trimmed) throw new ValidationError(`${label} must not be empty`);
+  if (trimmed === "." || trimmed === "..") {
+    throw new ValidationError(`Invalid ${label}: "${trimmed}"`);
+  }
   return encodeURIComponent(trimmed);
+}
+
+/** JSON of a response payload with URL query strings redacted, for error messages. */
+function describePayload(data: unknown): string {
+  const text = JSON.stringify(data, (_k, v) =>
+    typeof v === "string" && /^https?:\/\//i.test(v) ? redactUrl(v) : v,
+  );
+  return (text ?? String(data)).slice(0, 500);
+}
+
+/**
+ * Require the documented job ID in a create response. A 2xx without it means a
+ * paid job may exist that cannot be tracked, so surface the raw payload.
+ */
+function requireJobId<T>(data: T, field: keyof T & string, path: string): T {
+  const value = (data as Record<string, unknown> | null)?.[field];
+  const ok = Array.isArray(value)
+    ? value.length > 0 && value.every((v) => typeof v === "string" && v.length > 0)
+    : typeof value === "string" && value.length > 0;
+  if (!ok) {
+    throw new ProviderError(
+      `HeyGen ${path} returned no ${field}; a job may still have been created, so check the HeyGen dashboard. Response: ${describePayload(data)}`,
+      "heygen",
+    );
+  }
+  return data;
 }
 
 export class HeygenClient {
@@ -147,7 +188,7 @@ export class HeygenClient {
           method,
           headers: this.headers(key),
           body: opts.body,
-          timeoutMs: this.timeoutMs,
+          timeoutMs: Math.max(1, Math.min(this.timeoutMs, opts.timeoutMs ?? this.timeoutMs)),
           fetch: this.fetchImpl,
         });
       } catch (error) {
@@ -212,12 +253,17 @@ export class HeygenClient {
   // ── Video Agent ───────────────────────────────────────────────────────
 
   /** POST /v3/video-agents. No Idempotency-Key: the endpoint does not document one. */
-  createVideoAgent(body: CreateVideoAgentRequest): Promise<CreateVideoAgentResponse> {
-    return this.request("/v3/video-agents", { method: "POST", body });
+  async createVideoAgent(body: CreateVideoAgentRequest): Promise<CreateVideoAgentResponse> {
+    const path = "/v3/video-agents";
+    const data = await this.request<CreateVideoAgentResponse>(path, { method: "POST", body });
+    return requireJobId(data, "session_id", path);
   }
 
-  getVideoAgentSession(sessionId: string): Promise<VideoAgentSession> {
-    return this.request(`/v3/video-agents/${seg(sessionId, "session id")}`);
+  async getVideoAgentSession(
+    sessionId: string,
+    opts: HeygenCallOptions = {},
+  ): Promise<VideoAgentSession> {
+    return this.request(`/v3/video-agents/${seg(sessionId, "session id")}`, opts);
   }
 
   listVideoAgentStyles(
@@ -228,41 +274,55 @@ export class HeygenClient {
 
   // ── Videos ────────────────────────────────────────────────────────────
 
-  createVideo(
+  async createVideo(
     body: CreateAvatarVideoRequest | Record<string, unknown>,
     idempotencyKey: boolean | string = true,
   ): Promise<CreateVideoResponse> {
-    return this.request("/v3/videos", { method: "POST", body, idempotencyKey });
-  }
-
-  getVideo(videoId: string): Promise<HeygenVideoDetail> {
-    return this.request(`/v3/videos/${seg(videoId, "video id")}`);
-  }
-
-  /** POST /v3/templates/{id}. Returns the created video's `VideoDetail`. */
-  generateFromTemplate(
-    templateId: string,
-    body: Record<string, unknown>,
-    idempotencyKey: boolean | string = true,
-  ): Promise<HeygenVideoDetail> {
-    return this.request(`/v3/templates/${seg(templateId, "template id")}`, {
+    const path = "/v3/videos";
+    const data = await this.request<CreateVideoResponse>(path, {
       method: "POST",
       body,
       idempotencyKey,
     });
+    return requireJobId(data, "video_id", path);
+  }
+
+  async getVideo(videoId: string, opts: HeygenCallOptions = {}): Promise<HeygenVideoDetail> {
+    return this.request(`/v3/videos/${seg(videoId, "video id")}`, opts);
+  }
+
+  /** POST /v3/templates/{id}. Returns the created video's `VideoDetail`. */
+  async generateFromTemplate(
+    templateId: string,
+    body: Record<string, unknown>,
+    idempotencyKey: boolean | string = true,
+  ): Promise<HeygenVideoDetail> {
+    const path = `/v3/templates/${seg(templateId, "template id")}`;
+    const data = await this.request<HeygenVideoDetail>(path, {
+      method: "POST",
+      body,
+      idempotencyKey,
+    });
+    return requireJobId(data, "id", path);
   }
 
   // ── HeyGen Video model ────────────────────────────────────────────────
 
-  createModelVideo(
+  async createModelVideo(
     body: CreateModelVideoRequest,
     idempotencyKey: boolean | string = true,
   ): Promise<CreateModelVideoResponse> {
-    return this.request("/v3/models/videos", { method: "POST", body, idempotencyKey });
+    const path = "/v3/models/videos";
+    const data = await this.request<CreateModelVideoResponse>(path, {
+      method: "POST",
+      body,
+      idempotencyKey,
+    });
+    return requireJobId(data, "video_id", path);
   }
 
-  getModelVideo(videoId: string): Promise<HeygenModelVideo> {
-    return this.request(`/v3/models/videos/${seg(videoId, "video id")}`);
+  async getModelVideo(videoId: string, opts: HeygenCallOptions = {}): Promise<HeygenModelVideo> {
+    return this.request(`/v3/models/videos/${seg(videoId, "video id")}`, opts);
   }
 
   // ── Catalog ───────────────────────────────────────────────────────────
@@ -288,15 +348,24 @@ export class HeygenClient {
 
   // ── Translation & lipsync ─────────────────────────────────────────────
 
-  createVideoTranslation(
+  async createVideoTranslation(
     body: CreateVideoTranslationRequest,
     idempotencyKey: boolean | string = true,
   ): Promise<CreateVideoTranslationResponse> {
-    return this.request("/v3/video-translations", { method: "POST", body, idempotencyKey });
+    const path = "/v3/video-translations";
+    const data = await this.request<CreateVideoTranslationResponse>(path, {
+      method: "POST",
+      body,
+      idempotencyKey,
+    });
+    return requireJobId(data, "video_translation_ids", path);
   }
 
-  getVideoTranslation(id: string): Promise<HeygenVideoTranslation> {
-    return this.request(`/v3/video-translations/${seg(id, "video translation id")}`);
+  async getVideoTranslation(
+    id: string,
+    opts: HeygenCallOptions = {},
+  ): Promise<HeygenVideoTranslation> {
+    return this.request(`/v3/video-translations/${seg(id, "video translation id")}`, opts);
   }
 
   async listTranslationLanguages(): Promise<string[]> {
@@ -307,15 +376,21 @@ export class HeygenClient {
     return data.languages.filter((l): l is string => typeof l === "string");
   }
 
-  createLipsync(
+  async createLipsync(
     body: CreateLipsyncRequest,
     idempotencyKey: boolean | string = true,
   ): Promise<CreateLipsyncResponse> {
-    return this.request("/v3/lipsyncs", { method: "POST", body, idempotencyKey });
+    const path = "/v3/lipsyncs";
+    const data = await this.request<CreateLipsyncResponse>(path, {
+      method: "POST",
+      body,
+      idempotencyKey,
+    });
+    return requireJobId(data, "lipsync_id", path);
   }
 
-  getLipsync(id: string): Promise<HeygenLipsync> {
-    return this.request(`/v3/lipsyncs/${seg(id, "lipsync id")}`);
+  async getLipsync(id: string, opts: HeygenCallOptions = {}): Promise<HeygenLipsync> {
+    return this.request(`/v3/lipsyncs/${seg(id, "lipsync id")}`, opts);
   }
 
   // ── Assets ────────────────────────────────────────────────────────────
@@ -357,8 +432,17 @@ export class HeygenClient {
         continue;
       }
       if (response.ok) {
-        const json = (await response.json()) as Record<string, unknown>;
-        return unwrapData<UploadAssetResponse>(json, "/v3/assets");
+        let json: unknown;
+        try {
+          json = await response.json();
+        } catch {
+          throw new ProviderError(
+            `HeyGen /v3/assets returned a non-JSON response (HTTP ${response.status}) for ${input.filename}`,
+            "heygen",
+          );
+        }
+        const data = unwrapData<UploadAssetResponse>(json, "/v3/assets");
+        return requireJobId(data, "asset_id", "/v3/assets");
       }
       const err = toHeygenApiError(await httpErrorFromResponse(response, url));
       const wait = attempt < this.maxAttempts ? this.retryDelay(err, key, attempt) : undefined;

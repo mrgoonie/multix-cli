@@ -50,8 +50,34 @@ describe("HeygenClient construction and auth", () => {
 
   it("rejects empty path IDs before any request", async () => {
     const { c, fake } = client({});
-    await expect(async () => c.getVideo(" ")).rejects.toThrow(ValidationError);
+    // Called directly (not wrapped in an async arrow): a synchronous throw would fail this.
+    const pending = c.getVideo(" ");
+    expect(pending).toBeInstanceOf(Promise);
+    await expect(pending).rejects.toThrow(ValidationError);
+    await expect(c.getVideoAgentSession(undefined as unknown as string)).rejects.toThrow(
+      /must be a string/,
+    );
+    await expect(c.getLipsync("..")).rejects.toThrow(/Invalid lipsync id/);
+    await expect(c.getModelVideo(".")).rejects.toThrow(ValidationError);
+    await expect(c.getVideoTranslation("")).rejects.toThrow(ValidationError);
+    await expect(c.generateFromTemplate(" ", {})).rejects.toThrow(ValidationError);
     expect(fake.calls).toHaveLength(0);
+  });
+
+  it("caps a request at the caller's remaining wait", async () => {
+    // A fetch that never settles unless its abort signal fires.
+    const c = new HeygenClient({
+      apiKey: KEY,
+      baseUrl: BASE,
+      timeoutMs: 120_000,
+      fetch: (_url, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
+        }),
+    });
+    const started = Date.now();
+    await expect(c.getVideo("v1", { timeoutMs: 30 })).rejects.toBeInstanceOf(HeygenApiError);
+    expect(Date.now() - started).toBeLessThan(5_000);
   });
 });
 
@@ -94,6 +120,32 @@ describe("Idempotency-Key", () => {
     await c.generateFromTemplate("tpl", { variables: {} });
     await c.createModelVideo({ model: "heygen-video-1", mode: "text_to_video", prompt: "x" });
     for (const call of fake.calls) expect(call.headers["idempotency-key"]).toMatch(/^idem-/);
+  });
+});
+
+describe("create responses must carry a job ID", () => {
+  it("rejects a 2xx create without the documented ID and shows the redacted payload", async () => {
+    const { c } = client({
+      "POST /v3/videos": {
+        body: { data: { status: "waiting", preview: "https://f.test/p.mp4?Signature=SECRET" } },
+      },
+      "POST /v3/video-translations": { body: { data: { video_translation_ids: [] } } },
+      "POST /v3/video-agents": { body: { data: { session_id: "", status: "thinking" } } },
+      "POST /v3/templates/t1": { body: { data: { status: "pending" } } },
+    });
+    const err = await c.createVideo({ type: "avatar" }).catch((e) => e);
+    expect(err).toBeInstanceOf(ProviderError);
+    expect(err.message).toMatch(/returned no video_id; a job may still have been created/);
+    expect(err.message).toContain('"status":"waiting"');
+    expect(err.message).not.toContain("SECRET");
+    await expect(
+      c.createVideoTranslation({
+        video: { type: "url", url: "https://x.test/a.mp4" },
+        output_languages: ["Spanish"],
+      }),
+    ).rejects.toThrow(/video_translation_ids/);
+    await expect(c.createVideoAgent({ prompt: "p" })).rejects.toThrow(/session_id/);
+    await expect(c.generateFromTemplate("t1", { variables: {} })).rejects.toThrow(/no id/);
   });
 });
 
@@ -290,6 +342,15 @@ describe("uploadAsset", () => {
       mimeType: "audio/mpeg",
     });
     expect(res.asset_id).toBe("as2");
+  });
+
+  it("turns a non-JSON 2xx upload response into a clear provider error", async () => {
+    const { c } = client({ "POST /v3/assets": { raw: "<html>gateway</html>" } });
+    const err = await c
+      .uploadAsset({ data: new Uint8Array([1]), filename: "a.png", mimeType: "image/png" })
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(ProviderError);
+    expect(err.message).toMatch(/non-JSON response.*a\.png/);
   });
 
   it("rejects empty and oversized files before uploading", async () => {

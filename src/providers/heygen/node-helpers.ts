@@ -17,7 +17,13 @@ import { redactUrl } from "../../core/redact.js";
 import { maybeDownloadThumb } from "../../core/video-thumb.js";
 import { HeygenClient } from "./client.js";
 import { HeygenJobFailedError } from "./heygen-errors.js";
-import { type HeygenJobState, assertJobSucceeded, resumeCommand, waitForJob } from "./jobs.js";
+import {
+  DEFAULT_POLL_INTERVAL_MS,
+  type HeygenJobState,
+  assertJobSucceeded,
+  resumeCommand,
+  waitForJob,
+} from "./jobs.js";
 import {
   ASSET_MIME_BY_EXT,
   DEFAULT_HEYGEN_BASE_URL,
@@ -132,6 +138,8 @@ export interface WaitFlowOptions {
   captions?: boolean;
   json?: boolean;
   verbose?: boolean;
+  /** Deliver the burned-in caption render (`captioned_video_url`). */
+  burnCaptions?: boolean;
 }
 
 export const DEFAULT_WAIT_TIMEOUT_MS = 1_800_000;
@@ -141,7 +149,11 @@ export function addWaitOptions(cmd: Command, defaultTimeoutMs = DEFAULT_WAIT_TIM
   return cmd
     .option("--async", "Return job IDs and a resume command immediately (no polling)")
     .option("--wait-timeout <ms>", "Max time to wait for completion", String(defaultTimeoutMs))
-    .option("--poll-interval <ms>", "Initial poll interval (backs off to 30s)", "5000")
+    .option(
+      "--poll-interval <ms>",
+      "Initial poll interval (backs off to 30s)",
+      String(DEFAULT_POLL_INTERVAL_MS),
+    )
     .option("--no-download", "Do not download outputs; print output URLs instead")
     .option("--output <path>", "Output file (or directory when several outputs are produced)")
     .option("--captions", "Also download the caption/subtitle file when one is available")
@@ -171,8 +183,10 @@ function safeSlug(value: string): string {
 }
 
 /**
- * Download one signed output URL to `dest`, removing partial files and
- * explaining expired-URL failures without echoing the signed query string.
+ * Download one signed output URL to `dest`. The file is written to a sibling
+ * temp file and renamed into place, so a failed download never touches an
+ * existing file at `dest`. Expired-URL failures are explained without echoing
+ * the signed query string.
  */
 export async function downloadOutput(
   url: string | undefined,
@@ -185,10 +199,12 @@ export async function downloadOutput(
   if (!/^https?:\/\//i.test(url)) {
     throw new ValidationError(`HeyGen returned an invalid output URL (${redactUrl(url)})`);
   }
+  const tmp = `${dest}.${process.pid}-${Date.now()}.part`;
   try {
-    await downloadFile(url, dest, 600_000);
+    await downloadFile(url, tmp, 600_000);
+    fs.renameSync(tmp, dest);
   } catch (e) {
-    fs.rmSync(dest, { force: true });
+    fs.rmSync(tmp, { force: true });
     const status = e instanceof HttpError ? e.status : 0;
     const expired = status === 403 || status === 404 || status === 410;
     const reason = e instanceof Error ? e.message : String(e);
@@ -233,6 +249,7 @@ export function summarizeState(state: HeygenJobState): Record<string, unknown> {
   if (state.progress !== undefined) out.progress = state.progress;
   if (state.outputLanguage) out.output_language = state.outputLanguage;
   if (state.outputUrl) out.output_url = redactUrl(state.outputUrl);
+  if (state.captionedVideoUrl) out.captioned_video_url = redactUrl(state.captionedVideoUrl);
   if (state.failureCode) out.failure_code = state.failureCode;
   if (state.failureMessage) out.failure_message = state.failureMessage;
   return out;
@@ -241,60 +258,95 @@ export function summarizeState(state: HeygenJobState): Record<string, unknown> {
 export interface FinishedJob {
   state: HeygenJobState;
   files: string[];
+  /**
+   * Usable (unredacted) URLs, set only for `--no-download`, whose whole purpose
+   * is to hand the caller a fetchable URL.
+   */
+  urls?: { output_url: string; caption_url?: string };
 }
 
-/** Download outputs (or print URLs) for completed states. */
+export interface DeliveryResult {
+  finished: FinishedJob[];
+  /** One message per job whose delivery failed; other jobs are still delivered. */
+  failures: string[];
+}
+
+async function deliverOne(
+  state: HeygenJobState,
+  opts: WaitFlowOptions,
+  count: number,
+  logger: Logger,
+  files: string[],
+): Promise<FinishedJob> {
+  const hint = `Refresh with: ${resumeCommand(state.kind, state.id, opts)}`;
+  if (opts.download === false) {
+    if (!state.outputUrl) {
+      throw new ValidationError(`No output URL for ${state.kind} ${state.id}. ${hint}`);
+    }
+    if (!opts.json) console.log(state.outputUrl);
+    const urls = {
+      output_url: state.outputUrl,
+      ...(state.captionUrl ? { caption_url: state.captionUrl } : {}),
+    };
+    return { state, files, urls };
+  }
+  const ext = inferExtension(state.outputUrl ?? "", "mp4");
+  const dest = outputPathFor(state, ext, opts.output, count);
+  await downloadOutput(state.outputUrl, dest, hint);
+  logger.success(`Saved ${dest}`);
+  files.push(dest);
+
+  if (opts.captions && state.captionUrl) {
+    const capExt = inferExtension(state.captionUrl, "srt");
+    const capDest = path.join(
+      path.dirname(dest),
+      `${path.basename(dest, path.extname(dest))}.${capExt}`,
+    );
+    await downloadOutput(state.captionUrl, capDest, hint);
+    logger.success(`Saved ${capDest}`);
+    files.push(capDest);
+  } else if (opts.captions) {
+    logger.warn(`No caption file available for ${state.kind} ${state.id}`);
+  }
+
+  if (state.kind === "video" || state.kind === "agent") {
+    const thumb = await maybeDownloadThumb(state.raw, dest, {
+      skip: opts.thumb === false,
+      logger,
+    });
+    if (thumb) files.push(thumb);
+  }
+  return { state, files };
+}
+
+/**
+ * Download outputs (or print URLs) for completed states. A failure on one job
+ * is recorded and the remaining jobs are still delivered.
+ */
 export async function deliverOutputs(
   states: HeygenJobState[],
   opts: WaitFlowOptions,
   logger: Logger,
-): Promise<FinishedJob[]> {
-  const results: FinishedJob[] = [];
+): Promise<DeliveryResult> {
+  const finished: FinishedJob[] = [];
+  const failures: string[] = [];
   for (const state of states) {
-    const hint = `Refresh with: ${resumeCommand(state.kind, state.id)}`;
-    if (opts.download === false) {
-      if (!state.outputUrl)
-        throw new ValidationError(`No output URL for ${state.kind} ${state.id}. ${hint}`);
-      if (!opts.json) console.log(state.outputUrl);
-      results.push({ state, files: [] });
-      continue;
+    const files: string[] = [];
+    try {
+      finished.push(await deliverOne(state, opts, states.length, logger, files));
+    } catch (e) {
+      failures.push(`${state.kind} ${state.id}: ${e instanceof Error ? e.message : String(e)}`);
+      if (files.length > 0) finished.push({ state, files });
     }
-    const ext = inferExtension(state.outputUrl ?? "", "mp4");
-    const dest = outputPathFor(state, ext, opts.output, states.length);
-    await downloadOutput(state.outputUrl, dest, hint);
-    logger.success(`Saved ${dest}`);
-    const files = [dest];
-
-    if (opts.captions && state.captionUrl) {
-      const capExt = inferExtension(state.captionUrl, "srt");
-      const capDest = path.join(
-        path.dirname(dest),
-        `${path.basename(dest, path.extname(dest))}.${capExt}`,
-      );
-      await downloadOutput(state.captionUrl, capDest, hint);
-      logger.success(`Saved ${capDest}`);
-      files.push(capDest);
-    } else if (opts.captions) {
-      logger.warn(`No caption file available for ${state.kind} ${state.id}`);
-    }
-
-    if (state.kind === "video" || state.kind === "agent") {
-      const thumb = await maybeDownloadThumb(state.raw, dest, {
-        skip: opts.thumb === false,
-        logger,
-      });
-      if (thumb) files.push(thumb);
-    }
-    results.push({ state, files });
   }
-  return results;
+  return { finished, failures };
 }
 
 /** Print the final summary for finished jobs. */
 export function printFinished(results: FinishedJob[], opts: WaitFlowOptions): void {
   if (opts.json) {
-    const jobs = results.map((r) => ({ ...summarizeState(r.state), files: r.files }));
-    console.log(JSON.stringify(jobs.length === 1 ? jobs[0] : jobs, null, 2));
+    const jobs = results.map((r) => ({ ...summarizeState(r.state), ...r.urls, files: r.files }));
+    if (jobs.length > 0) console.log(JSON.stringify(jobs.length === 1 ? jobs[0] : jobs, null, 2));
     return;
   }
   for (const r of results) {
@@ -309,20 +361,21 @@ export function printSubmitted(kind: HeygenJobKind, ids: string[], opts: WaitFlo
       kind,
       id,
       status: "submitted",
-      resume: resumeCommand(kind, id),
+      resume: resumeCommand(kind, id, opts),
     }));
     console.log(JSON.stringify(jobs.length === 1 ? jobs[0] : jobs, null, 2));
     return;
   }
   for (const id of ids) {
     console.log(`Submitted ${kind} job: ${id}`);
-    console.log(`  Resume with: ${resumeCommand(kind, id)}`);
+    console.log(`  Resume with: ${resumeCommand(kind, id, opts)}`);
   }
 }
 
 /**
  * Shared post-submit flow: `--async` prints IDs; otherwise wait for every job,
- * fail non-zero if any job failed, then download outputs.
+ * deliver every success, print the summary, and fail non-zero if any job or
+ * download failed.
  */
 export async function completeJobs(
   client: HeygenClient,
@@ -331,13 +384,19 @@ export async function completeJobs(
   opts: WaitFlowOptions,
   logger: Logger,
 ): Promise<FinishedJob[]> {
-  if (ids.length === 0) throw new ValidationError("HeyGen returned no job IDs");
+  if (!Array.isArray(ids) || ids.length === 0 || ids.some((id) => typeof id !== "string" || !id)) {
+    throw new ValidationError(`HeyGen returned no usable ${kind} job ID`);
+  }
   if (opts.async) {
     printSubmitted(kind, ids, opts);
     return [];
   }
   const timeoutMs = parsePositiveInt(opts.waitTimeout, "--wait-timeout", DEFAULT_WAIT_TIMEOUT_MS);
-  const intervalMs = parsePositiveInt(opts.pollInterval, "--poll-interval", 5000);
+  const intervalMs = parsePositiveInt(
+    opts.pollInterval,
+    "--poll-interval",
+    DEFAULT_POLL_INTERVAL_MS,
+  );
   logger.info(
     `Waiting for ${ids.length > 1 ? `${ids.length} ${kind} jobs` : `${kind} ${ids[0]}`}...`,
   );
@@ -348,7 +407,8 @@ export async function completeJobs(
         timeoutMs,
         intervalMs,
         maxIntervalMs: Math.max(intervalMs, 30_000),
-        resumeHint: `Resume with: ${resumeCommand(kind, id)}`,
+        burnCaptions: opts.burnCaptions,
+        resumeHint: `Resume with: ${resumeCommand(kind, id, opts)}`,
         onPoll: (s, attempt) =>
           logger.debug(
             `${kind} ${id} poll #${attempt}: ${s.status}${s.videoId ? ` (video ${s.videoId})` : ""}`,
@@ -376,10 +436,16 @@ export async function completeJobs(
     }
   }
 
-  const finished = states.length > 0 ? await deliverOutputs(states, opts, logger) : [];
-  printFinished(finished, opts);
+  const delivery =
+    states.length > 0 ? await deliverOutputs(states, opts, logger) : { finished: [], failures: [] };
+  failures.push(...delivery.failures);
+  printFinished(delivery.finished, opts);
   if (failures.length > 0) {
-    throw new HeygenJobFailedError(failures.join("\n"));
+    const total = ids.length;
+    const ok = total - failures.length;
+    const header =
+      total > 1 ? `${ok} of ${total} ${kind} jobs delivered; ${failures.length} failed:\n` : "";
+    throw new HeygenJobFailedError(`${header}${failures.join("\n")}`);
   }
-  return finished;
+  return delivery.finished;
 }

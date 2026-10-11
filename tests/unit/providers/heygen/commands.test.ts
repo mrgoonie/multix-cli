@@ -361,6 +361,150 @@ describe("heygen status", () => {
   });
 });
 
+describe("heygen delivery safety", () => {
+  const completed = (extra: Record<string, unknown>) => ({
+    body: { data: { id: "v7", status: "completed", ...extra } },
+  });
+
+  it("downloads captioned_video_url when --burn-captions is set", async () => {
+    useApi({
+      "POST /v3/videos": { body: { data: { video_id: "v7", status: "waiting" } } },
+      "GET /v3/videos/v7": completed({
+        video_url: `${FILES}/out/clean.mp4`,
+        captioned_video_url: `${FILES}/out/burned.mp4`,
+      }),
+      "GET /out/burned.mp4": { raw: "BURNED" },
+      "GET /out/clean.mp4": { raw: "CLEAN" },
+    });
+    const dest = path.join(tmp, "out.mp4");
+    await run(
+      "video",
+      "Hello",
+      "--avatar",
+      "look1",
+      "--burn-captions",
+      "--output",
+      dest,
+      "--poll-interval",
+      "1",
+      "--no-thumb",
+    );
+    expect(fs.readFileSync(dest, "utf8")).toBe("BURNED");
+    expect(fake.callsTo("GET /out/clean.mp4")).toHaveLength(0);
+  });
+
+  it("fails clearly when --burn-captions is set but no captioned render exists", async () => {
+    useApi({
+      "POST /v3/videos": { body: { data: { video_id: "v7", status: "waiting" } } },
+      "GET /v3/videos/v7": completed({ video_url: `${FILES}/out/clean.mp4` }),
+    });
+    const err = await run(
+      "video",
+      "Hello",
+      "--avatar",
+      "look1",
+      "--burn-captions",
+      "--poll-interval",
+      "1",
+    ).catch((e) => e);
+    expect(err).toBeInstanceOf(HeygenJobFailedError);
+    expect(err.message).toMatch(/captioned_video_missing/);
+    expect(fake.callsTo("GET /out/clean.mp4")).toHaveLength(0);
+  });
+
+  it("keeps an existing --output file when the download fails", async () => {
+    useApi({
+      "GET /v3/videos/v7": completed({ video_url: `${FILES}/out/v7.mp4?${SIG}` }),
+      "GET /out/v7.mp4": { status: 403, raw: "expired" },
+    });
+    const dest = path.join(tmp, "keep.mp4");
+    fs.writeFileSync(dest, "PRECIOUS");
+    const err = await run(
+      "status",
+      "v7",
+      "--type",
+      "video",
+      "--download",
+      "--output",
+      dest,
+      "--no-thumb",
+    ).catch((e) => e);
+    expect(err.message).toMatch(/may have expired/);
+    expect(fs.readFileSync(dest, "utf8")).toBe("PRECIOUS");
+    expect(fs.readdirSync(tmp)).toEqual(["keep.mp4"]);
+  });
+
+  it("prints the usable output URL with --no-download --json", async () => {
+    const url = `${FILES}/out/v7.mp4?${SIG}`;
+    useApi({
+      "POST /v3/videos": { body: { data: { video_id: "v7", status: "waiting" } } },
+      "GET /v3/videos/v7": completed({ video_url: url }),
+    });
+    await run(
+      "video",
+      "Hello",
+      "--avatar",
+      "look1",
+      "--no-download",
+      "--json",
+      "--poll-interval",
+      "1",
+    );
+    const summary = JSON.parse(printed().slice(printed().indexOf("{")));
+    expect(summary).toMatchObject({ kind: "video", id: "v7", output_url: url });
+    expect(fs.readdirSync(tmp)).toEqual([]);
+  });
+
+  it("delivers remaining translations after one download fails, then exits non-zero", async () => {
+    useApi({
+      "POST /v3/video-translations": { body: { data: { video_translation_ids: ["t1", "t2"] } } },
+      "GET /v3/video-translations/t1": {
+        body: {
+          data: {
+            id: "t1",
+            status: "completed",
+            output_language: "Spanish",
+            video_url: `${FILES}/tr/t1.mp4?${SIG}`,
+          },
+        },
+      },
+      "GET /v3/video-translations/t2": {
+        body: {
+          data: {
+            id: "t2",
+            status: "completed",
+            output_language: "French",
+            video_url: `${FILES}/tr/t2.mp4`,
+          },
+        },
+      },
+      "GET /tr/t1.mp4": { status: 403, raw: "expired" },
+      "GET /tr/t2.mp4": { raw: "FR" },
+    });
+    const err = await run(
+      "translate",
+      "asset:src1",
+      "--languages",
+      "Spanish,French",
+      "--poll-interval",
+      "1",
+    ).catch((e) => e);
+    expect(err).toBeInstanceOf(HeygenJobFailedError);
+    expect(err.message).toMatch(/1 of 2 translation jobs delivered; 1 failed/);
+    expect(err.message).toMatch(/translation t1:.*may have expired/s);
+    expect(err.message).not.toContain("TOPSECRETSIG");
+    expect(fs.readFileSync(path.join(tmp, "heygen-translation-French-t2.mp4"), "utf8")).toBe("FR");
+    expect(printed()).toContain("heygen-translation-French-t2.mp4");
+  });
+
+  it("reports a create response without a job ID instead of polling", async () => {
+    useApi({ "POST /v3/videos": { body: { data: { status: "waiting" } } } });
+    const err = await run("video", "Hello", "--avatar", "look1").catch((e) => e);
+    expect(err.message).toMatch(/returned no video_id/);
+    expect(fake.calls).toHaveLength(1);
+  });
+});
+
 describe("heygen catalog", () => {
   it("pages avatars with --cursor and prints has_more/next_token in JSON", async () => {
     useApi({

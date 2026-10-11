@@ -33,6 +33,8 @@ export interface HeygenJobState {
   videoId?: string;
   progress?: number;
   outputUrl?: string;
+  /** Video only: the burned-in caption render, when HeyGen produced one. */
+  captionedVideoUrl?: string;
   thumbnailUrl?: string;
   captionUrl?: string;
   outputLanguage?: string;
@@ -44,26 +46,48 @@ export interface HeygenJobState {
 
 const str = (v: unknown): string | undefined => (typeof v === "string" && v ? v : undefined);
 
+/** Options that change how a job's output is selected. */
+export interface JobReadOptions {
+  /**
+   * Burned-in captions were requested: the deliverable is `captioned_video_url`
+   * (HeyGen's `video_url` is the clean render). A completed video without it fails.
+   */
+  burnCaptions?: boolean;
+}
+
 export function videoState(
   video: HeygenVideoDetail,
   kind: HeygenJobKind = "video",
   id = video.id,
+  opts: JobReadOptions = {},
 ): HeygenJobState {
   const done = video.status === "completed" || video.status === "failed";
-  return {
+  const captioned = str(video.captioned_video_url);
+  const state: HeygenJobState = {
     kind,
     id,
     status: video.status,
     done,
     succeeded: video.status === "completed",
     videoId: video.id,
-    outputUrl: str(video.video_url) ?? str(video.captioned_video_url),
+    outputUrl: opts.burnCaptions ? captioned : (str(video.video_url) ?? captioned),
+    captionedVideoUrl: captioned,
     thumbnailUrl: str(video.thumbnail_url),
     captionUrl: str(video.subtitle_url),
     failureCode: str(video.failure_code),
     failureMessage: str(video.failure_message),
     raw: { video },
   };
+  if (opts.burnCaptions && state.succeeded && !captioned) {
+    return {
+      ...state,
+      succeeded: false,
+      failureCode: "captioned_video_missing",
+      failureMessage:
+        "Burned-in captions were requested but HeyGen returned no captioned_video_url. The uncaptioned render is available via `heygen status --raw`.",
+    };
+  }
+  return state;
 }
 
 export function translationState(t: HeygenVideoTranslation): HeygenJobState {
@@ -187,30 +211,32 @@ export function agentState(session: VideoAgentSession, video?: HeygenVideoDetail
 }
 
 /**
- * Stateful status reader. For `agent`, the video id is remembered after the
- * first sighting so later polls hit GET /v3/videos/{id} only.
+ * Status reader for one job. `remainingMs` (from polling) caps each request so
+ * a single call cannot overrun the overall wait. For `agent`, the session is
+ * re-read on every poll so a session that fails after its video was assigned
+ * ends the wait instead of polling a stalled video until the timeout.
  */
 export function createJobStatusReader(
   client: HeygenClient,
   kind: HeygenJobKind,
   id: string,
-): () => Promise<HeygenJobState> {
-  let agentSession: VideoAgentSession | undefined;
-  return async () => {
+  opts: JobReadOptions = {},
+): (ctx?: { remainingMs?: number }) => Promise<HeygenJobState> {
+  return async (ctx) => {
+    const call = { timeoutMs: ctx?.remainingMs };
     switch (kind) {
       case "video":
-        return videoState(await client.getVideo(id));
+        return videoState(await client.getVideo(id, call), "video", id, opts);
       case "translation":
-        return translationState(await client.getVideoTranslation(id));
+        return translationState(await client.getVideoTranslation(id, call));
       case "lipsync":
-        return lipsyncState(await client.getLipsync(id));
+        return lipsyncState(await client.getLipsync(id, call));
       case "model-video":
-        return modelVideoState(await client.getModelVideo(id));
+        return modelVideoState(await client.getModelVideo(id, call));
       case "agent": {
-        if (!agentSession?.video_id) agentSession = await client.getVideoAgentSession(id);
-        const videoId = agentSession.video_id;
-        if (!videoId) return agentState(agentSession);
-        return agentState(agentSession, await client.getVideo(videoId));
+        const session = await client.getVideoAgentSession(id, call);
+        if (!session.video_id) return agentState(session);
+        return agentState(session, await client.getVideo(session.video_id, call));
       }
     }
   };
@@ -220,11 +246,16 @@ export function getJobState(
   client: HeygenClient,
   kind: HeygenJobKind,
   id: string,
+  opts: JobReadOptions = {},
 ): Promise<HeygenJobState> {
-  return createJobStatusReader(client, kind, id)();
+  return createJobStatusReader(client, kind, id, opts)();
 }
 
-export type WaitOptions = Omit<PollOptions<HeygenJobState>, "fetchStatus" | "isTerminal">;
+export type WaitOptions = Omit<PollOptions<HeygenJobState>, "fetchStatus" | "isTerminal"> &
+  JobReadOptions;
+
+/** Default first poll interval; HeyGen recommends polling every 10-30 s. */
+export const DEFAULT_POLL_INTERVAL_MS = 10_000;
 
 /** Poll until terminal. Returns the final state; does not throw on job failure. */
 export function waitForJob(
@@ -233,11 +264,12 @@ export function waitForJob(
   id: string,
   opts: WaitOptions,
 ): Promise<HeygenJobState> {
+  const { burnCaptions, ...poll } = opts;
   return pollUntil({
-    intervalMs: 5_000,
+    intervalMs: DEFAULT_POLL_INTERVAL_MS,
     maxIntervalMs: 30_000,
-    ...opts,
-    fetchStatus: createJobStatusReader(client, kind, id),
+    ...poll,
+    fetchStatus: createJobStatusReader(client, kind, id, { burnCaptions }),
     isTerminal: (s) => s.done,
   });
 }
@@ -255,7 +287,13 @@ export function assertJobSucceeded(state: HeygenJobState): void {
   );
 }
 
+/** Single-quote a value for a copy-pasteable POSIX shell command when needed. */
+function shellArg(value: string): string {
+  return /^[A-Za-z0-9_-]+$/.test(value) ? value : `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
 /** Command that resumes a job, printed for `--async` and on timeouts. */
-export function resumeCommand(kind: HeygenJobKind, id: string): string {
-  return `multix heygen status ${id} --type ${kind} --wait --download`;
+export function resumeCommand(kind: HeygenJobKind, id: string, opts: JobReadOptions = {}): string {
+  const captions = opts.burnCaptions ? " --burn-captions" : "";
+  return `multix heygen status ${shellArg(id)} --type ${kind} --wait --download${captions}`;
 }

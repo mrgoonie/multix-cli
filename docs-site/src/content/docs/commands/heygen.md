@@ -79,8 +79,10 @@ multix heygen video --avatar <look-id> --audio ./voiceover.mp3
 - `--output-format webm` renders a transparent background, so it cannot be
   combined with `--background-*`.
 - A subtitle file is always produced when captions are requested.
-  `--burn-captions` also burns them into the video, and `--captions`
-  downloads the subtitle file next to the video.
+  `--burn-captions` also burns them into the video and downloads that
+  captioned render (`captioned_video_url`); the command fails if HeyGen
+  returns no captioned render. `--captions` downloads the subtitle file next
+  to the video.
 - Other `POST /v3/videos` variants (image, cinematic avatar, studio) are
   available through `heygen run video --input <json>`.
 
@@ -99,7 +101,7 @@ The mode is inferred: `--image` selects image-to-video, any `--reference-*`
 selects reference-to-video, and otherwise the mode is text-to-video.
 `adaptive` aspect ratio is only valid for reference-to-video. Image-to-video
 follows the first frame, so it takes no aspect ratio. Up to 9 reference
-images, 3 videos, and 3 audio files.
+images, 3 videos, and 3 audio files, with at most 12 reference files in total.
 
 ## Translation and lipsync
 
@@ -118,7 +120,8 @@ multix heygen lipsync --video <ref> --audio <ref> [--mode speed|precision] [--st
   language.
 - One translation job is created per language. The CLI waits for all of them,
   downloads every successful output (`--output` is treated as a directory when
-  there are several), and exits non-zero if any language failed.
+  there are several), and exits non-zero if any language or download failed.
+  A failed download does not stop the remaining languages from downloading.
 
 ## Text-to-speech
 
@@ -177,15 +180,22 @@ They accept the same set of flags:
 
 - `--async` prints the job IDs and a resume command without waiting.
 - `--wait-timeout <ms>` sets the deadline (default 30 minutes).
-- `--poll-interval <ms>` sets the first interval (default 5 s), which backs off
-  to 30 s.
-- `--no-download` prints the output URL instead of downloading it.
+- `--poll-interval <ms>` sets the first interval (default 10 s), which backs
+  off to 30 s.
+- `--no-download` prints the output URL instead of downloading it. With
+  `--json`, the summary includes the usable `output_url` (and `caption_url`).
+  These URLs are signed, so treat the output as sensitive.
+- An existing file at the destination is only replaced after a download
+  completes; a failed download leaves it untouched.
 - `--output`, `--captions`, `--no-thumb`, and `--json` work as their names
   suggest.
 
 ```bash
-multix heygen status <id> --type agent|video|translation|lipsync|model-video [--wait] [--download] [--json] [--raw]
+multix heygen status <id> --type agent|video|translation|lipsync|model-video [--wait] [--download] [--burn-captions] [--json] [--raw]
 ```
+
+- `--burn-captions` reads the burned-in caption render of a video, as the
+  resume command printed by `heygen video --burn-captions` does.
 
 - `--type agent` takes a Video Agent `session_id` and follows it to the video.
   The other types take the ID that the matching command printed.
@@ -199,10 +209,25 @@ multix heygen status <id> --type agent|video|translation|lipsync|model-video [--
 
 `--callback-url` (HTTPS only) asks HeyGen to notify your endpoint when a job
 completes or fails. HeyGen signs the raw request body with HMAC-SHA256 using
-the endpoint secret and sends the hex digest in the `signature` header. The
-provider module exports `verifyHeygenWebhookSignature(rawBody, signature,
-secret)` (Web Crypto, works in Node 20+ and Cloudflare Workers) for receivers
-built on multix.
+the endpoint secret and sends the hex digest in the `signature` header.
+
+The published `multix-cli` package does not export a webhook verifier. The
+repository source has one at
+`src/providers/heygen/webhook.ts` (`verifyHeygenWebhookSignature`, Web Crypto,
+works in Node 20+ and Cloudflare Workers) that you can copy into your receiver.
+In Node, the check is:
+
+```ts
+import { createHmac, timingSafeEqual } from "node:crypto";
+
+function verify(rawBody: Buffer, signature: string, secret: string): boolean {
+  const expected = createHmac("sha256", secret).update(rawBody).digest();
+  const provided = Buffer.from(signature, "hex");
+  return provided.length === expected.length && timingSafeEqual(provided, expected);
+}
+```
+
+Verify the raw body exactly as received, not re-serialized JSON.
 
 ## Errors and limits
 

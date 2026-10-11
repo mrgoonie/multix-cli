@@ -76,7 +76,9 @@ multix heygen video --avatar <look-id> --audio ./voiceover.mp3
 - `--output-format webm` cho nền trong suốt, nên không kết hợp được với
   `--background-*`.
 - Khi yêu cầu phụ đề, file phụ đề luôn được tạo. `--burn-captions` còn in phụ
-  đề vào video, và `--captions` tải file phụ đề về cạnh video.
+  đề vào video và tải về bản render có phụ đề (`captioned_video_url`); lệnh sẽ
+  báo lỗi nếu HeyGen không trả về bản này. `--captions` tải file phụ đề về cạnh
+  video.
 - Các biến thể khác của `POST /v3/videos` (image, cinematic avatar, studio)
   dùng qua `heygen run video --input <json>`.
 
@@ -95,7 +97,7 @@ Chế độ được suy ra tự động: có `--image` thì là image-to-video,
 `--reference-*` nào thì là reference-to-video, còn lại là text-to-video. Tỉ lệ
 khung hình `adaptive` chỉ hợp lệ với reference-to-video. Image-to-video bám
 theo khung hình đầu nên không nhận tỉ lệ khung hình. Tối đa 9 ảnh, 3 video và
-3 audio tham chiếu.
+3 audio tham chiếu, và tổng cộng không quá 12 tệp tham chiếu.
 
 ## Dịch video và lipsync
 
@@ -114,7 +116,8 @@ multix heygen lipsync --video <ref> --audio <ref> [--mode speed|precision] [--st
   ngôn ngữ.
 - Mỗi ngôn ngữ tạo một job dịch riêng. CLI chờ tất cả các job, tải về mọi kết
   quả thành công (`--output` được hiểu là thư mục khi có nhiều kết quả), và
-  thoát với mã khác 0 nếu có ngôn ngữ nào thất bại.
+  thoát với mã khác 0 nếu có ngôn ngữ nào hoặc lượt tải nào thất bại. Một lượt
+  tải lỗi không chặn việc tải các ngôn ngữ còn lại.
 
 ## Chuyển văn bản thành giọng nói
 
@@ -172,14 +175,21 @@ chung một bộ cờ:
 
 - `--async` in ID job và lệnh tiếp tục mà không chờ.
 - `--wait-timeout <ms>` đặt hạn chờ (mặc định 30 phút).
-- `--poll-interval <ms>` đặt khoảng poll đầu tiên (mặc định 5 giây), sau đó
+- `--poll-interval <ms>` đặt khoảng poll đầu tiên (mặc định 10 giây), sau đó
   giãn dần đến 30 giây.
-- `--no-download` in URL kết quả thay vì tải về.
+- `--no-download` in URL kết quả thay vì tải về. Khi dùng kèm `--json`, bản tóm
+  tắt có `output_url` (và `caption_url`) dùng được ngay. Các URL này có chữ ký,
+  nên hãy xem output là dữ liệu nhạy cảm.
+- Tệp đã có ở đích chỉ bị thay thế sau khi tải xong; lượt tải lỗi không đụng
+  đến tệp đó.
 - `--output`, `--captions`, `--no-thumb` và `--json` hoạt động đúng như tên gọi.
 
 ```bash
-multix heygen status <id> --type agent|video|translation|lipsync|model-video [--wait] [--download] [--json] [--raw]
+multix heygen status <id> --type agent|video|translation|lipsync|model-video [--wait] [--download] [--burn-captions] [--json] [--raw]
 ```
+
+- `--burn-captions` đọc bản render có phụ đề in sẵn của video, giống lệnh tiếp
+  tục mà `heygen video --burn-captions` in ra.
 
 - `--type agent` nhận `session_id` của Video Agent và theo session đến video.
   Các loại khác nhận ID mà lệnh tương ứng đã in ra.
@@ -193,10 +203,25 @@ multix heygen status <id> --type agent|video|translation|lipsync|model-video [--
 
 `--callback-url` (chỉ HTTPS) yêu cầu HeyGen thông báo cho endpoint của bạn khi
 job hoàn thành hoặc thất bại. HeyGen ký raw request body bằng HMAC-SHA256 với
-secret của endpoint và gửi digest dạng hex trong header `signature`. Module
-provider export `verifyHeygenWebhookSignature(rawBody, signature, secret)`
-(dùng Web Crypto, chạy được trên Node 20+ và Cloudflare Workers) cho các
-receiver xây dựng trên multix.
+secret của endpoint và gửi digest dạng hex trong header `signature`.
+
+Package `multix-cli` đã publish không export hàm xác minh webhook. Mã nguồn
+repository có sẵn một hàm tại `src/providers/heygen/webhook.ts`
+(`verifyHeygenWebhookSignature`, dùng Web Crypto, chạy được trên Node 20+ và
+Cloudflare Workers) để bạn chép vào receiver của mình. Trên Node, phép kiểm tra
+như sau:
+
+```ts
+import { createHmac, timingSafeEqual } from "node:crypto";
+
+function verify(rawBody: Buffer, signature: string, secret: string): boolean {
+  const expected = createHmac("sha256", secret).update(rawBody).digest();
+  const provided = Buffer.from(signature, "hex");
+  return provided.length === expected.length && timingSafeEqual(provided, expected);
+}
+```
+
+Hãy xác minh đúng raw body như khi nhận được, không dùng JSON đã serialize lại.
 
 ## Lỗi và giới hạn
 

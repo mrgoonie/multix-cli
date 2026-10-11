@@ -240,6 +240,22 @@ describe("buildModelVideoRequest", () => {
       }),
     ).toThrow(/reference images/);
     expect(() => buildModelVideoRequest({ prompt: "x", seed: -1 })).toThrow(/--seed/);
+    // 9 images + 3 videos + 3 audio pass the per-type caps but exceed the combined 12.
+    expect(() =>
+      buildModelVideoRequest({
+        prompt: "x",
+        referenceImages: Array.from({ length: 9 }, () => URL_IN),
+        referenceVideos: Array.from({ length: 3 }, () => URL_IN),
+        referenceAudio: Array.from({ length: 3 }, () => URL_IN),
+      }),
+    ).toThrow(/12 reference files in total \(got 15\)/);
+    expect(
+      buildModelVideoRequest({
+        prompt: "x",
+        referenceImages: Array.from({ length: 9 }, () => URL_IN),
+        referenceVideos: Array.from({ length: 3 }, () => URL_IN),
+      }).mode,
+    ).toBe("reference_to_video");
   });
 
   it("builds a full body", () => {

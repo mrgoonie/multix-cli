@@ -513,9 +513,9 @@ multix heygen me
 **Notes:**
 - API usage is billed separately from HeyGen web/app plans; `multix heygen me` shows the API balance. A 402 means the API account needs credits.
 - Media `<ref>` values accept `https://` URLs, `asset:<asset_id>`, or a local file. Local files upload via `POST /v3/assets` (max 32 MB).
-- Generation commands wait and download by default. Use `--async` to print IDs plus a resume command, `--no-download` to print the signed URL, and `--wait-timeout` / `--poll-interval` to tune polling (default 30 min / 5 s, backing off to 30 s).
-- Failed, cancelled, or input-blocked jobs exit non-zero with HeyGen's `failure_code`/message. 429 `Retry-After` is honoured, and `Idempotency-Key` is sent only on endpoints that document it.
-- `--callback-url` webhooks are signed with HMAC-SHA256 (`signature` header). The provider module exports `verifyHeygenWebhookSignature` for receivers.
+- Generation commands wait and download by default. Use `--async` to print IDs plus a resume command, `--no-download` to print the signed URL (included as `output_url` with `--json`), and `--wait-timeout` / `--poll-interval` to tune polling (default 30 min / 10 s, backing off to 30 s). `--burn-captions` downloads the captioned render and fails if HeyGen returns none.
+- Failed, cancelled, or input-blocked jobs exit non-zero with HeyGen's `failure_code`/message. When several jobs run, every success is still downloaded before the command exits non-zero. 429 `Retry-After` is honoured, and `Idempotency-Key` is sent only on endpoints that document it.
+- `--callback-url` webhooks are signed with HMAC-SHA256 of the raw body (hex, `signature` header). The npm package does not export a verifier; copy `src/providers/heygen/webhook.ts` or the Node snippet in the [HeyGen docs](https://multix.zuey.me/commands/heygen/#webhooks).
 - Digital-twin creation and voice cloning are out of scope. Full reference: [HeyGen commands](https://multix.zuey.me/commands/heygen/).
 
 ### `multix media`
