@@ -55,7 +55,10 @@ function parseSeconds(value: unknown): number | undefined {
   return m ? Number(m[1]) : undefined;
 }
 
-/** Collapse an `anyOf`/`oneOf` with one non-null member; undefined when the shape is ambiguous. */
+/**
+ * Collapse an `anyOf`/`oneOf` with one non-null member (recursively);
+ * undefined when the shape is ambiguous or holds a `$ref`/`allOf` at any level.
+ */
 function unwrap(prop: Prop | undefined): Prop | undefined {
   if (!prop) return undefined;
   if (prop.$ref !== undefined || prop.allOf !== undefined) return undefined;
@@ -67,7 +70,7 @@ function unwrap(prop: Prop | undefined): Prop | undefined {
   );
   if (members.length !== 1) return undefined;
   const { anyOf: _a, oneOf: _o, ...outer } = prop;
-  return { ...members[0], ...outer };
+  return unwrap({ ...members[0], ...outer });
 }
 
 /** True when the property holds a number (by type, an all-numeric enum, or a numeric default). */
@@ -273,8 +276,12 @@ function effective(
   if (raw.$ref === undefined && raw.allOf === undefined && raw.default !== undefined) {
     return raw.default;
   }
+  // Only resolution is a tool argument; size and dimensions cannot be passed.
+  const remedy = (F.resolution as readonly string[]).includes(field)
+    ? "pass a resolution or use another model"
+    : "use another model";
   throw new ValidationError(
-    `Model ${model}: input "${field}" has a schema this server cannot check; pass it explicitly or use another model`,
+    `Model ${model}: input "${field}" has a schema this server cannot check; ${remedy}`,
   );
 }
 

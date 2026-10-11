@@ -485,6 +485,11 @@ describe("multix_generate_video", () => {
       ],
     ),
     [
+      "a length-like field wrapping a $ref in a nullable union",
+      { clip_length: { anyOf: [{ $ref: "#/components/schemas/Len" }, { type: "null" }] } },
+      /length input "clip_length" this server cannot cap/,
+    ],
+    [
       "a numeric-string length-like field",
       { clip_length: { type: "string", default: "30" } },
       /length input "clip_length" this server cannot cap/,
@@ -606,6 +611,11 @@ describe("multix_generate_video", () => {
       { resolution: { $ref: "#/components/schemas/Resolution" } },
       "resolution",
     ],
+    [
+      "a nullable resolution $ref",
+      { resolution: { anyOf: [{ $ref: "#/components/schemas/Resolution" }, { type: "null" }] } },
+      "resolution",
+    ],
     ["a size allOf", { size: { allOf: [{ type: "string" }], default: "640*360" } }, "size"],
     [
       "a width union with several members",
@@ -625,7 +635,9 @@ describe("multix_generate_video", () => {
     );
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain(
-      `input "${field}" has a schema this server cannot check`,
+      `input "${field}" has a schema this server cannot check; ${
+        field === "resolution" ? "pass a resolution or use another model" : "use another model"
+      }`,
     );
     expect(calls.some((c) => c.method === "POST")).toBe(false);
   });

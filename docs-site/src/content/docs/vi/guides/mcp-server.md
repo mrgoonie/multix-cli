@@ -186,11 +186,11 @@ phải là duy nhất trong tài khoản Cloudflare của bạn. Nếu Worker kh
     Nếu schema không khai báo frame rate, server giả định một frame mỗi giây,
     nên chỉ mặc định không quá `giới hạn` frame mới được chấp nhận; trường hợp
     khác bị từ chối.
-  - **Input khác giống thời lượng:** mọi trường số khác có tên chứa `frame`,
+  - **Input khác giống thời lượng:** mọi trường khác có tên chứa `frame`,
     `second`, `duration` hoặc `length`, hoặc kết thúc bằng `_len` (ví dụ
-    `frame_count` hay `clip_length`), đều bị từ chối, vì Worker không giới
-    hạn được nó. Input ảnh và cờ như `first_frame` hay `return_last_frame`
-    không bị ảnh hưởng.
+    `frame_count` hay `clip_length`), đều bị từ chối khi là số hoặc khi
+    schema của nó không đọc được, vì Worker không giới hạn được nó. Input ảnh
+    và cờ như `first_frame` hay `return_last_frame` không bị ảnh hưởng.
   - **Kiểm tra cuối:** mọi trường số giây và số frame, dù được gửi hay được
     điền từ mặc định của schema, phải nằm trong giới hạn. `resolution` sẽ được
     render (giá trị của caller hoặc mặc định của schema) phải nằm trong

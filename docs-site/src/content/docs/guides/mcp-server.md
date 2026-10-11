@@ -183,11 +183,11 @@ different integer, or the two Workers will share counters.
     schema's `fps` (or `frames_per_second`) default, and sent explicitly.
     Without a declared frame rate, one frame per second is assumed, so only a
     default of at most `cap` frames passes; anything else is rejected.
-  - **Other length-like inputs:** any other numeric field whose name contains
+  - **Other length-like inputs:** any other field whose name contains
     `frame`, `second`, `duration` or `length`, or ends in `_len` (for example
-    `frame_count` or `clip_length`), is rejected, since the Worker cannot cap
-    it. Image and flag inputs such as `first_frame` or `return_last_frame` are
-    not affected.
+    `frame_count` or `clip_length`), is rejected when it is numeric or its
+    schema cannot be read, since the Worker cannot cap it. Image and flag
+    inputs such as `first_frame` or `return_last_frame` are not affected.
   - **Final check:** every seconds and frame field, sent or filled from the
     schema default, must be within the cap. The `resolution` that will be
     rendered (the caller's value or the schema default) must be in
