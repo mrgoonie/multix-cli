@@ -7,6 +7,7 @@
  */
 
 import { redactUrl } from "../../core/redact.js";
+import { type UrlSafetyResult, checkUrlSafety } from "../../core/url-safety.js";
 import type { ReplicatePrediction } from "./types.js";
 
 export interface MediaOutput {
@@ -26,6 +27,21 @@ const DATA_URI_RE = /^data:[^,]*,/i;
 
 export function isMediaRef(value: unknown): boolean {
   return typeof value === "string" && (HTTP_RE.test(value) || DATA_URI_RE.test(value));
+}
+
+export const REPLICATE_DELIVERY_HOST = "replicate.delivery";
+
+export type OutputUrlCheck = UrlSafetyResult;
+
+/**
+ * Policy for downloading a prediction output URL (applied to every redirect
+ * hop): https only, never localhost or a private/special-purpose IP literal
+ * (hostnames are not resolved). Hosts other than replicate.delivery are
+ * allowed but reported as untrusted so the caller can warn. Error messages
+ * name the host only, never the signed URL.
+ */
+export function checkOutputUrl(url: string): OutputUrlCheck {
+  return checkUrlSafety(url, { provider: "replicate", trustedHosts: [REPLICATE_DELIVERY_HOST] });
 }
 
 /** Walk any output shape, collecting media URLs and text values in order. */
