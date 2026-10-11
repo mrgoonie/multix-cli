@@ -624,13 +624,17 @@ multix media batch --input-dir <dir> --output-dir <dir> [--quality 85] [--max-wi
 ### `multix doc`
 
 ```bash
-multix doc convert --input <files...> [--output <path>] [--auto-name] [--model gemini-3.6-flash] [--prompt <str>] [-v]
+multix doc convert --input <files...> [--output <path>] [--auto-name] [--stdin-ext <ext>] [--model gemini-3.6-flash] [--prompt <str>] [-v]
+
+# Read piped stdin with "-" (PDF, images and text auto-detected; pass --stdin-ext docx/pptx/xlsx otherwise)
+cat report.pdf | multix doc convert --input - --output report.md
 ```
 
 Converts PDFs, DOCX/XLSX/PPTX, images, and HTML/text files to Markdown via Gemini.
 Multiple inputs are concatenated with `---` separators into a single output.
+Piped stdin is labelled `<stdin>` in the output and error messages; its temp file is removed when the command ends.
 
-**Default output:** `./multix-output/document-extraction.md`
+**Default output:** `./multix-output/document-extraction.md` (with `--auto-name`: `<input-basename>-extraction.md`, or `stdin-extraction.md` for piped input)
 
 ## Output
 

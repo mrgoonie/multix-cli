@@ -67,5 +67,17 @@ multix doc convert --input report.pdf --output report.md
 multix doc convert --input presentation.pptx --auto-name
 ```
 
+Pass `-` as the input to read a piped document from stdin. PDFs, images and
+text are detected automatically; Office files such as DOCX, PPTX and XLSX need
+`--stdin-ext`. Piped input is labelled `<stdin>` in the output and in errors,
+`--auto-name` writes `stdin-extraction.md`, and the temporary copy is removed
+when the command ends. Without `--output` or `--auto-name` the result goes to
+`document-extraction.md` in the output directory, as for regular files.
+
+```bash
+cat report.pdf | multix doc convert --input - --output report.md
+cat slides.pptx | multix doc convert --input - --stdin-ext pptx --auto-name
+```
+
 The command requires a configured Gemini key and can be affected by file size,
 model availability, and account policy.

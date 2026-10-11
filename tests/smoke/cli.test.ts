@@ -247,3 +247,35 @@ describe("gemini --files - (smoke)", () => {
     expect(result.stdout + result.stderr).toContain("stdin was empty");
   });
 });
+
+describe("doc convert --input - (smoke)", () => {
+  // Without a key each attempt fails fast, but the retry backoff adds ~3 s.
+  it("reads piped stdin, labels it, and removes the temp file", { timeout: 15_000 }, async () => {
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "multix-smoke-doc-stdin-"));
+    try {
+      const result = await execa("node", [CLI, "doc", "convert", "--input", "-"], {
+        input: "piped notes for conversion",
+        cwd: tmp,
+        reject: false,
+        env: {
+          MULTIX_DISABLE_HOME_ENV: "1",
+          GEMINI_API_KEY: "",
+          TMP: tmp,
+          TEMP: tmp,
+          TMPDIR: tmp,
+        },
+      });
+      const out = result.stdout + result.stderr;
+      // No key is configured, so the request fails after stdin was materialized.
+      expect(result.exitCode).toBe(1);
+      expect(out).toContain("Failed: <stdin>");
+      expect(out).toContain("GEMINI_API_KEY is not set");
+      expect(out).not.toContain("piped notes");
+      expect(fs.readdirSync(tmp).filter((d) => d.startsWith("multix-stdin-"))).toEqual([]);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+});

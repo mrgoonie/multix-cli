@@ -63,3 +63,15 @@ Dùng `--output` cho đường dẫn xác định hoặc `--auto-name` cho tên 
 multix doc convert --input report.pdf --output report.md
 multix doc convert --input presentation.pptx --auto-name
 ```
+
+Truyền `-` làm input để đọc tài liệu được pipe vào stdin. PDF, ảnh và văn bản
+được nhận diện tự động; file Office như DOCX, PPTX và XLSX cần `--stdin-ext`.
+Input từ pipe được ghi nhãn `<stdin>` trong kết quả và thông báo lỗi,
+`--auto-name` ghi ra `stdin-extraction.md`, và bản tạm được xoá khi lệnh kết
+thúc. Nếu không có `--output` hay `--auto-name`, kết quả được ghi vào
+`document-extraction.md` trong thư mục output, giống như với file thường.
+
+```bash
+cat report.pdf | multix doc convert --input - --output report.md
+cat slides.pptx | multix doc convert --input - --stdin-ext pptx --auto-name
+```

@@ -127,6 +127,23 @@ describe("resolveFileInputs", () => {
     );
   });
 
+  it("uses the caller's flag and example in messages", async () => {
+    const usage = { flag: "--input", example: "cat report.pdf | multix doc convert --input -" };
+    await expect(resolveFileInputs(["-", "-"], usage)).rejects.toThrow(
+      "`-` (stdin) can only be passed once to --input",
+    );
+    await expect(resolveFileInputs([], { ...usage, stdinExt: "pdf" })).rejects.toThrow(
+      "--stdin-ext only applies when --input includes `-`",
+    );
+    const tty = Object.assign(piped(Buffer.from("x")), { isTTY: true });
+    await expect(resolveFileInputs(["-"], { ...usage, input: tty })).rejects.toThrow(
+      "`--input -` reads piped input, but stdin is a terminal. Example: cat report.pdf | multix doc convert --input -",
+    );
+    await expect(resolveFileInputs(["-"], { ...usage, input: piped() })).rejects.toThrow(
+      "`--input -` was given but stdin was empty",
+    );
+  });
+
   describe("review hardening", () => {
     const pipe = (...chunks: Buffer[]) =>
       Object.assign(

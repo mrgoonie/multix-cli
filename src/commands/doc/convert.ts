@@ -157,6 +157,10 @@ async function convertResolved(
       }
     }
 
+    if (markdown === undefined) {
+      logger?.error(`Failed: ${input.label} — ${errorMsg}`);
+    }
+
     results.push({
       file: input.label,
       status: markdown !== undefined ? "success" : "error",
@@ -172,7 +176,8 @@ async function convertResolved(
   lines.push(`Converted ${inputs.length} document(s) to markdown.\n\n---\n`);
 
   for (const r of results) {
-    lines.push(`\n## ${path.basename(r.file)}\n`);
+    // Escape angle brackets so "<stdin>" does not render as an HTML tag.
+    lines.push(`\n## ${path.basename(r.file).replace(/[<>]/g, "\\$&")}\n`);
     if (r.status === "success" && r.markdown) {
       lines.push(`${r.markdown}\n`);
     } else if (r.status === "success") {
