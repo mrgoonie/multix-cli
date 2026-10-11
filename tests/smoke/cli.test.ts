@@ -3,9 +3,11 @@
  * All tests use `node dist/cli.js` to avoid shebang issues on Windows.
  */
 
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { execa } from "execa";
+import { type Options, execa } from "execa";
 import { beforeAll, describe, expect, it } from "vitest";
 import { isolatedEnv } from "./child-env.js";
 
@@ -14,9 +16,22 @@ const CLI = path.resolve(__dirname, "../../dist/cli.js");
 /** Each test spawns `node`; cold starts under a parallel full-suite run can exceed vitest's 5 s default. */
 const SPAWN_TIMEOUT = 15_000;
 
+/**
+ * Spawn `node dist/cli.js`. The child is killed shortly before the vitest
+ * timeout (pass `timeout` to match a longer test), so a hung CLI never
+ * outlives the test that started it.
+ */
+const run = (
+  args: string[],
+  opts: Pick<Options, "cwd" | "env" | "extendEnv" | "input" | "timeout"> = {},
+) => execa("node", [CLI, ...args], { reject: false, timeout: SPAWN_TIMEOUT - 1_000, ...opts });
+
+/** stdin temp dirs the CLI left (or is holding) inside `dir`. */
+const stdinDirs = (dir: string) => fs.readdirSync(dir).filter((d) => d.startsWith("multix-stdin-"));
+
 describe("multix --help (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
   it("exits 0 and lists all top-level commands", async () => {
-    const result = await execa("node", [CLI, "--help"], { reject: false });
+    const result = await run(["--help"]);
     expect(result.exitCode).toBe(0);
 
     const out = result.stdout + result.stderr;
@@ -35,7 +50,7 @@ describe("multix --help (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
   });
 
   it("lists heygen subcommands", async () => {
-    const result = await execa("node", [CLI, "heygen", "--help"], { reject: false });
+    const result = await run(["heygen", "--help"]);
     expect(result.exitCode).toBe(0);
     const out = result.stdout + result.stderr;
     for (const sub of [
@@ -59,7 +74,7 @@ describe("multix --help (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
   });
 
   it("lists replicate subcommands", async () => {
-    const result = await execa("node", [CLI, "replicate", "--help"], { reject: false });
+    const result = await run(["replicate", "--help"]);
     expect(result.exitCode).toBe(0);
     const out = result.stdout + result.stderr;
     for (const sub of ["run", "image", "video", "status", "cancel"]) {
@@ -68,7 +83,7 @@ describe("multix --help (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
   });
 
   it("lists atlas subcommands", async () => {
-    const result = await execa("node", [CLI, "atlas", "--help"], { reject: false });
+    const result = await run(["atlas", "--help"]);
     expect(result.exitCode).toBe(0);
     const out = result.stdout + result.stderr;
     for (const sub of [
@@ -87,8 +102,7 @@ describe("multix --help (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
   });
 
   it("fails heygen commands without HEYGEN_API_KEY with a config error, not a stack trace", async () => {
-    const result = await execa("node", [CLI, "heygen", "me"], {
-      reject: false,
+    const result = await run(["heygen", "me"], {
       env: { HEYGEN_API_KEY: "", MULTIX_DISABLE_HOME_ENV: "1" },
     });
     expect(result.exitCode).toBe(1);
@@ -97,11 +111,9 @@ describe("multix --help (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
   });
 
   it("accepts --version as a replicate run option without printing the CLI version", async () => {
-    const result = await execa(
-      "node",
-      [CLI, "replicate", "run", "owner/model", "--version", "abc", "--input", "{}"],
+    const result = await run(
+      ["replicate", "run", "owner/model", "--version", "abc", "--input", "{}"],
       {
-        reject: false,
         env: { REPLICATE_API_TOKEN: "", REPLICATE_API_KEY: "", MULTIX_DISABLE_HOME_ENV: "1" },
       },
     );
@@ -110,8 +122,7 @@ describe("multix --help (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
   });
 
   it("atlas image without ATLASCLOUD_API_KEY exits non-zero with a setup hint", async () => {
-    const result = await execa("node", [CLI, "atlas", "image", "a cat"], {
-      reject: false,
+    const result = await run(["atlas", "image", "a cat"], {
       cwd: path.resolve(__dirname, "../.."),
       env: { ATLASCLOUD_API_KEY: "", MULTIX_DISABLE_HOME_ENV: "1" },
     });
@@ -120,7 +131,7 @@ describe("multix --help (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
   });
 
   it("lists elevenlabs subcommands", async () => {
-    const result = await execa("node", [CLI, "elevenlabs", "--help"], { reject: false });
+    const result = await run(["elevenlabs", "--help"]);
     expect(result.exitCode).toBe(0);
     const out = result.stdout + result.stderr;
     for (const sub of [
@@ -143,13 +154,13 @@ describe("multix --help (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
   });
 
   it("lists gemini i2v subcommand", async () => {
-    const result = await execa("node", [CLI, "gemini", "--help"], { reject: false });
+    const result = await run(["gemini", "--help"]);
     expect(result.exitCode).toBe(0);
     expect(result.stdout + result.stderr).toContain("image-to-video");
   });
 
   it("lists openrouter video subcommands", async () => {
-    const result = await execa("node", [CLI, "openrouter", "--help"], { reject: false });
+    const result = await run(["openrouter", "--help"]);
     expect(result.exitCode).toBe(0);
     const out = result.stdout + result.stderr;
     expect(out).toContain("image-to-video");
@@ -158,7 +169,7 @@ describe("multix --help (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
   });
 
   it("lists leonardo subcommands", async () => {
-    const result = await execa("node", [CLI, "leonardo", "--help"], { reject: false });
+    const result = await run(["leonardo", "--help"]);
     expect(result.exitCode).toBe(0);
     const out = result.stdout + result.stderr;
     for (const sub of [
@@ -187,7 +198,7 @@ describe("multix --help (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
         "minimax",
         "openai",
       ]) {
-        const result = await execa("node", [CLI, provider, "--help"], { reject: false });
+        const result = await run([provider, "--help"]);
         expect(result.exitCode).toBe(0);
         expect(result.stdout + result.stderr).toContain("image-to-image");
       }
@@ -196,7 +207,7 @@ describe("multix --help (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
   );
 
   it("lists openai subcommands", async () => {
-    const result = await execa("node", [CLI, "openai", "--help"], { reject: false });
+    const result = await run(["openai", "--help"]);
     expect(result.exitCode).toBe(0);
     const out = result.stdout + result.stderr;
     for (const sub of ["generate", "image-to-image", "generate-speech", "transcribe"]) {
@@ -205,17 +216,13 @@ describe("multix --help (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
   });
 
   it("rejects openai image-to-image without refs before auth or network work", async () => {
-    const result = await execa(
-      "node",
-      [CLI, "openai", "image-to-image", "--prompt", "test", "--driver", "api"],
-      { reject: false },
-    );
+    const result = await run(["openai", "image-to-image", "--prompt", "test", "--driver", "api"]);
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain("At least one --ref is required for image-to-image.");
   });
 
   it("prints version", async () => {
-    const result = await execa("node", [CLI, "--version"], { reject: false });
+    const result = await run(["--version"]);
     expect(result.exitCode).toBe(0);
     expect(result.stdout.trim()).toMatch(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/);
   });
@@ -223,14 +230,11 @@ describe("multix --help (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
 
 describe("gemini --files - (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
   it("reads piped stdin, labels it, and removes the temp file", async () => {
-    const fs = await import("node:fs");
-    const os = await import("node:os");
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "multix-smoke-stdin-"));
     try {
-      const result = await execa("node", [CLI, "gemini", "analyze", "--files", "-"], {
+      const result = await run(["gemini", "analyze", "--files", "-"], {
         input: "piped notes for analysis",
         cwd: tmp,
-        reject: false,
         extendEnv: false,
         env: isolatedEnv(tmp),
       });
@@ -240,28 +244,34 @@ describe("gemini --files - (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
       expect(out).toContain("Failed: <stdin>");
       expect(out).toContain("GEMINI_API_KEY is not set");
       expect(out).not.toContain("piped notes");
-      expect(fs.readdirSync(tmp).filter((d) => d.startsWith("multix-stdin-"))).toEqual([]);
+      expect(stdinDirs(tmp)).toEqual([]);
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
   });
 
-  it("rejects an empty pipe", async () => {
-    const fs = await import("node:fs");
-    const os = await import("node:os");
+  it("rejects an empty pipe and removes the temp dir it created", async () => {
     // Private temp root: the child's stdin temp dir must not appear in the shared tmpdir.
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "multix-smoke-empty-stdin-"));
     try {
-      const result = await execa("node", [CLI, "gemini", "transcribe", "--files", "-"], {
-        input: "",
+      // Keep stdin open until the child has created its temp dir, so the test
+      // proves the dir lands in the private root rather than the shared tmpdir.
+      const child = run(["gemini", "transcribe", "--files", "-"], {
         cwd: tmp,
-        reject: false,
         extendEnv: false,
         env: isolatedEnv(tmp),
       });
+      const deadline = Date.now() + SPAWN_TIMEOUT / 2;
+      while (stdinDirs(tmp).length === 0 && child.exitCode === null && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      const dirsWhileReading = stdinDirs(tmp);
+      child.stdin?.end();
+      const result = await child;
+      expect(dirsWhileReading).toHaveLength(1);
       expect(result.exitCode).not.toBe(0);
       expect(result.stdout + result.stderr).toContain("stdin was empty");
-      expect(fs.readdirSync(tmp).filter((d) => d.startsWith("multix-stdin-"))).toEqual([]);
+      expect(stdinDirs(tmp)).toEqual([]);
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
@@ -270,20 +280,20 @@ describe("gemini --files - (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
 
 describe("doc convert --input - (smoke)", () => {
   // Without a key each attempt fails fast, but the retry backoff adds ~3 s.
+  const DOC_TIMEOUT = 2 * SPAWN_TIMEOUT;
+
   it(
     "reads piped stdin, labels it, and removes the temp file",
-    { timeout: 2 * SPAWN_TIMEOUT },
+    { timeout: DOC_TIMEOUT },
     async () => {
-      const fs = await import("node:fs");
-      const os = await import("node:os");
       const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "multix-smoke-doc-stdin-"));
       try {
-        const result = await execa("node", [CLI, "doc", "convert", "--input", "-"], {
+        const result = await run(["doc", "convert", "--input", "-"], {
           input: "piped notes for conversion",
           cwd: tmp,
-          reject: false,
           extendEnv: false,
           env: isolatedEnv(tmp),
+          timeout: DOC_TIMEOUT - 1_000,
         });
         const out = result.stdout + result.stderr;
         // No key is configured, so the request fails after stdin was materialized.
@@ -291,7 +301,7 @@ describe("doc convert --input - (smoke)", () => {
         expect(out).toContain("Failed: <stdin>");
         expect(out).toContain("GEMINI_API_KEY is not set");
         expect(out).not.toContain("piped notes");
-        expect(fs.readdirSync(tmp).filter((d) => d.startsWith("multix-stdin-"))).toEqual([]);
+        expect(stdinDirs(tmp)).toEqual([]);
         // MULTIX_OUTPUT_DIR is pinned to the test dir, never the user's own.
         expect(fs.existsSync(path.join(tmp, "document-extraction.md"))).toBe(true);
       } finally {

@@ -22,7 +22,7 @@ const piped = (...chunks: Buffer[]) => Readable.from(chunks);
  * Point os.tmpdir() at a private directory for each test so temp-dir cleanup
  * can be asserted exactly, without racing other test files that pipe stdin.
  */
-function usePrivateTmpRoot(): () => string {
+function usePrivateTmpRoot(): { root: () => string; stdinDirs: () => string[] } {
   let root = "";
   beforeEach(() => {
     root = fs.mkdtempSync(path.join(os.tmpdir(), "multix-stdin-test-"));
@@ -34,7 +34,11 @@ function usePrivateTmpRoot(): () => string {
     vi.unstubAllEnvs();
     fs.rmSync(root, { recursive: true, force: true });
   });
-  return () => root;
+  return {
+    root: () => root,
+    /** stdin temp dirs currently inside the private root. */
+    stdinDirs: () => fs.readdirSync(root).filter((d) => d.startsWith("multix-stdin-")),
+  };
 }
 
 describe("detectExtension", () => {
@@ -65,7 +69,7 @@ describe("detectExtension", () => {
 });
 
 describe("stdinToTempFile", () => {
-  const tmpRoot = usePrivateTmpRoot();
+  const { root: tmpRoot, stdinDirs } = usePrivateTmpRoot();
 
   it("writes all chunks to a private temp file named by the detected type", async () => {
     const png = bytes([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], "rest");
@@ -102,13 +106,17 @@ describe("stdinToTempFile", () => {
   });
 
   it("removes the temp directory when reading fails", async () => {
+    // Recorded mid-read: proves the temp dir really lands in the private root.
+    let dirsWhileReading: string[] = [];
     const failing = Readable.from(
       (async function* () {
         yield Buffer.from("partial");
+        dirsWhileReading = stdinDirs();
         throw new Error("pipe broke");
       })(),
     );
     await expect(stdinToTempFile({ input: failing })).rejects.toThrow("pipe broke");
+    expect(dirsWhileReading).toHaveLength(1);
     expect(fs.readdirSync(tmpRoot())).toEqual([]);
   });
 });
@@ -162,7 +170,7 @@ describe("resolveFileInputs", () => {
   });
 
   describe("review hardening", () => {
-    const tmpRoot = usePrivateTmpRoot();
+    const { root: tmpRoot, stdinDirs } = usePrivateTmpRoot();
     const pipe = (...chunks: Buffer[]) =>
       Object.assign(
         (async function* () {
@@ -210,11 +218,14 @@ describe("resolveFileInputs", () => {
       // Explicit chunks: the third must never be pulled once the second crosses the limit.
       let pulled = 0;
       let closed = false;
+      let dirsWhileReading: string[] = [];
       const input = Object.assign(
         (async function* () {
           try {
             for (const c of [Buffer.alloc(10, 0x61), Buffer.alloc(10, 0x61), Buffer.alloc(10)]) {
               pulled++;
+              // Recorded mid-read: proves the temp dir really lands in the private root.
+              if (pulled === 1) dirsWhileReading = stdinDirs();
               yield c;
             }
           } finally {
@@ -228,6 +239,31 @@ describe("resolveFileInputs", () => {
       await expect(read).rejects.toThrow(/exceeds/);
       expect(pulled).toBe(2);
       expect(closed).toBe(true);
+      expect(dirsWhileReading).toHaveLength(1);
+      expect(fs.readdirSync(tmpRoot())).toEqual([]);
+    });
+
+    it("destroys a Readable stream that crosses the size limit", async () => {
+      // Same path production takes with process.stdin: early exit from for-await destroys the stream.
+      const total = 100;
+      let pulled = 0;
+      const stream = Object.assign(
+        Readable.from(
+          (function* () {
+            for (let i = 0; i < total; i++) {
+              pulled++;
+              yield Buffer.alloc(10, 0x61);
+            }
+          })(),
+        ),
+        { isTTY: false },
+      );
+      const read = resolveFileInputs(["-"], { input: stream, maxBytes: 15 });
+      await expect(read).rejects.toThrow(/exceeds/);
+      expect(stream.destroyed).toBe(true);
+      expect(stream.readableEnded).toBe(false);
+      // Read-ahead is bounded by the stream's highWaterMark, far below the full input.
+      expect(pulled).toBeLessThan(total);
       expect(fs.readdirSync(tmpRoot())).toEqual([]);
     });
 
