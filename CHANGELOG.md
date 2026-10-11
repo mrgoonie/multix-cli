@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.6](https://github.com/mrgoonie/multix-cli/compare/v1.0.5...v1.0.6) (2026-10-11)
+
+
+### Fixed
+
+* **providers:** read model defaults after loading .env files ([#121](https://github.com/mrgoonie/multix-cli/issues/121)) ([5f36dba](https://github.com/mrgoonie/multix-cli/commit/5f36dba0fc7a1ccbe3d904e928c4ef82b3c6ce36))
+
 ## [1.0.5](https://github.com/mrgoonie/multix-cli/compare/v1.0.4...v1.0.5) (2026-10-11)
 
 
