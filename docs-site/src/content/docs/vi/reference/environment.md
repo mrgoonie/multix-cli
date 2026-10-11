@@ -130,6 +130,11 @@ dùng khi nó không thể gửi key của người khác:
   Ví dụ: `FAL_BASE_URL` và `FAL_KEY` cùng nằm trong `.env` của project, hoặc
   `CLOUDFLARE_API_TOKEN` cùng với account ID và gateway ID. Video Cloudflare
   còn gửi `REPLICATE_API_TOKEN`, nên token này cũng phải đến từ cùng file đó.
+  Quy tắc này bảo vệ key của bạn, không bảo vệ dữ liệu của bạn: một `.env` của
+  project có sẵn key và base URL riêng sẽ gửi các request trong project đó, kể cả
+  prompt và mọi file bạn tải lên, tới host đó, và key của nó thay thế key của bạn
+  trong `~/.multix/.env`. Hãy xem kỹ `.env` của repository vừa clone trước khi
+  chạy `multix` trong đó.
 - Giá trị bị bỏ qua khi có key đến từ nơi khác: shell, `~/.multix/.env`, một
   file cũ trong thư mục home, hoặc một file project khác. Nếu `~/.multix/.env`
   đặt cùng biến đó, giá trị ở đó được dùng và `multix` in một cảnh báo nêu tên
@@ -141,6 +146,9 @@ dùng khi nó không thể gửi key của người khác:
 - `multix check` liệt kê từng thiết lập loại này đang được đặt, và cho biết nó
   đang có hiệu lực hay bị bỏ qua (ví dụ
   `FAL_BASE_URL ignored: set in project .env while FAL_KEY comes from the shell`).
+  Lệnh này dùng đúng các bước kiểm tra của các lệnh khác, nên nó cũng báo base
+  URL vi phạm quy tắc `https://` và ID Cloudflare dùng được cho image và speech
+  nhưng không dùng được cho video.
 - Để dùng giá trị của project (ví dụ mock server cục bộ), bật cho đúng một lệnh
   từ shell: `MULTIX_ALLOW_PROJECT_BASE_URL=1 multix ...`. Tránh đặt biến này
   trong `~/.multix/.env`: như vậy sẽ tắt cơ chế bảo vệ cho mọi thư mục bạn chạy

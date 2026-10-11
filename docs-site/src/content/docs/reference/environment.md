@@ -129,7 +129,11 @@ only when it cannot send someone else's key:
   repository's own. For example, `FAL_BASE_URL` and `FAL_KEY` both in the
   project `.env`, or `CLOUDFLARE_API_TOKEN` with the account and gateway IDs.
   Cloudflare video also sends `REPLICATE_API_TOKEN`, so that token must come
-  from the same file too.
+  from the same file too. This protects your key, not your data: a project
+  `.env` that ships its own key and base URL routes that project's requests,
+  including your prompts and any files you upload, to that host, and its key
+  replaces yours from `~/.multix/.env`. Review a cloned repository's `.env`
+  before running `multix` in it.
 - It is ignored when a key comes from somewhere else: the shell,
   `~/.multix/.env`, a legacy file under your home directory, or a different
   project file. If `~/.multix/.env` sets the same variable, that value is used
@@ -141,6 +145,9 @@ only when it cannot send someone else's key:
 - `multix check` lists each of these settings that is set, and whether it is in
   effect or ignored (for example
   `FAL_BASE_URL ignored: set in project .env while FAL_KEY comes from the shell`).
+  It uses the same checks as the commands, so it also flags a base URL that
+  breaks the `https://` rule and a Cloudflare ID that works for image and
+  speech but not for video.
 - To use a project value (for example a local mock server), opt in for a single
   command from your shell:
   `MULTIX_ALLOW_PROJECT_BASE_URL=1 multix ...`. Avoid putting the opt-in in
