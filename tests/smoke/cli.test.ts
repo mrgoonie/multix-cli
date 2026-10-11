@@ -159,4 +159,3 @@ describe("gemini --files - (smoke)", () => {
     expect(result.stdout + result.stderr).toContain("stdin was empty");
   });
 });
-
