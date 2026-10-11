@@ -15,11 +15,14 @@ export function redact(key: string): string {
 /**
  * Strip the query string and fragment from a URL so API keys passed as query
  * parameters and pre-signed media tokens never reach logs or error messages.
- * Non-URL input is returned unchanged except for anything after "?" or "#".
+ * Opaque URLs (data:, blob:, file:) collapse to their scheme. Secrets embedded
+ * in the path itself are not detected. Non-URL input is returned unchanged
+ * except for anything after "?" or "#".
  */
 export function redactUrl(url: string): string {
   try {
     const u = new URL(url);
+    if (u.origin === "null") return `${u.protocol}[redacted]`;
     const suffix = u.search || u.hash ? "?[redacted]" : "";
     return `${u.origin}${u.pathname}${suffix}`;
   } catch {

@@ -88,5 +88,21 @@ export async function fetchJson<T>(opts: FetchJsonOptions): Promise<T> {
     throw await httpErrorFromResponse(response, url);
   }
 
-  return response.json() as Promise<T>;
+  let text: string;
+  try {
+    text = await response.text();
+  } catch (cause) {
+    const msg = cause instanceof Error ? cause.message : String(cause);
+    throw new HttpError(0, `Failed to read response body: ${msg}`, url);
+  }
+  if (text.trim() === "") return undefined as T;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new HttpError(
+      response.status,
+      `Invalid JSON response: ${text.slice(0, SNIPPET_MAX)}`,
+      url,
+    );
+  }
 }

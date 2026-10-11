@@ -17,8 +17,12 @@ export class PollTimeoutError extends MultixError {
 }
 
 export interface PollOptions<T> {
-  /** Fetch the current job state. */
-  fetchStatus: () => Promise<T>;
+  /**
+   * Fetch the current job state. `remainingMs` is the time left before the
+   * deadline; use it as the request timeout so one slow request cannot
+   * overrun the overall wait.
+   */
+  fetchStatus: (ctx: { remainingMs: number; attempt: number }) => Promise<T>;
   /** True once the job reached a terminal state (success OR failure). */
   isTerminal: (state: T) => boolean;
   /** Hard upper bound for the whole wait. */
@@ -31,6 +35,8 @@ export interface PollOptions<T> {
   backoffFactor?: number;
   /** Add up to ±20% random jitter to each delay. Default true. */
   jitter?: boolean;
+  /** Lower bound for any delay, including Retry-After: 0. Default 500ms. */
+  minIntervalMs?: number;
   /** Errors that should be retried instead of aborting. Default: network, 429, 5xx. */
   isTransientError?: (error: unknown) => boolean;
   /** Called after each successful status fetch. */
@@ -61,6 +67,7 @@ export async function pollUntil<T>(opts: PollOptions<T>): Promise<T> {
   const random = opts.random ?? Math.random;
   const isTransient = opts.isTransientError ?? isTransientHttpError;
   const maxInterval = opts.maxIntervalMs ?? 15_000;
+  const minInterval = opts.minIntervalMs ?? 500;
   const factor = opts.backoffFactor ?? 1.5;
   const jitter = opts.jitter ?? true;
   const deadline = now() + opts.timeoutMs;
@@ -68,31 +75,35 @@ export async function pollUntil<T>(opts: PollOptions<T>): Promise<T> {
   let interval = opts.intervalMs ?? 3000;
   let attempt = 0;
   let last: T | undefined;
+  let lastError: unknown;
 
   for (;;) {
     attempt++;
     let retryAfterMs: number | undefined;
     try {
-      last = await opts.fetchStatus();
+      last = await opts.fetchStatus({ remainingMs: Math.max(1, deadline - now()), attempt });
+      lastError = undefined;
       opts.onPoll?.(last, attempt);
       if (opts.isTerminal(last)) return last;
     } catch (error) {
       if (!isTransient(error)) throw error;
+      lastError = error;
       if (error instanceof HttpError) retryAfterMs = error.retryAfterMs;
     }
 
     const remaining = deadline - now();
     if (remaining <= 0) {
       const hint = opts.resumeHint ? ` ${opts.resumeHint}` : "";
+      const cause = lastError instanceof Error ? ` Last error: ${lastError.message}.` : "";
       throw new PollTimeoutError(
-        `Timed out after ${opts.timeoutMs}ms waiting for job.${hint}`,
+        `Timed out after ${opts.timeoutMs}ms waiting for job.${cause}${hint}`,
         last,
       );
     }
 
     let delay = retryAfterMs ?? interval;
     if (jitter && retryAfterMs === undefined) delay *= 0.8 + random() * 0.4;
-    await sleep(Math.max(0, Math.min(delay, remaining)));
+    await sleep(Math.min(Math.max(delay, minInterval), remaining));
     interval = Math.min(interval * factor, maxInterval);
   }
 }

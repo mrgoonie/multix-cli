@@ -8,6 +8,7 @@ import path from "node:path";
 import { downloadFile } from "../../core/http-client.js";
 import { parseJsonInput } from "../../core/json-input.js";
 import type { Logger } from "../../core/logger.js";
+import { redactUrl } from "../../core/redact.js";
 import { HttpError, createFalClient, submitPath } from "./client.js";
 import type { FalResultResponse, FalStatusResponse, FalSubmitResponse } from "./types.js";
 
@@ -208,7 +209,7 @@ export async function downloadResultMedia(
       logger.success(`Saved ${filepath}`);
     } catch (e) {
       fs.rmSync(filepath, { force: true });
-      logger.warn(`Download failed for ${url}: ${e instanceof Error ? e.message : e}`);
+      logger.warn(`Download failed for ${redactUrl(url)}: ${e instanceof Error ? e.message : e}`);
     }
   }
   return saved;

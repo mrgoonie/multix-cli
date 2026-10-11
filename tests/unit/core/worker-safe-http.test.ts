@@ -13,7 +13,7 @@ const WORKER_SAFE_MODULES = ["redact.ts", "fetch-json.ts", "async-poll.ts", "err
 describe("worker-safe core modules", () => {
   it.each(WORKER_SAFE_MODULES)("%s has no node:* imports", (file) => {
     const src = fs.readFileSync(path.resolve("src/core", file), "utf8");
-    expect(src).not.toMatch(/from\s+["']node:/);
+    expect(src).not.toMatch(/(from\s+|import\s*\(?\s*)["']node:/);
   });
 });
 
@@ -33,6 +33,10 @@ describe("redactUrl", () => {
     );
   });
 
+  it("never echoes opaque data: payloads", () => {
+    expect(redactUrl("data:image/png;base64,SECRETPAYLOAD")).toBe("data:[redacted]");
+  });
+
   it("handles non-URL strings", () => {
     expect(redactUrl("not a url?token=1")).toBe("not a url?[redacted]");
   });
@@ -43,7 +47,9 @@ describe("HttpError", () => {
     const e = new HttpError(500, "boom", "https://x.test/a?key=SECRET123");
     expect(e.message).not.toContain("SECRET123");
     expect(e.message).toContain("https://x.test/a");
-    expect(e.url).toBe("https://x.test/a?key=SECRET123");
+    expect(e.url).toBe("https://x.test/a?[redacted]");
+    expect(e.rawUrl).toBe("https://x.test/a?key=SECRET123");
+    expect(JSON.stringify(e)).not.toContain("SECRET123");
   });
 });
 
@@ -91,6 +97,24 @@ describe("fetchJson", () => {
     ).rejects.toMatchObject({ status: 429, retryAfterMs: 2000 });
   });
 
+  it("wraps invalid JSON bodies in HttpError", async () => {
+    await expect(
+      fetchJson({
+        url: "https://api.test/x",
+        fetch: async () => new Response("<html>", { status: 200 }),
+      }),
+    ).rejects.toBeInstanceOf(HttpError);
+  });
+
+  it("returns undefined for empty bodies", async () => {
+    await expect(
+      fetchJson({
+        url: "https://api.test/x",
+        fetch: async () => new Response(null, { status: 204 }),
+      }),
+    ).resolves.toBeUndefined();
+  });
+
   it("falls back to globalThis.fetch", async () => {
     vi.stubGlobal("fetch", async () => new Response("{}", { status: 200 }));
     await expect(fetchJson({ url: "https://api.test/x" })).resolves.toEqual({});
@@ -129,6 +153,7 @@ describe("pollUntil", () => {
       timeoutMs: 60_000,
       jitter: false,
       intervalMs: 100,
+      minIntervalMs: 0,
       sleep: async (ms) => {
         delays.push(ms);
       },
@@ -136,6 +161,38 @@ describe("pollUntil", () => {
     expect(out).toBe("done");
     expect(delays[0]).toBe(1234);
     expect(delays[1]).toBe(150);
+  });
+
+  it("never busy-loops on Retry-After: 0", async () => {
+    let i = 0;
+    const delays: number[] = [];
+    await pollUntil({
+      fetchStatus: async () => {
+        i++;
+        if (i === 1) throw new HttpError(429, "rate", "https://x", 0);
+        return "done";
+      },
+      isTerminal: (s) => s === "done",
+      timeoutMs: 60_000,
+      sleep: async (ms) => {
+        delays.push(ms);
+      },
+    });
+    expect(delays[0]).toBeGreaterThanOrEqual(500);
+  });
+
+  it("passes the remaining budget to fetchStatus", async () => {
+    let seen = 0;
+    await pollUntil({
+      fetchStatus: async ({ remainingMs }) => {
+        seen = remainingMs;
+        return "done";
+      },
+      isTerminal: () => true,
+      timeoutMs: 9_000,
+      now: () => 0,
+    });
+    expect(seen).toBe(9_000);
   });
 
   it("rethrows non-transient errors", async () => {
@@ -165,6 +222,23 @@ describe("pollUntil", () => {
         resumeHint: "Resume with: multix x status abc",
       }),
     ).rejects.toThrow(PollTimeoutError);
+  });
+
+  it("mentions the last transient error on timeout", async () => {
+    let t = 0;
+    await expect(
+      pollUntil({
+        fetchStatus: async () => {
+          throw new HttpError(503, "upstream down", "https://x");
+        },
+        isTerminal: () => false,
+        timeoutMs: 5_000,
+        now: () => t,
+        sleep: async (ms) => {
+          t += ms;
+        },
+      }),
+    ).rejects.toThrow(/Last error: HTTP 503/);
   });
 
   it("classifies transient errors", () => {

@@ -19,6 +19,7 @@ import { ValidationError } from "../../core/errors.js";
 import { ConfigError, HttpError } from "../../core/errors.js";
 import { httpJson } from "../../core/http-client.js";
 import type { Logger } from "../../core/logger.js";
+import { redactUrl } from "../../core/redact.js";
 import { DEFAULT_FAL_BASE_URL } from "./models.js";
 
 export function requireFalKey(): string {
@@ -55,7 +56,7 @@ export class FalClient {
 
   /** Same auth/headers as `request`, but `url` is used verbatim (e.g. a status_url/response_url returned by submit). */
   async requestAbsolute<T = unknown>(url: string, opts: FalRequestOptions = {}): Promise<T> {
-    opts.logger?.debug(`${opts.method ?? "GET"} ${url}`);
+    opts.logger?.debug(`${opts.method ?? "GET"} ${redactUrl(url)}`);
 
     return httpJson<T>({
       url,

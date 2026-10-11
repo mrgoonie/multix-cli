@@ -33,12 +33,16 @@ export async function downloadFile(
   url: string,
   dest: string,
   timeoutMs = DEFAULT_TIMEOUT_MS,
+  headers?: Record<string, string>,
 ): Promise<void> {
   fs.mkdirSync(path.dirname(dest), { recursive: true });
 
   let response: Response;
   try {
-    response = await globalThis.fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+    response = await globalThis.fetch(url, {
+      signal: AbortSignal.timeout(timeoutMs),
+      ...(headers ? { headers } : {}),
+    });
   } catch (cause) {
     const msg = cause instanceof Error ? cause.message : String(cause);
     throw new HttpError(0, msg, url);
