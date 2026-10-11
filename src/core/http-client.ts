@@ -120,7 +120,7 @@ function replaceFile(from: string, to: string): void {
 
 /**
  * Download a URL to a local file, streaming to avoid large memory usage.
- * The body is written to `<dest>.part` and renamed over `dest` only once it
+ * The body is written to a unique `<dest>.<id>.part` file and renamed over `dest` only once it
  * is complete, so a failed download never truncates or removes an existing
  * file. The parent directory is created if needed. Optional URL validation
  * (per redirect hop) and a byte cap. Errors name the last hop (redacted).
@@ -170,7 +170,8 @@ export async function downloadToFile(url: string, opts: DownloadOptions): Promis
     }
   }
 
-  const part = `${dest}.part`;
+  // Unique per process and call, so concurrent downloads to one dest never share it.
+  const part = `${dest}.${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.part`;
   let fileStream: fs.WriteStream | undefined;
   try {
     fileStream = fs.createWriteStream(part);

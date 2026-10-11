@@ -8,7 +8,7 @@ import {
 } from "./models.js";
 import {
   type CloudflareVideoPrediction,
-  cloudflareProviderFailure,
+  cloudflareResponseFailure,
   createCloudflareVideoPrediction,
   getCloudflareVideoPrediction,
   readCloudflareJson,
@@ -82,7 +82,7 @@ export async function runCloudflareBytes(
       body: JSON.stringify(useGateway ? { model, input } : input),
     },
   );
-  if (!response.ok) throw cloudflareProviderFailure(response.status);
+  if (!response.ok) throw await cloudflareResponseFailure(response);
   const contentType = response.headers.get("content-type") ?? "";
   if (!contentType.includes("audio/mpeg")) {
     throw new ProviderError("Cloudflare did not return MPEG audio", "Cloudflare");

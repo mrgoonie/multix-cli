@@ -253,6 +253,7 @@ export class AtlasCloudClient {
         (input, init) => this.doFetch(input, init),
       );
     } catch (cause) {
+      if (cause instanceof HttpError) throw cause;
       throw new HttpError(0, cause instanceof Error ? cause.message : String(cause), url);
     }
     if (!response.ok) throw await httpErrorFromResponse(response, url);

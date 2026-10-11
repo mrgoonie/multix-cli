@@ -125,6 +125,83 @@ describe("fetchFollowingRedirects", () => {
     expect(calls).toHaveLength(1);
   });
 
+  it("stops a redirect loop after maxRedirects with a non-network HttpError", async () => {
+    const { fetch, calls } = fakeFetch({ "https://api.test/a": redirect(302, "/a") });
+    const err = await fetchFollowingRedirects(
+      "https://api.test/a",
+      {},
+      { fetch, maxRedirects: 2 },
+    ).catch((e) => e);
+    expect(err).toBeInstanceOf(HttpError);
+    expect(err.status).toBe(302);
+    expect(err.message).toContain("too many redirects (over 2)");
+    expect(calls).toHaveLength(3);
+  });
+
+  it("rejects a malformed Location header and cancels the redirect body", async () => {
+    const cancel = vi.fn();
+    const body = new ReadableStream({ cancel });
+    const fetch = async () =>
+      new Response(body, { status: 302, headers: { location: "http://[bad" } });
+    const err = await fetchFollowingRedirects("https://api.test/a", {}, { fetch }).catch((e) => e);
+    expect(err).toBeInstanceOf(HttpError);
+    expect(err.status).toBe(302);
+    expect(err.message).toContain("malformed Location");
+    expect(cancel).toHaveBeenCalled();
+  });
+
+  it.each([301, 302])("turns a POST into a body-less GET on %s", async (status) => {
+    const { fetch, calls } = fakeFetch({
+      "https://api.test/a": redirect(status, "/b"),
+      "https://api.test/b": ok(),
+    });
+    await fetchFollowingRedirects(
+      "https://api.test/a",
+      {
+        method: "POST",
+        headers: { "X-Api-Key": "SECRET", "content-type": "application/json" },
+        body: "{}",
+      },
+      { fetch },
+    );
+    expect(calls[1]?.init?.method).toBe("GET");
+    expect(calls[1]?.init?.body).toBeUndefined();
+    expect(header(calls[1], "content-type")).toBeNull();
+    expect(header(calls[1], "x-api-key")).toBe("SECRET");
+  });
+
+  it.each([301, 302])("keeps a PUT and its body on %s", async (status) => {
+    const { fetch, calls } = fakeFetch({
+      "https://api.test/a": redirect(status, "/b"),
+      "https://api.test/b": ok(),
+    });
+    await fetchFollowingRedirects("https://api.test/a", { method: "PUT", body: "x" }, { fetch });
+    expect(calls[1]?.init?.method).toBe("PUT");
+    expect(calls[1]?.init?.body).toBe("x");
+  });
+
+  it("resolves a relative Location against the new origin and never restores the key", async () => {
+    const { fetch, calls } = fakeFetch({
+      "https://api.test/file": redirect(302, "https://storage.test/a"),
+      "https://storage.test/a": redirect(302, "/b"),
+      "https://storage.test/b": redirect(302, "https://api.test/again"),
+      "https://api.test/again": ok("DATA"),
+    });
+    const { url } = await fetchFollowingRedirects(
+      "https://api.test/file",
+      { headers: { "X-Api-Key": "SECRET" } },
+      { fetch },
+    );
+    expect(url).toBe("https://api.test/again");
+    expect(calls.map((c) => c.url)).toEqual([
+      "https://api.test/file",
+      "https://storage.test/a",
+      "https://storage.test/b",
+      "https://api.test/again",
+    ]);
+    expect(calls.slice(1).map((c) => header(c, "x-api-key"))).toEqual([null, null, null]);
+  });
+
   it("validates a response URL that differs from the requested one", async () => {
     const res = new Response("x");
     Object.defineProperty(res, "url", { value: "http://plain.test/x" });
@@ -178,6 +255,36 @@ describe("fetchJson redirects", () => {
     expect(err.status).toBe(308);
     expect(calls.map((c) => c.url)).toEqual(["https://api.test/v1/x"]);
   });
+
+  it.each([
+    ["no headers", undefined],
+    ["only non-credential headers", { Accept: "application/json", "User-Agent": "multix" }],
+  ])("follows a cross-origin redirect for a request with %s", async (_, headers) => {
+    const { fetch, calls } = fakeFetch({
+      "https://catalog.test/schema.json": redirect(302, "https://cdn.test/schema.json"),
+      "https://cdn.test/schema.json": ok('{"type":"object"}'),
+    });
+    await expect(
+      fetchJson({ url: "https://catalog.test/schema.json", headers, fetch }),
+    ).resolves.toEqual({ type: "object" });
+    expect(calls.map((c) => c.url)).toEqual([
+      "https://catalog.test/schema.json",
+      "https://cdn.test/schema.json",
+    ]);
+  });
+
+  it.each(["Authorization", "X-Api-Key", "xi-api-key", "X-Custom"])(
+    "refuses a cross-origin redirect when the request carries %s",
+    async (name) => {
+      const { fetch, calls } = fakeFetch({
+        "https://api.test/v1/x": redirect(302, "https://evil.test/v1/x"),
+      });
+      await expect(
+        fetchJson({ url: "https://api.test/v1/x", headers: { [name]: "SECRET" }, fetch }),
+      ).rejects.toMatchObject({ status: 302 });
+      expect(calls).toHaveLength(1);
+    },
+  );
 
   it("follows a same-origin redirect", async () => {
     const { fetch, calls } = fakeFetch({

@@ -32,8 +32,8 @@ export MULTIX_OUTPUT_DIR="./multix-output"
 multix check
 ```
 
-Keys are sent only to the provider's own API origin. If an API request is
-redirected to another host, or from `https://` to `http://`, multix stops and
+Keys are never forwarded to another origin on an HTTP redirect. If an API
+request is redirected to another host, or from `https://` to `http://`, multix stops and
 reports the HTTP 3xx status instead of following it. A download that the
 provider hands off to a storage host still works, but the key header is removed
 before that redirect is followed.

@@ -132,7 +132,7 @@ export function registerDubCommand(parent: Command): void {
     });
 }
 
-async function downloadDub(url: string, apiKey: string, dest: string): Promise<void> {
+export async function downloadDub(url: string, apiKey: string, dest: string): Promise<void> {
   fs.mkdirSync(path.dirname(dest), { recursive: true });
   // The key header is dropped if the API redirects to another origin.
   const { response: res } = await fetchWithValidatedRedirects(url, {

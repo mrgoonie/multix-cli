@@ -349,6 +349,7 @@ export class ReplicateClient {
         this.doFetch,
       );
     } catch (cause) {
+      if (cause instanceof HttpError) throw mapReplicateError(cause, subject);
       const msg = cause instanceof Error ? cause.message : String(cause);
       throw mapReplicateError(new HttpError(0, msg, url), subject);
     }

@@ -31,8 +31,8 @@ export MULTIX_OUTPUT_DIR="./multix-output"
 multix check
 ```
 
-Key chỉ được gửi tới đúng origin API của provider. Nếu một request API bị
-chuyển hướng (redirect) sang host khác, hoặc từ `https://` sang `http://`,
+Key không bao giờ bị chuyển tiếp sang origin khác khi gặp HTTP redirect. Nếu
+một request API bị chuyển hướng (redirect) sang host khác, hoặc từ `https://` sang `http://`,
 multix dừng lại và báo mã HTTP 3xx thay vì đi theo. Bản tải xuống mà provider
 chuyển sang host lưu trữ vẫn hoạt động, nhưng header chứa key được gỡ bỏ trước
 khi đi theo redirect đó.

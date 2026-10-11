@@ -430,6 +430,8 @@ export class HeygenClient {
           doFetch,
         );
       } catch (cause) {
+        // A redirect loop is not a network failure: report it, do not retry.
+        if (cause instanceof HttpError) throw toHeygenApiError(cause);
         const msg = cause instanceof Error ? cause.message : String(cause);
         const err = toHeygenApiError(new HttpError(0, msg, url));
         if (attempt >= this.maxAttempts) throw err;

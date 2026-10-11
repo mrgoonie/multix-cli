@@ -235,6 +235,30 @@ describe("downloadToFile", () => {
     expect(fs.readdirSync(tmp)).toEqual(["hero.png"]);
   });
 
+  it("gives concurrent downloads to one destination their own temporary file", async () => {
+    /** Body sent in two chunks with a pause, so both downloads are in flight together. */
+    const slow = (fill: number) => () =>
+      new Response(
+        new ReadableStream<Uint8Array>({
+          async start(controller) {
+            controller.enqueue(new Uint8Array(4).fill(fill));
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            controller.enqueue(new Uint8Array(4).fill(fill));
+            controller.close();
+          },
+        }),
+      );
+    const { fetch } = fakeFetch({ "https://a.test/1": slow(1), "https://a.test/2": slow(2) });
+    const dest = path.join(tmp, "out.bin");
+    await Promise.all([
+      downloadToFile("https://a.test/1", { dest, fetch }),
+      downloadToFile("https://a.test/2", { dest, fetch }),
+    ]);
+    const bytes = [...fs.readFileSync(dest)];
+    expect([new Array(8).fill(1), new Array(8).fill(2)]).toContainEqual(bytes);
+    expect(fs.readdirSync(tmp)).toEqual(["out.bin"]);
+  });
+
   it("replaces the destination when rename refuses to overwrite it (Windows)", async () => {
     const { fetch } = fakeFetch({ "https://a.test/f": () => new Response(BYTES) });
     const dest = path.join(tmp, "hero.png");

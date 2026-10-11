@@ -57,6 +57,7 @@ export async function postOpenAIForm<T>(
       signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (cause) {
+    if (cause instanceof HttpError) throw cause;
     throw new HttpError(0, cause instanceof Error ? cause.message : String(cause), url);
   }
   if (!res.ok) {
@@ -82,6 +83,7 @@ export async function postOpenAIBinary(
       signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (cause) {
+    if (cause instanceof HttpError) throw cause;
     throw new HttpError(0, cause instanceof Error ? cause.message : String(cause), url);
   }
   if (!res.ok) {

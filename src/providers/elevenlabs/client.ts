@@ -114,6 +114,7 @@ export async function apiPostBinary(
   try {
     res = await fetchSameOrigin(url.toString(), init);
   } catch (cause) {
+    if (cause instanceof HttpError) throw cause;
     const msg = cause instanceof Error ? cause.message : String(cause);
     throw new HttpError(0, msg, url.toString());
   }
@@ -145,6 +146,7 @@ export async function apiPostMultipart<T>(
       signal: AbortSignal.timeout(opts.timeoutMs ?? DEFAULT_TIMEOUT_MS),
     });
   } catch (cause) {
+    if (cause instanceof HttpError) throw cause;
     const msg = cause instanceof Error ? cause.message : String(cause);
     throw new HttpError(0, msg, url);
   }
