@@ -132,14 +132,17 @@ luồng, không nạp toàn bộ vào bộ nhớ.
 ## Kết quả
 
 - File được lưu vào `./multix-output/` (hoặc `MULTIX_OUTPUT_DIR`) với tên
-  `atlas-<8 ký tự đầu của prediction id>-NN.<ext>`. Tên tự sinh này không bao
-  giờ ghi đè file đã có: khi đã tồn tại file cùng tên, với bất kỳ phần mở rộng
-  nào, multix thêm `-1`, `-2`, ... vào tên. Quy tắc này cũng áp dụng khi ảnh
-  được chuyển sang WebP sau đó.
+  `atlas-<prediction id>-NN.<ext>`. Mỗi kết quả của một prediction luôn có cùng
+  một tên, nên khi chạy lại `multix atlas status <id> --wait --download`, các
+  file đã lưu ở lần trước được giữ nguyên (ghi là "already saved", với bất kỳ
+  phần mở rộng nào, ví dụ sau khi chuyển sang WebP) và chỉ những kết quả còn
+  thiếu được tải. Không có file nào bị trùng lặp.
 - `--output` kết thúc bằng dấu gạch chéo, không có phần mở rộng, hoặc là thư mục
-  đã tồn tại sẽ được dùng làm thư mục kết quả. Đường dẫn file được dùng nguyên
-  vẹn khi chỉ có một kết quả, và làm phần gốc của tên `<name>-NN.<ext>` khi có
-  nhiều kết quả. Đường dẫn file do bạn chọn sẽ bị ghi đè.
+  đã tồn tại sẽ được dùng làm thư mục kết quả, với cùng cách đặt tên. Đường dẫn
+  file được dùng nguyên vẹn khi chỉ có một kết quả và sẽ bị ghi đè. Khi có nhiều
+  kết quả, đường dẫn file là phần gốc của tên `<name>-NN.<ext>`; các tên này
+  không bao giờ ghi đè file đã có (với bất kỳ phần mở rộng nào): multix thêm
+  `-1`, `-2`, ... vào tên.
 - URL kết quả đến từ phản hồi của API, nên multix kiểm tra trước khi tải: chỉ tải
   URL `https://`, và từ chối `localhost` hoặc địa chỉ IP loopback, private,
   link-local hay địa chỉ dùng cho mục đích đặc biệt khác. Mọi lần redirect đều
@@ -153,9 +156,13 @@ luồng, không nạp toàn bộ vào bộ nhớ.
   ảnh tham chiếu, bị bỏ qua. Việc tải thumbnail tuân theo cùng quy tắc như kết
   quả. Truyền `--no-thumb` để bỏ qua.
 - URL kết quả không có phần mở rộng sẽ được đặt tên theo `Content-Type` của lần
-  tải, nên job tiếp tục sau cũng có tên `.mp4` hay `.png` giống job chờ trực tiếp.
+  tải, nên job tiếp tục sau cũng có cùng tên, kể cả đuôi `.mp4` hay `.png`, như
+  job chờ trực tiếp.
 - Mỗi file được tải vào một file tạm `.part` rồi đổi tên khi hoàn tất, nên lần tải
-  thất bại không bao giờ ghi đè hay xóa file đã có.
+  thất bại không bao giờ ghi đè hay xóa file đã có. File `.part` cũng giữ chỗ
+  cho tên: lần chạy thứ hai gặp cùng kết quả trong lúc đang tải sẽ dừng với lỗi
+  thay vì ghi file hai lần. Nếu không còn lượt tải nào đang chạy, hãy xóa file
+  `.part` còn sót lại rồi thử lại.
 - Nếu một số kết quả tải thất bại, multix liệt kê các file đã lưu, in lệnh tiếp
   tục và thoát với mã khác 0.
 - Ảnh được chuyển sang WebP khi đã cài `cwebp`. Truyền `--image-format original`

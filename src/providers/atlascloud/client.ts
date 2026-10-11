@@ -24,7 +24,7 @@ import {
   httpErrorFromResponse,
 } from "../../core/fetch-json.js";
 import { parseModelSpec } from "./model-input.js";
-import { DEFAULT_ATLAS_BASE_URL, SUBMIT_PATHS } from "./models.js";
+import { ATLAS_PROVIDER, DEFAULT_ATLAS_BASE_URL, SUBMIT_PATHS } from "./models.js";
 import {
   isFailureStatus,
   isSuccessStatus,
@@ -42,7 +42,7 @@ import type {
   WaitOptions,
 } from "./types.js";
 
-export const ATLAS_PROVIDER = "atlascloud";
+export { ATLAS_PROVIDER };
 const DEFAULT_UPLOAD_TIMEOUT_MS = 300_000;
 const CATALOG_TIMEOUT_MS = 15_000;
 const PREDICTION_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;

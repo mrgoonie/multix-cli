@@ -5,8 +5,9 @@
  * images finalized to WebP like other providers, video thumbnails).
  *
  * Output and thumbnail downloads are https-only, never reach a local/private
- * address (checked on every redirect hop), stop at MULTIX_MAX_DOWNLOAD_MB, and
- * never overwrite an existing file under a generated name.
+ * address (checked on every redirect hop), and stop at MULTIX_MAX_DOWNLOAD_MB.
+ * Generated names are deterministic per prediction output, so a retry keeps
+ * the files an earlier run saved and downloads only the missing ones.
  */
 
 import fs from "node:fs";
@@ -213,7 +214,7 @@ export function isDirectoryOutput(output: string): boolean {
 
 /**
  * Plan local paths for media outputs. Without --output: the output dir with
- * `atlas-<id>-NN.<ext>`. --output without an extension (or an existing
+ * `atlas-<prediction id>-NN.<ext>`. --output without an extension (or an existing
  * directory) is a directory; with an extension it is the file for a single
  * output, or the `<base>-NN.<ext>` stem for several.
  */
@@ -261,8 +262,9 @@ export async function deliverPrediction(
   for (const text of classified.texts) console.log(text);
   if (classified.mode === "text") {
     if (opts.output) {
+      // A directory gets the deterministic name, so a rerun rewrites the same text.
       const dest = isDirectoryOutput(opts.output)
-        ? availableOutputPath(path.resolve(opts.output, outputFileName(prediction.id, 0, "txt")))
+        ? path.resolve(opts.output, outputFileName(prediction.id, 0, "txt"))
         : path.resolve(opts.output);
       fs.mkdirSync(path.dirname(dest), { recursive: true });
       fs.writeFileSync(dest, `${classified.texts.join("\n\n")}\n`, "utf8");
@@ -283,35 +285,42 @@ export async function deliverPrediction(
     output: opts.output,
     hint: cfg.hint,
   });
-  // An explicit single-file --output keeps the user's chosen name and extension.
-  const explicitFile =
-    classified.urls.length === 1 && opts.output !== undefined && !isDirectoryOutput(opts.output);
-  // Generated names (no --output, or a directory) never replace an existing file;
-  // a user-chosen file path is overwritten as asked.
-  const generatedNames = !opts.output || isDirectoryOutput(opts.output);
+  const policy = namingPolicy(opts.output, classified.urls.length);
   // Read the cap up front so a bad MULTIX_MAX_DOWNLOAD_MB fails before any download.
   const maxBytes = maxDownloadBytes();
   const saved: string[] = [];
+  const downloaded: string[] = [];
+  const reused = new Set<string>();
   let failed = 0;
   for (let i = 0; i < classified.urls.length; i++) {
     const url = classified.urls[i] as string;
     const planned = dests[i] as string;
     try {
+      // Checked before fetching: the stem is known even when the extension
+      // still depends on the response Content-Type.
+      const existing = policy === "reuse" ? savedOutput(planned) : undefined;
+      if (existing) {
+        saved.push(existing);
+        reused.add(existing);
+        logger.info(`Already saved: ${existing}`);
+        continue;
+      }
       // downloadToFile writes `<dest>.part` and renames on success, so a failed
       // download never deletes or truncates a file the user already had.
       const { dest } = await downloadToFile(url, {
-        dest: (response) => {
-          const named =
-            explicitFile || outputExtension(url)
+        dest: (response) =>
+          claimOutputPath(
+            policy === "overwrite" || outputExtension(url)
               ? planned
-              : withContentTypeExtension(planned, response.headers.get("content-type"));
-          return generatedNames ? availableOutputPath(named) : named;
-        },
+              : withContentTypeExtension(planned, response.headers.get("content-type")),
+            policy,
+          ),
         maxBytes,
         // Inline data: outputs are decoded by fetch, never sent over the network.
         validateUrl: isDataUrl(url) ? undefined : checkOutputUrl,
       });
       saved.push(dest);
+      downloaded.push(dest);
       logger.debug(`Downloaded ${redactUrl(url)} -> ${dest}`);
     } catch (e) {
       failed++;
@@ -327,7 +336,8 @@ export async function deliverPrediction(
     );
   }
 
-  const images = saved.filter((f) => outputCategory(f) === "image");
+  // Files saved by an earlier run were finalized then (or kept as asked then).
+  const images = downloaded.filter((f) => outputCategory(f) === "image");
   // A directory --output must not reach the finalizer, which treats it as a file path.
   const fileOutput = opts.output && !isDirectoryOutput(opts.output) ? opts.output : undefined;
   const finalImages = finalizeGeneratedImages(images, {
@@ -341,17 +351,24 @@ export async function deliverPrediction(
   const firstVideo = files.find((f) => outputCategory(f) === "video");
   if (firstVideo) {
     // Only the outputs may name a thumbnail: the rest of the payload can echo
-    // request input such as a reference image. Same URL policy as the outputs.
+    // request input such as a reference image. Same URL and naming policy as the outputs.
     await maybeDownloadThumb(thumbnailSource(prediction), firstVideo, {
       skip: opts.thumb === false,
       logger,
-      download: (thumbUrl, dest) =>
-        downloadToFile(thumbUrl, { dest, maxBytes, validateUrl: checkOutputUrl }),
+      download: async (thumbUrl, planned) => {
+        const existing = policy === "reuse" ? savedOutput(planned) : undefined;
+        if (existing) return { dest: existing };
+        return downloadToFile(thumbUrl, {
+          dest: () => claimOutputPath(planned, policy),
+          maxBytes,
+          validateUrl: checkOutputUrl,
+        });
+      },
     });
   }
 
   console.log(`\nPrediction ${prediction.id}: saved ${files.length} file(s)`);
-  for (const f of files) console.log(`  ${f}`);
+  for (const f of files) console.log(`  ${f}${reused.has(f) ? " (already saved)" : ""}`);
   if (failed > 0) {
     // Paid-for outputs were lost: scripts must not mistake this for success.
     throw new ProviderError(
@@ -367,26 +384,98 @@ function isDataUrl(url: string): boolean {
 }
 
 /**
+ * How a planned output name treats a file that is already there:
+ * - `overwrite`: a single-output `--output` file the user chose;
+ * - `reuse`: a generated `atlas-<id>-NN` name (no `--output`, or a directory).
+ *   It is deterministic per prediction output, so an existing file is that
+ *   output, saved by an earlier run, and is kept instead of downloaded again;
+ * - `unique`: the `<base>-NN` names derived from a multi-output `--output` file
+ *   can match unrelated files, so a free `-N` suffix is picked instead.
+ */
+export type NamingPolicy = "overwrite" | "reuse" | "unique";
+
+export function namingPolicy(output: string | undefined, outputCount: number): NamingPolicy {
+  if (!output || isDirectoryOutput(output)) return "reuse";
+  return outputCount === 1 ? "overwrite" : "unique";
+}
+
+const PART = ".part";
+// Windows and default macOS file systems ignore case, so names must too.
+const foldCase = process.platform === "win32" || process.platform === "darwin";
+
+/** Name without extension (and without a trailing `.part`), case-folded where the file system is. */
+function stemOf(name: string): string {
+  const base = name.toLowerCase().endsWith(PART) ? name.slice(0, -PART.length) : name;
+  const stem = base.slice(0, base.length - path.extname(base).length);
+  return foldCase ? stem.toLowerCase() : stem;
+}
+
+function listDir(dir: string): string[] {
+  try {
+    return fs.readdirSync(dir);
+  } catch {
+    return []; // the directory does not exist yet: nothing to collide with
+  }
+}
+
+/**
+ * A complete file beside `file` with the same stem, whatever its extension
+ * (a PNG may have become WebP), or undefined. In-progress `.part` files do not
+ * count; the exact planned name wins when several match.
+ */
+export function savedOutput(file: string): string | undefined {
+  const dir = path.dirname(file);
+  const stem = stemOf(path.basename(file));
+  const matches = listDir(dir).filter((n) => !n.toLowerCase().endsWith(PART) && stemOf(n) === stem);
+  const exact = matches.find((n) => n === path.basename(file));
+  const found = exact ?? matches.sort()[0];
+  return found === undefined ? undefined : path.join(dir, found);
+}
+
+/**
  * `file`, or the first free `<stem>-N<ext>` beside it. A stem counts as taken
- * when any file in the directory shares it, whatever its extension, so neither
- * a different output type nor a later WebP conversion (`.png` -> `.webp`) can
- * overwrite an earlier output.
+ * when any file in the directory shares it, whatever its extension, including
+ * an in-progress `.part` download, so neither a different output type nor a
+ * later WebP conversion (`.png` -> `.webp`) can overwrite an earlier output.
  */
 export function availableOutputPath(file: string): string {
   const dir = path.dirname(file);
   const ext = path.extname(file);
   const stem = path.basename(file, ext);
-  let entries: string[];
-  try {
-    entries = fs.readdirSync(dir);
-  } catch {
-    return file; // the directory does not exist yet: nothing to collide with
-  }
-  const stems = new Set(entries.map((n) => n.slice(0, n.length - path.extname(n).length)));
-  if (!stems.has(stem)) return file;
+  const stems = new Set(listDir(dir).map(stemOf));
+  const fold = (s: string) => (foldCase ? s.toLowerCase() : s);
+  if (!stems.has(fold(stem))) return file;
   for (let n = 1; ; n++) {
     const candidate = `${stem}-${n}`;
-    if (!stems.has(candidate)) return path.join(dir, `${candidate}${ext}`);
+    if (!stems.has(fold(candidate))) return path.join(dir, `${candidate}${ext}`);
+  }
+}
+
+/**
+ * Pick the destination for `file` under `policy` and, unless it is a file the
+ * user asked to overwrite, reserve it by creating `<dest>.part` exclusively.
+ * downloadToFile then streams into that `.part` and renames it into place (or
+ * removes it on failure), so two concurrent runs can never write one name.
+ */
+export function claimOutputPath(file: string, policy: NamingPolicy): string {
+  if (policy === "overwrite") return file;
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  for (;;) {
+    const dest = policy === "unique" ? availableOutputPath(file) : file;
+    try {
+      fs.closeSync(fs.openSync(`${dest}${PART}`, "wx"));
+      return dest;
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+      if (policy === "reuse") {
+        throw new ProviderError(
+          `${dest}${PART} exists: another download of this output is in progress. If none is running, delete that file and retry.`,
+          ATLAS_PROVIDER,
+        );
+      }
+      // unique: another run took this name since the directory was listed; the
+      // next listing sees its `.part`, so pick again.
+    }
   }
 }
 

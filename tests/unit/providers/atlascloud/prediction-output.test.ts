@@ -6,6 +6,7 @@ import {
   checkOutputUrl,
   classifyOutputs,
   collectOutputs,
+  extensionForContentType,
   hasNsfwFlag,
   isFailureStatus,
   isSuccessStatus,
@@ -94,9 +95,23 @@ describe("extensions and names", () => {
     expect(outputCategory("https://cdn/x/a.zip")).toBe("3d");
   });
 
-  it("names multi-output files atlas-<idprefix>-NN.<ext>", () => {
-    expect(outputFileName("47e7acf05d7449c1874f", 0, "jpg")).toBe("atlas-47e7acf0-01.jpg");
+  it("names multi-output files atlas-<prediction id>-NN.<ext>", () => {
+    expect(outputFileName("47e7acf05d7449c1874f", 0, "jpg")).toBe(
+      "atlas-47e7acf05d7449c1874f-01.jpg",
+    );
     expect(outputFileName("ab", 11, "mp3")).toBe("atlas-ab-12.mp3");
+    expect(outputFileName("../x/y", 0, "png")).toBe("atlas-xy-01.png");
+  });
+
+  it("maps svg, avif, bmp, audio/webm and mkv content types; svg is never an image to convert", () => {
+    expect(extensionForContentType("image/svg+xml")).toBe("svg");
+    expect(extensionForContentType("image/avif")).toBe("avif");
+    expect(extensionForContentType("image/bmp")).toBe("bmp");
+    expect(extensionForContentType("audio/webm; codecs=opus")).toBe("webm");
+    expect(extensionForContentType("video/x-matroska")).toBe("mkv");
+    expect(outputExtension("data:image/svg+xml;base64,PHN2Zy8+")).toBe("svg");
+    expect(outputCategory("data:image/svg+xml;base64,PHN2Zy8+")).toBe("unknown");
+    expect(outputCategory("data:image/avif;base64,AAAA")).toBe("image");
   });
 
   it("checkOutputUrl allows public https only and never echoes the signed path", () => {

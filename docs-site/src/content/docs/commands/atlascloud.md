@@ -132,14 +132,16 @@ streamed, not loaded into memory.
 ## Output
 
 - Files are saved to `./multix-output/` (or `MULTIX_OUTPUT_DIR`) as
-  `atlas-<first 8 chars of the prediction id>-NN.<ext>`. Such a generated name
-  never overwrites an existing file: when a file with the same name already
-  exists, whatever its extension, multix adds `-1`, `-2`, ... instead. This also
-  covers a later WebP conversion.
+  `atlas-<prediction id>-NN.<ext>`. The name is fixed for each output of a
+  prediction, so retrying with `multix atlas status <id> --wait --download`
+  keeps the files an earlier run saved (listed as "already saved", whatever
+  their extension, for example after a WebP conversion) and downloads only the
+  missing ones. Nothing is duplicated.
 - `--output` with a trailing slash, no extension, or an existing directory is
-  used as the output directory. A file path is used as-is for a single output,
-  and as the stem for `<name>-NN.<ext>` when there are several. A file path
-  you choose is overwritten.
+  used as the output directory, with the same names. A file path is used as-is
+  for a single output and is overwritten. With several outputs, a file path is
+  the stem for `<name>-NN.<ext>`; those names never overwrite an existing file
+  (whatever its extension): multix adds `-1`, `-2`, ... instead.
 - Output URLs come from the API response, so multix checks them before
   downloading: only `https://` URLs are fetched, and `localhost` or a loopback,
   private, link-local or other special-purpose IP address is refused. Every
@@ -153,10 +155,13 @@ streamed, not loaded into memory.
   are ignored. The thumbnail download follows the same rules as the outputs.
   Pass `--no-thumb` to skip it.
 - An output URL without a file extension is named from the download's
-  `Content-Type`, so a resumed job gets the same `.mp4` or `.png` name as a
-  waited one.
+  `Content-Type`, so a resumed job gets the same name, `.mp4` or `.png`
+  included, as a waited one.
 - Each file is downloaded to a temporary `.part` file and renamed when complete,
-  so a failed download never overwrites or deletes an existing file.
+  so a failed download never overwrites or deletes an existing file. The
+  `.part` file also reserves the name: a second run that reaches the same
+  output while it downloads stops with an error instead of writing it twice.
+  If no download is running, delete the leftover `.part` file and retry.
 - If some outputs fail to download, multix lists the files it saved, prints the
   resume command and exits with a non-zero status.
 - Images are converted to WebP when `cwebp` is installed. Pass

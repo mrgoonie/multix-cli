@@ -9,6 +9,7 @@
  */
 
 import { checkUrlSafety } from "../../core/url-safety.js";
+import { ATLAS_PROVIDER } from "./models.js";
 import type { AtlasPrediction } from "./types.js";
 
 const SUCCESS_STATUSES = new Set(["completed", "succeeded", "success"]);
@@ -80,7 +81,7 @@ export function collectOutputs(prediction: AtlasPrediction): string[] {
  * network and are not passed through this check. Messages name the host only.
  */
 export function checkOutputUrl(url: string): void {
-  checkUrlSafety(url, { provider: "atlascloud" });
+  checkUrlSafety(url, { provider: ATLAS_PROVIDER });
 }
 
 /** An output is media when it is an http(s) or data: URI; anything else is text content. */
@@ -91,6 +92,8 @@ export function isMediaOutput(value: string): boolean {
 
 export type OutputCategory = "image" | "video" | "audio" | "3d" | "unknown";
 
+// `svg` is deliberately not an "image" here: it is vector markup, and only
+// "image" outputs are handed to the WebP converter.
 const EXT_CATEGORY: Record<string, OutputCategory> = {
   png: "image",
   jpg: "image",
@@ -129,8 +132,14 @@ const MIME_EXT: Record<string, string> = {
   "image/jpeg": "jpg",
   "image/webp": "webp",
   "image/gif": "gif",
+  "image/avif": "avif",
+  "image/bmp": "bmp",
+  "image/svg+xml": "svg",
   "video/mp4": "mp4",
   "video/webm": "webm",
+  "video/x-matroska": "mkv",
+  "video/matroska": "mkv",
+  "audio/webm": "webm",
   "audio/mpeg": "mp3",
   "audio/mp3": "mp3",
   "audio/wav": "wav",
@@ -225,12 +234,11 @@ export function thumbnailSource(prediction: AtlasPrediction): unknown {
 }
 
 /**
- * `atlas-<first 8 of id>-NN.<ext>` — distinct names for the outputs of one
- * prediction. Two predictions can share an id prefix, so callers writing into
- * an existing directory pick a free name with a numeric suffix
- * (`availableOutputPath` in the command layer).
+ * `atlas-<prediction id>-NN.<ext>` — one deterministic name per output of a
+ * prediction. The full (sanitized) id keeps different predictions apart, so a
+ * file already under this name is this very output, saved by an earlier run.
  */
 export function outputFileName(predictionId: string, index: number, ext: string): string {
-  const prefix = predictionId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 8) || "output";
-  return `atlas-${prefix}-${String(index + 1).padStart(2, "0")}.${ext}`;
+  const id = predictionId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64) || "output";
+  return `atlas-${id}-${String(index + 1).padStart(2, "0")}.${ext}`;
 }
