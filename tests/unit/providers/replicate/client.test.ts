@@ -12,6 +12,12 @@ import { BASE, TOKEN, createFakeReplicate, noSleep, prediction } from "./fake-re
 
 const VERSION = "c846a69991daf4c0e5d016514849d14ee5b2e6846ce6b9d6f21369e564cfe51e";
 
+/** What undici throws when the connection is reset. */
+const econnreset = () =>
+  new TypeError("fetch failed", {
+    cause: Object.assign(new Error("read ECONNRESET"), { code: "ECONNRESET" }),
+  });
+
 function client(fake: ReturnType<typeof createFakeReplicate>) {
   return new ReplicateClient({ apiKey: TOKEN, baseUrl: BASE, fetch: fake.fetch, sleep: noSleep });
 }
@@ -278,17 +284,17 @@ describe("HTTP error mapping", () => {
 
   it("reports network failures as status 0", async () => {
     const fake = createFakeReplicate({
-      "POST /models/o/m/predictions": [{ throws: new Error("ECONNRESET") }],
+      "POST /models/o/m/predictions": [{ throws: econnreset() }],
     });
     await expect(
       client(fake).createPrediction({ model: parseModelRef("o/m"), input: {} }),
-    ).rejects.toThrow(/Network error contacting Replicate: ECONNRESET/);
+    ).rejects.toThrow(/Network error contacting Replicate: fetch failed: read ECONNRESET/);
   });
 
   it.each([
     [
       "a network error or timeout",
-      { throws: new Error("The operation was aborted due to timeout") },
+      { throws: new DOMException("The operation was aborted due to timeout", "TimeoutError") },
     ],
     ["a 5xx", { status: 502, text: "bad gateway" }],
     ["a 2xx with invalid JSON", { status: 201, text: "<html>captive portal</html>" }],
@@ -304,7 +310,7 @@ describe("HTTP error mapping", () => {
   it("does not add the orphan hint to client errors or to status checks", async () => {
     const fake = createFakeReplicate({
       "POST /models/o/m/predictions": [{ status: 422, json: { detail: "bad" } }],
-      "GET /predictions/p1": [{ throws: new Error("ECONNRESET") }],
+      "GET /predictions/p1": [{ throws: econnreset() }],
     });
     const create = await client(fake)
       .createPrediction({ model: parseModelRef("o/m"), input: {} })

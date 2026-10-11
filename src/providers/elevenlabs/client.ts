@@ -7,6 +7,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { resolveKey } from "../../core/env-loader.js";
 import { ConfigError, HttpError, ProviderError, ValidationError } from "../../core/errors.js";
+import { toFetchError } from "../../core/fetch-error.js";
 import { httpJson } from "../../core/http-client.js";
 import type { Logger } from "../../core/logger.js";
 import { getOutputDir } from "../../core/output-dir.js";
@@ -67,11 +68,17 @@ export function apiPostJson<T>(
 /** DELETE. */
 export async function apiDelete(endpoint: string, apiKey: string): Promise<void> {
   const url = `${ELEVENLABS_BASE_URL}/${endpoint.replace(/^\//, "")}`;
-  const res = await fetchSameOrigin(url, {
-    method: "DELETE",
-    headers: authHeaders(apiKey),
-    signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
-  });
+  let res: Response;
+  try {
+    res = await fetchSameOrigin(url, {
+      method: "DELETE",
+      headers: authHeaders(apiKey),
+      signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
+    });
+  } catch (cause) {
+    if (cause instanceof HttpError) throw cause;
+    throw toFetchError(cause, url, { provider: "elevenlabs" });
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new HttpError(res.status, text.slice(0, 500), url);
@@ -115,8 +122,7 @@ export async function apiPostBinary(
     res = await fetchSameOrigin(url.toString(), init);
   } catch (cause) {
     if (cause instanceof HttpError) throw cause;
-    const msg = cause instanceof Error ? cause.message : String(cause);
-    throw new HttpError(0, msg, url.toString());
+    throw toFetchError(cause, url.toString(), { provider: "elevenlabs" });
   }
 
   if (!res.ok) {
@@ -147,8 +153,7 @@ export async function apiPostMultipart<T>(
     });
   } catch (cause) {
     if (cause instanceof HttpError) throw cause;
-    const msg = cause instanceof Error ? cause.message : String(cause);
-    throw new HttpError(0, msg, url);
+    throw toFetchError(cause, url, { provider: "elevenlabs" });
   }
   if (!res.ok) {
     const text = await res.text().catch(() => "");

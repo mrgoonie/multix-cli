@@ -10,6 +10,7 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { resolveKey } from "./env-loader.js";
 import { ConfigError, HttpError, MultixError } from "./errors.js";
+import { toFetchError } from "./fetch-error.js";
 import {
   DEFAULT_TIMEOUT_MS,
   type FetchLike,
@@ -229,8 +230,7 @@ export async function fetchBytes(urlOrDataUri: string): Promise<Buffer> {
       signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
     });
   } catch (cause) {
-    const msg = cause instanceof Error ? cause.message : String(cause);
-    throw new HttpError(0, msg, urlOrDataUri);
+    throw toFetchError(cause, urlOrDataUri);
   }
 
   if (!response.ok) {

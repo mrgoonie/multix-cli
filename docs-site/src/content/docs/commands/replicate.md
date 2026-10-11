@@ -123,7 +123,7 @@ uploaded through the Replicate Files API. Files must be under 100 MB.
 
 - 401 points at the token, 404 at the model (or a missing version for
   community models), 422 at the model's input schema, and 429 honours
-  `Retry-After`; network errors, timeouts, 408, 429, and 5xx are retried while polling.
+  `Retry-After`; network errors, timeouts, 408, 429, and 5xx (except 501 and 505) are retried while polling.
 - The token is never logged. `status` JSON omits prediction inputs and logs
   and strips signed query strings from output URLs; verbose logs redact them
   too.

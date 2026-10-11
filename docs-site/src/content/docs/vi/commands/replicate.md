@@ -125,7 +125,7 @@ lên qua Replicate Files API. File phải nhỏ hơn 100 MB.
 
 - Lỗi 401 chỉ ra vấn đề token, 404 chỉ ra model (hoặc thiếu version với model
   cộng đồng), 422 chỉ ra schema input của model, và 429 tuân theo
-  `Retry-After`; lỗi mạng, timeout, 408, 429 và 5xx được thử lại trong lúc poll.
+  `Retry-After`; lỗi mạng, timeout, 408, 429 và 5xx (trừ 501 và 505) được thử lại trong lúc poll.
 - Token không bao giờ được ghi log. JSON của `status` bỏ input và log của
   prediction, đồng thời loại bỏ query string đã ký khỏi URL output; log verbose
   cũng được che tương tự.

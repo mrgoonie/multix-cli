@@ -13,6 +13,7 @@
  */
 
 import { HttpError, ProviderError, ValidationError } from "../../core/errors.js";
+import { isNetworkFetchFailure, toFetchError } from "../../core/fetch-error.js";
 import { fetchJson } from "../../core/fetch-json.js";
 import { FILES_API_MAX_BYTES } from "../../core/limits.js";
 import type { Logger } from "../../core/logger.js";
@@ -143,6 +144,8 @@ function formatMb(bytes: number): string {
  *   transient and retry.
  * - Refused redirect or a timed-out byte upload: ProviderError, never retried,
  *   so a deterministic failure or a slow multi-GB upload is not sent again.
+ * - A deterministic rejection (invalid header value or URL, TLS certificate
+ *   error): ConfigError or ProviderError from `toFetchError`, never retried.
  * Transport errors keep the original error as `cause`.
  */
 async function uploadFetch(
@@ -172,6 +175,13 @@ async function uploadFetch(
     const message = `File upload failed: ${reason}`;
     if (redirected || (timedOut && step === "upload")) {
       throw new ProviderError(message, "gemini", { cause: err });
+    }
+    if (!isNetworkFetchFailure(err)) {
+      throw toFetchError(err, FILES_BASE, {
+        provider: "gemini",
+        prefix: "File upload failed: ",
+        target: step === "start" ? FILES_BASE : "the upload session URL",
+      });
     }
     throw new HttpError(0, message, FILES_BASE, undefined, { cause: err });
   }

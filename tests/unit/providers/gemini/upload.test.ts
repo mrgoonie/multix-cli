@@ -340,7 +340,9 @@ describe("gemini uploadFile (resumable, streamed)", () => {
   it.each(["start", "upload"] as const)(
     "turns a network failure on %s into a transient HttpError(0) that keeps the cause",
     async (step) => {
-      const failure = new TypeError("fetch failed", { cause: new Error("other side closed") });
+      const failure = new TypeError("fetch failed", {
+        cause: Object.assign(new Error("other side closed"), { code: "UND_ERR_SOCKET" }),
+      });
       const err = await failAt(step, failure);
       expect(err).toBeInstanceOf(HttpError);
       expect((err as HttpError).status).toBe(0);
@@ -354,6 +356,33 @@ describe("gemini uploadFile (resumable, streamed)", () => {
       expect((err as Error).message).not.toContain("test-key-0000");
     },
   );
+
+  it("does not treat an invalid header value as a network failure", async () => {
+    const failure = new TypeError(
+      "Cannot convert argument to a ByteString because the character at index 3 has a value of 8220 which is greater than 255.",
+    );
+    const err = await failAt("start", failure);
+    expect(err).toBeInstanceOf(ConfigError);
+    expect(isTransientHttpError(err)).toBe(false);
+    expect((err as Error).cause).toBe(failure);
+    expect((err as Error).message).toMatch(
+      /^File upload failed: Invalid HTTP header value in the request to https:\/\/generativelanguage\.googleapis\.com\/upload\/v1beta\/files\./,
+    );
+    expect((err as Error).message).not.toContain("upload_id");
+  });
+
+  it("names the session, not FILES_BASE, when the byte upload hits a TLS certificate error", async () => {
+    const failure = new TypeError("fetch failed", {
+      cause: Object.assign(new Error("certificate has expired"), { code: "CERT_HAS_EXPIRED" }),
+    });
+    const err = await failAt("upload", failure);
+    expect(err).toBeInstanceOf(ProviderError);
+    expect(isTransientHttpError(err)).toBe(false);
+    expect((err as Error).message).toBe(
+      "File upload failed: Request to the upload session URL failed: fetch failed: certificate has expired",
+    );
+    expect((err as Error).cause).toBe(failure);
+  });
 
   it("turns a timed-out start request into a transient HttpError(0)", async () => {
     const failure = timeout();
