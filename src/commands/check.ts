@@ -81,6 +81,12 @@ const PROVIDERS: ProviderEntry[] = [
     link: "https://fal.ai/dashboard/keys",
   },
   {
+    name: "Atlas Cloud",
+    envPrimary: "ATLASCLOUD_API_KEY",
+    optional: true,
+    link: "https://www.atlascloud.ai/console/api-keys",
+  },
+  {
     name: "Replicate",
     envPrimary: "REPLICATE_API_TOKEN",
     envFallback: "REPLICATE_API_KEY",

@@ -22,6 +22,7 @@ history and never commit them.
 | `CLOUDFLARE_AI_GATEWAY_ID` and `REPLICATE_API_TOKEN` | Cloudflare AI Gateway video |
 | `ELEVENLABS_API_KEY` | ElevenLabs |
 | `FAL_KEY` | fal.ai |
+| `ATLASCLOUD_API_KEY` | Atlas Cloud |
 | `REPLICATE_API_TOKEN` or `REPLICATE_API_KEY` | Replicate (direct API) |
 
 ```bash
@@ -90,6 +91,15 @@ settings include `IMAGE_GEN_MODEL`, `VIDEO_GEN_MODEL`, `MULTIMODAL_MODEL`,
 (default `black-forest-labs/flux-schnell`), and `REPLICATE_VIDEO_MODEL`
 (default `prunaai/p-video`). Cloudflare AI Gateway video reads only
 `REPLICATE_API_TOKEN`.
+
+Atlas Cloud accepts `ATLASCLOUD_BASE_URL` (media API base, default
+`https://api.atlascloud.ai/api/v1`) and one default-model override per command:
+`ATLASCLOUD_IMAGE_MODEL`, `ATLASCLOUD_IMAGE_EDIT_MODEL`,
+`ATLASCLOUD_VIDEO_MODEL`, `ATLASCLOUD_IMAGE_TO_VIDEO_MODEL`,
+`ATLASCLOUD_TTS_MODEL`, `ATLASCLOUD_STT_MODEL`, `ATLASCLOUD_TEXT_TO_3D_MODEL`,
+and `ATLASCLOUD_IMAGE_TO_3D_MODEL`. See [Atlas Cloud](/commands/atlascloud/)
+for the built-in defaults. `ATLASCLOUD_MAX_UPLOAD_MB` sets the size limit for
+local files uploaded to Atlas Cloud (default 200).
 
 Cloudflare accepts only the built-in Workers AI image and speech model IDs;
 `CLOUDFLARE_AI_IMAGE_MODEL` and `CLOUDFLARE_AI_TTS_MODEL` are therefore useful

@@ -1,7 +1,7 @@
 ---
 name: multix
-description: AI multimodal CLI — generate and edit images (OpenAI, Codex driver, Gemini Nano Banana, Imagen, MiniMax, OpenRouter, Leonardo, BytePlus Seedream, Cloudflare Workers AI FLUX.1 Schnell, fal.ai FLUX, Replicate FLUX), generate video (Gemini Veo, MiniMax Hailuo, OpenRouter via Veo/Seedance/Kling, Leonardo via Motion/Veo/Kling/Hailuo/Seedance/LTX, BytePlus Seedance, Cloudflare AI Gateway via Replicate, fal.ai queue models, Replicate direct API models incl. P-Video), TTS/STT/music (OpenAI, Gemini Flash TTS incl. Gemini 3.8 with delivery-style control, MiniMax, Cloudflare Workers AI MeloTTS, ElevenLabs), 3D models (BytePlus Hyper3D/Hitem3d), analyze/transcribe media, convert documents to Markdown, optimize media via ffmpeg/ImageMagick, and self-update the CLI. Use whenever the user wants to create, edit, or transform images/video/audio/3D/documents from a CLI, mentions any of: OpenAI, Codex image driver, image-to-image, i2i, image edit, watercolor/cyberpunk style transfer, reference image, OpenRouter, Nano Banana, Flux, Seedream, Veo, Hailuo, Seedance, Kling, Cloudflare Workers AI, AI Gateway, fal.ai, Replicate, replicate.com models, Replicate predictions, video generation, text-to-video, image-to-video, i2v, ElevenLabs voice cloning, updating/upgrading multix, or asks for batch media optimization.
-version: 0.8.0 # x-release-please-version
+description: AI multimodal CLI — generate and edit images (OpenAI, Codex driver, Gemini Nano Banana, Imagen, MiniMax, OpenRouter, Leonardo, BytePlus Seedream, Cloudflare Workers AI FLUX.1 Schnell, fal.ai FLUX, Replicate FLUX), generate video (Gemini Veo, MiniMax Hailuo, OpenRouter via Veo/Seedance/Kling, Leonardo via Motion/Veo/Kling/Hailuo/Seedance/LTX, BytePlus Seedance, Cloudflare AI Gateway via Replicate, fal.ai queue models, Replicate direct API models incl. P-Video), TTS/STT/music (OpenAI, Gemini Flash TTS incl. Gemini 3.8 with delivery-style control, MiniMax, Cloudflare Workers AI MeloTTS, ElevenLabs), 3D models (BytePlus Hyper3D/Hitem3d), analyze/transcribe media, convert documents to Markdown, optimize media via ffmpeg/ImageMagick, and self-update the CLI. Use whenever the user wants to create, edit, or transform images/video/audio/3D/documents from a CLI, mentions any of: OpenAI, Codex image driver, image-to-image, i2i, image edit, watercolor/cyberpunk style transfer, reference image, OpenRouter, Nano Banana, Flux, Seedream, Veo, Hailuo, Seedance, Kling, Cloudflare Workers AI, AI Gateway, fal.ai, Atlas Cloud, Replicate, replicate.com models, Replicate predictions, video generation, text-to-video, image-to-video, i2v, ElevenLabs voice cloning, updating/upgrading multix, or asks for batch media optimization.
+version: 0.10.0 # x-release-please-version
 ---
 
 # multix — AI Multimodal CLI
@@ -22,6 +22,7 @@ Activate this skill when the user asks to:
 - Convert PDFs / DOCX / images to Markdown
 - Optimize, resize, batch-convert, or split video/audio/image files
 - Run any fal.ai model (generic queue-API runner), or fal.ai's default image/video models
+- Run any Atlas Cloud model (image, image edit, video, TTS/STT, 3D) with schema-validated inputs and resumable async predictions
 - Run any Replicate model (official or versioned) via the direct API, generate Replicate images/video, or resume/cancel a Replicate prediction by id
 - Update multix itself to the latest (or a given dist-tag) npm version
 
@@ -44,6 +45,7 @@ LEONARDO_API_KEY      # Leonardo.Ai (image/video/upscale)
 BYTEPLUS_API_KEY      # BytePlus / Volcengine ARK (Seedream/Seedance/Hyper3D)
 ELEVENLABS_API_KEY    # ElevenLabs (TTS, cloning, STT, music, dubbing)
 FAL_KEY                # fal.ai (generic queue-API model runner, image/video)
+ATLASCLOUD_API_KEY    # Atlas Cloud (any model: image, edit, video, audio, 3D)
 REPLICATE_API_TOKEN   # Replicate direct API (REPLICATE_API_KEY accepted as fallback)
 CLOUDFLARE_ACCOUNT_ID # Cloudflare Workers AI / AI Gateway account
 CLOUDFLARE_API_TOKEN  # Cloudflare Workers AI / AI Gateway token
@@ -81,6 +83,7 @@ multix check [--verbose]
 | BytePlus | `multix byteplus generate --prompt "<text>" [--model seedream-4-0-250828] [--size 2K] [--aspect-ratio 16:9] [-n N] [--input-image <path\|url>]` | Sync |
 | Cloudflare | `multix cloudflare generate --prompt "<text>" [--steps 1-8] [--seed <n>]` | Workers AI FLUX.1 Schnell only |
 | fal.ai | `multix fal image "<text>" [-m <model>] [--image-size square_hd] [-n N] [--seed <n>]` | Default `fal-ai/flux/schnell`; also `multix fal run <model> --input <json\|@file>` for any fal model |
+| Atlas Cloud | `multix atlas image "<text>" [-m <model>] [--size <size>] [--aspect-ratio 1:1] [-n N] [--seed <n>]` | Default `black-forest-labs/flux-schnell`; flags are validated against the model's schema |
 | Replicate | `multix replicate image "<text>" [-m <owner/name>] [--aspect-ratio 16:9] [-n N] [--seed <n>]` | Default `black-forest-labs/flux-schnell`; also `multix replicate run <model> --input <json\|@file>` for any model |
 
 Aspect ratios (most providers): `1:1 2:3 3:2 3:4 4:3 4:5 5:4 9:16 16:9 21:9`.
@@ -130,6 +133,29 @@ multix fal video "a dancer under neon lights" [-m <model>] [--image-url <https-u
 multix fal status <model> <requestId>
 multix fal result <model> <requestId> [--download]
 ```
+
+## Atlas Cloud
+
+Auth is `Authorization: Bearer $ATLASCLOUD_API_KEY`; the media API base is `https://api.atlascloud.ai/api/v1`. Each job is an async prediction: commands wait (bounded by `--wait-timeout`) and download to `MULTIX_OUTPUT_DIR` as `atlas-<idprefix>-NN.<ext>`. `--async` prints only the prediction id on stdout (progress goes to stderr) so scripts can capture it. A failed prediction, or a partial download, exits non-zero with a resume command.
+
+Inputs are model-specific. multix reads the model's published schema and maps flags onto its field names (`size`/`image_size`, `images[]`/`image`, `audio_url`/`audio`). Unsupported flags and invalid values fail before anything is billed, and the error lists the accepted values. Pass `--no-validate` to skip this check.
+
+```bash
+multix atlas image "a red fox in the snow" [-m <model>] [--size <size>] [--aspect-ratio 1:1] [-n 1] [--seed <n>]
+multix atlas image-to-image --prompt "make it dusk" --ref ./photo.png      # default openai/gpt-image-1-mini/edit
+multix atlas video "waves at sunset" [--duration <s>] [--resolution 720p]  # default bytedance/seedance-v1-pro-fast/text-to-video
+multix atlas image-to-video --ref ./frame.png [--prompt "slow pan"]
+multix atlas audio "Hello from multix" [--voice <id>]                      # TTS, default xai/tts-v1
+multix atlas audio --audio ./meeting.mp3                                   # STT, transcript printed to stdout
+multix atlas 3d "a low-poly treasure chest" [--ref ./object.png]           # tencent/hunyuan3d-rapid
+multix atlas run <modelId> --input '{"prompt":"a cat"}' [--type image|video|audio]
+
+# Async + resume
+id=$(multix atlas video "waves" --async)
+multix atlas status "$id" --wait --download [--output <path>]
+```
+
+`--ref` takes one value per flag; repeat it for several references. Local `--ref` and `--audio` files are uploaded first (`multix atlas upload <file>` prints only a temporary URL). Uploads accept only image, video and audio files up to 200 MB (`ATLASCLOUD_MAX_UPLOAD_MB`). `run --no-validate` skips the schema, so pass `--type` with it. Atlas Cloud has no cancel endpoint.
 
 ## Replicate
 
@@ -341,6 +367,9 @@ Requires `cwebp` (libwebp: `brew install webp`, `apt install webp`) on `PATH`.
 | `BYTEPLUS_VIDEO_PARAMS_MODE` | `flags` (default) or `structured` |
 | `FAL_BASE_URL` | Override fal queue base (default `https://queue.fal.run`) |
 | `FAL_IMAGE_MODEL` / `FAL_VIDEO_MODEL` | fal.ai default model ids (default `fal-ai/flux/schnell`, `fal-ai/kling-video/v1.6/standard/text-to-video`) |
+| `ATLASCLOUD_BASE_URL` | Override Atlas Cloud media API base (default `https://api.atlascloud.ai/api/v1`) |
+| `ATLASCLOUD_IMAGE_MODEL` / `ATLASCLOUD_IMAGE_EDIT_MODEL` / `ATLASCLOUD_VIDEO_MODEL` / `ATLASCLOUD_IMAGE_TO_VIDEO_MODEL` / `ATLASCLOUD_TTS_MODEL` / `ATLASCLOUD_STT_MODEL` / `ATLASCLOUD_TEXT_TO_3D_MODEL` / `ATLASCLOUD_IMAGE_TO_3D_MODEL` | Atlas Cloud default model ids per command |
+| `ATLASCLOUD_MAX_UPLOAD_MB` | Size limit for local files uploaded to Atlas Cloud (default 200) |
 | `GEMINI_TTS_MODEL` / `TTS_MODEL` | Override Gemini TTS model (default `gemini-3.8-flash-lite-tts`) |
 | `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN` | Required for Cloudflare Workers AI image/speech and AI Gateway video |
 | `CLOUDFLARE_AI_GATEWAY_ID` | Optional for native Cloudflare image/speech; required for Cloudflare video |
@@ -378,6 +407,7 @@ multix byteplus i2v ./photo.jpg --prompt "camera slowly pans left"
 # Transcribe / analyze media
 multix gemini analyze --files ./video.mp4 --prompt "Summarize this video"
 multix gemini transcribe --files ./audio.mp3
+cat ./shot.png | multix gemini analyze --files - --prompt "Describe"   # "-" reads stdin; --stdin-ext <ext> if undetected
 multix elevenlabs transcribe --input ./audio.mp3 --diarize
 
 # Compress / split media
@@ -390,6 +420,10 @@ multix doc convert --input report.pdf --auto-name
 # fal.ai
 multix fal image "A sunset over mountains"
 multix fal run fal-ai/flux/schnell --input '{"prompt":"A sunset over mountains"}'
+
+# Atlas Cloud
+multix atlas image "A sunset over mountains"
+multix atlas status "$(multix atlas video "Ocean waves" --async)" --wait --download
 
 # Replicate
 multix replicate image "A sunset over mountains"
