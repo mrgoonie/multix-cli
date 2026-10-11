@@ -15,12 +15,62 @@
  */
 
 import { resolveProviderBaseUrl, resolveRoutedKey } from "../../core/env-loader.js";
-import { ValidationError } from "../../core/errors.js";
+import { ProviderError, ValidationError } from "../../core/errors.js";
 import { ConfigError, HttpError } from "../../core/errors.js";
 import { httpJson } from "../../core/http-client.js";
 import type { Logger } from "../../core/logger.js";
 import { redactUrl } from "../../core/redact.js";
 import { FAL_ROUTING } from "./models.js";
+
+/**
+ * fal's documented queue host. Submit responses point `status_url` /
+ * `response_url` here, so it stays trusted even when FAL_BASE_URL is a proxy.
+ * Kept to this exact host on https with the default port (no wildcard
+ * subdomains): it is the only host the queue API uses today.
+ */
+export const FAL_QUEUE_HOST = "queue.fal.run";
+
+function parseUrl(url: string): URL | undefined {
+  try {
+    return new URL(url);
+  } catch {
+    return undefined;
+  }
+}
+
+/** Lowercased hostname without a trailing dot (IPv6 keeps its brackets). */
+function normalizedHost(u: URL): string {
+  return u.hostname.toLowerCase().replace(/\.$/, "");
+}
+
+/** Scheme, host and port, with the default port elided by the URL parser. */
+function normalizedOrigin(u: URL): string {
+  return `${u.protocol}//${normalizedHost(u)}:${u.port}`;
+}
+
+/**
+ * Throws a ProviderError unless `url` may receive the fal key. Two cases are
+ * trusted:
+ * - the same origin (scheme, host, port) as FAL_BASE_URL — the key already
+ *   goes there on submit, and which base URLs are accepted (https, or http to
+ *   loopback; project-file trust) is decided by `resolveProviderBaseUrl`;
+ * - https on exactly {@link FAL_QUEUE_HOST} with the default port.
+ * Messages name the host only, never the path, query string or key.
+ */
+export function assertTrustedFalUrl(url: string, baseUrl: string): void {
+  const target = parseUrl(url);
+  if (!target) {
+    throw new ProviderError("Refusing to send the fal key to a malformed URL", "fal");
+  }
+  const base = parseUrl(baseUrl);
+  if (base && normalizedOrigin(target) === normalizedOrigin(base)) return;
+  const host = normalizedHost(target);
+  if (target.protocol === "https:" && host === FAL_QUEUE_HOST && target.port === "") return;
+  throw new ProviderError(
+    `Refusing to send the fal key to ${host || "this URL"}: not https://${FAL_QUEUE_HOST} or the FAL_BASE_URL origin`,
+    "fal",
+  );
+}
 
 export function requireFalKey(): string {
   const key = resolveRoutedKey(FAL_ROUTING);
@@ -51,11 +101,25 @@ export class FalClient {
   async request<T = unknown>(path: string, opts: FalRequestOptions = {}): Promise<T> {
     const base = this.baseUrl.replace(/\/$/, "");
     const suffix = path.startsWith("/") ? path : `/${path}`;
-    return this.requestAbsolute<T>(base + suffix, opts);
+    return this.send<T>(base + suffix, opts);
   }
 
-  /** Same auth/headers as `request`, but `url` is used verbatim (e.g. a status_url/response_url returned by submit). */
+  /**
+   * Same auth/headers as `request`, but `url` is used verbatim (e.g. a
+   * status_url/response_url returned by submit). The URL must pass
+   * {@link assertTrustedFalUrl} before the key is sent.
+   */
   async requestAbsolute<T = unknown>(url: string, opts: FalRequestOptions = {}): Promise<T> {
+    assertTrustedFalUrl(url, this.baseUrl);
+    return this.send<T>(url, opts);
+  }
+
+  /** Throws a ProviderError when `url` may not receive the key (see {@link assertTrustedFalUrl}). */
+  assertTrustedUrl(url: string): void {
+    assertTrustedFalUrl(url, this.baseUrl);
+  }
+
+  private async send<T>(url: string, opts: FalRequestOptions): Promise<T> {
     opts.logger?.debug(`${opts.method ?? "GET"} ${redactUrl(url)}`);
 
     return httpJson<T>({
