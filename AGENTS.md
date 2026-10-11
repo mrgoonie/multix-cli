@@ -1,0 +1,84 @@
+# AGENTS.md — contributor and agent workflow
+
+Rules for anyone (human or AI agent) changing `multix-cli`. Follow them so that
+parallel contributors do not step on each other.
+
+## Issue workflow
+
+Every change starts from a GitHub issue. Before writing code:
+
+1. Search open issues and PRs for duplicates. If a related or duplicate issue
+   exists, comment on it with a link to the issue you are working on instead of
+   opening a second thread.
+2. Assign yourself to the issue (`gh issue edit <n> --add-assignee @me`). An
+   issue that is already assigned and labelled `in progress` belongs to someone
+   else: comment and coordinate before touching it.
+3. Move the issue through the status labels as the work advances. Only one
+   status label should be on an issue at a time — remove the previous one.
+
+| Label | Meaning |
+|---|---|
+| `in progress` | Someone is implementing it now. |
+| `blocked` | Waiting on something outside the change (credential, upstream fix, decision). Explain the blocker in a comment. |
+| `in review` | Implementation finished; under code review in an isolated context (a separate reviewer or review agent that did not write the code). |
+| `done` | PR opened and linked to the issue (`Closes #<n>` in the PR body). |
+| `shipped` | PR merged into `main`. |
+
+Priority labels (`priority: P1`–`P3`) are set during triage; pick the highest
+priority unassigned issue first.
+
+```bash
+gh issue edit 123 --add-assignee @me --add-label "in progress"
+gh issue edit 123 --remove-label "in progress" --add-label "in review"
+gh issue edit 123 --remove-label "in review" --add-label "done"     # after the PR is opened
+gh issue edit 123 --remove-label "done" --add-label "shipped"       # after merge
+```
+
+Found an unrelated bug, security gap, or hardening opportunity while working?
+Open a new issue for it (with evidence) rather than widening the current PR.
+
+## Branches, commits, PRs
+
+- Branch from `main`: `feat/<scope>-<slug>`, `fix/<scope>-<slug>`, `docs/<slug>`, `chore/<slug>`.
+- Use a separate git worktree per issue when several issues are in flight.
+- Conventional commits (`feat(replicate): …`, `fix(gemini): …`); release-please builds the changelog from them.
+- One issue per PR; put `Closes #<n>` in the PR body.
+- Do not merge release-please PRs as part of feature work; they publish to npm.
+
+## Verification before review
+
+```bash
+npm ci
+npm run lint
+npm run typecheck
+npm run build        # the smoke tests execute dist/cli.js, so build before testing
+npm test             # MULTIX_DISABLE_HOME_ENV=1 is set by vitest.config.ts
+npm run verify:docs  # when docs-site/ changed (needs `npm ci --prefix docs-site`)
+```
+
+- Tests must not call paid APIs by default. Mock `globalThis.fetch`
+  (`tests/helpers/mock-fetch.ts`) or inject a fetch function.
+- Optional live smoke tests must be gated behind an explicit env opt-in and the
+  provider credential, and must never print key values.
+- Attach evidence (test output, CLI output with secrets redacted) to the PR.
+
+## Code conventions
+
+- TypeScript ESM, Node ≥ 20, Biome for lint/format, kebab-case file names.
+- Providers live in `src/providers/<name>/`; register the command group in
+  `src/commands/index.ts`, and add the key to `src/commands/check.ts`,
+  `src/commands/check-helpers/setup-hints.ts`, `.env.example`, `README.md`,
+  the docs site (`docs-site/src/content/docs/**`, English and Vietnamese), and
+  `skill/SKILL.md`.
+- Keep provider HTTP clients free of `node:*` imports (take `fetch`, `apiKey`
+  and `baseUrl` as inputs) so they can be reused by non-Node runtimes such as a
+  Cloudflare Worker. File-system, env loading and downloads stay in the command
+  layer.
+- Never log API keys, signed URLs, or full prompts at info level. Use
+  `redact()` from `src/core/env-loader.ts` for keys.
+
+## Documentation
+
+- User-facing docs: `README.md` and `docs-site/` (English at `docs/`, Vietnamese at `docs/vi/`).
+- Agent-facing usage: `skill/SKILL.md`.
+- Implementation plans and reports: `plans/`.
