@@ -7,6 +7,7 @@ import {
   assertJobSucceeded,
   getJobState,
   resumeCommand,
+  staggerOffsetMs,
   videoState,
   waitForJob,
 } from "../../../../src/providers/heygen/jobs.js";
@@ -329,6 +330,57 @@ describe("polling robustness", () => {
     }).catch((e) => e);
     expect(err).toBeInstanceOf(PollTimeoutError);
     expect(err.message).toContain("multix heygen status v1 --type video --wait --download");
+  });
+
+  it("staggers first polls of parallel jobs: one step per job, capped", () => {
+    expect(staggerOffsetMs(0, 10_000)).toBe(0);
+    expect(staggerOffsetMs(1, 10_000)).toBe(500);
+    expect(staggerOffsetMs(3, 10_000)).toBe(1500);
+    expect(staggerOffsetMs(50, 10_000)).toBe(5000);
+    // Never wait longer per step than the poll interval itself.
+    expect(staggerOffsetMs(2, 1)).toBe(2);
+  });
+
+  it("waits startDelayMs before the first poll and counts it against the timeout", async () => {
+    const { c, fake } = client({
+      "GET /v3/videos/v1": { body: { data: { id: "v1", status: "processing" } } },
+    });
+    let t = 0;
+    const events: string[] = [];
+    const sleep = async (ms: number) => {
+      events.push(`sleep ${ms}`);
+      t += ms;
+    };
+    const err = await waitForJob(c, "video", "v1", {
+      timeoutMs: 2000,
+      intervalMs: 600,
+      jitter: false,
+      startDelayMs: 500,
+      sleep,
+      now: () => t,
+      onPoll: () => events.push("poll"),
+    }).catch((e) => e);
+    expect(err).toBeInstanceOf(PollTimeoutError);
+    expect(events[0]).toBe("sleep 500");
+    expect(events[1]).toBe("poll");
+    // 500 ms start delay + polling never exceeds the 2000 ms budget.
+    expect(t).toBeLessThanOrEqual(2000);
+    expect(fake.calls.length).toBeGreaterThan(0);
+    // The message reports the caller's --wait-timeout, not the budget left after the delay.
+    expect(err.message).toContain("Timed out after 2000ms");
+  });
+
+  it("marks an audio-only translation output as audio", async () => {
+    const { c } = client({
+      "GET /v3/video-translations/t1": {
+        body: { data: { id: "t1", status: "completed", audio_url: "https://f.test/t1" } },
+      },
+      "GET /v3/video-translations/t2": {
+        body: { data: { id: "t2", status: "completed", video_url: "https://f.test/t2.mp4" } },
+      },
+    });
+    expect((await getJobState(c, "translation", "t1")).outputIsAudio).toBe(true);
+    expect((await getJobState(c, "translation", "t2")).outputIsAudio).toBeUndefined();
   });
 
   it("does not retry non-transient errors such as 404", async () => {

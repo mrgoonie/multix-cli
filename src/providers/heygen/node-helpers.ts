@@ -4,17 +4,18 @@
  * logic lives in the runtime-neutral client/jobs modules.
  */
 
+import { once } from "node:events";
 import fs from "node:fs";
 import path from "node:path";
+import { pipeline } from "node:stream/promises";
 import type { Command } from "commander";
 import { PollTimeoutError } from "../../core/async-poll.js";
 import { resolveKey } from "../../core/env-loader.js";
 import { ConfigError, HttpError, ValidationError } from "../../core/errors.js";
-import { downloadFile } from "../../core/http-client.js";
 import type { Logger } from "../../core/logger.js";
 import { getOutputDir } from "../../core/output-dir.js";
 import { redactUrl } from "../../core/redact.js";
-import { maybeDownloadThumb } from "../../core/video-thumb.js";
+import { detectThumbUrl, maybeDownloadThumb } from "../../core/video-thumb.js";
 import { HeygenClient } from "./client.js";
 import { HeygenJobFailedError } from "./heygen-errors.js";
 import {
@@ -22,6 +23,7 @@ import {
   type HeygenJobState,
   assertJobSucceeded,
   resumeCommand,
+  staggerOffsetMs,
   waitForJob,
 } from "./jobs.js";
 import {
@@ -31,7 +33,7 @@ import {
   type HeygenJobKind,
   LIMITS,
 } from "./models.js";
-import { classifyMediaRef } from "./request-builders.js";
+import { checkBaseUrl, classifyMediaRef, isHttpsUrl } from "./request-builders.js";
 import type { HeygenAssetInput } from "./types.js";
 
 export function requireHeygenKey(): string {
@@ -44,11 +46,17 @@ export function requireHeygenKey(): string {
   return key;
 }
 
-/** Build a client from env. `HEYGEN_BASE_URL` exists for tests and proxies. */
+/**
+ * Build a client from env. `HEYGEN_BASE_URL` exists for tests and proxies; it
+ * must be https:// (plain http:// only for loopback hosts) so the key is never
+ * sent in cleartext.
+ */
 export function createHeygenClientFromEnv(): HeygenClient {
+  const apiKey = requireHeygenKey();
+  const override = resolveKey("HEYGEN_BASE_URL")?.trim();
   return new HeygenClient({
-    apiKey: requireHeygenKey(),
-    baseUrl: resolveKey("HEYGEN_BASE_URL") ?? DEFAULT_HEYGEN_BASE_URL,
+    apiKey,
+    baseUrl: override ? checkBaseUrl(override, "HEYGEN_BASE_URL") : DEFAULT_HEYGEN_BASE_URL,
   });
 }
 
@@ -155,14 +163,21 @@ export function addWaitOptions(cmd: Command, defaultTimeoutMs = DEFAULT_WAIT_TIM
       String(DEFAULT_POLL_INTERVAL_MS),
     )
     .option("--no-download", "Do not download outputs; print output URLs instead")
-    .option("--output <path>", "Output file (or directory when several outputs are produced)")
+    .option(
+      "--output <path>",
+      "Output file or directory. A path ending in / or \\, an existing directory, or a path without an extension is a directory; with several outputs, a media file name gets a per-language suffix (dub.mp4 -> dub-Spanish.mp4)",
+    )
     .option("--captions", "Also download the caption/subtitle file when one is available")
     .option("--no-thumb", "Skip downloading the video thumbnail")
     .option("--json", "Print a JSON summary instead of human-readable output")
     .option("-v, --verbose", "Verbose logging");
 }
 
-const OUTPUT_EXTS = new Set(["mp4", "webm", "mov", "mp3", "wav", "m4a", "aac", "srt", "vtt"]);
+const VIDEO_EXTS = new Set(["mp4", "webm", "mov"]);
+const AUDIO_EXTS = new Set(["mp3", "wav", "m4a", "aac"]);
+/** Extensions that make a multi-output `--output` a name template. */
+const MEDIA_EXTS = new Set([...VIDEO_EXTS, ...AUDIO_EXTS]);
+const OUTPUT_EXTS = new Set([...MEDIA_EXTS, "srt", "vtt"]);
 
 export function inferExtension(url: string, fallback: string): string {
   try {
@@ -182,6 +197,57 @@ function safeSlug(value: string): string {
   );
 }
 
+const MAX_REDIRECTS = 5;
+const isRedirect = (status: number) => [301, 302, 303, 307, 308].includes(status);
+
+/**
+ * Stream `url` to `dest`, following redirects by hand so every hop (and the
+ * final response URL) must be https://. A redirect to plain http:// is refused
+ * before any body is written.
+ */
+export async function downloadHttpsOnly(
+  url: string,
+  dest: string,
+  timeoutMs: number,
+): Promise<void> {
+  const signal = AbortSignal.timeout(timeoutMs);
+  let current = url;
+  for (let hop = 0; ; hop++) {
+    if (!isHttpsUrl(current)) {
+      throw new HttpError(0, "refusing to follow a redirect to a non-https URL", current);
+    }
+    let response: Response;
+    try {
+      response = await globalThis.fetch(current, { signal, redirect: "manual" });
+    } catch (cause) {
+      throw new HttpError(0, cause instanceof Error ? cause.message : String(cause), current);
+    }
+    if (response.url && !isHttpsUrl(response.url)) {
+      await response.body?.cancel();
+      throw new HttpError(0, "redirected to a non-https URL", response.url);
+    }
+    const location = response.headers.get("location");
+    if (isRedirect(response.status) && location) {
+      await response.body?.cancel();
+      if (hop >= MAX_REDIRECTS) throw new HttpError(0, "too many redirects", url);
+      current = new URL(location, current).href;
+      continue;
+    }
+    if (!response.ok) throw new HttpError(response.status, "(download failed)", current);
+    if (!response.body) throw new HttpError(0, "Response body is null", current);
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    const fileStream = fs.createWriteStream(dest);
+    try {
+      await pipeline(response.body as unknown as NodeJS.ReadableStream, fileStream);
+    } catch (err) {
+      // Wait for the handle to close so the caller can remove the partial file on Windows.
+      if (!fileStream.closed) await once(fileStream, "close");
+      throw err;
+    }
+    return;
+  }
+}
+
 /**
  * Download one signed output URL to `dest`. The file is written to a sibling
  * temp file and renamed into place, so a failed download never touches an
@@ -196,12 +262,14 @@ export async function downloadOutput(
   if (!url) {
     throw new ValidationError(`HeyGen reported success but returned no output URL. ${resumeHint}`);
   }
-  if (!/^https?:\/\//i.test(url)) {
-    throw new ValidationError(`HeyGen returned an invalid output URL (${redactUrl(url)})`);
+  if (!isHttpsUrl(url)) {
+    throw new ValidationError(
+      `Refusing to download HeyGen output from a non-https URL (${redactUrl(url)})`,
+    );
   }
   const tmp = `${dest}.${process.pid}-${Date.now()}.part`;
   try {
-    await downloadFile(url, tmp, 600_000);
+    await downloadHttpsOnly(url, tmp, 600_000);
     fs.renameSync(tmp, dest);
   } catch (e) {
     fs.rmSync(tmp, { force: true });
@@ -220,21 +288,87 @@ export function defaultOutputPath(state: HeygenJobState, ext: string): string {
   return path.join(getOutputDir(), `heygen-${state.kind}${lang}-${safeSlug(state.id)}.${ext}`);
 }
 
-/** Resolve the destination for one of `count` outputs. `--output` is a dir when count > 1. */
+function statOrUndefined(p: string): fs.Stats | undefined {
+  try {
+    return fs.statSync(p);
+  } catch {
+    return undefined;
+  }
+}
+
+/** `--output` names a directory: trailing separator, existing directory, or no extension. */
+function isDirectoryOutput(output: string, target: string): boolean {
+  if (/[\\/]$/.test(output)) return true;
+  const stat = statOrUndefined(target);
+  if (stat) return stat.isDirectory();
+  return path.extname(target) === "";
+}
+
+/**
+ * Swap a video extension for the real audio one (and vice versa), so an
+ * audio-only translation saved via `--output dub.mp4` is not named `.mp4`.
+ */
+function withMediaExt(file: string, ext: string): string {
+  const given = path.extname(file).slice(1).toLowerCase();
+  const mismatch =
+    (VIDEO_EXTS.has(given) && AUDIO_EXTS.has(ext)) ||
+    (AUDIO_EXTS.has(given) && VIDEO_EXTS.has(ext));
+  return mismatch ? `${file.slice(0, -(given.length + 1))}.${ext}` : file;
+}
+
+/**
+ * Resolve the destination for one of `count` outputs. A directory `--output`
+ * (trailing separator, existing directory, or no extension) receives the
+ * default file names. Otherwise a single output is saved to that file, and
+ * with several outputs a media file name is a template (`dub.mp4` ->
+ * `dub-Spanish.mp4`, suffixed with the output language or job ID).
+ */
 function outputPathFor(
   state: HeygenJobState,
   ext: string,
   output: string | undefined,
   count: number,
-) {
+): string {
   if (!output) return defaultOutputPath(state, ext);
-  if (count > 1) {
-    const dir = path.resolve(output);
-    fs.mkdirSync(dir, { recursive: true });
-    return path.join(dir, path.basename(defaultOutputPath(state, ext)));
+  const target = path.resolve(output);
+  const givenExt = path.extname(target);
+  const isTemplate = count > 1 && MEDIA_EXTS.has(givenExt.slice(1).toLowerCase());
+  if (isDirectoryOutput(output, target) || (count > 1 && !isTemplate)) {
+    fs.mkdirSync(target, { recursive: true });
+    return path.join(target, path.basename(defaultOutputPath(state, ext)));
   }
-  return path.resolve(output);
+  if (!isTemplate) return withMediaExt(target, ext);
+  const base = path.basename(target, givenExt);
+  const suffix = safeSlug(state.outputLanguage ?? state.id);
+  return withMediaExt(path.join(path.dirname(target), `${base}-${suffix}${givenExt}`), ext);
 }
+
+/**
+ * Make `dest` unique within one batch (compared case-insensitively, since
+ * Windows and macOS file systems usually are): on a repeat, append the job ID,
+ * then a counter. Two jobs never write the same file.
+ */
+function claimPath(dest: string, state: HeygenJobState, used: Set<string>): string {
+  const ext = path.extname(dest);
+  const stem = dest.slice(0, dest.length - ext.length);
+  let candidate = dest;
+  for (let n = 1; used.has(candidate.toLowerCase()); n++) {
+    const id = safeSlug(state.id);
+    candidate = n === 1 ? `${stem}-${id}${ext}` : `${stem}-${id}-${n}${ext}`;
+  }
+  used.add(candidate.toLowerCase());
+  return candidate;
+}
+
+/** Sibling caption path for `dest`; never the video file itself. */
+function captionPathFor(dest: string, capExt: string): string {
+  const stem = path.join(path.dirname(dest), path.basename(dest, path.extname(dest)));
+  const capDest = `${stem}.${capExt}`;
+  return capDest.toLowerCase() === dest.toLowerCase() ? `${stem}.captions.${capExt}` : capDest;
+}
+
+/** https-only downloader for thumbnails (same redirect policy as outputs). */
+const downloadThumbHttpsOnly = (url: string, dest: string) => downloadHttpsOnly(url, dest, 120_000);
 
 /** Secret-free summary of a job state (signed URLs reduced to origin+path). */
 export function summarizeState(state: HeygenJobState): Record<string, unknown> {
@@ -277,6 +411,7 @@ async function deliverOne(
   count: number,
   logger: Logger,
   files: string[],
+  usedPaths: Set<string>,
 ): Promise<FinishedJob> {
   const hint = `Refresh with: ${resumeCommand(state.kind, state.id, opts)}`;
   if (opts.download === false) {
@@ -290,18 +425,15 @@ async function deliverOne(
     };
     return { state, files, urls };
   }
-  const ext = inferExtension(state.outputUrl ?? "", "mp4");
-  const dest = outputPathFor(state, ext, opts.output, count);
+  const ext = inferExtension(state.outputUrl ?? "", state.outputIsAudio ? "mp3" : "mp4");
+  const dest = claimPath(outputPathFor(state, ext, opts.output, count), state, usedPaths);
   await downloadOutput(state.outputUrl, dest, hint);
   logger.success(`Saved ${dest}`);
   files.push(dest);
 
   if (opts.captions && state.captionUrl) {
     const capExt = inferExtension(state.captionUrl, "srt");
-    const capDest = path.join(
-      path.dirname(dest),
-      `${path.basename(dest, path.extname(dest))}.${capExt}`,
-    );
+    const capDest = claimPath(captionPathFor(dest, capExt), state, usedPaths);
     await downloadOutput(state.captionUrl, capDest, hint);
     logger.success(`Saved ${capDest}`);
     files.push(capDest);
@@ -309,12 +441,17 @@ async function deliverOne(
     logger.warn(`No caption file available for ${state.kind} ${state.id}`);
   }
 
-  if (state.kind === "video" || state.kind === "agent") {
-    const thumb = await maybeDownloadThumb(state.raw, dest, {
-      skip: opts.thumb === false,
-      logger,
-    });
-    if (thumb) files.push(thumb);
+  if ((state.kind === "video" || state.kind === "agent") && opts.thumb !== false) {
+    const thumbUrl = detectThumbUrl(state.raw);
+    if (thumbUrl && !isHttpsUrl(thumbUrl)) {
+      logger.warn(`Skipping thumbnail from a non-https URL (${redactUrl(thumbUrl)})`);
+    } else {
+      const thumb = await maybeDownloadThumb(state.raw, dest, {
+        logger,
+        download: downloadThumbHttpsOnly,
+      });
+      if (thumb) files.push(thumb);
+    }
   }
   return { state, files };
 }
@@ -330,10 +467,11 @@ export async function deliverOutputs(
 ): Promise<DeliveryResult> {
   const finished: FinishedJob[] = [];
   const failures: string[] = [];
+  const usedPaths = new Set<string>();
   for (const state of states) {
     const files: string[] = [];
     try {
-      finished.push(await deliverOne(state, opts, states.length, logger, files));
+      finished.push(await deliverOne(state, opts, states.length, logger, files, usedPaths));
     } catch (e) {
       failures.push(`${state.kind} ${state.id}: ${e instanceof Error ? e.message : String(e)}`);
       if (files.length > 0) finished.push({ state, files });
@@ -402,10 +540,11 @@ export async function completeJobs(
   );
 
   const settled = await Promise.allSettled(
-    ids.map((id) =>
+    ids.map((id, index) =>
       waitForJob(client, kind, id, {
         timeoutMs,
         intervalMs,
+        startDelayMs: staggerOffsetMs(index, intervalMs),
         maxIntervalMs: Math.max(intervalMs, 30_000),
         burnCaptions: opts.burnCaptions,
         resumeHint: `Resume with: ${resumeCommand(kind, id, opts)}`,

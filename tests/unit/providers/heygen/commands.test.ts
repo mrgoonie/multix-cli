@@ -283,6 +283,41 @@ describe("heygen translate", () => {
     expect(printed()).not.toContain("TOPSECRETSIG");
   });
 
+  it("derives per-language file names when --output has a media extension", async () => {
+    const translation = (id: string, language: string) => ({
+      body: {
+        data: {
+          id,
+          status: "completed",
+          output_language: language,
+          video_url: `${FILES}/tr/${id}.mp4`,
+        },
+      },
+    });
+    useApi({
+      "POST /v3/video-translations": { body: { data: { video_translation_ids: ["t1", "t2"] } } },
+      "GET /v3/video-translations/t1": translation("t1", "Spanish"),
+      "GET /v3/video-translations/t2": translation("t2", "French (France)"),
+      "GET /tr/t1.mp4": { raw: "ES" },
+      "GET /tr/t2.mp4": { raw: "FR" },
+    });
+    const outDir = path.join(tmp, "out");
+
+    await run(
+      "translate",
+      "asset:src1",
+      "--languages",
+      "Spanish,French (France)",
+      "--output",
+      path.join(outDir, "dub.mp4"),
+      "--poll-interval",
+      "1",
+    );
+
+    expect(fs.readdirSync(outDir).sort()).toEqual(["dub-French-France.mp4", "dub-Spanish.mp4"]);
+    expect(fs.readFileSync(path.join(outDir, "dub-Spanish.mp4"), "utf8")).toBe("ES");
+  });
+
   it("downloads successes but still fails when one language fails", async () => {
     useApi({
       "POST /v3/video-translations": { body: { data: { video_translation_ids: ["t1", "t2"] } } },
@@ -497,11 +532,300 @@ describe("heygen delivery safety", () => {
     expect(printed()).toContain("heygen-translation-French-t2.mp4");
   });
 
+  it("refuses an http:// HEYGEN_BASE_URL for a non-loopback host before any request", async () => {
+    vi.stubEnv("HEYGEN_BASE_URL", "http://proxy.example/heygen");
+    useApi({});
+    const err = await run("video", "Hello", "--avatar", "look1").catch((e) => e);
+    expect(err).toBeInstanceOf(ConfigError);
+    expect(err.message).toMatch(/HEYGEN_BASE_URL must use https:\/\//);
+    expect(err.message).not.toContain(KEY);
+    expect(fake.calls).toHaveLength(0);
+  });
+
+  it("allows an http:// HEYGEN_BASE_URL on loopback for local mocks", async () => {
+    vi.stubEnv("HEYGEN_BASE_URL", "http://127.0.0.1:8787");
+    useApi({ "POST /v3/videos": { body: { data: { video_id: "v1", status: "waiting" } } } });
+    await run("video", "Hello", "--avatar", "look1", "--async", "--json");
+    expect(fake.calls[0]?.url).toBe("http://127.0.0.1:8787/v3/videos");
+  });
+
+  it("refuses to download a non-https output URL and redacts it", async () => {
+    useApi({
+      "GET /v3/videos/v7": completed({ video_url: `http://files.heygen.test/out/v7.mp4?${SIG}` }),
+    });
+    const err = await run("status", "v7", "--type", "video", "--download", "--no-thumb").catch(
+      (e) => e,
+    );
+    expect(err.message).toMatch(/non-https URL \(http:\/\/files\.heygen\.test\/out\/v7\.mp4/);
+    expect(err.message).not.toContain("TOPSECRETSIG");
+    expect(fake.callsTo("GET /out/v7.mp4")).toHaveLength(0);
+    expect(fs.readdirSync(tmp)).toEqual([]);
+  });
+
+  it("refuses a non-https caption URL", async () => {
+    useApi({
+      "GET /v3/videos/v7": completed({
+        video_url: `${FILES}/out/v7.mp4`,
+        subtitle_url: `http://files.heygen.test/out/v7.srt?${SIG}`,
+      }),
+      "GET /out/v7.mp4": { raw: "V7" },
+    });
+    const err = await run(
+      "status",
+      "v7",
+      "--type",
+      "video",
+      "--download",
+      "--captions",
+      "--no-thumb",
+    ).catch((e) => e);
+    expect(err.message).toMatch(/non-https URL/);
+    expect(err.message).not.toContain("TOPSECRETSIG");
+    expect(fake.callsTo("GET /out/v7.srt")).toHaveLength(0);
+  });
+
+  it("skips a non-https thumbnail with a warning but keeps the video", async () => {
+    useApi({
+      "GET /v3/videos/v7": completed({
+        video_url: `${FILES}/out/v7.mp4`,
+        thumbnail_url: `http://files.heygen.test/out/v7.jpg?${SIG}`,
+      }),
+      "GET /out/v7.mp4": { raw: "V7" },
+    });
+    await run("status", "v7", "--type", "video", "--download");
+    expect(fs.readdirSync(tmp)).toEqual(["heygen-video-v7.mp4"]);
+    expect(fake.callsTo("GET /out/v7.jpg")).toHaveLength(0);
+    expect(printed()).toMatch(/Skipping thumbnail from a non-https URL/);
+    expect(printed()).not.toContain("TOPSECRETSIG");
+  });
+
   it("reports a create response without a job ID instead of polling", async () => {
     useApi({ "POST /v3/videos": { body: { data: { status: "waiting" } } } });
     const err = await run("video", "Hello", "--avatar", "look1").catch((e) => e);
     expect(err.message).toMatch(/returned no video_id/);
     expect(fake.calls).toHaveLength(1);
+  });
+});
+
+describe("heygen https-only redirects", () => {
+  const completed = (extra: Record<string, unknown>) => ({
+    body: { data: { id: "v7", status: "completed", ...extra } },
+  });
+
+  it("refuses an output URL that redirects to plain http before writing anything", async () => {
+    useApi({
+      "GET /v3/videos/v7": completed({ video_url: `${FILES}/out/v7.mp4?${SIG}` }),
+      "GET /out/v7.mp4": {
+        status: 302,
+        headers: { Location: `http://files.heygen.test/plain/v7.mp4?${SIG}` },
+      },
+      "GET /plain/v7.mp4": { raw: "CLEARTEXT" },
+    });
+    const err = await run("status", "v7", "--type", "video", "--download", "--no-thumb").catch(
+      (e) => e,
+    );
+    expect(err.message).toMatch(/non-https URL/);
+    expect(err.message).not.toContain("TOPSECRETSIG");
+    expect(fake.callsTo("GET /plain/v7.mp4")).toHaveLength(0);
+    expect(fs.readdirSync(tmp)).toEqual([]);
+  });
+
+  it("follows an https -> https redirect", async () => {
+    useApi({
+      "GET /v3/videos/v7": completed({ video_url: `${FILES}/out/v7.mp4` }),
+      "GET /out/v7.mp4": { status: 307, headers: { Location: "/cdn/v7.mp4" } },
+      "GET /cdn/v7.mp4": { raw: "V7" },
+    });
+    await run("status", "v7", "--type", "video", "--download", "--no-thumb");
+    expect(fs.readFileSync(path.join(tmp, "heygen-video-v7.mp4"), "utf8")).toBe("V7");
+    expect(fake.callsTo("GET /out/v7.mp4")[0]?.url).toBe(`${FILES}/out/v7.mp4`);
+  });
+
+  it("refuses a response whose final URL is not https", async () => {
+    useApi({ "GET /v3/videos/v7": completed({ video_url: `${FILES}/out/v7.mp4?${SIG}` }) });
+    const apiFetch = fake.fetch;
+    vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (!url.includes("/out/v7.mp4")) return apiFetch(input, init);
+      const res = new Response("CLEARTEXT");
+      Object.defineProperty(res, "url", { value: `http://files.heygen.test/out/v7.mp4?${SIG}` });
+      return res;
+    });
+    const err = await run("status", "v7", "--type", "video", "--download", "--no-thumb").catch(
+      (e) => e,
+    );
+    expect(err.message).toMatch(/redirected to a non-https URL/);
+    expect(err.message).not.toContain("TOPSECRETSIG");
+    expect(fs.readdirSync(tmp)).toEqual([]);
+  });
+
+  it("skips a thumbnail that redirects to plain http but keeps the video", async () => {
+    useApi({
+      "GET /v3/videos/v7": completed({
+        video_url: `${FILES}/out/v7.mp4`,
+        thumbnail_url: `${FILES}/out/v7.jpg?${SIG}`,
+      }),
+      "GET /out/v7.mp4": { raw: "V7" },
+      "GET /out/v7.jpg": {
+        status: 301,
+        headers: { Location: "http://files.heygen.test/plain/v7.jpg" },
+      },
+      "GET /plain/v7.jpg": { raw: "JPEG" },
+    });
+    await run("status", "v7", "--type", "video", "--download");
+    expect(fs.readdirSync(tmp)).toEqual(["heygen-video-v7.mp4"]);
+    expect(fake.callsTo("GET /plain/v7.jpg")).toHaveLength(0);
+    expect(printed()).toMatch(/Thumb download failed/);
+    expect(printed()).not.toContain("TOPSECRETSIG");
+  });
+});
+
+describe("heygen output naming", () => {
+  const translation = (id: string, data: Record<string, unknown>) => ({
+    body: { data: { id, status: "completed", ...data } },
+  });
+
+  async function translate(languages: string, ...extra: string[]) {
+    await run(
+      "translate",
+      "asset:src1",
+      "--languages",
+      languages,
+      "--poll-interval",
+      "1",
+      ...extra,
+    );
+  }
+
+  it("never lets two outputs share a template name (case-insensitive)", async () => {
+    useApi({
+      "POST /v3/video-translations": {
+        body: { data: { video_translation_ids: ["t1", "t2", "t3"] } },
+      },
+      "GET /v3/video-translations/t1": translation("t1", {
+        output_language: "Spanish",
+        video_url: `${FILES}/tr/t1.mp4`,
+      }),
+      "GET /v3/video-translations/t2": translation("t2", {
+        output_language: "Spanish",
+        video_url: `${FILES}/tr/t2.mp4`,
+      }),
+      "GET /v3/video-translations/t3": translation("t3", {
+        output_language: "spanish",
+        video_url: `${FILES}/tr/t3.mp4`,
+      }),
+      "GET /tr/t1.mp4": { raw: "ONE" },
+      "GET /tr/t2.mp4": { raw: "TWO" },
+      "GET /tr/t3.mp4": { raw: "THREE" },
+    });
+    const outDir = path.join(tmp, "out");
+    await translate("Spanish,spanish,Spanish (Spain)", "--output", path.join(outDir, "dub.mp4"));
+    const read = (f: string) => fs.readFileSync(path.join(outDir, f), "utf8");
+    expect(fs.readdirSync(outDir).sort()).toEqual([
+      "dub-Spanish-t2.mp4",
+      "dub-Spanish.mp4",
+      "dub-spanish-t3.mp4",
+    ]);
+    expect([
+      read("dub-Spanish.mp4"),
+      read("dub-Spanish-t2.mp4"),
+      read("dub-spanish-t3.mp4"),
+    ]).toEqual(["ONE", "TWO", "THREE"]);
+  });
+
+  it("saves template captions next to each video", async () => {
+    useApi({
+      "POST /v3/video-translations": { body: { data: { video_translation_ids: ["t1", "t2"] } } },
+      "GET /v3/video-translations/t1": translation("t1", {
+        output_language: "Spanish",
+        video_url: `${FILES}/tr/t1.mp4`,
+        srt_caption_url: `${FILES}/tr/t1.srt`,
+      }),
+      "GET /v3/video-translations/t2": translation("t2", {
+        output_language: "French",
+        video_url: `${FILES}/tr/t2.mp4`,
+        vtt_caption_url: `${FILES}/tr/t2.vtt`,
+      }),
+      "GET /tr/t1.mp4": { raw: "ES" },
+      "GET /tr/t1.srt": { raw: "ES-SUBS" },
+      "GET /tr/t2.mp4": { raw: "FR" },
+      "GET /tr/t2.vtt": { raw: "FR-SUBS" },
+    });
+    await translate("Spanish,French", "--output", path.join(tmp, "dub.mp4"), "--captions");
+    expect(fs.readdirSync(tmp).sort()).toEqual([
+      "dub-French.mp4",
+      "dub-French.vtt",
+      "dub-Spanish.mp4",
+      "dub-Spanish.srt",
+    ]);
+  });
+
+  it("does not save captions over a video whose --output has a subtitle extension", async () => {
+    useApi({
+      "GET /v3/videos/v7": translation("v7", {
+        video_url: `${FILES}/out/v7.mp4`,
+        subtitle_url: `${FILES}/out/v7.srt`,
+      }),
+      "GET /out/v7.mp4": { raw: "VIDEO" },
+      "GET /out/v7.srt": { raw: "SUBS" },
+    });
+    const dest = path.join(tmp, "x.srt");
+    await run(
+      "status",
+      "v7",
+      "--type",
+      "video",
+      "--download",
+      "--captions",
+      "--no-thumb",
+      "--output",
+      dest,
+    );
+    expect(fs.readFileSync(dest, "utf8")).toBe("VIDEO");
+    expect(fs.readFileSync(path.join(tmp, "x.captions.srt"), "utf8")).toBe("SUBS");
+  });
+
+  it("treats a trailing separator, an existing directory, or no extension as a directory", async () => {
+    useApi({
+      "GET /v3/videos/v7": translation("v7", { video_url: `${FILES}/out/v7.mp4` }),
+      "GET /out/v7.mp4": { raw: "V7" },
+    });
+    const download = (output: string) =>
+      run("status", "v7", "--type", "video", "--download", "--no-thumb", "--output", output);
+
+    await download(`${path.join(tmp, "renders.mp4")}${path.sep}`);
+    expect(fs.readdirSync(path.join(tmp, "renders.mp4"))).toEqual(["heygen-video-v7.mp4"]);
+
+    const existing = path.join(tmp, "final.mov");
+    fs.mkdirSync(existing);
+    await download(existing);
+    expect(fs.readdirSync(existing)).toEqual(["heygen-video-v7.mp4"]);
+
+    await download(path.join(tmp, "outdir"));
+    expect(fs.readdirSync(path.join(tmp, "outdir"))).toEqual(["heygen-video-v7.mp4"]);
+  });
+
+  it("names audio-only translations with the audio extension", async () => {
+    useApi({
+      "POST /v3/video-translations": { body: { data: { video_translation_ids: ["t1", "t2"] } } },
+      "GET /v3/video-translations/t1": translation("t1", {
+        output_language: "Spanish",
+        audio_url: `${FILES}/tr/t1.mp3`,
+      }),
+      "GET /v3/video-translations/t2": translation("t2", {
+        output_language: "French",
+        audio_url: `${FILES}/tr/t2`,
+      }),
+      "GET /tr/t1.mp3": { raw: "ES" },
+      "GET /tr/t2": { raw: "FR" },
+    });
+    await translate("Spanish,French", "--audio-only", "--output", path.join(tmp, "dub.mp4"));
+    expect(fs.readdirSync(tmp).sort()).toEqual(["dub-French.mp3", "dub-Spanish.mp3"]);
+
+    fs.rmSync(path.join(tmp, "dub-French.mp3"));
+    fs.rmSync(path.join(tmp, "dub-Spanish.mp3"));
+    await run("status", "t2", "--type", "translation", "--download");
+    expect(fs.readdirSync(tmp)).toEqual(["heygen-translation-French-t2.mp3"]);
   });
 });
 
