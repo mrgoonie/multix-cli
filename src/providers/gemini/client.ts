@@ -248,7 +248,8 @@ export async function listModels(timeoutMs = 10_000): Promise<string[]> {
   const apiKey = requireApiKey();
   // biome-ignore lint/suspicious/noExplicitAny: dynamic API
   const resp = await httpJson<any>({
-    url: `${BASE}/v1beta/models?key=${apiKey}`,
+    url: `${BASE}/v1beta/models`,
+    headers: authHeaders(apiKey),
     timeoutMs,
   });
   // biome-ignore lint/suspicious/noExplicitAny: dynamic API

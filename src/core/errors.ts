@@ -3,6 +3,8 @@
  * All errors carry a short `code` string for programmatic handling.
  */
 
+import { redactUrl } from "./redact.js";
+
 export class MultixError extends Error {
   constructor(
     message: string,
@@ -44,14 +46,20 @@ export class ValidationError extends MultixError {
   }
 }
 
-/** HTTP request failed. */
+/**
+ * HTTP request failed. `url` keeps the raw request URL for programmatic use;
+ * the message only shows it with the query string redacted so API keys and
+ * signed-URL tokens never reach terminal or CI logs.
+ */
 export class HttpError extends MultixError {
   constructor(
     public readonly status: number,
     public readonly snippet: string,
     public readonly url: string,
+    /** Parsed Retry-After header (ms), when the server sent one. */
+    public readonly retryAfterMs?: number,
   ) {
-    super(`HTTP ${status} from ${url}: ${snippet}`, "HTTP_ERROR");
+    super(`HTTP ${status} from ${redactUrl(url)}: ${snippet}`, "HTTP_ERROR");
     this.name = "HttpError";
   }
 }

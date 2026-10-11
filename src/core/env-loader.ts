@@ -45,14 +45,7 @@ export function resolveKey(name: string): string | undefined {
   return process.env[name] || undefined;
 }
 
-/**
- * Redact an API key for safe logging: show first 6 + last 4 chars.
- * e.g. "AIzaSy...abcd"
- */
-export function redact(key: string): string {
-  if (key.length <= 10) return "***";
-  return `${key.slice(0, 6)}...${key.slice(-4)}`;
-}
+export { redact } from "./redact.js";
 
 /** Reset loaded state — for testing only. */
 export function _resetEnvLoader(): void {

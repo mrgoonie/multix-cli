@@ -9,59 +9,20 @@ import fs from "node:fs";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { HttpError } from "./errors.js";
+import {
+  DEFAULT_TIMEOUT_MS,
+  type FetchJsonOptions as HttpJsonOptions,
+  fetchJson,
+} from "./fetch-json.js";
 
-const DEFAULT_TIMEOUT_MS = 120_000;
-const SNIPPET_MAX = 500;
-
-export interface HttpJsonOptions {
-  url: string;
-  method?: "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
-  headers?: Record<string, string>;
-  // biome-ignore lint/suspicious/noExplicitAny: generic JSON body
-  body?: Record<string, unknown> | unknown[] | any;
-  timeoutMs?: number;
-}
+export type { HttpJsonOptions };
 
 /**
  * Make an HTTP request and parse the JSON response.
  * Throws HttpError on non-2xx status.
  */
 export async function httpJson<T>(opts: HttpJsonOptions): Promise<T> {
-  const { url, method = "GET", headers = {}, body, timeoutMs = DEFAULT_TIMEOUT_MS } = opts;
-
-  const init: RequestInit = {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-      ...headers,
-    },
-    signal: AbortSignal.timeout(timeoutMs),
-  };
-
-  if (body !== undefined) {
-    init.body = JSON.stringify(body);
-  }
-
-  let response: Response;
-  try {
-    response = await globalThis.fetch(url, init);
-  } catch (cause) {
-    const msg = cause instanceof Error ? cause.message : String(cause);
-    throw new HttpError(0, msg, url);
-  }
-
-  if (!response.ok) {
-    let snippet = "";
-    try {
-      const text = await response.text();
-      snippet = text.slice(0, SNIPPET_MAX);
-    } catch {
-      snippet = "(could not read body)";
-    }
-    throw new HttpError(response.status, snippet, url);
-  }
-
-  return response.json() as Promise<T>;
+  return fetchJson<T>(opts);
 }
 
 /**

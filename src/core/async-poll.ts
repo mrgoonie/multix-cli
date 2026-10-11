@@ -1,0 +1,98 @@
+/**
+ * Bounded polling for asynchronous provider jobs (predictions, video renders).
+ * Runtime-neutral (no node:* imports): exponential backoff with jitter, a hard
+ * deadline, transient-error retries, and Retry-After support on 429.
+ */
+
+import { HttpError, MultixError } from "./errors.js";
+
+export class PollTimeoutError extends MultixError {
+  constructor(
+    message: string,
+    public readonly lastStatus?: unknown,
+  ) {
+    super(message, "POLL_TIMEOUT");
+    this.name = "PollTimeoutError";
+  }
+}
+
+export interface PollOptions<T> {
+  /** Fetch the current job state. */
+  fetchStatus: () => Promise<T>;
+  /** True once the job reached a terminal state (success OR failure). */
+  isTerminal: (state: T) => boolean;
+  /** Hard upper bound for the whole wait. */
+  timeoutMs: number;
+  /** First delay between polls. Default 3000ms. */
+  intervalMs?: number;
+  /** Ceiling for the backoff delay. Default 15000ms. */
+  maxIntervalMs?: number;
+  /** Multiplier applied after each poll. Default 1.5. */
+  backoffFactor?: number;
+  /** Add up to ±20% random jitter to each delay. Default true. */
+  jitter?: boolean;
+  /** Errors that should be retried instead of aborting. Default: network, 429, 5xx. */
+  isTransientError?: (error: unknown) => boolean;
+  /** Called after each successful status fetch. */
+  onPoll?: (state: T, attempt: number) => void;
+  /** Appended to the timeout message, e.g. a resume command. */
+  resumeHint?: string;
+  sleep?: (ms: number) => Promise<void>;
+  now?: () => number;
+  random?: () => number;
+}
+
+/** Network failures (status 0), rate limits and server errors are worth retrying. */
+export function isTransientHttpError(error: unknown): boolean {
+  if (!(error instanceof HttpError)) return false;
+  return error.status === 0 || error.status === 429 || error.status >= 500;
+}
+
+const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Poll `fetchStatus` until `isTerminal` returns true or the deadline passes.
+ * Returns the terminal state; callers decide whether it is success or failure.
+ * Throws PollTimeoutError on timeout and rethrows non-transient errors.
+ */
+export async function pollUntil<T>(opts: PollOptions<T>): Promise<T> {
+  const now = opts.now ?? Date.now;
+  const sleep = opts.sleep ?? defaultSleep;
+  const random = opts.random ?? Math.random;
+  const isTransient = opts.isTransientError ?? isTransientHttpError;
+  const maxInterval = opts.maxIntervalMs ?? 15_000;
+  const factor = opts.backoffFactor ?? 1.5;
+  const jitter = opts.jitter ?? true;
+  const deadline = now() + opts.timeoutMs;
+
+  let interval = opts.intervalMs ?? 3000;
+  let attempt = 0;
+  let last: T | undefined;
+
+  for (;;) {
+    attempt++;
+    let retryAfterMs: number | undefined;
+    try {
+      last = await opts.fetchStatus();
+      opts.onPoll?.(last, attempt);
+      if (opts.isTerminal(last)) return last;
+    } catch (error) {
+      if (!isTransient(error)) throw error;
+      if (error instanceof HttpError) retryAfterMs = error.retryAfterMs;
+    }
+
+    const remaining = deadline - now();
+    if (remaining <= 0) {
+      const hint = opts.resumeHint ? ` ${opts.resumeHint}` : "";
+      throw new PollTimeoutError(
+        `Timed out after ${opts.timeoutMs}ms waiting for job.${hint}`,
+        last,
+      );
+    }
+
+    let delay = retryAfterMs ?? interval;
+    if (jitter && retryAfterMs === undefined) delay *= 0.8 + random() * 0.4;
+    await sleep(Math.max(0, Math.min(delay, remaining)));
+    interval = Math.min(interval * factor, maxInterval);
+  }
+}

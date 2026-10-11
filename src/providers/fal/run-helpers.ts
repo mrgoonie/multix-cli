@@ -5,25 +5,15 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { ValidationError } from "../../core/errors.js";
 import { downloadFile } from "../../core/http-client.js";
+import { parseJsonInput } from "../../core/json-input.js";
 import type { Logger } from "../../core/logger.js";
 import { HttpError, createFalClient, submitPath } from "./client.js";
 import type { FalResultResponse, FalStatusResponse, FalSubmitResponse } from "./types.js";
 
 /** Parse `--input` as inline JSON or `@path/to/file.json`. */
 export function parseInputArg(raw: string): Record<string, unknown> {
-  const text = raw.startsWith("@") ? fs.readFileSync(raw.slice(1), "utf8") : raw;
-  try {
-    const parsed = JSON.parse(text);
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-      throw new Error("input must be a JSON object");
-    }
-    return parsed as Record<string, unknown>;
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    throw new ValidationError(`Invalid --input JSON: ${msg}`);
-  }
+  return parseJsonInput(raw);
 }
 
 export interface SubmitAndWaitOptions {

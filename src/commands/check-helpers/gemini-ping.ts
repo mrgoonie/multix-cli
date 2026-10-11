@@ -21,7 +21,8 @@ export async function pingGemini(apiKey: string): Promise<PingResult> {
   try {
     // biome-ignore lint/suspicious/noExplicitAny: dynamic API
     const resp = await httpJson<any>({
-      url: `${MODELS_URL}?key=${encodeURIComponent(apiKey)}`,
+      url: MODELS_URL,
+      headers: { "x-goog-api-key": apiKey },
       timeoutMs: 10_000,
     });
     const modelCount: number = Array.isArray(resp.models) ? resp.models.length : 0;
