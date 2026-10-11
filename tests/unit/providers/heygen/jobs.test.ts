@@ -366,6 +366,21 @@ describe("polling robustness", () => {
     // 500 ms start delay + polling never exceeds the 2000 ms budget.
     expect(t).toBeLessThanOrEqual(2000);
     expect(fake.calls.length).toBeGreaterThan(0);
+    // The message reports the caller's --wait-timeout, not the budget left after the delay.
+    expect(err.message).toContain("Timed out after 2000ms");
+  });
+
+  it("marks an audio-only translation output as audio", async () => {
+    const { c } = client({
+      "GET /v3/video-translations/t1": {
+        body: { data: { id: "t1", status: "completed", audio_url: "https://f.test/t1" } },
+      },
+      "GET /v3/video-translations/t2": {
+        body: { data: { id: "t2", status: "completed", video_url: "https://f.test/t2.mp4" } },
+      },
+    });
+    expect((await getJobState(c, "translation", "t1")).outputIsAudio).toBe(true);
+    expect((await getJobState(c, "translation", "t2")).outputIsAudio).toBeUndefined();
   });
 
   it("does not retry non-transient errors such as 404", async () => {

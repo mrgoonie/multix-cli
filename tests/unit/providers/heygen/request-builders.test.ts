@@ -84,6 +84,24 @@ describe("checkBaseUrl", () => {
     expect(() => checkBaseUrl("ftp://api.heygen.com", "HEYGEN_BASE_URL")).toThrow(ConfigError);
     expect(() => checkBaseUrl("api.heygen.com", "HEYGEN_BASE_URL")).toThrow(/absolute https/);
   });
+
+  it("normalizes an uppercase scheme before deciding", () => {
+    expect(checkBaseUrl("HTTPS://proxy.example", "HEYGEN_BASE_URL")).toBe("HTTPS://proxy.example");
+    expect(checkBaseUrl("HTTP://LOCALHOST:8787", "HEYGEN_BASE_URL")).toBe("HTTP://LOCALHOST:8787");
+    expect(() => checkBaseUrl("HTTP://evil.test", "HEYGEN_BASE_URL")).toThrow(ConfigError);
+  });
+
+  it("does not echo userinfo from a rejected base URL", () => {
+    const err = (() => {
+      try {
+        checkBaseUrl("http://user:PASSW0RD@evil.test/v3", "HEYGEN_BASE_URL");
+      } catch (e) {
+        return e as Error;
+      }
+    })();
+    expect(err).toBeInstanceOf(ConfigError);
+    expect(err?.message).not.toContain("PASSW0RD");
+  });
 });
 
 describe("isHttpsUrl", () => {

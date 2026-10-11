@@ -123,11 +123,19 @@ multix heygen lipsync --video <ref> --audio <ref> [--mode speed|precision] [--st
   downloads every successful output, and exits non-zero if any language or
   download failed. A failed download does not stop the remaining languages
   from downloading.
+- An `--output` that ends in `/` or `\`, names an existing directory, or has
+  no extension is a directory that receives the default file names.
 - With several languages, an `--output` that ends in a media extension
-  (`.mp4`, `.webm`, `.mov`, `.mp3`, `.wav`, `.m4a`, `.aac`, `.srt`, `.vtt`) is
-  a name template: `--output dub.mp4` saves `dub-Spanish.mp4`,
-  `dub-French.mp4`, and so on. Any other `--output` is a directory that
-  receives the default file names.
+  (`.mp4`, `.webm`, `.mov`, `.mp3`, `.wav`, `.m4a`, `.aac`) is a name
+  template: `--output dub.mp4` saves `dub-Spanish.mp4`, `dub-French.mp4`, and
+  so on. When two outputs would get the same name (compared without regard to
+  case), the later one also gets its job ID (`dub-Spanish-<id>.mp4`), so no
+  output overwrites another. Any other `--output` is a directory.
+- Audio-only translations keep their audio extension: `--audio-only --output
+  dub.mp4` saves `dub-Spanish.mp3`.
+- `--captions` saves the subtitle file next to its video with a `.srt` or
+  `.vtt` extension (`dub-Spanish.srt`). If that would be the video's own path,
+  it is saved as `<name>.captions.srt` instead.
 
 ## Text-to-speech
 
@@ -211,8 +219,9 @@ multix heygen status <id> --type agent|video|translation|lipsync|model-video [--
 - Output URLs are signed and expire. If a download fails with 403/404/410,
   re-run `status ... --download` to get a fresh URL.
 - Outputs, caption files, and thumbnails are only downloaded from `https://`
-  URLs. A non-HTTPS output or caption URL fails the job's delivery; a
-  non-HTTPS thumbnail is skipped with a warning.
+  URLs, and every redirect must stay on `https://`. A non-HTTPS output or
+  caption URL (or a redirect to one) fails the job's delivery before anything
+  is written; a non-HTTPS thumbnail is skipped with a warning.
 
 ## Webhooks
 

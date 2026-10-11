@@ -118,10 +118,19 @@ multix heygen lipsync --video <ref> --audio <ref> [--mode speed|precision] [--st
 - Mỗi ngôn ngữ tạo một job dịch riêng. CLI chờ tất cả các job, tải về mọi kết
   quả thành công, và thoát với mã khác 0 nếu có ngôn ngữ nào hoặc lượt tải nào
   thất bại. Một lượt tải lỗi không chặn việc tải các ngôn ngữ còn lại.
+- `--output` kết thúc bằng `/` hoặc `\`, trỏ tới một thư mục đã có, hoặc không
+  có đuôi tệp được hiểu là thư mục chứa các tệp với tên mặc định.
 - Khi dịch sang nhiều ngôn ngữ, `--output` có đuôi media (`.mp4`, `.webm`,
-  `.mov`, `.mp3`, `.wav`, `.m4a`, `.aac`, `.srt`, `.vtt`) được hiểu là mẫu tên
-  tệp: `--output dub.mp4` lưu thành `dub-Spanish.mp4`, `dub-French.mp4`, v.v.
-  Mọi `--output` khác được hiểu là thư mục chứa các tệp với tên mặc định.
+  `.mov`, `.mp3`, `.wav`, `.m4a`, `.aac`) được hiểu là mẫu tên tệp:
+  `--output dub.mp4` lưu thành `dub-Spanish.mp4`, `dub-French.mp4`, v.v. Nếu
+  hai kết quả trùng tên (không phân biệt hoa thường), kết quả sau được thêm ID
+  job (`dub-Spanish-<id>.mp4`), nên không kết quả nào ghi đè kết quả khác. Mọi
+  `--output` khác được hiểu là thư mục.
+- Bản dịch chỉ âm thanh giữ đuôi âm thanh: `--audio-only --output dub.mp4` lưu
+  thành `dub-Spanish.mp3`.
+- `--captions` lưu file phụ đề cạnh video với đuôi `.srt` hoặc `.vtt`
+  (`dub-Spanish.srt`). Nếu đường dẫn đó trùng chính video, phụ đề được lưu
+  thành `<tên>.captions.srt`.
 
 ## Chuyển văn bản thành giọng nói
 
@@ -202,9 +211,11 @@ multix heygen status <id> --type agent|video|translation|lipsync|model-video [--
   `multix heygen status ... --wait --download` để tiếp tục.
 - URL kết quả có chữ ký và sẽ hết hạn. Nếu tải về lỗi 403/404/410, hãy chạy lại
   `status ... --download` để lấy URL mới.
-- Kết quả, file phụ đề và thumbnail chỉ được tải từ URL `https://`. URL kết
-  quả hoặc phụ đề không phải HTTPS sẽ làm lượt giao kết quả của job đó thất
-  bại; thumbnail không phải HTTPS được bỏ qua kèm cảnh báo.
+- Kết quả, file phụ đề và thumbnail chỉ được tải từ URL `https://`, và mọi
+  chuyển hướng (redirect) cũng phải giữ `https://`. URL kết quả hoặc phụ đề
+  không phải HTTPS (hoặc chuyển hướng sang URL như vậy) sẽ làm lượt giao kết
+  quả của job đó thất bại trước khi ghi bất cứ thứ gì; thumbnail không phải
+  HTTPS được bỏ qua kèm cảnh báo.
 
 ## Webhook
 

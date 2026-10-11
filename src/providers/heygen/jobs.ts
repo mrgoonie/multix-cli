@@ -33,6 +33,8 @@ export interface HeygenJobState {
   videoId?: string;
   progress?: number;
   outputUrl?: string;
+  /** True when `outputUrl` is an audio file (an audio-only translation). */
+  outputIsAudio?: boolean;
   /** Video only: the burned-in caption render, when HeyGen produced one. */
   captionedVideoUrl?: string;
   thumbnailUrl?: string;
@@ -91,6 +93,7 @@ export function videoState(
 }
 
 export function translationState(t: HeygenVideoTranslation): HeygenJobState {
+  const audioOnly = !str(t.video_url) && !!str(t.audio_url);
   return {
     kind: "translation",
     id: t.id,
@@ -98,6 +101,7 @@ export function translationState(t: HeygenVideoTranslation): HeygenJobState {
     done: t.status === "completed" || t.status === "failed",
     succeeded: t.status === "completed",
     outputUrl: str(t.video_url) ?? str(t.audio_url),
+    ...(audioOnly ? { outputIsAudio: true } : {}),
     captionUrl: str(t.srt_caption_url) ?? str(t.vtt_caption_url),
     outputLanguage: str(t.output_language),
     failureMessage: str(t.failure_message),
@@ -287,14 +291,21 @@ export async function waitForJob(
 ): Promise<HeygenJobState> {
   const { burnCaptions, startDelayMs = 0, ...poll } = opts;
   // Keep at least half the budget for polling so a tiny --wait-timeout still polls.
-  const delay = Math.min(Math.max(0, startDelayMs), Math.floor(poll.timeoutMs / 2));
-  if (delay > 0) await (poll.sleep ?? defaultSleep)(delay);
+  let pendingDelay = Math.min(Math.max(0, startDelayMs), Math.floor(poll.timeoutMs / 2));
+  const read = createJobStatusReader(client, kind, id, { burnCaptions });
+  // The start delay runs inside the first status read, so it counts against the
+  // caller's timeout and a timeout message reports the caller's own budget.
   return pollUntil({
     intervalMs: DEFAULT_POLL_INTERVAL_MS,
     maxIntervalMs: 30_000,
     ...poll,
-    timeoutMs: poll.timeoutMs - delay,
-    fetchStatus: createJobStatusReader(client, kind, id, { burnCaptions }),
+    fetchStatus: async (ctx) => {
+      const delay = pendingDelay;
+      if (delay <= 0) return read(ctx);
+      pendingDelay = 0;
+      await (poll.sleep ?? defaultSleep)(delay);
+      return read({ remainingMs: Math.max(1, ctx.remainingMs - delay) });
+    },
     isTerminal: (s) => s.done,
   });
 }
