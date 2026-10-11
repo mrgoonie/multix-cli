@@ -81,9 +81,11 @@ Thư mục project được đọc trước, sau đó là các file tương tự
 Chỉ các tên dạng credential được lấy từ những file này: tên kết thúc bằng
 `_API_KEY` (có thể đánh số, như `GEMINI_API_KEY_2`), `_API_TOKEN`, `_ACCOUNT_ID`
 hoặc `_GATEWAY_ID`, cùng `FAL_KEY` và `ARK_API_KEY`. Các thiết lập endpoint,
-proxy và runtime như `*_BASE_URL` bị bỏ qua, nên một repository clone về không
-thể gửi key của bạn tới host khác. Bản thân cờ này bị bỏ qua nếu đặt trong các
-file đó.
+proxy và runtime như `*_BASE_URL` bị bỏ qua. Account ID và gateway ID lấy từ
+các file `.claude` của thư mục hiện tại tuân theo cùng quy tắc tin cậy như
+`.env` của project (xem
+[Ghi đè base URL và độ tin cậy](#ghi-đè-base-url-và-độ-tin-cậy)). Bản thân cờ
+này bị bỏ qua nếu đặt trong các file đó.
 `multix check` báo khi tìm thấy file cũ lúc cờ đang tắt, còn `multix check -v`
 liệt kê mọi file env đã nạp (chỉ đường dẫn, không bao giờ in giá trị). Vẫn nên
 chuyển key sang `.env` hoặc `~/.multix/.env`.
@@ -123,6 +125,54 @@ cho file cục bộ upload lên Atlas Cloud (mặc định 200).
 `HEYGEN_BASE_URL` ghi đè API base của HeyGen (mặc định
 `https://api.heygen.com`) cho proxy và test. Giá trị phải là `https://`;
 `http://` chỉ được chấp nhận cho `localhost`, `127.0.0.1` hoặc `[::1]`.
+
+### Ghi đè base URL và độ tin cậy
+
+Biến ghi đè `*_BASE_URL` quyết định API key của bạn được gửi tới đâu.
+`CLOUDFLARE_ACCOUNT_ID` và `CLOUDFLARE_AI_GATEWAY_ID` cũng vậy: chúng chọn
+account Cloudflare và AI Gateway nào nhận token của bạn. Giá trị từ biến môi
+trường của shell hoặc `~/.multix/.env` luôn được dùng. Giá trị từ `.env` của
+project (thư mục hiện tại, hoặc một file `.claude` cũ bên trong nó) chỉ được
+dùng khi nó không thể gửi key của người khác:
+
+- Giá trị được dùng khi mọi key mà provider gửi kèm request đó đều đến từ cùng
+  file project, vì khi đó key duy nhất được gửi đi là key của chính repository.
+  Ví dụ: `FAL_BASE_URL` và `FAL_KEY` cùng nằm trong `.env` của project, hoặc
+  `CLOUDFLARE_API_TOKEN` cùng với account ID và gateway ID. Video Cloudflare
+  còn gửi `REPLICATE_API_TOKEN`, nên token này cũng phải đến từ cùng file đó.
+  Quy tắc này bảo vệ key của bạn, không bảo vệ dữ liệu của bạn: một `.env` của
+  project có sẵn key và base URL riêng sẽ gửi các request trong project đó, kể cả
+  prompt và mọi file bạn tải lên, tới host đó, và key của nó thay thế key của bạn
+  trong `~/.multix/.env`. Hãy xem kỹ `.env` của repository vừa clone trước khi
+  chạy `multix` trong đó.
+- Giá trị bị bỏ qua khi có key đến từ nơi khác: shell, `~/.multix/.env`, một
+  file cũ trong thư mục home, hoặc một file project khác. Nếu `~/.multix/.env`
+  đặt cùng biến đó, giá trị ở đó được dùng và `multix` in một cảnh báo nêu tên
+  biến, đường dẫn file và nguồn của key (không bao giờ in giá trị). Nếu không,
+  lệnh dừng với một lỗi trước khi gửi bất kỳ request nào. Lệnh không quay về
+  giá trị mặc định của nhà cung cấp, nên request bạn định gửi tới mock server
+  không bao giờ tới API trả phí.
+- Giá trị rỗng trong project không bao giờ che giá trị trong `~/.multix/.env`.
+- `multix check` liệt kê từng thiết lập loại này đang được đặt, và cho biết nó
+  đang có hiệu lực hay bị bỏ qua (ví dụ
+  `FAL_BASE_URL ignored: set in project .env while FAL_KEY comes from the shell`).
+  Lệnh này dùng đúng các bước kiểm tra của các lệnh khác, nên nó cũng báo base
+  URL vi phạm quy tắc `https://` và ID Cloudflare dùng được cho image và speech
+  nhưng không dùng được cho video.
+- Để dùng giá trị của project (ví dụ mock server cục bộ), bật cho đúng một lệnh
+  từ shell: `MULTIX_ALLOW_PROJECT_BASE_URL=1 multix ...`. Tránh đặt biến này
+  trong `~/.multix/.env`: như vậy sẽ tắt cơ chế bảo vệ cho mọi thư mục bạn chạy
+  `multix`. Biến này bị bỏ qua nếu được đặt ngay trong `.env` của project.
+- Base URL khác mặc định phải dùng `https://`; `http://` chỉ được chấp nhận cho
+  `localhost`, `127.0.0.1` hoặc `[::1]`.
+- Khi một base URL khác mặc định đang được dùng, `multix` in một cảnh báo cho
+  mỗi biến, nêu provider và chỉ hostname, không bao giờ in key hay URL đầy đủ.
+  Cảnh báo được ghi ra stderr nên stdout vẫn đọc được bằng máy.
+
+Cơ chế này chỉ bảo vệ base URL và các ID định tuyến của Cloudflare. `.env` của
+project vẫn có thể đặt các biến cấp process khác (ví dụ proxy, TLS và thiết
+lập Node); xem [issue #99](https://github.com/mrgoonie/multix-cli/issues/99).
+Đừng chạy `multix` trong repository có `.env` mà bạn chưa đọc.
 
 Cloudflare chỉ chấp nhận các model image và speech Workers AI có sẵn;
 `CLOUDFLARE_AI_IMAGE_MODEL` và `CLOUDFLARE_AI_TTS_MODEL` vì vậy chỉ dùng để

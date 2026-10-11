@@ -7,6 +7,17 @@
 
 export const DEFAULT_FAL_BASE_URL = "https://queue.fal.run";
 
+/**
+ * Base URL override and the key env names in the order the provider reads
+ * them (first non-blank wins). Shared by the key lookup, the base URL trust
+ * check and `multix check`, so the three cannot drift apart.
+ */
+export const FAL_ROUTING = {
+  name: "FAL_BASE_URL",
+  defaultUrl: DEFAULT_FAL_BASE_URL,
+  keyEnvs: ["FAL_KEY"],
+} as const;
+
 export const FAL_DEFAULTS = {
   // FLUX.1 [schnell] — fast, low-cost default text-to-image model.
   imageModel: process.env.FAL_IMAGE_MODEL ?? "fal-ai/flux/schnell",

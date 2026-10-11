@@ -13,11 +13,18 @@ import {
 } from "../../../../src/core/errors.js";
 import {
   FILES_API_MAX_BYTES,
-  minUploadBytesPerSec,
   uploadFile,
   uploadTimeoutMs,
 } from "../../../../src/providers/gemini/client.js";
 import { _resetGeminiKeyCooldowns } from "../../../../src/providers/gemini/key-pool.js";
+import {
+  INLINE_MAX_BYTES,
+  inlinePart,
+  minUploadBytesPerSec,
+  shouldUseFileApi,
+  uploadLocalFile,
+} from "../../../../src/providers/gemini/local-files.js";
+import { findNodeOnlyUses, formatNodeOnlyUses } from "../../../helpers/import-graph.js";
 
 const GOOGLE = "https://generativelanguage.googleapis.com";
 const SESSION_PATH = "/upload/v1beta/files?upload_id=session-secret";
@@ -127,7 +134,7 @@ describe("gemini uploadFile (resumable, streamed)", () => {
         peak = Math.max(peak, process.memoryUsage().arrayBuffers);
       }, 1);
 
-      const ref = await uploadFile(file, { apiKey: "test-key-0000" });
+      const ref = await uploadLocalFile(file, { apiKey: "test-key-0000" });
       expect(ref).toEqual(FILE_REF);
     } finally {
       clearInterval(sampler);
@@ -166,22 +173,101 @@ describe("gemini uploadFile (resumable, streamed)", () => {
     expect(upload.headers["content-length"]).toBe(String(size));
   }, 30_000);
 
-  it("rejects files above the 2 GB Files API limit before any request", async () => {
-    const file = path.join(dir, "huge.mp4");
-    fs.writeFileSync(file, "x");
-    const realStat = fs.statSync;
-    vi.spyOn(fs, "statSync").mockImplementation(((p: fs.PathLike, o?: fs.StatSyncOptions) => {
-      const st = realStat(p, o) as fs.Stats;
-      return p === file ? Object.assign(st, { size: FILES_API_MAX_BYTES + 1 }) : st;
-    }) as typeof fs.statSync);
+  it("rejects Blobs above the 2 GB Files API limit before any request", async () => {
+    class HugeBlob extends Blob {
+      override get size(): number {
+        return FILES_API_MAX_BYTES + 1;
+      }
+    }
     const fetchSpy = vi.fn();
     vi.stubGlobal("fetch", fetchSpy);
 
     expect(FILES_API_MAX_BYTES).toBe(2_000_000_000);
-    const err = await uploadFile(file, { apiKey: "test-key-0000" }).catch((e: unknown) => e);
+    const err = await uploadFile(
+      { blob: new HugeBlob(["x"]), displayName: "huge.mp4", mimeType: "video/mp4" },
+      { apiKey: "test-key-0000" },
+    ).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ValidationError);
     expect((err as Error).message).toMatch(/huge\.mp4 .*limit 2 GB/);
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("uploads an in-memory Blob with the given name and type (no file system)", async () => {
+    const bodies: unknown[] = [];
+    const starts: RequestInit[] = [];
+    vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
+      if (url.includes("upload_id=")) {
+        bodies.push(init.body);
+        return finalized();
+      }
+      starts.push(init);
+      return started();
+    });
+
+    const blob = new Blob(["%PDF-1.4"]);
+    const ref = await uploadFile(
+      { blob, displayName: "report.pdf", mimeType: "application/pdf" },
+      { apiKey: "test-key-0000" },
+    );
+    expect(ref).toEqual(FILE_REF);
+    expect(bodies[0]).toBe(blob); // sent as is, never copied
+    expect(headerOf(starts[0], "x-goog-upload-header-content-length")).toBe("8");
+    expect(headerOf(starts[0], "x-goog-upload-header-content-type")).toBe("application/pdf");
+    expect(JSON.parse(String(starts[0]?.body))).toEqual({ file: { display_name: "report.pdf" } });
+  });
+
+  it("sends a typed Blob without its type, so the byte upload has no Content-Type", async () => {
+    const realFetch = globalThis.fetch;
+    let server: Awaited<ReturnType<typeof startUploadServer>> | undefined;
+    try {
+      server = await startUploadServer();
+      const local = `http://127.0.0.1:${server.port}`;
+      vi.stubGlobal("fetch", (url: string, i: RequestInit) =>
+        realFetch(url.replace(GOOGLE, local), i),
+      );
+      const blob = new File(["%PDF-1.4"], "report.pdf", { type: "application/x-other" });
+      await uploadFile(
+        { blob, displayName: "report.pdf", mimeType: "application/pdf" },
+        { apiKey: "test-key-0000" },
+      );
+    } finally {
+      await server?.close();
+    }
+    const upload = server?.received[1];
+    expect(upload?.url).toBe(SESSION_PATH);
+    expect(upload?.headers["content-type"]).toBeUndefined();
+    expect(upload?.bytes).toBe(8);
+    expect(upload?.head).toBe("%PDF-1.4");
+    expect(server?.received[0]?.headers["x-goog-upload-header-content-type"]).toBe(
+      "application/pdf",
+    );
+  });
+
+  it.each([
+    ["FAILED", 300_000, "File processing failed"],
+    ["PROCESSING", 0, "Processing timeout"],
+  ] as const)("names the source in the %s processing error", async (state, timeoutMs, text) => {
+    const file = path.join(dir, "clip.mp4");
+    fs.writeFileSync(file, "x");
+    vi.stubGlobal("fetch", async (url: string) =>
+      url.includes("upload_id=")
+        ? finalized("final", { file: { ...FILE_REF, state, mimeType: "video/mp4" } })
+        : started(),
+    );
+
+    // The CLI helper labels errors with the local path ...
+    const local = await uploadLocalFile(file, { apiKey: "test-key-0000", timeoutMs }).catch(
+      (e: unknown) => e,
+    );
+    expect(local).toBeInstanceOf(ProviderError);
+    expect((local as Error).message).toBe(`${text}: ${file}`);
+
+    // ... and the client falls back to the display name.
+    const blob = await uploadFile(
+      { blob: new Blob(["x"]), displayName: "clip.mp4", mimeType: "video/mp4" },
+      { apiKey: "test-key-0000", timeoutMs },
+    ).catch((e: unknown) => e);
+    expect((blob as Error).message).toBe(`${text}: clip.mp4`);
   });
 
   it("rotates to the next key when the upload is rate-limited", async () => {
@@ -202,7 +288,7 @@ describe("gemini uploadFile (resumable, streamed)", () => {
       });
     });
 
-    const ref = await uploadFile(file);
+    const ref = await uploadLocalFile(file);
     expect(ref).toEqual(FILE_REF);
     expect(keys).toEqual(["key-a", "key-b"]);
   });
@@ -219,7 +305,7 @@ describe("gemini uploadFile (resumable, streamed)", () => {
           }),
     );
 
-    const err = await uploadFile(file, { apiKey: "test-key-0000" }).catch((e: unknown) => e);
+    const err = await uploadLocalFile(file, { apiKey: "test-key-0000" }).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(HttpError);
     expect((err as HttpError).status).toBe(503);
     expect((err as HttpError).rawUrl).not.toContain("upload_id");
@@ -231,7 +317,7 @@ describe("gemini uploadFile (resumable, streamed)", () => {
     fs.writeFileSync(file, "%PDF-1.4");
     vi.stubGlobal("fetch", async () => new Response(null, { status: 200 }));
 
-    const err = await uploadFile(file, { apiKey: "test-key-0000" }).catch((e: unknown) => e);
+    const err = await uploadLocalFile(file, { apiKey: "test-key-0000" }).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ProviderError);
     expect((err as Error).message).toMatch(/no upload URL/);
   });
@@ -245,7 +331,7 @@ describe("gemini uploadFile (resumable, streamed)", () => {
       if ((step === "upload") === isUpload) throw failure;
       return isUpload ? finalized() : started();
     });
-    return uploadFile(file, { apiKey: "test-key-0000" }).catch((e: unknown) => e);
+    return uploadLocalFile(file, { apiKey: "test-key-0000" }).catch((e: unknown) => e);
   }
 
   const timeout = () =>
@@ -325,7 +411,7 @@ describe("gemini uploadFile (resumable, streamed)", () => {
       url.includes("upload_id=") ? finalized(status, body) : started(),
     );
 
-    const err = await uploadFile(file, { apiKey: "test-key-0000" }).catch((e: unknown) => e);
+    const err = await uploadLocalFile(file, { apiKey: "test-key-0000" }).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ProviderError);
     expect((err as Error).message).toMatch(/^File upload failed: upload was not finalized/);
     expect((err as Error).message).toMatch(detail);
@@ -344,7 +430,7 @@ describe("gemini uploadFile (resumable, streamed)", () => {
         : started(),
     );
 
-    const err = await uploadFile(file, { apiKey: "test-key-0000" }).catch((e: unknown) => e);
+    const err = await uploadLocalFile(file, { apiKey: "test-key-0000" }).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ProviderError);
     expect((err as Error).message).toBe(
       "File upload failed: upload was not finalized (unreadable response body)",
@@ -359,7 +445,7 @@ describe("gemini uploadFile (resumable, streamed)", () => {
       url.includes("upload_id=") ? finalized("FINAL") : started(),
     );
 
-    await expect(uploadFile(file, { apiKey: "test-key-0000" })).resolves.toEqual(FILE_REF);
+    await expect(uploadLocalFile(file, { apiKey: "test-key-0000" })).resolves.toEqual(FILE_REF);
   });
 
   it.each(["abc", "0", "-5", "0.5", "Infinity"])(
@@ -371,12 +457,53 @@ describe("gemini uploadFile (resumable, streamed)", () => {
       const fetchSpy = vi.fn();
       vi.stubGlobal("fetch", fetchSpy);
 
-      const err = await uploadFile(file, { apiKey: "test-key-0000" }).catch((e: unknown) => e);
+      const err = await uploadLocalFile(file, { apiKey: "test-key-0000" }).catch((e: unknown) => e);
       expect(err).toBeInstanceOf(ConfigError);
       expect((err as Error).message).toContain("MULTIX_UPLOAD_MIN_KBPS");
       expect(fetchSpy).not.toHaveBeenCalled();
     },
   );
+});
+
+describe("gemini client runtime neutrality", () => {
+  it("client.ts reaches no Node built-ins, dotenv or process through its imports", () => {
+    expect(formatNodeOnlyUses(findNodeOnlyUses("src/providers/gemini/client.ts"))).toEqual([]);
+  });
+
+  it("the import check catches Node-only modules (local-files.ts is Node-only)", () => {
+    const found = formatNodeOnlyUses(findNodeOnlyUses("src/providers/gemini/local-files.ts"));
+    expect(found).toContain('src/providers/gemini/local-files.ts: imports "node:fs"');
+    expect(found).toContain(
+      "src/providers/gemini/local-files.ts -> src/providers/gemini/key-pool.ts: uses process.",
+    );
+    expect(found.some((f) => f.endsWith('imports "dotenv"'))).toBe(true);
+  });
+});
+
+describe("local file helpers", () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), "multix-local-"));
+  });
+  afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  it("inlinePart base64-encodes the file with its MIME type", () => {
+    const file = path.join(dir, "pic.png");
+    fs.writeFileSync(file, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    expect(inlinePart(file)).toEqual({ inlineData: { mimeType: "image/png", data: "iVBORw==" } });
+  });
+
+  it("shouldUseFileApi switches to the Files API only above 20 MB", () => {
+    const sized = (name: string, size: number) => {
+      const file = path.join(dir, name);
+      fs.closeSync(fs.openSync(file, "w"));
+      fs.truncateSync(file, size);
+      return file;
+    };
+    expect(INLINE_MAX_BYTES).toBe(20 * 1024 * 1024);
+    expect(shouldUseFileApi(sized("at.pdf", INLINE_MAX_BYTES))).toBe(false);
+    expect(shouldUseFileApi(sized("over.pdf", INLINE_MAX_BYTES + 1))).toBe(true);
+  });
 });
 
 describe("uploadTimeoutMs", () => {

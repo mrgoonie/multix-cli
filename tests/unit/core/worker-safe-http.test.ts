@@ -13,6 +13,7 @@ import { isNetworkFetchFailure, toFetchError } from "../../../src/core/fetch-err
 import { fetchJson, parseRetryAfter } from "../../../src/core/fetch-json.js";
 import { parseJsonInput } from "../../../src/core/json-input.js";
 import { redactUrl } from "../../../src/core/redact.js";
+import { findNodeOnlyUses, formatNodeOnlyUses } from "../../helpers/import-graph.js";
 
 const WORKER_SAFE_MODULES = [
   "redact.ts",
@@ -24,9 +25,44 @@ const WORKER_SAFE_MODULES = [
 ];
 
 describe("worker-safe core modules", () => {
-  it.each(WORKER_SAFE_MODULES)("%s has no node:* imports", (file) => {
-    const src = fs.readFileSync(path.resolve("src/core", file), "utf8");
-    expect(src).not.toMatch(/(from\s+|import\s*\(?\s*)["']node:/);
+  it.each(WORKER_SAFE_MODULES)(
+    "%s reaches no Node built-ins, dotenv or process through its imports",
+    (file) => {
+      expect(formatNodeOnlyUses(findNodeOnlyUses(`src/core/${file}`))).toEqual([]);
+    },
+  );
+});
+
+describe("findNodeOnlyUses", () => {
+  it("follows value re-exports and require, and skips type-only imports and comments", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "multix-graph-"));
+    const write = (name: string, src: string) => fs.writeFileSync(path.join(dir, name), src);
+    write(
+      "entry.ts",
+      [
+        'export { a } from "./a.js";',
+        'export type { T } from "./typed.js";',
+        'import type { U } from "node:fs";',
+        "// process.env and node:os in a comment do not count",
+        'const os = require("os");',
+      ].join("\n"),
+    );
+    write("a.ts", 'export * from "node:stream";\nexport const a = globalThis.process.env;');
+    write("typed.ts", 'import fs from "node:fs";\nexport type T = string;');
+    try {
+      const found = findNodeOnlyUses(path.join(dir, "entry.ts")).map(
+        (u) => `${u.chain.map((f) => path.basename(f)).join(" -> ")}: ${u.problem}`,
+      );
+      expect(found.sort()).toEqual(
+        [
+          'entry.ts: imports Node built-in "os"',
+          'entry.ts -> a.ts: imports "node:stream"',
+          "entry.ts -> a.ts: uses process.",
+        ].sort(),
+      );
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

@@ -403,8 +403,8 @@ describe("references and env", () => {
     Reflect.deleteProperty(process.env, "ATLASCLOUD_API_KEY");
     expect(() => createAtlasClientFromEnv()).toThrow(ConfigError);
     process.env.ATLASCLOUD_API_KEY = TEST_KEY;
-    process.env.ATLASCLOUD_BASE_URL = "http://mock.local/api/v1";
-    expect(createAtlasClientFromEnv().baseUrl).toBe("http://mock.local/api/v1");
+    process.env.ATLASCLOUD_BASE_URL = "https://mock.local/api/v1";
+    expect(createAtlasClientFromEnv().baseUrl).toBe("https://mock.local/api/v1");
     expect(atlasDefaultModel("video")).toBe("bytedance/seedance-v1-pro-fast/text-to-video");
     process.env.ATLASCLOUD_VIDEO_MODEL = "kwaivgi/kling-v2.6-pro/text-to-video";
     expect(atlasDefaultModel("video")).toBe("kwaivgi/kling-v2.6-pro/text-to-video");
