@@ -20,6 +20,7 @@ const documentationRoutes = [
   "commands/heygen",
   "commands/providers",
   "commands/media-and-documents",
+  "guides/mcp-server",
   "reference/environment",
   "reference/output-and-troubleshooting",
   "reference/for-ai-agents",

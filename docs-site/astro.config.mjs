@@ -101,6 +101,17 @@ export default defineConfig({
           ],
         },
         {
+          label: "Guides",
+          translations: { vi: "Hướng dẫn" },
+          items: [
+            {
+              label: "Remote MCP server",
+              translations: { vi: "MCP server từ xa" },
+              slug: "guides/mcp-server",
+            },
+          ],
+        },
+        {
           label: "Reference",
           translations: { vi: "Tham chiếu" },
           items: [

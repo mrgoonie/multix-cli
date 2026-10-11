@@ -28,6 +28,33 @@ jobs:
       - name: Verify documentation site
         run: npm run verify --prefix docs-site
 
+  mcp-worker:
+    name: MCP Worker
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+          cache: npm
+          cache-dependency-path: worker/package-lock.json
+
+      - name: Install worker dependencies
+        run: npm ci --prefix worker
+
+      - name: Type check
+        run: npm run typecheck --prefix worker
+
+      - name: Test
+        run: npm test --prefix worker
+
+      - name: Bundle check (no Node-only or CLI code)
+        run: npm run check:bundle --prefix worker
+
   ci:
     name: CI — Node ${{ matrix.node-version }} / ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
