@@ -105,7 +105,8 @@ for the built-in defaults. `ATLASCLOUD_MAX_UPLOAD_MB` sets the size limit for
 local files uploaded to Atlas Cloud (default 200).
 
 `HEYGEN_BASE_URL` overrides the HeyGen API base (default
-`https://api.heygen.com`) for proxies and tests.
+`https://api.heygen.com`) for proxies and tests. It must be `https://`; plain
+`http://` is accepted only for `localhost`, `127.0.0.1`, or `[::1]`.
 
 Cloudflare accepts only the built-in Workers AI image and speech model IDs;
 `CLOUDFLARE_AI_IMAGE_MODEL` and `CLOUDFLARE_AI_TTS_MODEL` are therefore useful

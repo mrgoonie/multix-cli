@@ -7,6 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { execa } from "execa";
 import { beforeAll, describe, expect, it } from "vitest";
+import { isolatedEnv } from "./child-env.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLI = path.resolve(__dirname, "../../dist/cli.js");
@@ -217,13 +218,8 @@ describe("gemini --files - (smoke)", () => {
         input: "piped notes for analysis",
         cwd: tmp,
         reject: false,
-        env: {
-          MULTIX_DISABLE_HOME_ENV: "1",
-          GEMINI_API_KEY: "",
-          TMP: tmp,
-          TEMP: tmp,
-          TMPDIR: tmp,
-        },
+        extendEnv: false,
+        env: isolatedEnv(tmp),
       });
       const out = result.stdout + result.stderr;
       // No key is configured, so the request fails after stdin was materialized.
@@ -245,5 +241,34 @@ describe("gemini --files - (smoke)", () => {
     });
     expect(result.exitCode).not.toBe(0);
     expect(result.stdout + result.stderr).toContain("stdin was empty");
+  });
+});
+
+describe("doc convert --input - (smoke)", () => {
+  // Without a key each attempt fails fast, but the retry backoff adds ~3 s.
+  it("reads piped stdin, labels it, and removes the temp file", { timeout: 15_000 }, async () => {
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "multix-smoke-doc-stdin-"));
+    try {
+      const result = await execa("node", [CLI, "doc", "convert", "--input", "-"], {
+        input: "piped notes for conversion",
+        cwd: tmp,
+        reject: false,
+        extendEnv: false,
+        env: isolatedEnv(tmp),
+      });
+      const out = result.stdout + result.stderr;
+      // No key is configured, so the request fails after stdin was materialized.
+      expect(result.exitCode).toBe(1);
+      expect(out).toContain("Failed: <stdin>");
+      expect(out).toContain("GEMINI_API_KEY is not set");
+      expect(out).not.toContain("piped notes");
+      expect(fs.readdirSync(tmp).filter((d) => d.startsWith("multix-stdin-"))).toEqual([]);
+      // MULTIX_OUTPUT_DIR is pinned to the test dir, never the user's own.
+      expect(fs.existsSync(path.join(tmp, "document-extraction.md"))).toBe(true);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
   });
 });
