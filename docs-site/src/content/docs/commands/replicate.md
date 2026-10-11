@@ -79,8 +79,16 @@ multix replicate cancel <id>
   `multix replicate status <id> --download` to retry while the URLs are live.
 - `--wait-timeout <ms>` bounds polling (defaults: run 10 min, image 5 min,
   video 15 min). A timeout prints the resume command; the job keeps running.
-- `--prefer-wait [seconds]` sends `Prefer: wait=N` (1–60 s) so short jobs can
-  finish in the create request; if the job is still running, polling continues.
+- `--prefer-wait [seconds]` sends `Prefer: wait=N` (an integer from 1 to 60;
+  the bare flag means 60) so short jobs can finish in the create request; if
+  the job is still running, polling continues. Any other value is rejected, so
+  `multix replicate image --prefer-wait "a cat"` fails instead of treating the
+  prompt as the value: put the prompt before the bare flag.
+- If submitting fails with a network error, timeout, 5xx response, or an
+  unreadable success response, the
+  prediction may still have been created, and it is billed while it runs.
+  Replicate has no idempotency key, so check
+  [your predictions](https://replicate.com/predictions) before retrying.
 
 ## Outputs
 
@@ -94,6 +102,16 @@ multix replicate cancel <id>
   become `<file>-NN.<ext>`); `--output <dir>/` saves into a directory.
 - `--no-download` prints the output URLs instead. Replicate output URLs
   expire (about an hour for API predictions), so download promptly.
+- Downloads use `https://` only. URLs whose host is `localhost` or a
+  loopback, private, link-local, unspecified, or other special-purpose IP
+  literal are refused, and every redirect is checked the same way. Only the
+  literal host is checked; hostnames are not resolved. Hosts other than
+  `replicate.delivery` (for example a proxy behind `REPLICATE_BASE_URL`) are
+  downloaded with a warning that names only the host.
+- Each file is capped at `MULTIX_MAX_DOWNLOAD_MB` (default 2048 MB); a larger
+  download is stopped and the partial file removed.
+- Each file is written to `<path>.part` and renamed when complete, so a failed
+  download never overwrites or removes an existing file at `--output`.
 
 ## Local files
 
@@ -105,7 +123,7 @@ uploaded through the Replicate Files API. Files must be under 100 MB.
 
 - 401 points at the token, 404 at the model (or a missing version for
   community models), 422 at the model's input schema, and 429 honours
-  `Retry-After`; network, 429, and 5xx errors are retried while polling.
+  `Retry-After`; network errors, timeouts, 408, 429, and 5xx are retried while polling.
 - The token is never logged. `status` JSON omits prediction inputs and logs
   and strips signed query strings from output URLs; verbose logs redact them
   too.

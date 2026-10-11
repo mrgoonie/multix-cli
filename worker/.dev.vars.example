@@ -1,0 +1,10 @@
+# Copy to .dev.vars for `npm run dev:mcp` (wrangler dev). .dev.vars is gitignored.
+# Generate a token with: openssl rand -hex 32   (at least 32 characters)
+MCP_AUTH_TOKEN=
+# Provider keys (set only the ones you use)
+REPLICATE_API_TOKEN=
+ATLASCLOUD_API_KEY=
+HEYGEN_API_KEY=
+CLOUDFLARE_ACCOUNT_ID=
+CLOUDFLARE_API_TOKEN=
+CLOUDFLARE_AI_GATEWAY_ID=

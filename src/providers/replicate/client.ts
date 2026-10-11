@@ -108,6 +108,28 @@ export function mapReplicateError(error: unknown, subject: string): unknown {
   return new ReplicateApiError(message, status, retryAfterMs);
 }
 
+export const ORPHAN_HINT =
+  "The prediction may have been created anyway (Replicate has no idempotency key); check https://replicate.com/predictions before retrying to avoid paying twice";
+
+/**
+ * A network error, timeout, 5xx, or an unusable 2xx body (invalid JSON or not
+ * a prediction) on create can happen after Replicate has already created (and
+ * started billing) the prediction, leaving no id to resume or cancel. Point
+ * the user at the dashboard before they retry.
+ */
+function withOrphanHint(error: unknown): unknown {
+  if (error instanceof ReplicateApiError) {
+    const { status } = error;
+    const mayExist = status === 0 || (status >= 200 && status < 300) || status >= 500;
+    if (!mayExist) return error;
+    return new ReplicateApiError(`${error.message}. ${ORPHAN_HINT}`, status, error.retryAfterMs);
+  }
+  if (error instanceof ProviderError) {
+    return new ProviderError(`${error.message}. ${ORPHAN_HINT}`, error.provider);
+  }
+  return error;
+}
+
 /** Reject responses that are not prediction-shaped instead of trusting them. */
 export function validatePrediction(value: unknown): ReplicatePrediction {
   if (
@@ -236,7 +258,7 @@ export class ReplicateClient {
           await this.sleep(delay);
           continue;
         }
-        throw mapReplicateError(error, subject);
+        throw withOrphanHint(mapReplicateError(error, subject));
       }
     }
   }
@@ -263,7 +285,7 @@ export class ReplicateClient {
   /**
    * Poll until the prediction reaches a terminal status (succeeded, failed,
    * canceled, aborted) and return it — callers decide success via
-   * assertSucceeded. Retries network/429/5xx; throws PollTimeoutError on deadline.
+   * assertSucceeded. Retries network/408/429/5xx; throws PollTimeoutError on deadline.
    */
   async waitForPrediction(
     prediction: ReplicatePrediction | string,

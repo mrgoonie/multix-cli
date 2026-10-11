@@ -3,7 +3,12 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PollTimeoutError, isTransientHttpError, pollUntil } from "../../../src/core/async-poll.js";
-import { ConfigError, HttpError, ValidationError } from "../../../src/core/errors.js";
+import {
+  ConfigError,
+  HttpError,
+  ProviderError,
+  ValidationError,
+} from "../../../src/core/errors.js";
 import { fetchJson, parseRetryAfter } from "../../../src/core/fetch-json.js";
 import { parseJsonInput } from "../../../src/core/json-input.js";
 import { redactUrl } from "../../../src/core/redact.js";
@@ -251,6 +256,7 @@ describe("pollUntil", () => {
     }
     expect(isTransientHttpError(new ConfigError("GEMINI_API_KEY is not set"))).toBe(false);
     expect(isTransientHttpError(new ValidationError("bad flag"))).toBe(false);
+    expect(isTransientHttpError(new ProviderError("File upload failed", "gemini"))).toBe(false);
     expect(isTransientHttpError(new Error("x"))).toBe(false);
   });
 });

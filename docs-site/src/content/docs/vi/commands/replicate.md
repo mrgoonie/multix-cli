@@ -81,8 +81,16 @@ multix replicate cancel <id>
   để thử lại khi URL còn hiệu lực.
 - `--wait-timeout <ms>` giới hạn thời gian poll (mặc định: run 10 phút, image
   5 phút, video 15 phút). Khi hết giờ, CLI in lệnh để tiếp tục; job vẫn chạy.
-- `--prefer-wait [seconds]` gửi `Prefer: wait=N` (1–60 giây) để job ngắn có
-  thể hoàn tất ngay trong request tạo; nếu job vẫn đang chạy, CLI tiếp tục poll.
+- `--prefer-wait [seconds]` gửi `Prefer: wait=N` (số nguyên từ 1 đến 60; dùng
+  cờ không kèm giá trị nghĩa là 60) để job ngắn có thể hoàn tất ngay trong
+  request tạo; nếu job vẫn đang chạy, CLI tiếp tục poll. Mọi giá trị khác đều
+  bị từ chối, nên `multix replicate image --prefer-wait "a cat"` báo lỗi thay vì
+  coi prompt là giá trị của cờ: hãy đặt prompt trước cờ không kèm giá trị.
+- Nếu việc gửi prediction gặp lỗi mạng, hết thời gian chờ, lỗi 5xx hoặc
+  response thành công nhưng không đọc được,
+  prediction vẫn có thể đã được tạo và bị tính phí trong lúc chạy. Replicate
+  không có idempotency key, nên hãy kiểm tra
+  [danh sách prediction](https://replicate.com/predictions) trước khi thử lại.
 
 ## Kết quả
 
@@ -96,6 +104,16 @@ multix replicate cancel <id>
   thành `<file>-NN.<ext>`); `--output <dir>/` lưu vào thư mục.
 - `--no-download` in URL output thay vì tải. URL output của Replicate sẽ hết
   hạn (khoảng một giờ với prediction tạo qua API), nên hãy tải sớm.
+- Chỉ tải qua `https://`. URL có host là `localhost` hoặc IP literal loopback,
+  private, link-local, unspecified hay thuộc dải dùng cho mục đích đặc biệt
+  khác đều bị từ chối, và mọi redirect cũng được kiểm tra như vậy. CLI chỉ
+  kiểm tra host dạng literal; tên miền không được phân giải. Host khác `replicate.delivery` (ví dụ
+  proxy sau `REPLICATE_BASE_URL`) vẫn được tải nhưng kèm cảnh báo chỉ nêu tên
+  host.
+- Mỗi file bị giới hạn bởi `MULTIX_MAX_DOWNLOAD_MB` (mặc định 2048 MB); lượt
+  tải vượt giới hạn bị dừng và file dở dang bị xóa.
+- Mỗi file được ghi vào `<path>.part` rồi mới đổi tên khi tải xong, nên lượt
+  tải thất bại không bao giờ ghi đè hay xóa file đã có ở `--output`.
 
 ## File cục bộ
 
@@ -107,7 +125,7 @@ lên qua Replicate Files API. File phải nhỏ hơn 100 MB.
 
 - Lỗi 401 chỉ ra vấn đề token, 404 chỉ ra model (hoặc thiếu version với model
   cộng đồng), 422 chỉ ra schema input của model, và 429 tuân theo
-  `Retry-After`; lỗi mạng, 429 và 5xx được thử lại trong lúc poll.
+  `Retry-After`; lỗi mạng, timeout, 408, 429 và 5xx được thử lại trong lúc poll.
 - Token không bao giờ được ghi log. JSON của `status` bỏ input và log của
   prediction, đồng thời loại bỏ query string đã ký khỏi URL output; log verbose
   cũng được che tương tự.

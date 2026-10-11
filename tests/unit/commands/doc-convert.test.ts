@@ -39,6 +39,10 @@ describe("convertDocuments with piped stdin", () => {
     vi.stubEnv("TEMP", tmp);
     vi.stubEnv("TMP", tmp);
     vi.stubEnv("MULTIX_OUTPUT_DIR", path.join(dir, "out"));
+    // Numbered keys from the developer's shell would join the rotation pool.
+    for (const name of Object.keys(process.env)) {
+      if (/^GEMINI_API_KEY_\d+$/.test(name)) vi.stubEnv(name, "");
+    }
     _resetOutputDir();
     exitSpy = vi.spyOn(process, "exit").mockImplementation((() => undefined) as never);
     logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -201,6 +205,24 @@ describe("convertDocuments with piped stdin", () => {
       expect(exitSpy).not.toHaveBeenCalled();
     });
 
+    it("retries HTTP 408", async () => {
+      vi.stubEnv("GEMINI_API_KEY", "test-key-408");
+      const fetchSpy = vi
+        .fn()
+        .mockResolvedValueOnce(new Response("request timeout", { status: 408 }))
+        .mockResolvedValueOnce(ok());
+      vi.stubGlobal("fetch", fetchSpy);
+      const output = path.join(dir, "retry-408.md");
+
+      const run = convertDocuments({ inputs: ["-"], output, stdin: piped("notes") });
+      await vi.runAllTimersAsync();
+      await run;
+
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+      expect(fs.readFileSync(output, "utf8")).toContain("# Ok");
+      expect(exitSpy).not.toHaveBeenCalled();
+    });
+
     it("retries network failures", async () => {
       vi.stubEnv("GEMINI_API_KEY", "test-key-network");
       const fetchSpy = vi
@@ -293,9 +315,15 @@ describe("convertDocuments with piped stdin", () => {
       let uploadBody = "";
       const generateBodies: SeenRequest["body"][] = [];
       vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
-        if (url.includes("/upload/")) {
-          // Only the multipart metadata matters; skip the 21 MB payload.
-          uploadBody = (init.body as Buffer).subarray(0, 512).toString("latin1");
+        if (url.includes("/upload/") && !url.includes("upload_id=")) {
+          // Resumable start: only the JSON metadata matters, the bytes follow separately.
+          uploadBody = String(init.body);
+          return new Response(null, {
+            status: 200,
+            headers: { "x-goog-upload-url": `${url}?upload_id=session` },
+          });
+        }
+        if (url.includes("upload_id=")) {
           return new Response(
             JSON.stringify({
               file: {
@@ -305,7 +333,7 @@ describe("convertDocuments with piped stdin", () => {
                 state: "ACTIVE",
               },
             }),
-            { status: 200 },
+            { status: 200, headers: { "x-goog-upload-status": "final" } },
           );
         }
         generateBodies.push(JSON.parse(String(init.body)));
@@ -318,7 +346,7 @@ describe("convertDocuments with piped stdin", () => {
       const output = path.join(dir, "big.md");
       await convertDocuments({ inputs: ["-"], output, stdin: big() });
 
-      expect(uploadBody).toContain('"displayName":"stdin.txt"');
+      expect(uploadBody).toContain('"display_name":"stdin.txt"');
       expect(uploadBody).not.toContain(tmp);
       const parts = generateBodies[0]?.contents[0]?.parts as Array<Record<string, unknown>>;
       expect(parts?.[1]).toEqual({
@@ -330,39 +358,105 @@ describe("convertDocuments with piped stdin", () => {
       expect(fs.readdirSync(tmp)).toEqual([]);
     });
 
-    it("retries an upload that fails at the network layer", async () => {
-      vi.stubEnv("GEMINI_API_KEY", "test-key-upload-network");
-      vi.useFakeTimers({ toFake: ["setTimeout"] });
-      let uploads = 0;
-      vi.stubGlobal("fetch", async (url: string) => {
-        if (url.includes("/upload/")) {
-          uploads++;
-          if (uploads === 1) throw new TypeError("fetch failed");
+    /**
+     * Resumable upload mock: `start` returns the session URL, the session request
+     * (`upload_id=`) finalizes, and generateContent answers "# Up". `fail` picks
+     * which step throws a network error on its first call.
+     */
+    const resumableFetch = (
+      fail: "start" | "upload",
+      calls: { start: number; upload: number; generate: number },
+    ) =>
+      vi.fn(async (url: string) => {
+        if (url.includes("upload_id=")) {
+          calls.upload++;
+          if (fail === "upload" && calls.upload === 1) throw new TypeError("fetch failed");
           return new Response(
             JSON.stringify({
               file: { name: "files/n", uri: "https://files.example/n", mimeType: "text/plain" },
             }),
-            { status: 200 },
+            { status: 200, headers: { "x-goog-upload-status": "final" } },
           );
         }
+        if (url.includes("/upload/")) {
+          calls.start++;
+          if (fail === "start" && calls.start === 1) throw new TypeError("fetch failed");
+          return new Response(null, {
+            status: 200,
+            headers: { "x-goog-upload-url": `${url}?upload_id=session` },
+          });
+        }
+        calls.generate++;
         return new Response(
           JSON.stringify({ candidates: [{ content: { parts: [{ text: "# Up" }] } }] }),
           { status: 200 },
         );
       });
 
-      const output = path.join(dir, "upload-retry.md");
+    const runWithFakeTimers = async (output: string, logger?: Logger) => {
+      vi.useFakeTimers({ toFake: ["setTimeout"] });
       try {
-        const run = convertDocuments({ inputs: ["-"], output, stdin: big() });
+        const run = convertDocuments({ inputs: ["-"], output, stdin: big(), logger });
         await vi.runAllTimersAsync();
         await run;
       } finally {
         vi.useRealTimers();
       }
+    };
 
-      expect(uploads).toBe(2);
+    it("restarts the whole upload session when sending the bytes fails at the network layer", async () => {
+      vi.stubEnv("GEMINI_API_KEY", "test-key-upload-network");
+      const calls = { start: 0, upload: 0, generate: 0 };
+      vi.stubGlobal("fetch", resumableFetch("upload", calls));
+      const logger = makeLogger();
+
+      const output = path.join(dir, "upload-retry.md");
+      await runWithFakeTimers(output, logger);
+
+      expect(calls).toEqual({ start: 2, upload: 2, generate: 1 });
+      expect(logger.debug).toHaveBeenCalledWith(
+        expect.stringMatching(/^Retry 1 after 1s: .*File upload failed: fetch failed/),
+      );
       expect(fs.readFileSync(output, "utf8")).toContain("# Up");
       expect(exitSpy).not.toHaveBeenCalled();
+    });
+
+    it("retries when starting the upload session fails at the network layer", async () => {
+      vi.stubEnv("GEMINI_API_KEY", "test-key-start-network");
+      const calls = { start: 0, upload: 0, generate: 0 };
+      vi.stubGlobal("fetch", resumableFetch("start", calls));
+
+      const output = path.join(dir, "start-retry.md");
+      await runWithFakeTimers(output);
+
+      expect(calls).toEqual({ start: 2, upload: 1, generate: 1 });
+      expect(fs.readFileSync(output, "utf8")).toContain("# Up");
+      expect(exitSpy).not.toHaveBeenCalled();
+    });
+
+    it("does not retry an upload the server did not finalize", async () => {
+      vi.stubEnv("GEMINI_API_KEY", "test-key-not-final");
+      let starts = 0;
+      vi.stubGlobal("fetch", async (url: string) => {
+        if (url.includes("upload_id=")) {
+          // No x-goog-upload-status: final, so the client raises a ProviderError.
+          return new Response(JSON.stringify({ file: {} }), { status: 200 });
+        }
+        starts++;
+        return new Response(null, {
+          status: 200,
+          headers: { "x-goog-upload-url": `${url}?upload_id=session` },
+        });
+      });
+      const logger = makeLogger();
+
+      const output = path.join(dir, "not-final.md");
+      await runWithFakeTimers(output, logger);
+
+      expect(starts).toBe(1);
+      expect(logger.debug).not.toHaveBeenCalledWith(expect.stringMatching(/^Retry /));
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining("was not finalized"));
+      expect(exitSpy).toHaveBeenCalledWith(1);
     });
 
     it("labels upload failures <stdin> and cleans up", async () => {

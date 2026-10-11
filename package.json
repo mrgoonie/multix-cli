@@ -1,6 +1,6 @@
 {
   "name": "@mrgoonie/multix",
-  "version": "0.14.0",
+  "version": "0.15.1",
   "description": "AI multimodal CLI — OpenAI, Gemini, MiniMax, OpenRouter, Leonardo, BytePlus, ElevenLabs, fal.ai, Atlas Cloud, Replicate, HeyGen, ffmpeg, ImageMagick, doc-to-md",
   "type": "module",
   "bin": {
@@ -35,7 +35,11 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:smoke": "vitest run tests/smoke",
-    "verify:docs": "npm run verify --prefix docs-site"
+    "verify:docs": "npm run verify --prefix docs-site",
+    "dev:mcp": "npm run dev --prefix worker",
+    "deploy:mcp": "npm run deploy --prefix worker",
+    "test:mcp": "npm test --prefix worker",
+    "check:mcp": "npm run typecheck --prefix worker && npm test --prefix worker && npm run check:bundle --prefix worker"
   },
   "keywords": [
     "cli",

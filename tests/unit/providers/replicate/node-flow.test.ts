@@ -159,8 +159,7 @@ describe("executePrediction", () => {
         logger: createLogger({ verbose: false }),
       });
     await expect(run({ async: true, wait: true })).rejects.toThrow(ValidationError);
-    await expect(run({ async: true, preferWait: true })).rejects.toThrow(ValidationError);
-    await expect(run({ preferWait: "90" })).rejects.toThrow(/--prefer-wait/);
+    await expect(run({ async: true, preferWait: 30 })).rejects.toThrow(ValidationError);
     await expect(run({ waitTimeout: "soon" })).rejects.toThrow(/--wait-timeout/);
     expect(fake.calls).toHaveLength(0);
   });
@@ -174,7 +173,7 @@ describe("executePrediction", () => {
       client,
       model: parseModelRef("o/m"),
       input: {},
-      opts: { ...flowOpts, preferWait: "5" },
+      opts: { ...flowOpts, preferWait: 5 },
       logger: createLogger({ verbose: false }),
     });
     expect(fake.calls[0]?.headers.prefer).toBe("wait=5");
@@ -245,6 +244,111 @@ describe("partial download failure", () => {
     expect((err as Error).message).toContain("1 of 2 output file(s) failed to download ([1])");
     expect((err as Error).message).toContain(`multix replicate status ${ID} --download`);
     expect(fs.readdirSync(path.join(tmp, "out"))).toEqual(["replicate-pred0001-01.png"]);
+  });
+});
+
+describe("output download policy", () => {
+  function succeededWith(output: unknown, extra: Parameters<typeof setup>[0] = {}) {
+    return setup({
+      [`GET /predictions/${ID}`]: [{ json: prediction(ID, "succeeded", { output }) }],
+      ...extra,
+    });
+  }
+  const resume = (client: ReplicateClient) =>
+    completePrediction(client, ID, {
+      waitTimeoutMs: 60_000,
+      logger: createLogger({ verbose: false }),
+      download: true,
+    });
+
+  it("refuses http:// and private-address outputs without fetching them", async () => {
+    const { client, fake } = succeededWith([
+      "http://replicate.delivery/a/out.png",
+      "https://169.254.169.254/latest/meta-data",
+    ]);
+    await expect(resume(client)).rejects.toThrow(/none of 2 output file\(s\)/);
+    const text = output.join("\n");
+    expect(text).toContain("only https:// URLs are allowed");
+    expect(text).toContain("local or private address");
+    expect(fake.calls.map((c) => c.url)).toEqual([`${BASE}/predictions/${ID}`]);
+  });
+
+  it("warns with the hostname only for hosts other than replicate.delivery", async () => {
+    const signed = "https://cdn.example.com/o.png?X-Amz-Signature=SIGSECRET";
+    const { client } = succeededWith(signed, { [`GET ${signed}`]: [{ bytes: PNG }] });
+    await resume(client);
+    const text = output.join("\n");
+    expect(text).toContain("served from cdn.example.com, not replicate.delivery");
+    expect(text).not.toContain("SIGSECRET");
+    expect(fs.readdirSync(path.join(tmp, "out"))).toEqual(["replicate-pred0001-01.png"]);
+  });
+
+  it("warns once per untrusted host, not once per output", async () => {
+    const urls = ["https://cdn.example.com/a.png", "https://cdn.example.com/b.png"];
+    const { client } = succeededWith(urls, {
+      [`GET ${urls[0]}`]: [{ bytes: PNG }],
+      [`GET ${urls[1]}`]: [{ bytes: PNG }],
+    });
+    expect(await resume(client)).toHaveLength(2);
+    const warnings = output.filter((line) => line.includes("served from cdn.example.com"));
+    expect(warnings).toHaveLength(1);
+  });
+
+  it("keeps an existing --output file when the download fails", async () => {
+    const url = "https://replicate.delivery/a/out.png";
+    const { client } = succeededWith(url, { [`GET ${url}`]: [{ status: 404, text: "gone" }] });
+    const dest = path.join(tmp, "hero.png");
+    fs.writeFileSync(dest, "precious");
+    await expect(
+      completePrediction(client, ID, {
+        waitTimeoutMs: 60_000,
+        logger: createLogger({ verbose: false }),
+        download: true,
+        output: dest,
+      }),
+    ).rejects.toThrow(/none of 1/);
+    expect(fs.readFileSync(dest, "utf8")).toBe("precious");
+    expect(fs.readdirSync(tmp).filter((name) => name.endsWith(".part"))).toEqual([]);
+  });
+
+  it("validates every redirect hop and refuses a redirect to a private address", async () => {
+    const start = "https://replicate.delivery/a/out.png";
+    const { client, fake } = succeededWith(start, {
+      [`GET ${start}`]: [
+        { status: 302, text: "", headers: { location: "http://127.0.0.1:8080/secret" } },
+      ],
+    });
+    await expect(resume(client)).rejects.toThrow(/none of 1/);
+    expect(output.join("\n")).toContain("only https://");
+    expect(fake.calls.filter((c) => c.url.includes("127.0.0.1"))).toHaveLength(0);
+  });
+
+  it("follows a safe redirect", async () => {
+    const start = "https://replicate.delivery/a/out.png";
+    const next = "https://pbxt.replicate.delivery/b/out.png";
+    const { client } = succeededWith(start, {
+      [`GET ${start}`]: [{ status: 307, text: "", headers: { location: next } }],
+      [`GET ${next}`]: [{ bytes: PNG }],
+    });
+    expect(await resume(client)).toHaveLength(1);
+  });
+
+  it("stops at MULTIX_MAX_DOWNLOAD_MB and removes the partial file", async () => {
+    vi.stubEnv("MULTIX_MAX_DOWNLOAD_MB", "0.000001"); // 1 byte
+    const url = "https://replicate.delivery/a/out.png";
+    const { client } = succeededWith(url, { [`GET ${url}`]: [{ bytes: PNG }] });
+    await expect(resume(client)).rejects.toThrow(/none of 1/);
+    expect(output.join("\n")).toContain("MULTIX_MAX_DOWNLOAD_MB");
+    const outDir = path.join(tmp, "out");
+    expect(fs.existsSync(outDir) ? fs.readdirSync(outDir) : []).toEqual([]);
+  });
+
+  it("rejects an invalid MULTIX_MAX_DOWNLOAD_MB before downloading", async () => {
+    vi.stubEnv("MULTIX_MAX_DOWNLOAD_MB", "lots");
+    const url = "https://replicate.delivery/a/out.png";
+    const { client, fake } = succeededWith(url, { [`GET ${url}`]: [{ bytes: PNG }] });
+    await expect(resume(client)).rejects.toThrow(ConfigError);
+    expect(fake.calls.filter((c) => c.url === url)).toHaveLength(0);
   });
 });
 

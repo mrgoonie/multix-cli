@@ -49,7 +49,8 @@ bắt buộc có `GEMINI_API_KEY`.
   đúng key đó, nên giới hạn về sau không bao giờ tạo job thứ hai bị tính phí riêng.
 - `multix doc convert` chỉ thử lại một file sau lỗi mạng, timeout, 408 và 5xx.
   Lệnh dừng khi gặp giới hạn, vì xoay vòng đã thử mọi key sẵn sàng, và báo lỗi
-  ngay khi thiếu key hoặc gặp mã 4xx khác.
+  ngay khi thiếu key hoặc gặp mã 4xx khác. Lượt upload qua Files API bị timeout
+  khi đang gửi dữ liệu file, hoặc bị server chuyển hướng, cũng không được thử lại.
 - Thời gian nghỉ chỉ tồn tại trong process hiện tại. Log chỉ ghi tên biến môi
   trường, không bao giờ ghi giá trị key.
 - `multix check` liệt kê các key đang xoay vòng và ping từng key.
@@ -92,7 +93,15 @@ Chỉ đặt override khi cần thay default. Các biến gồm `IMAGE_GEN_MODEL
 `REPLICATE_BASE_URL` (API root cho mock hoặc proxy), `REPLICATE_IMAGE_MODEL`
 (mặc định `black-forest-labs/flux-schnell`) và `REPLICATE_VIDEO_MODEL`
 (mặc định `prunaai/p-video`). Video qua Cloudflare AI Gateway chỉ đọc
-`REPLICATE_API_TOKEN`.
+`REPLICATE_API_TOKEN`. `MULTIX_MAX_DOWNLOAD_MB` đặt giới hạn dung lượng cho
+mỗi file output Replicate được tải về (mặc định 2048); xem
+[Replicate](/vi/commands/replicate/) để biết chính sách tải file.
+
+`MULTIX_UPLOAD_MIN_KBPS` đặt tốc độ upload chậm nhất, tính theo kilobyte (1.000
+byte) mỗi giây, mà một lần upload lên Gemini Files API được cho đủ thời gian
+(mặc định `1000`, tức 1 MB/s cộng thêm một phút; tối thiểu `1`). Giảm giá trị
+này khi đường truyền chậm để file lớn không bị hết thời gian chờ; xem
+[Gemini](/vi/commands/gemini/).
 
 Atlas Cloud nhận `ATLASCLOUD_BASE_URL` (base của media API, mặc định
 `https://api.atlascloud.ai/api/v1`) và một biến ghi đè model mặc định cho mỗi

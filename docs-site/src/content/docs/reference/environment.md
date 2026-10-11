@@ -50,7 +50,9 @@ without `GEMINI_API_KEY`.
   that key, so a later rate limit never starts a second, separately billed job.
 - `multix doc convert` retries a file only after network errors, timeouts, 408
   and 5xx responses. It stops on a rate limit, because rotation already tried
-  every ready key, and fails at once on a missing key or any other 4xx.
+  every ready key, and fails at once on a missing key or any other 4xx. A Files
+  API upload that times out while sending the file bytes, or that the server
+  redirects, is not retried either.
 - Cooldowns last for the current process only. Logs name the env var, never the
   key value.
 - `multix check` lists the keys in rotation and pings each one.
@@ -92,7 +94,14 @@ settings include `IMAGE_GEN_MODEL`, `VIDEO_GEN_MODEL`, `MULTIMODAL_MODEL`,
 `REPLICATE_BASE_URL` (API root for mocks or proxies), `REPLICATE_IMAGE_MODEL`
 (default `black-forest-labs/flux-schnell`), and `REPLICATE_VIDEO_MODEL`
 (default `prunaai/p-video`). Cloudflare AI Gateway video reads only
-`REPLICATE_API_TOKEN`.
+`REPLICATE_API_TOKEN`. `MULTIX_MAX_DOWNLOAD_MB` sets the size limit for each
+downloaded Replicate output file (default 2048); see
+[Replicate](/commands/replicate/#outputs) for the download policy.
+
+`MULTIX_UPLOAD_MIN_KBPS` sets the slowest upload speed, in kilobytes (1,000
+bytes) per second, that a Gemini Files API upload is given time for (default
+`1000`, so 1 MB/s plus one minute; at least `1`). Lower it on a slow link so
+large uploads do not time out; see [Gemini](/commands/gemini/).
 
 Atlas Cloud accepts `ATLASCLOUD_BASE_URL` (media API base, default
 `https://api.atlascloud.ai/api/v1`) and one default-model override per command:
