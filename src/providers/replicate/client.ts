@@ -112,18 +112,22 @@ export const ORPHAN_HINT =
   "The prediction may have been created anyway (Replicate has no idempotency key); check https://replicate.com/predictions before retrying to avoid paying twice";
 
 /**
- * A network error, timeout, or 5xx on create can happen after Replicate has
- * already created (and started billing) the prediction, leaving no id to
- * resume or cancel. Point the user at the dashboard before they retry.
+ * A network error, timeout, 5xx, or an unusable 2xx body (invalid JSON or not
+ * a prediction) on create can happen after Replicate has already created (and
+ * started billing) the prediction, leaving no id to resume or cancel. Point
+ * the user at the dashboard before they retry.
  */
 function withOrphanHint(error: unknown): unknown {
-  if (!(error instanceof ReplicateApiError)) return error;
-  if (error.status !== 0 && error.status < 500) return error;
-  return new ReplicateApiError(
-    `${error.message}. ${ORPHAN_HINT}`,
-    error.status,
-    error.retryAfterMs,
-  );
+  if (error instanceof ReplicateApiError) {
+    const { status } = error;
+    const mayExist = status === 0 || (status >= 200 && status < 300) || status >= 500;
+    if (!mayExist) return error;
+    return new ReplicateApiError(`${error.message}. ${ORPHAN_HINT}`, status, error.retryAfterMs);
+  }
+  if (error instanceof ProviderError) {
+    return new ProviderError(`${error.message}. ${ORPHAN_HINT}`, error.provider);
+  }
+  return error;
 }
 
 /** Reject responses that are not prediction-shaped instead of trusting them. */

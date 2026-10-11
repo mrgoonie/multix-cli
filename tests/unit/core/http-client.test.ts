@@ -7,6 +7,7 @@ import {
   DownloadTooLargeError,
   downloadFile,
   downloadToFile,
+  fetchWithValidatedRedirects,
   maxDownloadBytes,
 } from "../../../src/core/http-client.js";
 
@@ -199,6 +200,126 @@ describe("downloadToFile", () => {
     await expect(downloadToFile("https://a.test/x", { dest, fetch })).rejects.toThrow(HttpError);
   });
 
+  it("keeps an existing destination file when the download fails", async () => {
+    const stream = () =>
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(BYTES);
+          controller.error(new Error("connection reset"));
+        },
+      });
+    const { fetch } = fakeFetch({
+      "https://a.test/reset": () => new Response(stream()),
+      "https://a.test/big": () => new Response(BYTES),
+      "https://a.test/gone": () => new Response("gone", { status: 404 }),
+    });
+    const dest = path.join(tmp, "hero.png");
+    fs.writeFileSync(dest, "precious");
+    await expect(downloadToFile("https://a.test/reset", { dest, fetch })).rejects.toThrow(
+      "connection reset",
+    );
+    await expect(
+      downloadToFile("https://a.test/big", { dest, fetch, maxBytes: 4 }),
+    ).rejects.toThrow(DownloadTooLargeError);
+    await expect(downloadToFile("https://a.test/gone", { dest, fetch })).rejects.toThrow(HttpError);
+    expect(fs.readFileSync(dest, "utf8")).toBe("precious");
+    expect(fs.readdirSync(tmp)).toEqual(["hero.png"]);
+  });
+
+  it("replaces an existing destination file on success and leaves no .part file", async () => {
+    const { fetch } = fakeFetch({ "https://a.test/f": () => new Response(BYTES) });
+    const dest = path.join(tmp, "hero.png");
+    fs.writeFileSync(dest, "old");
+    await downloadToFile("https://a.test/f", { dest, fetch });
+    expect(new Uint8Array(fs.readFileSync(dest))).toEqual(BYTES);
+    expect(fs.readdirSync(tmp)).toEqual(["hero.png"]);
+  });
+
+  it("replaces the destination when rename refuses to overwrite it (Windows)", async () => {
+    const { fetch } = fakeFetch({ "https://a.test/f": () => new Response(BYTES) });
+    const dest = path.join(tmp, "hero.png");
+    fs.writeFileSync(dest, "old");
+    const realRename = fs.renameSync;
+    const spy = vi.spyOn(fs, "renameSync").mockImplementationOnce(() => {
+      throw Object.assign(new Error("EPERM: operation not permitted"), { code: "EPERM" });
+    });
+    spy.mockImplementation(realRename);
+    await downloadToFile("https://a.test/f", { dest, fetch });
+    spy.mockRestore();
+    expect(new Uint8Array(fs.readFileSync(dest))).toEqual(BYTES);
+    expect(fs.readdirSync(tmp)).toEqual(["hero.png"]);
+  });
+
+  it("reports the download error even when removing the partial file fails", async () => {
+    const { fetch } = fakeFetch({ "https://a.test/f": () => new Response(BYTES) });
+    const spy = vi.spyOn(fs, "rmSync").mockImplementation(() => {
+      throw Object.assign(new Error("EBUSY: resource busy"), { code: "EBUSY" });
+    });
+    const err = await downloadToFile("https://a.test/f", {
+      dest: path.join(tmp, "f.bin"),
+      maxBytes: 4,
+      fetch,
+    }).catch((e: unknown) => e);
+    spy.mockRestore();
+    expect(err).toBeInstanceOf(DownloadTooLargeError);
+  });
+
+  it("cancels the response body when choosing the destination throws", async () => {
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.enqueue(BYTES);
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const { fetch } = fakeFetch({ "https://a.test/f": () => new Response(body) });
+    await expect(
+      downloadToFile("https://a.test/f", {
+        dest: () => {
+          throw new Error("no destination");
+        },
+        fetch,
+      }),
+    ).rejects.toThrow("no destination");
+    expect(cancelled).toBe(true);
+  });
+
+  it("awaits an async validator and stops when it rejects", async () => {
+    const { fetch, calls } = fakeFetch({
+      "https://a.test/f": () =>
+        new Response(null, { status: 302, headers: { location: "https://b.test/g" } }),
+    });
+    await expect(
+      downloadToFile("https://a.test/f", {
+        dest: path.join(tmp, "f.bin"),
+        validateUrl: async (url) => {
+          await Promise.resolve();
+          if (url.includes("b.test")) throw new Error("refused async");
+        },
+        fetch,
+      }),
+    ).rejects.toThrow("refused async");
+    expect(calls).toHaveLength(1);
+  });
+
+  it("names the final redirect hop (redacted) in errors", async () => {
+    const { fetch } = fakeFetch({
+      "https://a.test/f": () =>
+        new Response(null, { status: 302, headers: { location: "https://b.test/h?sig=SECRET" } }),
+      "https://b.test/h?sig=SECRET": () => new Response("gone", { status: 404 }),
+    });
+    const err = (await downloadToFile("https://a.test/f", {
+      dest: path.join(tmp, "f.bin"),
+      validateUrl: () => {},
+      fetch,
+    }).catch((e: unknown) => e)) as HttpError;
+    expect(err.status).toBe(404);
+    expect(err.url).toBe("https://b.test/h?[redacted]");
+    expect(err.message).not.toContain("SECRET");
+  });
+
   it("downloadFile keeps its contract and uses global fetch", async () => {
     vi.stubGlobal(
       "fetch",
@@ -207,6 +328,53 @@ describe("downloadToFile", () => {
     const dest = path.join(tmp, "v", "clip.mp4");
     expect(await downloadFile("https://a.test/v", dest)).toBe("video/mp4");
     expect(fs.statSync(dest).size).toBe(8);
+  });
+});
+
+describe("fetchWithValidatedRedirects", () => {
+  it.each([301, 302, 303, 307, 308])("follows a %i as a bodiless GET", async (status) => {
+    const inits: Array<RequestInit | undefined> = [];
+    const fetch = async (url: string, init?: RequestInit) => {
+      inits.push(init);
+      return url === "https://a.test/f"
+        ? new Response(null, { status, headers: { location: "https://a.test/g" } })
+        : new Response("ok");
+    };
+    const { response, url } = await fetchWithValidatedRedirects("https://a.test/f", {
+      validateUrl: () => {},
+      fetch,
+    });
+    expect(url).toBe("https://a.test/g");
+    expect(await response.text()).toBe("ok");
+    expect(inits.every((i) => i?.method === undefined && i?.body === undefined)).toBe(true);
+  });
+
+  it("drops headers on an https to http downgrade (origin includes the scheme)", async () => {
+    const seen: Array<boolean> = [];
+    const fetch = async (url: string, init?: RequestInit) => {
+      seen.push(Boolean(init?.headers));
+      return url.startsWith("https:")
+        ? new Response(null, { status: 302, headers: { location: "http://a.test/g" } })
+        : new Response("ok");
+    };
+    await fetchWithValidatedRedirects("https://a.test/f", {
+      headers: { "x-api-key": "k" },
+      validateUrl: () => {},
+      fetch,
+    });
+    expect(seen).toEqual([true, false]);
+  });
+
+  it("turns a malformed Location into an HttpError naming the hop", async () => {
+    const fetch = async () =>
+      new Response(null, { status: 302, headers: { location: "https://[bad" } });
+    const err = (await fetchWithValidatedRedirects("https://a.test/f", {
+      validateUrl: () => {},
+      fetch,
+    }).catch((e: unknown) => e)) as HttpError;
+    expect(err).toBeInstanceOf(HttpError);
+    expect(err.message).toContain("malformed Location");
+    expect(err.url).toBe("https://a.test/f");
   });
 });
 
@@ -222,8 +390,8 @@ describe("maxDownloadBytes", () => {
     expect(maxDownloadBytes()).toBe(Math.floor(1.5 * 1024 * 1024));
   });
 
-  it("rejects non-positive or non-numeric values", () => {
-    for (const bad of ["0", "-1", "abc", "Infinity"]) {
+  it("rejects non-positive, non-numeric, or sub-byte values", () => {
+    for (const bad of ["0", "-1", "abc", "Infinity", "0.0000001"]) {
       vi.stubEnv("MULTIX_MAX_DOWNLOAD_MB", bad);
       expect(() => maxDownloadBytes()).toThrow(ConfigError);
     }

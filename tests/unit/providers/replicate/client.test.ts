@@ -291,6 +291,9 @@ describe("HTTP error mapping", () => {
       { throws: new Error("The operation was aborted due to timeout") },
     ],
     ["a 5xx", { status: 502, text: "bad gateway" }],
+    ["a 2xx with invalid JSON", { status: 201, text: "<html>captive portal</html>" }],
+    ["a 2xx that is not a prediction", { status: 201, json: { hello: "world" } }],
+    ["a 2xx with an invalid prediction id", { status: 201, json: prediction("../x", "starting") }],
   ] as const)("warns about a possibly orphaned prediction after %s on create", async (_, res) => {
     const fake = createFakeReplicate({ "POST /models/o/m/predictions": [res] });
     await expect(

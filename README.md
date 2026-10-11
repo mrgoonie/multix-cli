@@ -548,7 +548,7 @@ multix replicate image "a futuristic city" [-m <owner/name>] [--aspect-ratio 16:
 # Text-to-video, or image-to-video with --image (default model: prunaai/p-video)
 multix replicate video "a cinematic establishing shot" [-m <owner/name>] [--image <path|url>] [--duration 5] [--aspect-ratio 16:9] [--resolution 720p] [--input '{"draft":true}']
 
-# Shared flags: [--async] [--wait] [--prefer-wait <seconds>] [--wait-timeout <ms>] [--no-download] [--output <path>] [-v]
+# Shared flags: [--async] [--wait] [--prefer-wait [seconds]] [--wait-timeout <ms>] [--no-download] [--output <path>] [-v]
 
 # Resume or cancel a prediction by id without re-running inference
 multix replicate status <prediction-id> [--wait] [--download] [--output <path>]
@@ -557,11 +557,11 @@ multix replicate cancel <prediction-id>
 
 **Notes:**
 - Auth: `Authorization: Bearer $REPLICATE_API_TOKEN` (`REPLICATE_API_KEY` accepted as fallback).
-- Default behavior waits with bounded polling; `--async` prints the prediction id plus resume/cancel commands. `--prefer-wait <seconds>` (an integer from 1 to 60) sends `Prefer: wait=N` and keeps polling if the job is still running.
+- Default behavior waits with bounded polling; `--async` prints the prediction id plus resume/cancel commands. `--prefer-wait [seconds]` (an integer from 1 to 60; the bare flag means 60) sends `Prefer: wait=N` and keeps polling if the job is still running. Put the prompt before a bare `--prefer-wait`; any other value is rejected.
 - Only `succeeded` exits 0; `failed`, `canceled`, and `aborted` exit non-zero with Replicate's error.
-- If submitting fails with a network error, timeout, or 5xx, the prediction may still have been created and billed (Replicate has no idempotency key). Check https://replicate.com/predictions before retrying.
+- If submitting fails with a network error, timeout, 5xx, or an unreadable 2xx response, the prediction may still have been created and billed (Replicate has no idempotency key). Check https://replicate.com/predictions before retrying.
 - Every media URL in the output (string, list, or nested object) is downloaded as `replicate-<id8>-NN.<ext>` (`<id8>` = first 8 characters of the prediction id); text outputs are printed. Output URLs expire, so download promptly. If any download fails, the command exits non-zero and prints `multix replicate status <id> --download` to retry.
-- Output downloads use `https://` only and refuse `localhost` and loopback, private, or link-local IP addresses, including on redirects. Hosts other than `replicate.delivery` are downloaded with a warning that names the host. Each file is capped at `MULTIX_MAX_DOWNLOAD_MB` (default 2048).
+- Output downloads use `https://` only and refuse `localhost` and loopback, private, link-local, or other special-purpose IP literals (hostnames are not resolved), including on redirects. Files are written to `<path>.part` and renamed when complete, so a failed download never clobbers an existing file. Hosts other than `replicate.delivery` are downloaded with a warning that names the host. Each file is capped at `MULTIX_MAX_DOWNLOAD_MB` (default 2048).
 - `replicate image` converts images to WebP by default; `--image-format original`, `--no-webp`, `MULTIX_IMAGE_FORMAT=original`, an explicit `--output-format`, or a non-`.webp` `--output` extension keeps the provider format.
 - Local files (`--image`, `--file key=path`) up to 256 KB are inlined as data URIs; larger files (< 100 MB) are uploaded via the Replicate Files API.
 

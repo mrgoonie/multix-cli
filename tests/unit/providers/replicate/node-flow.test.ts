@@ -268,7 +268,7 @@ describe("output download policy", () => {
     ]);
     await expect(resume(client)).rejects.toThrow(/none of 2 output file\(s\)/);
     const text = output.join("\n");
-    expect(text).toContain("only https:// output URLs are downloaded");
+    expect(text).toContain("only https:// URLs are allowed");
     expect(text).toContain("local or private address");
     expect(fake.calls.map((c) => c.url)).toEqual([`${BASE}/predictions/${ID}`]);
   });
@@ -281,6 +281,34 @@ describe("output download policy", () => {
     expect(text).toContain("served from cdn.example.com, not replicate.delivery");
     expect(text).not.toContain("SIGSECRET");
     expect(fs.readdirSync(path.join(tmp, "out"))).toEqual(["replicate-pred0001-01.png"]);
+  });
+
+  it("warns once per untrusted host, not once per output", async () => {
+    const urls = ["https://cdn.example.com/a.png", "https://cdn.example.com/b.png"];
+    const { client } = succeededWith(urls, {
+      [`GET ${urls[0]}`]: [{ bytes: PNG }],
+      [`GET ${urls[1]}`]: [{ bytes: PNG }],
+    });
+    expect(await resume(client)).toHaveLength(2);
+    const warnings = output.filter((line) => line.includes("served from cdn.example.com"));
+    expect(warnings).toHaveLength(1);
+  });
+
+  it("keeps an existing --output file when the download fails", async () => {
+    const url = "https://replicate.delivery/a/out.png";
+    const { client } = succeededWith(url, { [`GET ${url}`]: [{ status: 404, text: "gone" }] });
+    const dest = path.join(tmp, "hero.png");
+    fs.writeFileSync(dest, "precious");
+    await expect(
+      completePrediction(client, ID, {
+        waitTimeoutMs: 60_000,
+        logger: createLogger({ verbose: false }),
+        download: true,
+        output: dest,
+      }),
+    ).rejects.toThrow(/none of 1/);
+    expect(fs.readFileSync(dest, "utf8")).toBe("precious");
+    expect(fs.readdirSync(tmp).filter((name) => name.endsWith(".part"))).toEqual([]);
   });
 
   it("validates every redirect hop and refuses a redirect to a private address", async () => {

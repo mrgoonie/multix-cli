@@ -73,23 +73,46 @@ describe("parsePreferWaitSeconds", () => {
 });
 
 describe("--prefer-wait", () => {
+  const route = () => ({
+    "POST /models/black-forest-labs/flux-schnell/predictions": [
+      { status: 201, json: prediction(ID, "succeeded", { output: "done" }) },
+    ],
+  });
+
   it("does not swallow a following prompt: fails on the option, before any request", async () => {
     const fake = stub({});
     const err = await run("image", "--prefer-wait", "a cat").catch((e: unknown) => e);
     expect(err).toBeInstanceOf(CommanderError);
     expect((err as CommanderError).code).toBe("commander.invalidArgument");
-    expect(output.join("\n")).toContain("--prefer-wait <seconds>");
+    expect(output.join("\n")).toContain("--prefer-wait [seconds]");
+    expect(output.join("\n")).toContain("1 to 60");
+    expect(fake.calls).toHaveLength(0);
+  });
+
+  it.each(["0", "61", "1.5"])("rejects the out-of-range value %s", async (bad) => {
+    const fake = stub({});
+    const err = await run("image", "a cat", "--prefer-wait", bad).catch((e: unknown) => e);
+    expect((err as CommanderError).code).toBe("commander.invalidArgument");
     expect(fake.calls).toHaveLength(0);
   });
 
   it("sends Prefer: wait=N when given a value before the prompt", async () => {
-    const fake = stub({
-      "POST /models/black-forest-labs/flux-schnell/predictions": [
-        { status: 201, json: prediction(ID, "succeeded", { output: "done" }) },
-      ],
-    });
+    const fake = stub(route());
     await run("image", "--prefer-wait", "10", "a cat", "--no-download", "--no-webp");
     expect(fake.calls[0]?.headers.prefer).toBe("wait=10");
+    expect((fake.calls[0]?.body as { input: { prompt: string } }).input.prompt).toBe("a cat");
+  });
+
+  it("treats a bare flag at the end as 60 seconds", async () => {
+    const fake = stub(route());
+    await run("image", "a cat", "--no-download", "--no-webp", "--prefer-wait");
+    expect(fake.calls[0]?.headers.prefer).toBe("wait=60");
+  });
+
+  it("treats a bare flag followed by another option as 60 seconds", async () => {
+    const fake = stub(route());
+    await run("image", "a cat", "--prefer-wait", "--no-download", "--no-webp");
+    expect(fake.calls[0]?.headers.prefer).toBe("wait=60");
     expect((fake.calls[0]?.body as { input: { prompt: string } }).input.prompt).toBe("a cat");
   });
 });

@@ -71,7 +71,7 @@ async function saveOne(
   predictionId: string,
   index: number,
   count: number,
-  opts: SaveMediaOptions & { maxBytes: number },
+  opts: SaveMediaOptions & { maxBytes: number; warnedHosts: Set<string> },
 ): Promise<string> {
   if (item.url.startsWith("data:")) {
     const comma = item.url.indexOf(",");
@@ -92,7 +92,7 @@ async function saveOne(
     return dest;
   }
 
-  const warned = new Set<string>();
+  const warned = opts.warnedHosts;
   try {
     const { dest } = await downloadToFile(item.url, {
       dest: (response) => {
@@ -118,7 +118,7 @@ async function saveOne(
     return dest;
   } catch (err) {
     if (err instanceof HttpError && (err.status === 404 || err.status === 410)) {
-      throw new HttpError(err.status, "download failed (output may have expired)", item.url);
+      throw new HttpError(err.status, "download failed (output may have expired)", err.rawUrl);
     }
     throw err;
   }
@@ -134,7 +134,8 @@ export async function saveMediaOutputs(
   opts: SaveMediaOptions,
 ): Promise<string[]> {
   // Read the cap up front so a bad MULTIX_MAX_DOWNLOAD_MB fails before any download.
-  const withCap = { ...opts, maxBytes: maxDownloadBytes() };
+  // One warned-host set per run, so several outputs on one CDN warn once.
+  const withCap = { ...opts, maxBytes: maxDownloadBytes(), warnedHosts: new Set<string>() };
   const saved: string[] = [];
   const failed: string[] = [];
   for (let i = 0; i < media.length; i++) {

@@ -178,9 +178,9 @@ multix replicate status <prediction-id> --wait --download
 multix replicate cancel <prediction-id>
 ```
 
-Shared flags: `--async`, `--wait`, `--prefer-wait <seconds>` (integer 1-60; sends `Prefer: wait=N`, still polls if unfinished), `--wait-timeout <ms>`, `--no-download` (print URLs), `--output <path|dir/>`. `failed`/`canceled`/`aborted` predictions exit non-zero. Local files up to 256 KB are inlined as data URIs; larger files (< 100 MB) go through the Replicate Files API.
+Shared flags: `--async`, `--wait`, `--prefer-wait [seconds]` (integer 1-60, bare flag = 60; sends `Prefer: wait=N`, still polls if unfinished; put the prompt before a bare flag), `--wait-timeout <ms>`, `--no-download` (print URLs), `--output <path|dir/>`. `failed`/`canceled`/`aborted` predictions exit non-zero. Local files up to 256 KB are inlined as data URIs; larger files (< 100 MB) go through the Replicate Files API.
 
-Output downloads are `https://` only; `localhost` and loopback/private/link-local IP targets (including redirects) are refused, non-`replicate.delivery` hosts are downloaded with a warning, and each file is capped at `MULTIX_MAX_DOWNLOAD_MB` (default 2048). If submitting fails with a network error, timeout, or 5xx, the prediction may still exist and bill: check https://replicate.com/predictions before retrying instead of resubmitting blindly.
+Output downloads are `https://` only; `localhost` and loopback/private/link-local/special-purpose IP literals (including redirects; hostnames are not resolved) are refused, non-`replicate.delivery` hosts are downloaded with a warning, and each file is capped at `MULTIX_MAX_DOWNLOAD_MB` (default 2048). If submitting fails with a network error, timeout, 5xx, or an unreadable 2xx response, the prediction may still exist and bill: check https://replicate.com/predictions before retrying instead of resubmitting blindly.
 
 ## HeyGen
 

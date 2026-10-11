@@ -17,6 +17,7 @@ import {
   fetchJson,
 } from "./fetch-json.js";
 import { redactUrl } from "./redact.js";
+import type { UrlValidator } from "./url-safety.js";
 
 export type { HttpJsonOptions };
 
@@ -60,7 +61,80 @@ export function maxDownloadBytes(): number {
       `${MAX_DOWNLOAD_ENV} must be a positive number of megabytes, got "${raw}"`,
     );
   }
-  return Math.floor(mb * 1024 * 1024);
+  const bytes = Math.floor(mb * 1024 * 1024);
+  if (bytes < 1) {
+    throw new ConfigError(`${MAX_DOWNLOAD_ENV} is too small: "${raw}" MB is less than one byte`);
+  }
+  return bytes;
+}
+
+export interface RedirectFetchOptions {
+  signal?: AbortSignal;
+  headers?: Record<string, string>;
+  /**
+   * Called (and awaited) with the URL and every redirect target before it is
+   * fetched; throw to refuse. When set, redirects are followed manually (at
+   * most `maxRedirects`) and `headers` are dropped once a redirect changes
+   * origin. When unset, fetch follows redirects itself.
+   */
+  validateUrl?: UrlValidator;
+  /** Default 5. */
+  maxRedirects?: number;
+  /** Defaults to globalThis.fetch (resolved at call time so tests can stub it). */
+  fetch?: FetchLike;
+}
+
+export interface RedirectFetchResult {
+  response: Response;
+  /** The URL of the last hop, i.e. the one `response` came from. */
+  url: string;
+}
+
+/**
+ * GET a URL, following redirects one hop at a time so every target is
+ * validated before it is requested. A relative Location resolves against the
+ * current hop; each redirect body is cancelled. Network failures become
+ * HttpError(0) naming the hop that failed.
+ */
+export async function fetchWithValidatedRedirects(
+  url: string,
+  opts: RedirectFetchOptions = {},
+): Promise<RedirectFetchResult> {
+  const doFetch: FetchLike = opts.fetch ?? ((input, init) => globalThis.fetch(input, init));
+  const { validateUrl, signal } = opts;
+  const maxRedirects = opts.maxRedirects ?? MAX_REDIRECTS;
+  let current = url;
+  let headers = opts.headers;
+  for (let hop = 0; ; hop++) {
+    await validateUrl?.(current);
+    let response: Response;
+    try {
+      response = await doFetch(current, {
+        ...(signal ? { signal } : {}),
+        ...(headers ? { headers } : {}),
+        ...(validateUrl ? { redirect: "manual" as const } : {}),
+      });
+    } catch (cause) {
+      const msg = cause instanceof Error ? cause.message : String(cause);
+      throw new HttpError(0, msg, current);
+    }
+    const location = response.headers.get("location");
+    if (!validateUrl || !location || response.status < 300 || response.status >= 400) {
+      return { response, url: current };
+    }
+    await response.body?.cancel().catch(() => {});
+    if (hop >= maxRedirects) {
+      throw new HttpError(response.status, `too many redirects (over ${maxRedirects})`, current);
+    }
+    let next: URL;
+    try {
+      next = new URL(location, current);
+    } catch {
+      throw new HttpError(response.status, "redirect with a malformed Location header", current);
+    }
+    if (next.origin !== new URL(current).origin) headers = undefined;
+    current = next.toString();
+  }
 }
 
 export interface DownloadOptions {
@@ -68,12 +142,8 @@ export interface DownloadOptions {
   dest: string | ((response: Response) => string);
   timeoutMs?: number;
   headers?: Record<string, string>;
-  /**
-   * Called with the URL and every redirect target before it is fetched; throw
-   * to refuse. When set, redirects are followed manually (at most 5) and
-   * `headers` are dropped once a redirect changes origin.
-   */
-  validateUrl?: (url: string) => void;
+  /** See RedirectFetchOptions.validateUrl; may be sync or async. */
+  validateUrl?: UrlValidator;
   /** Abort and remove the partial file once the body exceeds this many bytes. */
   maxBytes?: number;
   /** Defaults to globalThis.fetch (resolved at call time so tests can stub it). */
@@ -86,68 +156,70 @@ export interface DownloadResult {
   bytes: number;
 }
 
-async function fetchForDownload(
-  url: string,
-  opts: DownloadOptions,
-  signal: AbortSignal,
-): Promise<Response> {
-  const doFetch: FetchLike = opts.fetch ?? ((input, init) => globalThis.fetch(input, init));
-  const validate = opts.validateUrl;
-  let current = url;
-  let headers = opts.headers;
-  for (let hop = 0; ; hop++) {
-    validate?.(current);
-    let response: Response;
-    try {
-      response = await doFetch(current, {
-        signal,
-        ...(headers ? { headers } : {}),
-        ...(validate ? { redirect: "manual" as const } : {}),
-      });
-    } catch (cause) {
-      const msg = cause instanceof Error ? cause.message : String(cause);
-      throw new HttpError(0, msg, current);
+/** Best-effort removal that never replaces the error being reported. */
+function removeQuietly(file: string): void {
+  try {
+    fs.rmSync(file, { force: true });
+  } catch {
+    // ignore: e.g. EBUSY from an antivirus lock on Windows
+  }
+}
+
+/** Move `from` over `to`, replacing an existing file (rename can refuse that on Windows). */
+function replaceFile(from: string, to: string): void {
+  try {
+    fs.renameSync(from, to);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    const existing = fs.statSync(to, { throwIfNoEntry: false });
+    if (!existing?.isFile() || (code !== "EEXIST" && code !== "EPERM" && code !== "EACCES")) {
+      throw err;
     }
-    const location = response.headers.get("location");
-    if (!validate || !location || response.status < 300 || response.status >= 400) {
-      return response;
-    }
-    await response.body?.cancel().catch(() => {});
-    if (hop >= MAX_REDIRECTS) {
-      throw new HttpError(response.status, `too many redirects (over ${MAX_REDIRECTS})`, url);
-    }
-    const next = new URL(location, current);
-    if (next.origin !== new URL(current).origin) headers = undefined;
-    current = next.toString();
+    fs.rmSync(to, { force: true });
+    fs.renameSync(from, to);
   }
 }
 
 /**
  * Download a URL to a local file, streaming to avoid large memory usage.
- * The parent directory is created if needed; a partial file is removed on
- * failure. Optional URL validation (per redirect hop) and a byte cap.
+ * The body is written to `<dest>.part` and renamed over `dest` only once it
+ * is complete, so a failed download never truncates or removes an existing
+ * file. The parent directory is created if needed. Optional URL validation
+ * (per redirect hop) and a byte cap. Errors name the last hop (redacted).
  */
 export async function downloadToFile(url: string, opts: DownloadOptions): Promise<DownloadResult> {
   const signal = AbortSignal.timeout(opts.timeoutMs ?? DEFAULT_TIMEOUT_MS);
-  const response = await fetchForDownload(url, opts, signal);
+  const { response, url: finalUrl } = await fetchWithValidatedRedirects(url, {
+    signal,
+    headers: opts.headers,
+    validateUrl: opts.validateUrl,
+    fetch: opts.fetch,
+  });
 
   if (!response.ok) {
     await response.body?.cancel().catch(() => {});
-    throw new HttpError(response.status, "(download failed)", url);
+    throw new HttpError(response.status, "(download failed)", finalUrl);
   }
   if (!response.body) {
-    throw new HttpError(0, "Response body is null", url);
+    throw new HttpError(0, "Response body is null", finalUrl);
   }
+  const body = response.body;
 
   const { maxBytes } = opts;
   const declared = Number(response.headers.get("content-length") ?? Number.NaN);
   if (maxBytes !== undefined && Number.isFinite(declared) && declared > maxBytes) {
-    await response.body.cancel().catch(() => {});
-    throw new DownloadTooLargeError(maxBytes, url);
+    await body.cancel().catch(() => {});
+    throw new DownloadTooLargeError(maxBytes, finalUrl);
   }
 
-  const dest = typeof opts.dest === "function" ? opts.dest(response) : opts.dest;
-  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  let dest: string;
+  try {
+    dest = typeof opts.dest === "function" ? opts.dest(response) : opts.dest;
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+  } catch (err) {
+    await body.cancel().catch(() => {});
+    throw err;
+  }
 
   let bytes = 0;
   // Content-Length can be absent or wrong, so count the bytes actually received.
@@ -155,26 +227,29 @@ export async function downloadToFile(url: string, opts: DownloadOptions): Promis
     for await (const chunk of source) {
       bytes += chunk.byteLength;
       if (maxBytes !== undefined && bytes > maxBytes)
-        throw new DownloadTooLargeError(maxBytes, url);
+        throw new DownloadTooLargeError(maxBytes, finalUrl);
       yield chunk;
     }
   }
 
-  const fileStream = fs.createWriteStream(dest);
+  const part = `${dest}.part`;
+  let fileStream: fs.WriteStream | undefined;
   try {
+    fileStream = fs.createWriteStream(part);
     await pipeline(
-      Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]),
+      Readable.fromWeb(body as Parameters<typeof Readable.fromWeb>[0]),
       countBytes,
       fileStream,
     );
+    replaceFile(part, dest);
   } catch (err) {
     // pipeline() rejects before the destroyed stream has released its file
     // handle; on Windows the partial file cannot be removed until then.
     // (events.once would reject on the stream's own "error" event instead.)
-    if (!fileStream.closed) {
-      await new Promise<void>((resolve) => fileStream.once("close", () => resolve()));
+    if (fileStream && !fileStream.closed) {
+      await new Promise<void>((resolve) => fileStream?.once("close", () => resolve()));
     }
-    fs.rmSync(dest, { force: true });
+    removeQuietly(part);
     throw err;
   }
   return { dest, contentType: response.headers.get("content-type") ?? undefined, bytes };

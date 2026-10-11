@@ -4,7 +4,7 @@
  * with commands to resume or cancel the job by id.
  */
 
-import { type Command, InvalidArgumentError } from "commander";
+import { type Command, InvalidArgumentError, Option } from "commander";
 import { ValidationError } from "../../../core/errors.js";
 import type { Logger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
@@ -26,14 +26,20 @@ export interface FlowOptions {
   verbose?: boolean;
 }
 
+export const DEFAULT_PREFER_WAIT_SECONDS = 60;
+
 /**
- * Commander parser for `--prefer-wait <seconds>`: an integer from 1 to 60.
- * The value is required so the flag can never swallow a following prompt.
+ * Commander parser for `--prefer-wait [seconds]`: an integer from 1 to 60.
+ * A bare flag (last argument, or followed by another option) means 60. Any
+ * other value is rejected, so a prompt placed right after the flag fails
+ * loudly instead of being swallowed as the wait time.
  */
 export function parsePreferWaitSeconds(raw: string): number {
   const n = Number(raw);
   if (!/^\d+$/.test(raw.trim()) || n < 1 || n > 60) {
-    throw new InvalidArgumentError("Expected an integer number of seconds from 1 to 60.");
+    throw new InvalidArgumentError(
+      `Expected an integer number of seconds from 1 to 60 (a bare --prefer-wait means ${DEFAULT_PREFER_WAIT_SECONDS}); put the prompt before the flag.`,
+    );
   }
   return n;
 }
@@ -43,10 +49,13 @@ export function addFlowOptions(cmd: Command, defaultTimeoutMs: number): Command 
   return cmd
     .option("--async", "Submit and return immediately with the prediction id")
     .option("--wait", "Wait for a terminal status (default unless --async)")
-    .option(
-      "--prefer-wait <seconds>",
-      "Ask Replicate to hold the create request open for 1-60s; keeps polling if still running",
-      parsePreferWaitSeconds,
+    .addOption(
+      new Option(
+        "--prefer-wait [seconds]",
+        "Ask Replicate to hold the create request open for 1-60s (bare flag: 60); keeps polling if still running",
+      )
+        .argParser(parsePreferWaitSeconds)
+        .preset(String(DEFAULT_PREFER_WAIT_SECONDS)),
     )
     .option("--wait-timeout <ms>", "Polling timeout in milliseconds", String(defaultTimeoutMs))
     .option("--download", "Download media outputs (default)")
