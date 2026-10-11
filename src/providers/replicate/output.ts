@@ -6,8 +6,8 @@
  * nested object, plain text, or a list of text tokens (language models).
  */
 
-import { ProviderError } from "../../core/errors.js";
 import { redactUrl } from "../../core/redact.js";
+import { type UrlSafetyResult, checkUrlSafety } from "../../core/url-safety.js";
 import type { ReplicatePrediction } from "./types.js";
 
 export interface MediaOutput {
@@ -31,88 +31,17 @@ export function isMediaRef(value: unknown): boolean {
 
 export const REPLICATE_DELIVERY_HOST = "replicate.delivery";
 
-function ipv4Octets(host: string): number[] | undefined {
-  const parts = host.split(".");
-  if (parts.length !== 4 || !parts.every((p) => /^\d{1,3}$/.test(p))) return undefined;
-  const octets = parts.map(Number);
-  return octets.every((o) => o <= 255) ? octets : undefined;
-}
-
-function isNonPublicIpv4([a = 0, b = 0]: number[]): boolean {
-  return (
-    a === 0 || // "this network" / unspecified
-    a === 10 ||
-    a === 127 || // loopback
-    (a === 100 && b >= 64 && b <= 127) || // carrier-grade NAT
-    (a === 169 && b === 254) || // link-local (cloud metadata)
-    (a === 172 && b >= 16 && b <= 31) ||
-    (a === 192 && b === 168) ||
-    a >= 224 // multicast and reserved
-  );
-}
-
-/** `host` is a bracketless IPv6 literal as normalized by the WHATWG URL parser. */
-function isNonPublicIpv6(host: string): boolean {
-  // IPv4-mapped (::ffff:7f00:1) — check the embedded IPv4 address.
-  const mapped = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(host);
-  if (mapped) {
-    const hi = Number.parseInt(mapped[1] as string, 16);
-    const lo = Number.parseInt(mapped[2] as string, 16);
-    return isNonPublicIpv4([hi >> 8, hi & 0xff, lo >> 8, lo & 0xff]);
-  }
-  // Leading zero group: unspecified (::), loopback (::1), IPv4-compatible.
-  if (host.startsWith("::")) return true;
-  const first = Number.parseInt(host.split(":")[0] || "0", 16);
-  return (
-    (first & 0xfe00) === 0xfc00 || // unique local fc00::/7
-    (first & 0xffc0) === 0xfe80 || // link-local fe80::/10
-    (first & 0xff00) === 0xff00 // multicast
-  );
-}
-
-export interface OutputUrlCheck {
-  /** Hostname only — safe to log (no path or signed query string). */
-  host: string;
-  /** True for replicate.delivery and its subdomains. */
-  trusted: boolean;
-}
+export type OutputUrlCheck = UrlSafetyResult;
 
 /**
  * Policy for downloading a prediction output URL (applied to every redirect
- * hop): https only, never localhost or a loopback/private/link-local/
- * unspecified IP literal. Hosts other than replicate.delivery are allowed but
- * reported as untrusted so the caller can warn. Error messages name the host
- * only, never the signed URL.
+ * hop): https only, never localhost or a private/special-purpose IP literal
+ * (hostnames are not resolved). Hosts other than replicate.delivery are
+ * allowed but reported as untrusted so the caller can warn. Error messages
+ * name the host only, never the signed URL.
  */
 export function checkOutputUrl(url: string): OutputUrlCheck {
-  let parsed: URL;
-  try {
-    parsed = new URL(url);
-  } catch {
-    throw new ProviderError("Refusing to download an output: malformed URL", "replicate");
-  }
-  const host = parsed.hostname.toLowerCase().replace(/\.$/, "");
-  if (parsed.protocol !== "https:") {
-    throw new ProviderError(
-      `Refusing to download from ${host || "an output URL"}: only https:// output URLs are downloaded`,
-      "replicate",
-    );
-  }
-  const bare = host.startsWith("[") ? host.slice(1, -1) : host;
-  const octets = ipv4Octets(bare);
-  const isLocal =
-    bare === "localhost" ||
-    bare.endsWith(".localhost") ||
-    (octets !== undefined && isNonPublicIpv4(octets)) ||
-    (bare.includes(":") && isNonPublicIpv6(bare));
-  if (isLocal) {
-    throw new ProviderError(
-      `Refusing to download from ${host}: output URLs must not point to a local or private address`,
-      "replicate",
-    );
-  }
-  const trusted = host === REPLICATE_DELIVERY_HOST || host.endsWith(`.${REPLICATE_DELIVERY_HOST}`);
-  return { host, trusted };
+  return checkUrlSafety(url, { provider: "replicate", trustedHosts: [REPLICATE_DELIVERY_HOST] });
 }
 
 /** Walk any output shape, collecting media URLs and text values in order. */
