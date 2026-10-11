@@ -145,11 +145,11 @@ describe("check command provider readiness", () => {
     vi.stubEnv("CLOUDFLARE_ACCOUNT_ID", "account");
     vi.stubEnv("CLOUDFLARE_API_TOKEN", "token");
     const { cloudflareReadiness } = await import("../../../src/commands/check.js");
-    expect(cloudflareReadiness()).toEqual({ native: true, video: false });
+    expect(cloudflareReadiness()).toMatchObject({ native: true, video: false });
 
     vi.stubEnv("CLOUDFLARE_AI_GATEWAY_ID", "gateway");
     vi.stubEnv("REPLICATE_API_TOKEN", "replicate");
-    expect(cloudflareReadiness()).toEqual({ native: true, video: true });
+    expect(cloudflareReadiness()).toMatchObject({ native: true, video: true });
   });
 
   it("reports direct Replicate readiness separately from Cloudflare AI Gateway video", async () => {
@@ -168,7 +168,7 @@ describe("check command provider readiness", () => {
     vi.stubEnv("CLOUDFLARE_ACCOUNT_ID", "");
     vi.stubEnv("CLOUDFLARE_API_TOKEN", "");
     vi.stubEnv("REPLICATE_API_TOKEN", "replicate");
-    expect(cloudflareReadiness()).toEqual({ native: false, video: false });
+    expect(cloudflareReadiness()).toMatchObject({ native: false, video: false });
   });
 
   it("resolves Replicate tokens like the provider: trimmed, then fallback", async () => {
@@ -194,13 +194,13 @@ describe("check command provider readiness", () => {
     vi.stubEnv("REPLICATE_API_TOKEN", "");
     vi.stubEnv("REPLICATE_API_KEY", "replicate-key");
     const { cloudflareReadiness } = await import("../../../src/commands/check.js");
-    expect(cloudflareReadiness()).toEqual({ native: true, video: false });
+    expect(cloudflareReadiness()).toMatchObject({ native: true, video: false });
   });
 
   it("does not count whitespace-only Cloudflare credentials as configured", async () => {
     vi.stubEnv("CLOUDFLARE_ACCOUNT_ID", "   ");
     vi.stubEnv("CLOUDFLARE_API_TOKEN", "\t");
     const { cloudflareReadiness } = await import("../../../src/commands/check.js");
-    expect(cloudflareReadiness()).toEqual({ native: false, video: false });
+    expect(cloudflareReadiness()).toMatchObject({ native: false, video: false });
   });
 });

@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0](https://github.com/mrgoonie/multix-cli/compare/v0.15.3...v1.0.0) (2026-10-11)
+
+
+### ⚠ BREAKING CHANGES
+
+* **core:** a project `.env` can no longer redirect a provider base URL or Cloudflare routing ID while the API key comes from the shell or `~/.multix/.env`. Keep the key in the same project `.env`, move the override to `~/.multix/.env`, or opt in explicitly as described in the environment reference.
+
+### Fixed
+
+* **core:** only trust project .env endpoint overrides that ship their own key ([#97](https://github.com/mrgoonie/multix-cli/issues/97)) ([5c503ec](https://github.com/mrgoonie/multix-cli/commit/5c503eca08aeca6998cf5cf520180a32c0aeee0c))
+
+## [0.15.3](https://github.com/mrgoonie/multix-cli/compare/v0.15.2...v0.15.3) (2026-10-11)
+
+
+### Fixed
+
+* **core:** never forward API-key headers across origins on redirect ([#101](https://github.com/mrgoonie/multix-cli/issues/101)) ([5fd673d](https://github.com/mrgoonie/multix-cli/commit/5fd673ddac9e30b592348cafd6ab68343fa644d7))
+
 ## [0.15.2](https://github.com/mrgoonie/multix-cli/compare/v0.15.1...v0.15.2) (2026-10-11)
 
 

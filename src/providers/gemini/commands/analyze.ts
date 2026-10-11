@@ -6,15 +6,9 @@
 import type { Command } from "commander";
 import { createLogger } from "../../../core/logger.js";
 import { type FileInput, labelError, resolveFileInputs } from "../../../core/stdin-file.js";
-import {
-  type ContentPart,
-  extractText,
-  generateContent,
-  inlinePart,
-  shouldUseFileApi,
-  uploadFile,
-} from "../client.js";
+import { type ContentPart, extractText, generateContent } from "../client.js";
 import { withGeminiKey } from "../key-pool.js";
+import { inlinePart, shouldUseFileApi, uploadLocalFile } from "../local-files.js";
 import { getDefaultModel } from "../models.js";
 import { formatResults } from "../result-formatter.js";
 import type { AnalysisResult, OutputFormat } from "../result-formatter.js";
@@ -63,7 +57,7 @@ export function registerAnalyzeCommand(parent: Command): void {
 
                 if (useApi) {
                   logger.debug("File >20MB — using Files API");
-                  const ref = await uploadFile(filePath, { logger, apiKey });
+                  const ref = await uploadLocalFile(filePath, { logger, apiKey });
                   contentParts = [
                     { text: opts.prompt },
                     { fileData: { mimeType: ref.mimeType, fileUri: ref.uri } },

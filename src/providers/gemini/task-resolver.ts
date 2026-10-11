@@ -78,7 +78,4 @@ export function getMimeType(filePath: string): string {
   return MIME_MAP[ext] ?? "application/octet-stream";
 }
 
-/** True if the MIME type is audio or video (requires polling after File API upload). */
-export function requiresProcessingWait(mimeType: string): boolean {
-  return mimeType.startsWith("audio/") || mimeType.startsWith("video/");
-}
+export { requiresProcessingWait } from "./media-types.js";

@@ -16,15 +16,13 @@ import {
   labelError,
   resolveFileInputs,
 } from "../../core/stdin-file.js";
+import { type ContentPart, extractText, generateContent } from "../../providers/gemini/client.js";
+import { isGeminiRateLimitError, withGeminiKey } from "../../providers/gemini/key-pool.js";
 import {
-  type ContentPart,
-  extractText,
-  generateContent,
   inlinePart,
   shouldUseFileApi,
-  uploadFile,
-} from "../../providers/gemini/client.js";
-import { isGeminiRateLimitError, withGeminiKey } from "../../providers/gemini/key-pool.js";
+  uploadLocalFile,
+} from "../../providers/gemini/local-files.js";
 import { DOC_MODEL_DEFAULT } from "../../providers/gemini/models.js";
 import { DEFAULT_CONVERT_PROMPT } from "./default-prompt.js";
 
@@ -117,7 +115,7 @@ async function convertResolved(
 
             if (useApi) {
               logger?.debug("File >20MB — using Files API");
-              const ref = await uploadFile(filePath, { logger, apiKey });
+              const ref = await uploadLocalFile(filePath, { logger, apiKey });
               contentParts = [
                 { text: prompt },
                 { fileData: { mimeType: ref.mimeType, fileUri: ref.uri } },
