@@ -3,13 +3,18 @@
  * schema loading, submit -> (async exit | bounded poll) -> terminal check ->
  * output delivery (text printed, media downloaded with normalized names,
  * images finalized to WebP like other providers, video thumbnails).
+ *
+ * Output and thumbnail downloads are https-only, never reach a local/private
+ * address (checked on every redirect hop), and stop at MULTIX_MAX_DOWNLOAD_MB.
+ * Generated names are deterministic per prediction output, so a retry keeps
+ * the files an earlier run saved and downloads only the missing ones.
  */
 
 import fs from "node:fs";
 import path from "node:path";
 import type { Command } from "commander";
 import { ProviderError, ValidationError } from "../../../core/errors.js";
-import { downloadFile } from "../../../core/http-client.js";
+import { maxDownloadBytes } from "../../../core/http-client.js";
 import {
   finalizeGeneratedImages,
   imageFormatOption,
@@ -22,6 +27,7 @@ import { maybeDownloadThumb } from "../../../core/video-thumb.js";
 import { ATLAS_PROVIDER, type AtlasCloudClient, assertPredictionSucceeded } from "../client.js";
 import {
   type OutputCategory,
+  checkOutputUrl,
   classifyOutputs,
   defaultExtensionFor,
   extensionForContentType,
@@ -30,8 +36,12 @@ import {
   outputCategory,
   outputExtension,
   outputFileName,
+  thumbnailSource,
 } from "../prediction-output.js";
 import type { AtlasMediaKind, AtlasModelSpec, AtlasPrediction } from "../types.js";
+import { type NamingPolicy, downloadClaimed, savedOutput } from "./output-claims.js";
+
+export type { NamingPolicy };
 
 export interface RunCliOpts {
   async?: boolean;
@@ -164,8 +174,16 @@ export interface ExecuteResult {
   texts: string[];
 }
 
-export function resumeCommand(id: string): string {
-  return `multix atlas status ${id} --wait --download`;
+/** The command that resumes a prediction, keeping the user's `--output` so files land in the same place. */
+export function resumeCommand(id: string, output?: string): string {
+  const base = `multix atlas status ${id} --wait --download`;
+  return output ? `${base} --output ${shellQuote(output)}` : base;
+}
+
+function shellQuote(value: string): string {
+  if (/^[\w@%+=:,./\\-]+$/.test(value)) return value;
+  // Double quotes work in POSIX shells, PowerShell and cmd; escape what POSIX expands.
+  return `"${value.replace(/(["\\$`])/g, "\\$1")}"`;
 }
 
 /** Submit, then either exit with the id (--async) or wait, verify, and deliver outputs. */
@@ -178,7 +196,7 @@ export async function executePrediction(o: ExecuteOptions): Promise<ExecuteResul
 
   if (opts.async) {
     console.log(id);
-    console.error(`Prediction submitted. Resume with: ${resumeCommand(id)}`);
+    console.error(`Prediction submitted. Resume with: ${resumeCommand(id, opts.output)}`);
     return { predictionId: id, files: [], texts: [] };
   }
 
@@ -188,11 +206,17 @@ export async function executePrediction(o: ExecuteOptions): Promise<ExecuteResul
     : await client.waitForPrediction(id, {
         timeoutMs,
         intervalMs: o.pollIntervalMs,
-        resumeHint: `Resume with: ${resumeCommand(id)}`,
+        resumeHint: `Resume with: ${resumeCommand(id, opts.output)}`,
         onPoll: (p, n) => logger.debug(`poll ${n}: ${p.status}`),
       });
   assertPredictionSucceeded(final);
-  const delivered = await deliverPrediction(final, { logger, opts, hint: o.hint });
+  // File names come from the submit-time id, which a resume also uses.
+  const delivered = await deliverPrediction(final, {
+    logger,
+    opts,
+    hint: o.hint,
+    predictionId: id,
+  });
   return { predictionId: id, prediction: final, ...delivered };
 }
 
@@ -207,7 +231,7 @@ export function isDirectoryOutput(output: string): boolean {
 
 /**
  * Plan local paths for media outputs. Without --output: the output dir with
- * `atlas-<id>-NN.<ext>`. --output without an extension (or an existing
+ * `atlas-<prediction id>-NN.<ext>`. --output without an extension (or an existing
  * directory) is a directory; with an extension it is the file for a single
  * output, or the `<base>-NN.<ext>` stem for several.
  */
@@ -235,9 +259,17 @@ export function planOutputPaths(
 /** Print text outputs, download media outputs, and finalize images/videos. */
 export async function deliverPrediction(
   prediction: AtlasPrediction,
-  cfg: { logger: Logger; opts: RunCliOpts; hint?: OutputCategory },
+  cfg: {
+    logger: Logger;
+    opts: RunCliOpts;
+    hint?: OutputCategory;
+    /** The id the user submitted or resumed with; names files. Defaults to the prediction's. */
+    predictionId?: string;
+  },
 ): Promise<{ files: string[]; texts: string[] }> {
   const { logger, opts } = cfg;
+  const id = cfg.predictionId ?? prediction.id;
+  const retry = resumeCommand(id, opts.output);
   if (prediction.price !== undefined && prediction.price !== "") {
     logger.info(`Cost: $${prediction.price}`);
   }
@@ -246,8 +278,8 @@ export async function deliverPrediction(
   if (classified.mode === "empty") {
     throw new ProviderError(
       hasNsfwFlag(prediction)
-        ? `Prediction ${prediction.id} returned no output: blocked by content safety (has_nsfw_contents). Try a different prompt or input.`
-        : `Prediction ${prediction.id} completed but returned no outputs.`,
+        ? `Prediction ${id} returned no output: blocked by content safety (has_nsfw_contents). Try a different prompt or input.`
+        : `Prediction ${id} completed but returned no outputs.`,
       ATLAS_PROVIDER,
     );
   }
@@ -255,8 +287,9 @@ export async function deliverPrediction(
   for (const text of classified.texts) console.log(text);
   if (classified.mode === "text") {
     if (opts.output) {
+      // A directory gets the deterministic name, so a rerun rewrites the same text.
       const dest = isDirectoryOutput(opts.output)
-        ? path.resolve(opts.output, outputFileName(prediction.id, 0, "txt"))
+        ? path.resolve(opts.output, outputFileName(id, 0, "txt"))
         : path.resolve(opts.output);
       fs.mkdirSync(path.dirname(dest), { recursive: true });
       fs.writeFileSync(dest, `${classified.texts.join("\n\n")}\n`, "utf8");
@@ -272,33 +305,45 @@ export async function deliverPrediction(
   }
 
   const dests = planOutputPaths(classified.urls, {
-    predictionId: prediction.id,
+    predictionId: id,
     outDir: getOutputDir,
     output: opts.output,
     hint: cfg.hint,
   });
-  // An explicit single-file --output keeps the user's chosen name and extension.
-  const explicitFile =
-    classified.urls.length === 1 && opts.output !== undefined && !isDirectoryOutput(opts.output);
+  const policy = namingPolicy(opts.output, classified.urls.length);
+  // Read the cap up front so a bad MULTIX_MAX_DOWNLOAD_MB fails before any download.
+  const maxBytes = maxDownloadBytes();
   const saved: string[] = [];
+  const downloaded: string[] = [];
+  const reused = new Set<string>();
   let failed = 0;
   for (let i = 0; i < classified.urls.length; i++) {
     const url = classified.urls[i] as string;
     const planned = dests[i] as string;
-    // Download beside the target and rename on success, so a failed download
-    // never deletes or truncates a file the user already had at that path.
-    const part = `${planned}.part`;
     try {
-      const contentType = await downloadFile(url, part);
-      const dest =
-        explicitFile || outputExtension(url)
-          ? planned
-          : withContentTypeExtension(planned, contentType);
-      fs.renameSync(part, dest);
+      // Checked before fetching: the stem is known even when the extension
+      // still depends on the response Content-Type.
+      const existing = policy === "reuse" ? savedOutput(planned) : undefined;
+      if (existing) {
+        saved.push(existing);
+        reused.add(existing);
+        logger.info(`Already saved: ${existing}`);
+        continue;
+      }
+      const dest = await downloadClaimed(
+        url,
+        (response) =>
+          policy === "overwrite" || outputExtension(url)
+            ? planned
+            : withContentTypeExtension(planned, response.headers.get("content-type")),
+        policy,
+        // Inline data: outputs are decoded by fetch, never sent over the network.
+        { maxBytes, validateUrl: isDataUrl(url) ? undefined : checkOutputUrl },
+      );
       saved.push(dest);
+      downloaded.push(dest);
       logger.debug(`Downloaded ${redactUrl(url)} -> ${dest}`);
     } catch (e) {
-      fs.rmSync(part, { force: true });
       failed++;
       logger.warn(
         `Download failed (${redactUrl(url)}): ${e instanceof Error ? e.message : String(e)}`,
@@ -307,12 +352,13 @@ export async function deliverPrediction(
   }
   if (saved.length === 0) {
     throw new ProviderError(
-      `Prediction ${prediction.id} produced ${classified.urls.length} output(s) but none downloaded. Retry with: ${resumeCommand(prediction.id)}`,
+      `Prediction ${id} produced ${classified.urls.length} output(s) but none downloaded. Retry with: ${retry}`,
       ATLAS_PROVIDER,
     );
   }
 
-  const images = saved.filter((f) => outputCategory(f) === "image");
+  // Files saved by an earlier run were finalized then (or kept as asked then).
+  const images = downloaded.filter((f) => outputCategory(f) === "image");
   // A directory --output must not reach the finalizer, which treats it as a file path.
   const fileOutput = opts.output && !isDirectoryOutput(opts.output) ? opts.output : undefined;
   const finalImages = finalizeGeneratedImages(images, {
@@ -325,23 +371,46 @@ export async function deliverPrediction(
 
   const firstVideo = files.find((f) => outputCategory(f) === "video");
   if (firstVideo) {
-    await maybeDownloadThumb(prediction, firstVideo, { skip: opts.thumb === false, logger });
+    // Only the outputs may name a thumbnail: the rest of the payload can echo
+    // request input such as a reference image. Same URL and naming policy as the outputs.
+    await maybeDownloadThumb(thumbnailSource(prediction), firstVideo, {
+      skip: opts.thumb === false,
+      logger,
+      download: async (thumbUrl, planned) => {
+        const existing = policy === "reuse" ? savedOutput(planned) : undefined;
+        if (existing) return { dest: existing };
+        const dest = await downloadClaimed(thumbUrl, () => planned, policy, {
+          maxBytes,
+          validateUrl: checkOutputUrl,
+        });
+        return { dest };
+      },
+    });
   }
 
-  console.log(`\nPrediction ${prediction.id}: saved ${files.length} file(s)`);
-  for (const f of files) console.log(`  ${f}`);
+  console.log(`\nPrediction ${id}: saved ${files.length} file(s)`);
+  for (const f of files) console.log(`  ${f}${reused.has(f) ? " (already saved)" : ""}`);
   if (failed > 0) {
     // Paid-for outputs were lost: scripts must not mistake this for success.
     throw new ProviderError(
-      `Prediction ${prediction.id}: downloaded ${saved.length} of ${classified.urls.length} output(s); ${failed} failed. Saved: ${files.join(", ")}. Retry with: ${resumeCommand(prediction.id)}`,
+      `Prediction ${id}: downloaded ${saved.length} of ${classified.urls.length} output(s); ${failed} failed. Saved: ${files.join(", ")}. Retry with: ${retry}`,
       ATLAS_PROVIDER,
     );
   }
   return { files, texts: classified.texts };
 }
 
+function isDataUrl(url: string): boolean {
+  return /^data:/i.test(url.trim());
+}
+
+export function namingPolicy(output: string | undefined, outputCount: number): NamingPolicy {
+  if (!output || isDirectoryOutput(output)) return "reuse";
+  return outputCount === 1 ? "overwrite" : "unique";
+}
+
 /** Swap a planned fallback extension for the one the response Content-Type names. */
-function withContentTypeExtension(planned: string, contentType: string | undefined): string {
+function withContentTypeExtension(planned: string, contentType: string | null): string {
   const ext = extensionForContentType(contentType);
   if (!ext) return planned;
   const current = path.extname(planned);

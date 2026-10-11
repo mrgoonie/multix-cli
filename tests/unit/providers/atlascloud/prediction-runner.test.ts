@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -12,10 +13,18 @@ import {
   resolveMediaRef,
 } from "../../../../src/providers/atlascloud/commands/env.js";
 import {
+  availableOutputPath,
+  claimOutputPath,
+  handleInterrupt,
+  releaseClaim,
+  savedOutput,
+} from "../../../../src/providers/atlascloud/commands/output-claims.js";
+import {
   assertEndpoint,
   executePrediction,
   loadModelSpec,
   planOutputPaths,
+  resumeCommand,
 } from "../../../../src/providers/atlascloud/commands/prediction-runner.js";
 import { parseMediaKind } from "../../../../src/providers/atlascloud/commands/run.js";
 import { parseModelSpec } from "../../../../src/providers/atlascloud/model-input.js";
@@ -76,7 +85,7 @@ afterEach(() => {
 });
 
 describe("executePrediction (mocked submit -> poll -> saved output)", () => {
-  it("image: black-forest-labs/flux-schnell saves atlas-<id>-01.jpg", async () => {
+  it("image: black-forest-labs/flux-schnell saves atlas-<prediction id>-01.jpg", async () => {
     const out = "https://atlas-media.test/history/47e7acf05d74-d58.jpeg";
     const { client, calls } = createFakeAtlas({
       "POST /model/generateImage": { body: prediction("47e7acf05d7449c1", "processing") },
@@ -104,7 +113,7 @@ describe("executePrediction (mocked submit -> poll -> saved output)", () => {
       model: "black-forest-labs/flux-schnell",
     });
     expect(calls[0]?.url).toBe(`${BASE}/model/generateImage`);
-    const expected = path.join(tmp, "atlas-47e7acf0-01.jpg");
+    const expected = path.join(tmp, "atlas-47e7acf05d7449c1-01.jpg");
     expect(res.files).toEqual([expected]);
     expect(fs.readFileSync(expected, "utf8")).toBe("JPEGBYTES");
   });
@@ -152,8 +161,8 @@ describe("executePrediction (mocked submit -> poll -> saved output)", () => {
       defaultWaitTimeoutMs: 60_000,
     });
     expect(res.files.map((f) => path.basename(f))).toEqual([
-      "atlas-song1234-01.mp3",
-      "atlas-song1234-02.mp3",
+      "atlas-song1234xyz-01.mp3",
+      "atlas-song1234xyz-02.mp3",
     ]);
   });
 
@@ -193,14 +202,25 @@ describe("executePrediction (mocked submit -> poll -> saved output)", () => {
       kind: "image",
       model: "m/x",
       body: { prompt: "x" },
-      opts: { async: true },
+      opts: { async: true, output: "my clips" },
       defaultWaitTimeoutMs: 60_000,
     });
     expect(res.files).toEqual([]);
     expect(stdout).toEqual(["async01"]);
     expect(calls).toHaveLength(1);
+    // The resume command keeps --output, so the files land where the user asked.
     expect(console.error).toHaveBeenCalledWith(
-      expect.stringContaining("multix atlas status async01 --wait --download"),
+      expect.stringContaining('multix atlas status async01 --wait --download --output "my clips"'),
+    );
+  });
+
+  it("resumeCommand adds --output only when given, quoting it when needed", () => {
+    expect(resumeCommand("p1")).toBe("multix atlas status p1 --wait --download");
+    expect(resumeCommand("p1", "out/clip.mp4")).toBe(
+      "multix atlas status p1 --wait --download --output out/clip.mp4",
+    );
+    expect(resumeCommand("p1", 'a "b" $c')).toBe(
+      'multix atlas status p1 --wait --download --output "a \\"b\\" \\$c"',
     );
   });
 
@@ -296,8 +316,8 @@ describe("planOutputPaths", () => {
       hint: "image",
     });
     expect(paths).toEqual([
-      path.join(tmp, "atlas-abcdef12-01.png"),
-      path.join(tmp, "atlas-abcdef12-02.png"),
+      path.join(tmp, "atlas-abcdef123-01.png"),
+      path.join(tmp, "atlas-abcdef123-02.png"),
     ]);
   });
 
@@ -403,10 +423,399 @@ describe("references and env", () => {
     Reflect.deleteProperty(process.env, "ATLASCLOUD_API_KEY");
     expect(() => createAtlasClientFromEnv()).toThrow(ConfigError);
     process.env.ATLASCLOUD_API_KEY = TEST_KEY;
-    process.env.ATLASCLOUD_BASE_URL = "https://mock.local/api/v1";
-    expect(createAtlasClientFromEnv().baseUrl).toBe("https://mock.local/api/v1");
+    process.env.ATLASCLOUD_BASE_URL = "http://127.0.0.1:8787/api/v1";
+    expect(createAtlasClientFromEnv().baseUrl).toBe("http://127.0.0.1:8787/api/v1");
     expect(atlasDefaultModel("video")).toBe("bytedance/seedance-v1-pro-fast/text-to-video");
     process.env.ATLASCLOUD_VIDEO_MODEL = "kwaivgi/kling-v2.6-pro/text-to-video";
     expect(atlasDefaultModel("video")).toBe("kwaivgi/kling-v2.6-pro/text-to-video");
+  });
+
+  it("requires https for ATLASCLOUD_BASE_URL, allowing http only on loopback", () => {
+    _resetEnvLoader();
+    process.env.ATLASCLOUD_API_KEY = TEST_KEY;
+    for (const ok of [
+      "https://proxy.example.com/api/v1",
+      "http://localhost:8787/api/v1",
+      "http://[::1]:8787/api/v1",
+    ]) {
+      process.env.ATLASCLOUD_BASE_URL = ok;
+      expect(createAtlasClientFromEnv().baseUrl).toBe(ok);
+    }
+    for (const bad of ["http://mock.local/api/v1", "http://10.0.0.5/api/v1", "not a url"]) {
+      process.env.ATLASCLOUD_BASE_URL = bad;
+      expect(() => createAtlasClientFromEnv()).toThrow(ConfigError);
+      expect(() => createAtlasClientFromEnv()).toThrow(/ATLASCLOUD_BASE_URL/);
+    }
+  });
+});
+
+describe("download hardening", () => {
+  /** Run a prediction that completes immediately with `extra` (outputs, input...). */
+  function runCompleted(id: string, extra: Record<string, unknown>, opts = {}) {
+    const { client } = createFakeAtlas({
+      "POST /model/generateVideo": { body: prediction(id, "completed", extra) },
+    });
+    return executePrediction({
+      client,
+      logger,
+      kind: "video",
+      model: "m/v",
+      body: { prompt: "x" },
+      opts: { imageFormat: "original", ...opts },
+      hint: "video",
+      defaultWaitTimeoutMs: 60_000,
+    });
+  }
+
+  it("refuses http and private-address outputs without fetching them", async () => {
+    const fetched = stubDownloads({});
+    for (const url of [
+      "http://m.test/a.mp4",
+      "https://169.254.169.254/latest/meta-data.mp4",
+      "https://[::1]/a.mp4",
+      "https://localhost/a.mp4",
+    ]) {
+      await expect(runCompleted("unsafe01", { outputs: [url] })).rejects.toThrow(ProviderError);
+    }
+    expect(fetched).toEqual([]);
+    const warned = logger.warn.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(warned).toContain("only https:// URLs are allowed");
+    expect(warned).toContain("local or private address");
+    expect(fs.readdirSync(tmp)).toEqual([]);
+  });
+
+  it("refuses a redirect from https to http or to an internal address", async () => {
+    const start = "https://m.test/a.mp4";
+    for (const target of ["http://m.test/a.mp4", "https://10.0.0.7/a.mp4"]) {
+      const fetched: string[] = [];
+      vi.stubGlobal("fetch", async (url: string) => {
+        fetched.push(url);
+        if (url === start)
+          return new Response(null, { status: 302, headers: { location: target } });
+        return new Response("LEAKED", { status: 200 });
+      });
+      await expect(runCompleted("redir01", { outputs: [start] })).rejects.toThrow(ProviderError);
+      expect(fetched).toEqual([start]);
+    }
+    expect(fs.readdirSync(tmp)).toEqual([]);
+  });
+
+  it("stops at MULTIX_MAX_DOWNLOAD_MB (declared and streamed sizes)", async () => {
+    process.env.MULTIX_MAX_DOWNLOAD_MB = String(4 / (1024 * 1024)); // 4 bytes
+    _resetEnvLoader();
+    const declared = "https://m.test/declared.mp4";
+    const streamed = "https://m.test/streamed.mp4";
+    vi.stubGlobal("fetch", async (url: string) => {
+      if (url === declared) {
+        return new Response("12345678", { headers: { "content-length": "8" } });
+      }
+      // No Content-Length: the cap must apply to the bytes actually received.
+      const body = new ReadableStream({
+        start(c) {
+          c.enqueue(new TextEncoder().encode("12345678"));
+          c.close();
+        },
+      });
+      return new Response(body);
+    });
+    for (const url of [declared, streamed]) {
+      await expect(runCompleted("big01", { outputs: [url] })).rejects.toThrow(ProviderError);
+    }
+    const warned = logger.warn.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(warned).toContain("MULTIX_MAX_DOWNLOAD_MB");
+    expect(fs.readdirSync(tmp)).toEqual([]);
+  });
+
+  it("still saves inline data: outputs", async () => {
+    const res = await runCompleted("data01", {
+      outputs: [`data:audio/mpeg;base64,${Buffer.from("MP3DATA").toString("base64")}`],
+    });
+    expect(res.files).toEqual([path.join(tmp, "atlas-data01-01.mp3")]);
+    expect(fs.readFileSync(res.files[0] as string, "utf8")).toBe("MP3DATA");
+  });
+
+  it("a retry keeps the outputs an earlier run saved and downloads only the missing ones", async () => {
+    const urls = ["https://m.test/a.mp4", "https://m.test/b.mp4"];
+    const first = stubDownloads({ [urls[0] as string]: "A", [urls[1] as string]: 500 });
+    await expect(runCompleted("retry0001-full-id", { outputs: urls })).rejects.toThrow(
+      /1 failed.*multix atlas status retry0001-full-id --wait --download/,
+    );
+    expect(first).toEqual(urls);
+
+    const second = stubDownloads({ [urls[1] as string]: "B" });
+    const res = await runCompleted("retry0001-full-id", { outputs: urls });
+    expect(second).toEqual([urls[1]]);
+    const names = ["atlas-retry0001-full-id-01.mp4", "atlas-retry0001-full-id-02.mp4"];
+    expect(res.files).toEqual(names.map((n) => path.join(tmp, n)));
+    expect(fs.readdirSync(tmp).sort()).toEqual(names);
+    expect(stdout).toContain(`  ${path.join(tmp, names[0] as string)} (already saved)`);
+
+    // A third run downloads nothing at all.
+    const third = stubDownloads({});
+    await runCompleted("retry0001-full-id", { outputs: urls });
+    expect(third).toEqual([]);
+    expect(fs.readdirSync(tmp).sort()).toEqual(names);
+  });
+
+  it("reuses an output saved under another extension (e.g. PNG -> WebP), even for an extensionless URL", async () => {
+    fs.writeFileSync(path.join(tmp, "atlas-reuse01-01.webp"), "OLD");
+    const fetched = stubDownloads({});
+    const res = await runCompleted("reuse01", { outputs: ["https://m.test/out/noext"] });
+    expect(fetched).toEqual([]);
+    expect(res.files).toEqual([path.join(tmp, "atlas-reuse01-01.webp")]);
+    expect(fs.readFileSync(path.join(tmp, "atlas-reuse01-01.webp"), "utf8")).toBe("OLD");
+  });
+
+  it("refuses a name a running process holds (.part lock with a live pid)", async () => {
+    const part = path.join(tmp, "atlas-busy01-01.mp4.part");
+    // The parent process (the test runner) is alive and is not this process.
+    const lock = JSON.stringify({ pid: process.ppid, host: os.hostname(), startedAt: "x" });
+    fs.writeFileSync(part, lock);
+    stubDownloads({ "https://m.test/v.mp4": "NEW" });
+    await expect(runCompleted("busy01", { outputs: ["https://m.test/v.mp4"] })).rejects.toThrow(
+      ProviderError,
+    );
+    const warned = logger.warn.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(warned).toContain(`held by another multix run (pid ${process.ppid}`);
+    expect(fs.readFileSync(part, "utf8")).toBe(lock);
+    expect(fs.readdirSync(tmp)).toEqual(["atlas-busy01-01.mp4.part"]);
+  });
+
+  it("takes over a lock and removes temp files left by a process that is gone (Ctrl+C, kill)", async () => {
+    const deadPid = spawnSync(process.execPath, ["-e", ""]).pid as number;
+    const dest = path.join(tmp, "atlas-stale01-01.mp4");
+    fs.writeFileSync(
+      `${dest}.part`,
+      JSON.stringify({ pid: deadPid, host: os.hostname(), startedAt: "x" }),
+    );
+    fs.writeFileSync(`${dest}.${deadPid}-1700000000000-k3x9qa.part`, "PARTIAL");
+    // An unrelated file that merely starts with the same name is never touched.
+    fs.writeFileSync(`${dest}.${deadPid}-notes.part`, "MINE");
+    stubDownloads({ "https://m.test/v.mp4": "NEW" });
+    const res = await runCompleted("stale01", { outputs: ["https://m.test/v.mp4"] });
+    expect(res.files).toEqual([dest]);
+    expect(fs.readFileSync(dest, "utf8")).toBe("NEW");
+    expect(fs.readdirSync(tmp).sort()).toEqual(
+      ["atlas-stale01-01.mp4", `atlas-stale01-01.mp4.${deadPid}-notes.part`].sort(),
+    );
+  });
+
+  it("does not count an empty file as an output already saved", async () => {
+    const dest = path.join(tmp, "atlas-empty01-01.mp4");
+    fs.writeFileSync(dest, "");
+    const fetched = stubDownloads({ "https://m.test/v.mp4": "NEW" });
+    const res = await runCompleted("empty01", { outputs: ["https://m.test/v.mp4"] });
+    expect(fetched).toEqual(["https://m.test/v.mp4"]);
+    expect(res.files).toEqual([dest]);
+    expect(fs.readFileSync(dest, "utf8")).toBe("NEW");
+    expect(savedOutput(path.join(tmp, "missing.mp4"))).toBeUndefined();
+  });
+
+  it("the interrupt handler removes this run's locks and temp files, then exits 130/143", () => {
+    const file = path.join(tmp, "atlas-int01-01.mp4");
+    expect(claimOutputPath(file, "reuse")).toBe(file);
+    const temp = `${file}.${process.pid}-1700000000000-k3x9qa.part`;
+    fs.writeFileSync(temp, "PARTIAL");
+    fs.writeFileSync(path.join(tmp, "keep.mp4"), "MINE");
+    const exit = vi.fn();
+    handleInterrupt("SIGINT", exit);
+    expect(exit).toHaveBeenCalledWith(130);
+    expect(fs.readdirSync(tmp)).toEqual(["keep.mp4"]);
+
+    claimOutputPath(file, "reuse");
+    handleInterrupt("SIGTERM", exit);
+    expect(exit).toHaveBeenLastCalledWith(143);
+    expect(fs.readdirSync(tmp)).toEqual(["keep.mp4"]);
+  });
+
+  it("overwrites an explicit single-file --output as asked", async () => {
+    const dest = path.join(tmp, "clip.mp4");
+    fs.writeFileSync(dest, "OLD");
+    stubDownloads({ "https://m.test/v.mp4": "NEW" });
+    const res = await runCompleted(
+      "explicit01",
+      { outputs: ["https://m.test/v.mp4"] },
+      { output: dest },
+    );
+    expect(res.files).toEqual([dest]);
+    expect(fs.readFileSync(dest, "utf8")).toBe("NEW");
+    expect(fs.readdirSync(tmp)).toEqual(["clip.mp4"]);
+  });
+
+  it("a multi-output --output stem never overwrites unrelated files, also for Content-Type names", async () => {
+    // Extensionless URLs: the extension comes from the response Content-Type.
+    const urls = ["https://m.test/out/first", "https://m.test/out/second"];
+    vi.stubGlobal(
+      "fetch",
+      async () => new Response("NEW", { headers: { "content-type": "video/mp4" } }),
+    );
+    fs.writeFileSync(path.join(tmp, "shot-01.txt"), "MINE");
+    fs.writeFileSync(path.join(tmp, "shot-02.mp4.part"), "SOMEONE ELSE");
+    const res = await runCompleted(
+      "tmpl01",
+      { outputs: urls },
+      { output: path.join(tmp, "shot.mp4") },
+    );
+    expect(res.files).toEqual([path.join(tmp, "shot-01-1.mp4"), path.join(tmp, "shot-02-1.mp4")]);
+    expect(fs.readFileSync(path.join(tmp, "shot-01.txt"), "utf8")).toBe("MINE");
+    expect(fs.readFileSync(path.join(tmp, "shot-02.mp4.part"), "utf8")).toBe("SOMEONE ELSE");
+  });
+
+  it("availableOutputPath returns the path itself when the stem is free", () => {
+    expect(availableOutputPath(path.join(tmp, "a.png"))).toBe(path.join(tmp, "a.png"));
+    expect(availableOutputPath(path.join(tmp, "missing-dir", "a.png"))).toBe(
+      path.join(tmp, "missing-dir", "a.png"),
+    );
+    fs.writeFileSync(path.join(tmp, "a.txt"), "x");
+    expect(availableOutputPath(path.join(tmp, "a.png"))).toBe(path.join(tmp, "a-1.png"));
+    fs.writeFileSync(path.join(tmp, "a-1.png.part"), "x");
+    expect(availableOutputPath(path.join(tmp, "a.png"))).toBe(path.join(tmp, "a-2.png"));
+    // downloadToFile's own in-flight file: taken for new names, never a saved output.
+    fs.writeFileSync(path.join(tmp, "a-2.png.4242-1700000000000-k3x9qa.part"), "x");
+    expect(availableOutputPath(path.join(tmp, "a.png"))).toBe(path.join(tmp, "a-3.png"));
+    expect(savedOutput(path.join(tmp, "a-2.png"))).toBeUndefined();
+  });
+
+  it("leaves no .part file behind after a successful or a failed download", async () => {
+    stubDownloads({ "https://m.test/ok.mp4": "OK" });
+    await runCompleted("clean01", { outputs: ["https://m.test/ok.mp4"] });
+    expect(fs.readdirSync(tmp)).toEqual(["atlas-clean01-01.mp4"]);
+
+    // Fails mid-stream, after the name was claimed.
+    vi.stubGlobal(
+      "fetch",
+      async () =>
+        new Response(
+          new ReadableStream({
+            start(c) {
+              c.enqueue(new TextEncoder().encode("partial"));
+              c.error(new Error("connection reset"));
+            },
+          }),
+        ),
+    );
+    await expect(runCompleted("clean02", { outputs: ["https://m.test/bad.mp4"] })).rejects.toThrow(
+      ProviderError,
+    );
+    expect(fs.readdirSync(tmp)).toEqual(["atlas-clean01-01.mp4"]);
+  });
+
+  it.runIf(process.platform === "win32" || process.platform === "darwin")(
+    "matches names case-insensitively where the file system does",
+    () => {
+      fs.writeFileSync(path.join(tmp, "Shot.PNG"), "x");
+      expect(availableOutputPath(path.join(tmp, "shot.png"))).toBe(path.join(tmp, "shot-1.png"));
+      expect(savedOutput(path.join(tmp, "SHOT.webp"))).toBe(path.join(tmp, "Shot.PNG"));
+    },
+  );
+
+  it("claimOutputPath reserves the name so a second claim cannot take it", () => {
+    const file = path.join(tmp, "sub", "atlas-x-01.mp4");
+    expect(claimOutputPath(file, "reuse")).toBe(file);
+    const lock = JSON.parse(fs.readFileSync(`${file}.part`, "utf8"));
+    expect(lock).toMatchObject({ pid: process.pid, host: os.hostname() });
+    expect(() => claimOutputPath(file, "reuse")).toThrow(/held by another multix run/);
+    const second = path.join(tmp, "sub", "atlas-x-01-1.mp4");
+    expect(claimOutputPath(file, "unique")).toBe(second);
+    expect(claimOutputPath(file, "overwrite")).toBe(file);
+    releaseClaim(file);
+    releaseClaim(second);
+    expect(fs.readdirSync(path.join(tmp, "sub"))).toEqual([]);
+  });
+
+  it("claimOutputPath treats an unreadable lock as held at first, then as stale", () => {
+    const file = path.join(tmp, "atlas-y-01.mp4");
+    fs.writeFileSync(`${file}.part`, "");
+    expect(() => claimOutputPath(file, "reuse")).toThrow(/held by another multix run/);
+    const old = new Date(Date.now() - 60_000);
+    fs.utimesSync(`${file}.part`, old, old);
+    expect(claimOutputPath(file, "reuse")).toBe(file);
+    releaseClaim(file);
+  });
+
+  it("claimOutputPath gives up on a multi-output name after a bounded number of attempts", () => {
+    const file = path.join(tmp, "z.mp4");
+    fs.writeFileSync(file, "x");
+    for (let n = 1; n < 1000; n++) fs.writeFileSync(path.join(tmp, `z-${n}.mp4`), "x");
+    expect(() => claimOutputPath(file, "unique")).toThrow(/No free file name .* 1000 attempts/);
+  });
+
+  it("saves an svg output as .svg and never converts it", async () => {
+    const svg = `data:image/svg+xml;base64,${Buffer.from("<svg/>").toString("base64")}`;
+    const { client } = createFakeAtlas({
+      "POST /model/generateImage": { body: prediction("svg01", "completed", { outputs: [svg] }) },
+    });
+    const res = await executePrediction({
+      client,
+      logger,
+      kind: "image",
+      model: "m/x",
+      body: { prompt: "x" },
+      opts: {},
+      hint: "image",
+      defaultWaitTimeoutMs: 60_000,
+    });
+    expect(res.files).toEqual([path.join(tmp, "atlas-svg01-01.svg")]);
+    expect(fs.readFileSync(res.files[0] as string, "utf8")).toBe("<svg/>");
+  });
+
+  it("ignores image URLs echoed from the request input when looking for a thumbnail", async () => {
+    const video = "https://m.test/v.mp4";
+    const fetched = stubDownloads({ [video]: "MP4" });
+    const res = await runCompleted("thumb01", {
+      outputs: [video],
+      input: { image_url: "https://cdn.test/u/my-reference.png" },
+      urls: { thumbnail_url: "https://cdn.test/u/other.jpg" },
+    });
+    expect(fetched).toEqual([video]);
+    expect(res.files).toEqual([path.join(tmp, "atlas-thumb01-01.mp4")]);
+    expect(fs.readdirSync(tmp)).toEqual(["atlas-thumb01-01.mp4"]);
+  });
+
+  it("downloads a thumbnail named in the outputs, under the same URL policy", async () => {
+    const video = "https://m.test/v.mp4";
+    const thumb = "https://m.test/t.jpg";
+    const fetched = stubDownloads({ [video]: "MP4", [thumb]: "JPG" });
+    await runCompleted("thumb02", { outputs: [{ url: video, thumbnail_url: thumb }] });
+    expect(fetched).toEqual([video, thumb]);
+    expect(fs.readFileSync(path.join(tmp, "atlas-thumb02-01_thumb.jpg"), "utf8")).toBe("JPG");
+
+    // Rerun: the video and its thumbnail are both kept, nothing is fetched again.
+    const refetched = stubDownloads({});
+    await runCompleted("thumb02", { outputs: [{ url: video, thumbnail_url: thumb }] });
+    expect(refetched).toEqual([]);
+    expect(fs.readdirSync(tmp).sort()).toEqual([
+      "atlas-thumb02-01.mp4",
+      "atlas-thumb02-01_thumb.jpg",
+    ]);
+
+    // Refused by scheme, and over https by a private / link-local address.
+    for (const [id, unsafe] of [
+      ["thumb03", "http://169.254.169.254/t.jpg"],
+      ["thumb04", "https://169.254.169.254/t.jpg"],
+      ["thumb05", "https://10.0.0.8/t.jpg"],
+    ] as const) {
+      const fetched2 = stubDownloads({ [video]: "MP4" });
+      const res = await runCompleted(id, { outputs: [{ url: video, thumbnail_url: unsafe }] });
+      expect(fetched2).toEqual([video]);
+      expect(res.files).toEqual([path.join(tmp, `atlas-${id}-01.mp4`)]);
+      expect(fs.existsSync(path.join(tmp, `atlas-${id}-01_thumb.jpg`))).toBe(false);
+    }
+    const warned = logger.warn.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(warned).toContain("local or private address");
+  });
+
+  it("a thumbnail from a multi-output --output stem never overwrites an orphan thumbnail", async () => {
+    const urls = ["https://m.test/a.mp4", "https://m.test/b.mp4"];
+    const thumb = "https://m.test/t.jpg";
+    stubDownloads({ [urls[0] as string]: "A", [urls[1] as string]: "B", [thumb]: "NEWTHUMB" });
+    fs.writeFileSync(path.join(tmp, "clip-01_thumb.jpg"), "ORPHAN");
+    await runCompleted(
+      "thumb06",
+      { outputs: [{ url: urls[0], thumbnail_url: thumb }, urls[1]] },
+      { output: path.join(tmp, "clip.mp4") },
+    );
+    expect(fs.readFileSync(path.join(tmp, "clip-01_thumb.jpg"), "utf8")).toBe("ORPHAN");
+    expect(fs.readFileSync(path.join(tmp, "clip-01_thumb-1.jpg"), "utf8")).toBe("NEWTHUMB");
   });
 });

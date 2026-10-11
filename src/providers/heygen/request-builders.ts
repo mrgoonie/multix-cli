@@ -4,8 +4,7 @@
  * the documented schema rules so obvious mistakes fail before a paid request.
  */
 
-import { ConfigError, ValidationError } from "../../core/errors.js";
-import { redactUrl } from "../../core/redact.js";
+import { ValidationError } from "../../core/errors.js";
 import {
   AGENT_ORIENTATIONS,
   AVATAR_ENGINES,
@@ -75,29 +74,7 @@ export function isHttpsUrl(url: string): boolean {
   }
 }
 
-const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
-
-/**
- * Validate an API base URL override. The API key travels in a header on every
- * request, so plain `http:` is accepted only for loopback hosts (local mocks).
- * The error names the variable and never echoes the key or a query string.
- */
-export function checkBaseUrl(raw: string, variable: string): string {
-  const value = raw.trim();
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    throw new ConfigError(`${variable} must be an absolute https:// URL`);
-  }
-  const loopbackHttp = url.protocol === "http:" && LOOPBACK_HOSTS.has(url.hostname);
-  if (url.protocol !== "https:" && !loopbackHttp) {
-    throw new ConfigError(
-      `${variable} must use https:// (got ${redactUrl(value)}); plain http:// is only allowed for localhost, 127.0.0.1, or [::1]`,
-    );
-  }
-  return value;
-}
+export { checkBaseUrl } from "../../core/url-safety.js";
 
 /** Classification of a media reference given on the command line. */
 export type MediaRef =

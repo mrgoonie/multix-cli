@@ -43,7 +43,7 @@ export function registerAtlasStatusCommand(parent: Command): void {
       const prediction = wait
         ? await client.waitForPrediction(predictionId, {
             timeoutMs: parseTimeoutMs(opts.waitTimeout, STATUS_WAIT_MS),
-            resumeHint: `Resume with: ${resumeCommand(predictionId)}`,
+            resumeHint: `Resume with: ${resumeCommand(predictionId, opts.output)}`,
             onPoll: (p, n) => logger.debug(`poll ${n}: ${p.status}`),
           })
         : await client.getPrediction(predictionId);
@@ -54,6 +54,10 @@ export function registerAtlasStatusCommand(parent: Command): void {
         return;
       }
       assertPredictionSucceeded(prediction);
-      await deliverPrediction(prediction, { logger, opts: { ...opts, download: true } });
+      await deliverPrediction(prediction, {
+        logger,
+        opts: { ...opts, download: true },
+        predictionId,
+      });
     });
 }

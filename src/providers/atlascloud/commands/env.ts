@@ -10,6 +10,7 @@ import { resolveKey, resolveProviderBaseUrl, resolveRoutedKey } from "../../../c
 import { ConfigError, ValidationError } from "../../../core/errors.js";
 import { type Logger, createLogger } from "../../../core/logger.js";
 import { redactUrl } from "../../../core/redact.js";
+import { checkBaseUrl } from "../../../core/url-safety.js";
 import { AtlasCloudClient } from "../client.js";
 import { ATLAS_DEFAULT_MODELS, ATLAS_ROUTING, type AtlasDefaultModelKey } from "../models.js";
 import { UPLOAD_EXTENSIONS, uploadMimeTypeFor } from "../upload-mime.js";
@@ -43,7 +44,8 @@ export function requireAtlasKey(): string {
 
 export function createAtlasClientFromEnv(): AtlasCloudClient {
   const apiKey = requireAtlasKey();
-  const baseUrl = resolveProviderBaseUrl(ATLAS_ROUTING);
+  // https only, except http on loopback for local mocks.
+  const baseUrl = checkBaseUrl(resolveProviderBaseUrl(ATLAS_ROUTING), "ATLASCLOUD_BASE_URL");
   return new AtlasCloudClient({ apiKey, baseUrl });
 }
 
