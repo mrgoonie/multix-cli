@@ -79,6 +79,12 @@ const PROVIDERS: ProviderEntry[] = [
     optional: true,
     link: "https://fal.ai/dashboard/keys",
   },
+  {
+    name: "Atlas Cloud",
+    envPrimary: "ATLASCLOUD_API_KEY",
+    optional: true,
+    link: "https://www.atlascloud.ai/console/api-keys",
+  },
 ];
 
 function resolveProviderKey(p: ProviderEntry): { key?: string; envUsed?: string } {

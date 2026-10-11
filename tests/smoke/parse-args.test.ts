@@ -19,6 +19,8 @@ const topLevelCommands = [
   "openai",
   "cloudflare",
   "fal",
+  "atlas",
+  "atlascloud",
   "media",
   "doc",
 ];
@@ -30,6 +32,18 @@ const subcommands: Record<string, string[]> = {
   openai: ["generate", "image-to-image", "generate-speech", "transcribe"],
   cloudflare: ["generate", "generate-speech", "generate-video", "video-status"],
   fal: ["run", "image", "video", "status", "result"],
+  atlas: [
+    "image",
+    "image-to-image",
+    "video",
+    "image-to-video",
+    "audio",
+    "3d",
+    "generate-3d",
+    "run",
+    "status",
+    "upload",
+  ],
   media: ["optimize", "split", "batch"],
   doc: ["convert"],
 };

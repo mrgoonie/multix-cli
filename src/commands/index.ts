@@ -4,6 +4,7 @@
  */
 
 import type { Command } from "commander";
+import { registerAtlasCloudCommands } from "../providers/atlascloud/commands/index.js";
 import { registerBytePlusCommands } from "../providers/byteplus/commands/index.js";
 import { registerCloudflareCommands } from "../providers/cloudflare/commands/index.js";
 import { registerElevenLabsCommands } from "../providers/elevenlabs/commands/index.js";
@@ -30,6 +31,7 @@ export function registerCommands(program: Command): void {
   registerCloudflareCommands(program);
   registerElevenLabsCommands(program);
   registerFalCommands(program);
+  registerAtlasCloudCommands(program);
   registerMediaCommands(program);
   registerDocCommands(program);
 }

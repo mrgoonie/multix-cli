@@ -26,6 +26,36 @@ describe("multix --help (smoke)", () => {
     expect(out).toContain("doc");
     expect(out).toContain("elevenlabs");
     expect(out).toContain("openai");
+    expect(out).toContain("atlas");
+  });
+
+  it("lists atlas subcommands", async () => {
+    const result = await execa("node", [CLI, "atlas", "--help"], { reject: false });
+    expect(result.exitCode).toBe(0);
+    const out = result.stdout + result.stderr;
+    for (const sub of [
+      "image",
+      "image-to-image",
+      "video",
+      "image-to-video",
+      "audio",
+      "3d",
+      "run",
+      "status",
+      "upload",
+    ]) {
+      expect(out).toContain(sub);
+    }
+  });
+
+  it("atlas image without ATLASCLOUD_API_KEY exits non-zero with a setup hint", async () => {
+    const result = await execa("node", [CLI, "atlas", "image", "a cat"], {
+      reject: false,
+      cwd: path.resolve(__dirname, "../.."),
+      env: { ATLASCLOUD_API_KEY: "", MULTIX_DISABLE_HOME_ENV: "1" },
+    });
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain("ATLASCLOUD_API_KEY");
   });
 
   it("lists elevenlabs subcommands", async () => {
