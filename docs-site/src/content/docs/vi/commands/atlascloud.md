@@ -166,7 +166,7 @@ field và kiểu dữ liệu thông thường của từng flag (ví dụ `image
 - Xác thực dùng `Authorization: Bearer <ATLASCLOUD_API_KEY>`. Base của media API
   là `https://api.atlascloud.ai/api/v1` (ghi đè bằng `ATLASCLOUD_BASE_URL`).
 - Khi poll, multix tự thử lại khi bị giới hạn tốc độ (tôn trọng `Retry-After`),
-  khi gặp phản hồi 5xx và lỗi mạng, cho đến khi hết `--wait-timeout`. Mỗi request
+  khi gặp phản hồi 408, 5xx và lỗi mạng, cho đến khi hết `--wait-timeout`. Mỗi request
   poll chỉ được dùng phần thời gian còn lại. Atlas báo một số job thất bại bằng
   HTTP 5xx có body chứa `data.status: "failed"`; chỉ dạng này mới kết thúc việc
   poll như một lỗi.

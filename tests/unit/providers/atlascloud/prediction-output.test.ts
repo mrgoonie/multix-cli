@@ -117,7 +117,13 @@ describe("runtime neutrality", () => {
   ];
   const FORBIDDEN =
     /from\s+["'](node:[^"']+|[^"']*\/(env-loader|http-client|logger|output-dir|json-input|image-input)\.js)["']/;
-  const WORKER_SAFE_CORE = new Set(["errors.js", "fetch-json.js", "async-poll.js", "redact.js"]);
+  const WORKER_SAFE_CORE = new Set([
+    "errors.js",
+    "fetch-json.js",
+    "async-poll.js",
+    "redact.js",
+    "redirect-fetch.js",
+  ]);
 
   it.each(NEUTRAL)("%s has no node:* or Node-only imports", (file) => {
     const src = fs.readFileSync(path.resolve("src/providers/atlascloud", file), "utf8");

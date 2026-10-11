@@ -6,6 +6,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { isTransientHttpError } from "../../core/async-poll.js";
 import type { Logger } from "../../core/logger.js";
 import { getOutputDir } from "../../core/output-dir.js";
 import {
@@ -142,6 +143,10 @@ async function convertResolved(
         errorMsg = labelError(e instanceof Error ? e.message : String(e), input);
         // Key rotation already tried every ready key; retrying would only repeat uploads.
         if (isGeminiRateLimitError(e)) break;
+        // Only network failures/timeouts (status 0), 408, 429 and 5xx are retried. Config,
+        // validation, provider (e.g. refused redirect, timed-out byte upload) and other 4xx
+        // errors fail the same way on every attempt.
+        if (!isTransientHttpError(e)) break;
         if (attempt < 2) {
           const wait = 2 ** attempt * 1000;
           logger?.debug(`Retry ${attempt + 1} after ${wait / 1000}s: ${errorMsg}`);

@@ -17,9 +17,16 @@ import {
   fetchJson,
 } from "./fetch-json.js";
 import { redactUrl } from "./redact.js";
+import { fetchWithValidatedRedirects } from "./redirect-fetch.js";
 import type { UrlValidator } from "./url-safety.js";
 
 export type { HttpJsonOptions };
+export {
+  fetchSameOrigin,
+  fetchWithValidatedRedirects,
+  type RedirectFetchOptions,
+  type RedirectFetchResult,
+} from "./redirect-fetch.js";
 
 /**
  * Make an HTTP request and parse the JSON response.
@@ -31,7 +38,6 @@ export async function httpJson<T>(opts: HttpJsonOptions): Promise<T> {
 
 export const MAX_DOWNLOAD_ENV = "MULTIX_MAX_DOWNLOAD_MB";
 const DEFAULT_MAX_DOWNLOAD_MB = 2048;
-const MAX_REDIRECTS = 5;
 
 function formatMb(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -68,79 +74,11 @@ export function maxDownloadBytes(): number {
   return bytes;
 }
 
-export interface RedirectFetchOptions {
-  signal?: AbortSignal;
-  headers?: Record<string, string>;
-  /**
-   * Called (and awaited) with the URL and every redirect target before it is
-   * fetched; throw to refuse. When set, redirects are followed manually (at
-   * most `maxRedirects`) and `headers` are dropped once a redirect changes
-   * origin. When unset, fetch follows redirects itself.
-   */
-  validateUrl?: UrlValidator;
-  /** Default 5. */
-  maxRedirects?: number;
-  /** Defaults to globalThis.fetch (resolved at call time so tests can stub it). */
-  fetch?: FetchLike;
-}
-
-export interface RedirectFetchResult {
-  response: Response;
-  /** The URL of the last hop, i.e. the one `response` came from. */
-  url: string;
-}
-
-/**
- * GET a URL, following redirects one hop at a time so every target is
- * validated before it is requested. A relative Location resolves against the
- * current hop; each redirect body is cancelled. Network failures become
- * HttpError(0) naming the hop that failed.
- */
-export async function fetchWithValidatedRedirects(
-  url: string,
-  opts: RedirectFetchOptions = {},
-): Promise<RedirectFetchResult> {
-  const doFetch: FetchLike = opts.fetch ?? ((input, init) => globalThis.fetch(input, init));
-  const { validateUrl, signal } = opts;
-  const maxRedirects = opts.maxRedirects ?? MAX_REDIRECTS;
-  let current = url;
-  let headers = opts.headers;
-  for (let hop = 0; ; hop++) {
-    await validateUrl?.(current);
-    let response: Response;
-    try {
-      response = await doFetch(current, {
-        ...(signal ? { signal } : {}),
-        ...(headers ? { headers } : {}),
-        ...(validateUrl ? { redirect: "manual" as const } : {}),
-      });
-    } catch (cause) {
-      const msg = cause instanceof Error ? cause.message : String(cause);
-      throw new HttpError(0, msg, current);
-    }
-    const location = response.headers.get("location");
-    if (!validateUrl || !location || response.status < 300 || response.status >= 400) {
-      return { response, url: current };
-    }
-    await response.body?.cancel().catch(() => {});
-    if (hop >= maxRedirects) {
-      throw new HttpError(response.status, `too many redirects (over ${maxRedirects})`, current);
-    }
-    let next: URL;
-    try {
-      next = new URL(location, current);
-    } catch {
-      throw new HttpError(response.status, "redirect with a malformed Location header", current);
-    }
-    if (next.origin !== new URL(current).origin) headers = undefined;
-    current = next.toString();
-  }
-}
-
 export interface DownloadOptions {
   /** Destination path, or a function choosing it from the (successful) response. */
   dest: string | ((response: Response) => string);
   timeoutMs?: number;
+  /** Request headers (e.g. an API key); dropped once a redirect changes origin. */
   headers?: Record<string, string>;
   /** See RedirectFetchOptions.validateUrl; may be sync or async. */
   validateUrl?: UrlValidator;
@@ -182,7 +120,7 @@ function replaceFile(from: string, to: string): void {
 
 /**
  * Download a URL to a local file, streaming to avoid large memory usage.
- * The body is written to `<dest>.part` and renamed over `dest` only once it
+ * The body is written to a unique `<dest>.<id>.part` file and renamed over `dest` only once it
  * is complete, so a failed download never truncates or removes an existing
  * file. The parent directory is created if needed. Optional URL validation
  * (per redirect hop) and a byte cap. Errors name the last hop (redacted).
@@ -232,7 +170,8 @@ export async function downloadToFile(url: string, opts: DownloadOptions): Promis
     }
   }
 
-  const part = `${dest}.part`;
+  // Unique per process and call, so concurrent downloads to one dest never share it.
+  const part = `${dest}.${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.part`;
   let fileStream: fs.WriteStream | undefined;
   try {
     fileStream = fs.createWriteStream(part);
@@ -259,7 +198,9 @@ export async function downloadToFile(url: string, opts: DownloadOptions): Promis
  * Download a URL to a local file path, streaming to avoid large memory usage.
  * Parent directory is created if it does not exist.
  * Resolves with the response Content-Type (if any) so callers can name
- * extensionless outputs.
+ * extensionless outputs. `headers` (e.g. an API key) are sent to the URL's
+ * own origin only: redirects are then followed by hand and the headers are
+ * dropped once a hop changes origin, including an https to http downgrade.
  */
 export async function downloadFile(
   url: string,

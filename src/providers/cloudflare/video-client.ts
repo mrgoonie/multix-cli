@@ -8,6 +8,7 @@
 
 import { ProviderError } from "../../core/errors.js";
 import { DEFAULT_TIMEOUT_MS, type FetchLike } from "../../core/fetch-json.js";
+import { fetchSameOrigin } from "../../core/redirect-fetch.js";
 import { CLOUDFLARE_VIDEO_MODEL } from "./model-ids.js";
 
 export interface CloudflareVideoConfig {
@@ -38,8 +39,14 @@ export function cloudflareProviderFailure(status: number): ProviderError {
   return new ProviderError(`Cloudflare request failed with HTTP ${status}`, "Cloudflare");
 }
 
+/** Cancel the unread body (e.g. an unfollowed redirect) and build the failure. */
+export async function cloudflareResponseFailure(response: Response): Promise<ProviderError> {
+  await response.body?.cancel().catch(() => {});
+  return cloudflareProviderFailure(response.status);
+}
+
 export async function readCloudflareJson<T>(response: Response): Promise<T> {
-  if (!response.ok) throw cloudflareProviderFailure(response.status);
+  if (!response.ok) throw await cloudflareResponseFailure(response);
   try {
     return (await response.json()) as T;
   } catch {
@@ -65,13 +72,14 @@ function videoHeaders(
 }
 
 function send(opts: CloudflareVideoRequestOptions, url: string, init: RequestInit) {
-  // Call without a receiver: Workers' native fetch rejects foreign `this`.
-  const f = opts.fetch;
   const withTimeout = {
     ...init,
     signal: AbortSignal.timeout(opts.timeoutMs ?? DEFAULT_TIMEOUT_MS),
   };
-  return f ? f(url, withTimeout) : globalThis.fetch(url, withTimeout);
+  // The headers carry both tokens, so a redirect to another origin is not
+  // followed. The injected fetch is called without a receiver (Workers'
+  // native fetch rejects a foreign `this`).
+  return fetchSameOrigin(url, withTimeout, opts.fetch);
 }
 
 /** Reject responses that are not prediction-shaped before they reach logs or callers. */

@@ -4,14 +4,13 @@
  * logic lives in the runtime-neutral client/jobs modules.
  */
 
-import { once } from "node:events";
 import fs from "node:fs";
 import path from "node:path";
-import { pipeline } from "node:stream/promises";
 import type { Command } from "commander";
 import { PollTimeoutError } from "../../core/async-poll.js";
 import { resolveProviderBaseUrl, resolveRoutedKey } from "../../core/env-loader.js";
 import { ConfigError, HttpError, ValidationError } from "../../core/errors.js";
+import { downloadToFile } from "../../core/http-client.js";
 import type { Logger } from "../../core/logger.js";
 import { getOutputDir } from "../../core/output-dir.js";
 import { redactUrl } from "../../core/redact.js";
@@ -194,55 +193,17 @@ function safeSlug(value: string): string {
   );
 }
 
-const MAX_REDIRECTS = 5;
-const isRedirect = (status: number) => [301, 302, 303, 307, 308].includes(status);
+/** Redirect validator: every hop, and the final response URL, must be https://. */
+function requireHttps(url: string): void {
+  if (!isHttpsUrl(url)) throw new HttpError(0, "redirected to a non-https URL", url);
+}
 
 /**
- * Stream `url` to `dest`, following redirects by hand so every hop (and the
- * final response URL) must be https://. A redirect to plain http:// is refused
- * before any body is written.
+ * Stream `url` to `dest` with the shared validated-redirect downloader, so a
+ * redirect to plain http:// is refused before any body is written.
  */
-export async function downloadHttpsOnly(
-  url: string,
-  dest: string,
-  timeoutMs: number,
-): Promise<void> {
-  const signal = AbortSignal.timeout(timeoutMs);
-  let current = url;
-  for (let hop = 0; ; hop++) {
-    if (!isHttpsUrl(current)) {
-      throw new HttpError(0, "refusing to follow a redirect to a non-https URL", current);
-    }
-    let response: Response;
-    try {
-      response = await globalThis.fetch(current, { signal, redirect: "manual" });
-    } catch (cause) {
-      throw new HttpError(0, cause instanceof Error ? cause.message : String(cause), current);
-    }
-    if (response.url && !isHttpsUrl(response.url)) {
-      await response.body?.cancel();
-      throw new HttpError(0, "redirected to a non-https URL", response.url);
-    }
-    const location = response.headers.get("location");
-    if (isRedirect(response.status) && location) {
-      await response.body?.cancel();
-      if (hop >= MAX_REDIRECTS) throw new HttpError(0, "too many redirects", url);
-      current = new URL(location, current).href;
-      continue;
-    }
-    if (!response.ok) throw new HttpError(response.status, "(download failed)", current);
-    if (!response.body) throw new HttpError(0, "Response body is null", current);
-    fs.mkdirSync(path.dirname(dest), { recursive: true });
-    const fileStream = fs.createWriteStream(dest);
-    try {
-      await pipeline(response.body as unknown as NodeJS.ReadableStream, fileStream);
-    } catch (err) {
-      // Wait for the handle to close so the caller can remove the partial file on Windows.
-      if (!fileStream.closed) await once(fileStream, "close");
-      throw err;
-    }
-    return;
-  }
+function downloadHttps(url: string, dest: string, timeoutMs: number): Promise<unknown> {
+  return downloadToFile(url, { dest, timeoutMs, validateUrl: requireHttps });
 }
 
 /**
@@ -264,12 +225,9 @@ export async function downloadOutput(
       `Refusing to download HeyGen output from a non-https URL (${redactUrl(url)})`,
     );
   }
-  const tmp = `${dest}.${process.pid}-${Date.now()}.part`;
   try {
-    await downloadHttpsOnly(url, tmp, 600_000);
-    fs.renameSync(tmp, dest);
+    await downloadHttps(url, dest, 600_000);
   } catch (e) {
-    fs.rmSync(tmp, { force: true });
     const status = e instanceof HttpError ? e.status : 0;
     const expired = status === 403 || status === 404 || status === 410;
     const reason = e instanceof Error ? e.message : String(e);
@@ -365,7 +323,7 @@ function captionPathFor(dest: string, capExt: string): string {
 }
 
 /** https-only downloader for thumbnails (same redirect policy as outputs). */
-const downloadThumbHttpsOnly = (url: string, dest: string) => downloadHttpsOnly(url, dest, 120_000);
+const downloadThumbHttpsOnly = (url: string, dest: string) => downloadHttps(url, dest, 120_000);
 
 /** Secret-free summary of a job state (signed URLs reduced to origin+path). */
 export function summarizeState(state: HeygenJobState): Record<string, unknown> {

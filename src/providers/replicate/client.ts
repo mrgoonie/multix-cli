@@ -14,6 +14,7 @@
 import { PollTimeoutError, isTransientHttpError, pollUntil } from "../../core/async-poll.js";
 import { HttpError, ProviderError } from "../../core/errors.js";
 import { type FetchLike, fetchJson, httpErrorFromResponse } from "../../core/fetch-json.js";
+import { fetchSameOrigin } from "../../core/redirect-fetch.js";
 import {
   DEFAULT_REPLICATE_BASE_URL,
   assertPredictionId,
@@ -285,7 +286,7 @@ export class ReplicateClient {
   /**
    * Poll until the prediction reaches a terminal status (succeeded, failed,
    * canceled, aborted) and return it — callers decide success via
-   * assertSucceeded. Retries network/429/5xx; throws PollTimeoutError on deadline.
+   * assertSucceeded. Retries network/408/429/5xx; throws PollTimeoutError on deadline.
    */
   async waitForPrediction(
     prediction: ReplicatePrediction | string,
@@ -337,13 +338,18 @@ export class ReplicateClient {
     const subject = `file upload ${opts.filename}`;
     let response: Response;
     try {
-      response = await this.doFetch(url, {
-        method: "POST",
-        headers: this.headers(),
-        body: form,
-        signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS),
-      });
+      response = await fetchSameOrigin(
+        url,
+        {
+          method: "POST",
+          headers: this.headers(),
+          body: form,
+          signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS),
+        },
+        this.doFetch,
+      );
     } catch (cause) {
+      if (cause instanceof HttpError) throw mapReplicateError(cause, subject);
       const msg = cause instanceof Error ? cause.message : String(cause);
       throw mapReplicateError(new HttpError(0, msg, url), subject);
     }

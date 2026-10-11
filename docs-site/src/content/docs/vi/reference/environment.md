@@ -31,6 +31,12 @@ export MULTIX_OUTPUT_DIR="./multix-output"
 multix check
 ```
 
+Key không bao giờ bị chuyển tiếp sang origin khác khi gặp HTTP redirect. Nếu
+một request API bị chuyển hướng (redirect) sang host khác, hoặc từ `https://` sang `http://`,
+multix dừng lại và báo mã HTTP 3xx thay vì đi theo. Bản tải xuống mà provider
+chuyển sang host lưu trữ vẫn hoạt động, nhưng header chứa key được gỡ bỏ trước
+khi đi theo redirect đó.
+
 ## Xoay vòng Gemini key
 
 Thêm key Gemini phụ bằng `GEMINI_API_KEY_2`, `GEMINI_API_KEY_3`, … (hậu tố số
@@ -47,8 +53,10 @@ bắt buộc có `GEMINI_API_KEY`.
   về key tạo ra nó.
 - Veo chỉ xoay vòng ở bước submit. Khi job đã được nhận, polling và download dùng
   đúng key đó, nên giới hạn về sau không bao giờ tạo job thứ hai bị tính phí riêng.
-- `multix doc convert` dừng vòng thử lại của chính nó khi gặp giới hạn, vì xoay
-  vòng đã thử mọi key sẵn sàng.
+- `multix doc convert` chỉ thử lại một file sau lỗi mạng, timeout, 408 và 5xx.
+  Lệnh dừng khi gặp giới hạn, vì xoay vòng đã thử mọi key sẵn sàng, và báo lỗi
+  ngay khi thiếu key hoặc gặp mã 4xx khác. Lượt upload qua Files API bị timeout
+  khi đang gửi dữ liệu file, hoặc bị server chuyển hướng, cũng không được thử lại.
 - Thời gian nghỉ chỉ tồn tại trong process hiện tại. Log chỉ ghi tên biến môi
   trường, không bao giờ ghi giá trị key.
 - `multix check` liệt kê các key đang xoay vòng và ping từng key.
