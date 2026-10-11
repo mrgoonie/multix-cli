@@ -91,7 +91,9 @@ Chỉ đặt override khi cần thay default. Các biến gồm `IMAGE_GEN_MODEL
 `REPLICATE_BASE_URL` (API root cho mock hoặc proxy), `REPLICATE_IMAGE_MODEL`
 (mặc định `black-forest-labs/flux-schnell`) và `REPLICATE_VIDEO_MODEL`
 (mặc định `prunaai/p-video`). Video qua Cloudflare AI Gateway chỉ đọc
-`REPLICATE_API_TOKEN`.
+`REPLICATE_API_TOKEN`. `MULTIX_MAX_DOWNLOAD_MB` đặt giới hạn dung lượng cho
+mỗi file output Replicate được tải về (mặc định 2048); xem
+[Replicate](/vi/commands/replicate/) để biết chính sách tải file.
 
 Atlas Cloud nhận `ATLASCLOUD_BASE_URL` (base của media API, mặc định
 `https://api.atlascloud.ai/api/v1`) và một biến ghi đè model mặc định cho mỗi
@@ -103,7 +105,8 @@ và `ATLASCLOUD_IMAGE_TO_3D_MODEL`. Xem [Atlas Cloud](/vi/commands/atlascloud/)
 cho file cục bộ upload lên Atlas Cloud (mặc định 200).
 
 `HEYGEN_BASE_URL` ghi đè API base của HeyGen (mặc định
-`https://api.heygen.com`) cho proxy và test.
+`https://api.heygen.com`) cho proxy và test. Giá trị phải là `https://`;
+`http://` chỉ được chấp nhận cho `localhost`, `127.0.0.1` hoặc `[::1]`.
 
 Cloudflare chỉ chấp nhận các model image và speech Workers AI có sẵn;
 `CLOUDFLARE_AI_IMAGE_MODEL` và `CLOUDFLARE_AI_TTS_MODEL` vì vậy chỉ dùng để

@@ -9,6 +9,7 @@ import {
   parseModelRef,
 } from "../../../../src/providers/replicate/models.js";
 import {
+  checkOutputUrl,
   extFromContentType,
   extFromUrl,
   extractOutput,
@@ -29,6 +30,75 @@ describe("runtime-neutral Replicate modules", () => {
       /from\s+["'][^"']*(env-loader|http-client|logger|output-dir|json-input)/,
     );
     expect(src).not.toMatch(/process\./);
+  });
+});
+
+describe("checkOutputUrl", () => {
+  it("trusts replicate.delivery and its subdomains", () => {
+    expect(checkOutputUrl("https://replicate.delivery/a/out.png?sig=1")).toEqual({
+      host: "replicate.delivery",
+      trusted: true,
+    });
+    expect(checkOutputUrl("https://pbxt.replicate.delivery/a/out.png").trusted).toBe(true);
+  });
+
+  it("allows other public https hosts but flags them as untrusted", () => {
+    expect(checkOutputUrl("https://cdn.example.com/o.mp4")).toEqual({
+      host: "cdn.example.com",
+      trusted: false,
+    });
+    expect(checkOutputUrl("https://notreplicate.delivery/o.mp4").trusted).toBe(false);
+    expect(checkOutputUrl("https://8.8.8.8/o.png").trusted).toBe(false);
+    expect(checkOutputUrl("https://[2001:db8::1]/o.png").trusted).toBe(false);
+    expect(checkOutputUrl("https://[::ffff:8.8.8.8]/o.png").trusted).toBe(false);
+  });
+
+  it("refuses non-https URLs", () => {
+    for (const url of [
+      "http://replicate.delivery/a/out.png",
+      "ftp://replicate.delivery/x",
+      "file:///etc/passwd",
+    ]) {
+      expect(() => checkOutputUrl(url)).toThrow(/only https/);
+    }
+    expect(() => checkOutputUrl("not a url")).toThrow(/malformed URL/);
+  });
+
+  it("refuses localhost and loopback/private/link-local/unspecified addresses", () => {
+    for (const url of [
+      "https://localhost/x",
+      "https://LOCALHOST./x",
+      "https://app.localhost/x",
+      "https://127.0.0.1/x",
+      "https://2130706433/x", // 127.0.0.1 as a decimal integer
+      "https://0x7f.1/x",
+      "https://10.1.2.3/x",
+      "https://172.16.0.1/x",
+      "https://192.168.1.1/x",
+      "https://169.254.169.254/latest/meta-data",
+      "https://100.64.0.1/x",
+      "https://0.0.0.0/x",
+      "https://[::]/x",
+      "https://[::1]/x",
+      "https://[::ffff:127.0.0.1]/x",
+      "https://[::ffff:169.254.169.254]/x",
+      "https://[fd00::1]/x",
+      "https://[fe80::1]/x",
+    ]) {
+      expect(() => checkOutputUrl(url), url).toThrow(/local or private address/);
+    }
+  });
+
+  it("never echoes the signed query string", () => {
+    const err = (() => {
+      try {
+        checkOutputUrl("http://cdn.example.com/o.png?X-Amz-Signature=SIGSECRET");
+      } catch (e) {
+        return e as Error;
+      }
+    })();
+    expect(err?.message).toContain("cdn.example.com");
+    expect(err?.message).not.toContain("SIGSECRET");
   });
 });
 

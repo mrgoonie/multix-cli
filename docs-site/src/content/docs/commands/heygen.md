@@ -81,8 +81,9 @@ multix heygen video --avatar <look-id> --audio ./voiceover.mp3
 - A subtitle file is always produced when captions are requested.
   `--burn-captions` also burns them into the video and downloads that
   captioned render (`captioned_video_url`); the command fails if HeyGen
-  returns no captioned render. `--captions` downloads the subtitle file next
-  to the video.
+  returns no captioned render. `--captions` asks HeyGen to produce captions
+  (it adds a `caption` object to the create request) and downloads the
+  subtitle file next to the video.
 - Other `POST /v3/videos` variants (image, cinematic avatar, studio) are
   available through `heygen run video --input <json>`.
 
@@ -110,7 +111,7 @@ multix heygen languages
 multix heygen translate ./talk.mp4 --languages "Spanish, French, Chinese (Cantonese, Traditional)" \
   [--mode speed|precision] [--input-language <code>] [--audio-only] [--audio <ref>] \
   [--speakers <n>] [--keep-format] [--no-dynamic-duration] [--disable-music] [--enhance-speech] \
-  [--start <s>] [--end <s>] [--brand-glossary <id>] [--captions] [--output <dir>]
+  [--start <s>] [--end <s>] [--brand-glossary <id>] [--captions] [--output <dir|name.mp4>]
 
 multix heygen lipsync --video <ref> --audio <ref> [--mode speed|precision] [--start <s>] [--end <s>]
 ```
@@ -119,9 +120,22 @@ multix heygen lipsync --video <ref> --audio <ref> [--mode speed|precision] [--st
   parentheses are kept, so `Chinese (Cantonese, Traditional)` stays one
   language.
 - One translation job is created per language. The CLI waits for all of them,
-  downloads every successful output (`--output` is treated as a directory when
-  there are several), and exits non-zero if any language or download failed.
-  A failed download does not stop the remaining languages from downloading.
+  downloads every successful output, and exits non-zero if any language or
+  download failed. A failed download does not stop the remaining languages
+  from downloading.
+- An `--output` that ends in `/` or `\`, names an existing directory, or has
+  no extension is a directory that receives the default file names.
+- With several languages, an `--output` that ends in a media extension
+  (`.mp4`, `.webm`, `.mov`, `.mp3`, `.wav`, `.m4a`, `.aac`) is a name
+  template: `--output dub.mp4` saves `dub-Spanish.mp4`, `dub-French.mp4`, and
+  so on. When two outputs would get the same name (compared without regard to
+  case), the later one also gets its job ID (`dub-Spanish-<id>.mp4`), so no
+  output overwrites another. Any other `--output` is a directory.
+- Audio-only translations keep their audio extension: `--audio-only --output
+  dub.mp4` saves `dub-Spanish.mp3`.
+- `--captions` saves the subtitle file next to its video with a `.srt` or
+  `.vtt` extension (`dub-Spanish.srt`). If that would be the video's own path,
+  it is saved as `<name>.captions.srt` instead.
 
 ## Text-to-speech
 
@@ -204,6 +218,10 @@ multix heygen status <id> --type agent|video|translation|lipsync|model-video [--
   command to continue.
 - Output URLs are signed and expire. If a download fails with 403/404/410,
   re-run `status ... --download` to get a fresh URL.
+- Outputs, caption files, and thumbnails are only downloaded from `https://`
+  URLs, and every redirect must stay on `https://`. A non-HTTPS output or
+  caption URL (or a redirect to one) fails the job's delivery before anything
+  is written; a non-HTTPS thumbnail is skipped with a warning.
 
 ## Webhooks
 
@@ -256,6 +274,6 @@ failed or cancelled job as success.
 | Variable | Required | Description |
 | --- | --- | --- |
 | `HEYGEN_API_KEY` | For HeyGen | API key, sent as `X-Api-Key` |
-| `HEYGEN_BASE_URL` | No | Override the API base (default `https://api.heygen.com`), for proxies and tests |
+| `HEYGEN_BASE_URL` | No | Override the API base (default `https://api.heygen.com`), for proxies and tests. Must be `https://`; plain `http://` is accepted only for `localhost`, `127.0.0.1`, or `[::1]` |
 
 Digital-twin creation and voice cloning are not part of this provider.

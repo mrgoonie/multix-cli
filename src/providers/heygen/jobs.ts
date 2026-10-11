@@ -33,6 +33,8 @@ export interface HeygenJobState {
   videoId?: string;
   progress?: number;
   outputUrl?: string;
+  /** True when `outputUrl` is an audio file (an audio-only translation). */
+  outputIsAudio?: boolean;
   /** Video only: the burned-in caption render, when HeyGen produced one. */
   captionedVideoUrl?: string;
   thumbnailUrl?: string;
@@ -91,6 +93,7 @@ export function videoState(
 }
 
 export function translationState(t: HeygenVideoTranslation): HeygenJobState {
+  const audioOnly = !str(t.video_url) && !!str(t.audio_url);
   return {
     kind: "translation",
     id: t.id,
@@ -98,6 +101,7 @@ export function translationState(t: HeygenVideoTranslation): HeygenJobState {
     done: t.status === "completed" || t.status === "failed",
     succeeded: t.status === "completed",
     outputUrl: str(t.video_url) ?? str(t.audio_url),
+    ...(audioOnly ? { outputIsAudio: true } : {}),
     captionUrl: str(t.srt_caption_url) ?? str(t.vtt_caption_url),
     outputLanguage: str(t.output_language),
     failureMessage: str(t.failure_message),
@@ -252,24 +256,56 @@ export function getJobState(
 }
 
 export type WaitOptions = Omit<PollOptions<HeygenJobState>, "fetchStatus" | "isTerminal"> &
-  JobReadOptions;
+  JobReadOptions & {
+    /**
+     * Delay before the first poll, counted against `timeoutMs`. Used to spread
+     * the first polls of parallel jobs instead of sending them as one burst.
+     */
+    startDelayMs?: number;
+  };
 
 /** Default first poll interval; HeyGen recommends polling every 10-30 s. */
 export const DEFAULT_POLL_INTERVAL_MS = 10_000;
 
+const STAGGER_STEP_MS = 500;
+const STAGGER_MAX_MS = 5_000;
+
+/**
+ * First-poll offset for the `index`-th of several parallel jobs: one step per
+ * job (500 ms, or the poll interval when shorter), capped at 5 s.
+ */
+export function staggerOffsetMs(index: number, intervalMs: number): number {
+  if (!Number.isFinite(index) || index <= 0) return 0;
+  const step = Math.min(STAGGER_STEP_MS, Math.max(0, intervalMs));
+  return Math.min(index * step, STAGGER_MAX_MS);
+}
+
+const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
 /** Poll until terminal. Returns the final state; does not throw on job failure. */
-export function waitForJob(
+export async function waitForJob(
   client: HeygenClient,
   kind: HeygenJobKind,
   id: string,
   opts: WaitOptions,
 ): Promise<HeygenJobState> {
-  const { burnCaptions, ...poll } = opts;
+  const { burnCaptions, startDelayMs = 0, ...poll } = opts;
+  // Keep at least half the budget for polling so a tiny --wait-timeout still polls.
+  let pendingDelay = Math.min(Math.max(0, startDelayMs), Math.floor(poll.timeoutMs / 2));
+  const read = createJobStatusReader(client, kind, id, { burnCaptions });
+  // The start delay runs inside the first status read, so it counts against the
+  // caller's timeout and a timeout message reports the caller's own budget.
   return pollUntil({
     intervalMs: DEFAULT_POLL_INTERVAL_MS,
     maxIntervalMs: 30_000,
     ...poll,
-    fetchStatus: createJobStatusReader(client, kind, id, { burnCaptions }),
+    fetchStatus: async (ctx) => {
+      const delay = pendingDelay;
+      if (delay <= 0) return read(ctx);
+      pendingDelay = 0;
+      await (poll.sleep ?? defaultSleep)(delay);
+      return read({ remainingMs: Math.max(1, ctx.remainingMs - delay) });
+    },
     isTerminal: (s) => s.done,
   });
 }

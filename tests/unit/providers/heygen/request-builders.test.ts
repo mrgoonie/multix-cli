@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ValidationError } from "../../../../src/core/errors.js";
+import { ConfigError, ValidationError } from "../../../../src/core/errors.js";
 import { extractJobIds } from "../../../../src/providers/heygen/commands/run.js";
 import { templateBody } from "../../../../src/providers/heygen/commands/template.js";
 import {
@@ -7,8 +7,10 @@ import {
   buildModelVideoRequest,
   buildSpeechRequest,
   buildVideoAgentRequest,
+  checkBaseUrl,
   checkCallback,
   classifyMediaRef,
+  isHttpsUrl,
   splitLanguages,
 } from "../../../../src/providers/heygen/request-builders.js";
 
@@ -50,6 +52,65 @@ describe("checkCallback", () => {
     expect(checkCallback(undefined)).toBeUndefined();
     expect(checkCallback("https://hook.test/x")).toBe("https://hook.test/x");
     expect(() => checkCallback("http://hook.test/x")).toThrow(ValidationError);
+  });
+});
+
+describe("checkBaseUrl", () => {
+  it("accepts https and loopback http", () => {
+    for (const ok of [
+      "https://proxy.example/heygen",
+      "http://localhost:8787",
+      "http://127.0.0.1:3000/api",
+      "http://[::1]:9000",
+    ]) {
+      expect(checkBaseUrl(` ${ok} `, "HEYGEN_BASE_URL")).toBe(ok);
+    }
+  });
+
+  it("rejects plain http for other hosts and malformed values with a ConfigError", () => {
+    const err = (() => {
+      try {
+        checkBaseUrl("http://evil.test/v3?token=SECRETQ", "HEYGEN_BASE_URL");
+      } catch (e) {
+        return e as Error;
+      }
+    })();
+    expect(err).toBeInstanceOf(ConfigError);
+    expect(err?.message).toMatch(/HEYGEN_BASE_URL must use https:\/\//);
+    expect(err?.message).not.toContain("SECRETQ");
+    expect(() => checkBaseUrl("http://localhost.evil.test", "HEYGEN_BASE_URL")).toThrow(
+      ConfigError,
+    );
+    expect(() => checkBaseUrl("ftp://api.heygen.com", "HEYGEN_BASE_URL")).toThrow(ConfigError);
+    expect(() => checkBaseUrl("api.heygen.com", "HEYGEN_BASE_URL")).toThrow(/absolute https/);
+  });
+
+  it("normalizes an uppercase scheme before deciding", () => {
+    expect(checkBaseUrl("HTTPS://proxy.example", "HEYGEN_BASE_URL")).toBe("HTTPS://proxy.example");
+    expect(checkBaseUrl("HTTP://LOCALHOST:8787", "HEYGEN_BASE_URL")).toBe("HTTP://LOCALHOST:8787");
+    expect(() => checkBaseUrl("HTTP://evil.test", "HEYGEN_BASE_URL")).toThrow(ConfigError);
+  });
+
+  it("does not echo userinfo from a rejected base URL", () => {
+    const err = (() => {
+      try {
+        checkBaseUrl("http://user:PASSW0RD@evil.test/v3", "HEYGEN_BASE_URL");
+      } catch (e) {
+        return e as Error;
+      }
+    })();
+    expect(err).toBeInstanceOf(ConfigError);
+    expect(err?.message).not.toContain("PASSW0RD");
+  });
+});
+
+describe("isHttpsUrl", () => {
+  it("accepts only absolute https URLs", () => {
+    expect(isHttpsUrl("https://files.test/a.mp4?sig=1")).toBe(true);
+    expect(isHttpsUrl("HTTPS://files.test/a.mp4")).toBe(true);
+    expect(isHttpsUrl("http://files.test/a.mp4")).toBe(false);
+    expect(isHttpsUrl("file:///etc/passwd")).toBe(false);
+    expect(isHttpsUrl("not a url")).toBe(false);
   });
 });
 

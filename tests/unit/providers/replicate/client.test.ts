@@ -284,6 +284,37 @@ describe("HTTP error mapping", () => {
       client(fake).createPrediction({ model: parseModelRef("o/m"), input: {} }),
     ).rejects.toThrow(/Network error contacting Replicate: ECONNRESET/);
   });
+
+  it.each([
+    [
+      "a network error or timeout",
+      { throws: new Error("The operation was aborted due to timeout") },
+    ],
+    ["a 5xx", { status: 502, text: "bad gateway" }],
+    ["a 2xx with invalid JSON", { status: 201, text: "<html>captive portal</html>" }],
+    ["a 2xx that is not a prediction", { status: 201, json: { hello: "world" } }],
+    ["a 2xx with an invalid prediction id", { status: 201, json: prediction("../x", "starting") }],
+  ] as const)("warns about a possibly orphaned prediction after %s on create", async (_, res) => {
+    const fake = createFakeReplicate({ "POST /models/o/m/predictions": [res] });
+    await expect(
+      client(fake).createPrediction({ model: parseModelRef("o/m"), input: {} }),
+    ).rejects.toThrow(/may have been created anyway.*replicate\.com\/predictions before retrying/);
+  });
+
+  it("does not add the orphan hint to client errors or to status checks", async () => {
+    const fake = createFakeReplicate({
+      "POST /models/o/m/predictions": [{ status: 422, json: { detail: "bad" } }],
+      "GET /predictions/p1": [{ throws: new Error("ECONNRESET") }],
+    });
+    const create = await client(fake)
+      .createPrediction({ model: parseModelRef("o/m"), input: {} })
+      .catch((e: unknown) => e as Error);
+    expect(create.message).not.toContain("created anyway");
+    const get = await client(fake)
+      .getPrediction("p1")
+      .catch((e: unknown) => e as Error);
+    expect(get.message).not.toContain("created anyway");
+  });
 });
 
 describe("uploadFile", () => {

@@ -91,7 +91,9 @@ settings include `IMAGE_GEN_MODEL`, `VIDEO_GEN_MODEL`, `MULTIMODAL_MODEL`,
 `REPLICATE_BASE_URL` (API root for mocks or proxies), `REPLICATE_IMAGE_MODEL`
 (default `black-forest-labs/flux-schnell`), and `REPLICATE_VIDEO_MODEL`
 (default `prunaai/p-video`). Cloudflare AI Gateway video reads only
-`REPLICATE_API_TOKEN`.
+`REPLICATE_API_TOKEN`. `MULTIX_MAX_DOWNLOAD_MB` sets the size limit for each
+downloaded Replicate output file (default 2048); see
+[Replicate](/commands/replicate/#outputs) for the download policy.
 
 Atlas Cloud accepts `ATLASCLOUD_BASE_URL` (media API base, default
 `https://api.atlascloud.ai/api/v1`) and one default-model override per command:
@@ -103,7 +105,8 @@ for the built-in defaults. `ATLASCLOUD_MAX_UPLOAD_MB` sets the size limit for
 local files uploaded to Atlas Cloud (default 200).
 
 `HEYGEN_BASE_URL` overrides the HeyGen API base (default
-`https://api.heygen.com`) for proxies and tests.
+`https://api.heygen.com`) for proxies and tests. It must be `https://`; plain
+`http://` is accepted only for `localhost`, `127.0.0.1`, or `[::1]`.
 
 Cloudflare accepts only the built-in Workers AI image and speech model IDs;
 `CLOUDFLARE_AI_IMAGE_MODEL` and `CLOUDFLARE_AI_TTS_MODEL` are therefore useful

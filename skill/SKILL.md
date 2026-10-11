@@ -1,7 +1,7 @@
 ---
 name: multix
 description: AI multimodal CLI — generate and edit images (OpenAI, Codex driver, Gemini Nano Banana, Imagen, MiniMax, OpenRouter, Leonardo, BytePlus Seedream, Cloudflare Workers AI FLUX.1 Schnell, fal.ai FLUX, Replicate FLUX), generate video (Gemini Veo, MiniMax Hailuo, OpenRouter via Veo/Seedance/Kling, Leonardo via Motion/Veo/Kling/Hailuo/Seedance/LTX, BytePlus Seedance, Cloudflare AI Gateway via Replicate, fal.ai queue models, Replicate direct API models incl. P-Video, HeyGen Video Agent and scripted avatar videos), video translation and lipsync (HeyGen), TTS/STT/music (OpenAI, Gemini Flash TTS incl. Gemini 3.8 with delivery-style control, MiniMax, Cloudflare Workers AI MeloTTS, ElevenLabs), 3D models (BytePlus Hyper3D/Hitem3d), analyze/transcribe media, convert documents to Markdown, optimize media via ffmpeg/ImageMagick, and self-update the CLI. Use whenever the user wants to create, edit, or transform images/video/audio/3D/documents from a CLI, mentions any of: OpenAI, Codex image driver, image-to-image, i2i, image edit, watercolor/cyberpunk style transfer, reference image, OpenRouter, Nano Banana, Flux, Seedream, Veo, Hailuo, Seedance, Kling, Cloudflare Workers AI, AI Gateway, fal.ai, Atlas Cloud, Replicate, replicate.com models, Replicate predictions, HeyGen, avatar video, talking head, Video Agent, video translation, dubbing, lipsync, video generation, text-to-video, image-to-video, i2v, ElevenLabs voice cloning, updating/upgrading multix, or asks for batch media optimization.
-version: 0.13.0 # x-release-please-version
+version: 0.14.0 # x-release-please-version
 ---
 
 # multix — AI Multimodal CLI
@@ -178,7 +178,9 @@ multix replicate status <prediction-id> --wait --download
 multix replicate cancel <prediction-id>
 ```
 
-Shared flags: `--async`, `--wait`, `--prefer-wait [seconds]` (sends `Prefer: wait=N`, still polls if unfinished), `--wait-timeout <ms>`, `--no-download` (print URLs), `--output <path|dir/>`. `failed`/`canceled`/`aborted` predictions exit non-zero. Local files up to 256 KB are inlined as data URIs; larger files (< 100 MB) go through the Replicate Files API.
+Shared flags: `--async`, `--wait`, `--prefer-wait [seconds]` (integer 1-60, bare flag = 60; sends `Prefer: wait=N`, still polls if unfinished; put the prompt before a bare flag), `--wait-timeout <ms>`, `--no-download` (print URLs), `--output <path|dir/>`. `failed`/`canceled`/`aborted` predictions exit non-zero. Local files up to 256 KB are inlined as data URIs; larger files (< 100 MB) go through the Replicate Files API.
+
+Output downloads are `https://` only; `localhost` and loopback/private/link-local/special-purpose IP literals (including redirects; hostnames are not resolved) are refused, non-`replicate.delivery` hosts are downloaded with a warning, and each file is capped at `MULTIX_MAX_DOWNLOAD_MB` (default 2048). If submitting fails with a network error, timeout, 5xx, or an unreadable 2xx response, the prediction may still exist and bill: check https://replicate.com/predictions before retrying instead of resubmitting blindly.
 
 ## HeyGen
 
@@ -194,7 +196,7 @@ multix heygen video-agent "45-second explainer for a note app" [--avatar <look-i
 multix heygen avatars [--type photo_avatar] [--cursor <token>]
 multix heygen voices [--language English]
 multix heygen video "Hello!" --avatar <look-id> [--voice <id>] [--aspect-ratio 9:16] [--engine avatar_iv|avatar_v|avatar_iii] [--burn-captions]
-multix heygen translate <ref> --languages "Spanish, Chinese (Cantonese, Traditional)" [--output <dir>]
+multix heygen translate <ref> --languages "Spanish, Chinese (Cantonese, Traditional)" [--output <dir|dub.mp4>]   # several languages: dub.mp4 -> dub-Spanish.mp4, ...
 multix heygen lipsync --video <ref> --audio <ref>
 multix heygen tts "Hello" --voice <voice-id>
 multix heygen template <template-id> --input @vars.json
@@ -354,6 +356,7 @@ multix byteplus 3d --input-image ./front.png ./side.png --prompt "Generate from 
 
 # Docs → Markdown (Gemini)
 multix doc convert --input report.pdf [--auto-name] [--output ./out.md]
+cat report.pdf | multix doc convert --input - --output ./out.md   # "-" reads stdin; --stdin-ext <ext> (e.g. pdf) if undetected
 
 # Media optimization (ffmpeg + ImageMagick)
 multix media optimize --input <file> --output <file> [--target-size <MB>] [--quality 85] [--max-width 1920]
@@ -383,6 +386,7 @@ Requires `cwebp` (libwebp: `brew install webp`, `apt install webp`) on `PATH`.
 | Variable | Purpose |
 |---|---|
 | `MULTIX_OUTPUT_DIR` | Override default output dir |
+| `MULTIX_MAX_DOWNLOAD_MB` | Size limit per downloaded Replicate output file (default 2048) |
 | `OPENAI_IMAGE_MODEL` / `OPENAI_TTS_MODEL` / `OPENAI_STT_MODEL` | OpenAI model defaults |
 | `OPENROUTER_IMAGE_MODEL` | Default OpenRouter image model |
 | `OPENROUTER_FALLBACK_MODELS` | CSV; applies to `generate` AND `i2i` |

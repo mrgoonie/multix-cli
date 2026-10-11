@@ -1,6 +1,7 @@
 /**
- * Materialize piped stdin as a temporary file so `--files -` works with
- * commands that need a path (Gemini inline parts, Files API uploads).
+ * Materialize piped stdin as a temporary file so `--files -` (gemini) and
+ * `--input -` (doc convert) work with commands that need a path (Gemini
+ * inline parts, Files API uploads).
  *
  * The extension is detected from magic bytes so MIME type inference keeps
  * working; `--stdin-ext` overrides it. The file lives in a private temp
@@ -22,7 +23,7 @@ const HEAD_BYTES = 4096;
 export const MAX_STDIN_BYTES = 2 * 1024 ** 3;
 const WAIT_HINT_MS = 2000;
 
-type StdinLike = AsyncIterable<Buffer | string> & { isTTY?: boolean };
+export type StdinLike = AsyncIterable<Buffer | string> & { isTTY?: boolean };
 
 const ascii = (buf: Buffer, start: number, end: number) => buf.toString("latin1", start, end);
 
@@ -183,14 +184,29 @@ export interface StdinFile {
   cleanup: () => void;
 }
 
+/** How the calling command spells its stdin argument, used in user-facing messages. */
+export interface StdinUsage {
+  /** Option that accepts `-`, e.g. "--files" or "--input". */
+  flag?: string;
+  /** Example command line shown when stdin is a terminal. */
+  example?: string;
+  /** Extension suggested when the piped type cannot be detected, e.g. "mp3" or "pdf". */
+  extExample?: string;
+}
+
+const DEFAULT_FLAG = "--files";
+const DEFAULT_EXAMPLE = "cat clip.mp3 | multix gemini transcribe --files -";
+const DEFAULT_EXT_EXAMPLE = "mp3";
+
 /** Read all of stdin into a private temp file. */
 export async function stdinToTempFile(
-  opts: { input?: StdinLike; ext?: string; maxBytes?: number } = {},
+  opts: { input?: StdinLike; ext?: string; maxBytes?: number } & StdinUsage = {},
 ): Promise<StdinFile> {
   const input = opts.input ?? (process.stdin as unknown as StdinLike);
+  const flag = opts.flag ?? DEFAULT_FLAG;
   if (input.isTTY) {
     throw new ValidationError(
-      "`--files -` reads piped input, but stdin is a terminal. Example: cat clip.mp3 | multix gemini transcribe --files -",
+      `\`${flag} -\` reads piped input, but stdin is a terminal. Example: ${opts.example ?? DEFAULT_EXAMPLE}`,
     );
   }
   const forcedExt = opts.ext ? normalizeExt(opts.ext) : undefined;
@@ -203,7 +219,7 @@ export async function stdinToTempFile(
 
   // A pipe that never sends data would otherwise hang silently.
   const hint = setTimeout(() => {
-    process.stderr.write("Waiting for data on stdin (`--files -`)... press Ctrl+C to cancel\n");
+    process.stderr.write(`Waiting for data on stdin (\`${flag} -\`)... press Ctrl+C to cancel\n`);
   }, WAIT_HINT_MS);
   hint.unref?.();
 
@@ -231,7 +247,7 @@ export async function stdinToTempFile(
       clearTimeout(hint);
       fs.closeSync(fd);
     }
-    if (size === 0) throw new ValidationError("`--files -` was given but stdin was empty");
+    if (size === 0) throw new ValidationError(`\`${flag} -\` was given but stdin was empty`);
 
     const detectedExt = forcedExt ?? detectExtension(head);
     const finalPath = path.join(dir, `stdin${detectedExt ?? ".bin"}`);
@@ -256,17 +272,18 @@ export function labelError(message: string, input: FileInput): string {
 }
 
 /**
- * Resolve `--files` values, replacing a single `-` with piped stdin.
+ * Resolve file arguments (`--files` by default), replacing a single `-` with piped stdin.
  * Call `cleanup()` when done; it also runs on exit and on interrupt signals.
  */
 export async function resolveFileInputs(
   files: string[],
-  opts: { stdinExt?: string; input?: StdinLike; maxBytes?: number } = {},
+  opts: { stdinExt?: string; input?: StdinLike; maxBytes?: number } & StdinUsage = {},
 ): Promise<{ inputs: FileInput[]; cleanup: () => void }> {
+  const flag = opts.flag ?? DEFAULT_FLAG;
   const stdinCount = files.filter((f) => f === STDIN_ARG).length;
-  if (stdinCount > 1) throw new ValidationError("`-` (stdin) can only be passed once to --files");
+  if (stdinCount > 1) throw new ValidationError(`\`-\` (stdin) can only be passed once to ${flag}`);
   if (opts.stdinExt && stdinCount === 0) {
-    throw new ValidationError("--stdin-ext only applies when --files includes `-`");
+    throw new ValidationError(`--stdin-ext only applies when ${flag} includes \`-\``);
   }
 
   for (const f of files) {
@@ -281,11 +298,13 @@ export async function resolveFileInputs(
     input: opts.input,
     ext: opts.stdinExt,
     maxBytes: opts.maxBytes,
+    flag: opts.flag,
+    example: opts.example,
   });
   if (!stdin.detected) {
     stdin.cleanup();
     throw new ValidationError(
-      "Could not detect the type of piped stdin; pass --stdin-ext (e.g. --stdin-ext mp3)",
+      `Could not detect the type of piped stdin; pass --stdin-ext (e.g. --stdin-ext ${opts.extExample ?? DEFAULT_EXT_EXAMPLE})`,
     );
   }
   return {
