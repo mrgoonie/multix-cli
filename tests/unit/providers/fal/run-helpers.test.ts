@@ -344,11 +344,31 @@ describe("submitAndWait", () => {
       "http://queue.fal.run/fal-ai/flux/requests/req-1/status",
       RESPONSE_URL,
     );
-    await expect(run()).rejects.toThrow(/only https/);
+    await expect(run()).rejects.toBeInstanceOf(ProviderError);
     expect(calls).toHaveLength(1);
   });
 
-  describe("with a loopback FAL_BASE_URL", () => {
+  it.each(["status_url", "response_url"])(
+    "raises a clear ProviderError when the submit response is missing %s",
+    async (field) => {
+      const submitBody: Record<string, string> = {
+        request_id: "req-1",
+        status_url: STATUS_URL,
+        response_url: RESPONSE_URL,
+      };
+      Reflect.deleteProperty(submitBody, field);
+      const fetchMock = vi.fn(
+        async () => new Response(JSON.stringify(submitBody), { status: 200 }),
+      );
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
+      const err = await run().catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ProviderError);
+      expect((err as Error).message).toBe(`fal submit response is missing ${field}`);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  describe("with a custom FAL_BASE_URL", () => {
     const originalBase = process.env.FAL_BASE_URL;
     afterEach(() => {
       if (originalBase === undefined) Reflect.deleteProperty(process.env, "FAL_BASE_URL");
@@ -364,6 +384,23 @@ describe("submitAndWait", () => {
       await run();
       expect(calls).toHaveLength(3);
     });
+
+    it.each(["https://10.0.0.5", "http://fal-proxy.internal:8080"])(
+      "allows follow-up URLs on the %s base origin and refuses a foreign host",
+      async (base) => {
+        process.env.FAL_BASE_URL = base;
+        const ok = mockSubmit(
+          `${base}/fal-ai/flux/requests/req-1/status`,
+          `${base}/fal-ai/flux/requests/req-1`,
+        );
+        await run();
+        expect(ok).toHaveLength(3);
+
+        const refused = mockSubmit("https://evil.example/status", `${base}/r`);
+        await expect(run()).rejects.toBeInstanceOf(ProviderError);
+        expect(refused).toHaveLength(1);
+      },
+    );
 
     it("still refuses http loopback when the base URL is the public fal host", async () => {
       process.env.FAL_BASE_URL = "https://queue.fal.run";

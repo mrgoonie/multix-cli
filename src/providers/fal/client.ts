@@ -20,43 +20,56 @@ import { ConfigError, HttpError } from "../../core/errors.js";
 import { httpJson } from "../../core/http-client.js";
 import type { Logger } from "../../core/logger.js";
 import { redactUrl } from "../../core/redact.js";
-import { checkUrlSafety, isLoopbackHost } from "../../core/url-safety.js";
 import { DEFAULT_FAL_BASE_URL } from "./models.js";
 
 /**
  * fal's documented queue host. Submit responses point `status_url` /
  * `response_url` here, so it stays trusted even when FAL_BASE_URL is a proxy.
- * Kept to this exact host (no wildcard subdomains): it is the only host the
- * queue API uses today.
+ * Kept to this exact host on https with the default port (no wildcard
+ * subdomains): it is the only host the queue API uses today.
  */
 export const FAL_QUEUE_HOST = "queue.fal.run";
 
+function parseUrl(url: string): URL | undefined {
+  try {
+    return new URL(url);
+  } catch {
+    return undefined;
+  }
+}
+
+/** Lowercased hostname without a trailing dot (IPv6 keeps its brackets). */
+function normalizedHost(u: URL): string {
+  return u.hostname.toLowerCase().replace(/\.$/, "");
+}
+
+/** Scheme, host and port, with the default port elided by the URL parser. */
+function normalizedOrigin(u: URL): string {
+  return `${u.protocol}//${normalizedHost(u)}:${u.port}`;
+}
+
 /**
- * Throws a ProviderError unless `url` is safe to receive the fal key: https
- * and on the configured base URL's host or {@link FAL_QUEUE_HOST}. Plain http
- * is accepted only for a loopback URL, and only when the base URL itself is
- * loopback (local dev servers and tests). Messages name the host only, never
- * the path or query string.
+ * Throws a ProviderError unless `url` may receive the fal key. Two cases are
+ * trusted:
+ * - the same origin (scheme, host, port) as FAL_BASE_URL — the key already
+ *   goes there on submit, so this adds no new exposure (covers local dev
+ *   servers and http or private-address proxies the operator configured);
+ * - https on exactly {@link FAL_QUEUE_HOST} with the default port.
+ * Messages name the host only, never the path, query string or key.
  */
 export function assertTrustedFalUrl(url: string, baseUrl: string): void {
-  let base: URL | undefined;
-  try {
-    base = new URL(baseUrl);
-  } catch {
-    base = undefined;
+  const target = parseUrl(url);
+  if (!target) {
+    throw new ProviderError("Refusing to send the fal key to a malformed URL", "fal");
   }
-  const baseHost = base?.hostname.toLowerCase().replace(/\.$/, "");
-  const { host } = checkUrlSafety(url, {
-    provider: "fal",
-    allowLocalhostHttp: base !== undefined && isLoopbackHost(base.hostname),
-    action: "send the fal key to",
-  });
-  if (host !== FAL_QUEUE_HOST && host !== baseHost) {
-    throw new ProviderError(
-      `Refusing to send the fal key to ${host}: not the fal queue host or FAL_BASE_URL host`,
-      "fal",
-    );
-  }
+  const base = parseUrl(baseUrl);
+  if (base && normalizedOrigin(target) === normalizedOrigin(base)) return;
+  const host = normalizedHost(target);
+  if (target.protocol === "https:" && host === FAL_QUEUE_HOST && target.port === "") return;
+  throw new ProviderError(
+    `Refusing to send the fal key to ${host || "this URL"}: not https://${FAL_QUEUE_HOST} or the FAL_BASE_URL origin`,
+    "fal",
+  );
 }
 
 export function requireFalKey(): string {

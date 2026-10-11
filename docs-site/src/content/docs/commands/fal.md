@@ -60,9 +60,10 @@ path segments, e.g. `fal-ai/kling-video`); the full model id used for `run`,
 - Submission uses the full model id; the queue's status/result endpoints are
   keyed by the app id (owner/alias) instead.
 - The key is sent to a `status_url` / `response_url` from the submit response
-  only when it is `https://` and on `queue.fal.run` or the `FAL_BASE_URL` host
-  (plain `http://` is accepted only for a loopback `FAL_BASE_URL`). Any other
-  URL fails with a provider error naming the host, before the key is sent.
+  only when it has the same origin (scheme, host and port) as `FAL_BASE_URL`,
+  or is `https://queue.fal.run` on the default port. Any other URL fails with
+  a provider error naming the host, before the key is sent. A submit response
+  without these URLs also fails with a provider error.
 - Polling is bounded by `--wait-timeout` (a wall-clock deadline, in
   milliseconds) and retries transient network/5xx errors. A timeout or
   unrecoverable error prints the request ID so you can resume with

@@ -93,23 +93,82 @@ describe("assertTrustedFalUrl", () => {
     }
   });
 
-  it("refuses plain http on a public host, even the fal queue host", () => {
-    expect(() =>
-      assertTrustedFalUrl(`http://queue.fal.run${STATUS}?x=1`, "https://queue.fal.run"),
-    ).toThrow(/only https/);
+  it("normalises case, a trailing dot and an explicit default port", () => {
+    for (const url of [
+      `https://QUEUE.FAL.RUN${STATUS}`,
+      `https://queue.fal.run.${STATUS}`,
+      `https://queue.fal.run:443${STATUS}`,
+    ]) {
+      expect(() => assertTrustedFalUrl(url, "https://proxy.example.com")).not.toThrow();
+    }
   });
 
-  it("allows http loopback only when the base URL is itself loopback", () => {
+  it("refuses the userinfo trick (the real host is after the @)", () => {
+    expect(() =>
+      assertTrustedFalUrl(`https://queue.fal.run@evil.example${STATUS}`, "https://queue.fal.run"),
+    ).toThrow(/evil\.example/);
+  });
+
+  it("refuses a non-default port on the fal queue host", () => {
+    expect(() =>
+      assertTrustedFalUrl(`https://queue.fal.run:8443${STATUS}`, "https://queue.fal.run"),
+    ).toThrow(ProviderError);
+  });
+
+  it("refuses plain http on the fal queue host", () => {
+    expect(() =>
+      assertTrustedFalUrl(`http://queue.fal.run${STATUS}?x=1`, "https://queue.fal.run"),
+    ).toThrow(ProviderError);
+  });
+
+  it("allows loopback only on the same origin as a loopback base URL", () => {
     expect(() =>
       assertTrustedFalUrl(`http://127.0.0.1:8787${STATUS}`, "http://127.0.0.1:8787"),
     ).not.toThrow();
     expect(() =>
       assertTrustedFalUrl(`http://127.0.0.1:8787${STATUS}`, "https://queue.fal.run"),
     ).toThrow(ProviderError);
-    // A different loopback name than the base is still not the base host.
+    // A different loopback name or port than the base is a different origin.
     expect(() =>
       assertTrustedFalUrl(`http://localhost:8787${STATUS}`, "http://127.0.0.1:8787"),
     ).toThrow(ProviderError);
+    expect(() =>
+      assertTrustedFalUrl(`http://127.0.0.1:9999${STATUS}`, "http://127.0.0.1:8787"),
+    ).toThrow(ProviderError);
+  });
+
+  it("allows an IPv6 loopback base's own origin", () => {
+    expect(() =>
+      assertTrustedFalUrl(`http://[::1]:8787${STATUS}`, "http://[::1]:8787"),
+    ).not.toThrow();
+    expect(() => assertTrustedFalUrl(`http://[::1]:9999${STATUS}`, "http://[::1]:8787")).toThrow(
+      ProviderError,
+    );
+  });
+
+  it("allows a private-IP https base's own origin and still refuses a foreign host", () => {
+    const base = "https://10.0.0.5";
+    expect(() => assertTrustedFalUrl(`https://10.0.0.5${STATUS}`, base)).not.toThrow();
+    expect(() => assertTrustedFalUrl(`https://evil.example${STATUS}`, base)).toThrow(ProviderError);
+    expect(() => assertTrustedFalUrl(`https://10.0.0.6${STATUS}`, base)).toThrow(ProviderError);
+  });
+
+  it("allows an http non-loopback proxy base's own origin and still refuses a foreign host", () => {
+    const base = "http://fal-proxy.internal:8080";
+    expect(() =>
+      assertTrustedFalUrl(`http://fal-proxy.internal:8080${STATUS}`, base),
+    ).not.toThrow();
+    expect(() => assertTrustedFalUrl(`http://evil.example:8080${STATUS}`, base)).toThrow(
+      ProviderError,
+    );
+    // Same host but another scheme or port is a different origin.
+    expect(() => assertTrustedFalUrl(`https://fal-proxy.internal${STATUS}`, base)).toThrow(
+      ProviderError,
+    );
+  });
+
+  it("refuses a malformed URL", () => {
+    expect(() => assertTrustedFalUrl("not a url", "https://queue.fal.run")).toThrow(/malformed/);
   });
 
   it("names the host only, never the path or query string", () => {
