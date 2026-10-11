@@ -7,6 +7,7 @@
  */
 
 import { HttpError, MultixError, ProviderError } from "../../core/errors.js";
+import { toFetchError } from "../../core/fetch-error.js";
 import { DEFAULT_TIMEOUT_MS, type FetchLike } from "../../core/fetch-json.js";
 import { fetchSameOrigin } from "../../core/redirect-fetch.js";
 import { CLOUDFLARE_VIDEO_MODEL } from "./model-ids.js";
@@ -77,23 +78,25 @@ function isAbort(cause: unknown): boolean {
 }
 
 /**
- * Turn a fetch rejection into a multix error. Timeouts and network failures
- * become HttpError(0) naming only the gateway origin (the path holds the
- * account and gateway ids); anything else unexpected becomes a ProviderError.
+ * Turn a fetch or redirect failure into a multix error that names only the
+ * gateway origin: the request path holds the account and gateway ids.
+ * Timeouts become a transient HttpError(0) with a clear message; other
+ * rejections are classified by `toFetchError` (transient by default,
+ * ConfigError/ProviderError for deterministic faults).
  */
 function cloudflareFetchFailure(cause: unknown, url: string, timeoutMs: number): MultixError {
-  if (cause instanceof MultixError) return cause;
   const origin = new URL(url).origin;
+  if (cause instanceof HttpError) {
+    // Redirect failures (loop, bad Location) carry the full request URL.
+    return new HttpError(cause.status, cause.snippet, origin, cause.retryAfterMs, { cause });
+  }
+  if (cause instanceof MultixError) return cause;
   if (isAbort(cause)) {
     return new HttpError(0, `request timed out after ${timeoutMs / 1000}s`, origin, undefined, {
       cause,
     });
   }
-  const msg = cause instanceof Error ? cause.message : String(cause);
-  if (cause instanceof TypeError) {
-    return new HttpError(0, `network error: ${msg}`, origin, undefined, { cause });
-  }
-  return new ProviderError(`Cloudflare request failed: ${msg}`, "Cloudflare", { cause });
+  return toFetchError(cause, origin, { provider: "Cloudflare" });
 }
 
 async function send(

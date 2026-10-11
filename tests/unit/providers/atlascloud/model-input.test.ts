@@ -137,6 +137,15 @@ describe("buildModelInput", () => {
     ).toThrow(/black-forest-labs\/flux-schnell does not accept --duration.*prompt, size/);
   });
 
+  it.each([
+    ["--duration", true],
+    ["[text]", true],
+    ["duration", false],
+  ])("suggests `multix atlas run` only for CLI input %s", (flag, hinted) => {
+    const run = () => buildModelInput(flux, [{ flag, value: "5", candidates: F.duration }]);
+    expect(run).toThrow(hinted ? /Use `multix atlas run black-forest-labs/ : /Its inputs: [^`]*$/);
+  });
+
   it("reports missing required fields with the flag to pass", () => {
     expect(() =>
       buildModelInput(gptEdit, [
