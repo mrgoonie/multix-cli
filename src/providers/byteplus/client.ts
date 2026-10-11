@@ -4,14 +4,14 @@
  * Base URL override via BYTEPLUS_BASE_URL.
  */
 
-import { resolveBaseUrl, resolveKey } from "../../core/env-loader.js";
+import { resolveProviderBaseUrl, resolveRoutedKey } from "../../core/env-loader.js";
 import { ConfigError, HttpError } from "../../core/errors.js";
 import { httpJson } from "../../core/http-client.js";
 import type { Logger } from "../../core/logger.js";
-import { DEFAULT_BYTEPLUS_BASE_URL } from "./models.js";
+import { BYTEPLUS_ROUTING } from "./models.js";
 
 export function requireBytePlusKey(): string {
-  const key = resolveKey("BYTEPLUS_API_KEY") ?? resolveKey("ARK_API_KEY");
+  const key = resolveRoutedKey(BYTEPLUS_ROUTING);
   if (!key) {
     throw new ConfigError(
       "BytePlus API key not set. Set BYTEPLUS_API_KEY or ARK_API_KEY. Get one at https://console.byteplus.com/auth/api-keys",
@@ -21,9 +21,7 @@ export function requireBytePlusKey(): string {
 }
 
 export function bytePlusBaseUrl(): string {
-  return resolveBaseUrl("BYTEPLUS_BASE_URL", DEFAULT_BYTEPLUS_BASE_URL, [
-    ["BYTEPLUS_API_KEY", "ARK_API_KEY"],
-  ]);
+  return resolveProviderBaseUrl(BYTEPLUS_ROUTING);
 }
 
 export interface BytePlusRequestOptions {

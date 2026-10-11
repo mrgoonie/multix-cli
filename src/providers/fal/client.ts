@@ -14,16 +14,16 @@
  * app id themselves via `appIdFromModel`.
  */
 
-import { resolveBaseUrl, resolveKey } from "../../core/env-loader.js";
+import { resolveProviderBaseUrl, resolveRoutedKey } from "../../core/env-loader.js";
 import { ValidationError } from "../../core/errors.js";
 import { ConfigError, HttpError } from "../../core/errors.js";
 import { httpJson } from "../../core/http-client.js";
 import type { Logger } from "../../core/logger.js";
 import { redactUrl } from "../../core/redact.js";
-import { DEFAULT_FAL_BASE_URL } from "./models.js";
+import { FAL_ROUTING } from "./models.js";
 
 export function requireFalKey(): string {
-  const key = resolveKey("FAL_KEY");
+  const key = resolveRoutedKey(FAL_ROUTING);
   if (!key) {
     throw new ConfigError("FAL_KEY is not set. Get one at https://fal.ai/dashboard/keys");
   }
@@ -31,7 +31,7 @@ export function requireFalKey(): string {
 }
 
 export function falBaseUrl(): string {
-  return resolveBaseUrl("FAL_BASE_URL", DEFAULT_FAL_BASE_URL, ["FAL_KEY"]);
+  return resolveProviderBaseUrl(FAL_ROUTING);
 }
 
 export interface FalRequestOptions {

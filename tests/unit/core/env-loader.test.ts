@@ -16,13 +16,26 @@ import {
   redact,
   resolveBaseUrl,
   resolveKey,
+  resolveProviderBaseUrl,
   resolveTrustedSetting,
 } from "../../../src/core/env-loader.js";
 import { ConfigError } from "../../../src/core/errors.js";
+import { requireAtlasKey } from "../../../src/providers/atlascloud/commands/env.js";
+import { ATLAS_ROUTING } from "../../../src/providers/atlascloud/models.js";
+import { requireBytePlusKey } from "../../../src/providers/byteplus/client.js";
+import { BYTEPLUS_ROUTING } from "../../../src/providers/byteplus/models.js";
 import {
   requireCloudflareConfig,
   requireCloudflareVideoConfig,
 } from "../../../src/providers/cloudflare/models.js";
+import { falBaseUrl, requireFalKey } from "../../../src/providers/fal/client.js";
+import { FAL_ROUTING } from "../../../src/providers/fal/models.js";
+import { HEYGEN_ROUTING } from "../../../src/providers/heygen/models.js";
+import { requireHeygenKey } from "../../../src/providers/heygen/node-helpers.js";
+import { requireLeonardoKey } from "../../../src/providers/leonardo/client.js";
+import { LEONARDO_ROUTING } from "../../../src/providers/leonardo/models.js";
+import { REPLICATE_ROUTING } from "../../../src/providers/replicate/models.js";
+import { requireReplicateToken } from "../../../src/providers/replicate/node-client.js";
 
 describe("env-loader", () => {
   beforeEach(() => {
@@ -185,10 +198,19 @@ describe("env-loader", () => {
       "REPLICATE_API_TOKEN",
     ];
     const CF_CREDS = ["CLOUDFLARE_API_TOKEN"];
+    const ROUTINGS = [
+      ATLAS_ROUTING,
+      BYTEPLUS_ROUTING,
+      FAL_ROUTING,
+      HEYGEN_ROUTING,
+      LEONARDO_ROUTING,
+      REPLICATE_ROUTING,
+    ];
     const VARS = [
       NAME,
       KEY,
       ...CF,
+      ...ROUTINGS.flatMap((r) => [r.name, ...r.keyEnvs]),
       ALLOW_PROJECT_BASE_URL_ENV,
       "MULTIX_DISABLE_HOME_ENV",
       "MULTIX_LEGACY_CLAUDE_ENV",
@@ -552,10 +574,142 @@ describe("env-loader", () => {
           "FAL_BASE_URL ignored: set in project .env while FAL_KEY comes from the shell",
         );
         expect(report.map((l) => l.message).join("\n")).not.toContain("evil.example.net");
-        expect(cloudflareReadiness()).toEqual({ native: false, video: false });
+        expect(cloudflareReadiness()).toMatchObject({ native: false, video: false });
       } finally {
         Reflect.deleteProperty(process.env, "FAL_KEY");
         Reflect.deleteProperty(process.env, "FAL_BASE_URL");
+      }
+    });
+
+    describe("multix check matches the commands", () => {
+      const loadCheck = () => import("../../../src/commands/check.js");
+      const messages = (lines: { message: string }[]) => lines.map((l) => l.message);
+      const thrown = (fn: () => unknown): string | undefined => {
+        try {
+          fn();
+        } catch (err) {
+          return (err as Error).message;
+        }
+        return undefined;
+      };
+
+      it("a refused project gateway ID blocks native commands, and check says so", async () => {
+        const { cloudflareReadiness, routingSettingReport } = await loadCheck();
+        process.env.CLOUDFLARE_API_TOKEN = "cf-token-from-shell";
+        process.env.CLOUDFLARE_ACCOUNT_ID = "my-account";
+        writeProject("CLOUDFLARE_AI_GATEWAY_ID=attacker-gw\n");
+        loadEnv();
+        const readiness = cloudflareReadiness();
+        expect(readiness).toMatchObject({ native: false, video: false });
+        expect(readiness.nativeCheck.refused).toBe(true);
+        expect(readiness.nativeCheck.problem).toBe(thrown(() => requireCloudflareConfig()));
+        expect(messages(routingSettingReport())).toEqual([
+          "CLOUDFLARE_ACCOUNT_ID in effect (from shell)",
+          "CLOUDFLARE_AI_GATEWAY_ID ignored: set in project .env while CLOUDFLARE_API_TOKEN comes from the shell; commands that use it will stop with an error",
+        ]);
+      });
+
+      it("a video token from the shell blocks video only, and check names it", async () => {
+        const { cloudflareReadiness, routingSettingReport } = await loadCheck();
+        writeProject(
+          "CLOUDFLARE_API_TOKEN=cf-repo-token\nCLOUDFLARE_ACCOUNT_ID=repo-account\nCLOUDFLARE_AI_GATEWAY_ID=repo-gw\n",
+        );
+        process.env.REPLICATE_API_TOKEN = "r8-shell-token";
+        loadEnv();
+        const readiness = cloudflareReadiness();
+        expect(readiness).toMatchObject({ native: true, video: false });
+        expect(thrown(() => requireCloudflareConfig())).toBeUndefined();
+        expect(readiness.videoCheck.refused).toBe(true);
+        expect(readiness.videoCheck.problem).toBe(thrown(() => requireCloudflareVideoConfig()));
+        const sameFile = "from project .env, which also holds every key sent with it";
+        const videoStops =
+          "ignored: set in project .env while REPLICATE_API_TOKEN comes from the shell; video commands will stop with an error";
+        expect(messages(routingSettingReport())).toEqual([
+          `CLOUDFLARE_ACCOUNT_ID in effect (${sameFile})`,
+          `CLOUDFLARE_ACCOUNT_ID (video) ${videoStops}`,
+          `CLOUDFLARE_AI_GATEWAY_ID in effect (${sameFile})`,
+          `CLOUDFLARE_AI_GATEWAY_ID (video) ${videoStops}`,
+        ]);
+      });
+
+      it("labels a project value used through the opt-in or because it equals the default", async () => {
+        const { routingSettingReport } = await loadCheck();
+        process.env.FAL_KEY = "fal-shell-key";
+        process.env.LEONARDO_API_KEY = "leo-shell-key";
+        writeProject(
+          `FAL_BASE_URL=${FAL_ROUTING.defaultUrl}/\nLEONARDO_BASE_URL=https://repo-proxy.example.net\n`,
+        );
+        loadEnv();
+        expect(messages(routingSettingReport())).toEqual([
+          "FAL_BASE_URL in effect (from project .env; same as the default endpoint)",
+          "LEONARDO_BASE_URL ignored: set in project .env while LEONARDO_API_KEY comes from the shell; commands that use it will stop with an error",
+        ]);
+
+        process.env[ALLOW_PROJECT_BASE_URL_ENV] = "1";
+        expect(messages(routingSettingReport())).toContain(
+          `LEONARDO_BASE_URL in effect (from project .env; allowed by ${ALLOW_PROJECT_BASE_URL_ENV})`,
+        );
+      });
+
+      it("reports a base URL the https rule rejects, from any source", async () => {
+        const { routingSettingReport } = await loadCheck();
+        process.env.FAL_KEY = "fal-shell-key";
+        process.env.FAL_BASE_URL = "http://proxy.example.org";
+        writeUser("HEYGEN_BASE_URL=http://user-proxy.example.org\n");
+        writeProject("HEYGEN_BASE_URL=https://repo-proxy.example.net\n");
+        process.env.HEYGEN_API_KEY = "hg-shell-key";
+        loadEnv();
+        const report = routingSettingReport();
+        const falError = thrown(() => falBaseUrl());
+        expect(falError).toMatch(/FAL_BASE_URL must use https:\/\//);
+        expect(report).toContainEqual({
+          level: "warn",
+          message: `${falError}; commands that use it will stop with an error`,
+        });
+        // The project value is ignored, and the ~/.multix/.env fallback fails the https rule.
+        expect(messages(report).join("\n")).toContain(
+          "HEYGEN_BASE_URL must use https:// (host user-proxy.example.org)",
+        );
+        expect(messages(report).join("\n")).not.toContain("repo-proxy.example.net");
+      });
+    });
+
+    it("each provider reads its keys in the order its trust check uses", () => {
+      const readers = new Map<string, () => string>([
+        [ATLAS_ROUTING.name, requireAtlasKey],
+        [BYTEPLUS_ROUTING.name, requireBytePlusKey],
+        [FAL_ROUTING.name, requireFalKey],
+        [HEYGEN_ROUTING.name, requireHeygenKey],
+        [LEONARDO_ROUTING.name, requireLeonardoKey],
+        [REPLICATE_ROUTING.name, requireReplicateToken],
+      ]);
+      for (const routing of ROUTINGS) {
+        const read = readers.get(routing.name);
+        if (!read) throw new Error(`no key reader for ${routing.name}`);
+        routing.keyEnvs.forEach((n, i) => {
+          process.env[n] = `key-${i}`;
+        });
+        expect(read(), routing.name).toBe("key-0");
+        if (routing.keyEnvs.length > 1) {
+          // A blank first name is skipped by the provider and by the trust check alike.
+          process.env[routing.keyEnvs[0]] = "  ";
+          expect(read(), routing.name).toBe("key-1");
+        }
+      }
+
+      // End to end: shell keys plus a project base URL refuse, naming the key the provider sends.
+      _resetEnvLoader();
+      for (const routing of ROUTINGS) {
+        routing.keyEnvs.forEach((n, i) => {
+          process.env[n] = `key-${i}`;
+        });
+      }
+      writeProject(ROUTINGS.map((r) => `${r.name}=https://repo-proxy.example.net\n`).join(""));
+      loadEnv();
+      for (const routing of ROUTINGS) {
+        expect(() => resolveProviderBaseUrl(routing)).toThrow(
+          `${routing.name} is set in project env file ${path.join(tmp, ".env")}, but ${routing.keyEnvs[0]} comes from the shell`,
+        );
       }
     });
 

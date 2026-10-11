@@ -203,11 +203,23 @@ const OPT_IN_HINT = `To use the project value for one command, run it as \`${ALL
  */
 export type CredentialSpec = string | readonly string[];
 
+/**
+ * Why a project env file value is used: the opt-in is set, the value equals
+ * the vendor default, or every key sent with it comes from that same file.
+ */
+export type ProjectTrustBasis = "opt-in" | "default" | "same-file";
+
 /** Effective state of a setting that decides where a key is sent. */
 export type TrustedSettingState =
   | { status: "unset" }
-  /** The value is used (shell, ~/.multix/.env, opt-in, or same project file as every key). */
-  | { status: "used"; value: string; source: EnvFileSource | "shell" }
+  /** The value is used (shell, ~/.multix/.env, or a project file on a ProjectTrustBasis). */
+  | {
+      status: "used";
+      value: string;
+      source: EnvFileSource | "shell";
+      /** Set only when `source` is "project". */
+      basis?: ProjectTrustBasis;
+    }
   /** The project value is ignored and the ~/.multix/.env value is used instead. */
   | { status: "fallback"; value: string; file: string; reason: string }
   /** The project value is ignored and there is nothing to fall back to. */
@@ -271,42 +283,54 @@ export function inspectTrustedSetting(
       ? { status: "fallback", value: userValue, file: origin.file, reason: "it is empty" }
       : { status: "unset" };
   }
-  const reason =
-    projectBaseUrlAllowed() || value === harmless
-      ? undefined
-      : foreignCredential(credentials, origin.file);
-  if (!reason) return { status: "used", value, source: "project" };
+  const project = (basis: ProjectTrustBasis): TrustedSettingState => ({
+    status: "used",
+    value,
+    source: "project",
+    basis,
+  });
+  if (value === harmless) return project("default");
+  if (projectBaseUrlAllowed()) return project("opt-in");
+  const reason = foreignCredential(credentials, origin.file);
+  if (!reason) return project("same-file");
   return userValue
     ? { status: "fallback", value: userValue, file: origin.file, reason }
     : { status: "refused", file: origin.file, reason };
 }
 
-/**
- * Read a setting that decides where `credentials` are sent, applying
- * inspectTrustedSetting: an ignored project value prints one warning per
- * variable (variable, file and key source; never the value) and uses the
- * ~/.multix/.env value; with nothing to fall back to, this throws a
- * ConfigError so no request is sent to a host the user did not choose.
- */
-export function resolveTrustedSetting(
+/** The ConfigError message for a refused setting (variable, file and key source; never the value). */
+export function trustedSettingRefusal(
   name: string,
-  credentials: readonly CredentialSpec[],
-  harmless?: string,
-): string | undefined {
-  const state = inspectTrustedSetting(name, credentials, harmless);
+  state: { file: string; reason: string },
+): string {
+  return `${name} is set in project env file ${state.file}, but ${state.reason}, so the project is not trusted to choose where that key is sent. Set ${name} in your shell or ~/.multix/.env, or keep the key in the same project file. ${OPT_IN_HINT}`;
+}
+
+/**
+ * Act on an inspectTrustedSetting result the way a command does: an ignored
+ * project value prints one warning per variable (variable, file and key
+ * source; never the value) and uses the ~/.multix/.env value; a refused value
+ * throws a ConfigError so no request is sent to a host the user did not choose.
+ */
+export function applyTrustedSetting(name: string, state: TrustedSettingState): string | undefined {
   if (state.status === "unset") return undefined;
   if (state.status === "used") return state.value;
-  if (state.status === "refused") {
-    throw new ConfigError(
-      `${name} is set in project env file ${state.file}, but ${state.reason}, so the project is not trusted to choose where that key is sent. Set ${name} in your shell or ~/.multix/.env, or keep the key in the same project file. ${OPT_IN_HINT}`,
-    );
-  }
+  if (state.status === "refused") throw new ConfigError(trustedSettingRefusal(name, state));
   const hint = state.reason === "it is empty" ? "" : ` ${OPT_IN_HINT}`;
   warnOnce(
     `ignored:${name}`,
     `Ignoring ${name} from project env file ${state.file} (${state.reason}); using the value from ~/.multix/.env.${hint}`,
   );
   return state.value;
+}
+
+/** inspectTrustedSetting then applyTrustedSetting: read a setting the way a command does. */
+export function resolveTrustedSetting(
+  name: string,
+  credentials: readonly CredentialSpec[],
+  harmless?: string,
+): string | undefined {
+  return applyTrustedSetting(name, inspectTrustedSetting(name, credentials, harmless));
 }
 
 function warnOnce(key: string, message: string): void {
@@ -329,19 +353,20 @@ const stripSlash = (url: string) => url.replace(/\/+$/, "");
 /** Hosts that may be reached over plain http:// (local mock servers). */
 const LOOPBACK_HTTP_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
-/** Throw unless `value` is an absolute https:// URL, or http:// to a loopback host. */
-function checkBaseUrlScheme(name: string, value: string): void {
+/**
+ * Why `value` cannot be used as the base URL `name`, or undefined when it is
+ * an absolute https:// URL, or http:// to a loopback host.
+ */
+function baseUrlSchemeError(name: string, value: string): string | undefined {
   let url: URL;
   try {
     url = new URL(value);
   } catch {
-    throw new ConfigError(`${name} must be an absolute https:// URL`);
+    return `${name} must be an absolute https:// URL`;
   }
-  if (url.protocol === "https:") return;
-  if (url.protocol === "http:" && LOOPBACK_HTTP_HOSTS.has(url.hostname)) return;
-  throw new ConfigError(
-    `${name} must use https:// (host ${url.hostname || "(none)"}); plain http:// is only allowed for localhost, 127.0.0.1, or [::1]`,
-  );
+  if (url.protocol === "https:") return undefined;
+  if (url.protocol === "http:" && LOOPBACK_HTTP_HOSTS.has(url.hostname)) return undefined;
+  return `${name} must use https:// (host ${url.hostname || "(none)"}); plain http:// is only allowed for localhost, 127.0.0.1, or [::1]`;
 }
 
 /** The raw value of `name` when it only restates `defaultUrl` (safe from any source). */
@@ -350,13 +375,43 @@ function defaultHarmless(name: string, defaultUrl: string): string | undefined {
   return raw && stripSlash(raw) === stripSlash(defaultUrl) ? raw : undefined;
 }
 
-/** inspectTrustedSetting for a base URL: a value equal to `defaultUrl` is always fine. */
+/**
+ * Where a provider sends its key: the env var that overrides its API root,
+ * the default root, and the key env names in the order the provider reads
+ * them (the first non-blank one is sent). Each provider exports one of these
+ * so its key lookup, its base URL trust check and `multix check` agree.
+ */
+export interface BaseUrlRouting {
+  readonly name: string;
+  readonly defaultUrl: string;
+  readonly keyEnvs: readonly [string, ...string[]];
+}
+
+/** inspectTrustedSetting for a base URL, plus the https rule the command applies. */
+export type BaseUrlState = TrustedSettingState & {
+  /** Set when the value in effect would be rejected by the https rule. */
+  schemeError?: string;
+};
+
+/**
+ * Effective state of a provider base URL. A value equal to `defaultUrl` is
+ * always fine; any other value in effect must pass the https rule.
+ */
 export function inspectBaseUrl(
   name: string,
   defaultUrl: string,
   credentials: readonly CredentialSpec[],
-): TrustedSettingState {
-  return inspectTrustedSetting(name, credentials, defaultHarmless(name, defaultUrl));
+): BaseUrlState {
+  const state = inspectTrustedSetting(name, credentials, defaultHarmless(name, defaultUrl));
+  if (state.status !== "used" && state.status !== "fallback") return state;
+  if (stripSlash(state.value) === stripSlash(defaultUrl)) return state;
+  const schemeError = baseUrlSchemeError(name, state.value);
+  return schemeError ? { ...state, schemeError } : state;
+}
+
+/** inspectBaseUrl for a provider's BaseUrlRouting. */
+export function inspectProviderBaseUrl(routing: BaseUrlRouting): BaseUrlState {
+  return inspectBaseUrl(routing.name, routing.defaultUrl, [routing.keyEnvs]);
 }
 
 /**
@@ -364,7 +419,7 @@ export function inspectBaseUrl(
  * back to `defaultUrl`.
  *
  * `credentials` are the keys the provider sends to that root (see
- * CredentialSpec). Project env file values follow resolveTrustedSetting. A
+ * CredentialSpec). Project env file values follow applyTrustedSetting. A
  * non-default base URL must be https://, except http:// to localhost,
  * 127.0.0.1 or [::1], and one warning per variable names the provider and the
  * hostname only, so a redirected API key is never silent.
@@ -374,15 +429,26 @@ export function resolveBaseUrl(
   defaultUrl: string,
   credentials: readonly CredentialSpec[],
 ): string {
-  const value = resolveTrustedSetting(name, credentials, defaultHarmless(name, defaultUrl));
+  const state = inspectBaseUrl(name, defaultUrl, credentials);
+  const value = applyTrustedSetting(name, state);
   if (!value || stripSlash(value) === stripSlash(defaultUrl)) return defaultUrl;
-  checkBaseUrlScheme(name, value);
+  if (state.schemeError) throw new ConfigError(state.schemeError);
   const provider = name.replace(/_BASE_URL$/, "");
   warnOnce(
     `custom:${name}`,
     `${name} is set: ${provider} API requests, including your API key, go to ${hostOf(value)} instead of the default host.`,
   );
   return value;
+}
+
+/** resolveBaseUrl for a provider's BaseUrlRouting. */
+export function resolveProviderBaseUrl(routing: BaseUrlRouting): string {
+  return resolveBaseUrl(routing.name, routing.defaultUrl, [routing.keyEnvs]);
+}
+
+/** The key a provider sends: the first non-blank of its `keyEnvs`, trimmed. */
+export function resolveRoutedKey(routing: BaseUrlRouting): string | undefined {
+  return resolveFirstKey(...routing.keyEnvs)?.value;
 }
 
 /** Env files that loadEnv actually read, in load order (paths only, never values). */

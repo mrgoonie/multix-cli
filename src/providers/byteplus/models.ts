@@ -7,6 +7,17 @@
 
 export const DEFAULT_BYTEPLUS_BASE_URL = "https://ark.ap-southeast.bytepluses.com/api/v3";
 
+/**
+ * Base URL override and the key env names in the order the provider reads
+ * them (first non-blank wins). Shared by the key lookup, the base URL trust
+ * check and `multix check`, so the three cannot drift apart.
+ */
+export const BYTEPLUS_ROUTING = {
+  name: "BYTEPLUS_BASE_URL",
+  defaultUrl: DEFAULT_BYTEPLUS_BASE_URL,
+  keyEnvs: ["BYTEPLUS_API_KEY", "ARK_API_KEY"],
+} as const;
+
 export const DEFAULT_BYTEPLUS_IMAGE_MODEL = "seedream-4-0-250828";
 export const DEFAULT_BYTEPLUS_VIDEO_MODEL = "seedance-2.0";
 export const DEFAULT_BYTEPLUS_3D_MODEL = "hyper3d-gen2-260112";

@@ -10,7 +10,7 @@ import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import type { Command } from "commander";
 import { PollTimeoutError } from "../../core/async-poll.js";
-import { resolveBaseUrl, resolveKey } from "../../core/env-loader.js";
+import { resolveProviderBaseUrl, resolveRoutedKey } from "../../core/env-loader.js";
 import { ConfigError, HttpError, ValidationError } from "../../core/errors.js";
 import type { Logger } from "../../core/logger.js";
 import { getOutputDir } from "../../core/output-dir.js";
@@ -28,8 +28,8 @@ import {
 } from "./jobs.js";
 import {
   ASSET_MIME_BY_EXT,
-  DEFAULT_HEYGEN_BASE_URL,
   HEYGEN_API_SETTINGS_URL,
+  HEYGEN_ROUTING,
   type HeygenJobKind,
   LIMITS,
 } from "./models.js";
@@ -37,7 +37,7 @@ import { checkBaseUrl, classifyMediaRef, isHttpsUrl } from "./request-builders.j
 import type { HeygenAssetInput } from "./types.js";
 
 export function requireHeygenKey(): string {
-  const key = resolveKey("HEYGEN_API_KEY")?.trim();
+  const key = resolveRoutedKey(HEYGEN_ROUTING);
   if (!key) {
     throw new ConfigError(
       `HEYGEN_API_KEY is not set. Create an API key at ${HEYGEN_API_SETTINGS_URL} (API usage is billed separately from HeyGen web plans).`,
@@ -53,7 +53,7 @@ export function requireHeygenKey(): string {
  */
 export function createHeygenClientFromEnv(): HeygenClient {
   const apiKey = requireHeygenKey();
-  const baseUrl = resolveBaseUrl("HEYGEN_BASE_URL", DEFAULT_HEYGEN_BASE_URL, ["HEYGEN_API_KEY"]);
+  const baseUrl = resolveProviderBaseUrl(HEYGEN_ROUTING);
   return new HeygenClient({ apiKey, baseUrl: checkBaseUrl(baseUrl, "HEYGEN_BASE_URL") });
 }
 

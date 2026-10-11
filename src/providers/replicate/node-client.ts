@@ -4,21 +4,20 @@
  * REPLICATE_BASE_URL overrides the API root (mock servers, proxies, tests).
  */
 
-import { resolveBaseUrl, resolveFirstKey, resolveKey } from "../../core/env-loader.js";
+import { resolveFirstKey, resolveKey, resolveProviderBaseUrl } from "../../core/env-loader.js";
 import { ConfigError } from "../../core/errors.js";
 import { ReplicateClient } from "./client.js";
 import {
-  DEFAULT_REPLICATE_BASE_URL,
   DEFAULT_REPLICATE_IMAGE_MODEL,
   DEFAULT_REPLICATE_VIDEO_MODEL,
+  REPLICATE_ROUTING,
 } from "./models.js";
 
-export const REPLICATE_TOKEN_ENV = "REPLICATE_API_TOKEN";
-export const REPLICATE_TOKEN_FALLBACK_ENV = "REPLICATE_API_KEY";
+export const [REPLICATE_TOKEN_ENV, REPLICATE_TOKEN_FALLBACK_ENV] = REPLICATE_ROUTING.keyEnvs;
 
 /** The configured token and which env var supplied it, or undefined. */
 export function resolveReplicateToken(): { token: string; envUsed: string } | undefined {
-  const found = resolveFirstKey(REPLICATE_TOKEN_ENV, REPLICATE_TOKEN_FALLBACK_ENV);
+  const found = resolveFirstKey(...REPLICATE_ROUTING.keyEnvs);
   return found ? { token: found.value, envUsed: found.envUsed } : undefined;
 }
 
@@ -33,9 +32,7 @@ export function requireReplicateToken(): string {
 }
 
 export function replicateBaseUrl(): string {
-  return resolveBaseUrl("REPLICATE_BASE_URL", DEFAULT_REPLICATE_BASE_URL, [
-    [REPLICATE_TOKEN_ENV, REPLICATE_TOKEN_FALLBACK_ENV],
-  ]);
+  return resolveProviderBaseUrl(REPLICATE_ROUTING);
 }
 
 export function replicateImageModel(): string {

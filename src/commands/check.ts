@@ -8,30 +8,32 @@ import fs from "node:fs";
 import os from "node:os";
 import type { Command } from "commander";
 import {
-  type CredentialSpec,
+  ALLOW_PROJECT_BASE_URL_ENV,
+  type BaseUrlRouting,
+  type BaseUrlState,
   type TrustedSettingState,
   getLoadedEnvFiles,
-  inspectBaseUrl,
-  inspectTrustedSetting,
+  inspectProviderBaseUrl,
   legacyClaudeEnvEnabled,
   legacyClaudeEnvFiles,
   redact,
   resolveFirstKey,
-  resolveKey,
 } from "../core/env-loader.js";
 import { createLogger } from "../core/logger.js";
-import { DEFAULT_ATLAS_BASE_URL } from "../providers/atlascloud/models.js";
-import { DEFAULT_BYTEPLUS_BASE_URL } from "../providers/byteplus/models.js";
+import { ATLAS_ROUTING } from "../providers/atlascloud/models.js";
+import { BYTEPLUS_ROUTING } from "../providers/byteplus/models.js";
 import {
-  CLOUDFLARE_NATIVE_CREDENTIALS,
-  CLOUDFLARE_VIDEO_CREDENTIALS,
+  CLOUDFLARE_ACCOUNT_ID_ENV,
+  CLOUDFLARE_GATEWAY_ID_ENV,
+  type CloudflareConfigCheck,
+  inspectCloudflareConfig,
 } from "../providers/cloudflare/models.js";
-import { DEFAULT_FAL_BASE_URL } from "../providers/fal/models.js";
+import { FAL_ROUTING } from "../providers/fal/models.js";
 import { listGeminiKeys } from "../providers/gemini/key-pool.js";
-import { DEFAULT_HEYGEN_BASE_URL } from "../providers/heygen/models.js";
-import { DEFAULT_LEONARDO_BASE_URL } from "../providers/leonardo/models.js";
+import { HEYGEN_ROUTING } from "../providers/heygen/models.js";
+import { LEONARDO_ROUTING } from "../providers/leonardo/models.js";
 import { checkCodexAuthenticated } from "../providers/openai/codex-image-driver.js";
-import { DEFAULT_REPLICATE_BASE_URL } from "../providers/replicate/models.js";
+import { REPLICATE_ROUTING } from "../providers/replicate/models.js";
 import { checkBinary } from "./check-helpers/binary-check.js";
 import { pingGemini } from "./check-helpers/gemini-ping.js";
 import { FFMPEG_HINT, MAGICK_HINT, SETUP_HINTS } from "./check-helpers/setup-hints.js";
@@ -42,6 +44,12 @@ export interface ProviderEntry {
   envFallback?: string;
   optional: boolean;
   link: string;
+}
+
+/** Key names of a provider that exports its BaseUrlRouting, in the order it reads them. */
+function keyNames(routing: BaseUrlRouting): Pick<ProviderEntry, "envPrimary" | "envFallback"> {
+  const [envPrimary, envFallback] = routing.keyEnvs;
+  return envFallback ? { envPrimary, envFallback } : { envPrimary };
 }
 
 const PROVIDERS: ProviderEntry[] = [
@@ -71,14 +79,13 @@ const PROVIDERS: ProviderEntry[] = [
   },
   {
     name: "Leonardo.Ai",
-    envPrimary: "LEONARDO_API_KEY",
+    ...keyNames(LEONARDO_ROUTING),
     optional: true,
     link: "https://app.leonardo.ai/settings/api-keys",
   },
   {
     name: "BytePlus",
-    envPrimary: "BYTEPLUS_API_KEY",
-    envFallback: "ARK_API_KEY",
+    ...keyNames(BYTEPLUS_ROUTING),
     optional: true,
     link: "https://console.byteplus.com/auth/api-keys",
   },
@@ -90,26 +97,25 @@ const PROVIDERS: ProviderEntry[] = [
   },
   {
     name: "fal.ai",
-    envPrimary: "FAL_KEY",
+    ...keyNames(FAL_ROUTING),
     optional: true,
     link: "https://fal.ai/dashboard/keys",
   },
   {
     name: "Atlas Cloud",
-    envPrimary: "ATLASCLOUD_API_KEY",
+    ...keyNames(ATLAS_ROUTING),
     optional: true,
     link: "https://www.atlascloud.ai/console/api-keys",
   },
   {
     name: "Replicate",
-    envPrimary: "REPLICATE_API_TOKEN",
-    envFallback: "REPLICATE_API_KEY",
+    ...keyNames(REPLICATE_ROUTING),
     optional: true,
     link: "https://replicate.com/account/api-tokens",
   },
   {
     name: "HeyGen",
-    envPrimary: "HEYGEN_API_KEY",
+    ...keyNames(HEYGEN_ROUTING),
     optional: true,
     link: "https://app.heygen.com/developers/api",
   },
@@ -133,86 +139,91 @@ export function getCheckProviders(): ProviderEntry[] {
   return [...PROVIDERS];
 }
 
-const usable = (s: TrustedSettingState) => s.status === "used" || s.status === "fallback";
-
-/**
- * Cloudflare readiness with the same trust rules the provider applies to the
- * account and gateway IDs, so an ID the provider would refuse is not counted.
- */
-export function cloudflareReadiness(): { native: boolean; video: boolean } {
-  const apiToken = resolveKey("CLOUDFLARE_API_TOKEN")?.trim();
-  const replicateToken = resolveKey("REPLICATE_API_TOKEN")?.trim();
-  const ids = (credentials: readonly CredentialSpec[]) => ({
-    account: usable(inspectTrustedSetting("CLOUDFLARE_ACCOUNT_ID", credentials)),
-    gateway: usable(inspectTrustedSetting("CLOUDFLARE_AI_GATEWAY_ID", credentials)),
-  });
-  const native = ids(CLOUDFLARE_NATIVE_CREDENTIALS);
-  const video = ids(CLOUDFLARE_VIDEO_CREDENTIALS);
-  return {
-    native: Boolean(apiToken) && native.account,
-    video: Boolean(apiToken && replicateToken) && video.account && video.gateway,
-  };
+/** Cloudflare readiness from the same inspection the commands run before they send anything. */
+export function cloudflareReadiness(): {
+  native: boolean;
+  video: boolean;
+  nativeCheck: CloudflareConfigCheck;
+  videoCheck: CloudflareConfigCheck;
+} {
+  const nativeCheck = inspectCloudflareConfig("native");
+  const videoCheck = inspectCloudflareConfig("video");
+  return { native: !nativeCheck.problem, video: !videoCheck.problem, nativeCheck, videoCheck };
 }
 
-/** Settings that decide where a key is sent, with the credentials each one receives. */
-const ROUTING_SETTINGS: { name: string; defaultUrl?: string; credentials: CredentialSpec[] }[] = [
-  {
-    name: "ATLASCLOUD_BASE_URL",
-    defaultUrl: DEFAULT_ATLAS_BASE_URL,
-    credentials: ["ATLASCLOUD_API_KEY"],
-  },
-  {
-    name: "BYTEPLUS_BASE_URL",
-    defaultUrl: DEFAULT_BYTEPLUS_BASE_URL,
-    credentials: [["BYTEPLUS_API_KEY", "ARK_API_KEY"]],
-  },
-  { name: "FAL_BASE_URL", defaultUrl: DEFAULT_FAL_BASE_URL, credentials: ["FAL_KEY"] },
-  { name: "HEYGEN_BASE_URL", defaultUrl: DEFAULT_HEYGEN_BASE_URL, credentials: ["HEYGEN_API_KEY"] },
-  {
-    name: "LEONARDO_BASE_URL",
-    defaultUrl: DEFAULT_LEONARDO_BASE_URL,
-    credentials: ["LEONARDO_API_KEY"],
-  },
-  {
-    name: "REPLICATE_BASE_URL",
-    defaultUrl: DEFAULT_REPLICATE_BASE_URL,
-    credentials: [["REPLICATE_API_TOKEN", "REPLICATE_API_KEY"]],
-  },
-  { name: "CLOUDFLARE_ACCOUNT_ID", credentials: [...CLOUDFLARE_NATIVE_CREDENTIALS] },
-  { name: "CLOUDFLARE_AI_GATEWAY_ID", credentials: [...CLOUDFLARE_NATIVE_CREDENTIALS] },
+/** Provider base URLs whose effective state `multix check` reports. */
+const BASE_URL_ROUTING: readonly BaseUrlRouting[] = [
+  ATLAS_ROUTING,
+  BYTEPLUS_ROUTING,
+  FAL_ROUTING,
+  HEYGEN_ROUTING,
+  LEONARDO_ROUTING,
+  REPLICATE_ROUTING,
 ];
+
+export type ReportLine = { level: "info" | "warn"; message: string };
+
+function usedFrom(state: Extract<TrustedSettingState, { status: "used" }>): string {
+  if (state.source === "project") {
+    if (state.basis === "default") return "project .env; same as the default endpoint";
+    if (state.basis === "opt-in") return `project .env; allowed by ${ALLOW_PROJECT_BASE_URL_ENV}`;
+    return "project .env, which also holds every key sent with it";
+  }
+  if (state.source === "user") return "~/.multix/.env";
+  if (state.source === "legacy") return "legacy .claude file";
+  return "shell";
+}
+
+/** One report line for a routing setting's state, or undefined when it is unset. */
+function settingLine(
+  label: string,
+  state: BaseUrlState,
+  commands = "commands that use it",
+): ReportLine | undefined {
+  const stops = `${commands} will stop with an error`;
+  if (state.status === "unset") return undefined;
+  if (state.status === "refused") {
+    return {
+      level: "warn",
+      message: `${label} ignored: set in project .env while ${state.reason}; ${stops}`,
+    };
+  }
+  if (state.schemeError) return { level: "warn", message: `${state.schemeError}; ${stops}` };
+  if (state.status === "used") {
+    return { level: "info", message: `${label} in effect (from ${usedFrom(state)})` };
+  }
+  const why =
+    state.reason === "it is empty"
+      ? "set empty in project .env"
+      : `set in project .env while ${state.reason}`;
+  return { level: "warn", message: `${label} ignored: ${why}; using ~/.multix/.env` };
+}
+
+const sameState = (a: TrustedSettingState, b: TrustedSettingState) =>
+  JSON.stringify(a) === JSON.stringify(b);
 
 /**
  * One check line per routing setting that is set, describing its effective
- * state (never the value).
+ * state (never the value). Each state comes from the inspector the command
+ * itself runs, including the https rule, so check and the command agree.
  */
-export function routingSettingReport(): { level: "info" | "warn"; message: string }[] {
-  const lines: { level: "info" | "warn"; message: string }[] = [];
-  for (const s of ROUTING_SETTINGS) {
-    const state = s.defaultUrl
-      ? inspectBaseUrl(s.name, s.defaultUrl, s.credentials)
-      : inspectTrustedSetting(s.name, s.credentials);
-    if (state.status === "used") {
-      const from =
-        state.source === "project"
-          ? "project .env, with the keys it receives from the same file"
-          : state.source === "user"
-            ? "~/.multix/.env"
-            : state.source === "legacy"
-              ? "legacy .claude file"
-              : "shell";
-      lines.push({ level: "info", message: `${s.name} in effect (from ${from})` });
-    } else if (state.status === "fallback") {
-      const why =
-        state.reason === "it is empty"
-          ? "set empty in project .env"
-          : `set in project .env while ${state.reason}`;
-      lines.push({ level: "warn", message: `${s.name} ignored: ${why}; using ~/.multix/.env` });
-    } else if (state.status === "refused") {
-      lines.push({
-        level: "warn",
-        message: `${s.name} ignored: set in project .env while ${state.reason}; commands that use it will stop with an error`,
-      });
+export function routingSettingReport(): ReportLine[] {
+  const lines: ReportLine[] = [];
+  const push = (line: ReportLine | undefined) => {
+    if (line) lines.push(line);
+  };
+  for (const routing of BASE_URL_ROUTING) {
+    push(settingLine(routing.name, inspectProviderBaseUrl(routing)));
+  }
+  // Native and video commands send different tokens, so an ID can be fine for one and not the other.
+  const { nativeCheck, videoCheck } = cloudflareReadiness();
+  for (const [name, key] of [
+    [CLOUDFLARE_ACCOUNT_ID_ENV, "accountId"],
+    [CLOUDFLARE_GATEWAY_ID_ENV, "gatewayId"],
+  ] as const) {
+    push(settingLine(name, nativeCheck[key]));
+    if (!sameState(nativeCheck[key], videoCheck[key])) {
+      push(settingLine(`${name} (video)`, videoCheck[key], "video commands"));
     }
   }
   return lines;
@@ -300,18 +311,24 @@ export function registerCheckCommand(program: Command): void {
       }
 
       const cloudflare = cloudflareReadiness();
+      const blocked = (what: string) =>
+        logger.warn(
+          `${what} will stop: a project .env setting is not trusted (see Endpoint Overrides)`,
+        );
       if (cloudflare.native) {
         anyKey = true;
         logger.success("Cloudflare Workers AI credentials configured (image and speech)");
         if (cloudflare.video) {
           logger.success("Cloudflare AI Gateway video credentials configured");
+        } else if (cloudflare.videoCheck.refused) {
+          blocked("Cloudflare video");
         } else {
-          logger.info("Cloudflare video needs CLOUDFLARE_AI_GATEWAY_ID and REPLICATE_API_TOKEN");
+          logger.info(`Cloudflare video unavailable: ${cloudflare.videoCheck.problem}`);
         }
+      } else if (cloudflare.nativeCheck.refused) {
+        blocked("Cloudflare image, speech and video");
       } else {
-        logger.info(
-          "Cloudflare media needs CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN (optional)",
-        );
+        logger.info(`Cloudflare media unavailable (optional): ${cloudflare.nativeCheck.problem}`);
       }
 
       const routing = routingSettingReport();

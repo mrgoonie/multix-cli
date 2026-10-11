@@ -12,6 +12,17 @@ import type { AtlasMediaKind } from "./types.js";
 /** Media API base (image/video/audio/upload/predictions). The LLM base is /v1 and is not used. */
 export const DEFAULT_ATLAS_BASE_URL = "https://api.atlascloud.ai/api/v1";
 
+/**
+ * Base URL override and the key env names in the order the provider reads
+ * them (first non-blank wins). Shared by the key lookup, the base URL trust
+ * check and `multix check`, so the three cannot drift apart.
+ */
+export const ATLAS_ROUTING = {
+  name: "ATLASCLOUD_BASE_URL",
+  defaultUrl: DEFAULT_ATLAS_BASE_URL,
+  keyEnvs: ["ATLASCLOUD_API_KEY"],
+} as const;
+
 export const SUBMIT_PATHS: Record<AtlasMediaKind, string> = {
   image: "/model/generateImage",
   video: "/model/generateVideo",

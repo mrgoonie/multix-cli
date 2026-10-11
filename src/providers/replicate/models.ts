@@ -15,6 +15,17 @@ import { ValidationError } from "../../core/errors.js";
 import type { ModelRef, ReplicateStatus } from "./types.js";
 
 export const DEFAULT_REPLICATE_BASE_URL = "https://api.replicate.com/v1";
+
+/**
+ * Base URL override and the key env names in the order the provider reads
+ * them (first non-blank wins). Shared by the key lookup, the base URL trust
+ * check and `multix check`, so the three cannot drift apart.
+ */
+export const REPLICATE_ROUTING = {
+  name: "REPLICATE_BASE_URL",
+  defaultUrl: DEFAULT_REPLICATE_BASE_URL,
+  keyEnvs: ["REPLICATE_API_TOKEN", "REPLICATE_API_KEY"],
+} as const;
 export const DEFAULT_REPLICATE_IMAGE_MODEL = "black-forest-labs/flux-schnell";
 export const DEFAULT_REPLICATE_VIDEO_MODEL = "prunaai/p-video";
 
