@@ -9,6 +9,7 @@ import { registerCloudflareCommands } from "../providers/cloudflare/commands/ind
 import { registerElevenLabsCommands } from "../providers/elevenlabs/commands/index.js";
 import { registerFalCommands } from "../providers/fal/commands/index.js";
 import { registerGeminiCommands } from "../providers/gemini/commands/index.js";
+import { registerHeygenCommands } from "../providers/heygen/commands/index.js";
 import { registerLeonardoCommands } from "../providers/leonardo/commands/index.js";
 import { registerMinimaxCommands } from "../providers/minimax/commands/index.js";
 import { registerOpenAICommands } from "../providers/openai/commands/index.js";
@@ -30,6 +31,7 @@ export function registerCommands(program: Command): void {
   registerCloudflareCommands(program);
   registerElevenLabsCommands(program);
   registerFalCommands(program);
+  registerHeygenCommands(program);
   registerMediaCommands(program);
   registerDocCommands(program);
 }

@@ -71,6 +71,12 @@ const PROVIDERS: ProviderEntry[] = [
     optional: true,
     link: "https://fal.ai/dashboard/keys",
   },
+  {
+    name: "HeyGen",
+    envPrimary: "HEYGEN_API_KEY",
+    optional: true,
+    link: "https://app.heygen.com/developers/api",
+  },
 ];
 
 function resolveProviderKey(p: ProviderEntry): { key?: string; envUsed?: string } {

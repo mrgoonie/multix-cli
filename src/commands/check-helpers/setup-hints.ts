@@ -13,6 +13,7 @@ To configure multix, set at least one provider API key:
     Leonardo.Ai        : https://app.leonardo.ai/settings/api-keys
     BytePlus           : https://console.byteplus.com/auth/api-keys
     fal.ai             : https://fal.ai/dashboard/keys
+    HeyGen             : https://app.heygen.com/developers/api
 
   Option A — user global config (recommended):
     echo 'GEMINI_API_KEY=your-key' >> ~/.multix/.env
