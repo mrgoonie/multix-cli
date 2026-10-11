@@ -9,13 +9,16 @@ export class MultixError extends Error {
   constructor(
     message: string,
     public readonly code: string,
+    options?: ErrorOptions,
   ) {
-    super(message);
+    super(message, options);
     this.name = "MultixError";
-    // Maintain proper stack trace in V8
-    if (Error.captureStackTrace) {
-      Error.captureStackTrace(this, this.constructor);
-    }
+    // Maintain proper stack trace in V8. Typed locally so the file also
+    // type-checks without Node typings (the Cloudflare Worker build).
+    (Error as { captureStackTrace?: (target: object, ctor?: unknown) => void }).captureStackTrace?.(
+      this,
+      this.constructor,
+    );
   }
 }
 
@@ -32,8 +35,9 @@ export class ProviderError extends MultixError {
   constructor(
     message: string,
     public readonly provider: string,
+    options?: ErrorOptions,
   ) {
-    super(message, "PROVIDER_ERROR");
+    super(message, "PROVIDER_ERROR", options);
     this.name = "ProviderError";
   }
 }
@@ -63,8 +67,9 @@ export class HttpError extends MultixError {
     url: string,
     /** Parsed Retry-After header (ms), when the server sent one. */
     public readonly retryAfterMs?: number,
+    options?: ErrorOptions,
   ) {
-    super(`HTTP ${status} from ${redactUrl(url)}: ${snippet}`, "HTTP_ERROR");
+    super(`HTTP ${status} from ${redactUrl(url)}: ${snippet}`, "HTTP_ERROR", options);
     this.url = redactUrl(url);
     Object.defineProperty(this, "rawUrl", { value: url, enumerable: false });
     this.name = "HttpError";

@@ -32,7 +32,8 @@
       "coverage/**",
       "*.d.ts",
       "package.json",
-      "docs-site/.astro/**"
+      "docs-site/.astro/**",
+      "worker/.wrangler/**"
     ]
   }
 }
