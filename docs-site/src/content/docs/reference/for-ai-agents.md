@@ -38,6 +38,7 @@ https://multix.zuey.me/llms.txt
 | Workers AI image/speech or AI Gateway video | [Cloudflare](/commands/cloudflare/) |
 | Voice workflows, dubbing, or generated audio | [ElevenLabs](/commands/elevenlabs/) |
 | Any fal.ai queue model, image, or video | [fal.ai](/commands/fal/) |
+| Avatar video from a prompt (Video Agent) or an exact script, video translation, lipsync | [HeyGen](/commands/heygen/) |
 | Convert a document or optimize media locally | [Media and documents](/commands/media-and-documents/) |
 | Self-update the CLI | [Command overview](/commands/#self-update) |
 

@@ -85,6 +85,7 @@ export default defineConfig({
             { label: "Cloudflare", slug: "commands/cloudflare" },
             { label: "ElevenLabs", slug: "commands/elevenlabs" },
             { label: "fal.ai", slug: "commands/fal" },
+            { label: "HeyGen", slug: "commands/heygen" },
             {
               label: "Provider directory",
               translations: { vi: "Danh mục provider" },
