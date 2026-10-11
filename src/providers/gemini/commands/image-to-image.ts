@@ -20,6 +20,7 @@ import {
   extractImages,
   generateContent,
 } from "../client.js";
+import { withGeminiKey } from "../key-pool.js";
 import { IMAGE_MODEL_FALLBACK } from "../models.js";
 
 // Gemini inline data has a practical ~7MB request cap. Stay well under that
@@ -97,7 +98,9 @@ export function registerGeminiImageToImageCommand(parent: Command): void {
           generationConfig: { responseModalities: ["IMAGE"] },
         };
 
-        const resp = await generateContent(req, { logger });
+        const resp = await withGeminiKey((apiKey) => generateContent(req, { apiKey, logger }), {
+          logger,
+        });
         const images = extractImages(resp);
         if (images.length === 0) {
           logger.error(

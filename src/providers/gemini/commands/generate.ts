@@ -15,6 +15,7 @@ import {
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import { extractImages, generateContent } from "../client.js";
+import { withGeminiKey } from "../key-pool.js";
 import {
   ASPECT_RATIOS,
   type AspectRatio,
@@ -80,12 +81,16 @@ export function registerGenerateCommand(parent: Command): void {
 
         for (let i = 0; i < numImages; i++) {
           try {
-            const resp = await generateContent(
-              {
-                model,
-                contents: [{ parts: [{ text: opts.prompt }] }],
-                generationConfig,
-              },
+            const resp = await withGeminiKey(
+              (apiKey) =>
+                generateContent(
+                  {
+                    model,
+                    contents: [{ parts: [{ text: opts.prompt }] }],
+                    generationConfig,
+                  },
+                  { apiKey, logger },
+                ),
               { logger },
             );
 

@@ -201,7 +201,7 @@ describe("gemini client rotation", () => {
     for (const [k, v] of Object.entries(saved)) if (v !== undefined) process.env[k] = v;
   });
 
-  it("retries generateContent with the next key after a 429", async () => {
+  it("retries generateContent with the next pool key after a 429", async () => {
     const keys: string[] = [];
     vi.stubGlobal("fetch", async (_url: string, init: RequestInit) => {
       const key = (init.headers as Record<string, string>)["x-goog-api-key"] as string;
@@ -211,7 +211,9 @@ describe("gemini client rotation", () => {
       }
       return new Response(JSON.stringify({ candidates: [] }), { status: 200 });
     });
-    await generateContent({ model: "m", contents: [{ parts: [{ text: "hi" }] }] });
+    await withGeminiKey((apiKey) =>
+      generateContent({ model: "m", contents: [{ parts: [{ text: "hi" }] }] }, { apiKey }),
+    );
     expect(keys).toEqual(["client-key-one-0", "client-key-two-0"]);
   });
 
