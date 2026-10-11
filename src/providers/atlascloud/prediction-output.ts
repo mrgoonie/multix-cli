@@ -202,7 +202,20 @@ export function hasNsfwFlag(prediction: AtlasPrediction): boolean {
   return Array.isArray(prediction.has_nsfw_contents) && prediction.has_nsfw_contents.some(Boolean);
 }
 
-/** `atlas-<first 8 of id>-NN.<ext>` — stable, collision-free names for multi-output downloads. */
+/**
+ * The part of a prediction that may name a video thumbnail: only the outputs.
+ * The rest of the payload can echo request input (reference images, temporary
+ * uploads), which must never be saved as if it were a generated thumbnail.
+ */
+export function thumbnailSource(prediction: AtlasPrediction): unknown {
+  return prediction.outputs ?? prediction.output ?? null;
+}
+
+/**
+ * `atlas-<first 8 of id>-NN.<ext>` — distinct names for the outputs of one
+ * prediction. Two predictions can share an id prefix, so callers writing into
+ * an existing directory pick a free name with a numeric suffix.
+ */
 export function outputFileName(predictionId: string, index: number, ext: string): string {
   const prefix = predictionId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 8) || "output";
   return `atlas-${prefix}-${String(index + 1).padStart(2, "0")}.${ext}`;

@@ -86,16 +86,28 @@ export async function resolveMediaRef(
 
 export const MAX_UPLOAD_ENV = "ATLASCLOUD_MAX_UPLOAD_MB";
 const DEFAULT_MAX_UPLOAD_MB = 200;
+export const MAX_DOWNLOAD_ENV = "ATLASCLOUD_MAX_DOWNLOAD_MB";
+const DEFAULT_MAX_DOWNLOAD_MB = 2048;
+
+/** Read a positive megabyte count from `name` (default `fallbackMb`) as bytes. */
+function megabytesFromEnv(name: string, fallbackMb: number): number {
+  const raw = resolveKey(name)?.trim();
+  if (!raw) return fallbackMb * 1024 * 1024;
+  const mb = Number(raw);
+  if (!Number.isFinite(mb) || mb <= 0) {
+    throw new ConfigError(`${name} must be a positive number of megabytes, got "${raw}"`);
+  }
+  return Math.max(1, Math.floor(mb * 1024 * 1024));
+}
 
 /** Upload size cap in bytes: ATLASCLOUD_MAX_UPLOAD_MB, default 200 MB. */
 export function maxUploadBytes(): number {
-  const raw = resolveKey(MAX_UPLOAD_ENV)?.trim();
-  if (!raw) return DEFAULT_MAX_UPLOAD_MB * 1024 * 1024;
-  const mb = Number(raw);
-  if (!Number.isFinite(mb) || mb <= 0) {
-    throw new ConfigError(`${MAX_UPLOAD_ENV} must be a positive number of megabytes, got "${raw}"`);
-  }
-  return Math.floor(mb * 1024 * 1024);
+  return megabytesFromEnv(MAX_UPLOAD_ENV, DEFAULT_MAX_UPLOAD_MB);
+}
+
+/** Per-file cap for downloaded prediction outputs: ATLASCLOUD_MAX_DOWNLOAD_MB, default 2048 MB. */
+export function maxDownloadBytes(): number {
+  return megabytesFromEnv(MAX_DOWNLOAD_ENV, DEFAULT_MAX_DOWNLOAD_MB);
 }
 
 function formatMb(bytes: number): string {
