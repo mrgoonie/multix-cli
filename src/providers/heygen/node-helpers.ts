@@ -53,7 +53,7 @@ export function requireHeygenKey(): string {
  */
 export function createHeygenClientFromEnv(): HeygenClient {
   const apiKey = requireHeygenKey();
-  const baseUrl = resolveBaseUrl("HEYGEN_BASE_URL", DEFAULT_HEYGEN_BASE_URL);
+  const baseUrl = resolveBaseUrl("HEYGEN_BASE_URL", DEFAULT_HEYGEN_BASE_URL, ["HEYGEN_API_KEY"]);
   return new HeygenClient({ apiKey, baseUrl: checkBaseUrl(baseUrl, "HEYGEN_BASE_URL") });
 }
 

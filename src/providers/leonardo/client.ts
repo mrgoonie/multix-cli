@@ -21,7 +21,7 @@ export function requireLeonardoKey(): string {
 }
 
 export function leonardoBaseUrl(): string {
-  return resolveBaseUrl("LEONARDO_BASE_URL", DEFAULT_LEONARDO_BASE_URL);
+  return resolveBaseUrl("LEONARDO_BASE_URL", DEFAULT_LEONARDO_BASE_URL, ["LEONARDO_API_KEY"]);
 }
 
 export interface LeonardoRequestOptions {

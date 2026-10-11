@@ -21,7 +21,9 @@ export function requireBytePlusKey(): string {
 }
 
 export function bytePlusBaseUrl(): string {
-  return resolveBaseUrl("BYTEPLUS_BASE_URL", DEFAULT_BYTEPLUS_BASE_URL);
+  return resolveBaseUrl("BYTEPLUS_BASE_URL", DEFAULT_BYTEPLUS_BASE_URL, [
+    ["BYTEPLUS_API_KEY", "ARK_API_KEY"],
+  ]);
 }
 
 export interface BytePlusRequestOptions {

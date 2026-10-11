@@ -114,18 +114,27 @@ cho file cục bộ upload lên Atlas Cloud (mặc định 200).
 
 Biến ghi đè `*_BASE_URL` quyết định API key của bạn được gửi tới đâu.
 `CLOUDFLARE_ACCOUNT_ID` và `CLOUDFLARE_AI_GATEWAY_ID` cũng vậy: chúng chọn
-account Cloudflare và AI Gateway nào nhận token của bạn. `multix` chỉ tin các
-thiết lập này khi chúng đến từ biến môi trường của shell hoặc `~/.multix/.env`:
+account Cloudflare và AI Gateway nào nhận token của bạn. Giá trị từ biến môi
+trường của shell hoặc `~/.multix/.env` luôn được dùng. Giá trị từ `.env` của
+project (thư mục hiện tại, hoặc một file `.claude` cũ bên trong nó) chỉ được
+dùng khi nó không thể gửi key của người khác:
 
-- Khi một biến như vậy đến từ `.env` của project (thư mục hiện tại, hoặc một
-  file `.claude` cũ bên trong nó) và `~/.multix/.env` cũng đặt biến đó, giá trị
-  trong `~/.multix/.env` được dùng và `multix` in một cảnh báo nêu tên biến và
-  đường dẫn file (không bao giờ in giá trị). Giá trị rỗng trong project không
-  bao giờ che giá trị trong `~/.multix/.env`.
-- Khi chỉ `.env` của project đặt biến đó, lệnh dừng với một lỗi nêu tên biến và
-  đường dẫn file, trước khi gửi bất kỳ request nào. Lệnh không quay về giá trị
-  mặc định của nhà cung cấp, nên request bạn định gửi tới mock server không bao
-  giờ tới API trả phí.
+- Giá trị được dùng khi mọi key mà provider gửi kèm request đó đều đến từ cùng
+  file project, vì khi đó key duy nhất được gửi đi là key của chính repository.
+  Ví dụ: `FAL_BASE_URL` và `FAL_KEY` cùng nằm trong `.env` của project, hoặc
+  `CLOUDFLARE_API_TOKEN` cùng với account ID và gateway ID. Video Cloudflare
+  còn gửi `REPLICATE_API_TOKEN`, nên token này cũng phải đến từ cùng file đó.
+- Giá trị bị bỏ qua khi có key đến từ nơi khác: shell, `~/.multix/.env`, một
+  file cũ trong thư mục home, hoặc một file project khác. Nếu `~/.multix/.env`
+  đặt cùng biến đó, giá trị ở đó được dùng và `multix` in một cảnh báo nêu tên
+  biến, đường dẫn file và nguồn của key (không bao giờ in giá trị). Nếu không,
+  lệnh dừng với một lỗi trước khi gửi bất kỳ request nào. Lệnh không quay về
+  giá trị mặc định của nhà cung cấp, nên request bạn định gửi tới mock server
+  không bao giờ tới API trả phí.
+- Giá trị rỗng trong project không bao giờ che giá trị trong `~/.multix/.env`.
+- `multix check` liệt kê từng thiết lập loại này đang được đặt, và cho biết nó
+  đang có hiệu lực hay bị bỏ qua (ví dụ
+  `FAL_BASE_URL ignored: set in project .env while FAL_KEY comes from the shell`).
 - Để dùng giá trị của project (ví dụ mock server cục bộ), bật cho đúng một lệnh
   từ shell: `MULTIX_ALLOW_PROJECT_BASE_URL=1 multix ...`. Tránh đặt biến này
   trong `~/.multix/.env`: như vậy sẽ tắt cơ chế bảo vệ cho mọi thư mục bạn chạy

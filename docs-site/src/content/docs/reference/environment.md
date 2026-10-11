@@ -114,18 +114,28 @@ local files uploaded to Atlas Cloud (default 200).
 
 A `*_BASE_URL` override decides where your API key is sent. So do
 `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_AI_GATEWAY_ID`, which choose whose
-Cloudflare account and AI Gateway receive your tokens. `multix` only trusts
-these settings from the shell environment or `~/.multix/.env`:
+Cloudflare account and AI Gateway receive your tokens. Values from the shell
+environment or `~/.multix/.env` are always used. A value from the project
+`.env` (the current directory, or a legacy `.claude` file under it) is used
+only when it cannot send someone else's key:
 
-- When one of them comes from the project `.env` (the current directory, or a
-  legacy `.claude` file under it) and `~/.multix/.env` sets the same variable,
-  the `~/.multix/.env` value is used and `multix` prints a warning naming the
-  variable and the file (never the value). An empty project value never hides
-  the `~/.multix/.env` value.
-- When only the project `.env` sets it, the command stops with an error that
-  names the variable and the file, before any request is sent. It does not fall
-  back to the vendor default, so a request you meant for a mock server never
-  reaches the paid API.
+- It is used when every key the provider sends with that request comes from
+  the same project file, because then the only key that travels is the
+  repository's own. For example, `FAL_BASE_URL` and `FAL_KEY` both in the
+  project `.env`, or `CLOUDFLARE_API_TOKEN` with the account and gateway IDs.
+  Cloudflare video also sends `REPLICATE_API_TOKEN`, so that token must come
+  from the same file too.
+- It is ignored when a key comes from somewhere else: the shell,
+  `~/.multix/.env`, a legacy file under your home directory, or a different
+  project file. If `~/.multix/.env` sets the same variable, that value is used
+  and `multix` prints a warning naming the variable, the file and where the key
+  comes from (never the value). Otherwise the command stops with an error
+  before any request is sent. It does not fall back to the vendor default, so a
+  request you meant for a mock server never reaches the paid API.
+- An empty project value never hides the `~/.multix/.env` value.
+- `multix check` lists each of these settings that is set, and whether it is in
+  effect or ignored (for example
+  `FAL_BASE_URL ignored: set in project .env while FAL_KEY comes from the shell`).
 - To use a project value (for example a local mock server), opt in for a single
   command from your shell:
   `MULTIX_ALLOW_PROJECT_BASE_URL=1 multix ...`. Avoid putting the opt-in in

@@ -198,39 +198,115 @@ export function projectBaseUrlAllowed(): boolean {
 const OPT_IN_HINT = `To use the project value for one command, run it as \`${ALLOW_PROJECT_BASE_URL_ENV}=1 multix ...\`. Do not put ${ALLOW_PROJECT_BASE_URL_ENV} in ~/.multix/.env: that trusts the .env of every directory you run multix in.`;
 
 /**
- * Read a setting that decides where an API key is sent (a base URL, an
- * account or gateway ID). Values are trimmed; blank means unset.
+ * One credential a request sends. An array lists alternatives in the order the
+ * provider reads them; the first non-blank one is the credential sent.
+ */
+export type CredentialSpec = string | readonly string[];
+
+/** Effective state of a setting that decides where a key is sent. */
+export type TrustedSettingState =
+  | { status: "unset" }
+  /** The value is used (shell, ~/.multix/.env, opt-in, or same project file as every key). */
+  | { status: "used"; value: string; source: EnvFileSource | "shell" }
+  /** The project value is ignored and the ~/.multix/.env value is used instead. */
+  | { status: "fallback"; value: string; file: string; reason: string }
+  /** The project value is ignored and there is nothing to fall back to. */
+  | { status: "refused"; file: string; reason: string };
+
+function describeSource(origin: { source: EnvFileSource; file: string } | undefined): string {
+  if (!origin) return "the shell";
+  if (origin.source === "user") return "~/.multix/.env";
+  if (origin.source === "legacy") return origin.file;
+  return `another project file (${origin.file})`;
+}
+
+/**
+ * Why sending the `credentials` to an endpoint chosen by `file` could leak a
+ * key the project does not own, or undefined when every credential that will
+ * be sent comes from that same project file (or none is set).
+ */
+function foreignCredential(
+  credentials: readonly CredentialSpec[],
+  file: string,
+): string | undefined {
+  for (const spec of credentials) {
+    const names = typeof spec === "string" ? [spec] : spec;
+    const used = names.find((n) => process.env[n]?.trim());
+    if (!used) continue;
+    const origin = envFileOrigin(used);
+    if (origin?.source === "project" && origin.file === file) continue;
+    return `${used} comes from ${describeSource(origin)}`;
+  }
+  return undefined;
+}
+
+/**
+ * Effective state of a setting that decides where a key is sent (a base URL,
+ * an account or gateway ID). Values are trimmed; blank means unset. Never
+ * throws or warns; resolveTrustedSetting acts on the result.
  *
  * A value from a project env file (cwd/.env, or a legacy `.claude` file under
- * cwd) is not trusted unless MULTIX_ALLOW_PROJECT_BASE_URL is set in the shell
- * or the user-level env file:
- * - when ~/.multix/.env sets the variable, that value is used and one warning
- *   per variable names the variable and file (never the value);
- * - otherwise this throws a ConfigError naming the variable and file, so no
- *   request is sent to a host the user did not choose.
- * A blank project value never hides a user-level value. A project value equal
- * to `harmless` (e.g. the vendor default) is accepted as-is.
+ * cwd) is used when MULTIX_ALLOW_PROJECT_BASE_URL is set in the shell or
+ * ~/.multix/.env, when it equals `harmless` (e.g. the vendor default), or when
+ * every credential in `credentials` that is set comes from that same file
+ * (then the only key that can travel is the project's own). Otherwise the
+ * ~/.multix/.env value is used if there is one, else the setting is refused.
+ * A blank project value never hides the ~/.multix/.env value.
  */
-export function resolveTrustedSetting(name: string, harmless?: string): string | undefined {
+export function inspectTrustedSetting(
+  name: string,
+  credentials: readonly CredentialSpec[],
+  harmless?: string,
+): TrustedSettingState {
   const value = process.env[name]?.trim() || undefined;
   const origin = envFileOrigin(name);
-  if (origin?.source !== "project" || projectBaseUrlAllowed()) return value;
-  if (value !== undefined && harmless !== undefined && value === harmless) return value;
-
+  if (origin?.source !== "project") {
+    return value
+      ? { status: "used", value, source: origin?.source ?? "shell" }
+      : { status: "unset" };
+  }
   const userValue = userFileValues[envNameKey(name)]?.trim() || undefined;
-  if (userValue === undefined) {
-    if (value === undefined) return undefined;
+  if (value === undefined) {
+    return userValue
+      ? { status: "fallback", value: userValue, file: origin.file, reason: "it is empty" }
+      : { status: "unset" };
+  }
+  const reason =
+    projectBaseUrlAllowed() || value === harmless
+      ? undefined
+      : foreignCredential(credentials, origin.file);
+  if (!reason) return { status: "used", value, source: "project" };
+  return userValue
+    ? { status: "fallback", value: userValue, file: origin.file, reason }
+    : { status: "refused", file: origin.file, reason };
+}
+
+/**
+ * Read a setting that decides where `credentials` are sent, applying
+ * inspectTrustedSetting: an ignored project value prints one warning per
+ * variable (variable, file and key source; never the value) and uses the
+ * ~/.multix/.env value; with nothing to fall back to, this throws a
+ * ConfigError so no request is sent to a host the user did not choose.
+ */
+export function resolveTrustedSetting(
+  name: string,
+  credentials: readonly CredentialSpec[],
+  harmless?: string,
+): string | undefined {
+  const state = inspectTrustedSetting(name, credentials, harmless);
+  if (state.status === "unset") return undefined;
+  if (state.status === "used") return state.value;
+  if (state.status === "refused") {
     throw new ConfigError(
-      `${name} is set in project env file ${origin.file}, which is not trusted to choose where your API key is sent. Set it in your shell or ~/.multix/.env instead. ${OPT_IN_HINT}`,
+      `${name} is set in project env file ${state.file}, but ${state.reason}, so the project is not trusted to choose where that key is sent. Set ${name} in your shell or ~/.multix/.env, or keep the key in the same project file. ${OPT_IN_HINT}`,
     );
   }
-  if (value !== userValue) {
-    warnOnce(
-      `ignored:${name}`,
-      `Ignoring ${name} from project env file ${origin.file}: it is not trusted to choose where your API key is sent; using the value from ~/.multix/.env. ${OPT_IN_HINT}`,
-    );
-  }
-  return userValue;
+  const hint = state.reason === "it is empty" ? "" : ` ${OPT_IN_HINT}`;
+  warnOnce(
+    `ignored:${name}`,
+    `Ignoring ${name} from project env file ${state.file} (${state.reason}); using the value from ~/.multix/.env.${hint}`,
+  );
+  return state.value;
 }
 
 function warnOnce(key: string, message: string): void {
@@ -268,20 +344,37 @@ function checkBaseUrlScheme(name: string, value: string): void {
   );
 }
 
+/** The raw value of `name` when it only restates `defaultUrl` (safe from any source). */
+function defaultHarmless(name: string, defaultUrl: string): string | undefined {
+  const raw = process.env[name]?.trim();
+  return raw && stripSlash(raw) === stripSlash(defaultUrl) ? raw : undefined;
+}
+
+/** inspectTrustedSetting for a base URL: a value equal to `defaultUrl` is always fine. */
+export function inspectBaseUrl(
+  name: string,
+  defaultUrl: string,
+  credentials: readonly CredentialSpec[],
+): TrustedSettingState {
+  return inspectTrustedSetting(name, credentials, defaultHarmless(name, defaultUrl));
+}
+
 /**
  * Resolve a provider API root from `name` (e.g. `HEYGEN_BASE_URL`), falling
  * back to `defaultUrl`.
  *
- * Project env file values follow resolveTrustedSetting (ignored in favour of
- * ~/.multix/.env, or a ConfigError, unless opted in). A non-default base URL
- * must be https://, except http:// to localhost, 127.0.0.1 or [::1], and one
- * warning per variable names the provider and the hostname only, so a
- * redirected API key is never silent.
+ * `credentials` are the keys the provider sends to that root (see
+ * CredentialSpec). Project env file values follow resolveTrustedSetting. A
+ * non-default base URL must be https://, except http:// to localhost,
+ * 127.0.0.1 or [::1], and one warning per variable names the provider and the
+ * hostname only, so a redirected API key is never silent.
  */
-export function resolveBaseUrl(name: string, defaultUrl: string): string {
-  const raw = process.env[name]?.trim();
-  const harmless = raw && stripSlash(raw) === stripSlash(defaultUrl) ? raw : undefined;
-  const value = resolveTrustedSetting(name, harmless);
+export function resolveBaseUrl(
+  name: string,
+  defaultUrl: string,
+  credentials: readonly CredentialSpec[],
+): string {
+  const value = resolveTrustedSetting(name, credentials, defaultHarmless(name, defaultUrl));
   if (!value || stripSlash(value) === stripSlash(defaultUrl)) return defaultUrl;
   checkBaseUrlScheme(name, value);
   const provider = name.replace(/_BASE_URL$/, "");

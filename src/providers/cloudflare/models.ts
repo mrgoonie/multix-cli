@@ -17,10 +17,13 @@ export interface CloudflareVideoConfig extends Required<CloudflareConfig> {
   replicateApiToken: string;
 }
 
-/**
- * Account and gateway IDs choose whose Cloudflare tenant receives the tokens,
- * so they are read like base URLs (not trusted from a project .env).
- */
+/** Credentials sent by native Workers AI calls and, additionally, by gateway video. */
+export const CLOUDFLARE_NATIVE_CREDENTIALS = ["CLOUDFLARE_API_TOKEN"] as const;
+export const CLOUDFLARE_VIDEO_CREDENTIALS = [
+  "CLOUDFLARE_API_TOKEN",
+  "REPLICATE_API_TOKEN",
+] as const;
+
 function required(name: string, read: (name: string) => string | undefined = resolveKey): string {
   const value = read(name)?.trim();
   if (!value) throw new ConfigError(`${name} is required for Cloudflare media generation`);
@@ -48,16 +51,24 @@ export function validateImageSteps(value: string): number {
   return steps;
 }
 
-export function requireCloudflareConfig(): CloudflareConfig {
+/**
+ * Account and gateway IDs choose whose Cloudflare tenant receives the tokens,
+ * so they are read like base URLs: a project .env value is trusted only when
+ * the tokens sent come from that same file (see resolveTrustedSetting).
+ */
+export function requireCloudflareConfig(
+  credentials: readonly string[] = CLOUDFLARE_NATIVE_CREDENTIALS,
+): CloudflareConfig {
+  const trusted = (name: string) => resolveTrustedSetting(name, credentials);
   return {
-    accountId: required("CLOUDFLARE_ACCOUNT_ID", resolveTrustedSetting),
+    accountId: required("CLOUDFLARE_ACCOUNT_ID", trusted),
     apiToken: required("CLOUDFLARE_API_TOKEN"),
-    gatewayId: resolveTrustedSetting("CLOUDFLARE_AI_GATEWAY_ID"),
+    gatewayId: trusted("CLOUDFLARE_AI_GATEWAY_ID"),
   };
 }
 
 export function requireCloudflareVideoConfig(): CloudflareVideoConfig {
-  const config = requireCloudflareConfig();
+  const config = requireCloudflareConfig(CLOUDFLARE_VIDEO_CREDENTIALS);
   if (!config.gatewayId) {
     throw new ConfigError("CLOUDFLARE_AI_GATEWAY_ID is required for Cloudflare video generation");
   }

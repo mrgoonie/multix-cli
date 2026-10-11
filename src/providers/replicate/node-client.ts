@@ -33,7 +33,9 @@ export function requireReplicateToken(): string {
 }
 
 export function replicateBaseUrl(): string {
-  return resolveBaseUrl("REPLICATE_BASE_URL", DEFAULT_REPLICATE_BASE_URL);
+  return resolveBaseUrl("REPLICATE_BASE_URL", DEFAULT_REPLICATE_BASE_URL, [
+    [REPLICATE_TOKEN_ENV, REPLICATE_TOKEN_FALLBACK_ENV],
+  ]);
 }
 
 export function replicateImageModel(): string {

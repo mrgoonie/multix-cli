@@ -31,7 +31,7 @@ export function requireFalKey(): string {
 }
 
 export function falBaseUrl(): string {
-  return resolveBaseUrl("FAL_BASE_URL", DEFAULT_FAL_BASE_URL);
+  return resolveBaseUrl("FAL_BASE_URL", DEFAULT_FAL_BASE_URL, ["FAL_KEY"]);
 }
 
 export interface FalRequestOptions {

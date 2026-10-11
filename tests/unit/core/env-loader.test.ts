@@ -19,7 +19,10 @@ import {
   resolveTrustedSetting,
 } from "../../../src/core/env-loader.js";
 import { ConfigError } from "../../../src/core/errors.js";
-import { requireCloudflareConfig } from "../../../src/providers/cloudflare/models.js";
+import {
+  requireCloudflareConfig,
+  requireCloudflareVideoConfig,
+} from "../../../src/providers/cloudflare/models.js";
 
 describe("env-loader", () => {
   beforeEach(() => {
@@ -175,7 +178,13 @@ describe("env-loader", () => {
     const DEFAULT = "https://api.example-default.com/v1";
     const NAME = "TESTPROV_BASE_URL";
     const KEY = "TESTPROV_API_KEY";
-    const CF = ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_AI_GATEWAY_ID", "CLOUDFLARE_API_TOKEN"];
+    const CF = [
+      "CLOUDFLARE_ACCOUNT_ID",
+      "CLOUDFLARE_AI_GATEWAY_ID",
+      "CLOUDFLARE_API_TOKEN",
+      "REPLICATE_API_TOKEN",
+    ];
+    const CF_CREDS = ["CLOUDFLARE_API_TOKEN"];
     const VARS = [
       NAME,
       KEY,
@@ -204,6 +213,8 @@ describe("env-loader", () => {
       vi.spyOn(process, "cwd").mockReturnValue(tmp);
       vi.spyOn(os, "homedir").mockReturnValue(home);
       warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      // Most cases model the attack: the key comes from the shell, not the project.
+      process.env[KEY] = "sk-shell-key";
     });
 
     afterEach(() => {
@@ -218,13 +229,13 @@ describe("env-loader", () => {
 
     it("returns the default silently when nothing is set", () => {
       loadEnv();
-      expect(resolveBaseUrl(NAME, DEFAULT)).toBe(DEFAULT);
+      expect(resolveBaseUrl(NAME, DEFAULT, [KEY])).toBe(DEFAULT);
       expect(warn).not.toHaveBeenCalled();
     });
 
     const refusal = (): Error => {
       try {
-        resolveBaseUrl(NAME, DEFAULT);
+        resolveBaseUrl(NAME, DEFAULT, [KEY]);
       } catch (err) {
         return err as Error;
       }
@@ -249,7 +260,7 @@ describe("env-loader", () => {
     it("accepts a project value equal to the default", () => {
       writeProject(`${NAME}=${DEFAULT}/\n`);
       loadEnv();
-      expect(resolveBaseUrl(NAME, DEFAULT)).toBe(DEFAULT);
+      expect(resolveBaseUrl(NAME, DEFAULT, [KEY])).toBe(DEFAULT);
       expect(warn).not.toHaveBeenCalled();
     });
 
@@ -258,8 +269,10 @@ describe("env-loader", () => {
       process.env[KEY] = "sk-secret-value";
       writeProject(`${NAME}=https://evil.example.net\n`);
       loadEnv();
-      expect(resolveBaseUrl(NAME, DEFAULT)).toBe("https://proxy.example.org/v1/path?token=abc");
-      resolveBaseUrl(NAME, DEFAULT);
+      expect(resolveBaseUrl(NAME, DEFAULT, [KEY])).toBe(
+        "https://proxy.example.org/v1/path?token=abc",
+      );
+      resolveBaseUrl(NAME, DEFAULT, [KEY]);
       expect(warn).toHaveBeenCalledTimes(1);
       const [message] = warnings();
       expect(message).toContain("TESTPROV");
@@ -273,7 +286,7 @@ describe("env-loader", () => {
       writeUser(`${NAME}=https://user-proxy.example.org\n`);
       loadEnv();
       expect(envFileOrigin(NAME)?.source).toBe("user");
-      expect(resolveBaseUrl(NAME, DEFAULT)).toBe("https://user-proxy.example.org");
+      expect(resolveBaseUrl(NAME, DEFAULT, [KEY])).toBe("https://user-proxy.example.org");
       expect(warnings()).toHaveLength(1);
       expect(warnings()[0]).toContain("user-proxy.example.org");
     });
@@ -282,7 +295,7 @@ describe("env-loader", () => {
       writeProject(`${NAME}=https://evil.example.net\n`);
       writeUser(`${NAME}=https://user-proxy.example.org\n`);
       loadEnv();
-      expect(resolveBaseUrl(NAME, DEFAULT)).toBe("https://user-proxy.example.org");
+      expect(resolveBaseUrl(NAME, DEFAULT, [KEY])).toBe("https://user-proxy.example.org");
       expect(warnings()).toHaveLength(2);
       expect(warnings()[0]).toContain(`${ALLOW_PROJECT_BASE_URL_ENV}=1 multix`);
       expect(warnings().join("\n")).not.toContain("evil.example.net");
@@ -292,7 +305,7 @@ describe("env-loader", () => {
       writeProject(`${NAME}=\n`);
       writeUser(`${NAME}=https://user-proxy.example.org\n`);
       loadEnv();
-      expect(resolveBaseUrl(NAME, DEFAULT)).toBe("https://user-proxy.example.org");
+      expect(resolveBaseUrl(NAME, DEFAULT, [KEY])).toBe("https://user-proxy.example.org");
       expect(warnings()).toHaveLength(2);
       expect(warnings()[0]).toContain(`Ignoring ${NAME}`);
     });
@@ -300,14 +313,14 @@ describe("env-loader", () => {
     it("treats an empty project value with no user value as unset", () => {
       writeProject(`${NAME}=  \n`);
       loadEnv();
-      expect(resolveBaseUrl(NAME, DEFAULT)).toBe(DEFAULT);
+      expect(resolveBaseUrl(NAME, DEFAULT, [KEY])).toBe(DEFAULT);
       expect(warn).not.toHaveBeenCalled();
     });
 
     it("shows only the hostname for a URL with userinfo and a port", () => {
       process.env[NAME] = "https://alice:pa55word@proxy.example.org:8443/x?sig=abc";
       loadEnv();
-      resolveBaseUrl(NAME, DEFAULT);
+      resolveBaseUrl(NAME, DEFAULT, [KEY]);
       const [message] = warnings();
       expect(message).toContain("proxy.example.org");
       for (const leak of ["alice", "pa55word", "8443", "/x", "sig=abc"]) {
@@ -319,7 +332,7 @@ describe("env-loader", () => {
       for (const ok of ["http://localhost:8787", "http://127.0.0.1:9000/v1", "http://[::1]:1"]) {
         _resetEnvLoader();
         process.env[NAME] = ok;
-        expect(resolveBaseUrl(NAME, DEFAULT)).toBe(ok);
+        expect(resolveBaseUrl(NAME, DEFAULT, [KEY])).toBe(ok);
       }
       for (const bad of [
         "http://proxy.example.org",
@@ -340,7 +353,7 @@ describe("env-loader", () => {
       process.env[ALLOW_PROJECT_BASE_URL_ENV] = "1";
       loadEnv();
       expect(projectBaseUrlAllowed()).toBe(true);
-      expect(resolveBaseUrl(NAME, DEFAULT)).toBe("https://local-mock.example.net");
+      expect(resolveBaseUrl(NAME, DEFAULT, [KEY])).toBe("https://local-mock.example.net");
       expect(warnings()).toHaveLength(1);
       expect(warnings()[0]).toContain("local-mock.example.net");
 
@@ -349,7 +362,7 @@ describe("env-loader", () => {
       Reflect.deleteProperty(process.env, NAME);
       writeUser(`${ALLOW_PROJECT_BASE_URL_ENV}=true\n`);
       loadEnv();
-      expect(resolveBaseUrl(NAME, DEFAULT)).toBe("https://local-mock.example.net");
+      expect(resolveBaseUrl(NAME, DEFAULT, [KEY])).toBe("https://local-mock.example.net");
     });
 
     it("does not accept the opt-in from the project .env itself", () => {
@@ -389,7 +402,7 @@ describe("env-loader", () => {
         writeProject(`${NAME}=https://evil.example.net\n`);
         writeUser("Testprov_Base_Url=https://user-proxy.example.org\n");
         loadEnv();
-        expect(resolveBaseUrl(NAME, DEFAULT)).toBe("https://user-proxy.example.org");
+        expect(resolveBaseUrl(NAME, DEFAULT, [KEY])).toBe("https://user-proxy.example.org");
       },
     );
 
@@ -402,7 +415,9 @@ describe("env-loader", () => {
       expect(() => requireCloudflareConfig()).toThrow(
         /CLOUDFLARE_ACCOUNT_ID is set in project env/,
       );
-      expect(() => resolveTrustedSetting("CLOUDFLARE_AI_GATEWAY_ID")).toThrow(ConfigError);
+      expect(() => resolveTrustedSetting("CLOUDFLARE_AI_GATEWAY_ID", CF_CREDS)).toThrow(
+        ConfigError,
+      );
 
       process.env[ALLOW_PROJECT_BASE_URL_ENV] = "1";
       expect(requireCloudflareConfig()).toMatchObject({
@@ -426,6 +441,7 @@ describe("env-loader", () => {
 
     it("treats legacy .claude files under cwd as project files, under home as trusted", () => {
       process.env.MULTIX_LEGACY_CLAUDE_ENV = "1";
+      process.env.CLOUDFLARE_API_TOKEN = "cf-token-from-shell";
       fs.mkdirSync(path.join(tmp, ".claude"), { recursive: true });
       fs.writeFileSync(
         path.join(tmp, ".claude", ".env"),
@@ -436,9 +452,111 @@ describe("env-loader", () => {
       loadEnv();
       expect(process.env[ALLOW_PROJECT_BASE_URL_ENV]).toBeUndefined();
       expect(envFileOrigin("CLOUDFLARE_AI_GATEWAY_ID")?.source).toBe("project");
-      expect(() => resolveTrustedSetting("CLOUDFLARE_AI_GATEWAY_ID")).toThrow(ConfigError);
+      expect(() => resolveTrustedSetting("CLOUDFLARE_AI_GATEWAY_ID", CF_CREDS)).toThrow(
+        ConfigError,
+      );
       expect(envFileOrigin("CLOUDFLARE_ACCOUNT_ID")?.source).toBe("legacy");
-      expect(resolveTrustedSetting("CLOUDFLARE_ACCOUNT_ID")).toBe("my-account");
+      expect(resolveTrustedSetting("CLOUDFLARE_ACCOUNT_ID", CF_CREDS)).toBe("my-account");
+    });
+
+    it("trusts a project base URL when the key comes from the same project file", () => {
+      Reflect.deleteProperty(process.env, KEY);
+      writeProject(`${NAME}=https://repo-proxy.example.net/v1\n${KEY}=sk-repo-own-key\n`);
+      loadEnv();
+      expect(resolveBaseUrl(NAME, DEFAULT, [KEY])).toBe("https://repo-proxy.example.net/v1");
+      expect(warnings()).toHaveLength(1);
+      expect(warnings()[0]).toContain("repo-proxy.example.net");
+      expect(warnings()[0]).not.toContain("sk-repo-own-key");
+    });
+
+    it("refuses a project base URL when the key comes from the shell", () => {
+      writeProject(`${NAME}=https://evil.example.net\n`);
+      loadEnv();
+      const err = refusal();
+      expect(err).toBeInstanceOf(ConfigError);
+      expect(err.message).toContain(`${KEY} comes from the shell`);
+      expect(err.message).not.toContain("sk-shell-key");
+    });
+
+    it("refuses a project base URL when the key comes from a different project file", () => {
+      Reflect.deleteProperty(process.env, KEY);
+      process.env.MULTIX_LEGACY_CLAUDE_ENV = "1";
+      writeProject(`${NAME}=https://evil.example.net\n`);
+      fs.mkdirSync(path.join(tmp, ".claude"), { recursive: true });
+      const other = path.join(tmp, ".claude", ".env");
+      fs.writeFileSync(other, `${KEY}=sk-legacy-key\n`);
+      loadEnv();
+      expect(refusal().message).toContain(`another project file (${other})`);
+    });
+
+    it("picks the alternative credential that is actually sent", () => {
+      Reflect.deleteProperty(process.env, KEY);
+      const FALLBACK = "TESTPROV_API_TOKEN";
+      process.env[FALLBACK] = "shell-fallback";
+      try {
+        writeProject(`${NAME}=https://repo-proxy.example.net\n${KEY}=sk-repo-own-key\n`);
+        loadEnv();
+        // KEY (first alternative, same file) is the one sent, so the shell fallback is irrelevant.
+        expect(resolveBaseUrl(NAME, DEFAULT, [[KEY, FALLBACK]])).toBe(
+          "https://repo-proxy.example.net",
+        );
+      } finally {
+        Reflect.deleteProperty(process.env, FALLBACK);
+      }
+    });
+
+    it("refuses a project routing ID when the token comes from ~/.multix/.env", () => {
+      writeUser("CLOUDFLARE_API_TOKEN=cf-user-token\n");
+      writeProject("CLOUDFLARE_ACCOUNT_ID=attacker-account\n");
+      loadEnv();
+      expect(() => requireCloudflareConfig()).toThrow(
+        /CLOUDFLARE_API_TOKEN comes from ~\/\.multix\/\.env/,
+      );
+    });
+
+    it("trusts Cloudflare IDs when the token is in the same project file", () => {
+      writeProject(
+        "CLOUDFLARE_API_TOKEN=cf-repo-token\nCLOUDFLARE_ACCOUNT_ID=repo-account\nCLOUDFLARE_AI_GATEWAY_ID=repo-gw\n",
+      );
+      loadEnv();
+      expect(requireCloudflareConfig()).toMatchObject({
+        accountId: "repo-account",
+        gatewayId: "repo-gw",
+      });
+      expect(warn).not.toHaveBeenCalled();
+      // Video also sends REPLICATE_API_TOKEN; from the shell, that would leak to the repo's gateway.
+      process.env.REPLICATE_API_TOKEN = "r8-shell-token";
+      expect(() => requireCloudflareVideoConfig()).toThrow(
+        /REPLICATE_API_TOKEN comes from the shell/,
+      );
+    });
+
+    it("multix check reports the effective state of routing settings", async () => {
+      const { cloudflareReadiness, routingSettingReport } = await import(
+        "../../../src/commands/check.js"
+      );
+      process.env.CLOUDFLARE_API_TOKEN = "cf-token-from-shell";
+      writeProject(
+        "CLOUDFLARE_ACCOUNT_ID=attacker-account\nFAL_BASE_URL=https://evil.example.net\n",
+      );
+      process.env.FAL_KEY = "fal-shell-key";
+      try {
+        loadEnv();
+        const report = routingSettingReport();
+        expect(report).toContainEqual({
+          level: "warn",
+          message:
+            "CLOUDFLARE_ACCOUNT_ID ignored: set in project .env while CLOUDFLARE_API_TOKEN comes from the shell; commands that use it will stop with an error",
+        });
+        expect(report.map((l) => l.message).join("\n")).toContain(
+          "FAL_BASE_URL ignored: set in project .env while FAL_KEY comes from the shell",
+        );
+        expect(report.map((l) => l.message).join("\n")).not.toContain("evil.example.net");
+        expect(cloudflareReadiness()).toEqual({ native: false, video: false });
+      } finally {
+        Reflect.deleteProperty(process.env, "FAL_KEY");
+        Reflect.deleteProperty(process.env, "FAL_BASE_URL");
+      }
     });
 
     it("envNameKey upper-cases names on win32 only", () => {
@@ -451,7 +569,7 @@ describe("env-loader", () => {
     it("does not warn when the override equals the default", () => {
       process.env[NAME] = `${DEFAULT}/`;
       loadEnv();
-      expect(resolveBaseUrl(NAME, DEFAULT)).toBe(DEFAULT);
+      expect(resolveBaseUrl(NAME, DEFAULT, [KEY])).toBe(DEFAULT);
       expect(warn).not.toHaveBeenCalled();
     });
   });

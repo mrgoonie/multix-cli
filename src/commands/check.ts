@@ -8,7 +8,11 @@ import fs from "node:fs";
 import os from "node:os";
 import type { Command } from "commander";
 import {
+  type CredentialSpec,
+  type TrustedSettingState,
   getLoadedEnvFiles,
+  inspectBaseUrl,
+  inspectTrustedSetting,
   legacyClaudeEnvEnabled,
   legacyClaudeEnvFiles,
   redact,
@@ -16,8 +20,18 @@ import {
   resolveKey,
 } from "../core/env-loader.js";
 import { createLogger } from "../core/logger.js";
+import { DEFAULT_ATLAS_BASE_URL } from "../providers/atlascloud/models.js";
+import { DEFAULT_BYTEPLUS_BASE_URL } from "../providers/byteplus/models.js";
+import {
+  CLOUDFLARE_NATIVE_CREDENTIALS,
+  CLOUDFLARE_VIDEO_CREDENTIALS,
+} from "../providers/cloudflare/models.js";
+import { DEFAULT_FAL_BASE_URL } from "../providers/fal/models.js";
 import { listGeminiKeys } from "../providers/gemini/key-pool.js";
+import { DEFAULT_HEYGEN_BASE_URL } from "../providers/heygen/models.js";
+import { DEFAULT_LEONARDO_BASE_URL } from "../providers/leonardo/models.js";
 import { checkCodexAuthenticated } from "../providers/openai/codex-image-driver.js";
+import { DEFAULT_REPLICATE_BASE_URL } from "../providers/replicate/models.js";
 import { checkBinary } from "./check-helpers/binary-check.js";
 import { pingGemini } from "./check-helpers/gemini-ping.js";
 import { FFMPEG_HINT, MAGICK_HINT, SETUP_HINTS } from "./check-helpers/setup-hints.js";
@@ -119,15 +133,89 @@ export function getCheckProviders(): ProviderEntry[] {
   return [...PROVIDERS];
 }
 
+const usable = (s: TrustedSettingState) => s.status === "used" || s.status === "fallback";
+
+/**
+ * Cloudflare readiness with the same trust rules the provider applies to the
+ * account and gateway IDs, so an ID the provider would refuse is not counted.
+ */
 export function cloudflareReadiness(): { native: boolean; video: boolean } {
-  const accountId = resolveKey("CLOUDFLARE_ACCOUNT_ID")?.trim();
   const apiToken = resolveKey("CLOUDFLARE_API_TOKEN")?.trim();
-  const gatewayId = resolveKey("CLOUDFLARE_AI_GATEWAY_ID")?.trim();
   const replicateToken = resolveKey("REPLICATE_API_TOKEN")?.trim();
+  const ids = (credentials: readonly CredentialSpec[]) => ({
+    account: usable(inspectTrustedSetting("CLOUDFLARE_ACCOUNT_ID", credentials)),
+    gateway: usable(inspectTrustedSetting("CLOUDFLARE_AI_GATEWAY_ID", credentials)),
+  });
+  const native = ids(CLOUDFLARE_NATIVE_CREDENTIALS);
+  const video = ids(CLOUDFLARE_VIDEO_CREDENTIALS);
   return {
-    native: Boolean(accountId && apiToken),
-    video: Boolean(accountId && apiToken && gatewayId && replicateToken),
+    native: Boolean(apiToken) && native.account,
+    video: Boolean(apiToken && replicateToken) && video.account && video.gateway,
   };
+}
+
+/** Settings that decide where a key is sent, with the credentials each one receives. */
+const ROUTING_SETTINGS: { name: string; defaultUrl?: string; credentials: CredentialSpec[] }[] = [
+  {
+    name: "ATLASCLOUD_BASE_URL",
+    defaultUrl: DEFAULT_ATLAS_BASE_URL,
+    credentials: ["ATLASCLOUD_API_KEY"],
+  },
+  {
+    name: "BYTEPLUS_BASE_URL",
+    defaultUrl: DEFAULT_BYTEPLUS_BASE_URL,
+    credentials: [["BYTEPLUS_API_KEY", "ARK_API_KEY"]],
+  },
+  { name: "FAL_BASE_URL", defaultUrl: DEFAULT_FAL_BASE_URL, credentials: ["FAL_KEY"] },
+  { name: "HEYGEN_BASE_URL", defaultUrl: DEFAULT_HEYGEN_BASE_URL, credentials: ["HEYGEN_API_KEY"] },
+  {
+    name: "LEONARDO_BASE_URL",
+    defaultUrl: DEFAULT_LEONARDO_BASE_URL,
+    credentials: ["LEONARDO_API_KEY"],
+  },
+  {
+    name: "REPLICATE_BASE_URL",
+    defaultUrl: DEFAULT_REPLICATE_BASE_URL,
+    credentials: [["REPLICATE_API_TOKEN", "REPLICATE_API_KEY"]],
+  },
+  { name: "CLOUDFLARE_ACCOUNT_ID", credentials: [...CLOUDFLARE_NATIVE_CREDENTIALS] },
+  { name: "CLOUDFLARE_AI_GATEWAY_ID", credentials: [...CLOUDFLARE_NATIVE_CREDENTIALS] },
+];
+
+/**
+ * One check line per routing setting that is set, describing its effective
+ * state (never the value).
+ */
+export function routingSettingReport(): { level: "info" | "warn"; message: string }[] {
+  const lines: { level: "info" | "warn"; message: string }[] = [];
+  for (const s of ROUTING_SETTINGS) {
+    const state = s.defaultUrl
+      ? inspectBaseUrl(s.name, s.defaultUrl, s.credentials)
+      : inspectTrustedSetting(s.name, s.credentials);
+    if (state.status === "used") {
+      const from =
+        state.source === "project"
+          ? "project .env, with the keys it receives from the same file"
+          : state.source === "user"
+            ? "~/.multix/.env"
+            : state.source === "legacy"
+              ? "legacy .claude file"
+              : "shell";
+      lines.push({ level: "info", message: `${s.name} in effect (from ${from})` });
+    } else if (state.status === "fallback") {
+      const why =
+        state.reason === "it is empty"
+          ? "set empty in project .env"
+          : `set in project .env while ${state.reason}`;
+      lines.push({ level: "warn", message: `${s.name} ignored: ${why}; using ~/.multix/.env` });
+    } else if (state.status === "refused") {
+      lines.push({
+        level: "warn",
+        message: `${s.name} ignored: set in project .env while ${state.reason}; commands that use it will stop with an error`,
+      });
+    }
+  }
+  return lines;
 }
 
 export async function checkCodexImageReadiness(
@@ -224,6 +312,15 @@ export function registerCheckCommand(program: Command): void {
         logger.info(
           "Cloudflare media needs CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN (optional)",
         );
+      }
+
+      const routing = routingSettingReport();
+      if (routing.length > 0) {
+        logger.header("Endpoint Overrides");
+        for (const line of routing) {
+          if (line.level === "warn") logger.warn(line.message);
+          else logger.info(line.message);
+        }
       }
 
       const shouldCheckCodex = !anyKey || opts.verbose;

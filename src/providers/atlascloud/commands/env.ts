@@ -41,7 +41,9 @@ export function createAtlasClientFromEnv(): AtlasCloudClient {
   if (!apiKey) {
     throw new ConfigError(`ATLASCLOUD_API_KEY is not set. Get one at ${ATLAS_KEY_URL}`);
   }
-  const baseUrl = resolveBaseUrl("ATLASCLOUD_BASE_URL", DEFAULT_ATLAS_BASE_URL);
+  const baseUrl = resolveBaseUrl("ATLASCLOUD_BASE_URL", DEFAULT_ATLAS_BASE_URL, [
+    "ATLASCLOUD_API_KEY",
+  ]);
   return new AtlasCloudClient({ apiKey, baseUrl });
 }
 
