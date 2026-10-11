@@ -604,6 +604,34 @@ describe("download hardening", () => {
     expect(availableOutputPath(path.join(tmp, "a.png"))).toBe(path.join(tmp, "a-1.png"));
     fs.writeFileSync(path.join(tmp, "a-1.png.part"), "x");
     expect(availableOutputPath(path.join(tmp, "a.png"))).toBe(path.join(tmp, "a-2.png"));
+    // downloadToFile's own in-flight file: taken for new names, never a saved output.
+    fs.writeFileSync(path.join(tmp, "a-2.png.4242-1700000000000-k3x9qa.part"), "x");
+    expect(availableOutputPath(path.join(tmp, "a.png"))).toBe(path.join(tmp, "a-3.png"));
+    expect(savedOutput(path.join(tmp, "a-2.png"))).toBeUndefined();
+  });
+
+  it("leaves no .part file behind after a successful or a failed download", async () => {
+    stubDownloads({ "https://m.test/ok.mp4": "OK" });
+    await runCompleted("clean01", { outputs: ["https://m.test/ok.mp4"] });
+    expect(fs.readdirSync(tmp)).toEqual(["atlas-clean01-01.mp4"]);
+
+    // Fails mid-stream, after the name was claimed.
+    vi.stubGlobal(
+      "fetch",
+      async () =>
+        new Response(
+          new ReadableStream({
+            start(c) {
+              c.enqueue(new TextEncoder().encode("partial"));
+              c.error(new Error("connection reset"));
+            },
+          }),
+        ),
+    );
+    await expect(runCompleted("clean02", { outputs: ["https://m.test/bad.mp4"] })).rejects.toThrow(
+      ProviderError,
+    );
+    expect(fs.readdirSync(tmp)).toEqual(["atlas-clean01-01.mp4"]);
   });
 
   it.runIf(process.platform === "win32" || process.platform === "darwin")(

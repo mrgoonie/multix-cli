@@ -7,7 +7,8 @@
  *   js-genai SDK sends to this endpoint.
  *   GET  /v1beta/{operation.name} until done
  *   video URI at response.generateVideoResponse.generatedSamples[0].video.uri,
- *   downloaded with the same x-goog-api-key header.
+ *   downloaded with the same x-goog-api-key header (never forwarded to the
+ *   storage host it redirects to).
  */
 
 import fs from "node:fs";
@@ -157,16 +158,19 @@ function checkVeoResult(op: VeoOperation): VeoOperation {
 
 /**
  * Download the generated video. Gemini file URIs require the API key header;
- * it is only attached for the Gemini API host so the key never goes elsewhere.
+ * it is only attached for https:// URIs on the Gemini API host, and
+ * downloadFile drops it when the API redirects to storage on another origin,
+ * so the key never goes elsewhere or over plain http.
  */
 export async function downloadVeoVideo(apiKey: string, uri: string, dest: string): Promise<void> {
-  let host = "";
+  let parsed: URL;
   try {
-    host = new URL(uri).hostname;
+    parsed = new URL(uri);
   } catch {
     throw new ProviderError("Veo returned an invalid video URI", "gemini");
   }
-  await downloadFile(uri, dest, 300_000, host === API_HOST ? headers(apiKey) : undefined);
+  const keyed = parsed.protocol === "https:" && parsed.hostname === API_HOST;
+  await downloadFile(uri, dest, 300_000, keyed ? headers(apiKey) : undefined);
 }
 
 /**

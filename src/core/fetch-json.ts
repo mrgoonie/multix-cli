@@ -5,11 +5,12 @@
  */
 
 import { HttpError } from "./errors.js";
+import { type FetchLike, fetchFollowingRedirects } from "./redirect-fetch.js";
+
+export type { FetchLike };
 
 export const DEFAULT_TIMEOUT_MS = 120_000;
 const SNIPPET_MAX = 500;
-
-export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
 export interface FetchJsonOptions {
   url: string;
@@ -55,9 +56,22 @@ export async function httpErrorFromResponse(response: Response, url: string): Pr
   );
 }
 
+/** Request headers that never carry a credential. */
+const NON_CREDENTIAL_HEADERS = new Set(["accept", "accept-language", "content-type", "user-agent"]);
+
+/** True when any header falls outside the non-credential set (it may hold a key). */
+function carriesCredentialHeaders(headers: Record<string, string>): boolean {
+  return Object.keys(headers).some((name) => !NON_CREDENTIAL_HEADERS.has(name.toLowerCase()));
+}
+
 /**
  * Make an HTTP request and parse the JSON response.
- * Throws HttpError on non-2xx status or network failure (status 0).
+ * Throws HttpError on non-2xx status or network failure (status 0). When the
+ * request carries a header that may be a credential (anything but Accept,
+ * Accept-Language, Content-Type, User-Agent), redirects are followed within
+ * the same origin only; one to another origin is refused (HttpError with the
+ * 3xx status) so the key is never sent there. Requests without such headers
+ * follow redirects to any origin.
  */
 export async function fetchJson<T>(opts: FetchJsonOptions): Promise<T> {
   const { url, method = "GET", headers = {}, body, timeoutMs = DEFAULT_TIMEOUT_MS } = opts;
@@ -76,13 +90,13 @@ export async function fetchJson<T>(opts: FetchJsonOptions): Promise<T> {
     init.body = JSON.stringify(body);
   }
 
-  let response: Response;
-  try {
-    response = await doFetch(url, init);
-  } catch (cause) {
-    const msg = cause instanceof Error ? cause.message : String(cause);
-    throw new HttpError(0, msg, url);
-  }
+  // A request with a header that may be a credential follows same-origin
+  // redirects only; an unkeyed one (public catalogs, registries) follows any.
+  const { response } = await fetchFollowingRedirects(url, init, {
+    fetch: doFetch,
+    crossOrigin: carriesCredentialHeaders(headers) ? "error" : "drop-headers",
+    wrapNetworkErrors: true,
+  });
 
   if (!response.ok) {
     throw await httpErrorFromResponse(response, url);

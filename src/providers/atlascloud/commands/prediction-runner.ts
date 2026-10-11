@@ -305,20 +305,16 @@ export async function deliverPrediction(
         logger.info(`Already saved: ${existing}`);
         continue;
       }
-      // downloadToFile writes `<dest>.part` and renames on success, so a failed
-      // download never deletes or truncates a file the user already had.
-      const { dest } = await downloadToFile(url, {
-        dest: (response) =>
-          claimOutputPath(
-            policy === "overwrite" || outputExtension(url)
-              ? planned
-              : withContentTypeExtension(planned, response.headers.get("content-type")),
-            policy,
-          ),
-        maxBytes,
+      const dest = await downloadClaimed(
+        url,
+        (response) =>
+          policy === "overwrite" || outputExtension(url)
+            ? planned
+            : withContentTypeExtension(planned, response.headers.get("content-type")),
+        policy,
         // Inline data: outputs are decoded by fetch, never sent over the network.
-        validateUrl: isDataUrl(url) ? undefined : checkOutputUrl,
-      });
+        { maxBytes, validateUrl: isDataUrl(url) ? undefined : checkOutputUrl },
+      );
       saved.push(dest);
       downloaded.push(dest);
       logger.debug(`Downloaded ${redactUrl(url)} -> ${dest}`);
@@ -358,11 +354,11 @@ export async function deliverPrediction(
       download: async (thumbUrl, planned) => {
         const existing = policy === "reuse" ? savedOutput(planned) : undefined;
         if (existing) return { dest: existing };
-        return downloadToFile(thumbUrl, {
-          dest: () => claimOutputPath(planned, policy),
+        const dest = await downloadClaimed(thumbUrl, () => planned, policy, {
           maxBytes,
           validateUrl: checkOutputUrl,
         });
+        return { dest };
       },
     });
   }
@@ -403,9 +399,12 @@ const PART = ".part";
 // Windows and default macOS file systems ignore case, so names must too.
 const foldCase = process.platform === "win32" || process.platform === "darwin";
 
-/** Name without extension (and without a trailing `.part`), case-folded where the file system is. */
+// The reservation `<dest>.part`, or downloadToFile's in-flight `<dest>.<pid>-<time>-<rand>.part`.
+const PART_SUFFIX = /(?:\.\d+-\d+-[a-z0-9]+)?\.part$/i;
+
+/** Name without extension (and without a `.part` suffix), case-folded where the file system is. */
 function stemOf(name: string): string {
-  const base = name.toLowerCase().endsWith(PART) ? name.slice(0, -PART.length) : name;
+  const base = name.replace(PART_SUFFIX, "");
   const stem = base.slice(0, base.length - path.extname(base).length);
   return foldCase ? stem.toLowerCase() : stem;
 }
@@ -426,7 +425,7 @@ function listDir(dir: string): string[] {
 export function savedOutput(file: string): string | undefined {
   const dir = path.dirname(file);
   const stem = stemOf(path.basename(file));
-  const matches = listDir(dir).filter((n) => !n.toLowerCase().endsWith(PART) && stemOf(n) === stem);
+  const matches = listDir(dir).filter((n) => !PART_SUFFIX.test(n) && stemOf(n) === stem);
   const exact = matches.find((n) => n === path.basename(file));
   const found = exact ?? matches.sort()[0];
   return found === undefined ? undefined : path.join(dir, found);
@@ -453,9 +452,10 @@ export function availableOutputPath(file: string): string {
 
 /**
  * Pick the destination for `file` under `policy` and, unless it is a file the
- * user asked to overwrite, reserve it by creating `<dest>.part` exclusively.
- * downloadToFile then streams into that `.part` and renames it into place (or
- * removes it on failure), so two concurrent runs can never write one name.
+ * user asked to overwrite, reserve it by creating the empty lock file
+ * `<dest>.part` exclusively, so two concurrent runs can never write one name.
+ * The caller removes the lock once the download has finished or failed
+ * (`downloadClaimed`).
  */
 export function claimOutputPath(file: string, policy: NamingPolicy): string {
   if (policy === "overwrite") return file;
@@ -475,6 +475,41 @@ export function claimOutputPath(file: string, policy: NamingPolicy): string {
       }
       // unique: another run took this name since the directory was listed; the
       // next listing sees its `.part`, so pick again.
+    }
+  }
+}
+
+/**
+ * Download `url` to the name `choose` picks from the response, claimed under
+ * `policy`. downloadToFile streams into its own temporary `.part` and renames
+ * it into place only when complete (removing it on failure), so a failed
+ * download never deletes or truncates a file the user already had. The
+ * reservation lock is released either way, so no `.part` file is left behind.
+ */
+async function downloadClaimed(
+  url: string,
+  choose: (response: Response) => string,
+  policy: NamingPolicy,
+  opts: { maxBytes: number; validateUrl?: (url: string) => void },
+): Promise<string> {
+  let lock: string | undefined;
+  try {
+    const { dest } = await downloadToFile(url, {
+      ...opts,
+      dest: (response) => {
+        const dest = claimOutputPath(choose(response), policy);
+        if (policy !== "overwrite") lock = `${dest}${PART}`;
+        return dest;
+      },
+    });
+    return dest;
+  } finally {
+    if (lock) {
+      try {
+        fs.rmSync(lock, { force: true });
+      } catch {
+        // best effort: never replace the result or error being reported
+      }
     }
   }
 }

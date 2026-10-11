@@ -168,6 +168,7 @@ describe("runtime neutrality", () => {
     "fetch-json.js",
     "async-poll.js",
     "redact.js",
+    "redirect-fetch.js",
     "url-safety.js",
   ]);
 

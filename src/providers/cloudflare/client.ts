@@ -1,5 +1,6 @@
 import { resolveKey } from "../../core/env-loader.js";
 import { ProviderError } from "../../core/errors.js";
+import { fetchSameOrigin } from "../../core/redirect-fetch.js";
 import {
   type CloudflareConfig,
   requireCloudflareConfig,
@@ -7,7 +8,7 @@ import {
 } from "./models.js";
 import {
   type CloudflareVideoPrediction,
-  cloudflareProviderFailure,
+  cloudflareResponseFailure,
   createCloudflareVideoPrediction,
   getCloudflareVideoPrediction,
   readCloudflareJson,
@@ -48,7 +49,7 @@ export async function runCloudflareJson<T>(
 ): Promise<T> {
   const config = requireCloudflareConfig();
   const useGateway = Boolean(config.gatewayId);
-  const response = await globalThis.fetch(
+  const response = await fetchSameOrigin(
     useGateway ? gatewayUrl(config.accountId) : nativeUrl(config.accountId, model),
     {
       method: "POST",
@@ -71,7 +72,7 @@ export async function runCloudflareBytes(
 ): Promise<Uint8Array> {
   const config = requireCloudflareConfig();
   const useGateway = Boolean(config.gatewayId);
-  const response = await globalThis.fetch(
+  const response = await fetchSameOrigin(
     useGateway ? gatewayUrl(config.accountId) : nativeUrl(config.accountId, model),
     {
       method: "POST",
@@ -81,7 +82,7 @@ export async function runCloudflareBytes(
       body: JSON.stringify(useGateway ? { model, input } : input),
     },
   );
-  if (!response.ok) throw cloudflareProviderFailure(response.status);
+  if (!response.ok) throw await cloudflareResponseFailure(response);
   const contentType = response.headers.get("content-type") ?? "";
   if (!contentType.includes("audio/mpeg")) {
     throw new ProviderError("Cloudflare did not return MPEG audio", "Cloudflare");
