@@ -10,7 +10,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { HttpError, ProviderError } from "../../core/errors.js";
+import { HttpError, ProviderError, ValidationError } from "../../core/errors.js";
 import { downloadFile, httpJson } from "../../core/http-client.js";
 import type { Logger } from "../../core/logger.js";
 import { withGeminiKey } from "./key-pool.js";
@@ -70,15 +70,30 @@ function authHeaders(apiKey: string): Record<string, string> {
   return { "x-goog-api-key": apiKey };
 }
 
+/** Files API per-file size limit (2 GB). */
+export const FILES_API_MAX_BYTES = 2 * 1024 * 1024 * 1024;
+
 /**
- * Upload a local file to the Gemini Files API via multipart/form-data.
+ * Upload a local file to the Gemini Files API via multipart/related.
+ * The file is streamed from disk (never read whole into memory); files above
+ * the 2 GB Files API limit are rejected before any request is made.
  * Polls until ACTIVE for audio/video files.
  */
 export async function uploadFile(
   filePath: string,
   opts: GeminiCallOptions & { timeoutMs?: number } = {},
 ): Promise<FileRef> {
+  const size = fs.statSync(filePath).size;
+  if (size > FILES_API_MAX_BYTES) {
+    throw new ValidationError(
+      `File too large for the Gemini Files API: ${path.basename(filePath)} is ${formatMb(size)} MB (limit 2048 MB)`,
+    );
+  }
   return withKey(opts, (apiKey) => uploadFileWithKey(filePath, apiKey, opts));
+}
+
+function formatMb(bytes: number): string {
+  return (bytes / 1024 / 1024).toFixed(2);
 }
 
 async function uploadFileWithKey(
@@ -89,33 +104,34 @@ async function uploadFileWithKey(
   const { timeoutMs = 300_000, logger } = opts;
 
   const mimeType = getMimeType(filePath);
-  const fileBytes = fs.readFileSync(filePath);
   const displayName = path.basename(filePath);
+  // File-backed Blob: fetch reads it from disk in small chunks while sending.
+  const file = await fs.openAsBlob(filePath);
 
   // Multipart upload: metadata part + media part
   const boundary = `multix_${Date.now()}`;
   const metaJson = JSON.stringify({ file: { displayName, mimeType } });
-
-  const body = Buffer.concat([
-    Buffer.from(
-      `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metaJson}\r\n--${boundary}\r\nContent-Type: ${mimeType}\r\n\r\n`,
-    ),
-    fileBytes,
-    Buffer.from(`\r\n--${boundary}--`),
+  const body = new Blob([
+    `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metaJson}\r\n--${boundary}\r\nContent-Type: ${mimeType}\r\n\r\n`,
+    file,
+    `\r\n--${boundary}--`,
   ]);
 
-  logger?.debug(`Uploading ${displayName} (${(fileBytes.length / 1024 / 1024).toFixed(2)} MB)`);
+  logger?.debug(`Uploading ${displayName} (${formatMb(file.size)} MB)`);
 
-  // Use globalThis.fetch for binary body (httpJson would re-stringify)
+  // Use globalThis.fetch for binary body (httpJson would re-stringify).
+  // redirect "error": with the default "follow", fetch clones the request body
+  // (tee) to replay it on a redirect, and that copy keeps every chunk in memory.
+  // fetch derives Content-Length from the Blob size.
   const resp = await globalThis.fetch(FILES_BASE, {
     method: "POST",
     headers: {
       "x-goog-api-key": apiKey,
       "Content-Type": `multipart/related; boundary=${boundary}`,
-      "Content-Length": String(body.length),
       "X-Goog-Upload-Protocol": "multipart",
     },
     body,
+    redirect: "error",
     signal: AbortSignal.timeout(timeoutMs),
   });
 

@@ -9,7 +9,9 @@ before automating a workflow.
 ## Analyze, transcribe, and extract
 
 Pass one or more local files with `--files`. Choose `text`, `json`, `csv`, or
-`markdown` output where supported.
+`markdown` output where supported. Files over 20 MB are streamed from disk to
+the Gemini Files API, which accepts files up to 2 GB; a larger file is rejected
+before anything is uploaded.
 
 ```bash
 multix gemini analyze --files photo.jpg clip.mp4 --prompt "Describe the scene"

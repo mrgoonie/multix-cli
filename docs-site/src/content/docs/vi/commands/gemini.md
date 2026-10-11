@@ -9,7 +9,9 @@ khi tự động hóa workflow.
 ## Analyze, transcribe và extract
 
 Truyền một hoặc nhiều file local bằng `--files`. Khi được hỗ trợ, chọn output
-`text`, `json`, `csv` hoặc `markdown`.
+`text`, `json`, `csv` hoặc `markdown`. File lớn hơn 20 MB được stream từ ổ đĩa
+lên Gemini Files API, vốn nhận file tối đa 2 GB; file lớn hơn sẽ bị từ chối
+trước khi upload.
 
 ```bash
 multix gemini analyze --files photo.jpg clip.mp4 --prompt "Describe the scene"
