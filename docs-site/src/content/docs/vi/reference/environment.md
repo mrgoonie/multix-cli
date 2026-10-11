@@ -93,7 +93,8 @@ lệnh: `ATLASCLOUD_IMAGE_MODEL`, `ATLASCLOUD_IMAGE_EDIT_MODEL`,
 `ATLASCLOUD_VIDEO_MODEL`, `ATLASCLOUD_IMAGE_TO_VIDEO_MODEL`,
 `ATLASCLOUD_TTS_MODEL`, `ATLASCLOUD_STT_MODEL`, `ATLASCLOUD_TEXT_TO_3D_MODEL`
 và `ATLASCLOUD_IMAGE_TO_3D_MODEL`. Xem [Atlas Cloud](/vi/commands/atlascloud/)
-để biết các model mặc định.
+để biết các model mặc định. `ATLASCLOUD_MAX_UPLOAD_MB` đặt giới hạn dung lượng
+cho file cục bộ upload lên Atlas Cloud (mặc định 200).
 
 Cloudflare chỉ chấp nhận các model image và speech Workers AI có sẵn;
 `CLOUDFLARE_AI_IMAGE_MODEL` và `CLOUDFLARE_AI_TTS_MODEL` vì vậy chỉ dùng để

@@ -4,8 +4,7 @@
  */
 
 import type { Command } from "commander";
-import { createLogger } from "../../../core/logger.js";
-import { createAtlasClientFromEnv, resolveMediaRef } from "./env.js";
+import { createAtlasClientFromEnv, createAtlasLogger, resolveMediaRef } from "./env.js";
 
 export function registerAtlasUploadCommand(parent: Command): void {
   parent
@@ -13,7 +12,8 @@ export function registerAtlasUploadCommand(parent: Command): void {
     .description("Upload a local file to Atlas Cloud and print its temporary URL")
     .option("-v, --verbose", "Verbose logging")
     .action(async (file: string, opts: { verbose?: boolean }) => {
-      const logger = createLogger({ verbose: opts.verbose ?? false });
+      // stdout carries only the URL so `url=$(multix atlas upload f.png)` works.
+      const logger = createAtlasLogger({ verbose: opts.verbose, stdoutReserved: true });
       if (/^(https?|data):/i.test(file.trim())) {
         logger.warn("Input is already a URL; nothing to upload.");
         console.log(file.trim());

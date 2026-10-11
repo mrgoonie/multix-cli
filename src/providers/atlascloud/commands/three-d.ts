@@ -10,7 +10,7 @@ import { FIELD_CANDIDATES as F } from "../model-input.js";
 import { ATLAS_DEFAULT_MODELS } from "../models.js";
 import { atlasDefaultModel } from "./env.js";
 import { runGenerationCommand } from "./generation-command.js";
-import { type RunCliOpts, addRunOptions } from "./prediction-runner.js";
+import { type RunCliOpts, addRefOption, addRunOptions } from "./prediction-runner.js";
 
 const THREE_D_WAIT_MS = 900_000;
 const THREE_D_POLL_MS = 5000;
@@ -28,8 +28,8 @@ export function registerAtlas3dCommand(parent: Command): void {
     .alias("generate-3d")
     .description(
       `Text- or image-to-3D via Atlas Cloud (defaults: ${ATLAS_DEFAULT_MODELS.textTo3d}; with --ref ${ATLAS_DEFAULT_MODELS.imageTo3d})`,
-    )
-    .option("--ref <pathOrUrl...>", "Reference image(s) for image-to-3D (local files are uploaded)")
+    );
+  addRefOption(cmd, "Reference image for image-to-3D (local files are uploaded)")
     .option(
       "-m, --model <id>",
       "Atlas Cloud 3D model id (env: ATLASCLOUD_TEXT_TO_3D_MODEL / ATLASCLOUD_IMAGE_TO_3D_MODEL)",

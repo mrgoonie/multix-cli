@@ -33,8 +33,10 @@ multix atlas image-to-image --prompt "make it dusk" --ref photo.png [--ref https
   `ATLASCLOUD_IMAGE_MODEL`).
 - `image-to-image` mặc định dùng `openai/gpt-image-1-mini/edit` (ghi đè bằng
   `ATLASCLOUD_IMAGE_EDIT_MODEL`).
-- `--ref` nhận file cục bộ hoặc URL `https://`. File cục bộ được upload lên
-  Atlas Cloud trước, rồi URL tạm thời nhận được sẽ được truyền cho model.
+- Mỗi `--ref` nhận một giá trị; lặp lại flag này khi cần nhiều ảnh tham chiếu
+  (`--ref a.png --ref b.png`). Mỗi giá trị là file cục bộ, URL `http(s)://` hoặc
+  URI `data:`. File cục bộ được upload lên Atlas Cloud trước (xem giới hạn ở mục
+  [Upload](#upload)), rồi URL tạm thời nhận được sẽ được truyền cho model.
 
 ## Video
 
@@ -92,8 +94,9 @@ multix atlas run <modelId> --input @input.json [--async] [--wait-timeout 600000]
 
 `--input` nhận JSON inline hoặc `@path/to/file.json`, dùng đúng tên field trong
 tài liệu của model. multix tự thêm field `model`. Endpoint (`image`, `video` hoặc
-`audio`) được lấy từ schema công khai của model. Chỉ cần truyền `--type` cho
-model không có schema công khai.
+`audio`) được lấy từ schema công khai của model. Hãy truyền `--type` khi model
+không có schema công khai, và mỗi khi dùng `--no-validate`, vì khi đó schema hoàn
+toàn không được tải.
 
 ## Trạng thái và tiếp tục
 
@@ -103,11 +106,12 @@ multix atlas status <predictionId> --wait                # poll đến khi xong
 multix atlas status <predictionId> --download [--output <path>]
 ```
 
-`--async` chỉ in prediction id ra stdout để script có thể lấy giá trị này. Lệnh
-cũng in một lệnh tiếp tục ra stderr. Khi việc chờ bị hết thời gian, thông báo lỗi
-kèm cùng lệnh tiếp tục đó. Prediction kết thúc ở trạng thái `failed` làm lệnh
-thoát với mã khác 0. Atlas Cloud không có endpoint hủy, nên multix không cung cấp
-lệnh hủy.
+`--async` chỉ in prediction id ra stdout để script có thể lấy giá trị này bằng
+`id=$(multix atlas video "waves" --async)`. Các dòng tiến trình và lệnh tiếp tục
+được in ra stderr. Khi việc chờ bị hết thời gian, dù trong lệnh tạo nội dung hay
+`status --wait`, thông báo lỗi kèm cùng lệnh tiếp tục đó. Prediction kết thúc ở
+trạng thái `failed` làm lệnh thoát với mã khác 0. Atlas Cloud không có endpoint
+hủy, nên multix không cung cấp lệnh hủy.
 
 ## Upload
 
@@ -115,9 +119,15 @@ lệnh hủy.
 multix atlas upload photo.png
 ```
 
-Lệnh này in một URL tạm thời cho file, có thể dùng trong payload của `run`. Atlas
-Cloud có thể dọn dẹp file đã upload định kỳ, nên hãy dùng URL sớm và đừng dựa vào
-nó để lưu trữ.
+Lệnh này chỉ in một URL tạm thời cho file ra stdout, có thể dùng trong payload
+của `run`. Atlas Cloud có thể dọn dẹp file đã upload định kỳ, nên hãy dùng URL
+sớm và đừng dựa vào nó để lưu trữ.
+
+Việc upload, kể cả file cục bộ truyền qua `--ref` và `--audio`, chỉ nhận file
+ảnh, video và âm thanh (ví dụ `png`, `jpg`, `webp`, `mp4`, `mov`, `mp3`, `wav`).
+Mọi file khác bị từ chối trước khi gửi bất cứ thứ gì. File lớn hơn 200 MB cũng bị
+từ chối; đặt `ATLASCLOUD_MAX_UPLOAD_MB` để đổi giới hạn này. File được truyền dạng
+luồng, không nạp toàn bộ vào bộ nhớ.
 
 ## Kết quả
 
@@ -127,6 +137,12 @@ nó để lưu trữ.
   đã tồn tại sẽ được dùng làm thư mục kết quả. Đường dẫn file được dùng nguyên
   vẹn khi chỉ có một kết quả, và làm phần gốc của tên `<name>-NN.<ext>` khi có
   nhiều kết quả.
+- URL kết quả không có phần mở rộng sẽ được đặt tên theo `Content-Type` của lần
+  tải, nên job tiếp tục sau cũng có tên `.mp4` hay `.png` giống job chờ trực tiếp.
+- Mỗi file được tải vào một file tạm `.part` rồi đổi tên khi hoàn tất, nên lần tải
+  thất bại không bao giờ ghi đè hay xóa file đã có.
+- Nếu một số kết quả tải thất bại, multix liệt kê các file đã lưu, in lệnh tiếp
+  tục và thoát với mã khác 0.
 - Ảnh được chuyển sang WebP khi đã cài `cwebp`. Truyền `--image-format original`
   hoặc `--no-webp` để giữ định dạng gốc của nhà cung cấp.
 - `--no-download` in URL kết quả thay vì lưu file. Các URL này có chữ ký và chỉ
@@ -141,14 +157,19 @@ multix cũng kiểm tra enum, khoảng giá trị và field bắt buộc. Flag k
 trợ hoặc giá trị không hợp lệ sẽ báo lỗi trước khi bị tính phí, và thông báo lỗi
 liệt kê các giá trị model chấp nhận.
 Dùng `--no-validate` để bỏ qua bước này, ví dụ khi không truy cập được catalog.
-Nếu không tải được schema, multix cảnh báo rồi vẫn submit.
+Nếu không tải được schema trong 15 giây, multix cảnh báo rồi vẫn submit, dùng tên
+field và kiểu dữ liệu thông thường của từng flag (ví dụ `image` là một chuỗi, còn
+`seed` và `duration` là số).
 
 ## Ghi chú
 
 - Xác thực dùng `Authorization: Bearer <ATLASCLOUD_API_KEY>`. Base của media API
   là `https://api.atlascloud.ai/api/v1` (ghi đè bằng `ATLASCLOUD_BASE_URL`).
 - Khi poll, multix tự thử lại khi bị giới hạn tốc độ (tôn trọng `Retry-After`),
-  khi gặp phản hồi 5xx và lỗi mạng, cho đến khi hết `--wait-timeout`.
+  khi gặp phản hồi 5xx và lỗi mạng, cho đến khi hết `--wait-timeout`. Mỗi request
+  poll chỉ được dùng phần thời gian còn lại. Atlas báo một số job thất bại bằng
+  HTTP 5xx có body chứa `data.status: "failed"`; chỉ dạng này mới kết thúc việc
+  poll như một lỗi.
 - multix không bao giờ ghi log API key, URL kết quả có chữ ký hay prompt. Log
   debug (`-v`) hiển thị URL kết quả đã che phần query string.
 - Danh mục model kèm giá có tại

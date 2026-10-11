@@ -11,7 +11,12 @@ import { createLogger } from "../../../core/logger.js";
 import { AtlasPredictionFailedError, assertPredictionSucceeded } from "../client.js";
 import { isFailureStatus } from "../prediction-output.js";
 import { createAtlasClientFromEnv } from "./env.js";
-import { type RunCliOpts, deliverPrediction, parseTimeoutMs } from "./prediction-runner.js";
+import {
+  type RunCliOpts,
+  deliverPrediction,
+  parseTimeoutMs,
+  resumeCommand,
+} from "./prediction-runner.js";
 
 const STATUS_WAIT_MS = 600_000;
 
@@ -38,6 +43,7 @@ export function registerAtlasStatusCommand(parent: Command): void {
       const prediction = wait
         ? await client.waitForPrediction(predictionId, {
             timeoutMs: parseTimeoutMs(opts.waitTimeout, STATUS_WAIT_MS),
+            resumeHint: `Resume with: ${resumeCommand(predictionId)}`,
             onPoll: (p, n) => logger.debug(`poll ${n}: ${p.status}`),
           })
         : await client.getPrediction(predictionId);

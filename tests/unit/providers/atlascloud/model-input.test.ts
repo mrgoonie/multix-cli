@@ -200,6 +200,32 @@ describe("buildModelInput", () => {
       ]),
     ).toEqual({ prompt: "x", images: ["u"] });
   });
+
+  it("sends the usual types when no schema is available", () => {
+    expect(
+      buildModelInput(undefined, [
+        { flag: "--prompt", value: "pan", candidates: F.prompt },
+        { flag: "--ref", value: ["https://x.test/f.png"], candidates: F.primaryImage },
+        { flag: "--seed", value: "42", candidates: F.seed },
+        { flag: "--duration", value: "5", candidates: F.duration },
+        { flag: "--num-images", value: "2", candidates: F.numImages },
+      ]),
+    ).toEqual({
+      prompt: "pan",
+      image: "https://x.test/f.png",
+      seed: 42,
+      duration: 5,
+      num_images: 2,
+    });
+    expect(() =>
+      buildModelInput(undefined, [
+        { flag: "--ref", value: ["a", "b"], candidates: F.primaryImage },
+      ]),
+    ).toThrow(/single value/);
+    expect(() =>
+      buildModelInput(undefined, [{ flag: "--seed", value: "abc", candidates: F.seed }]),
+    ).toThrow(ValidationError);
+  });
 });
 
 describe("validateRawInput", () => {

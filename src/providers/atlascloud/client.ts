@@ -44,6 +44,7 @@ import type {
 
 export const ATLAS_PROVIDER = "atlascloud";
 const DEFAULT_UPLOAD_TIMEOUT_MS = 300_000;
+const CATALOG_TIMEOUT_MS = 15_000;
 const PREDICTION_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
 
 /** A prediction reached a terminal failure state; carries the provider payload. */
@@ -76,22 +77,30 @@ export function assertPredictionSucceeded(prediction: AtlasPrediction): void {
  * Atlas reports a failed task as HTTP 5xx with the verdict in the body
  * (`{ code: 500, data: { status: "failed", error } }`). Recover that terminal
  * state so polling stops instead of retrying a decision already made.
+ *
+ * Only 5xx responses carrying the prediction envelope (`data.status`) qualify:
+ * a 429/401 or a gateway error body must stay an HTTP error so it is retried
+ * or reported as such, never mistaken for a finished job.
  */
 export function terminalPredictionFromError(error: unknown, id: string): AtlasPrediction | null {
-  if (!(error instanceof HttpError) || error.status < 400) return null;
+  if (!(error instanceof HttpError) || error.status < 500) return null;
   const snippet = error.snippet;
   try {
-    const parsed = JSON.parse(snippet) as AtlasEnvelope<AtlasPrediction> & AtlasPrediction;
-    const data = (parsed.data && typeof parsed.data === "object" ? parsed.data : parsed) as
-      | AtlasPrediction
-      | undefined;
-    if (data && isTerminalStatus(data.status)) return { ...data, id: data.id || id };
+    const parsed = JSON.parse(snippet) as AtlasEnvelope<AtlasPrediction>;
+    const data = parsed?.data;
+    if (data && typeof data === "object" && isTerminalStatus(data.status)) {
+      return { ...data, id: data.id || id };
+    }
+    return null;
   } catch {
     // The snippet is truncated at 500 chars; fall back to field extraction.
   }
-  const status = /"status"\s*:\s*"([^"]+)"/.exec(snippet)?.[1];
-  if (!status || !isFailureStatus(status)) return null;
-  const err = /"error"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(snippet)?.[1];
+  const dataAt = snippet.search(/"data"\s*:\s*\{/);
+  if (dataAt === -1) return null;
+  const inData = snippet.slice(dataAt);
+  const status = /"status"\s*:\s*"([^"]+)"/.exec(inData)?.[1];
+  if (status?.toLowerCase() !== "failed") return null;
+  const err = /"error"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(inData)?.[1];
   return { id, status, error: err ?? snippet };
 }
 
@@ -133,7 +142,15 @@ export class AtlasCloudClient {
   }
 
   private doFetch(input: string, init?: RequestInit): Promise<Response> {
-    return this.fetchImpl ? this.fetchImpl(input, init) : globalThis.fetch(input, init);
+    // Call without a receiver: Workers' native fetch throws "Illegal invocation"
+    // when invoked as a method of another object.
+    const f = this.fetchImpl;
+    return f ? f(input, init) : globalThis.fetch(input, init);
+  }
+
+  /** Catalog and schema lookups are advisory; fail fast so a slow catalog cannot stall a command. */
+  private catalogTimeoutMs(): number {
+    return Math.min(this.timeoutMs, CATALOG_TIMEOUT_MS);
   }
 
   private authHeaders(): Record<string, string> {
@@ -163,13 +180,13 @@ export class AtlasCloudClient {
   }
 
   /** Fetch a prediction once. A failed task reported as HTTP 5xx is returned, not thrown. */
-  async getPrediction(id: string): Promise<AtlasPrediction> {
+  async getPrediction(id: string, timeoutMs?: number): Promise<AtlasPrediction> {
     assertValidPredictionId(id);
     try {
       const env = await fetchJson<AtlasEnvelope<AtlasPrediction>>({
         url: `${this.baseUrl}/model/prediction/${id}`,
         headers: this.authHeaders(),
-        timeoutMs: this.timeoutMs,
+        timeoutMs: timeoutMs ?? this.timeoutMs,
         fetch: this.fetchImpl,
       });
       const data = envelopeData(env, "prediction");
@@ -189,7 +206,9 @@ export class AtlasCloudClient {
   async waitForPrediction(id: string, opts: WaitOptions): Promise<AtlasPrediction> {
     assertValidPredictionId(id);
     return pollUntil<AtlasPrediction>({
-      fetchStatus: () => this.getPrediction(id),
+      // Cap each request at the time left so one hung poll cannot overrun the deadline.
+      fetchStatus: ({ remainingMs }) =>
+        this.getPrediction(id, Math.ceil(Math.max(1000, Math.min(this.timeoutMs, remainingMs)))),
       isTerminal: (p) => isTerminalStatus(p.status),
       timeoutMs: opts.timeoutMs,
       intervalMs: opts.intervalMs ?? 3000,
@@ -258,7 +277,7 @@ export class AtlasCloudClient {
   listModels(): Promise<AtlasCatalogModel[]> {
     this.catalog ??= fetchJson<AtlasEnvelope<AtlasCatalogModel[]>>({
       url: `${this.baseUrl}/models`,
-      timeoutMs: this.timeoutMs,
+      timeoutMs: this.catalogTimeoutMs(),
       fetch: this.fetchImpl,
     })
       .then((env) => {
@@ -289,7 +308,7 @@ export class AtlasCloudClient {
     if (!entry?.schema || !/^https:\/\//i.test(entry.schema)) return undefined;
     const doc = await fetchJson<unknown>({
       url: entry.schema,
-      timeoutMs: this.timeoutMs,
+      timeoutMs: this.catalogTimeoutMs(),
       fetch: this.fetchImpl,
     });
     return parseModelSpec(model, doc);

@@ -24,6 +24,7 @@ import {
   type OutputCategory,
   classifyOutputs,
   defaultExtensionFor,
+  extensionForContentType,
   hasNsfwFlag,
   isTerminalStatus,
   outputCategory,
@@ -61,6 +62,27 @@ export function addRunOptions(
   if (cfg.images) cmd.addOption(imageFormatOption()).addOption(noWebpOption());
   if (cfg.video) cmd.option("--no-thumb", "Skip downloading the video thumbnail if present");
   return cmd.option("-v, --verbose", "Verbose logging");
+}
+
+/**
+ * Repeatable single-value `--ref`: each occurrence takes exactly one value, so
+ * `atlas 3d --ref a.png "prompt"` keeps "prompt" as the positional argument.
+ */
+export function addRefOption(cmd: Command, description: string): Command {
+  return cmd.option(
+    "--ref <pathOrUrl>",
+    `${description} (repeat --ref for several)`,
+    (value: string, prev: string[]) => [...prev, value],
+    [] as string[],
+  );
+}
+
+/** Reject a missing `--ref` for commands that need at least one reference. */
+export function requireRefs(refs: string[] | undefined): string[] {
+  if (!refs || refs.length === 0) {
+    throw new ValidationError("Missing required option --ref <pathOrUrl>");
+  }
+  return refs;
 }
 
 export function parseTimeoutMs(raw: string | undefined, fallback: number): number {
@@ -255,16 +277,29 @@ export async function deliverPrediction(
     output: opts.output,
     hint: cfg.hint,
   });
+  // An explicit single-file --output keeps the user's chosen name and extension.
+  const explicitFile =
+    classified.urls.length === 1 && opts.output !== undefined && !isDirectoryOutput(opts.output);
   const saved: string[] = [];
+  let failed = 0;
   for (let i = 0; i < classified.urls.length; i++) {
     const url = classified.urls[i] as string;
-    const dest = dests[i] as string;
+    const planned = dests[i] as string;
+    // Download beside the target and rename on success, so a failed download
+    // never deletes or truncates a file the user already had at that path.
+    const part = `${planned}.part`;
     try {
-      await downloadFile(url, dest);
+      const contentType = await downloadFile(url, part);
+      const dest =
+        explicitFile || outputExtension(url)
+          ? planned
+          : withContentTypeExtension(planned, contentType);
+      fs.renameSync(part, dest);
       saved.push(dest);
       logger.debug(`Downloaded ${redactUrl(url)} -> ${dest}`);
     } catch (e) {
-      fs.rmSync(dest, { force: true });
+      fs.rmSync(part, { force: true });
+      failed++;
       logger.warn(
         `Download failed (${redactUrl(url)}): ${e instanceof Error ? e.message : String(e)}`,
       );
@@ -295,5 +330,20 @@ export async function deliverPrediction(
 
   console.log(`\nPrediction ${prediction.id}: saved ${files.length} file(s)`);
   for (const f of files) console.log(`  ${f}`);
+  if (failed > 0) {
+    // Paid-for outputs were lost: scripts must not mistake this for success.
+    throw new ProviderError(
+      `Prediction ${prediction.id}: downloaded ${saved.length} of ${classified.urls.length} output(s); ${failed} failed. Saved: ${files.join(", ")}. Retry with: ${resumeCommand(prediction.id)}`,
+      ATLAS_PROVIDER,
+    );
+  }
   return { files, texts: classified.texts };
+}
+
+/** Swap a planned fallback extension for the one the response Content-Type names. */
+function withContentTypeExtension(planned: string, contentType: string | undefined): string {
+  const ext = extensionForContentType(contentType);
+  if (!ext) return planned;
+  const current = path.extname(planned);
+  return `${current ? planned.slice(0, -current.length) : planned}.${ext}`;
 }

@@ -77,6 +77,7 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `ATLASCLOUD_VIDEO_MODEL` / `ATLASCLOUD_IMAGE_TO_VIDEO_MODEL` | No | Atlas video defaults (`bytedance/seedance-v1-pro-fast/text-to-video`, `.../image-to-video`) |
 | `ATLASCLOUD_TTS_MODEL` / `ATLASCLOUD_STT_MODEL` | No | Atlas audio defaults (`xai/tts-v1`, `bytedance/seed-asr-2.0`) |
 | `ATLASCLOUD_TEXT_TO_3D_MODEL` / `ATLASCLOUD_IMAGE_TO_3D_MODEL` | No | Atlas 3D defaults (`tencent/hunyuan3d-rapid/text-to-3d`, `.../image-to-3d`) |
+| `ATLASCLOUD_MAX_UPLOAD_MB` | No | Size limit for local files uploaded to Atlas Cloud (default `200`) |
 | `ARK_API_KEY` | No | Fallback for `BYTEPLUS_API_KEY` (Volcengine ARK shared name) |
 | `BYTEPLUS_BASE_URL` | No | Override BytePlus base (default `https://ark.ap-southeast.bytepluses.com/api/v3`) |
 | `BYTEPLUS_IMAGE_MODEL` | No | Default Seedream model (default `seedream-4-0-250828`) |
@@ -519,7 +520,10 @@ multix atlas upload ./photo.png
 - Auth is `Authorization: Bearer $ATLASCLOUD_API_KEY`; the media API base is `https://api.atlascloud.ai/api/v1`.
 - Generation commands and `run` accept `--async`, `--wait-timeout <ms>`, `--output <path>`, `--no-download` and `--no-validate`. By default the command waits, then downloads to `MULTIX_OUTPUT_DIR` as `atlas-<idprefix>-NN.<ext>`.
 - Inputs are model-specific. multix reads each model's published schema, maps flags onto that model's field names, and rejects unsupported flags or invalid values before submitting. Use `--no-validate` to skip this check.
-- Local `--ref` / `--audio` files are uploaded first. Text outputs (transcripts, lyrics) are printed instead of downloaded. A failed prediction exits non-zero. Atlas Cloud has no cancel endpoint.
+- `--async` prints only the prediction id on stdout and `upload` prints only the URL; progress goes to stderr, so `id=$(multix atlas video "waves" --async)` works.
+- `--ref` takes one value per flag; repeat it for several references. Local `--ref` / `--audio` files are uploaded first: only image, video and audio files, up to 200 MB (`ATLASCLOUD_MAX_UPLOAD_MB`).
+- Text outputs (transcripts, lyrics) are printed instead of downloaded. A failed prediction, or a download where some outputs fail, exits non-zero with the resume command. Atlas Cloud has no cancel endpoint.
+- `run --no-validate` skips the schema, so pass `--type` with it.
 
 ### `multix media`
 

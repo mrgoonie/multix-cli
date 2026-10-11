@@ -33,8 +33,11 @@ multix atlas image-to-image --prompt "make it dusk" --ref photo.png [--ref https
   `ATLASCLOUD_IMAGE_MODEL`).
 - `image-to-image` defaults to `openai/gpt-image-1-mini/edit` (override with
   `ATLASCLOUD_IMAGE_EDIT_MODEL`).
-- `--ref` accepts local files or `https://` URLs. Local files are uploaded to
-  Atlas Cloud first, and the returned temporary URL is passed to the model.
+- `--ref` takes one value per flag; repeat it for several references
+  (`--ref a.png --ref b.png`). Each value is a local file, an `http(s)://` URL or
+  a `data:` URI. Local files are uploaded to Atlas Cloud first (see
+  [Upload](#upload) for the limits), and the returned temporary URL is passed to
+  the model.
 
 ## Video
 
@@ -92,7 +95,8 @@ multix atlas run <modelId> --input @input.json [--async] [--wait-timeout 600000]
 `--input` takes inline JSON or `@path/to/file.json`, using the field names
 from the model's documentation. multix adds the `model` field itself. The
 endpoint (`image`, `video` or `audio`) comes from the model's published schema.
-Pass `--type` only for a model that has no published schema.
+Pass `--type` when the model has no published schema, and whenever you use
+`--no-validate`, because the schema is then not loaded at all.
 
 ## Status and resume
 
@@ -102,11 +106,12 @@ multix atlas status <predictionId> --wait                # poll until it finishe
 multix atlas status <predictionId> --download [--output <path>]
 ```
 
-`--async` prints only the prediction id on stdout, so scripts can capture it.
-It also prints a resume command on stderr. When a wait times out, the error
-includes the same resume command. A prediction that ends in `failed` makes
-the command exit with a non-zero status. Atlas Cloud has no cancel endpoint, so
-multix does not offer one.
+`--async` prints only the prediction id on stdout, so scripts can capture it
+with `id=$(multix atlas video "waves" --async)`. Progress lines and a resume
+command go to stderr. When a wait times out, in a generation command or in
+`status --wait`, the error includes the same resume command. A prediction that
+ends in `failed` makes the command exit with a non-zero status. Atlas Cloud has
+no cancel endpoint, so multix does not offer one.
 
 ## Upload
 
@@ -114,9 +119,15 @@ multix does not offer one.
 multix atlas upload photo.png
 ```
 
-This prints a temporary URL for the file, which you can use in `run` payloads.
-Atlas Cloud may clean up uploaded files periodically, so use the URL promptly
-and do not rely on it for storage.
+This prints only a temporary URL for the file on stdout, which you can use in
+`run` payloads. Atlas Cloud may clean up uploaded files periodically, so use the
+URL promptly and do not rely on it for storage.
+
+Uploads, including local `--ref` and `--audio` files, accept only image, video
+and audio files (for example `png`, `jpg`, `webp`, `mp4`, `mov`, `mp3`, `wav`).
+Any other file is refused before anything is sent. Files above 200 MB are also
+refused; set `ATLASCLOUD_MAX_UPLOAD_MB` to change the limit. The file is
+streamed, not loaded into memory.
 
 ## Output
 
@@ -125,6 +136,13 @@ and do not rely on it for storage.
 - `--output` with a trailing slash, no extension, or an existing directory is
   used as the output directory. A file path is used as-is for a single output,
   and as the stem for `<name>-NN.<ext>` when there are several.
+- An output URL without a file extension is named from the download's
+  `Content-Type`, so a resumed job gets the same `.mp4` or `.png` name as a
+  waited one.
+- Each file is downloaded to a temporary `.part` file and renamed when complete,
+  so a failed download never overwrites or deletes an existing file.
+- If some outputs fail to download, multix lists the files it saved, prints the
+  resume command and exits with a non-zero status.
 - Images are converted to WebP when `cwebp` is installed. Pass
   `--image-format original` or `--no-webp` to keep the provider's format.
 - `--no-download` prints the output URLs instead of saving files. These URLs are
@@ -139,14 +157,18 @@ the field that model actually uses, for example `size` or `image_size`, or
 unsupported flag or an invalid value fails before anything is billed. The error
 lists the values the model accepts.
 Use `--no-validate` to skip this check, for example when the catalog is
-unreachable. If the schema cannot be fetched, multix warns and submits anyway.
+unreachable. If the schema cannot be fetched within 15 seconds, multix warns and
+submits anyway, using each flag's usual field name and type (for example a single
+`image` string, and numbers for `seed` and `duration`).
 
 ## Notes
 
 - Auth uses `Authorization: Bearer <ATLASCLOUD_API_KEY>`. The media API base is
   `https://api.atlascloud.ai/api/v1` (override with `ATLASCLOUD_BASE_URL`).
 - Polling retries rate limits (honouring `Retry-After`), 5xx responses and
-  network errors until `--wait-timeout` expires.
+  network errors until `--wait-timeout` expires. Each poll request is limited
+  to the time left. Atlas reports some failed jobs as an HTTP 5xx whose body
+  holds `data.status: "failed"`; only that shape ends polling as a failure.
 - multix never logs the API key, signed output URLs or prompts. Debug output
   (`-v`) shows output URLs with their query string redacted.
 - The model catalog with prices is at

@@ -28,7 +28,15 @@ const UPLOAD_MIME_TYPES: Record<string, string> = {
   opus: "audio/opus",
 };
 
-export function guessUploadMimeType(filename: string): string {
+/** Extensions accepted for upload: image, video and audio media only. */
+export const UPLOAD_EXTENSIONS: readonly string[] = Object.keys(UPLOAD_MIME_TYPES);
+
+/** Content type for a supported media file, or undefined when the extension is not media. */
+export function uploadMimeTypeFor(filename: string): string | undefined {
   const ext = /\.([a-z0-9]+)$/i.exec(filename)?.[1]?.toLowerCase() ?? "";
-  return UPLOAD_MIME_TYPES[ext] ?? "application/octet-stream";
+  return UPLOAD_MIME_TYPES[ext];
+}
+
+export function guessUploadMimeType(filename: string): string {
+  return uploadMimeTypeFor(filename) ?? "application/octet-stream";
 }

@@ -7,11 +7,10 @@
 import type { Command } from "commander";
 import { ValidationError } from "../../../core/errors.js";
 import { parseJsonInput } from "../../../core/json-input.js";
-import { createLogger } from "../../../core/logger.js";
 import { validateRawInput } from "../model-input.js";
 import { ATLAS_MEDIA_KINDS } from "../models.js";
 import type { AtlasMediaKind } from "../types.js";
-import { createAtlasClientFromEnv } from "./env.js";
+import { createAtlasClientFromEnv, createAtlasLogger } from "./env.js";
 import {
   type RunCliOpts,
   addRunOptions,
@@ -43,11 +42,11 @@ export function registerAtlasRunCommand(parent: Command): void {
     .requiredOption("--input <json>", "Model input as JSON, or @path/to/input.json")
     .option(
       "--type <type>",
-      "Endpoint: image | video | audio (default: from the model's published schema; 3D uses image)",
+      "Endpoint: image | video | audio (default: from the model's published schema; 3D uses image). Required with --no-validate or for models without a schema",
     );
   addRunOptions(run, { waitTimeoutMs: RUN_WAIT_MS, images: true, video: true }).action(
     async (modelId: string, opts: RunFlags) => {
-      const logger = createLogger({ verbose: opts.verbose ?? false });
+      const logger = createAtlasLogger({ verbose: opts.verbose, stdoutReserved: opts.async });
       const input = parseJsonInput(opts.input);
       if (input.model !== undefined && input.model !== modelId) {
         throw new ValidationError(

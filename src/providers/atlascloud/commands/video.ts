@@ -8,7 +8,7 @@ import { FIELD_CANDIDATES as F, type FieldRequest } from "../model-input.js";
 import { ATLAS_DEFAULT_MODELS } from "../models.js";
 import { atlasDefaultModel } from "./env.js";
 import { runGenerationCommand } from "./generation-command.js";
-import { type RunCliOpts, addRunOptions } from "./prediction-runner.js";
+import { type RunCliOpts, addRefOption, addRunOptions, requireRefs } from "./prediction-runner.js";
 
 const VIDEO_WAIT_MS = 900_000;
 // Docs: poll video every ~5s.
@@ -68,19 +68,18 @@ export function registerAtlasVideoCommands(parent: Command): void {
     .description(
       `Animate reference image(s) via Atlas Cloud (default: ${ATLAS_DEFAULT_MODELS.imageToVideo})`,
     )
-    .requiredOption("--ref <pathOrUrl...>", "Reference image(s): local files are uploaded first")
-    .option("--prompt <text>", "Motion / scene prompt")
-    .option(
-      "-m, --model <id>",
-      "Atlas Cloud image-to-video model id (env: ATLASCLOUD_IMAGE_TO_VIDEO_MODEL)",
-    );
+    .option("--prompt <text>", "Motion / scene prompt");
+  addRefOption(i2v, "Reference image; local files are uploaded first; required").option(
+    "-m, --model <id>",
+    "Atlas Cloud image-to-video model id (env: ATLASCLOUD_IMAGE_TO_VIDEO_MODEL)",
+  );
   addVideoFlags(i2v);
   addRunOptions(i2v, { waitTimeoutMs: VIDEO_WAIT_MS, video: true }).action(
     async (opts: VideoFlags & { prompt?: string; ref: string[] }) => {
       await runGenerationCommand({
         model: opts.model ?? atlasDefaultModel("imageToVideo"),
         kind: "video",
-        refs: opts.ref,
+        refs: requireRefs(opts.ref),
         requests: (refs) => [
           ...videoRequests(opts.prompt, opts),
           { flag: "--ref", value: refs, candidates: F.primaryImage },

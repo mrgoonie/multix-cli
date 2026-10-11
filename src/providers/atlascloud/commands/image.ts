@@ -8,7 +8,7 @@ import { FIELD_CANDIDATES as F, type FieldRequest } from "../model-input.js";
 import { ATLAS_DEFAULT_MODELS } from "../models.js";
 import { atlasDefaultModel } from "./env.js";
 import { runGenerationCommand } from "./generation-command.js";
-import { type RunCliOpts, addRunOptions } from "./prediction-runner.js";
+import { type RunCliOpts, addRefOption, addRunOptions, requireRefs } from "./prediction-runner.js";
 
 const IMAGE_WAIT_MS = 300_000;
 const IMAGE_POLL_MS = 2000;
@@ -70,19 +70,18 @@ export function registerAtlasImageCommands(parent: Command): void {
     .description(
       `Edit or restyle reference images via Atlas Cloud (default: ${ATLAS_DEFAULT_MODELS.imageEdit})`,
     )
-    .requiredOption("--prompt <text>", "Edit instruction")
-    .requiredOption("--ref <pathOrUrl...>", "Reference image(s): local files are uploaded first")
-    .option(
-      "-m, --model <id>",
-      "Atlas Cloud image-edit model id (env: ATLASCLOUD_IMAGE_EDIT_MODEL)",
-    );
+    .requiredOption("--prompt <text>", "Edit instruction");
+  addRefOption(edit, "Reference image; local files are uploaded first; required").option(
+    "-m, --model <id>",
+    "Atlas Cloud image-edit model id (env: ATLASCLOUD_IMAGE_EDIT_MODEL)",
+  );
   addImageFlags(edit);
   addRunOptions(edit, { waitTimeoutMs: IMAGE_WAIT_MS, images: true }).action(
     async (opts: ImageFlags & { prompt: string; ref: string[] }) => {
       await runGenerationCommand({
         model: opts.model ?? atlasDefaultModel("imageEdit"),
         kind: "image",
-        refs: opts.ref,
+        refs: requireRefs(opts.ref),
         requests: (refs) => [
           ...imageRequests(opts.prompt, opts),
           { flag: "--ref", value: refs, candidates: F.editImages },

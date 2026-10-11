@@ -93,7 +93,8 @@ Atlas Cloud accepts `ATLASCLOUD_BASE_URL` (media API base, default
 `ATLASCLOUD_VIDEO_MODEL`, `ATLASCLOUD_IMAGE_TO_VIDEO_MODEL`,
 `ATLASCLOUD_TTS_MODEL`, `ATLASCLOUD_STT_MODEL`, `ATLASCLOUD_TEXT_TO_3D_MODEL`,
 and `ATLASCLOUD_IMAGE_TO_3D_MODEL`. See [Atlas Cloud](/commands/atlascloud/)
-for the built-in defaults.
+for the built-in defaults. `ATLASCLOUD_MAX_UPLOAD_MB` sets the size limit for
+local files uploaded to Atlas Cloud (default 200).
 
 Cloudflare accepts only the built-in Workers AI image and speech model IDs;
 `CLOUDFLARE_AI_IMAGE_MODEL` and `CLOUDFLARE_AI_TTS_MODEL` are therefore useful

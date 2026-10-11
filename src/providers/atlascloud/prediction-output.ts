@@ -125,7 +125,19 @@ const MIME_EXT: Record<string, string> = {
   "audio/ogg": "ogg",
   "audio/flac": "flac",
   "model/gltf-binary": "glb",
+  "video/quicktime": "mov",
+  "audio/aac": "aac",
+  "audio/mp4": "m4a",
+  "application/zip": "zip",
 };
+
+/** Extension for a response Content-Type (parameters ignored), or undefined if unknown. */
+export function extensionForContentType(
+  contentType: string | null | undefined,
+): string | undefined {
+  const mime = contentType?.split(";")[0]?.trim().toLowerCase();
+  return mime ? MIME_EXT[mime] : undefined;
+}
 
 /** Lower-cased, normalized extension (no dot) of a media output, or undefined. */
 export function outputExtension(value: string): string | undefined {

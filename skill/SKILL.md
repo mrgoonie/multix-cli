@@ -133,7 +133,7 @@ multix fal result <model> <requestId> [--download]
 
 ## Atlas Cloud
 
-Auth is `Authorization: Bearer $ATLASCLOUD_API_KEY`; the media API base is `https://api.atlascloud.ai/api/v1`. Each job is an async prediction: commands wait (bounded by `--wait-timeout`) and download to `MULTIX_OUTPUT_DIR` as `atlas-<idprefix>-NN.<ext>`. `--async` prints only the prediction id on stdout so scripts can capture it. A failed prediction exits non-zero.
+Auth is `Authorization: Bearer $ATLASCLOUD_API_KEY`; the media API base is `https://api.atlascloud.ai/api/v1`. Each job is an async prediction: commands wait (bounded by `--wait-timeout`) and download to `MULTIX_OUTPUT_DIR` as `atlas-<idprefix>-NN.<ext>`. `--async` prints only the prediction id on stdout (progress goes to stderr) so scripts can capture it. A failed prediction, or a partial download, exits non-zero with a resume command.
 
 Inputs are model-specific. multix reads the model's published schema and maps flags onto its field names (`size`/`image_size`, `images[]`/`image`, `audio_url`/`audio`). Unsupported flags and invalid values fail before anything is billed, and the error lists the accepted values. Pass `--no-validate` to skip this check.
 
@@ -152,7 +152,7 @@ id=$(multix atlas video "waves" --async)
 multix atlas status "$id" --wait --download [--output <path>]
 ```
 
-Local `--ref` and `--audio` files are uploaded first (`multix atlas upload <file>` prints a temporary URL). Atlas Cloud has no cancel endpoint.
+`--ref` takes one value per flag; repeat it for several references. Local `--ref` and `--audio` files are uploaded first (`multix atlas upload <file>` prints only a temporary URL). Uploads accept only image, video and audio files up to 200 MB (`ATLASCLOUD_MAX_UPLOAD_MB`). `run --no-validate` skips the schema, so pass `--type` with it. Atlas Cloud has no cancel endpoint.
 
 ## Image-to-image (edit existing image with a prompt)
 
@@ -345,6 +345,7 @@ Requires `cwebp` (libwebp: `brew install webp`, `apt install webp`) on `PATH`.
 | `FAL_IMAGE_MODEL` / `FAL_VIDEO_MODEL` | fal.ai default model ids (default `fal-ai/flux/schnell`, `fal-ai/kling-video/v1.6/standard/text-to-video`) |
 | `ATLASCLOUD_BASE_URL` | Override Atlas Cloud media API base (default `https://api.atlascloud.ai/api/v1`) |
 | `ATLASCLOUD_IMAGE_MODEL` / `ATLASCLOUD_IMAGE_EDIT_MODEL` / `ATLASCLOUD_VIDEO_MODEL` / `ATLASCLOUD_IMAGE_TO_VIDEO_MODEL` / `ATLASCLOUD_TTS_MODEL` / `ATLASCLOUD_STT_MODEL` / `ATLASCLOUD_TEXT_TO_3D_MODEL` / `ATLASCLOUD_IMAGE_TO_3D_MODEL` | Atlas Cloud default model ids per command |
+| `ATLASCLOUD_MAX_UPLOAD_MB` | Size limit for local files uploaded to Atlas Cloud (default 200) |
 | `GEMINI_TTS_MODEL` / `TTS_MODEL` | Override Gemini TTS model (default `gemini-3.8-flash-lite-tts`) |
 | `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN` | Required for Cloudflare Workers AI image/speech and AI Gateway video |
 | `CLOUDFLARE_AI_GATEWAY_ID` | Optional for native Cloudflare image/speech; required for Cloudflare video |

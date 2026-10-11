@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { PollTimeoutError } from "../../../../src/core/async-poll.js";
 import {
   ConfigError,
@@ -149,6 +149,22 @@ describe("terminalPredictionFromError", () => {
       terminalPredictionFromError(new HttpError(500, '{"data":{"status":"processing"}}', "u"), "p"),
     ).toBeNull();
   });
+
+  it("only treats 5xx bodies with a data.status verdict as terminal", () => {
+    const failedBody = '{"code":429,"data":{"status":"failed","error":"x"}}';
+    expect(terminalPredictionFromError(new HttpError(429, failedBody, "u"), "p")).toBeNull();
+    expect(terminalPredictionFromError(new HttpError(401, failedBody, "u"), "p")).toBeNull();
+    // A gateway or rate-limit body with a top-level status is not a prediction verdict.
+    expect(
+      terminalPredictionFromError(new HttpError(503, '{"status":"error","msg":"busy"}', "u"), "p"),
+    ).toBeNull();
+    expect(
+      terminalPredictionFromError(
+        new HttpError(502, '{"status":"failed","message":"bad gw', "u"),
+        "p",
+      ),
+    ).toBeNull();
+  });
 });
 
 describe("waitForPrediction", () => {
@@ -196,6 +212,28 @@ describe("waitForPrediction", () => {
     expect(p.status).toBe("completed");
     expect(sleeps[0]).toBe(2000);
     expect(sleeps).toHaveLength(3);
+  });
+
+  it("retries a 429 whose body carries an error status instead of failing the job", async () => {
+    const { client } = createFakeAtlas({
+      "GET /model/prediction/w6": [
+        { status: 429, body: { status: "error", message: "rate limited" } },
+        { body: prediction("w6", "completed", { outputs: ["https://cdn.test/a.png"] }) },
+      ],
+    });
+    const p = await client.waitForPrediction("w6", { timeoutMs: 60_000, sleep: noSleep });
+    expect(p.status).toBe("completed");
+  });
+
+  it("caps each poll request at the time left before the deadline", async () => {
+    const { client } = createFakeAtlas({
+      "GET /model/prediction/w7": { body: prediction("w7", "completed") },
+    });
+    const spy = vi.spyOn(client, "getPrediction");
+    await client.waitForPrediction("w7", { timeoutMs: 5000, sleep: noSleep });
+    const perPoll = spy.mock.calls[0]?.[1] as number;
+    expect(perPoll).toBeGreaterThanOrEqual(1000);
+    expect(perPoll).toBeLessThanOrEqual(5000);
   });
 
   it("does not retry a 401", async () => {
@@ -258,6 +296,18 @@ describe("uploadMedia", () => {
     expect(file.size).toBe(3);
   });
 
+  it("calls the injected fetch without a receiver (Workers reject method calls)", async () => {
+    // Mimics workerd: native fetch throws "Illegal invocation" for any other `this`.
+    const strictFetch = async function (this: unknown, _url: string, _init?: RequestInit) {
+      if (this !== undefined && this !== globalThis) {
+        throw new TypeError("Illegal invocation: function called with incorrect `this` reference");
+      }
+      return new Response(JSON.stringify(envelope({ download_url: "https://cdn.test/w.png" })));
+    };
+    const c = new AtlasCloudClient({ apiKey: TEST_KEY, fetch: strictFetch });
+    expect((await c.uploadMedia(new Uint8Array([1]), "w.png")).url).toBe("https://cdn.test/w.png");
+  });
+
   it("falls back to the documented top-level url", async () => {
     const fetch = async () => new Response(JSON.stringify({ url: "https://cdn.test/x.mp3" }));
     const c = new AtlasCloudClient({ apiKey: TEST_KEY, fetch });
@@ -302,5 +352,18 @@ describe("catalog and model schemas", () => {
     expect(calls.every((c) => c.headers.authorization === undefined)).toBe(true);
     expect(await client.getModelSpec("Black-Forest-Labs/flux-schnell")).toBeUndefined();
     expect(calls.filter((c) => c.url.endsWith("/models"))).toHaveLength(1);
+  });
+
+  it("uses a short timeout for catalog and schema lookups", async () => {
+    const { client } = createFakeAtlas({
+      "GET /models": {
+        body: catalog([{ model: "m/x", type: "Image", schema: "https://static.test/x.json" }]),
+      },
+      "GET /x.json": { body: FLUX_SCHNELL_SCHEMA },
+    });
+    const timeout = vi.spyOn(AbortSignal, "timeout");
+    await client.getModelSpec("m/x");
+    expect(timeout.mock.calls.map((c) => c[0])).toEqual([15_000, 15_000]);
+    timeout.mockRestore();
   });
 });

@@ -4,11 +4,10 @@
  * upload or billable submit, upload local references, then run the prediction.
  */
 
-import { createLogger } from "../../../core/logger.js";
 import { type FieldRequest, buildModelInput } from "../model-input.js";
 import type { OutputCategory } from "../prediction-output.js";
 import type { AtlasMediaKind } from "../types.js";
-import { createAtlasClientFromEnv, resolveMediaRefs } from "./env.js";
+import { createAtlasClientFromEnv, createAtlasLogger, resolveMediaRefs } from "./env.js";
 import {
   type RunCliOpts,
   assertEndpoint,
@@ -33,7 +32,10 @@ export interface GenerationCommandConfig {
 }
 
 export async function runGenerationCommand(cfg: GenerationCommandConfig): Promise<void> {
-  const logger = createLogger({ verbose: cfg.opts.verbose ?? false });
+  const logger = createAtlasLogger({
+    verbose: cfg.opts.verbose,
+    stdoutReserved: cfg.opts.async,
+  });
   const client = createAtlasClientFromEnv();
   const spec = await loadModelSpec(client, cfg.model, logger, cfg.opts.validate);
   const kind = cfg.endpointFromSchema ? (spec?.endpoint ?? cfg.kind) : cfg.kind;

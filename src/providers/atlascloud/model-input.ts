@@ -97,6 +97,18 @@ export const FIELD_CANDIDATES = {
   modelFormat: ["format", "output_format", "target_formats"],
 } as const satisfies Record<string, readonly string[]>;
 
+/**
+ * Types assumed for each first-choice candidate when no schema is available,
+ * matching how the catalog declares them. Anything unlisted is a string, so a
+ * single `--ref` becomes `image: "<url>"` rather than a one-element array.
+ */
+const FALLBACK_FIELD_TYPES: Record<string, string> = {
+  seed: "integer",
+  num_images: "integer",
+  duration: "number",
+  images: "array",
+};
+
 /** One convenience flag and the schema fields it may map onto, in preference order. */
 export interface FieldRequest {
   /** CLI flag shown in errors, e.g. "--duration". */
@@ -200,7 +212,8 @@ function pickField(spec: AtlasModelSpec, req: FieldRequest): string | undefined 
  * Build a request body (without `model`) from convenience flags.
  * With a spec: map each flag onto a declared field, coerce types, check enums
  * and ranges, fill required defaults, and reject missing required fields.
- * Without a spec (schema unavailable): use each request's first candidate verbatim.
+ * Without a spec (schema unavailable): use each request's first candidate,
+ * coerced to the type the catalog normally declares for it.
  */
 export function buildModelInput(
   spec: AtlasModelSpec | undefined,
@@ -212,7 +225,10 @@ export function buildModelInput(
     if (req.value === undefined || (Array.isArray(req.value) && req.value.length === 0)) continue;
     if (!spec) {
       const field = req.candidates[0];
-      if (field) body[field] = req.value;
+      if (field) {
+        const type = FALLBACK_FIELD_TYPES[field] ?? "string";
+        body[field] = coerce(req.flag, field, { type }, req.value);
+      }
       continue;
     }
     const field = pickField(spec, req);
