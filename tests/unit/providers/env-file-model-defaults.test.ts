@@ -1,7 +1,8 @@
 /**
  * Provider model defaults set only in a `.env` file must reach the request.
  * The provider modules are imported (and evaluated) before the `.env` file
- * exists and before loadEnv() runs, the same order as `dist/cli.js`, so a
+ * exists and before loadEnv() runs (with the real project-env allowlist),
+ * the same order as `dist/cli.js`, so a
  * default captured at module load would miss the file value.
  */
 
@@ -12,6 +13,7 @@ import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { _resetEnvLoader, loadEnv } from "../../../src/core/env-loader.js";
 import { _resetOutputDir } from "../../../src/core/output-dir.js";
+import { isProjectEnvName } from "../../../src/project-env-names.js";
 import { registerBytePlusCommands } from "../../../src/providers/byteplus/commands/index.js";
 import { registerFalCommands } from "../../../src/providers/fal/commands/index.js";
 import { registerGeminiCommands } from "../../../src/providers/gemini/commands/index.js";
@@ -136,7 +138,7 @@ afterEach(() => {
 /** Write the project `.env`, load it like the CLI does, then run one command. */
 async function runWithEnvFile(envFile: string, args: string[]): Promise<Call> {
   fs.writeFileSync(path.join(tmp, ".env"), envFile);
-  loadEnv();
+  loadEnv({ isProjectEnvName });
   const program = new Command();
   program.exitOverride();
   program.configureOutput({ writeErr: () => {}, writeOut: () => {} });
@@ -314,7 +316,7 @@ describe("blank model overrides in a .env file (as in a copied .env.example)", (
       path.join(tmp, ".env"),
       `${GEMINI_MODEL_ENVS.map((name) => `${name}=`).join("\n")}\nGEMINI_IMAGE_GEN_MODEL=file-image\n`,
     );
-    loadEnv();
+    loadEnv({ isProjectEnvName });
     expect(getDefaultModel("generate")).toBe("file-image");
     expect(getDefaultModel("generate-video")).toBe(VIDEO_MODEL_DEFAULT);
     expect(getDefaultModel("generate-speech")).toBe(TTS_MODEL_DEFAULT);
@@ -324,7 +326,7 @@ describe("blank model overrides in a .env file (as in a copied .env.example)", (
   it("gemini shell value still wins over the .env file", () => {
     process.env.GEMINI_MODEL = "shell-model";
     fs.writeFileSync(path.join(tmp, ".env"), "GEMINI_MODEL=file-model\n");
-    loadEnv();
+    loadEnv({ isProjectEnvName });
     expect(getDefaultModel("analyze")).toBe("shell-model");
   });
 });

@@ -65,6 +65,7 @@ describe("project env allowlist", () => {
       /process\.env\.([A-Z][A-Z0-9_]*)/g,
       /process\.env\[["']([A-Z][A-Z0-9_]*)["']\]/g,
       /resolveKey\(["']([A-Z][A-Z0-9_]*)["']\)/g,
+      /envDefault\(\s*["']([A-Z][A-Z0-9_]*)["']/g,
       /\b[A-Z][A-Z0-9_]*_ENV\s*=\s*["']([A-Z][A-Z0-9_]*)["']/g,
     ]);
     expect(read.size).toBeGreaterThan(20);
