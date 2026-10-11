@@ -7,6 +7,31 @@ description: Cấu hình credential, model mặc định và thư mục output c
 chạy, rồi `~/.multix/.env` (cùng [file `.claude` cũ](#file-env-claude-cũ) khi được
 bật). Không commit API key hoặc đưa key vào shell history.
 
+## Biến được phép trong `.env` của project
+
+`.env` của project (thư mục hiện tại, hoặc một file `.claude` cũ nằm trong đó)
+chỉ được đặt những biến mà chính `multix` đọc:
+
+- các credential provider liệt kê bên dưới, gồm cả `GEMINI_API_KEY_2`,
+  `GEMINI_API_KEY_3`, …;
+- các thiết lập provider trong trang này, như `*_BASE_URL`,
+  `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_AI_GATEWAY_ID` và các biến ghi đè model;
+- mọi thiết lập `MULTIX_*`, cùng `NO_COLOR`.
+
+[`.env.example`](https://github.com/mrgoonie/multix-cli/blob/main/.env.example)
+liệt kê các biến này. Mọi tên khác, ví dụ `NODE_OPTIONS`, `npm_config_registry`,
+`LD_PRELOAD`, `HTTPS_PROXY` hay `NODE_TLS_REJECT_UNAUTHORIZED`, không được nạp,
+nên không bao giờ tới được `multix` hay các công cụ nó khởi chạy (`npm` khi chạy
+`multix update`, ffmpeg, ImageMagick, cwebp). `multix` in một cảnh báo duy nhất
+ra stderr, liệt kê tên các biến bị bỏ qua, không bao giờ in giá trị:
+
+```text
+⚠ Ignoring 2 variable(s) in project env file /repo/.env that multix does not read: NODE_OPTIONS, HTTPS_PROXY. A project .env may only set provider keys and multix settings; set anything else in your shell.
+```
+
+Hãy đặt những biến đó trong shell. Shell và `~/.multix/.env` không bị lọc. Trên
+Windows, việc kiểm tra không phân biệt hoa thường, giống hệ điều hành.
+
 ## Credential provider
 
 | Biến | Dùng cho |
@@ -79,7 +104,10 @@ Thư mục project được đọc trước, sau đó là các file tương tự
 Chỉ các tên dạng credential được lấy từ những file này: tên kết thúc bằng
 `_API_KEY` (có thể đánh số, như `GEMINI_API_KEY_2`), `_API_TOKEN`, `_ACCOUNT_ID`
 hoặc `_GATEWAY_ID`, cùng `FAL_KEY` và `ARK_API_KEY`. Các thiết lập endpoint,
-proxy và runtime như `*_BASE_URL` bị bỏ qua. Account ID và gateway ID lấy từ
+proxy và runtime như `*_BASE_URL` bị bỏ qua. Các file trong thư mục hiện tại
+còn bị giới hạn ở những tên mà `multix` đọc (xem
+[Biến được phép trong `.env` của project](#biến-được-phép-trong-env-của-project));
+các tên khác trong đó bị bỏ qua mà không cảnh báo. Account ID và gateway ID lấy từ
 các file `.claude` của thư mục hiện tại tuân theo cùng quy tắc tin cậy như
 `.env` của project (xem
 [Ghi đè base URL và độ tin cậy](#ghi-đè-base-url-và-độ-tin-cậy)). Bản thân cờ
@@ -167,10 +195,9 @@ dùng khi nó không thể gửi key của người khác:
   mỗi biến, nêu provider và chỉ hostname, không bao giờ in key hay URL đầy đủ.
   Cảnh báo được ghi ra stderr nên stdout vẫn đọc được bằng máy.
 
-Cơ chế này chỉ bảo vệ base URL và các ID định tuyến của Cloudflare. `.env` của
-project vẫn có thể đặt các biến cấp process khác (ví dụ proxy, TLS và thiết
-lập Node); xem [issue #99](https://github.com/mrgoonie/multix-cli/issues/99).
-Đừng chạy `multix` trong repository có `.env` mà bạn chưa đọc.
+`.env` của project hoàn toàn không thể đặt biến proxy, TLS hay Node (xem
+[Biến được phép trong `.env` của project](#biến-được-phép-trong-env-của-project)),
+nhưng vẫn có thể chọn model và, với key của chính nó, chọn endpoint. Đừng chạy `multix` trong repository có `.env` mà bạn chưa đọc.
 
 Cloudflare chỉ chấp nhận các model image và speech Workers AI có sẵn;
 `CLOUDFLARE_AI_IMAGE_MODEL` và `CLOUDFLARE_AI_TTS_MODEL` vì vậy chỉ dùng để

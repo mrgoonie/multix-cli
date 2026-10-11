@@ -54,7 +54,7 @@ CLOUDFLARE_API_TOKEN  # Cloudflare Workers AI / AI Gateway token
 # Video additionally requires CLOUDFLARE_AI_GATEWAY_ID and REPLICATE_API_TOKEN.
 ```
 
-Priority: `process.env` > `cwd/.env` > `~/.multix/.env`. Set `MULTIX_LEGACY_CLAUDE_ENV=1` to also read legacy AgentKit `.claude` env files (credential names only, lowest priority); `multix check -v` lists loaded env files.
+Priority: `process.env` > `cwd/.env` > `~/.multix/.env`. Set `MULTIX_LEGACY_CLAUDE_ENV=1` to also read legacy AgentKit `.claude` env files (credential names only, lowest priority); `multix check -v` lists loaded env files. A project `.env` may only set names multix reads (provider keys and settings from `.env.example`, `MULTIX_*`, `NO_COLOR`); anything else there (`NODE_OPTIONS`, `npm_config_*`, `LD_PRELOAD`, proxy/TLS variables) is not loaded, with one stderr warning naming the ignored variables. Put such variables in the shell.
 
 ## Gemini text-output tasks
 
