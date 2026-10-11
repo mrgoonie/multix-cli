@@ -19,19 +19,27 @@ export function registerDocCommands(program: Command): void {
     .description("Convert documents to Markdown using Gemini Files API")
     .requiredOption(
       "--input <files...>",
-      "Input file(s) to convert",
+      "Input file(s) to convert (use - to read piped stdin)",
       (val, prev: string[]) => [...prev, val],
       [],
     )
     .alias("-i")
+    .option(
+      "--stdin-ext <ext>",
+      "Extension for piped stdin when auto-detection fails (e.g. docx, pptx)",
+    )
     .option("--output <path>", "Output markdown file path")
-    .option("--auto-name", "Derive output filename from input basename (single file only)")
+    .option(
+      "--auto-name",
+      "Derive output filename from input basename (single file only; stdin becomes stdin-extraction.md)",
+    )
     .option("--model <id>", `Gemini model to use (default: ${DOC_MODEL_DEFAULT})`)
     .option("--prompt <text>", "Custom conversion prompt")
     .option("-v, --verbose", "Verbose logging")
     .action(
       async (opts: {
         input: string[];
+        stdinExt?: string;
         output?: string;
         autoName?: boolean;
         model?: string;
@@ -42,6 +50,7 @@ export function registerDocCommands(program: Command): void {
 
         await convertDocuments({
           inputs: opts.input,
+          stdinExt: opts.stdinExt,
           output: opts.output,
           autoName: opts.autoName,
           model: opts.model,
