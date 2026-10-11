@@ -4,8 +4,10 @@
  * authenticated Codex image-driver readiness.
  */
 
+import fs from "node:fs";
+import os from "node:os";
 import type { Command } from "commander";
-import { redact, resolveKey } from "../core/env-loader.js";
+import { getLoadedEnvFiles, legacyClaudeEnvFiles, redact, resolveKey } from "../core/env-loader.js";
 import { createLogger } from "../core/logger.js";
 import { listGeminiKeys } from "../providers/gemini/key-pool.js";
 import { checkCodexAuthenticated } from "../providers/openai/codex-image-driver.js";
@@ -146,6 +148,20 @@ export function registerCheckCommand(program: Command): void {
 
       // ── Section 2: API Keys ─────────────────────────────────────────────
       logger.header("API Keys");
+
+      if (opts.verbose) {
+        const files = getLoadedEnvFiles();
+        logger.info(`Env files loaded: ${files.length > 0 ? files.join(", ") : "none"}`);
+      }
+      if (!process.env.MULTIX_LEGACY_CLAUDE_ENV) {
+        const home = process.env.MULTIX_DISABLE_HOME_ENV ? undefined : os.homedir();
+        const legacy = legacyClaudeEnvFiles(process.cwd(), home).filter((f) => fs.existsSync(f));
+        if (legacy.length > 0) {
+          logger.info(
+            `Found ${legacy.length} legacy .claude env file(s); set MULTIX_LEGACY_CLAUDE_ENV=1 to load them`,
+          );
+        }
+      }
 
       let anyKey = false;
       const resolved = new Map<string, { key?: string; envUsed?: string }>();

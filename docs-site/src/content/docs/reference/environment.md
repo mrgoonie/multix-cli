@@ -4,7 +4,8 @@ description: Configure multix credentials, model defaults, and output location w
 ---
 
 `multix` reads configuration in this order: process environment, a `.env` file
-in the current project, then `~/.multix/.env`. Keep API keys out of shell
+in the current project, then `~/.multix/.env` (plus [legacy `.claude` files](#legacy-claude-env-files)
+when enabled). Keep API keys out of shell
 history and never commit them.
 
 ## Provider credentials
@@ -51,6 +52,23 @@ without `GEMINI_API_KEY`.
 - `multix check` lists the keys in rotation and pings each one.
 - Gemini quotas apply per Google Cloud project. Keys from the same project share
   one quota, so rotation only helps with keys from different projects.
+
+## Legacy `.claude` env files
+
+Older AgentKit installs kept keys in `.claude` folders. Set
+`MULTIX_LEGACY_CLAUDE_ENV=1` (in the shell, the project `.env` or
+`~/.multix/.env`) to also read them. This is off by default. The files load
+after `~/.multix/.env`, never override earlier values, and the first file that
+sets a variable wins:
+
+1. `.claude/skills/ai-multimodal/.env` and `.claude/skills/ak-ai-multimodal/.env`
+2. `.claude/skills/.env`
+3. `.claude/.env`
+
+Project folders are read first, then the same files under your home directory.
+`multix check` mentions legacy files it finds while the flag is off, and
+`multix check -v` lists every env file that was loaded (paths only, never
+values). Moving the keys to `.env` or `~/.multix/.env` is still recommended.
 
 ## Model and endpoint overrides
 

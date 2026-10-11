@@ -4,7 +4,8 @@ description: Cấu hình credential, model mặc định và thư mục output c
 ---
 
 `multix` đọc cấu hình theo thứ tự: environment hiện tại, `.env` ở project đang
-chạy, rồi `~/.multix/.env`. Không commit API key hoặc đưa key vào shell history.
+chạy, rồi `~/.multix/.env` (cùng [file `.claude` cũ](#file-env-claude-cũ) khi được
+bật). Không commit API key hoặc đưa key vào shell history.
 
 ## Credential provider
 
@@ -50,6 +51,23 @@ bắt buộc có `GEMINI_API_KEY`.
 - `multix check` liệt kê các key đang xoay vòng và ping từng key.
 - Quota Gemini tính theo từng Google Cloud project. Các key cùng project dùng
   chung quota, nên xoay vòng chỉ có ích với key thuộc các project khác nhau.
+
+## File env `.claude` cũ
+
+Bản cài AgentKit cũ lưu key trong các thư mục `.claude`. Đặt
+`MULTIX_LEGACY_CLAUDE_ENV=1` (trong shell, `.env` của project hoặc
+`~/.multix/.env`) để đọc thêm các file này. Mặc định tính năng này tắt. Các file
+được nạp sau `~/.multix/.env`, không bao giờ ghi đè giá trị đã có, và file đầu
+tiên đặt một biến sẽ thắng:
+
+1. `.claude/skills/ai-multimodal/.env` và `.claude/skills/ak-ai-multimodal/.env`
+2. `.claude/skills/.env`
+3. `.claude/.env`
+
+Thư mục project được đọc trước, sau đó là các file tương tự trong thư mục home.
+`multix check` báo khi tìm thấy file cũ lúc cờ đang tắt, còn `multix check -v`
+liệt kê mọi file env đã nạp (chỉ đường dẫn, không bao giờ in giá trị). Vẫn nên
+chuyển key sang `.env` hoặc `~/.multix/.env`.
 
 ## Ghi đè model và endpoint
 
