@@ -102,5 +102,7 @@ describe("Cloudflare video client errors", () => {
     expect(error.message).toMatch(/too many redirects/);
     expect((error as HttpError).url).toBe(ORIGIN);
     expectNoIdentifiers(error);
+    // The original redirect error holds the full path; it must not survive as the cause.
+    expect(error.cause).toBeUndefined();
   });
 });

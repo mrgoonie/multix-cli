@@ -402,7 +402,7 @@ describe("multix_generate_video", () => {
       );
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toMatch(
-        /schema could not be loaded.*Retry later; operators can pin vetted models with MULTIX_MCP_ALLOWED_MODELS/,
+        /schema could not be loaded.*request is not sent\. Retry later/,
       );
       expect(calls.some((c) => c.method === "POST")).toBe(false);
     },
@@ -477,6 +477,18 @@ describe("multix_generate_video", () => {
       { duration_seconds: { type: "integer", default: 30 } },
       /length input "duration_seconds" this server cannot cap/,
     ],
+    ...["frame_count", "num_frame", "clip_length", "video_len"].map(
+      (name): [string, Record<string, unknown>, RegExp] => [
+        `a numeric "${name}" field`,
+        { [name]: { type: "integer", default: 300 } },
+        new RegExp(`length input "${name}" this server cannot cap`),
+      ],
+    ),
+    [
+      "a numeric-string length-like field",
+      { clip_length: { type: "string", default: "30" } },
+      /length input "clip_length" this server cannot cap/,
+    ],
     [
       "frames with no frame rate above the cap",
       { num_frames: { type: "integer", default: 81 } },
@@ -493,6 +505,22 @@ describe("multix_generate_video", () => {
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toMatch(message);
     expect(calls.some((c) => c.method === "POST")).toBe(false);
+  });
+
+  it("ignores non-numeric inputs whose names mention frames", async () => {
+    const { model, fetch, submitted } = atlasVideoModel({
+      duration: { type: "integer", default: 5 },
+      return_last_frame: { type: "boolean", default: false },
+      first_frame: { type: "string" },
+    });
+    const result = await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "atlascloud", model, prompt: "pan" },
+      { fetch },
+    );
+    expect(result.isError).toBeFalsy();
+    expect(submitted()).toEqual({ model, prompt: "pan", duration: 5 });
   });
 
   it("caps frame counts using the schema frame rate", async () => {
@@ -537,6 +565,20 @@ describe("multix_generate_video", () => {
     ["an unparseable size", { size: { type: "string", default: "landscape" } }],
     ["a width default above the allowlist", { width: { type: "integer", default: 2560 } }],
     ["a non-string resolution default", { resolution: { type: "integer", default: 2160 } }],
+    ["a square size above the short edge", { size: { type: "string", default: "1920*1920" } }],
+    [
+      "width and height together above the short edge",
+      { width: { type: "integer", default: 1920 }, height: { type: "integer", default: 1920 } },
+    ],
+    [
+      "a resolution default outside a union with several members",
+      {
+        resolution: {
+          anyOf: [{ type: "string", enum: ["720p", "4k"] }, { type: "string" }],
+          default: "4k",
+        },
+      },
+    ],
   ])("rejects %s on Atlas Cloud before submit", async (_label, props) => {
     const { model, fetch, calls } = atlasVideoModel({
       duration: { type: "integer", default: 5 },
@@ -551,6 +593,56 @@ describe("multix_generate_video", () => {
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toMatch(/would render at/);
     expect(calls.some((c) => c.method === "POST")).toBe(false);
+  });
+
+  it.each([
+    [
+      "a resolution union with no outer default",
+      { resolution: { anyOf: [{ type: "string", enum: ["720p"] }, { type: "integer" }] } },
+      "resolution",
+    ],
+    [
+      "a resolution $ref",
+      { resolution: { $ref: "#/components/schemas/Resolution" } },
+      "resolution",
+    ],
+    ["a size allOf", { size: { allOf: [{ type: "string" }], default: "640*360" } }, "size"],
+    [
+      "a width union with several members",
+      { width: { oneOf: [{ type: "integer" }, { type: "string" }] } },
+      "width",
+    ],
+  ])("rejects %s on Atlas Cloud before submit", async (_label, props, field) => {
+    const { model, fetch, calls } = atlasVideoModel({
+      duration: { type: "integer", default: 5 },
+      ...props,
+    });
+    const result = await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "atlascloud", model, prompt: "pan" },
+      { fetch },
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain(
+      `input "${field}" has a schema this server cannot check`,
+    );
+    expect(calls.some((c) => c.method === "POST")).toBe(false);
+  });
+
+  it("checks a caller resolution even when the schema shape is unreadable", async () => {
+    const { model, fetch, submitted } = atlasVideoModel({
+      duration: { type: "integer", default: 5 },
+      resolution: { $ref: "#/components/schemas/Resolution" },
+    });
+    const result = await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "atlascloud", model, prompt: "pan", resolution: "720p" },
+      { fetch },
+    );
+    expect(result.isError).toBeFalsy();
+    expect(submitted()).toMatchObject({ resolution: "720p" });
   });
 
   it("accepts Atlas size and dimension defaults within the allowlist", async () => {

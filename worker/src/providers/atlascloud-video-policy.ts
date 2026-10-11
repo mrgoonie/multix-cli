@@ -27,15 +27,23 @@ export interface VideoPolicy {
   allowedResolutions: string[];
 }
 
-type Prop = AtlasSchemaProperty & { anyOf?: unknown; oneOf?: unknown };
+type Prop = AtlasSchemaProperty & {
+  anyOf?: unknown;
+  oneOf?: unknown;
+  allOf?: unknown;
+  $ref?: unknown;
+};
 
 /** Fields that set a video's length in seconds, in preference order. */
 const SECONDS_FIELDS = ["duration", "seconds", "length", "num_seconds", "video_length"];
 /** Fields that set a video's length in frames. */
 const FRAME_FIELDS = ["num_frames", "frames"];
 const FPS_FIELDS = ["fps", "frames_per_second"];
-/** Any other field with one of these words in its name is a length this code cannot cap. */
-const LENGTH_LIKE_RE = /duration|seconds|frames/i;
+/**
+ * Any other numeric field with one of these words in its name is a length
+ * this code cannot cap (frame_count, num_frame, clip_length, video_len, ...).
+ */
+const LENGTH_LIKE_RE = /frame|second|duration|length|_len$/i;
 const SIZE_FIELDS = ["size", "video_size"];
 const DIMENSION_FIELDS = ["width", "height"];
 
@@ -50,6 +58,7 @@ function parseSeconds(value: unknown): number | undefined {
 /** Collapse an `anyOf`/`oneOf` with one non-null member; undefined when the shape is ambiguous. */
 function unwrap(prop: Prop | undefined): Prop | undefined {
   if (!prop) return undefined;
+  if (prop.$ref !== undefined || prop.allOf !== undefined) return undefined;
   const alternatives = prop.anyOf ?? prop.oneOf;
   if (alternatives === undefined) return prop;
   if (!Array.isArray(alternatives)) return undefined;
@@ -178,9 +187,12 @@ export function lengthRequests(
   model: string,
   policy: VideoPolicy,
 ): FieldRequest[] {
-  for (const name of Object.keys(spec.properties)) {
+  for (const [name, raw] of Object.entries(spec.properties)) {
     const known = [...SECONDS_FIELDS, ...FRAME_FIELDS, ...FPS_FIELDS].includes(name);
-    if (!known && LENGTH_LIKE_RE.test(name)) {
+    if (known || !LENGTH_LIKE_RE.test(name)) continue;
+    // Image or flag inputs such as first_frame or return_last_frame are not lengths.
+    const prop = unwrap(raw as Prop);
+    if (prop === undefined || isNumeric(prop)) {
       throw new ValidationError(
         `Model ${model} has a length input "${name}" this server cannot cap; use a model whose length is set by duration`,
       );
@@ -224,8 +236,11 @@ export function lengthRequests(
   return requests;
 }
 
-/** Longest side allowed by the resolution allowlist (e.g. 1080p -> 1920), if any entry parses. */
-function maxLongSide(allowed: string[]): number | undefined {
+/**
+ * Largest frame allowed by the resolution allowlist, as long and short side
+ * (e.g. 1080p -> 1920 x 1080), if any entry parses.
+ */
+function maxBox(allowed: string[]): { long: number; short: number } | undefined {
   const shortSides = allowed
     .map((r) => {
       const p = /^(\d{3,4})p$/.exec(r);
@@ -233,12 +248,34 @@ function maxLongSide(allowed: string[]): number | undefined {
       return r === "2k" ? 1440 : r === "4k" ? 2160 : undefined;
     })
     .filter((n): n is number => n !== undefined);
-  return shortSides.length > 0 ? Math.ceil((Math.max(...shortSides) * 16) / 9) : undefined;
+  if (shortSides.length === 0) return undefined;
+  const short = Math.max(...shortSides);
+  return { long: Math.ceil((short * 16) / 9), short };
 }
 
-/** What the API will use for a field: the value sent, else the schema default it fills in. */
-function effective(spec: AtlasModelSpec, body: Record<string, unknown>, field: string): unknown {
-  return body[field] ?? unwrap(spec.properties[field] as Prop)?.default;
+/**
+ * What the API will use for a field: the value sent, else the schema default
+ * it fills in. A schema shape this code cannot read ($ref, allOf, an anyOf or
+ * oneOf with several members) is trusted only for an outer default next to a
+ * union; anything else is rejected rather than skipped.
+ */
+function effective(
+  spec: AtlasModelSpec,
+  model: string,
+  body: Record<string, unknown>,
+  field: string,
+): unknown {
+  if (body[field] !== undefined) return body[field];
+  const raw = spec.properties[field] as Prop | undefined;
+  if (raw === undefined) return undefined;
+  const prop = unwrap(raw);
+  if (prop !== undefined) return prop.default;
+  if (raw.$ref === undefined && raw.allOf === undefined && raw.default !== undefined) {
+    return raw.default;
+  }
+  throw new ValidationError(
+    `Model ${model}: input "${field}" has a schema this server cannot check; pass it explicitly or use another model`,
+  );
 }
 
 /** Re-check what will actually be billed, including schema defaults the API fills in. */
@@ -253,19 +290,19 @@ export function assertVideoBodyWithinLimits(
       `Model ${model} would render ${seconds}s; this server allows at most ${policy.maxSeconds}s`,
     );
   for (const field of SECONDS_FIELDS) {
-    const seconds = parseSeconds(effective(spec, body, field));
+    const seconds = parseSeconds(effective(spec, model, body, field));
     if (seconds !== undefined && seconds > policy.maxSeconds) throw tooLong(seconds);
   }
   const fps = schemaFps(spec);
   for (const field of FRAME_FIELDS) {
-    const frames = parseSeconds(effective(spec, body, field));
+    const frames = parseSeconds(effective(spec, model, body, field));
     if (frames !== undefined && frames > maxFrames(fps, policy)) {
       throw tooLong(fps === undefined ? frames : frames / fps);
     }
   }
 
   for (const field of F.resolution) {
-    const resolution = effective(spec, body, field);
+    const resolution = effective(spec, model, body, field);
     if (resolution === undefined || resolution === "") continue;
     if (
       typeof resolution !== "string" ||
@@ -277,23 +314,30 @@ export function assertVideoBodyWithinLimits(
     }
   }
 
-  const longest = maxLongSide(policy.allowedResolutions);
+  const box = maxBox(policy.allowedResolutions);
   const sizeError = (value: unknown) =>
     new ValidationError(
-      `Model ${model} would render at size ${String(value)}; this server allows at most ${longest ?? "?"} pixels on the longest side`,
+      `Model ${model} would render at size ${String(value)}; this server allows at most ${box ? `${box.long}x${box.short}` : "?"} pixels`,
     );
+  /** Both sides fit the box in either orientation: long side <= long edge, short side <= short edge. */
+  const fits = (a: number, b: number) =>
+    box !== undefined && Math.max(a, b) <= box.long && Math.min(a, b) <= box.short;
   for (const field of SIZE_FIELDS) {
-    const size = effective(spec, body, field);
+    const size = effective(spec, model, body, field);
     if (size === undefined || size === "") continue;
     const m = typeof size === "string" ? /^\s*(\d+)\s*[x*×]\s*(\d+)\s*$/i.exec(size) : null;
-    if (!m || longest === undefined || Math.max(Number(m[1]), Number(m[2])) > longest) {
-      throw sizeError(size);
-    }
+    if (!m || !fits(Number(m[1]), Number(m[2]))) throw sizeError(size);
   }
+  const sides: number[] = [];
   for (const field of DIMENSION_FIELDS) {
-    const value = effective(spec, body, field);
+    const value = effective(spec, model, body, field);
     if (value === undefined) continue;
     const pixels = parseSeconds(value);
-    if (pixels === undefined || longest === undefined || pixels > longest) throw sizeError(value);
+    if (pixels === undefined || box === undefined || pixels > box.long) throw sizeError(value);
+    sides.push(pixels);
+  }
+  const [first, second] = sides;
+  if (first !== undefined && second !== undefined && !fits(first, second)) {
+    throw sizeError(sides.join("x"));
   }
 }

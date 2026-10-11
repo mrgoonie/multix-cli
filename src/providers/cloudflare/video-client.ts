@@ -87,8 +87,9 @@ function isAbort(cause: unknown): boolean {
 function cloudflareFetchFailure(cause: unknown, url: string, timeoutMs: number): MultixError {
   const origin = new URL(url).origin;
   if (cause instanceof HttpError) {
-    // Redirect failures (loop, bad Location) carry the full request URL.
-    return new HttpError(cause.status, cause.snippet, origin, cause.retryAfterMs, { cause });
+    // Redirect failures (loop, bad Location) carry the full request URL, so
+    // the original is not kept as `cause`.
+    return new HttpError(cause.status, cause.snippet, origin, cause.retryAfterMs);
   }
   if (cause instanceof MultixError) return cause;
   if (isAbort(cause)) {

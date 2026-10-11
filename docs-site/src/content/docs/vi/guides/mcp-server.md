@@ -163,8 +163,9 @@ phải là duy nhất trong tài khoản Cloudflare của bạn. Nếu Worker kh
 
   - **Không có schema:** nếu không tải được schema của model (lỗi catalog,
     hoặc model không có trong catalog công khai), mọi lệnh tạo video Atlas đều
-    bị từ chối, dù caller truyền gì. Hãy thử lại sau, và dùng
-    `MULTIX_MCP_ALLOWED_MODELS` để chỉ cho phép model đã kiểm duyệt.
+    bị từ chối, dù caller truyền gì, và không có request nào được gửi. Chỉ
+    thử lại khi schema tải được mới giúp được; ghim model không bỏ qua bước
+    kiểm tra này.
   - **Trường số giây:** `duration`, `seconds`, `length`, `num_seconds` và
     `video_length`. Giá trị có thể là số hoặc chuỗi như `"8"` hay `"8s"`, và
     `anyOf`/`oneOf` chỉ có một thành phần khác null sẽ được mở ra. Trường số
@@ -185,20 +186,28 @@ phải là duy nhất trong tài khoản Cloudflare của bạn. Nếu Worker kh
     Nếu schema không khai báo frame rate, server giả định một frame mỗi giây,
     nên chỉ mặc định không quá `giới hạn` frame mới được chấp nhận; trường hợp
     khác bị từ chối.
-  - **Input khác giống thời lượng:** mọi trường khác có tên chứa `duration`,
-    `seconds` hoặc `frames` (ví dụ `duration_seconds`) đều bị từ chối, vì
-    Worker không giới hạn được nó.
+  - **Input khác giống thời lượng:** mọi trường số khác có tên chứa `frame`,
+    `second`, `duration` hoặc `length`, hoặc kết thúc bằng `_len` (ví dụ
+    `frame_count` hay `clip_length`), đều bị từ chối, vì Worker không giới
+    hạn được nó. Input ảnh và cờ như `first_frame` hay `return_last_frame`
+    không bị ảnh hưởng.
   - **Kiểm tra cuối:** mọi trường số giây và số frame, dù được gửi hay được
     điền từ mặc định của schema, phải nằm trong giới hạn. `resolution` sẽ được
     render (giá trị của caller hoặc mặc định của schema) phải nằm trong
     `MULTIX_MCP_ALLOWED_RESOLUTIONS`. Giá trị `size`/`video_size`
-    (`1920*1080`) hoặc `width`/`height` không được vượt cạnh dài nhất của độ
-    phân giải lớn nhất được phép (16:9; `1080p` cho phép 1920 pixel). Giá trị
-    không đọc được sẽ bị từ chối.
+    (`1920*1080`) hoặc cặp `width`/`height` phải nằm trong độ phân giải lớn
+    nhất được phép ở tỉ lệ 16:9, theo cả hai chiều: `1080p` cho phép cạnh dài
+    tối đa 1920 và cạnh ngắn tối đa 1080, nên `1920*1920` bị từ chối. Giá trị
+    hoặc dạng schema không đọc được (`$ref`, `allOf`, union nhiều thành phần
+    không có mặc định bên ngoài) sẽ bị từ chối.
 
-  Giới hạn: khi schema không khai báo trường kích thước và không có mặc định,
-  model tự chọn kích thước đầu ra. Hãy dùng `MULTIX_MCP_ALLOWED_MODELS` để chỉ
-  cho phép model đã kiểm duyệt.
+  Giới hạn: lớp giới hạn chi phí chỉ giới hạn thời lượng (số giây và số
+  frame) và độ phân giải hoặc kích thước. Các input khác làm tăng giá không
+  bị giới hạn, ví dụ `generate_audio`, `enable_thinking`/`thinking_level`,
+  `motion`, hoặc trường số lượng output có mặc định lớn hơn 1. Khi schema
+  không khai báo trường kích thước và không có mặc định, model tự chọn kích
+  thước đầu ra. Hãy dùng `MULTIX_MCP_ALLOWED_MODELS` để chỉ cho phép model đã
+  kiểm duyệt.
 - **Log và che thông tin nhạy cảm:** lệnh gọi thành công được log ở mức `info`,
   chỉ gồm tên tool, provider, model, kết quả và độ trễ. Prompt không bao giờ
   được log thành một trường riêng. Lệnh gọi thất bại được log ở mức `warn` (lỗi

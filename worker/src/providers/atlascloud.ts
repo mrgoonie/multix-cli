@@ -80,7 +80,7 @@ async function submit(
   // Without the schema, the defaults the API fills in (length, resolution) are unknown.
   if (!spec) {
     throw new ValidationError(
-      `Model ${model}: its schema could not be loaded, so its length and resolution cannot be checked against this server's limits. Retry later; operators can pin vetted models with MULTIX_MCP_ALLOWED_MODELS.`,
+      `Model ${model}: its schema could not be loaded, so its length and resolution cannot be checked against this server's limits, and the request is not sent. Retry later, when the model schema is available.`,
     );
   }
   const body = buildModelInput(spec, [...requests, ...lengthRequests(spec, model, video)]);

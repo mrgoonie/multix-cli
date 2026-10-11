@@ -164,8 +164,8 @@ different integer, or the two Workers will share counters.
 
   - **No schema:** if the model schema cannot be loaded (catalog error, or a
     model the public catalog does not list), every Atlas video call is
-    rejected, whatever the caller passed. Retry later, and pin vetted models
-    with `MULTIX_MCP_ALLOWED_MODELS`.
+    rejected, whatever the caller passed, and nothing is sent. Only a retry
+    once the schema loads helps; pinning models does not lift this check.
   - **Seconds fields:** `duration`, `seconds`, `length`, `num_seconds` and
     `video_length`. Values may be numbers or strings such as `"8"` or `"8s"`,
     and an `anyOf`/`oneOf` with a single non-null member is unwrapped. A
@@ -183,20 +183,27 @@ different integer, or the two Workers will share counters.
     schema's `fps` (or `frames_per_second`) default, and sent explicitly.
     Without a declared frame rate, one frame per second is assumed, so only a
     default of at most `cap` frames passes; anything else is rejected.
-  - **Other length-like inputs:** any other field whose name contains
-    `duration`, `seconds` or `frames` (for example `duration_seconds`) is
-    rejected, since the Worker cannot cap it.
+  - **Other length-like inputs:** any other numeric field whose name contains
+    `frame`, `second`, `duration` or `length`, or ends in `_len` (for example
+    `frame_count` or `clip_length`), is rejected, since the Worker cannot cap
+    it. Image and flag inputs such as `first_frame` or `return_last_frame` are
+    not affected.
   - **Final check:** every seconds and frame field, sent or filled from the
     schema default, must be within the cap. The `resolution` that will be
     rendered (the caller's value or the schema default) must be in
     `MULTIX_MCP_ALLOWED_RESOLUTIONS`. A `size`/`video_size` (`1920*1080`) or
-    `width`/`height` value must not exceed the longest side of the largest
-    allowed resolution (16:9; `1080p` allows 1920 pixels). An unreadable value
-    is rejected.
+    `width`/`height` pair must fit the largest allowed resolution at 16:9 in
+    either orientation: `1080p` allows a long side up to 1920 and a short side
+    up to 1080, so `1920*1920` is rejected. A value, or a schema shape
+    (`$ref`, `allOf`, a union with several members and no outer default), that
+    cannot be read is rejected.
 
-  Limitation: when the schema declares no size field and no default, the
-  model picks its own output size. Pin vetted models with
-  `MULTIX_MCP_ALLOWED_MODELS`.
+  Limitations: the spend guard caps only length (seconds and frames) and
+  resolution or size. Other inputs that raise the price are not capped, for
+  example `generate_audio`, `enable_thinking`/`thinking_level`, `motion`, or
+  an output-count field whose default is above 1. When the schema declares no
+  size field and no default, the model picks its own output size. Pin vetted
+  models with `MULTIX_MCP_ALLOWED_MODELS`.
 - **Logging and redaction:** successful calls are logged at `info` with tool
   name, provider, model, outcome, and latency only. Prompts are never logged as
   a field. Failed calls are logged at `warn` (expected errors) or `error`, with
