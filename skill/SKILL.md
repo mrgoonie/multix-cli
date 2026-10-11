@@ -413,7 +413,7 @@ Requires `cwebp` (libwebp: `brew install webp`, `apt install webp`) on `PATH`.
 | `CLOUDFLARE_AI_IMAGE_MODEL` / `CLOUDFLARE_AI_TTS_MODEL` | Fixed-model settings: only `@cf/black-forest-labs/flux-1-schnell` and `@cf/myshell-ai/melotts` respectively are accepted |
 | `MULTIX_DISABLE_HOME_ENV` | `1` to skip every home-directory env file (`~/.multix/.env`, `~/.claude/...`) |
 | `MULTIX_LEGACY_CLAUDE_ENV` | `1` to also read legacy `.claude` env files (credential names only) |
-| `MULTIX_ALLOW_PROJECT_BASE_URL` | `1` (shell or `~/.multix/.env` only) to honour `*_BASE_URL` overrides from the project `.env`; otherwise they are ignored with a warning |
+| `MULTIX_ALLOW_PROJECT_BASE_URL` | Set `1` for one command (`MULTIX_ALLOW_PROJECT_BASE_URL=1 multix ...`) to honour `*_BASE_URL`, `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_AI_GATEWAY_ID` from the project `.env`. Without it, the `~/.multix/.env` value is used with a warning, or the command stops with a config error when only the project sets the value. Ignored in a project `.env`; avoid `~/.multix/.env` (it trusts every directory). Non-default base URLs must be `https://` (http only for localhost/127.0.0.1/[::1]) |
 
 ## Quick examples for agents
 

@@ -6,6 +6,7 @@ import {
   ALLOW_PROJECT_BASE_URL_ENV,
   _resetEnvLoader,
   envFileOrigin,
+  envNameKey,
   getLoadedEnvFiles,
   isLegacyAllowedName,
   legacyClaudeEnvEnabled,
@@ -15,7 +16,10 @@ import {
   redact,
   resolveBaseUrl,
   resolveKey,
+  resolveTrustedSetting,
 } from "../../../src/core/env-loader.js";
+import { ConfigError } from "../../../src/core/errors.js";
+import { requireCloudflareConfig } from "../../../src/providers/cloudflare/models.js";
 
 describe("env-loader", () => {
   beforeEach(() => {
@@ -167,11 +171,19 @@ describe("env-loader", () => {
     });
   });
 
-  describe("resolveBaseUrl", () => {
+  describe("resolveBaseUrl and resolveTrustedSetting", () => {
     const DEFAULT = "https://api.example-default.com/v1";
     const NAME = "TESTPROV_BASE_URL";
     const KEY = "TESTPROV_API_KEY";
-    const VARS = [NAME, KEY, ALLOW_PROJECT_BASE_URL_ENV, "MULTIX_DISABLE_HOME_ENV"];
+    const CF = ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_AI_GATEWAY_ID", "CLOUDFLARE_API_TOKEN"];
+    const VARS = [
+      NAME,
+      KEY,
+      ...CF,
+      ALLOW_PROJECT_BASE_URL_ENV,
+      "MULTIX_DISABLE_HOME_ENV",
+      "MULTIX_LEGACY_CLAUDE_ENV",
+    ];
     const saved: Record<string, string | undefined> = {};
     let tmp: string;
     let home: string;
@@ -210,19 +222,35 @@ describe("env-loader", () => {
       expect(warn).not.toHaveBeenCalled();
     });
 
-    it("ignores a project .env value and warns with the variable and file, not the value", () => {
+    const refusal = (): Error => {
+      try {
+        resolveBaseUrl(NAME, DEFAULT);
+      } catch (err) {
+        return err as Error;
+      }
+      throw new Error("expected resolveBaseUrl to throw");
+    };
+
+    it("refuses a project-only .env value, naming the variable and file, not the value", () => {
       writeProject(`${NAME}=https://evil.example.net/steal\n${KEY}=sk-secret-value\n`);
       loadEnv();
       expect(envFileOrigin(NAME)?.source).toBe("project");
+      const err = refusal();
+      expect(err).toBeInstanceOf(ConfigError);
+      expect(err.message).toContain(NAME);
+      expect(err.message).toContain(path.join(tmp, ".env"));
+      expect(err.message).toContain(`${ALLOW_PROJECT_BASE_URL_ENV}=1 multix`);
+      expect(err.message).toContain("every directory");
+      expect(err.message).not.toContain("evil.example.net");
+      expect(err.message).not.toContain("sk-secret-value");
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it("accepts a project value equal to the default", () => {
+      writeProject(`${NAME}=${DEFAULT}/\n`);
+      loadEnv();
       expect(resolveBaseUrl(NAME, DEFAULT)).toBe(DEFAULT);
-      expect(resolveBaseUrl(NAME, DEFAULT)).toBe(DEFAULT);
-      expect(warn).toHaveBeenCalledTimes(1);
-      const [message] = warnings();
-      expect(message).toContain(NAME);
-      expect(message).toContain(path.join(tmp, ".env"));
-      expect(message).toContain(ALLOW_PROJECT_BASE_URL_ENV);
-      expect(message).not.toContain("evil.example.net");
-      expect(message).not.toContain("sk-secret-value");
+      expect(warn).not.toHaveBeenCalled();
     });
 
     it("honours a shell value and warns once with the hostname only", () => {
@@ -256,7 +284,55 @@ describe("env-loader", () => {
       loadEnv();
       expect(resolveBaseUrl(NAME, DEFAULT)).toBe("https://user-proxy.example.org");
       expect(warnings()).toHaveLength(2);
+      expect(warnings()[0]).toContain(`${ALLOW_PROJECT_BASE_URL_ENV}=1 multix`);
       expect(warnings().join("\n")).not.toContain("evil.example.net");
+    });
+
+    it("does not let an empty project value hide the user-level value", () => {
+      writeProject(`${NAME}=\n`);
+      writeUser(`${NAME}=https://user-proxy.example.org\n`);
+      loadEnv();
+      expect(resolveBaseUrl(NAME, DEFAULT)).toBe("https://user-proxy.example.org");
+      expect(warnings()).toHaveLength(2);
+      expect(warnings()[0]).toContain(`Ignoring ${NAME}`);
+    });
+
+    it("treats an empty project value with no user value as unset", () => {
+      writeProject(`${NAME}=  \n`);
+      loadEnv();
+      expect(resolveBaseUrl(NAME, DEFAULT)).toBe(DEFAULT);
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it("shows only the hostname for a URL with userinfo and a port", () => {
+      process.env[NAME] = "https://alice:pa55word@proxy.example.org:8443/x?sig=abc";
+      loadEnv();
+      resolveBaseUrl(NAME, DEFAULT);
+      const [message] = warnings();
+      expect(message).toContain("proxy.example.org");
+      for (const leak of ["alice", "pa55word", "8443", "/x", "sig=abc"]) {
+        expect(message).not.toContain(leak);
+      }
+    });
+
+    it("requires https except for http:// to localhost, 127.0.0.1 or [::1]", () => {
+      for (const ok of ["http://localhost:8787", "http://127.0.0.1:9000/v1", "http://[::1]:1"]) {
+        _resetEnvLoader();
+        process.env[NAME] = ok;
+        expect(resolveBaseUrl(NAME, DEFAULT)).toBe(ok);
+      }
+      for (const bad of [
+        "http://proxy.example.org",
+        "http://localhost.evil.test",
+        "ftp://proxy.example.org",
+        "proxy.example.org",
+      ]) {
+        _resetEnvLoader();
+        process.env[NAME] = bad;
+        const err = refusal();
+        expect(err).toBeInstanceOf(ConfigError);
+        expect(err.message).toMatch(/must (use|be an absolute) https:\/\//);
+      }
     });
 
     it("honours a project value when the opt-in is set in the shell or user env", () => {
@@ -280,7 +356,96 @@ describe("env-loader", () => {
       writeProject(`${ALLOW_PROJECT_BASE_URL_ENV}=1\n${NAME}=https://evil.example.net\n`);
       loadEnv();
       expect(projectBaseUrlAllowed()).toBe(false);
-      expect(resolveBaseUrl(NAME, DEFAULT)).toBe(DEFAULT);
+      expect(refusal()).toBeInstanceOf(ConfigError);
+    });
+
+    it.runIf(process.platform === "win32")(
+      "Windows: a lower-case project name is still project-sourced",
+      () => {
+        writeProject(`${NAME.toLowerCase()}=https://evil.example.net\n`);
+        loadEnv();
+        expect(process.env[NAME]).toBe("https://evil.example.net");
+        expect(envFileOrigin(NAME)?.source).toBe("project");
+        expect(refusal()).toBeInstanceOf(ConfigError);
+      },
+    );
+
+    it.runIf(process.platform === "win32")(
+      "Windows: a lower-case opt-in in the project .env is not honoured",
+      () => {
+        writeProject(
+          `${ALLOW_PROJECT_BASE_URL_ENV.toLowerCase()}=1\n${NAME}=https://evil.example.net\n`,
+        );
+        loadEnv();
+        expect(process.env[ALLOW_PROJECT_BASE_URL_ENV]).toBe("1");
+        expect(projectBaseUrlAllowed()).toBe(false);
+        expect(refusal()).toBeInstanceOf(ConfigError);
+      },
+    );
+
+    it.runIf(process.platform === "win32")(
+      "Windows: a mixed-case user-level value is found as the fallback",
+      () => {
+        writeProject(`${NAME}=https://evil.example.net\n`);
+        writeUser("Testprov_Base_Url=https://user-proxy.example.org\n");
+        loadEnv();
+        expect(resolveBaseUrl(NAME, DEFAULT)).toBe("https://user-proxy.example.org");
+      },
+    );
+
+    it("refuses Cloudflare account and gateway IDs from a project .env unless opted in", () => {
+      process.env.CLOUDFLARE_API_TOKEN = "cf-token-from-shell";
+      writeProject(
+        "CLOUDFLARE_ACCOUNT_ID=attacker-account\nCLOUDFLARE_AI_GATEWAY_ID=attacker-gw\n",
+      );
+      loadEnv();
+      expect(() => requireCloudflareConfig()).toThrow(
+        /CLOUDFLARE_ACCOUNT_ID is set in project env/,
+      );
+      expect(() => resolveTrustedSetting("CLOUDFLARE_AI_GATEWAY_ID")).toThrow(ConfigError);
+
+      process.env[ALLOW_PROJECT_BASE_URL_ENV] = "1";
+      expect(requireCloudflareConfig()).toMatchObject({
+        accountId: "attacker-account",
+        gatewayId: "attacker-gw",
+      });
+    });
+
+    it("uses the user-level Cloudflare IDs over project ones", () => {
+      process.env.CLOUDFLARE_API_TOKEN = "cf-token-from-shell";
+      writeProject("CLOUDFLARE_ACCOUNT_ID=attacker-account\n");
+      writeUser("CLOUDFLARE_ACCOUNT_ID=my-account\nCLOUDFLARE_AI_GATEWAY_ID=my-gw\n");
+      loadEnv();
+      expect(requireCloudflareConfig()).toMatchObject({
+        accountId: "my-account",
+        gatewayId: "my-gw",
+      });
+      expect(warnings()).toHaveLength(1);
+      expect(warnings()[0]).toContain("Ignoring CLOUDFLARE_ACCOUNT_ID");
+    });
+
+    it("treats legacy .claude files under cwd as project files, under home as trusted", () => {
+      process.env.MULTIX_LEGACY_CLAUDE_ENV = "1";
+      fs.mkdirSync(path.join(tmp, ".claude"), { recursive: true });
+      fs.writeFileSync(
+        path.join(tmp, ".claude", ".env"),
+        `CLOUDFLARE_AI_GATEWAY_ID=attacker-gw\n${ALLOW_PROJECT_BASE_URL_ENV}=1\n`,
+      );
+      fs.mkdirSync(path.join(home, ".claude"), { recursive: true });
+      fs.writeFileSync(path.join(home, ".claude", ".env"), "CLOUDFLARE_ACCOUNT_ID=my-account\n");
+      loadEnv();
+      expect(process.env[ALLOW_PROJECT_BASE_URL_ENV]).toBeUndefined();
+      expect(envFileOrigin("CLOUDFLARE_AI_GATEWAY_ID")?.source).toBe("project");
+      expect(() => resolveTrustedSetting("CLOUDFLARE_AI_GATEWAY_ID")).toThrow(ConfigError);
+      expect(envFileOrigin("CLOUDFLARE_ACCOUNT_ID")?.source).toBe("legacy");
+      expect(resolveTrustedSetting("CLOUDFLARE_ACCOUNT_ID")).toBe("my-account");
+    });
+
+    it("envNameKey upper-cases names on win32 only", () => {
+      expect(envNameKey("heygen_base_url", "win32")).toBe("HEYGEN_BASE_URL");
+      expect(envNameKey("Multix_Allow_Project_Base_Url", "win32")).toBe(ALLOW_PROJECT_BASE_URL_ENV);
+      expect(envNameKey("heygen_base_url", "linux")).toBe("heygen_base_url");
+      expect(envNameKey("HEYGEN_BASE_URL", "darwin")).toBe("HEYGEN_BASE_URL");
     });
 
     it("does not warn when the override equals the default", () => {

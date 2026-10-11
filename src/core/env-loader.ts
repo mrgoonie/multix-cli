@@ -12,18 +12,32 @@
  * Set MULTIX_DISABLE_HOME_ENV=1 to skip every file under the home directory
  * (used in tests).
  *
- * The loader records which file supplied each variable so that endpoint
- * overrides (`*_BASE_URL`) from a project `.env` can be refused: see
- * resolveBaseUrl.
+ * The loader records which file supplied each variable so that settings that
+ * decide where a key is sent (`*_BASE_URL`, Cloudflare account and gateway
+ * IDs) from a project `.env` can be refused: see resolveTrustedSetting.
  */
 
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { parse as dotenvParse } from "dotenv";
+import { ConfigError } from "./errors.js";
 
-/** Where a file-loaded variable came from. Variables with no record came from the shell. */
+/**
+ * Where a file-loaded variable came from. Variables with no record came from
+ * the shell. Legacy `.claude` files under the current directory count as
+ * "project"; those under the home directory count as "legacy".
+ */
 export type EnvFileSource = "project" | "user" | "legacy";
+
+/**
+ * Key used to record and look up a variable name. Windows env names are
+ * case-insensitive (`heygen_base_url` and `HEYGEN_BASE_URL` are the same
+ * variable), so names are upper-cased there; elsewhere they are kept as-is.
+ */
+export function envNameKey(name: string, platform: NodeJS.Platform = process.platform): string {
+  return platform === "win32" ? name.toUpperCase() : name;
+}
 
 let loaded = false;
 let loadedFiles: string[] = [];
@@ -111,10 +125,20 @@ function loadFile(
   for (const [name, value] of Object.entries(parsed)) {
     if (!accept(name) || process.env[name] !== undefined) continue;
     process.env[name] = value;
-    fileOrigins.set(name, { source, file, value });
+    fileOrigins.set(envNameKey(name), { source, file, value });
   }
   loadedFiles.push(file);
   return parsed;
+}
+
+/** Parsed file values keyed by envNameKey (first spelling wins, like process.env). */
+function byNameKey(values: Record<string, string> | undefined): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [name, value] of Object.entries(values ?? {})) {
+    const key = envNameKey(name);
+    if (!(key in out)) out[key] = value;
+  }
+  return out;
 }
 
 /** Load .env files once. Safe to call multiple times. */
@@ -132,23 +156,25 @@ export function loadEnv(): void {
   loadFile(path.resolve(cwd, ".env"), "project");
 
   // ~/.multix/.env — skip in test mode
-  if (home) userFileValues = loadFile(path.join(home, ".multix", ".env"), "user") ?? {};
+  if (home) userFileValues = byNameKey(loadFile(path.join(home, ".multix", ".env"), "user"));
 
   // Opt-in compatibility for old AgentKit installs. Checked after the files
   // above so the flag itself may live in cwd/.env or ~/.multix/.env.
   if (legacyClaudeEnvEnabled()) {
+    const projectLegacy = new Set(legacyFilesUnder(cwd));
     for (const file of legacyClaudeEnvFiles(cwd, home)) {
-      loadFile(file, "legacy", isLegacyAllowedName);
+      loadFile(file, projectLegacy.has(file) ? "project" : "legacy", isLegacyAllowedName);
     }
   }
 }
 
 /**
  * The env file that supplied `name`, or undefined when the current value came
- * from the shell (or was set at runtime after loading).
+ * from the shell (or was set at runtime after loading). On Windows the lookup
+ * ignores case, matching how the OS resolves the variable.
  */
 export function envFileOrigin(name: string): { source: EnvFileSource; file: string } | undefined {
-  const origin = fileOrigins.get(name);
+  const origin = fileOrigins.get(envNameKey(name));
   if (!origin || process.env[name] !== origin.value) return undefined;
   return { source: origin.source, file: origin.file };
 }
@@ -157,13 +183,54 @@ function isTruthy(value: string | undefined): boolean {
   return value !== undefined && ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
 }
 
-/** Opt-in env var that lets a project `.env` set `*_BASE_URL` overrides. */
+/**
+ * Opt-in env var that lets a project `.env` set `*_BASE_URL` overrides and
+ * other settings that decide where a key is sent.
+ */
 export const ALLOW_PROJECT_BASE_URL_ENV = "MULTIX_ALLOW_PROJECT_BASE_URL";
 
 /** True when the opt-in is set in the shell or the user-level env file (never a project file). */
 export function projectBaseUrlAllowed(): boolean {
   if (!isTruthy(process.env[ALLOW_PROJECT_BASE_URL_ENV])) return false;
   return envFileOrigin(ALLOW_PROJECT_BASE_URL_ENV)?.source !== "project";
+}
+
+const OPT_IN_HINT = `To use the project value for one command, run it as \`${ALLOW_PROJECT_BASE_URL_ENV}=1 multix ...\`. Do not put ${ALLOW_PROJECT_BASE_URL_ENV} in ~/.multix/.env: that trusts the .env of every directory you run multix in.`;
+
+/**
+ * Read a setting that decides where an API key is sent (a base URL, an
+ * account or gateway ID). Values are trimmed; blank means unset.
+ *
+ * A value from a project env file (cwd/.env, or a legacy `.claude` file under
+ * cwd) is not trusted unless MULTIX_ALLOW_PROJECT_BASE_URL is set in the shell
+ * or the user-level env file:
+ * - when ~/.multix/.env sets the variable, that value is used and one warning
+ *   per variable names the variable and file (never the value);
+ * - otherwise this throws a ConfigError naming the variable and file, so no
+ *   request is sent to a host the user did not choose.
+ * A blank project value never hides a user-level value. A project value equal
+ * to `harmless` (e.g. the vendor default) is accepted as-is.
+ */
+export function resolveTrustedSetting(name: string, harmless?: string): string | undefined {
+  const value = process.env[name]?.trim() || undefined;
+  const origin = envFileOrigin(name);
+  if (origin?.source !== "project" || projectBaseUrlAllowed()) return value;
+  if (value !== undefined && harmless !== undefined && value === harmless) return value;
+
+  const userValue = userFileValues[envNameKey(name)]?.trim() || undefined;
+  if (userValue === undefined) {
+    if (value === undefined) return undefined;
+    throw new ConfigError(
+      `${name} is set in project env file ${origin.file}, which is not trusted to choose where your API key is sent. Set it in your shell or ~/.multix/.env instead. ${OPT_IN_HINT}`,
+    );
+  }
+  if (value !== userValue) {
+    warnOnce(
+      `ignored:${name}`,
+      `Ignoring ${name} from project env file ${origin.file}: it is not trusted to choose where your API key is sent; using the value from ~/.multix/.env. ${OPT_IN_HINT}`,
+    );
+  }
+  return userValue;
 }
 
 function warnOnce(key: string, message: string): void {
@@ -183,28 +250,40 @@ function hostOf(url: string): string {
 
 const stripSlash = (url: string) => url.replace(/\/+$/, "");
 
+/** Hosts that may be reached over plain http:// (local mock servers). */
+const LOOPBACK_HTTP_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+/** Throw unless `value` is an absolute https:// URL, or http:// to a loopback host. */
+function checkBaseUrlScheme(name: string, value: string): void {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new ConfigError(`${name} must be an absolute https:// URL`);
+  }
+  if (url.protocol === "https:") return;
+  if (url.protocol === "http:" && LOOPBACK_HTTP_HOSTS.has(url.hostname)) return;
+  throw new ConfigError(
+    `${name} must use https:// (host ${url.hostname || "(none)"}); plain http:// is only allowed for localhost, 127.0.0.1, or [::1]`,
+  );
+}
+
 /**
  * Resolve a provider API root from `name` (e.g. `HEYGEN_BASE_URL`), falling
  * back to `defaultUrl`.
  *
- * A value that comes only from a project `.env` is ignored (with a warning
- * naming the variable and file, never the value) unless
- * MULTIX_ALLOW_PROJECT_BASE_URL is set in the shell or the user-level env
- * file; a value the user-level file also sets is used instead. Whenever a
- * non-default base URL is in effect, one warning per variable names the
- * provider and the hostname only, so a redirected API key is never silent.
+ * Project env file values follow resolveTrustedSetting (ignored in favour of
+ * ~/.multix/.env, or a ConfigError, unless opted in). A non-default base URL
+ * must be https://, except http:// to localhost, 127.0.0.1 or [::1], and one
+ * warning per variable names the provider and the hostname only, so a
+ * redirected API key is never silent.
  */
 export function resolveBaseUrl(name: string, defaultUrl: string): string {
-  let value = process.env[name]?.trim() || undefined;
-  const origin = envFileOrigin(name);
-  if (value && origin?.source === "project" && !projectBaseUrlAllowed()) {
-    warnOnce(
-      `ignored:${name}`,
-      `Ignoring ${name} from project env file ${origin.file}: base URL overrides from a project .env are not trusted. Set ${ALLOW_PROJECT_BASE_URL_ENV}=1 in your shell or ~/.multix/.env to allow it.`,
-    );
-    value = userFileValues[name]?.trim() || undefined;
-  }
+  const raw = process.env[name]?.trim();
+  const harmless = raw && stripSlash(raw) === stripSlash(defaultUrl) ? raw : undefined;
+  const value = resolveTrustedSetting(name, harmless);
   if (!value || stripSlash(value) === stripSlash(defaultUrl)) return defaultUrl;
+  checkBaseUrlScheme(name, value);
   const provider = name.replace(/_BASE_URL$/, "");
   warnOnce(
     `custom:${name}`,

@@ -71,9 +71,11 @@ Thư mục project được đọc trước, sau đó là các file tương tự
 Chỉ các tên dạng credential được lấy từ những file này: tên kết thúc bằng
 `_API_KEY` (có thể đánh số, như `GEMINI_API_KEY_2`), `_API_TOKEN`, `_ACCOUNT_ID`
 hoặc `_GATEWAY_ID`, cùng `FAL_KEY` và `ARK_API_KEY`. Các thiết lập endpoint,
-proxy và runtime như `*_BASE_URL` bị bỏ qua, nên một repository clone về không
-thể gửi key của bạn tới host khác. Bản thân cờ này bị bỏ qua nếu đặt trong các
-file đó.
+proxy và runtime như `*_BASE_URL` bị bỏ qua. Account ID và gateway ID lấy từ
+các file `.claude` của thư mục hiện tại tuân theo cùng quy tắc tin cậy như
+`.env` của project (xem
+[Ghi đè base URL và độ tin cậy](#ghi-đè-base-url-và-độ-tin-cậy)). Bản thân cờ
+này bị bỏ qua nếu đặt trong các file đó.
 `multix check` báo khi tìm thấy file cũ lúc cờ đang tắt, còn `multix check -v`
 liệt kê mọi file env đã nạp (chỉ đường dẫn, không bao giờ in giá trị). Vẫn nên
 chuyển key sang `.env` hoặc `~/.multix/.env`.
@@ -110,24 +112,34 @@ cho file cục bộ upload lên Atlas Cloud (mặc định 200).
 
 ### Ghi đè base URL và độ tin cậy
 
-Biến ghi đè `*_BASE_URL` quyết định API key của bạn được gửi tới đâu, nên
-`multix` chỉ tin giá trị này khi nó đến từ biến môi trường của shell hoặc
-`~/.multix/.env`:
+Biến ghi đè `*_BASE_URL` quyết định API key của bạn được gửi tới đâu.
+`CLOUDFLARE_ACCOUNT_ID` và `CLOUDFLARE_AI_GATEWAY_ID` cũng vậy: chúng chọn
+account Cloudflare và AI Gateway nào nhận token của bạn. `multix` chỉ tin các
+thiết lập này khi chúng đến từ biến môi trường của shell hoặc `~/.multix/.env`:
 
-- `*_BASE_URL` chỉ có trong `.env` của project (thư mục hiện tại) sẽ bị bỏ qua,
-  và `multix` in một cảnh báo nêu tên biến và đường dẫn file (không bao giờ in
-  giá trị). Nếu `~/.multix/.env` cũng đặt biến đó thì giá trị ở đó được dùng;
-  nếu không, provider dùng giá trị mặc định. Nhờ vậy một repository clone về
-  không thể chuyển key của bạn sang host khác.
-- Để cho phép ghi đè từ project (ví dụ mock server cục bộ), đặt
-  `MULTIX_ALLOW_PROJECT_BASE_URL=1` trong shell hoặc `~/.multix/.env`. Biến
-  này bị bỏ qua nếu được đặt ngay trong `.env` của project.
-- Khi một base URL khác mặc định đang được dùng, `multix` in một cảnh báo mỗi
-  lần chạy, nêu provider và chỉ hostname, không bao giờ in key hay URL đầy đủ.
+- Khi một biến như vậy đến từ `.env` của project (thư mục hiện tại, hoặc một
+  file `.claude` cũ bên trong nó) và `~/.multix/.env` cũng đặt biến đó, giá trị
+  trong `~/.multix/.env` được dùng và `multix` in một cảnh báo nêu tên biến và
+  đường dẫn file (không bao giờ in giá trị). Giá trị rỗng trong project không
+  bao giờ che giá trị trong `~/.multix/.env`.
+- Khi chỉ `.env` của project đặt biến đó, lệnh dừng với một lỗi nêu tên biến và
+  đường dẫn file, trước khi gửi bất kỳ request nào. Lệnh không quay về giá trị
+  mặc định của nhà cung cấp, nên request bạn định gửi tới mock server không bao
+  giờ tới API trả phí.
+- Để dùng giá trị của project (ví dụ mock server cục bộ), bật cho đúng một lệnh
+  từ shell: `MULTIX_ALLOW_PROJECT_BASE_URL=1 multix ...`. Tránh đặt biến này
+  trong `~/.multix/.env`: như vậy sẽ tắt cơ chế bảo vệ cho mọi thư mục bạn chạy
+  `multix`. Biến này bị bỏ qua nếu được đặt ngay trong `.env` của project.
+- Base URL khác mặc định phải dùng `https://`; `http://` chỉ được chấp nhận cho
+  `localhost`, `127.0.0.1` hoặc `[::1]`.
+- Khi một base URL khác mặc định đang được dùng, `multix` in một cảnh báo cho
+  mỗi biến, nêu provider và chỉ hostname, không bao giờ in key hay URL đầy đủ.
   Cảnh báo được ghi ra stderr nên stdout vẫn đọc được bằng máy.
 
-Các quy tắc riêng của từng provider ở trên (ví dụ HeyGen chỉ nhận `https://`)
-vẫn được áp dụng.
+Cơ chế này chỉ bảo vệ base URL và các ID định tuyến của Cloudflare. `.env` của
+project vẫn có thể đặt các biến cấp process khác (ví dụ proxy, TLS và thiết
+lập Node); xem [issue #99](https://github.com/mrgoonie/multix-cli/issues/99).
+Đừng chạy `multix` trong repository có `.env` mà bạn chưa đọc.
 
 Cloudflare chỉ chấp nhận các model image và speech Workers AI có sẵn;
 `CLOUDFLARE_AI_IMAGE_MODEL` và `CLOUDFLARE_AI_TTS_MODEL` vì vậy chỉ dùng để

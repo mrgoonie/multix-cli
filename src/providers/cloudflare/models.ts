@@ -1,4 +1,4 @@
-import { resolveKey } from "../../core/env-loader.js";
+import { resolveKey, resolveTrustedSetting } from "../../core/env-loader.js";
 import { ConfigError, ValidationError } from "../../core/errors.js";
 
 export const CLOUDFLARE_IMAGE_MODEL = "@cf/black-forest-labs/flux-1-schnell";
@@ -17,8 +17,12 @@ export interface CloudflareVideoConfig extends Required<CloudflareConfig> {
   replicateApiToken: string;
 }
 
-function required(name: string): string {
-  const value = resolveKey(name)?.trim();
+/**
+ * Account and gateway IDs choose whose Cloudflare tenant receives the tokens,
+ * so they are read like base URLs (not trusted from a project .env).
+ */
+function required(name: string, read: (name: string) => string | undefined = resolveKey): string {
+  const value = read(name)?.trim();
   if (!value) throw new ConfigError(`${name} is required for Cloudflare media generation`);
   return value;
 }
@@ -46,9 +50,9 @@ export function validateImageSteps(value: string): number {
 
 export function requireCloudflareConfig(): CloudflareConfig {
   return {
-    accountId: required("CLOUDFLARE_ACCOUNT_ID"),
+    accountId: required("CLOUDFLARE_ACCOUNT_ID", resolveTrustedSetting),
     apiToken: required("CLOUDFLARE_API_TOKEN"),
-    gatewayId: resolveKey("CLOUDFLARE_AI_GATEWAY_ID")?.trim() || undefined,
+    gatewayId: resolveTrustedSetting("CLOUDFLARE_AI_GATEWAY_ID"),
   };
 }
 

@@ -72,8 +72,10 @@ Project folders are read first, then the same files under your home directory.
 Only credential names are taken from these files: names ending in `_API_KEY`
 (optionally numbered, such as `GEMINI_API_KEY_2`), `_API_TOKEN`, `_ACCOUNT_ID`
 or `_GATEWAY_ID`, plus `FAL_KEY` and `ARK_API_KEY`. Endpoint, proxy and runtime
-settings such as `*_BASE_URL` are ignored, so a cloned repository cannot send
-your keys to another host. The flag itself is ignored inside these files.
+settings such as `*_BASE_URL` are ignored. Account and gateway IDs from the
+`.claude` files of the current directory follow the same trust rules as a
+project `.env` (see [Base URL overrides and trust](#base-url-overrides-and-trust)).
+The flag itself is ignored inside these files.
 `multix check` mentions legacy files it finds while the flag is off, and
 `multix check -v` lists every env file that was loaded (paths only, never
 values). Moving the keys to `.env` or `~/.multix/.env` is still recommended.
@@ -110,23 +112,36 @@ local files uploaded to Atlas Cloud (default 200).
 
 ### Base URL overrides and trust
 
-A `*_BASE_URL` override decides where your API key is sent, so `multix` only
-trusts it from the shell environment or `~/.multix/.env`:
+A `*_BASE_URL` override decides where your API key is sent. So do
+`CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_AI_GATEWAY_ID`, which choose whose
+Cloudflare account and AI Gateway receive your tokens. `multix` only trusts
+these settings from the shell environment or `~/.multix/.env`:
 
-- A `*_BASE_URL` that comes only from the project `.env` (the current
-  directory) is ignored, and `multix` prints one warning naming the variable
-  and the file (never the value). If `~/.multix/.env` sets the same variable,
-  that value is used instead; otherwise the provider default applies. This
-  stops a cloned repository from redirecting your key to another host.
-- To allow project overrides (for example a local mock server), set
-  `MULTIX_ALLOW_PROJECT_BASE_URL=1` in your shell or `~/.multix/.env`. The
-  opt-in is ignored when it is set in the project `.env` itself.
+- When one of them comes from the project `.env` (the current directory, or a
+  legacy `.claude` file under it) and `~/.multix/.env` sets the same variable,
+  the `~/.multix/.env` value is used and `multix` prints a warning naming the
+  variable and the file (never the value). An empty project value never hides
+  the `~/.multix/.env` value.
+- When only the project `.env` sets it, the command stops with an error that
+  names the variable and the file, before any request is sent. It does not fall
+  back to the vendor default, so a request you meant for a mock server never
+  reaches the paid API.
+- To use a project value (for example a local mock server), opt in for a single
+  command from your shell:
+  `MULTIX_ALLOW_PROJECT_BASE_URL=1 multix ...`. Avoid putting the opt-in in
+  `~/.multix/.env`: that turns the protection off for every directory you run
+  `multix` in. The opt-in is ignored when it is set in the project `.env`
+  itself.
+- A non-default base URL must use `https://`; plain `http://` is accepted only
+  for `localhost`, `127.0.0.1`, or `[::1]`.
 - Whenever a non-default base URL is in effect, `multix` prints one warning per
-  run naming the provider and only the hostname, never the key or the full URL.
-  Warnings go to stderr, so stdout stays machine-readable.
+  variable naming the provider and only the hostname, never the key or the full
+  URL. Warnings go to stderr, so stdout stays machine-readable.
 
-The per-provider rules above (for example `https://` only for HeyGen) still
-apply.
+This protects base URLs and Cloudflare routing IDs only. A project `.env` can
+still set other process-level variables (proxy, TLS and Node settings, for
+example); see [issue #99](https://github.com/mrgoonie/multix-cli/issues/99).
+Do not run `multix` inside a repository whose `.env` you have not read.
 
 Cloudflare accepts only the built-in Workers AI image and speech model IDs;
 `CLOUDFLARE_AI_IMAGE_MODEL` and `CLOUDFLARE_AI_TTS_MODEL` are therefore useful
