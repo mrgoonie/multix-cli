@@ -37,7 +37,7 @@ export interface PollOptions<T> {
   jitter?: boolean;
   /** Lower bound for any delay, including Retry-After: 0. Default 500ms. */
   minIntervalMs?: number;
-  /** Errors that should be retried instead of aborting. Default: network/timeout, 408, 429, 5xx. */
+  /** Errors that should be retried instead of aborting. Default: network/timeout, 408, 429, 5xx except 501/505. */
   isTransientError?: (error: unknown) => boolean;
   /** Called after each successful status fetch. */
   onPoll?: (state: T, attempt: number) => void;
@@ -51,12 +51,23 @@ export interface PollOptions<T> {
 /**
  * Network failures and timeouts (status 0), 408, rate limits and server errors
  * are worth retrying. Anything else — ConfigError, ValidationError, other 4xx,
- * plain errors — fails the same way on every attempt.
+ * 501 Not Implemented, 505 HTTP Version Not Supported, plain errors — fails the
+ * same way on every attempt.
  */
 export function isTransientHttpError(error: unknown): boolean {
   if (!(error instanceof HttpError)) return false;
   const { status } = error;
-  return status === 0 || status === 408 || status === 429 || status >= 500;
+  return status === 408 || status === 429 || isRetryableServerStatus(status);
+}
+
+/**
+ * Network failure (status 0) or a server error worth retrying: every 5xx
+ * except 501 Not Implemented and 505 HTTP Version Not Supported, which fail
+ * the same way on every attempt. Shared by every retry policy.
+ */
+export function isRetryableServerStatus(status: number): boolean {
+  if (status === 501 || status === 505) return false;
+  return status === 0 || status >= 500;
 }
 
 const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));

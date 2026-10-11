@@ -10,6 +10,12 @@ import { _resetGeminiKeyCooldowns } from "../../../src/providers/gemini/key-pool
 
 const piped = (text: string) => Readable.from([Buffer.from(text)]);
 
+/** What undici throws when the socket drops mid-request. */
+const networkError = () =>
+  new TypeError("fetch failed", {
+    cause: Object.assign(new Error("other side closed"), { code: "UND_ERR_SOCKET" }),
+  });
+
 const makeLogger = (): Logger & { error: ReturnType<typeof vi.fn> } => ({
   info: vi.fn(),
   success: vi.fn(),
@@ -162,7 +168,7 @@ describe("convertDocuments with piped stdin", () => {
       expect(exitSpy).toHaveBeenCalledWith(1);
     });
 
-    for (const status of [400, 401, 403, 404]) {
+    for (const status of [400, 401, 403, 404, 501, 505]) {
       it(`does not retry HTTP ${status}`, async () => {
         vi.stubEnv("GEMINI_API_KEY", `test-key-${status}`);
         const fetchSpy = vi.fn(async () => new Response("bad request", { status }));
@@ -223,22 +229,59 @@ describe("convertDocuments with piped stdin", () => {
       expect(exitSpy).not.toHaveBeenCalled();
     });
 
-    it("retries network failures", async () => {
-      vi.stubEnv("GEMINI_API_KEY", "test-key-network");
-      const fetchSpy = vi
-        .fn()
-        .mockRejectedValueOnce(new TypeError("fetch failed"))
-        .mockResolvedValueOnce(ok());
+    const networkFailures: Array<[string, () => Error]> = [
+      [
+        "a connection reset",
+        () =>
+          new TypeError("fetch failed", {
+            cause: Object.assign(new Error("read ECONNRESET"), { code: "ECONNRESET" }),
+          }),
+      ],
+      ["a timeout", () => new DOMException("The operation timed out", "TimeoutError")],
+      ["an abort", () => new DOMException("This operation was aborted", "AbortError")],
+    ];
+    for (const [label, failure] of networkFailures) {
+      it(`retries ${label}`, async () => {
+        vi.stubEnv("GEMINI_API_KEY", "test-key-network");
+        const fetchSpy = vi.fn().mockRejectedValueOnce(failure()).mockResolvedValueOnce(ok());
+        vi.stubGlobal("fetch", fetchSpy);
+        const output = path.join(dir, "retry-network.md");
+
+        const run = convertDocuments({ inputs: ["-"], output, stdin: piped("notes") });
+        await vi.runAllTimersAsync();
+        await run;
+
+        expect(fetchSpy).toHaveBeenCalledTimes(2);
+        expect(fs.readFileSync(output, "utf8")).toContain("# Ok");
+        expect(exitSpy).not.toHaveBeenCalled();
+      });
+    }
+
+    it("does not retry an API key that is not a valid header value", async () => {
+      // A smart quote pasted into the key: building the request headers throws
+      // the same TypeError that fetch raises, before anything is sent.
+      vi.stubEnv("GEMINI_API_KEY", "test-key“quoted");
+      const fetchSpy = vi.fn(async (_url: string, init: RequestInit) => {
+        new Headers(init.headers);
+        return ok();
+      });
       vi.stubGlobal("fetch", fetchSpy);
-      const output = path.join(dir, "retry-network.md");
+      const logger = makeLogger();
 
-      const run = convertDocuments({ inputs: ["-"], output, stdin: piped("notes") });
-      await vi.runAllTimersAsync();
-      await run;
+      await convertDocuments({
+        inputs: ["-"],
+        output: path.join(dir, "bad-header.md"),
+        stdin: piped("notes"),
+        logger,
+      });
 
-      expect(fetchSpy).toHaveBeenCalledTimes(2);
-      expect(fs.readFileSync(output, "utf8")).toContain("# Ok");
-      expect(exitSpy).not.toHaveBeenCalled();
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(logger.debug).not.toHaveBeenCalledWith(expect.stringMatching(/^Retry /));
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining("Invalid HTTP header value"),
+      );
+      expect(logger.error).not.toHaveBeenCalledWith(expect.stringContaining("quoted"));
+      expect(exitSpy).toHaveBeenCalledWith(1);
     });
 
     it("rotates to the next key on 429 without a backoff sleep", async () => {
@@ -370,7 +413,7 @@ describe("convertDocuments with piped stdin", () => {
       vi.fn(async (url: string) => {
         if (url.includes("upload_id=")) {
           calls.upload++;
-          if (fail === "upload" && calls.upload === 1) throw new TypeError("fetch failed");
+          if (fail === "upload" && calls.upload === 1) throw networkError();
           return new Response(
             JSON.stringify({
               file: { name: "files/n", uri: "https://files.example/n", mimeType: "text/plain" },
@@ -380,7 +423,7 @@ describe("convertDocuments with piped stdin", () => {
         }
         if (url.includes("/upload/")) {
           calls.start++;
-          if (fail === "start" && calls.start === 1) throw new TypeError("fetch failed");
+          if (fail === "start" && calls.start === 1) throw networkError();
           return new Response(null, {
             status: 200,
             headers: { "x-goog-upload-url": `${url}?upload_id=session` },

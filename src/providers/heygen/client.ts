@@ -7,7 +7,9 @@
  * list endpoints add `has_more` / `next_token` cursor fields.
  */
 
+import { isRetryableServerStatus } from "../../core/async-poll.js";
 import { HttpError, ProviderError, ValidationError } from "../../core/errors.js";
+import { toFetchError } from "../../core/fetch-error.js";
 import { type FetchLike, fetchJson, httpErrorFromResponse } from "../../core/fetch-json.js";
 import { redactUrl } from "../../core/redact.js";
 import { fetchSameOrigin } from "../../core/redirect-fetch.js";
@@ -214,7 +216,7 @@ export class HeygenClient {
       return Math.min(error.retryAfterMs, MAX_RETRY_WAIT_MS);
     }
     if (!key) return undefined;
-    if (error.status === 0 || error.status >= 500 || code === "request_in_progress") {
+    if (isRetryableServerStatus(error.status) || code === "request_in_progress") {
       return Math.min(1000 * 2 ** (attempt - 1), MAX_RETRY_WAIT_MS);
     }
     return undefined;
@@ -432,8 +434,9 @@ export class HeygenClient {
       } catch (cause) {
         // A redirect loop is not a network failure: report it, do not retry.
         if (cause instanceof HttpError) throw toHeygenApiError(cause);
-        const msg = cause instanceof Error ? cause.message : String(cause);
-        const err = toHeygenApiError(new HttpError(0, msg, url));
+        const failure = toFetchError(cause, url, { provider: "heygen" });
+        if (!(failure instanceof HttpError)) throw failure;
+        const err = toHeygenApiError(failure);
         if (attempt >= this.maxAttempts) throw err;
         await this.sleep(this.retryDelay(err, key, attempt) ?? 1000);
         continue;

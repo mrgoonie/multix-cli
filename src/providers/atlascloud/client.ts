@@ -17,6 +17,7 @@
 
 import { PollTimeoutError, isTransientHttpError, pollUntil } from "../../core/async-poll.js";
 import { ConfigError, HttpError, ProviderError, ValidationError } from "../../core/errors.js";
+import { toFetchError } from "../../core/fetch-error.js";
 import {
   DEFAULT_TIMEOUT_MS,
   type FetchLike,
@@ -254,7 +255,7 @@ export class AtlasCloudClient {
       );
     } catch (cause) {
       if (cause instanceof HttpError) throw cause;
-      throw new HttpError(0, cause instanceof Error ? cause.message : String(cause), url);
+      throw toFetchError(cause, url, { provider: "atlascloud" });
     }
     if (!response.ok) throw await httpErrorFromResponse(response, url);
 

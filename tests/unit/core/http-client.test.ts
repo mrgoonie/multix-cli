@@ -57,7 +57,9 @@ describe("httpJson", () => {
 
   it("throws HttpError when fetch rejects (network error)", async () => {
     vi.stubGlobal("fetch", async () => {
-      throw new Error("Network error");
+      throw new TypeError("fetch failed", {
+        cause: Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" }),
+      });
     });
     const { httpJson } = await import("../../../src/core/http-client.js");
     await expect(httpJson({ url: "https://unreachable.test/api" })).rejects.toThrow(HttpError);
@@ -197,7 +199,16 @@ describe("downloadToFile", () => {
     const dest = path.join(tmp, "f.bin");
     const err = await downloadToFile("https://a.test/f", { dest, fetch }).catch((e: unknown) => e);
     expect((err as HttpError).status).toBe(410);
-    await expect(downloadToFile("https://a.test/x", { dest, fetch })).rejects.toThrow(HttpError);
+    const offline = async (): Promise<Response> => {
+      throw new TypeError("fetch failed", {
+        cause: Object.assign(new Error("getaddrinfo ENOTFOUND a.test"), { code: "ENOTFOUND" }),
+      });
+    };
+    const netErr = await downloadToFile("https://a.test/x", { dest, fetch: offline }).catch(
+      (e: unknown) => e,
+    );
+    expect(netErr).toBeInstanceOf(HttpError);
+    expect((netErr as HttpError).status).toBe(0);
   });
 
   it("keeps an existing destination file when the download fails", async () => {

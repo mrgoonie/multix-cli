@@ -47,7 +47,11 @@ export function createFakeAtlas(routes: Record<string, FakeResponse[] | FakeResp
     if (!key) throw new Error(`fake atlas: no route for ${method} ${input}`);
     const queue = queues.get(key) as FakeResponse[];
     const res = (queue.length > 1 ? queue.shift() : queue[0]) as FakeResponse;
-    if (res.status === -1) throw new TypeError("fetch failed: ECONNRESET");
+    if (res.status === -1) {
+      throw new TypeError("fetch failed", {
+        cause: Object.assign(new Error("read ECONNRESET"), { code: "ECONNRESET" }),
+      });
+    }
     return new Response(JSON.stringify(res.body ?? {}), {
       status: res.status ?? 200,
       headers: { "content-type": "application/json", ...(res.headers ?? {}) },

@@ -72,7 +72,7 @@ describe("HeygenClient construction and auth", () => {
       timeoutMs: 120_000,
       fetch: (_url, init) =>
         new Promise<Response>((_resolve, reject) => {
-          init?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
+          init?.signal?.addEventListener("abort", () => reject(init.signal?.reason));
         }),
     });
     const started = Date.now();

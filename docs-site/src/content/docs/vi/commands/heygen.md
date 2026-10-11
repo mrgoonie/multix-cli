@@ -255,7 +255,7 @@ bao giờ báo thành công cho job thất bại hoặc bị hủy.
 | 429 | Giới hạn tốc độ/đồng thời hoặc `quota_exceeded` | CLI tuân theo `Retry-After`; hãy giảm số job chạy song song |
 
 - Request tạo bị giới hạn tốc độ (429) được thử lại sau `Retry-After`. Lỗi
-  server chỉ được thử lại ở các endpoint có tài liệu hỗ trợ `Idempotency-Key`
+  mạng và lỗi server (5xx trừ 501 và 505) chỉ được thử lại ở các endpoint có tài liệu hỗ trợ `Idempotency-Key`
   (video, dịch, lipsync, template, asset, model video), header này được CLI tự
   gửi. Request tạo Video Agent và speech không bao giờ bị gửi lại.
 - Tài khoản API trả theo mức dùng (pay-as-you-go) chạy được khoảng 10 workflow
