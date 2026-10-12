@@ -3,7 +3,7 @@
  */
 
 import type { Command } from "commander";
-import { resolveKey } from "../../../core/env-loader.js";
+import { envDefault } from "../../../core/env-default.js";
 import {
   finalizeGeneratedImages,
   imageFormatOption,
@@ -42,8 +42,7 @@ export function registerOpenRouterGenerateCommand(parent: Command): void {
         const logger = createLogger({ verbose: opts.verbose ?? false });
 
         // Model resolution: --model > OPENROUTER_IMAGE_MODEL env > default
-        const model =
-          opts.model ?? resolveKey("OPENROUTER_IMAGE_MODEL") ?? DEFAULT_OPENROUTER_MODEL;
+        const model = opts.model ?? envDefault("OPENROUTER_IMAGE_MODEL", DEFAULT_OPENROUTER_MODEL);
 
         const numImages = Math.max(1, Number.parseInt(opts.numImages, 10) || 1);
 

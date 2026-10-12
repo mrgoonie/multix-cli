@@ -18,6 +18,15 @@ describe("Cloudflare model catalog", () => {
     expect(() => getCloudflareModel("image", "arbitrary/model")).toThrow(ValidationError);
   });
 
+  it("treats blank model overrides as unset and trims padded ones", () => {
+    vi.stubEnv("CLOUDFLARE_AI_IMAGE_MODEL", "   ");
+    vi.stubEnv("CLOUDFLARE_AI_TTS_MODEL", ` ${CLOUDFLARE_TTS_MODEL} `);
+    expect(getCloudflareModel("image")).toBe(CLOUDFLARE_IMAGE_MODEL);
+    expect(getCloudflareModel("speech")).toBe(CLOUDFLARE_TTS_MODEL);
+    vi.stubEnv("CLOUDFLARE_AI_IMAGE_MODEL", "other/model");
+    expect(() => getCloudflareModel("image")).toThrow(ValidationError);
+  });
+
   it("validates FLUX Schnell steps", () => {
     expect(validateImageSteps("1")).toBe(1);
     expect(validateImageSteps("8")).toBe(8);

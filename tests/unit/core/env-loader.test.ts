@@ -333,9 +333,89 @@ describe("env-loader", () => {
       writeProject(`${NAME}=\n`);
       writeUser(`${NAME}=https://user-proxy.example.org\n`);
       loadEnv(ALLOW_ALL);
+      expect(process.env[NAME]).toBe("https://user-proxy.example.org");
+      expect(envFileOrigin(NAME)).toEqual({
+        source: "user",
+        file: path.join(home, ".multix", ".env"),
+      });
       expect(resolveBaseUrl(NAME, DEFAULT, [KEY])).toBe("https://user-proxy.example.org");
-      expect(warnings()).toHaveLength(2);
-      expect(warnings()[0]).toContain(`Ignoring ${NAME}`);
+      // Only the custom-host notice: nothing from the project file is ignored.
+      expect(warnings()).toHaveLength(1);
+      expect(warnings()[0]).toContain("user-proxy.example.org");
+    });
+
+    it("lets ~/.multix/.env fill a blank project key, and tracks it as the user file", () => {
+      Reflect.deleteProperty(process.env, KEY);
+      writeProject(`${NAME}=https://repo-proxy.example.net\n${KEY}=   \n`);
+      writeUser(`${KEY}=sk-user-key\n`);
+      loadEnv(ALLOW_ALL);
+      expect(resolveKey(KEY)).toBe("sk-user-key");
+      expect(envFileOrigin(KEY)?.source).toBe("user");
+      // The key now comes from ~/.multix/.env, so the project base URL is not trusted with it.
+      expect(refusal().message).toContain(`${KEY} comes from ~/.multix/.env`);
+    });
+
+    it("stops trusting a project base URL once ~/.multix/.env fills its blank primary key", () => {
+      Reflect.deleteProperty(process.env, KEY);
+      const ALT = "TESTPROV_API_TOKEN";
+      try {
+        // The project sends its own key under the secondary name and leaves the primary one blank.
+        writeProject(`${NAME}=https://repo-proxy.example.net\n${KEY}=\n${ALT}=sk-repo-alt-key\n`);
+        writeUser(`${KEY}=sk-user-key\n`);
+        loadEnv(ALLOW_ALL);
+        expect(resolveKey(KEY)).toBe("sk-user-key");
+        const err = (() => {
+          try {
+            resolveBaseUrl(NAME, DEFAULT, [[KEY, ALT]]);
+          } catch (e) {
+            return e as Error;
+          }
+          throw new Error("expected resolveBaseUrl to throw");
+        })();
+        expect(err).toBeInstanceOf(ConfigError);
+        expect(err.message).toContain(`${KEY} comes from ~/.multix/.env`);
+        expect(err.message).not.toContain("sk-user-key");
+
+        // With a base URL in ~/.multix/.env as well, that value replaces the project one.
+        _resetEnvLoader();
+        for (const v of [NAME, KEY, ALT]) Reflect.deleteProperty(process.env, v);
+        writeUser(`${KEY}=sk-user-key\n${NAME}=https://user-proxy.example.org\n`);
+        loadEnv(ALLOW_ALL);
+        expect(resolveBaseUrl(NAME, DEFAULT, [[KEY, ALT]])).toBe("https://user-proxy.example.org");
+        expect(warnings().join("\n")).toContain(`Ignoring ${NAME}`);
+      } finally {
+        Reflect.deleteProperty(process.env, ALT);
+      }
+    });
+
+    it("keeps a blank project value when ~/.multix/.env is blank too", () => {
+      writeProject(`${NAME}=\n`);
+      writeUser(`${NAME}=  \n`);
+      loadEnv(ALLOW_ALL);
+      expect(process.env[NAME]).toBe("");
+      expect(envFileOrigin(NAME)?.source).toBe("project");
+      expect(resolveBaseUrl(NAME, DEFAULT, [KEY])).toBe(DEFAULT);
+    });
+
+    it("never overwrites a shell value, even a blank one", () => {
+      process.env[NAME] = "";
+      process.env[KEY] = "sk-shell-key";
+      writeProject(`${KEY}=sk-project-key\n`);
+      writeUser(`${NAME}=https://user-proxy.example.org\n${KEY}=sk-user-key\n`);
+      loadEnv(ALLOW_ALL);
+      expect(process.env[NAME]).toBe("");
+      expect(envFileOrigin(NAME)).toBeUndefined();
+      expect(resolveBaseUrl(NAME, DEFAULT, [KEY])).toBe(DEFAULT);
+      expect(resolveKey(KEY)).toBe("sk-shell-key");
+    });
+
+    it("keeps a non-blank project value over ~/.multix/.env", () => {
+      Reflect.deleteProperty(process.env, KEY);
+      writeProject(`${KEY}=sk-project-key\n`);
+      writeUser(`${KEY}=sk-user-key\n`);
+      loadEnv(ALLOW_ALL);
+      expect(resolveKey(KEY)).toBe("sk-project-key");
+      expect(envFileOrigin(KEY)?.source).toBe("project");
     });
 
     it("treats an empty project value with no user value as unset", () => {

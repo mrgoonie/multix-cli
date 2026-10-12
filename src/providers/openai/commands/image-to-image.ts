@@ -1,5 +1,5 @@
 import type { Command } from "commander";
-import { resolveKey } from "../../../core/env-loader.js";
+import { envDefault } from "../../../core/env-default.js";
 import { ValidationError } from "../../../core/errors.js";
 import {
   finalizeGeneratedImages,
@@ -33,7 +33,7 @@ export function registerOpenAIImageToImageCommand(parent: Command): void {
     .option(
       "-m, --model <id>",
       "Image model",
-      resolveKey("OPENAI_IMAGE_MODEL") ?? DEFAULT_OPENAI_IMAGE_MODEL,
+      envDefault("OPENAI_IMAGE_MODEL", DEFAULT_OPENAI_IMAGE_MODEL),
     )
     .option("--size <size>", "1024x1024|1024x1536|1536x1024|auto", "1024x1024")
     .option("--quality <q>", "low|medium|high", "medium")

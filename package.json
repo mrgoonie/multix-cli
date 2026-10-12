@@ -1,6 +1,6 @@
 {
   "name": "@mrgoonie/multix",
-  "version": "1.0.6",
+  "version": "1.0.9",
   "description": "AI multimodal CLI — OpenAI, Gemini, MiniMax, OpenRouter, Leonardo, BytePlus, ElevenLabs, fal.ai, Atlas Cloud, Replicate, HeyGen, ffmpeg, ImageMagick, doc-to-md",
   "type": "module",
   "bin": {
@@ -10,8 +10,9 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "default": "./dist/index.js"
     }
   },
   "files": [

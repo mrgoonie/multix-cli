@@ -20,6 +20,11 @@ import type {
   AtlasPrediction,
 } from "../../../src/providers/atlascloud/types.js";
 import type { Env } from "../config.js";
+import {
+  type VideoPolicy,
+  assertVideoBodyWithinLimits,
+  lengthRequests,
+} from "./atlascloud-video-policy.js";
 import { type JobResult, type ProviderAdapter, splitOutputs } from "./types.js";
 
 const IMAGE_POLL_MS = 2000;
@@ -58,67 +63,31 @@ async function loadSpec(
   }
 }
 
-/** How a video request's duration is bounded on Atlas, where the API silently fills defaults. */
-interface DurationPolicy {
-  max: number;
-  /** Server default used when the caller omitted `duration`. */
-  fallback: number;
-  requested: boolean;
-}
-
-/**
- * Pick the duration to send. Without a schema the model's own default is
- * unknown, so an omitted duration fails closed. With a schema that declares
- * no duration field, the model has no length control and nothing is sent.
- */
-function durationToSend(
-  spec: AtlasModelSpec | undefined,
-  model: string,
-  policy: DurationPolicy,
-  requested: number,
-): number | undefined {
-  if (policy.requested) return requested;
-  if (!spec) {
-    throw new ValidationError(
-      `Model ${model}: its schema is unavailable, so its default length is unknown; pass duration (at most ${policy.max}s)`,
-    );
-  }
-  const field = F.duration.find((name) => spec.properties[name] !== undefined);
-  if (!field) return undefined;
-  const schemaDefault = spec.properties[field]?.default;
-  return typeof schemaDefault === "number" && schemaDefault <= policy.max
-    ? schemaDefault
-    : policy.fallback;
-}
-
 async function submit(
   atlas: AtlasCloudClient,
   model: string,
   fallbackKind: AtlasMediaKind,
   requests: FieldRequest[],
-  duration?: { policy: DurationPolicy; value: number },
+  video?: VideoPolicy,
 ): Promise<AtlasPrediction> {
   const spec = await loadSpec(atlas, model);
-  const all = duration
-    ? [
-        ...requests,
-        {
-          flag: "duration",
-          value: durationToSend(spec, model, duration.policy, duration.value),
-          candidates: F.duration,
-        },
-      ]
-    : requests;
-  const body = buildModelInput(spec, all);
-  // Schema defaults are filled in too, so re-check the duration that will actually be billed.
-  const billed = body.duration;
-  if (duration && typeof billed === "number" && billed > duration.policy.max) {
+  if (!video) {
+    return atlas.submit(spec?.endpoint ?? fallbackKind, {
+      model,
+      ...buildModelInput(spec, requests),
+    });
+  }
+  // Without the schema, the defaults the API fills in (length, resolution) are unknown.
+  if (!spec) {
     throw new ValidationError(
-      `Model ${model} would render ${billed}s; this server allows at most ${duration.policy.max}s`,
+      `Model ${model}: its schema could not be loaded, so its length and resolution cannot be checked against this server's limits, and the request is not sent. Retry later, when the model schema is available.`,
     );
   }
-  return atlas.submit(spec?.endpoint ?? fallbackKind, { model, ...body });
+  const body = buildModelInput(spec, [...requests, ...lengthRequests(spec, model, video)]);
+  assertVideoBodyWithinLimits(spec, model, body, video);
+  return atlas.submit(spec.endpoint ?? fallbackKind, { model, ...body });
 }
+
 export const atlasCloudAdapter: ProviderAdapter = {
   id: "atlascloud",
   isConfigured: (env) => Boolean(env.ATLASCLOUD_API_KEY?.trim()),
@@ -173,12 +142,10 @@ export const atlasCloudAdapter: ProviderAdapter = {
         },
       ],
       {
-        policy: {
-          max: ctx.limits.maxVideoSeconds,
-          fallback: ctx.limits.defaultVideoSeconds,
-          requested: req.durationRequested,
-        },
-        value: req.duration,
+        maxSeconds: ctx.limits.maxVideoSeconds,
+        fallbackSeconds: ctx.limits.defaultVideoSeconds,
+        requestedSeconds: req.durationRequested ? req.duration : undefined,
+        allowedResolutions: ctx.limits.allowedResolutions,
       },
     );
     return atlasJob(submitted);

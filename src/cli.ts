@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { createRequire } from "node:module";
 import { Command } from "commander";
 import { registerCommands } from "./commands/index.js";

@@ -1,7 +1,7 @@
 ---
 name: multix
 description: AI multimodal CLI — generate and edit images (OpenAI, Codex driver, Gemini Nano Banana, Imagen, MiniMax, OpenRouter, Leonardo, BytePlus Seedream, Cloudflare Workers AI FLUX.1 Schnell, fal.ai FLUX, Replicate FLUX), generate video (Gemini Veo, MiniMax Hailuo, OpenRouter via Veo/Seedance/Kling, Leonardo via Motion/Veo/Kling/Hailuo/Seedance/LTX, BytePlus Seedance, Cloudflare AI Gateway via Replicate, fal.ai queue models, Replicate direct API models incl. P-Video, HeyGen Video Agent and scripted avatar videos), video translation and lipsync (HeyGen), TTS/STT/music (OpenAI, Gemini Flash TTS incl. Gemini 3.8 with delivery-style control, MiniMax, Cloudflare Workers AI MeloTTS, ElevenLabs), 3D models (BytePlus Hyper3D/Hitem3d), analyze/transcribe media, convert documents to Markdown, optimize media via ffmpeg/ImageMagick, and self-update the CLI. Use whenever the user wants to create, edit, or transform images/video/audio/3D/documents from a CLI, mentions any of: OpenAI, Codex image driver, image-to-image, i2i, image edit, watercolor/cyberpunk style transfer, reference image, OpenRouter, Nano Banana, Flux, Seedream, Veo, Hailuo, Seedance, Kling, Cloudflare Workers AI, AI Gateway, fal.ai, Atlas Cloud, Replicate, replicate.com models, Replicate predictions, HeyGen, avatar video, talking head, Video Agent, video translation, dubbing, lipsync, video generation, text-to-video, image-to-video, i2v, ElevenLabs voice cloning, updating/upgrading multix, or asks for batch media optimization.
-version: 1.0.6 # x-release-please-version
+version: 1.0.9 # x-release-please-version
 ---
 
 # multix — AI Multimodal CLI
@@ -54,7 +54,7 @@ CLOUDFLARE_API_TOKEN  # Cloudflare Workers AI / AI Gateway token
 # Video additionally requires CLOUDFLARE_AI_GATEWAY_ID and REPLICATE_API_TOKEN.
 ```
 
-Priority: `process.env` > `cwd/.env` > `~/.multix/.env`. Set `MULTIX_LEGACY_CLAUDE_ENV=1` to also read legacy AgentKit `.claude` env files (credential names only, lowest priority); `multix check -v` lists loaded env files. A project `.env` may only set names multix reads (provider keys and settings from `.env.example`, the documented `MULTIX_*` settings such as `MULTIX_OUTPUT_DIR`, `NO_COLOR`; never `MULTIX_ALLOW_PROJECT_BASE_URL` or `MULTIX_LEGACY_CLAUDE_ENV`); anything else there (`NODE_OPTIONS`, `npm_config_*`, `LD_PRELOAD`, proxy/TLS variables) is not loaded, with one stderr warning naming the ignored variables. Put such variables in the shell.
+Priority: `process.env` > `cwd/.env` > `~/.multix/.env`; a blank value in a `.env` file does not count as set, so a later file can fill it (a shell value wins even when blank). Set `MULTIX_LEGACY_CLAUDE_ENV=1` to also read legacy AgentKit `.claude` env files (credential names only, lowest priority); `multix check -v` lists loaded env files. A project `.env` may only set names multix reads (provider keys and settings from `.env.example`, the documented `MULTIX_*` settings such as `MULTIX_OUTPUT_DIR`, `NO_COLOR`; never `MULTIX_ALLOW_PROJECT_BASE_URL` or `MULTIX_LEGACY_CLAUDE_ENV`); anything else there (`NODE_OPTIONS`, `npm_config_*`, `LD_PRELOAD`, proxy/TLS variables) is not loaded, with one stderr warning naming the ignored variables. Put such variables in the shell.
 
 ## Gemini text-output tasks
 
@@ -479,7 +479,8 @@ local files), supports only Replicate, Atlas Cloud, HeyGen, and Cloudflare
 video, and accepts only public `https://` image URLs. Check `limits` from
 `multix_list_providers` before a video call: `duration` above
 `max_video_seconds` or a `resolution` outside `allowed_resolutions` is
-rejected, and an omitted `duration` becomes `default_video_seconds`.
+rejected, and an omitted `duration` becomes `default_video_seconds` (on Atlas
+Cloud, the model's own default when it is within `max_video_seconds`).
 
 ## Security & scope
 

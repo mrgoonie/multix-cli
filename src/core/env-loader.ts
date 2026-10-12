@@ -8,7 +8,11 @@
  * 4. Legacy Claude/AgentKit layers, only when MULTIX_LEGACY_CLAUDE_ENV=1
  *    (see legacyClaudeEnvFiles for their order; credential names only)
  *
- * Files never overwrite an existing variable, so earlier layers always win.
+ * Files never overwrite a non-blank variable, so earlier layers win. A blank
+ * or whitespace-only value from a file does not count as set: a later file may
+ * fill it (e.g. `GEMINI_API_KEY=` copied from .env.example into cwd/.env does
+ * not hide the ~/.multix/.env key). A shell variable is never overwritten,
+ * even when blank, so `NAME= multix ...` still clears a file value.
  * Set MULTIX_DISABLE_HOME_ENV=1 to skip every file under the home directory
  * (used in tests).
  *
@@ -115,7 +119,20 @@ function parseFile(file: string): Record<string, string> | undefined {
 }
 
 /**
- * Load a file without overriding anything, recording the origin of each new
+ * True when an env file may set `name`: it is unset, or an earlier file left
+ * it blank (a copied `.env.example` line such as `FAL_KEY=` does not count as
+ * set, so a later file can still supply the value). Any shell value, blank
+ * included, is kept.
+ */
+function fileMaySet(name: string, value: string): boolean {
+  const current = process.env[name];
+  if (current === undefined) return true;
+  if (current.trim() !== "" || value.trim() === "") return false;
+  return fileOrigins.get(envNameKey(name))?.value === current;
+}
+
+/**
+ * Load a file without overriding a value already set, recording the origin of each new
  * variable. Names `accept` refuses are skipped and passed to `onRefused`.
  */
 function loadFile(
@@ -131,7 +148,7 @@ function loadFile(
       onRefused?.(name);
       continue;
     }
-    if (process.env[name] !== undefined) continue;
+    if (!fileMaySet(name, value)) continue;
     process.env[name] = value;
     fileOrigins.set(envNameKey(name), { source, file, value });
   }
@@ -320,12 +337,9 @@ export function inspectTrustedSetting(
       ? { status: "used", value, source: origin?.source ?? "shell" }
       : { status: "unset" };
   }
+  // A blank project value never hides ~/.multix/.env: loadEnv lets that file fill it.
+  if (value === undefined) return { status: "unset" };
   const userValue = userFileValues[envNameKey(name)]?.trim() || undefined;
-  if (value === undefined) {
-    return userValue
-      ? { status: "fallback", value: userValue, file: origin.file, reason: "it is empty" }
-      : { status: "unset" };
-  }
   const project = (basis: ProjectTrustBasis): TrustedSettingState => ({
     status: "used",
     value,
@@ -359,10 +373,9 @@ export function applyTrustedSetting(name: string, state: TrustedSettingState): s
   if (state.status === "unset") return undefined;
   if (state.status === "used") return state.value;
   if (state.status === "refused") throw new ConfigError(trustedSettingRefusal(name, state));
-  const hint = state.reason === "it is empty" ? "" : ` ${OPT_IN_HINT}`;
   warnOnce(
     `ignored:${name}`,
-    `Ignoring ${name} from project env file ${state.file} (${state.reason}); using the value from ~/.multix/.env.${hint}`,
+    `Ignoring ${name} from project env file ${state.file} (${state.reason}); using the value from ~/.multix/.env. ${OPT_IN_HINT}`,
   );
   return state.value;
 }

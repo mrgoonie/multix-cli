@@ -6,7 +6,8 @@
  * the same request/response handling.
  */
 
-import { ProviderError } from "../../core/errors.js";
+import { HttpError, MultixError, ProviderError } from "../../core/errors.js";
+import { toFetchError } from "../../core/fetch-error.js";
 import { DEFAULT_TIMEOUT_MS, type FetchLike } from "../../core/fetch-json.js";
 import { fetchSameOrigin } from "../../core/redirect-fetch.js";
 import { CLOUDFLARE_VIDEO_MODEL } from "./model-ids.js";
@@ -71,15 +72,49 @@ function videoHeaders(
   };
 }
 
-function send(opts: CloudflareVideoRequestOptions, url: string, init: RequestInit) {
-  const withTimeout = {
-    ...init,
-    signal: AbortSignal.timeout(opts.timeoutMs ?? DEFAULT_TIMEOUT_MS),
-  };
-  // The headers carry both tokens, so a redirect to another origin is not
-  // followed. The injected fetch is called without a receiver (Workers'
-  // native fetch rejects a foreign `this`).
-  return fetchSameOrigin(url, withTimeout, opts.fetch);
+function isAbort(cause: unknown): boolean {
+  const name = (cause as { name?: unknown } | null)?.name;
+  return name === "TimeoutError" || name === "AbortError";
+}
+
+/**
+ * Turn a fetch or redirect failure into a multix error that names only the
+ * gateway origin: the request path holds the account and gateway ids.
+ * Timeouts become a transient HttpError(0) with a clear message; other
+ * rejections are classified by `toFetchError` (transient by default,
+ * ConfigError/ProviderError for deterministic faults).
+ */
+function cloudflareFetchFailure(cause: unknown, url: string, timeoutMs: number): MultixError {
+  const origin = new URL(url).origin;
+  if (cause instanceof HttpError) {
+    // Redirect failures (loop, bad Location) carry the full request URL, so
+    // the original is not kept as `cause`.
+    return new HttpError(cause.status, cause.snippet, origin, cause.retryAfterMs);
+  }
+  if (cause instanceof MultixError) return cause;
+  if (isAbort(cause)) {
+    return new HttpError(0, `request timed out after ${timeoutMs / 1000}s`, origin, undefined, {
+      cause,
+    });
+  }
+  return toFetchError(cause, origin, { provider: "Cloudflare" });
+}
+
+async function send(
+  opts: CloudflareVideoRequestOptions,
+  url: string,
+  init: RequestInit,
+): Promise<Response> {
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const withTimeout = { ...init, signal: AbortSignal.timeout(timeoutMs) };
+  try {
+    // The headers carry both tokens, so a redirect to another origin is not
+    // followed. The injected fetch is called without a receiver (Workers'
+    // native fetch rejects a foreign `this`).
+    return await fetchSameOrigin(url, withTimeout, opts.fetch);
+  } catch (cause) {
+    throw cloudflareFetchFailure(cause, url, timeoutMs);
+  }
 }
 
 /** Reject responses that are not prediction-shaped before they reach logs or callers. */

@@ -7,6 +7,12 @@ description: Cấu hình credential, model mặc định và thư mục output c
 chạy, rồi `~/.multix/.env` (cùng [file `.claude` cũ](#file-env-claude-cũ) khi được
 bật). Không commit API key hoặc đưa key vào shell history.
 
+Nguồn đầu tiên đặt một biến sẽ thắng. Giá trị rỗng hoặc chỉ có khoảng trắng
+trong file `.env` không được tính là đã đặt, nên `.env` của project chép từ
+`.env.example` (ví dụ `GEMINI_API_KEY=` hay `FAL_IMAGE_MODEL=`) không che giá
+trị trong `~/.multix/.env`. Biến trong shell luôn thắng, kể cả khi rỗng: chạy
+`GEMINI_API_KEY= multix ...` để bỏ qua key trong các file `.env` cho một lệnh.
+
 ## Biến được phép trong `.env` của project
 
 `.env` của project (thư mục hiện tại, hoặc một file `.claude` cũ nằm trong đó)
@@ -74,7 +80,9 @@ khi đi theo redirect đó.
 Thêm key Gemini phụ bằng `GEMINI_API_KEY_2`, `GEMINI_API_KEY_3`, … (hậu tố số
 bất kỳ). `multix` dùng `GEMINI_API_KEY` trước, sau đó các key đánh số theo thứ
 tự tăng dần; giá trị trùng lặp bị bỏ qua. Chỉ cần các key đánh số cũng đủ, không
-bắt buộc có `GEMINI_API_KEY`.
+bắt buộc có `GEMINI_API_KEY`. Nếu `.env` của project để trống `GEMINI_API_KEY`
+và `~/.multix/.env` có đặt biến này, key trong home sẽ tham gia xoay vòng của
+project đó và được thử trước tiên.
 
 - Key trả về HTTP 429, hoặc 400/403 kèm `RESOURCE_EXHAUSTED`, sẽ tạm nghỉ theo
   `Retry-After` hoặc `retryDelay` của server, nếu không có thì 60 giây, và chính
@@ -102,8 +110,8 @@ bắt buộc có `GEMINI_API_KEY`.
 Bản cài AgentKit cũ lưu key trong các thư mục `.claude`. Đặt
 `MULTIX_LEGACY_CLAUDE_ENV=1` (trong shell hoặc `~/.multix/.env`; `.env` của project
 không thể đặt biến này) để đọc thêm các file này. Mặc định tính năng này tắt. Các file
-được nạp sau `~/.multix/.env`, không bao giờ ghi đè giá trị đã có, và file đầu
-tiên đặt một biến sẽ thắng:
+được nạp sau `~/.multix/.env`, không bao giờ ghi đè giá trị không rỗng đã có,
+và file đầu tiên đặt một biến sẽ thắng:
 
 1. `.claude/skills/ai-multimodal/.env`, rồi `.claude/skills/ak-ai-multimodal/.env`
 2. `.claude/skills/.env`

@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.9](https://github.com/mrgoonie/multix-cli/compare/v1.0.8...v1.0.9) (2026-10-11)
+
+
+### Fixed
+
+* **build:** ship the programmatic entry point declared in package.json ([#132](https://github.com/mrgoonie/multix-cli/issues/132)) ([1c41397](https://github.com/mrgoonie/multix-cli/commit/1c41397c0b8fda141311fef0fbc5c278b660a67f))
+
+## [1.0.8](https://github.com/mrgoonie/multix-cli/compare/v1.0.7...v1.0.8) (2026-10-11)
+
+
+### Fixed
+
+* **mcp:** tighten Worker duration/resolution defaults and Cloudflare video errors ([#120](https://github.com/mrgoonie/multix-cli/issues/120)) ([e082feb](https://github.com/mrgoonie/multix-cli/commit/e082feb3c1b3d0b88c96aa0a837b903759d6db00))
+
+## [1.0.7](https://github.com/mrgoonie/multix-cli/compare/v1.0.6...v1.0.7) (2026-10-11)
+
+
+### Fixed
+
+* **core:** let a later .env file fill a blank value ([#129](https://github.com/mrgoonie/multix-cli/issues/129)) ([bdfb673](https://github.com/mrgoonie/multix-cli/commit/bdfb6739770f0e7bb9d2623606cdb32d454779d4))
+
 ## [1.0.6](https://github.com/mrgoonie/multix-cli/compare/v1.0.5...v1.0.6) (2026-10-11)
 
 

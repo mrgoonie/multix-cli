@@ -73,7 +73,7 @@ describe("multix_list_providers", () => {
       max_outputs: 4,
       max_video_seconds: 10,
       default_video_seconds: 5,
-      allowed_resolutions: ["480p", "720p", "1080p"],
+      allowed_resolutions: ["480p", "720p", "768p", "1080p"],
     });
   });
 });
@@ -317,58 +317,18 @@ describe("multix_generate_video", () => {
     expect(status.structuredContent.next).toBeUndefined();
   });
 
-  it("uses Atlas Cloud's image-to-video default when image_url is given", async () => {
-    const { fetch, calls } = mockFetch(
-      route("GET", /\/api\/v1\/models$/, () => jsonResponse({ code: 200, data: [] })),
-      route("POST", /\/model\/generateVideo$/, () =>
-        jsonResponse({ code: 200, data: { id: "atv-1", status: "processing" } }),
-      ),
-    );
-    const result = await callTool(
-      fullEnv(),
-      "multix_generate_video",
-      {
-        provider: "atlascloud",
-        prompt: "pan",
-        image_url: "https://images.example.com/a.png",
-        duration: 5,
-      },
-      { fetch },
-    );
-    expect(result.structuredContent).toMatchObject({
-      id: "atv-1",
-      done: false,
-      model: "bytedance/seedance-v1-pro-fast/image-to-video",
-    });
-    expect(calls.find((c) => c.url === `${ATLAS}/model/generateVideo`)?.body).toMatchObject({
-      image: "https://images.example.com/a.png",
-      duration: 5,
-    });
-  });
-
-  it("fails closed on Atlas Cloud when the schema is unavailable and duration is omitted", async () => {
-    const { fetch, calls } = mockFetch(
-      route("GET", /\/api\/v1\/models$/, () => jsonResponse({ code: 500 }, 500)),
-    );
-    const result = await callTool(
-      fullEnv(),
-      "multix_generate_video",
-      { provider: "atlascloud", prompt: "pan" },
-      { fetch },
-    );
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toMatch(/pass duration \(at most 10s\)/);
-    expect(calls.some((c) => c.method === "POST")).toBe(false);
-  });
-
-  it("sends an explicit capped duration on Atlas Cloud when the schema default is too long", async () => {
-    const model = "vendor/long-video";
-    const schemaUrl = "https://schemas.example.com/long-video.json";
-    const { fetch, calls } = mockFetch(
+  /** Atlas catalog + schema + submit routes for one video model with the given inputs. */
+  function atlasVideoModel(
+    properties: Record<string, unknown>,
+    required: string[] = ["prompt"],
+    model = "vendor/test-video",
+  ) {
+    const schemaUrl = "https://schemas.example.com/test-video.json";
+    const mock = mockFetch(
       route("GET", /\/api\/v1\/models$/, () =>
         jsonResponse({ code: 200, data: [{ model, schema: schemaUrl }] }),
       ),
-      route("GET", /long-video\.json$/, () =>
+      route("GET", /test-video\.json$/, () =>
         jsonResponse({
           paths: {
             "/api/v1/model/generateVideo": {
@@ -377,11 +337,8 @@ describe("multix_generate_video", () => {
                   content: {
                     "application/json": {
                       schema: {
-                        properties: {
-                          prompt: { type: "string" },
-                          duration: { type: "integer", default: 12 },
-                        },
-                        required: ["prompt"],
+                        properties: { prompt: { type: "string" }, ...properties },
+                        required,
                       },
                     },
                   },
@@ -395,6 +352,172 @@ describe("multix_generate_video", () => {
         jsonResponse({ code: 200, data: { id: "atv-2", status: "processing" } }),
       ),
     );
+    const submitted = () => mock.calls.find((c) => c.url === `${ATLAS}/model/generateVideo`)?.body;
+    return { model, ...mock, submitted };
+  }
+
+  it("uses Atlas Cloud's image-to-video default when image_url is given", async () => {
+    const { fetch, submitted } = atlasVideoModel(
+      { image: { type: "string" }, duration: { type: "integer", default: 5 } },
+      ["prompt", "image"],
+      "bytedance/seedance-v1-pro-fast/image-to-video",
+    );
+    const result = await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      {
+        provider: "atlascloud",
+        prompt: "pan",
+        image_url: "https://images.example.com/a.png",
+        duration: 5,
+      },
+      { fetch },
+    );
+    expect(result.structuredContent).toMatchObject({
+      id: "atv-2",
+      done: false,
+      model: "bytedance/seedance-v1-pro-fast/image-to-video",
+    });
+    expect(submitted()).toMatchObject({
+      image: "https://images.example.com/a.png",
+      duration: 5,
+    });
+  });
+
+  it.each([
+    ["duration omitted", {}],
+    ["duration passed", { duration: 5 }],
+    ["duration and resolution passed", { duration: 5, resolution: "720p" }],
+  ])(
+    "fails closed on Atlas Cloud video when the schema is unavailable (%s)",
+    async (_label, extra) => {
+      const { fetch, calls } = mockFetch(
+        route("GET", /\/api\/v1\/models$/, () => jsonResponse({ code: 500 }, 500)),
+      );
+      const result = await callTool(
+        fullEnv(),
+        "multix_generate_video",
+        { provider: "atlascloud", prompt: "pan", ...extra },
+        { fetch },
+      );
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toMatch(
+        /schema could not be loaded.*request is not sent\. Retry later/,
+      );
+      expect(calls.some((c) => c.method === "POST")).toBe(false);
+    },
+  );
+
+  it("parses string durations such as 8s and sends the schema's format", async () => {
+    const enumField = atlasVideoModel({
+      duration: { type: "string", enum: ["4s", "8s", "12s"], default: "12s" },
+    });
+    await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "atlascloud", model: enumField.model, prompt: "pan" },
+      { fetch: enumField.fetch },
+    );
+    expect(enumField.submitted()).toMatchObject({ duration: "8s" });
+
+    const requested = atlasVideoModel({
+      duration: { type: "string", enum: ["4s", "8s"], default: "8s" },
+    });
+    await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "atlascloud", model: requested.model, prompt: "pan", duration: 4 },
+      { fetch: requested.fetch },
+    );
+    expect(requested.submitted()).toMatchObject({ duration: "4s" });
+
+    const free = atlasVideoModel({ duration: { type: "string", default: "12s" } });
+    await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "atlascloud", model: free.model, prompt: "pan" },
+      { fetch: free.fetch },
+    );
+    expect(free.submitted()).toMatchObject({ duration: "10s" });
+  });
+
+  it("unwraps anyOf length fields and rejects ambiguous ones", async () => {
+    const nullable = atlasVideoModel({
+      duration: { anyOf: [{ type: "integer", maximum: 20 }, { type: "null" }], default: 15 },
+    });
+    await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "atlascloud", model: nullable.model, prompt: "pan" },
+      { fetch: nullable.fetch },
+    );
+    expect(nullable.submitted()).toMatchObject({ duration: 10 });
+
+    const ambiguous = atlasVideoModel({
+      duration: { oneOf: [{ type: "integer" }, { type: "string", enum: ["auto"] }] },
+    });
+    const result = await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "atlascloud", model: ambiguous.model, prompt: "pan" },
+      { fetch: ambiguous.fetch },
+    );
+    expect(result.content[0].text).toMatch(/"duration" has a type this server cannot check/);
+    expect(ambiguous.calls.some((c) => c.method === "POST")).toBe(false);
+  });
+
+  it.each([
+    [
+      "a non-numeric length field",
+      { length: { type: "string", enum: ["short", "long"] } },
+      /type this server cannot check/,
+    ],
+    [
+      "an unknown length-like field",
+      { duration_seconds: { type: "integer", default: 30 } },
+      /length input "duration_seconds" this server cannot cap/,
+    ],
+    ...["frame_count", "num_frame", "clip_length", "video_len"].map(
+      (name): [string, Record<string, unknown>, RegExp] => [
+        `a numeric "${name}" field`,
+        { [name]: { type: "integer", default: 300 } },
+        new RegExp(`length input "${name}" this server cannot cap`),
+      ],
+    ),
+    [
+      "a length-like field wrapping a $ref in a nullable union",
+      { clip_length: { anyOf: [{ $ref: "#/components/schemas/Len" }, { type: "null" }] } },
+      /length input "clip_length" this server cannot cap/,
+    ],
+    [
+      "a numeric-string length-like field",
+      { clip_length: { type: "string", default: "30" } },
+      /length input "clip_length" this server cannot cap/,
+    ],
+    [
+      "frames with no frame rate above the cap",
+      { num_frames: { type: "integer", default: 81 } },
+      /"num_frames" has no allowed value/,
+    ],
+  ])("rejects %s before submit", async (_label, props, message) => {
+    const { model, fetch, calls } = atlasVideoModel(props);
+    const result = await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "atlascloud", model, prompt: "pan" },
+      { fetch },
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(message);
+    expect(calls.some((c) => c.method === "POST")).toBe(false);
+  });
+
+  it("ignores non-numeric inputs whose names mention frames", async () => {
+    const { model, fetch, submitted } = atlasVideoModel({
+      duration: { type: "integer", default: 5 },
+      return_last_frame: { type: "boolean", default: false },
+      first_frame: { type: "string" },
+    });
     const result = await callTool(
       fullEnv(),
       "multix_generate_video",
@@ -402,11 +525,286 @@ describe("multix_generate_video", () => {
       { fetch },
     );
     expect(result.isError).toBeFalsy();
-    expect(calls.find((c) => c.url === `${ATLAS}/model/generateVideo`)?.body).toEqual({
-      model,
-      prompt: "pan",
-      duration: 5,
+    expect(submitted()).toEqual({ model, prompt: "pan", duration: 5 });
+  });
+
+  it("caps frame counts using the schema frame rate", async () => {
+    const { model, fetch, submitted } = atlasVideoModel({
+      num_frames: { type: "integer", minimum: 17, maximum: 241, default: 241 },
+      fps: { type: "integer", default: 16 },
     });
+    const result = await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "atlascloud", model, prompt: "pan" },
+      { fetch },
+    );
+    expect(result.isError).toBeFalsy();
+    expect(submitted()).toEqual({ model, prompt: "pan", num_frames: 160 });
+  });
+
+  it("never sends a zero or negative length unless picked from the schema's positive values", async () => {
+    const auto = atlasVideoModel({ duration: { type: "integer", default: 0 } });
+    await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "atlascloud", model: auto.model, prompt: "pan" },
+      { fetch: auto.fetch },
+    );
+    expect(auto.submitted()).toMatchObject({ duration: 5 });
+
+    const smart = atlasVideoModel({
+      duration: { type: "integer", enum: [-1, 0, 4, 8], default: -1 },
+    });
+    await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "atlascloud", model: smart.model, prompt: "pan" },
+      { fetch: smart.fetch },
+    );
+    expect(smart.submitted()).toMatchObject({ duration: 4 });
+  });
+
+  it.each([
+    ["a size default above the allowlist", { size: { type: "string", default: "3840*2160" } }],
+    ["an unparseable size", { size: { type: "string", default: "landscape" } }],
+    ["a width default above the allowlist", { width: { type: "integer", default: 2560 } }],
+    ["a non-string resolution default", { resolution: { type: "integer", default: 2160 } }],
+    ["a square size above the short edge", { size: { type: "string", default: "1920*1920" } }],
+    [
+      "width and height together above the short edge",
+      { width: { type: "integer", default: 1920 }, height: { type: "integer", default: 1920 } },
+    ],
+    [
+      "a resolution default outside a union with several members",
+      {
+        resolution: {
+          anyOf: [{ type: "string", enum: ["720p", "4k"] }, { type: "string" }],
+          default: "4k",
+        },
+      },
+    ],
+  ])("rejects %s on Atlas Cloud before submit", async (_label, props) => {
+    const { model, fetch, calls } = atlasVideoModel({
+      duration: { type: "integer", default: 5 },
+      ...props,
+    });
+    const result = await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "atlascloud", model, prompt: "pan" },
+      { fetch },
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/would render at/);
+    expect(calls.some((c) => c.method === "POST")).toBe(false);
+  });
+
+  it.each([
+    [
+      "a resolution union with no outer default",
+      { resolution: { anyOf: [{ type: "string", enum: ["720p"] }, { type: "integer" }] } },
+      "resolution",
+    ],
+    [
+      "a resolution $ref",
+      { resolution: { $ref: "#/components/schemas/Resolution" } },
+      "resolution",
+    ],
+    [
+      "a nullable resolution $ref",
+      { resolution: { anyOf: [{ $ref: "#/components/schemas/Resolution" }, { type: "null" }] } },
+      "resolution",
+    ],
+    ["a size allOf", { size: { allOf: [{ type: "string" }], default: "640*360" } }, "size"],
+    [
+      "a width union with several members",
+      { width: { oneOf: [{ type: "integer" }, { type: "string" }] } },
+      "width",
+    ],
+  ])("rejects %s on Atlas Cloud before submit", async (_label, props, field) => {
+    const { model, fetch, calls } = atlasVideoModel({
+      duration: { type: "integer", default: 5 },
+      ...props,
+    });
+    const result = await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "atlascloud", model, prompt: "pan" },
+      { fetch },
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain(
+      `input "${field}" has a schema this server cannot check; ${
+        field === "resolution" ? "pass a resolution or use another model" : "use another model"
+      }`,
+    );
+    expect(calls.some((c) => c.method === "POST")).toBe(false);
+  });
+
+  it("checks a caller resolution even when the schema shape is unreadable", async () => {
+    const { model, fetch, submitted } = atlasVideoModel({
+      duration: { type: "integer", default: 5 },
+      resolution: { $ref: "#/components/schemas/Resolution" },
+    });
+    const result = await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "atlascloud", model, prompt: "pan", resolution: "720p" },
+      { fetch },
+    );
+    expect(result.isError).toBeFalsy();
+    expect(submitted()).toMatchObject({ resolution: "720p" });
+  });
+
+  it("accepts Atlas size and dimension defaults within the allowlist", async () => {
+    const { model, fetch, submitted } = atlasVideoModel({
+      duration: { type: "integer", default: 5 },
+      size: { type: "string", default: "1920*1080" },
+      height: { type: "integer", default: 1080 },
+    });
+    const result = await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "atlascloud", model, prompt: "pan" },
+      { fetch },
+    );
+    expect(result.isError).toBeFalsy();
+    expect(submitted()).toEqual({ model, prompt: "pan", duration: 5 });
+  });
+
+  it("sends the cap on Atlas Cloud when the schema default is longer", async () => {
+    const { model, fetch, submitted } = atlasVideoModel({
+      duration: { type: "integer", default: 12 },
+    });
+    const result = await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "atlascloud", model, prompt: "pan" },
+      { fetch },
+    );
+    expect(result.isError).toBeFalsy();
+    expect(submitted()).toEqual({ model, prompt: "pan", duration: 10 });
+  });
+
+  it("sends an Atlas schema default within the cap, and the server default when there is none", async () => {
+    const withDefault = atlasVideoModel({ duration: { type: "integer", default: 8 } });
+    await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "atlascloud", model: withDefault.model, prompt: "pan" },
+      { fetch: withDefault.fetch },
+    );
+    expect(withDefault.submitted()).toMatchObject({ duration: 8 });
+
+    const noDefault = atlasVideoModel({ duration: { type: "number" } });
+    await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "atlascloud", model: noDefault.model, prompt: "pan" },
+      { fetch: noDefault.fetch },
+    );
+    expect(noDefault.submitted()).toMatchObject({ duration: 5 });
+  });
+
+  it("caps Atlas length fields with other names, snapping to the largest enum value within the cap", async () => {
+    const { model, fetch, submitted } = atlasVideoModel({
+      seconds: { type: "string", enum: ["4", "8", "12"], default: "12" },
+      video_length: { type: "integer", minimum: 2, maximum: 20, default: 15 },
+    });
+    const result = await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "atlascloud", model, prompt: "pan" },
+      { fetch },
+    );
+    expect(result.isError).toBeFalsy();
+    expect(submitted()).toEqual({ model, prompt: "pan", seconds: "8", video_length: 10 });
+  });
+
+  it("maps a requested duration onto the Atlas model's own length field", async () => {
+    const { model, fetch, submitted } = atlasVideoModel({
+      seconds: { type: "string", enum: ["4", "8", "12"], default: "12" },
+    });
+    const result = await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "atlascloud", model, prompt: "pan", duration: 4 },
+      { fetch },
+    );
+    expect(result.isError).toBeFalsy();
+    expect(submitted()).toEqual({ model, prompt: "pan", seconds: "4" });
+  });
+
+  it.each([
+    ["a minimum above the cap", { video_length: { type: "integer", minimum: 12, default: 12 } }],
+    ["no enum value within the cap", { duration: { type: "integer", enum: [12, 15] } }],
+  ])("rejects an Atlas model whose length field has %s before submit", async (_label, props) => {
+    const { model, fetch, calls } = atlasVideoModel(props);
+    const result = await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "atlascloud", model, prompt: "pan" },
+      { fetch },
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/no allowed value within this server's cap of 10s/);
+    expect(calls.some((c) => c.method === "POST")).toBe(false);
+  });
+
+  it.each([
+    ["a required", ["prompt", "resolution"]],
+    ["an optional", ["prompt"]],
+  ])(
+    "rejects %s Atlas resolution whose schema default is outside the allowlist",
+    async (_label, required) => {
+      const { model, fetch, calls } = atlasVideoModel(
+        {
+          duration: { type: "integer", default: 5 },
+          resolution: { type: "string", enum: ["720p", "4k"], default: "4k" },
+        },
+        required,
+      );
+      const result = await callTool(
+        fullEnv(),
+        "multix_generate_video",
+        { provider: "atlascloud", model, prompt: "pan" },
+        { fetch },
+      );
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toMatch(/would render at 4k; pass a resolution/);
+      expect(calls.some((c) => c.method === "POST")).toBe(false);
+    },
+  );
+
+  it("accepts an Atlas resolution default inside the allowlist", async () => {
+    const { model, fetch, submitted } = atlasVideoModel(
+      {
+        duration: { type: "integer", default: 5 },
+        resolution: { type: "string", enum: ["720p", "1080p"], default: "1080p" },
+      },
+      ["prompt", "resolution"],
+    );
+    const result = await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "atlascloud", model, prompt: "pan" },
+      { fetch },
+    );
+    expect(result.isError).toBeFalsy();
+    expect(submitted()).toEqual({ model, prompt: "pan", duration: 5, resolution: "1080p" });
+  });
+
+  it("words Atlas field errors for MCP clients, without CLI hints", async () => {
+    const { model, fetch } = atlasVideoModel({});
+    const result = await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "atlascloud", model, prompt: "pan", duration: 5 },
+      { fetch },
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/does not accept duration\. Its inputs: prompt\.$/);
   });
 
   it("starts and polls a HeyGen video, returning the output URL as given", async () => {
@@ -467,6 +865,38 @@ describe("multix_generate_video", () => {
     expect(calls[0]?.body).toMatchObject({ input: { prompt: "rain", duration: 5 } });
   });
 
+  it("reports a Cloudflare network failure as a provider error, not an internal error", async () => {
+    const fetch = async (): Promise<Response> => {
+      throw new TypeError("fetch failed");
+    };
+    const result = await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "cloudflare", prompt: "rain" },
+      { fetch },
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toBe(
+      "HTTP 0 from https://gateway.ai.cloudflare.com/: fetch failed",
+    );
+  });
+
+  it("accepts HeyGen's 768p resolution by default", async () => {
+    const { fetch, calls } = mockFetch(
+      route("POST", /\/v3\/models\/videos$/, () =>
+        jsonResponse({ data: { video_id: "hg2", status: "pending" } }),
+      ),
+    );
+    const result = await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "heygen", prompt: "x", duration: 5, resolution: "768p" },
+      { fetch },
+    );
+    expect(result.isError).toBeFalsy();
+    expect(calls[0]?.body).toMatchObject({ resolution: "768p" });
+  });
+
   it.each(["replicate", "heygen"])(
     "sends the server default duration to %s when the caller omits it",
     async (provider) => {
@@ -489,6 +919,8 @@ describe("multix_generate_video", () => {
       } else {
         // HeyGen's minimum is 5s, so a 4s cap fails closed instead of billing the default.
         expect(result.isError).toBe(true);
+        // Shared CLI validation names the tool argument, not the CLI flag.
+        expect(result.content[0].text).toMatch(/^duration must be an integer between 5 and 15/);
         expect(calls).toHaveLength(0);
       }
     },
@@ -505,7 +937,7 @@ describe("multix_generate_video", () => {
       { fetch },
     );
     expect(denied.isError).toBe(true);
-    expect(denied.content[0].text).toMatch(/resolution must be one of 480p, 720p, 1080p/);
+    expect(denied.content[0].text).toMatch(/resolution must be one of 480p, 720p, 768p, 1080p/);
     expect(calls).toHaveLength(0);
 
     const allowed = await callTool(
