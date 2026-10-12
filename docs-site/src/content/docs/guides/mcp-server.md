@@ -197,13 +197,33 @@ different integer, or the two Workers will share counters.
     up to 1080, so `1920*1920` is rejected. A value, or a schema shape
     (`$ref`, `allOf`, a union with several members and no outer default), that
     cannot be read is rejected.
+  - **Other price multipliers** are sent at their cheapest values, because
+    the tool has no argument for them and schema defaults are often the
+    expensive choice:
+    - **Cost switches** `generate_audio`, `sound`, `audio`, `enable_thinking`
+      and `hdr` are sent off (`false`, or `"no"`/`"off"` when the schema uses
+      a string enum). A string `audio` with no default is an input URL and is
+      left alone. A switch that has no off value is rejected.
+    - **Output count** (`n`, `count`, `batch_size`, `num_outputs`,
+      `num_videos`, `num_samples`, `num_generations`, `*_count` and similar)
+      is sent as `1`. If the schema does not allow `1`, the call is rejected.
+    - **Price tiers** use a fixed table, cheapest first: `thinking_level`
+      (`minimal`, `low`, `medium`, `default`, `high`), `motion` (`low`,
+      `medium`, `high`), `bitrate_mode` (`standard`, `high`) and `mode`
+      (`wan-std`, `wan-pro`). The cheapest listed value in the schema enum is
+      sent when every enum value is listed or the default is listed. Otherwise
+      a listed default above the cheapest tier is rejected, and an unknown
+      default is left alone.
+    - Any of these fields whose schema cannot be read is rejected.
 
-  Limitations: the spend guard caps only length (seconds and frames) and
-  resolution or size. Other inputs that raise the price are not capped, for
-  example `generate_audio`, `enable_thinking`/`thinking_level`, `motion`, or
-  an output-count field whose default is above 1. When the schema declares no
-  size field and no default, the model picks its own output size. Pin vetted
-  models with `MULTIX_MCP_ALLOWED_MODELS`.
+  Limitations: the Worker does not cap other inputs that may change the
+  price, such as `bgm`, `enable_prompt_expansion` or a `quality` field.
+  Video-extend models also bill the input video's length; the Worker cannot
+  measure a remote video, and the MCP tool has no video input, so a model
+  that requires one is rejected for the missing field. An explicit extension
+  length field (`duration`) is capped like any other. When the schema
+  declares no size field and no default, the model picks its own output size.
+  Pin vetted models with `MULTIX_MCP_ALLOWED_MODELS`.
 - **Logging and redaction:** successful calls are logged at `info` with tool
   name, provider, model, outcome, and latency only. Prompts are never logged as
   a field. Failed calls are logged at `warn` (expected errors) or `error`, with

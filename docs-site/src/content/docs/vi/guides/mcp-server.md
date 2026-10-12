@@ -200,14 +200,33 @@ phải là duy nhất trong tài khoản Cloudflare của bạn. Nếu Worker kh
     tối đa 1920 và cạnh ngắn tối đa 1080, nên `1920*1920` bị từ chối. Giá trị
     hoặc dạng schema không đọc được (`$ref`, `allOf`, union nhiều thành phần
     không có mặc định bên ngoài) sẽ bị từ chối.
+  - **Các hệ số giá khác** được gửi ở giá trị rẻ nhất, vì tool không có
+    tham số cho chúng và mặc định của schema thường là lựa chọn đắt:
+    - **Công tắc tốn phí** `generate_audio`, `sound`, `audio`,
+      `enable_thinking` và `hdr` được gửi ở trạng thái tắt (`false`, hoặc
+      `"no"`/`"off"` khi schema dùng enum chuỗi). `audio` kiểu chuỗi không có
+      mặc định là URL đầu vào nên được giữ nguyên. Công tắc không có giá trị
+      tắt sẽ bị từ chối.
+    - **Số lượng output** (`n`, `count`, `batch_size`, `num_outputs`,
+      `num_videos`, `num_samples`, `num_generations`, `*_count` và tương tự)
+      được gửi là `1`. Nếu schema không cho phép `1`, lệnh gọi bị từ chối.
+    - **Bậc giá** dùng một bảng cố định, rẻ nhất trước: `thinking_level`
+      (`minimal`, `low`, `medium`, `default`, `high`), `motion` (`low`,
+      `medium`, `high`), `bitrate_mode` (`standard`, `high`) và `mode`
+      (`wan-std`, `wan-pro`). Giá trị rẻ nhất có trong bảng của enum được gửi
+      khi mọi giá trị enum đều có trong bảng hoặc mặc định có trong bảng.
+      Nếu không, mặc định có trong bảng mà cao hơn bậc rẻ nhất sẽ bị từ chối,
+      còn mặc định không xác định được giữ nguyên.
+    - Bất kỳ trường nào ở trên có schema không đọc được sẽ bị từ chối.
 
-  Giới hạn: lớp giới hạn chi phí chỉ giới hạn thời lượng (số giây và số
-  frame) và độ phân giải hoặc kích thước. Các input khác làm tăng giá không
-  bị giới hạn, ví dụ `generate_audio`, `enable_thinking`/`thinking_level`,
-  `motion`, hoặc trường số lượng output có mặc định lớn hơn 1. Khi schema
-  không khai báo trường kích thước và không có mặc định, model tự chọn kích
-  thước đầu ra. Hãy dùng `MULTIX_MCP_ALLOWED_MODELS` để chỉ cho phép model đã
-  kiểm duyệt.
+  Giới hạn: Worker không giới hạn các input khác có thể làm đổi giá, như
+  `bgm`, `enable_prompt_expansion` hoặc trường `quality`. Model video-extend
+  còn tính phí theo độ dài video đầu vào; Worker không đo được video từ xa,
+  và tool MCP không có input video, nên model bắt buộc input này bị từ chối
+  vì thiếu trường. Trường độ dài phần nối thêm khai báo rõ (`duration`) được
+  giới hạn như mọi trường khác. Khi schema không khai báo trường kích thước
+  và không có mặc định, model tự chọn kích thước đầu ra. Hãy dùng
+  `MULTIX_MCP_ALLOWED_MODELS` để chỉ cho phép model đã kiểm duyệt.
 - **Log và che thông tin nhạy cảm:** lệnh gọi thành công được log ở mức `info`,
   chỉ gồm tên tool, provider, model, kết quả và độ trễ. Prompt không bao giờ
   được log thành một trường riêng. Lệnh gọi thất bại được log ở mức `warn` (lỗi

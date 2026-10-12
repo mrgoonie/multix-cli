@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ATLAS_VIDEO_SCHEMAS } from "./fixtures/atlas-video-schemas.js";
 import {
   ATLAS_KEY,
   CF_TOKEN,
@@ -655,6 +656,204 @@ describe("multix_generate_video", () => {
     );
     expect(result.isError).toBeFalsy();
     expect(submitted()).toMatchObject({ resolution: "720p" });
+  });
+
+  it.each([
+    [
+      "boolean cost switches",
+      {
+        generate_audio: { type: "boolean", default: true },
+        sound: { type: "boolean", default: true },
+        audio: { type: "boolean", default: true },
+        enable_thinking: { type: "boolean", default: true },
+        hdr: { type: "boolean", default: false },
+      },
+      { generate_audio: false, sound: false, audio: false, enable_thinking: false, hdr: false },
+    ],
+    [
+      "a yes/no audio enum",
+      { generate_audio: { type: "string", enum: ["yes", "no"], default: "yes" } },
+      { generate_audio: "no" },
+    ],
+    [
+      "output counts",
+      {
+        count: { type: "integer", enum: [1, 2, 4], default: 2 },
+        num_videos: { type: "integer", minimum: 1, maximum: 4, default: 4 },
+        n: { type: "string", enum: ["1", "2"], default: "2" },
+      },
+      { count: 1, num_videos: 1, n: "1" },
+    ],
+    [
+      "known price tiers",
+      {
+        thinking_level: { type: "string", enum: ["default", "high", "low"], default: "default" },
+        motion: { type: "string", enum: ["high", "low"], default: "high" },
+        bitrate_mode: { type: "string", enum: ["standard", "high"], default: "high" },
+        mode: { type: "string", enum: ["wan-std", "wan-pro"], default: "wan-pro" },
+      },
+      { thinking_level: "low", motion: "low", bitrate_mode: "standard", mode: "wan-std" },
+    ],
+    [
+      "a tier enum with an unknown value and a known default",
+      { motion: { type: "string", enum: ["auto", "low", "high"], default: "high" } },
+      { motion: "low" },
+    ],
+  ])("sends Atlas Cloud %s at their cheapest values", async (_label, props, expected) => {
+    const { model, fetch, submitted } = atlasVideoModel({
+      duration: { type: "integer", default: 5 },
+      ...props,
+    });
+    const result = await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "atlascloud", model, prompt: "pan" },
+      { fetch },
+    );
+    expect(result.isError).toBeFalsy();
+    expect(submitted()).toEqual({ model, prompt: "pan", duration: 5, ...expected });
+  });
+
+  it.each([
+    ["an audio input URL", { audio: { type: "string" } }],
+    [
+      "a tier enum with unknown values and an unknown default",
+      { motion: { type: "string", enum: ["auto", "fast", "slow"], default: "auto" } },
+    ],
+    ["a free-text tier at its cheapest default", { motion: { type: "string", default: "low" } }],
+  ])("leaves %s alone", async (_label, props) => {
+    const { model, fetch, submitted } = atlasVideoModel({
+      duration: { type: "integer", default: 5 },
+      ...props,
+    });
+    const result = await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "atlascloud", model, prompt: "pan" },
+      { fetch },
+    );
+    expect(result.isError).toBeFalsy();
+    expect(submitted()).toEqual({ model, prompt: "pan", duration: 5 });
+  });
+
+  it.each([
+    [
+      "an unreadable cost switch",
+      { generate_audio: { anyOf: [{ type: "boolean" }, { type: "string" }] } },
+      /"generate_audio" raises the price and has a schema that cannot be read/,
+    ],
+    [
+      "a $ref cost switch",
+      { enable_thinking: { $ref: "#/components/schemas/Flag" } },
+      /"enable_thinking" raises the price and has a schema that cannot be read/,
+    ],
+    [
+      "a cost switch enum with no off value",
+      { sound: { type: "string", enum: ["stereo", "mono"], default: "stereo" } },
+      /"sound" raises the price and cannot be switched off/,
+    ],
+    [
+      "an output count whose minimum is above 1",
+      { num_outputs: { type: "integer", minimum: 2, maximum: 4, default: 2 } },
+      /"num_outputs" raises the price and cannot be set to one output/,
+    ],
+    [
+      "an output count enum without 1",
+      { num_samples: { type: "integer", enum: [2, 4], default: 2 } },
+      /"num_samples" raises the price and cannot be set to one output/,
+    ],
+    [
+      "a non-numeric output count",
+      { batch_size: { type: "string", enum: ["small", "large"] } },
+      /"batch_size" raises the price and cannot be set to one output/,
+    ],
+    [
+      "an unreadable output count",
+      { num_videos: { oneOf: [{ type: "integer" }, { type: "string" }] } },
+      /"num_videos" raises the price and has a schema that cannot be read/,
+    ],
+    [
+      "a free-text tier with a higher default",
+      { thinking_level: { type: "string", default: "high" } },
+      /"thinking_level" raises the price and cannot be set to its lowest price tier/,
+    ],
+    [
+      "an unreadable tier",
+      { motion: { $ref: "#/components/schemas/Motion" } },
+      /"motion" raises the price and has a schema that cannot be read/,
+    ],
+  ])("rejects %s on Atlas Cloud before submit", async (_label, props, message) => {
+    const { model, fetch, calls } = atlasVideoModel({
+      duration: { type: "integer", default: 5 },
+      ...props,
+    });
+    const result = await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "atlascloud", model, prompt: "pan" },
+      { fetch },
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(message);
+    expect(calls.some((c) => c.method === "POST")).toBe(false);
+  });
+
+  it.each([
+    ["bytedance/seedance-2.5/text-to-video", {}, { duration: 5, generate_audio: false }],
+    [
+      "bytedance/seedance-2.0-mini/text-to-video",
+      {},
+      { duration: 5, bitrate_mode: "standard", generate_audio: false },
+    ],
+    [
+      "alibaba/wan-3.0-prime/reference-to-video",
+      {},
+      { duration: 5, audio: false, enable_thinking: false },
+    ],
+    ["alibaba/wan-2.5/video-extend", {}, { duration: 5 }],
+    ["google/gemini-omni-1.1-flash/video-extend", {}, { duration: 10, thinking_level: "low" }],
+    [
+      "midjourney/v8.2/image-to-video",
+      { image_url: "https://images.example.com/a.png" },
+      { image: "https://images.example.com/a.png", motion: "low" },
+    ],
+    ["pixverse/c1/text-to-video", {}, { duration: 5, sound: false }],
+    ["kwaivgi/kling-video-o3-4k/text-to-video", {}, { duration: 5, sound: false }],
+    ["luma/ray-3.2/text-to-video", {}, { duration: 5, hdr: false }],
+  ])("submits the real %s schema with cheap values", async (name, args, expected) => {
+    const { model, fetch, submitted } = atlasVideoModel(
+      ATLAS_VIDEO_SCHEMAS[name] as Record<string, unknown>,
+      ["prompt"],
+      name,
+    );
+    const result = await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "atlascloud", model, prompt: "pan", ...args },
+      { fetch },
+    );
+    expect(result.isError).toBeFalsy();
+    expect(submitted()).toEqual({ model, prompt: "pan", ...expected });
+  });
+
+  it("caps an explicit extension length on a video-extend model", async () => {
+    const { model, fetch, submitted } = atlasVideoModel(
+      {
+        video: { type: "string" },
+        duration: { type: "integer", default: 15, minimum: 1, maximum: 20 },
+        generate_audio: { type: "boolean", default: true },
+      },
+      ["prompt"],
+      "vendor/test-video-extend",
+    );
+    const result = await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "atlascloud", model, prompt: "continue" },
+      { fetch },
+    );
+    expect(result.isError).toBeFalsy();
+    expect(submitted()).toEqual({ model, prompt: "continue", duration: 10, generate_audio: false });
   });
 
   it("accepts Atlas size and dimension defaults within the allowlist", async () => {

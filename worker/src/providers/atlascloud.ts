@@ -24,6 +24,7 @@ import {
   type VideoPolicy,
   assertVideoBodyWithinLimits,
   lengthRequests,
+  priceRequests,
 } from "./atlascloud-video-policy.js";
 import { type JobResult, type ProviderAdapter, splitOutputs } from "./types.js";
 
@@ -83,7 +84,11 @@ async function submit(
       `Model ${model}: its schema could not be loaded, so its length and resolution cannot be checked against this server's limits, and the request is not sent. Retry later, when the model schema is available.`,
     );
   }
-  const body = buildModelInput(spec, [...requests, ...lengthRequests(spec, model, video)]);
+  const body = buildModelInput(spec, [
+    ...requests,
+    ...lengthRequests(spec, model, video),
+    ...priceRequests(spec, model),
+  ]);
   assertVideoBodyWithinLimits(spec, model, body, video);
   return atlas.submit(spec.endpoint ?? fallbackKind, { model, ...body });
 }

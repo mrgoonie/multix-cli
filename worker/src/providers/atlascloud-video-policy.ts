@@ -4,7 +4,9 @@
  * The Atlas API fills any field left out of a request from the model's
  * schema default, so length and size are bounded by sending every length
  * field explicitly and by checking what will actually be rendered, schema
- * defaults included. Shapes this code cannot interpret fail closed.
+ * defaults included. Other price multipliers (audio and reasoning switches,
+ * output count, known price tiers) are sent at their cheapest values. Shapes
+ * this code cannot interpret fail closed.
  */
 
 import { ValidationError } from "../../../src/core/errors.js";
@@ -46,6 +48,29 @@ const FPS_FIELDS = ["fps", "frames_per_second"];
 const LENGTH_LIKE_RE = /frame|second|duration|length|_len$/i;
 const SIZE_FIELDS = ["size", "video_size"];
 const DIMENSION_FIELDS = ["width", "height"];
+
+/**
+ * Switches that add a billed feature when on: an audio track
+ * (generate_audio, sound, audio), prompt reasoning (enable_thinking) or HDR
+ * output (hdr). The MCP tool has no argument for them, so they are always
+ * sent off. A string `audio` with no default is an input URL, not a switch.
+ */
+const COST_TOGGLES = ["generate_audio", "sound", "audio", "enable_thinking", "hdr"];
+/** Enum values that mean "off" for a cost switch declared as a string enum. */
+const OFF_VALUES = ["false", "no", "off", "none", "disabled"];
+/** Fields that set how many videos one call generates; always sent as 1. */
+const OUTPUT_COUNT_RE =
+  /^(n|count|batch_size|batch_count)$|^num_(outputs?|videos?|samples?|generations?|results?)$|^(outputs?|videos?|samples?|generations?)_count$/i;
+/**
+ * Price tiers by field, cheapest first. Only values listed here are ordered;
+ * any other value is unknown. "default" thinking is treated as above medium.
+ */
+const PRICE_TIERS: Record<string, readonly string[]> = {
+  thinking_level: ["minimal", "low", "medium", "default", "high"],
+  motion: ["low", "medium", "high"],
+  bitrate_mode: ["standard", "high"],
+  mode: ["wan-std", "wan-pro"],
+};
 
 /** "8", 8, "8s" or "8 seconds" -> 8. */
 function parseSeconds(value: unknown): number | undefined {
@@ -235,6 +260,84 @@ export function lengthRequests(
   // A requested duration on a model without a seconds field fails with "does not accept".
   if (seconds.length === 0 && requested !== undefined) {
     requests.push({ flag: "duration", value: requested, candidates: F.duration });
+  }
+  return requests;
+}
+
+/** Off value for a cost switch; undefined when the field is not a switch the API would fill. */
+function offValue(prop: Prop): string | boolean | undefined | null {
+  if (prop.type === "boolean" || typeof prop.default === "boolean") return false;
+  if (Array.isArray(prop.enum) && prop.enum.length > 0) {
+    const off = prop.enum.find((e) => OFF_VALUES.includes(String(e).toLowerCase()));
+    return typeof off === "string" || typeof off === "boolean" ? off : null;
+  }
+  // No default: nothing is filled in (for example an `audio` input URL).
+  return prop.default === undefined ? undefined : null;
+}
+
+/** 1 in the schema's format, or undefined when the schema does not allow 1. */
+function oneOutput(prop: Prop): string | number | undefined {
+  if (!isNumeric(prop)) return undefined;
+  if (Array.isArray(prop.enum) && prop.enum.length > 0) {
+    return prop.enum.some((e) => parseSeconds(e) === 1) ? formatFor(prop, 1) : undefined;
+  }
+  if ((prop.minimum ?? 1) > 1 || (prop.maximum ?? 1) < 1) return undefined;
+  return formatFor(prop, 1);
+}
+
+/**
+ * Cheapest tier to send, undefined to leave the field alone, or null to reject.
+ * Sends the cheapest listed value of the enum when its order is known: every
+ * enum value is listed, or the default is listed (so the pick costs no more
+ * than the default). Without that, a listed default above the cheapest tier
+ * is rejected; an unknown or missing default is left alone.
+ */
+function cheapestTier(prop: Prop, tiers: readonly string[]): string | undefined | null {
+  const rank = (v: unknown) => (typeof v === "string" ? tiers.indexOf(v.toLowerCase()) : -1);
+  const known = (Array.isArray(prop.enum) ? prop.enum : []).filter((e) => rank(e) >= 0);
+  const defaultRank = rank(prop.default);
+  if (known.length > 0) {
+    const ordered = known.length === prop.enum?.length || defaultRank >= 0;
+    if (ordered) return known.reduce((a, b) => (rank(b) < rank(a) ? b : a)) as string;
+  }
+  return defaultRank > 0 ? null : undefined;
+}
+
+/**
+ * Inputs other than length and size that multiply the price, pinned to their
+ * cheapest values because the API fills omitted fields from schema defaults
+ * (often audio on, or a higher tier): cost switches off, output count 1, and
+ * known price tiers at the lowest tier. A field whose schema cannot be read,
+ * or that has no cheap value this code can choose, is rejected.
+ */
+export function priceRequests(spec: AtlasModelSpec, model: string): FieldRequest[] {
+  const requests: FieldRequest[] = [];
+  for (const [name, raw] of Object.entries(spec.properties)) {
+    const toggle = COST_TOGGLES.includes(name);
+    const count = OUTPUT_COUNT_RE.test(name);
+    const tiers = PRICE_TIERS[name];
+    if (!toggle && !count && !tiers) continue;
+    const prop = unwrap(raw as Prop);
+    let value: string | number | boolean | undefined | null = null;
+    if (prop !== undefined) {
+      if (toggle) value = offValue(prop);
+      else if (count) value = oneOutput(prop) ?? null;
+      else if (tiers) value = cheapestTier(prop, tiers);
+    }
+    if (value === null) {
+      const why =
+        prop === undefined
+          ? "has a schema that cannot be read"
+          : count
+            ? "cannot be set to one output"
+            : toggle
+              ? "cannot be switched off"
+              : "cannot be set to its lowest price tier";
+      throw new ValidationError(
+        `Model ${model}: input "${name}" raises the price and ${why} by this server; use another model`,
+      );
+    }
+    if (value !== undefined) requests.push({ flag: name, value, candidates: [name] });
   }
   return requests;
 }
