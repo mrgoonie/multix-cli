@@ -44,6 +44,13 @@ Open a new issue for it (with evidence) rather than widening the current PR.
 - Conventional commits (`feat(replicate): …`, `fix(gemini): …`); release-please builds the changelog from them.
 - One issue per PR; put `Closes #<n>` in the PR body.
 - Do not merge release-please PRs as part of feature work; they publish to npm.
+- `release-please.yml` merges its own release PR, so every merge into `main`
+  with a `feat` or `fix` commit publishes a new npm version. A `!` in the
+  commit type or a `BREAKING CHANGE:` footer publishes a new major version; use
+  it only for a deliberate breaking change.
+- Dependencies: adopt a new release only once it is at least 14 days old
+  (`npm view <pkg> time --json`), and keep lockfile diffs confined to the
+  packages you meant to change.
 
 ## Verification before review
 
@@ -54,7 +61,12 @@ npm run typecheck
 npm run build        # the smoke tests execute dist/cli.js, so build before testing
 npm test             # MULTIX_DISABLE_HOME_ENV=1 is set by vitest.config.ts
 npm run verify:docs  # when docs-site/ changed (needs `npm ci --prefix docs-site`)
+npm run check:mcp    # when worker/ or a client it imports changed (needs `npm ci --prefix worker`)
 ```
+
+- Running the test suite needs Node 20.19+ or 22.12+ (required by vite, which
+  vitest uses). The published CLI itself still supports Node ≥ 20.
+- In a fresh worktree, install `worker/` dependencies before `check:mcp`.
 
 - Tests must not call paid APIs by default. Mock `globalThis.fetch`
   (`tests/helpers/mock-fetch.ts`) or inject a fetch function.
@@ -75,7 +87,7 @@ npm run verify:docs  # when docs-site/ changed (needs `npm ci --prefix docs-site
   Cloudflare Worker. File-system, env loading and downloads stay in the command
   layer.
 - Never log API keys, signed URLs, or full prompts at info level. Use
-  `redact()` from `src/core/env-loader.ts` for keys.
+  `redact()` from `src/core/redact.ts` for keys.
 - `worker/` is a separate package (remote MCP server for Cloudflare Workers)
   that imports runtime-neutral provider clients from `src/providers/**`. It is
   not published with the CLI. When you change a client it uses, run
@@ -86,4 +98,5 @@ npm run verify:docs  # when docs-site/ changed (needs `npm ci --prefix docs-site
 
 - User-facing docs: `README.md` and `docs-site/` (English at `docs/`, Vietnamese at `docs/vi/`).
 - Agent-facing usage: `skill/SKILL.md`.
-- Implementation plans and reports: `plans/`.
+- Implementation plans and reports: `plans/`. Isolated code-review reports go
+  in `plans/reports/` (`code-reviewer-<yymmdd>-<hhmm>-<slug>.md`).
