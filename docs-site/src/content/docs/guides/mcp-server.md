@@ -193,9 +193,12 @@ different integer, or the two Workers will share counters.
     be rendered (the value sent or the schema default) must be in
     `MULTIX_MCP_ALLOWED_RESOLUTIONS`. The resolution fields are `resolution`,
     `output_resolution`, `target_resolution`, and `quality` when its value,
-    default or enum looks like a resolution (`360p` to `1080p`, `2k`, `4k`).
-    An integer such as `1080` is read as `1080p`. A `quality` such as `high`
-    or `standard` is not a resolution and is left alone. Only `resolution` is
+    default or enum looks like a resolution (such as `720p`, `1080p`, `2k`,
+    `4k`, or an integer video height such as `1080`). An integer such as
+    `1080` is read as `1080p`; `4k` and `2160p` are different allowlist
+    entries. A `quality` such as `high`, `standard` or a `1`–`5` scale is not
+    a resolution and is left alone; a `quality` schema this server cannot read
+    (`$ref`, `allOf`) is rejected. Only `resolution` is
     a tool argument, so a model whose other resolution field is outside the
     list is rejected. A model whose ID names a resolution as a whole token
     between `/`, `-` or `_` (such as `kwaivgi/kling-video-o3-4k/...` or

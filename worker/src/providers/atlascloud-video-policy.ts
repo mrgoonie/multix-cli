@@ -405,13 +405,24 @@ function normaliseResolution(value: unknown): string | undefined {
   return /^\d{3,4}$/.test(v) ? `${v}p` : v;
 }
 
+/** Integer quality values that are video heights rather than a 1..N quality scale. */
+const RESOLUTION_HEIGHTS = new Set([360, 480, 540, 576, 720, 768, 1080, 1440, 2160, 4320]);
+
+/** A string such as 720p or 4K, or an integer that is a common video height. */
+function looksLikeResolution(value: unknown): boolean {
+  if (typeof value === "number") return RESOLUTION_HEIGHTS.has(value);
+  return typeof value === "string" && RESOLUTION_VALUE_RE.test(value);
+}
+
 /**
  * True when `quality` names a resolution: the value sent, or a default or enum
  * value of the property or of any `anyOf`/`oneOf` member, looks like one.
- * Other quality inputs (high, standard, ...) are not resolutions.
+ * Other quality inputs (high, standard, ...) are not resolutions. A `$ref` or
+ * `allOf` shape cannot be read, so it counts as one and fails closed in the check.
  */
 function qualityIsResolution(spec: AtlasModelSpec, body: Record<string, unknown>): boolean {
   const raw = spec.properties[QUALITY_FIELD] as Prop | undefined;
+  if (raw && (raw.$ref !== undefined || raw.allOf !== undefined)) return true;
   const shapes: unknown[] = raw ? [raw] : [];
   for (const union of [raw?.anyOf, raw?.oneOf]) {
     if (Array.isArray(union)) shapes.push(...union);
@@ -422,7 +433,7 @@ function qualityIsResolution(spec: AtlasModelSpec, body: Record<string, unknown>
     const { default: def, enum: enumValues } = shape as Prop;
     values.push(def, ...(Array.isArray(enumValues) ? enumValues : []));
   }
-  return values.some((v) => typeof v === "string" && RESOLUTION_VALUE_RE.test(v));
+  return values.some(looksLikeResolution);
 }
 
 /**

@@ -196,9 +196,12 @@ phải là duy nhất trong tài khoản Cloudflare của bạn. Nếu Worker kh
     giải sẽ được render (giá trị được gửi hoặc mặc định của schema) phải nằm
     trong `MULTIX_MCP_ALLOWED_RESOLUTIONS`. Các trường độ phân giải là
     `resolution`, `output_resolution`, `target_resolution`, và `quality` khi
-    giá trị, mặc định hoặc enum của nó trông như độ phân giải (`360p` đến
-    `1080p`, `2k`, `4k`). Số nguyên như `1080` được hiểu là `1080p`. `quality`
-    như `high` hay `standard` không phải độ phân giải nên được giữ nguyên. Chỉ
+    giá trị, mặc định hoặc enum của nó trông như độ phân giải (ví dụ `720p`,
+    `1080p`, `2k`, `4k`, hoặc số nguyên là chiều cao video như `1080`). Số
+    nguyên như `1080` được hiểu là `1080p`; `4k` và `2160p` là hai mục khác
+    nhau trong allowlist. `quality` như `high`, `standard` hay thang `1`–`5`
+    không phải độ phân giải nên được giữ nguyên; `quality` có schema mà server
+    không đọc được (`$ref`, `allOf`) sẽ bị từ chối. Chỉ
     `resolution` là tham số của tool, nên model có trường độ phân giải khác
     nằm ngoài danh sách sẽ bị từ chối. Model mà ID nêu một độ phân giải thành
     token riêng, ngăn cách bởi `/`, `-` hoặc `_` (như

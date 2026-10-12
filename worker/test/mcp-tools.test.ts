@@ -1072,6 +1072,18 @@ describe("multix_generate_video", () => {
       ["prompt"],
       /would render at 2k \(input "target_resolution"\)/,
     ],
+    [
+      "an integer quality resolution",
+      { quality: { type: "integer", enum: [720, 1080, 2160], default: 2160 } },
+      ["prompt"],
+      /would render at 2160 \(input "quality"\)/,
+    ],
+    [
+      "a quality behind a $ref",
+      { quality: { $ref: "#/components/schemas/Quality" } },
+      ["prompt"],
+      /input "quality" has a schema this server cannot check; use another model/,
+    ],
   ])(
     "rejects %s outside the allowlist on Atlas Cloud before submit",
     async (_label, props, required, message) => {
@@ -1104,6 +1116,14 @@ describe("multix_generate_video", () => {
     [
       "a target_resolution",
       { target_resolution: { type: "string", enum: ["1080p", "2k"], default: "1080p" } },
+    ],
+    [
+      "an integer resolution, read as 720p",
+      { resolution: { type: "integer", enum: [480, 720], default: 720 } },
+    ],
+    [
+      "an integer quality scale, which is not a resolution",
+      { quality: { type: "integer", enum: [1, 2, 3, 4, 5], default: 5 } },
     ],
   ])("accepts %s inside the allowlist on Atlas Cloud", async (_label, props) => {
     const { model, fetch, submitted } = atlasVideoModel({
