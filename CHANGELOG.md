@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.12](https://github.com/mrgoonie/multix-cli/compare/v1.0.11...v1.0.12) (2026-10-12)
+
+
+### Fixed
+
+* **mcp:** check Atlas template presets that name a resolution ([#145](https://github.com/mrgoonie/multix-cli/issues/145)) ([5d7127d](https://github.com/mrgoonie/multix-cli/commit/5d7127d930a164f568b099615078065c9f587719))
+
 ## [1.0.11](https://github.com/mrgoonie/multix-cli/compare/v1.0.10...v1.0.11) (2026-10-12)
 
 
