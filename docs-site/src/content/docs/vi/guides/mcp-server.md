@@ -208,7 +208,8 @@ phải là duy nhất trong tài khoản Cloudflare của bạn. Nếu Worker kh
     `kwaivgi/kling-video-o3-4k/...` hay `kling-v3.0-4k`, đều là `4k`), render
     và tính phí ở độ phân giải đó, nên bị từ chối khi độ phân giải này không có
     trong danh sách, kể cả khi trường độ phân giải của chính model có mặc định
-    hợp lệ. Các chuỗi trông giống như
+    hợp lệ. Quy tắc này cũng áp dụng cho preset `template` có nêu độ phân giải
+    (mặc định `anime-enhance-4k` của Tencent upscaler là `4k`). Các chuỗi trông giống như
     `2.4k` hay `4kids` không được tính. Giá trị `size`/`video_size`
     (`1920*1080`) hoặc cặp `width`/`height` phải nằm trong độ phân giải lớn
     nhất được phép ở tỉ lệ 16:9, theo cả hai chiều: `1080p` cho phép cạnh dài

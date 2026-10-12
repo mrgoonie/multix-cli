@@ -57,6 +57,8 @@ const DIMENSION_FIELDS = ["width", "height"];
  */
 const RESOLUTION_FIELDS = ["output_resolution", "target_resolution"];
 const QUALITY_FIELD = "quality";
+/** A preset whose name can carry the output resolution (anime-enhance-4k). */
+const TEMPLATE_FIELD = "template";
 /** A resolution value: 720p, 1080P, 2k, 4K. */
 const RESOLUTION_VALUE_RE = /^\s*(\d{3,4}p|\d{1,2}k)\s*$/i;
 /**
@@ -504,15 +506,24 @@ export function assertVideoBodyWithinLimits(
     );
   }
 
-  // A resolution named in the ID is what the model renders and bills at, even
-  // when it also has a resolution input (kling-v3.0-4k/image-to-video defaults it to 1080P).
-  for (const match of model.matchAll(ID_RESOLUTION_RE)) {
-    const implied = (match[1] as string).toLowerCase();
-    if (!policy.allowedResolutions.includes(implied)) {
-      throw new ValidationError(
-        `Model ${model} renders at ${implied} (named in its ID); this server allows ${allowedList}, so use another model`,
-      );
+  // A resolution named in the ID or in a preset template is what the model
+  // renders and bills at, even when it also has a resolution input
+  // (kling-v3.0-4k/image-to-video defaults it to 1080P; tencent/video/upscaler
+  // defaults `template` to anime-enhance-4k).
+  const assertNamedResolutions = (text: string, where: string) => {
+    for (const match of text.matchAll(ID_RESOLUTION_RE)) {
+      const implied = (match[1] as string).toLowerCase();
+      if (!policy.allowedResolutions.includes(implied)) {
+        throw new ValidationError(
+          `Model ${model} renders at ${implied} (named in ${where}); this server allows ${allowedList}, so use another model`,
+        );
+      }
     }
+  };
+  assertNamedResolutions(model, "its ID");
+  const template = effective(spec, model, body, TEMPLATE_FIELD);
+  if (typeof template === "string") {
+    assertNamedResolutions(template, `input "${TEMPLATE_FIELD}"`);
   }
 
   const box = maxBox(policy.allowedResolutions);

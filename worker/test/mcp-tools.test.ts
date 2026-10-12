@@ -1189,6 +1189,51 @@ describe("multix_generate_video", () => {
     },
   );
 
+  it("rejects a template preset that names a resolution outside the allowlist", async () => {
+    const { model, fetch, calls } = atlasVideoModel({
+      duration: { type: "integer", default: 5 },
+      template: {
+        type: "string",
+        enum: ["anime-enhance-4k", "general-enhance-1080p", "standard"],
+        default: "anime-enhance-4k",
+      },
+    });
+    const result = await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "atlascloud", model, prompt: "pan" },
+      { fetch },
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(
+      /renders at 4k \(named in input "template"\); this server allows .*use another model/,
+    );
+    expect(result.content[0].text).not.toContain(ATLAS_KEY);
+    expect(calls.some((c) => c.method === "POST")).toBe(false);
+  });
+
+  it.each([["general-enhance-1080p"], ["standard"]])(
+    "accepts a template preset %s",
+    async (preset) => {
+      const { model, fetch, submitted } = atlasVideoModel({
+        duration: { type: "integer", default: 5 },
+        template: {
+          type: "string",
+          enum: ["anime-enhance-4k", "general-enhance-1080p", "standard"],
+          default: preset,
+        },
+      });
+      const result = await callTool(
+        fullEnv(),
+        "multix_generate_video",
+        { provider: "atlascloud", model, prompt: "pan" },
+        { fetch },
+      );
+      expect(result.isError).toBeFalsy();
+      expect(submitted()).toEqual({ model, prompt: "pan", duration: 5 });
+    },
+  );
+
   it("accepts a 4k-only model when the allowlist includes 4k", async () => {
     const { model, fetch, submitted } = atlasVideoModel(
       ATLAS_VIDEO_SCHEMAS[KLING_O3_4K] as Record<string, unknown>,
