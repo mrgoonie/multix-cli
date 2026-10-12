@@ -45,9 +45,11 @@ Open a new issue for it (with evidence) rather than widening the current PR.
 - One issue per PR; put `Closes #<n>` in the PR body.
 - Do not merge release-please PRs as part of feature work; they publish to npm.
 - `release-please.yml` merges its own release PR, so every merge into `main`
-  with a `feat` or `fix` commit publishes a new npm version. A `!` in the
-  commit type or a `BREAKING CHANGE:` footer publishes a new major version; use
-  it only for a deliberate breaking change.
+  with a `feat`, `fix`, `perf`, `refactor` or `docs` commit publishes a new npm
+  version (these have visible changelog sections in
+  `release-please-config.json`); `chore`, `ci`, `build`, `test` and `style` do
+  not. A `!` in the commit type or a `BREAKING CHANGE:` footer publishes a new
+  major version; use it only for a deliberate breaking change.
 - Dependencies: adopt a new release only once it is at least 14 days old
   (`npm view <pkg> time --json`), and keep lockfile diffs confined to the
   packages you meant to change.
@@ -61,13 +63,12 @@ npm run typecheck
 npm run build        # the smoke tests execute dist/cli.js, so build before testing
 npm test             # MULTIX_DISABLE_HOME_ENV=1 is set by vitest.config.ts
 npm run verify:docs  # when docs-site/ changed (needs `npm ci --prefix docs-site`)
-npm run check:mcp    # when worker/ or a client it imports changed (needs `npm ci --prefix worker`)
+npm run check:mcp    # when worker/ or a client it imports changed
 ```
 
 - Running the test suite needs Node 20.19+ or 22.12+ (required by vite, which
   vitest uses). The published CLI itself still supports Node ≥ 20.
-- In a fresh worktree, install `worker/` dependencies before `check:mcp`.
-
+- In a fresh worktree, run `npm ci --prefix worker` before `check:mcp`.
 - Tests must not call paid APIs by default. Mock `globalThis.fetch`
   (`tests/helpers/mock-fetch.ts`) or inject a fetch function.
 - Optional live smoke tests must be gated behind an explicit env opt-in and the

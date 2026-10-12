@@ -42,7 +42,7 @@ None.
 ## Low Priority
 
 ### L1. home==cwd dedup is case-sensitive on Windows
-- `src/core/env-loader.ts:43` uses `path.resolve(home) !== path.resolve(cwd)`. Verified: `path.resolve('c:/Users/admin') === path.resolve('C:/Users/admin')` is `false`. `process.cwd()` often has a lowercase drive letter (VS Code terminals, some shells), while `os.homedir()` comes from `USERPROFILE` with an uppercase one. Folder-name case can differ too.
+- `src/core/env-loader.ts:43` uses `path.resolve(home) !== path.resolve(cwd)`. Verified: `path.resolve('c:/Users/<user>') === path.resolve('C:/Users/<user>')` is `false`. `process.cwd()` often has a lowercase drive letter (VS Code terminals, some shells), while `os.homedir()` comes from `USERPROFILE` with an uppercase one. Folder-name case can differ too.
 - Effect: running from home on such a shell loads home legacy files twice. Values are unaffected (`override:false`), but `check -v` lists duplicates and the `check` hint count doubles. Symlinks and junctions (OneDrive-redirected profiles) also slip through.
 - Fix: normalize before comparing, e.g. `const norm = (p) => { const r = path.resolve(p); return process.platform === "win32" ? r.toLowerCase() : r; }`. Or use `fs.realpathSync.native` inside a try/catch. Alternatively, dedup the final file list with a `Set` of normalized paths. That also covers a cwd nested so that `cwd/.claude` and `home/.claude` coincide.
 
