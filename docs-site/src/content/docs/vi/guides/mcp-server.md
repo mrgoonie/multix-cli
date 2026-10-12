@@ -203,20 +203,30 @@ phải là duy nhất trong tài khoản Cloudflare của bạn. Nếu Worker kh
   - **Các hệ số giá khác** được gửi ở giá trị rẻ nhất, vì tool không có
     tham số cho chúng và mặc định của schema thường là lựa chọn đắt:
     - **Công tắc tốn phí** `generate_audio`, `sound`, `audio`,
-      `enable_thinking` và `hdr` được gửi ở trạng thái tắt (`false`, hoặc
-      `"no"`/`"off"` khi schema dùng enum chuỗi). `audio` kiểu chuỗi không có
-      mặc định là URL đầu vào nên được giữ nguyên. Công tắc không có giá trị
-      tắt sẽ bị từ chối.
-    - **Số lượng output** (`n`, `count`, `batch_size`, `num_outputs`,
-      `num_videos`, `num_samples`, `num_generations`, `*_count` và tương tự)
-      được gửi là `1`. Nếu schema không cho phép `1`, lệnh gọi bị từ chối.
+      `enable_thinking` và `hdr` được gửi ở trạng thái tắt: `false`, hoặc,
+      khi schema dùng enum, giá trị `false`, `"no"`, `"off"`, `"none"` hoặc
+      `"disabled"` của enum đó. `audio` kiểu chuỗi không có mặc định là URL
+      đầu vào nên được giữ nguyên. Công tắc không có giá trị tắt sẽ bị từ
+      chối.
+    - **Số lượng output** được gửi là `1`. Các trường chính xác là `n`,
+      `count`, `batch_size`, `batch_count`, `num_output`, `num_video`,
+      `num_sample`, `num_generation`, `num_result`, `output_count`,
+      `video_count`, `sample_count` và `generation_count` (mỗi tên cũng khớp
+      dạng số nhiều có `s`, như `num_videos` hoặc `videos_count`). Các trường
+      `*_count` khác, như `face_count`, không phải số lượng output
+      (`frame_count` là độ dài, xem ở trên). Nếu schema không cho phép `1`,
+      lệnh gọi bị từ chối.
     - **Bậc giá** dùng một bảng cố định, rẻ nhất trước: `thinking_level`
       (`minimal`, `low`, `medium`, `default`, `high`), `motion` (`low`,
       `medium`, `high`), `bitrate_mode` (`standard`, `high`) và `mode`
-      (`wan-std`, `wan-pro`). Giá trị rẻ nhất có trong bảng của enum được gửi
-      khi mọi giá trị enum đều có trong bảng hoặc mặc định có trong bảng.
-      Nếu không, mặc định có trong bảng mà cao hơn bậc rẻ nhất sẽ bị từ chối,
-      còn mặc định không xác định được giữ nguyên.
+      (`wan-std` < `wan-pro`, `std` < `pro`, hoặc `standard` <
+      `professional`). Giá trị rẻ nhất có trong bảng của enum được gửi khi mọi
+      giá trị enum đều có trong bảng hoặc mặc định có trong bảng. Nếu không,
+      mặc định có trong bảng mà cao hơn bậc rẻ nhất sẽ bị từ chối, còn mặc
+      định không xác định được giữ nguyên. Việc cố định `thinking_level`,
+      `motion` và các bậc khác ở mức rẻ nhất có thể làm giảm chất lượng đầu
+      ra. Operator cần bậc cao hơn nên gọi model trực tiếp bằng multix CLI
+      (`multix atlas run <model> --input '{...}'`).
     - Bất kỳ trường nào ở trên có schema không đọc được sẽ bị từ chối.
 
   Giới hạn: Worker không giới hạn các input khác có thể làm đổi giá, như

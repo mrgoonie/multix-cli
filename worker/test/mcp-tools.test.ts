@@ -699,6 +699,25 @@ describe("multix_generate_video", () => {
       { motion: { type: "string", enum: ["auto", "low", "high"], default: "high" } },
       { motion: "low" },
     ],
+    [
+      "output counts named *_count",
+      {
+        video_count: { type: "integer", minimum: 1, maximum: 4, default: 2 },
+        output_count: { type: "integer", enum: [1, 2], default: 2 },
+        samples_count: { type: "integer", default: 3 },
+      },
+      { video_count: 1, output_count: 1, samples_count: 1 },
+    ],
+    [
+      "a std/pro mode",
+      { mode: { type: "string", enum: ["std", "pro"], default: "pro" } },
+      { mode: "std" },
+    ],
+    [
+      "a standard/professional mode",
+      { mode: { type: "string", enum: ["professional", "standard"], default: "professional" } },
+      { mode: "standard" },
+    ],
   ])("sends Atlas Cloud %s at their cheapest values", async (_label, props, expected) => {
     const { model, fetch, submitted } = atlasVideoModel({
       duration: { type: "integer", default: 5 },
@@ -721,6 +740,17 @@ describe("multix_generate_video", () => {
       { motion: { type: "string", enum: ["auto", "fast", "slow"], default: "auto" } },
     ],
     ["a free-text tier at its cheapest default", { motion: { type: "string", default: "low" } }],
+    [
+      "counts that are not output counts",
+      {
+        face_count: { type: "integer", default: 3 },
+        speaker_count: { type: "integer", default: 2 },
+      },
+    ],
+    [
+      "a mode with no known ladder",
+      { mode: { type: "string", enum: ["fast", "slow"], default: "slow" } },
+    ],
   ])("leaves %s alone", async (_label, props) => {
     const { model, fetch, submitted } = atlasVideoModel({
       duration: { type: "integer", default: 5 },

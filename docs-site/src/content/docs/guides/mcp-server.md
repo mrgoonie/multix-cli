@@ -201,19 +201,28 @@ different integer, or the two Workers will share counters.
     the tool has no argument for them and schema defaults are often the
     expensive choice:
     - **Cost switches** `generate_audio`, `sound`, `audio`, `enable_thinking`
-      and `hdr` are sent off (`false`, or `"no"`/`"off"` when the schema uses
-      a string enum). A string `audio` with no default is an input URL and is
-      left alone. A switch that has no off value is rejected.
-    - **Output count** (`n`, `count`, `batch_size`, `num_outputs`,
-      `num_videos`, `num_samples`, `num_generations`, `*_count` and similar)
-      is sent as `1`. If the schema does not allow `1`, the call is rejected.
+      and `hdr` are sent off: `false`, or, when the schema uses an enum, its
+      value `false`, `"no"`, `"off"`, `"none"` or `"disabled"`. A string
+      `audio` with no default is an input URL and is left alone. A switch
+      that has no off value is rejected.
+    - **Output count** is sent as `1`. The fields are exactly `n`, `count`,
+      `batch_size`, `batch_count`, `num_output`, `num_video`, `num_sample`,
+      `num_generation`, `num_result`, `output_count`, `video_count`,
+      `sample_count` and `generation_count` (each also with a plural `s`,
+      such as `num_videos` or `videos_count`). Other `*_count` fields, such as
+      `face_count`, are not output counts (`frame_count` is a length, see
+      above). If the schema does not allow `1`, the call is rejected.
     - **Price tiers** use a fixed table, cheapest first: `thinking_level`
       (`minimal`, `low`, `medium`, `default`, `high`), `motion` (`low`,
       `medium`, `high`), `bitrate_mode` (`standard`, `high`) and `mode`
-      (`wan-std`, `wan-pro`). The cheapest listed value in the schema enum is
-      sent when every enum value is listed or the default is listed. Otherwise
-      a listed default above the cheapest tier is rejected, and an unknown
-      default is left alone.
+      (`wan-std` < `wan-pro`, `std` < `pro`, or `standard` <
+      `professional`). The cheapest listed value in the schema enum is sent
+      when every enum value is listed or the default is listed. Otherwise a
+      listed default above the cheapest tier is rejected, and an unknown
+      default is left alone. Pinning `thinking_level`, `motion` and the other
+      tiers to the cheapest value can lower output quality. Operators who
+      need a higher tier should call the model with the multix CLI directly
+      (`multix atlas run <model> --input '{...}'`).
     - Any of these fields whose schema cannot be read is rejected.
 
   Limitations: the Worker does not cap other inputs that may change the

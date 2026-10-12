@@ -62,14 +62,20 @@ const OFF_VALUES = ["false", "no", "off", "none", "disabled"];
 const OUTPUT_COUNT_RE =
   /^(n|count|batch_size|batch_count)$|^num_(outputs?|videos?|samples?|generations?|results?)$|^(outputs?|videos?|samples?|generations?)_count$/i;
 /**
- * Price tiers by field, cheapest first. Only values listed here are ordered;
- * any other value is unknown. "default" thinking is treated as above medium.
+ * Price tier ladders by field, each cheapest first. A field may have several
+ * independent ladders; the one holding the schema's values is used. Only
+ * values listed here are ordered; any other value is unknown. "default"
+ * thinking is treated as above medium.
  */
-const PRICE_TIERS: Record<string, readonly string[]> = {
-  thinking_level: ["minimal", "low", "medium", "default", "high"],
-  motion: ["low", "medium", "high"],
-  bitrate_mode: ["standard", "high"],
-  mode: ["wan-std", "wan-pro"],
+const PRICE_TIERS: Record<string, readonly (readonly string[])[]> = {
+  thinking_level: [["minimal", "low", "medium", "default", "high"]],
+  motion: [["low", "medium", "high"]],
+  bitrate_mode: [["standard", "high"]],
+  mode: [
+    ["wan-std", "wan-pro"],
+    ["std", "pro"],
+    ["standard", "professional"],
+  ],
 };
 
 /** "8", 8, "8s" or "8 seconds" -> 8. */
@@ -290,11 +296,22 @@ function oneOutput(prop: Prop): string | number | undefined {
  * Sends the cheapest listed value of the enum when its order is known: every
  * enum value is listed, or the default is listed (so the pick costs no more
  * than the default). Without that, a listed default above the cheapest tier
- * is rejected; an unknown or missing default is left alone.
+ * is rejected; an unknown or missing default is left alone. The ladder used
+ * is the one holding the default, else the first holding an enum value.
  */
-function cheapestTier(prop: Prop, tiers: readonly string[]): string | undefined | null {
+function cheapestTier(
+  prop: Prop,
+  ladders: readonly (readonly string[])[],
+): string | undefined | null {
+  const holds = (ladder: readonly string[], v: unknown) =>
+    typeof v === "string" && ladder.includes(v.toLowerCase());
+  const values = Array.isArray(prop.enum) ? prop.enum : [];
+  const tiers =
+    ladders.find((l) => holds(l, prop.default)) ??
+    ladders.find((l) => values.some((e) => holds(l, e)));
+  if (tiers === undefined) return undefined;
   const rank = (v: unknown) => (typeof v === "string" ? tiers.indexOf(v.toLowerCase()) : -1);
-  const known = (Array.isArray(prop.enum) ? prop.enum : []).filter((e) => rank(e) >= 0);
+  const known = values.filter((e) => rank(e) >= 0);
   const defaultRank = rank(prop.default);
   if (known.length > 0) {
     const ordered = known.length === prop.enum?.length || defaultRank >= 0;
