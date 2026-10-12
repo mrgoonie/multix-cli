@@ -5,7 +5,7 @@
  * schema default, so length and size are bounded by sending every length
  * field explicitly and by checking what will actually be rendered, schema
  * defaults included. Resolution is checked on every field that names it and
- * against a resolution named in the model ID. Other
+ * against a resolution named in the model ID or a `template` preset. Other
  * price multipliers (audio, music and reasoning switches, output count, known
  * price tiers) are sent at their cheapest values. Shapes this code cannot
  * interpret fail closed.
@@ -521,9 +521,23 @@ export function assertVideoBodyWithinLimits(
     }
   };
   assertNamedResolutions(model, "its ID");
-  const template = effective(spec, model, body, TEMPLATE_FIELD);
-  if (typeof template === "string") {
-    assertNamedResolutions(template, `input "${TEMPLATE_FIELD}"`);
+  const templateRaw = spec.properties[TEMPLATE_FIELD] as Prop | undefined;
+  if (templateRaw !== undefined) {
+    const where = `input "${TEMPLATE_FIELD}"`;
+    const template = effective(spec, model, body, TEMPLATE_FIELD);
+    if (typeof template === "string") {
+      assertNamedResolutions(template, where);
+    } else if (template === undefined) {
+      // No default: the API picks one of the presets, so every preset must be allowed.
+      const presets = unwrap(templateRaw)?.enum;
+      for (const preset of Array.isArray(presets) ? presets : []) {
+        if (typeof preset === "string") assertNamedResolutions(preset, where);
+      }
+    } else {
+      throw new ValidationError(
+        `Model ${model}: input "${TEMPLATE_FIELD}" has a schema this server cannot check; use another model`,
+      );
+    }
   }
 
   const box = maxBox(policy.allowedResolutions);

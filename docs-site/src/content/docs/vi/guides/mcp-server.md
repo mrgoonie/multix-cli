@@ -209,7 +209,9 @@ phải là duy nhất trong tài khoản Cloudflare của bạn. Nếu Worker kh
     và tính phí ở độ phân giải đó, nên bị từ chối khi độ phân giải này không có
     trong danh sách, kể cả khi trường độ phân giải của chính model có mặc định
     hợp lệ. Quy tắc này cũng áp dụng cho preset `template` có nêu độ phân giải
-    (mặc định `anime-enhance-4k` của Tencent upscaler là `4k`). Các chuỗi trông giống như
+    (mặc định `anime-enhance-4k` của Tencent upscaler là `4k`); nếu không có
+    mặc định thì mọi preset trong danh sách đều phải được cho phép, và schema
+    `template` mà server không đọc được sẽ bị từ chối. Các chuỗi trông giống như
     `2.4k` hay `4kids` không được tính. Giá trị `size`/`video_size`
     (`1920*1080`) hoặc cặp `width`/`height` phải nằm trong độ phân giải lớn
     nhất được phép ở tỉ lệ 16:9, theo cả hai chiều: `1080p` cho phép cạnh dài

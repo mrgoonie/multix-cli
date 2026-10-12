@@ -1212,6 +1212,39 @@ describe("multix_generate_video", () => {
     expect(calls.some((c) => c.method === "POST")).toBe(false);
   });
 
+  it.each([
+    [
+      "a preset list with no default",
+      { type: "string", enum: ["general-enhance-1080p", "anime-enhance-4k"] },
+      /renders at 4k \(named in input "template"\)/,
+    ],
+    [
+      "a template behind a $ref",
+      { $ref: "#/components/schemas/Template" },
+      /input "template" has a schema this server cannot check; use another model/,
+    ],
+    [
+      "a non-string template default",
+      { type: "object", default: { preset: "anime-enhance-4k" } },
+      /input "template" has a schema this server cannot check; use another model/,
+    ],
+  ])("rejects %s before submit", async (_label, template, message) => {
+    const { model, fetch, calls } = atlasVideoModel({
+      duration: { type: "integer", default: 5 },
+      template,
+    });
+    const result = await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "atlascloud", model, prompt: "pan" },
+      { fetch },
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(message);
+    expect(result.content[0].text).not.toContain(ATLAS_KEY);
+    expect(calls.some((c) => c.method === "POST")).toBe(false);
+  });
+
   it.each([["general-enhance-1080p"], ["standard"]])(
     "accepts a template preset %s",
     async (preset) => {

@@ -206,7 +206,8 @@ different integer, or the two Workers will share counters.
     rejected when that resolution is not in the list, even if its own
     resolution field defaults to an allowed value. The same applies to a
     `template` preset that names a resolution (the Tencent upscaler's default
-    `anime-enhance-4k` is `4k`).
+    `anime-enhance-4k` is `4k`); with no default, every listed preset must be
+    allowed, and a `template` schema this server cannot read is rejected.
     Lookalikes such as `2.4k` or `4kids` do not count. A `size`/`video_size`
     (`1920*1080`) or `width`/`height` pair must fit the largest allowed resolution at 16:9 in
     either orientation: `1080p` allows a long side up to 1920 and a short side
