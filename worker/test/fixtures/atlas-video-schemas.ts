@@ -83,6 +83,20 @@ export const ATLAS_VIDEO_SCHEMAS: Record<string, Record<string, unknown>> = {
     shot_type: { type: "string", enum: ["customize", "intelligence"] },
     multi_prompt: { type: "array", items: { type: "object" }, maxItems: 6 },
   },
+  "vidu/q2/text-to-video": {
+    style: { type: "string", default: "general", enum: ["general", "anime"] },
+    resolution: { type: "string", default: "720p", enum: ["540p", "720p", "1080p"] },
+    duration: { type: "number", default: 5, minimum: 1, maximum: 8 },
+    generate_audio: { type: "boolean", default: true },
+    aspect_ratio: { type: "string", default: "16:9", enum: ["16:9", "9:16", "1:1", "4:3", "3:4"] },
+    movement_amplitude: {
+      type: "string",
+      default: "auto",
+      enum: ["auto", "small", "medium", "large"],
+    },
+    bgm: { type: "boolean", default: true },
+    seed: { type: "integer" },
+  },
   "luma/ray-3.2/text-to-video": {
     duration: { type: "integer", default: 5, enum: [5, 10] },
     resolution: { type: "string", default: "720p", enum: ["540p", "720p", "1080p"] },

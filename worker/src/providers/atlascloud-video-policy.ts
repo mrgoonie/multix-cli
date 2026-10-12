@@ -4,9 +4,11 @@
  * The Atlas API fills any field left out of a request from the model's
  * schema default, so length and size are bounded by sending every length
  * field explicitly and by checking what will actually be rendered, schema
- * defaults included. Other price multipliers (audio and reasoning switches,
- * output count, known price tiers) are sent at their cheapest values. Shapes
- * this code cannot interpret fail closed.
+ * defaults included. Resolution is checked on every field that names it and
+ * against a resolution named in the model ID. Other
+ * price multipliers (audio, music and reasoning switches, output count, known
+ * price tiers) are sent at their cheapest values. Shapes this code cannot
+ * interpret fail closed.
  */
 
 import { ValidationError } from "../../../src/core/errors.js";
@@ -48,14 +50,31 @@ const FPS_FIELDS = ["fps", "frames_per_second"];
 const LENGTH_LIKE_RE = /frame|second|duration|length|_len$/i;
 const SIZE_FIELDS = ["size", "video_size"];
 const DIMENSION_FIELDS = ["width", "height"];
+/**
+ * Fields that always name the output resolution. `quality` names it only on
+ * some models (360p..1080p on PixVerse), so it counts only when its values
+ * look like resolutions.
+ */
+const RESOLUTION_FIELDS = ["output_resolution", "target_resolution"];
+const QUALITY_FIELD = "quality";
+/** A resolution value: 720p, 1080P, 2k, 4K. */
+const RESOLUTION_VALUE_RE = /^\s*(\d{3,4}p|\d{1,2}k)\s*$/i;
+/**
+ * A resolution named in a model ID as a whole token between `/`, `-` or `_`
+ * (kling-video-o3-4k, kling-v3.0-4k, foo-1080p). Dots are not separators, so
+ * a version such as 2.4k is not read as 4k, and 4kids is not a token.
+ */
+const ID_RESOLUTION_RE = /(?<=^|[/_-])(\d{3,4}p|\d{1,2}k)(?=$|[/_-])/gi;
 
 /**
  * Switches that add a billed feature when on: an audio track
- * (generate_audio, sound, audio), prompt reasoning (enable_thinking) or HDR
- * output (hdr). The MCP tool has no argument for them, so they are always
- * sent off. A string `audio` with no default is an input URL, not a switch.
+ * (generate_audio, sound, audio), background music (bgm), prompt reasoning
+ * (enable_thinking) or HDR output (hdr). The MCP tool has no argument for
+ * them, so they are always sent off. A string `audio` with no default is an
+ * input URL, not a switch. Vidu's `bgm` defaults to on; neither Atlas nor
+ * Vidu publishes whether it changes the price, so it is treated as one.
  */
-const COST_TOGGLES = ["generate_audio", "sound", "audio", "enable_thinking", "hdr"];
+const COST_TOGGLES = ["generate_audio", "sound", "audio", "bgm", "enable_thinking", "hdr"];
 /** Enum values that mean "off" for a cost switch declared as a string enum. */
 const OFF_VALUES = ["false", "no", "off", "none", "disabled"];
 /** Fields that set how many videos one call generates; always sent as 1. */
@@ -376,6 +395,36 @@ function maxBox(allowed: string[]): { long: number; short: number } | undefined 
   return { long: Math.ceil((short * 16) / 9), short };
 }
 
+/** 720, "720" or "720P" -> "720p"; other strings lower-cased; anything else undefined. */
+function normaliseResolution(value: unknown): string | undefined {
+  if (typeof value === "number") {
+    return Number.isInteger(value) && value > 0 ? `${value}p` : undefined;
+  }
+  if (typeof value !== "string") return undefined;
+  const v = value.trim().toLowerCase();
+  return /^\d{3,4}$/.test(v) ? `${v}p` : v;
+}
+
+/**
+ * True when `quality` names a resolution: the value sent, or a default or enum
+ * value of the property or of any `anyOf`/`oneOf` member, looks like one.
+ * Other quality inputs (high, standard, ...) are not resolutions.
+ */
+function qualityIsResolution(spec: AtlasModelSpec, body: Record<string, unknown>): boolean {
+  const raw = spec.properties[QUALITY_FIELD] as Prop | undefined;
+  const shapes: unknown[] = raw ? [raw] : [];
+  for (const union of [raw?.anyOf, raw?.oneOf]) {
+    if (Array.isArray(union)) shapes.push(...union);
+  }
+  const values: unknown[] = [body[QUALITY_FIELD]];
+  for (const shape of shapes) {
+    if (!shape || typeof shape !== "object") continue;
+    const { default: def, enum: enumValues } = shape as Prop;
+    values.push(def, ...(Array.isArray(enumValues) ? enumValues : []));
+  }
+  return values.some((v) => typeof v === "string" && RESOLUTION_VALUE_RE.test(v));
+}
+
 /**
  * What the API will use for a field: the value sent, else the schema default
  * it fills in. A schema shape this code cannot read ($ref, allOf, an anyOf or
@@ -428,15 +477,29 @@ export function assertVideoBodyWithinLimits(
     }
   }
 
-  for (const field of F.resolution) {
-    const resolution = effective(spec, model, body, field);
-    if (resolution === undefined || resolution === "") continue;
-    if (
-      typeof resolution !== "string" ||
-      !policy.allowedResolutions.includes(resolution.toLowerCase())
-    ) {
+  const allowedList = policy.allowedResolutions.join(", ");
+  const resolutionFields: string[] = [...F.resolution, ...RESOLUTION_FIELDS];
+  if (qualityIsResolution(spec, body)) resolutionFields.push(QUALITY_FIELD);
+  for (const field of resolutionFields) {
+    const value = effective(spec, model, body, field);
+    if (value === undefined || value === "") continue;
+    const resolution = normaliseResolution(value);
+    if (resolution !== undefined && policy.allowedResolutions.includes(resolution)) continue;
+    // Only `resolution` is a tool argument; the other fields cannot be passed.
+    throw new ValidationError(
+      (F.resolution as readonly string[]).includes(field)
+        ? `Model ${model} would render at ${String(value)}; pass a resolution this server allows (${allowedList})`
+        : `Model ${model} would render at ${String(value)} (input "${field}"); this server allows ${allowedList}, so use another model`,
+    );
+  }
+
+  // A resolution named in the ID is what the model renders and bills at, even
+  // when it also has a resolution input (kling-v3.0-4k/image-to-video defaults it to 1080P).
+  for (const match of model.matchAll(ID_RESOLUTION_RE)) {
+    const implied = (match[1] as string).toLowerCase();
+    if (!policy.allowedResolutions.includes(implied)) {
       throw new ValidationError(
-        `Model ${model} would render at ${String(resolution)}; pass a resolution this server allows (${policy.allowedResolutions.join(", ")})`,
+        `Model ${model} renders at ${implied} (named in its ID); this server allows ${allowedList}, so use another model`,
       );
     }
   }

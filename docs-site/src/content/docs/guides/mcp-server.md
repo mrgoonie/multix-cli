@@ -125,7 +125,7 @@ Set these as `vars` in `worker/wrangler.jsonc` or as secrets:
 | `MULTIX_MCP_ALLOWED_MODELS` | any | Comma-separated `provider:model` allowlist, e.g. `replicate:black-forest-labs/flux-schnell,heygen:heygen-video-1`. When set, every model (including defaults) must be listed. |
 | `MULTIX_MCP_MAX_OUTPUTS` | `4` (ceiling 10) | Maximum `num_outputs` per image call. |
 | `MULTIX_MCP_MAX_VIDEO_SECONDS` | `10` (ceiling 15) | Maximum video `duration`. When a caller omits `duration`, the server sends a length explicitly instead of leaving the provider default: `min(5, cap)` seconds on Replicate, HeyGen and Cloudflare; on Atlas Cloud see [Spend guard](#security-model). |
-| `MULTIX_MCP_ALLOWED_RESOLUTIONS` | `480p,720p,768p,1080p` | Video resolutions a caller may request (`768p` is a HeyGen Video size). Anything else (for example `4k`) is rejected before the provider call. An omitted resolution uses the model default; on Atlas Cloud that default (and any `size`, `width` or `height`) is checked against this list too. |
+| `MULTIX_MCP_ALLOWED_RESOLUTIONS` | `480p,720p,768p,1080p` | Video resolutions a caller may request (`768p` is a HeyGen Video size). Anything else (for example `4k`) is rejected before the provider call. An omitted resolution uses the model default; on Atlas Cloud that default (and any `output_resolution`, `target_resolution`, resolution-valued `quality`, `size`, `width` or `height`, or a resolution named in the model ID) is checked against this list too. |
 | `MULTIX_MCP_ALLOWED_ORIGINS` | none | Exact browser origins (for example `https://app.example.com`) allowed to call `/mcp`. `*` and other wildcards are not supported: `*` only matches a literal `*` origin, which browsers never send. Requests with any other `Origin` header get `403`; requests without an `Origin` (server-side clients) are allowed. Listed origins get CORS headers, and their `OPTIONS` preflight is answered without a token. The real request still needs the bearer token. |
 
 The `MCP_RATE_LIMITER` binding in `wrangler.jsonc` uses the
@@ -189,10 +189,21 @@ different integer, or the two Workers will share counters.
     schema cannot be read, since the Worker cannot cap it. Image and flag
     inputs such as `first_frame` or `return_last_frame` are not affected.
   - **Final check:** every seconds and frame field, sent or filled from the
-    schema default, must be within the cap. The `resolution` that will be
-    rendered (the caller's value or the schema default) must be in
-    `MULTIX_MCP_ALLOWED_RESOLUTIONS`. A `size`/`video_size` (`1920*1080`) or
-    `width`/`height` pair must fit the largest allowed resolution at 16:9 in
+    schema default, must be within the cap. Every resolution field that will
+    be rendered (the value sent or the schema default) must be in
+    `MULTIX_MCP_ALLOWED_RESOLUTIONS`. The resolution fields are `resolution`,
+    `output_resolution`, `target_resolution`, and `quality` when its value,
+    default or enum looks like a resolution (`360p` to `1080p`, `2k`, `4k`).
+    An integer such as `1080` is read as `1080p`. A `quality` such as `high`
+    or `standard` is not a resolution and is left alone. Only `resolution` is
+    a tool argument, so a model whose other resolution field is outside the
+    list is rejected. A model whose ID names a resolution as a whole token
+    between `/`, `-` or `_` (such as `kwaivgi/kling-video-o3-4k/...` or
+    `kling-v3.0-4k`, both `4k`) renders and bills at that resolution, so it is
+    rejected when that resolution is not in the list, even if its own
+    resolution field defaults to an allowed value.
+    Lookalikes such as `2.4k` or `4kids` do not count. A `size`/`video_size`
+    (`1920*1080`) or `width`/`height` pair must fit the largest allowed resolution at 16:9 in
     either orientation: `1080p` allows a long side up to 1920 and a short side
     up to 1080, so `1920*1920` is rejected. A value, or a schema shape
     (`$ref`, `allOf`, a union with several members and no outer default), that
@@ -200,11 +211,14 @@ different integer, or the two Workers will share counters.
   - **Other price multipliers** are sent at their cheapest values, because
     the tool has no argument for them and schema defaults are often the
     expensive choice:
-    - **Cost switches** `generate_audio`, `sound`, `audio`, `enable_thinking`
-      and `hdr` are sent off: `false`, or, when the schema uses an enum, its
-      value `false`, `"no"`, `"off"`, `"none"` or `"disabled"`. A string
-      `audio` with no default is an input URL and is left alone. A switch
-      that has no off value is rejected.
+    - **Cost switches** `generate_audio`, `sound`, `audio`, `bgm`,
+      `enable_thinking` and `hdr` are sent off: `false`, or, when the schema
+      uses an enum, its value `false`, `"no"`, `"off"`, `"none"` or
+      `"disabled"`. A string `audio` with no default is an input URL and is
+      left alone. A switch that has no off value is rejected. Vidu's `bgm`
+      (background music) defaults to on. Neither Atlas Cloud nor Vidu
+      publishes whether it changes the price, so it is treated as a price
+      input and sent off.
     - **Output count** is sent as `1`. The fields are exactly `n`, `count`,
       `batch_size`, `batch_count`, `num_output`, `num_video`, `num_sample`,
       `num_generation`, `num_result`, `output_count`, `video_count`,
@@ -226,7 +240,8 @@ different integer, or the two Workers will share counters.
     - Any of these fields whose schema cannot be read is rejected.
 
   Limitations: the Worker does not cap other inputs that may change the
-  price, such as `bgm`, `enable_prompt_expansion` or a `quality` field.
+  price, such as `enable_prompt_expansion` or a `quality` field that is not
+  a resolution.
   Video-extend models also bill the input video's length; the Worker cannot
   measure a remote video, and the MCP tool has no video input, so a model
   that requires one is rejected for the missing field. An explicit extension

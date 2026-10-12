@@ -124,7 +124,7 @@ Luồng video thường gặp: `multix_generate_video` → gọi lại
 | `MULTIX_MCP_ALLOWED_MODELS` | bất kỳ | Allowlist `provider:model`, ví dụ `replicate:black-forest-labs/flux-schnell,heygen:heygen-video-1`. Khi đặt, mọi model (kể cả model mặc định) phải có trong danh sách. |
 | `MULTIX_MCP_MAX_OUTPUTS` | `4` (tối đa 10) | Số `num_outputs` tối đa mỗi lần tạo ảnh. |
 | `MULTIX_MCP_MAX_VIDEO_SECONDS` | `10` (tối đa 15) | `duration` video tối đa. Khi caller bỏ qua `duration`, server gửi rõ một thời lượng thay vì để mặc định của provider: `min(5, giới hạn)` giây với Replicate, HeyGen và Cloudflare; với Atlas Cloud xem [Giới hạn chi phí](#mô-hình-bảo-mật). |
-| `MULTIX_MCP_ALLOWED_RESOLUTIONS` | `480p,720p,768p,1080p` | Độ phân giải video caller được yêu cầu (`768p` là kích thước của HeyGen Video). Giá trị khác (ví dụ `4k`) bị từ chối trước khi gọi provider. Nếu bỏ qua resolution, model dùng mặc định của nó; với Atlas Cloud, mặc định đó (và mọi `size`, `width` hoặc `height`) cũng được kiểm tra theo danh sách này. |
+| `MULTIX_MCP_ALLOWED_RESOLUTIONS` | `480p,720p,768p,1080p` | Độ phân giải video caller được yêu cầu (`768p` là kích thước của HeyGen Video). Giá trị khác (ví dụ `4k`) bị từ chối trước khi gọi provider. Nếu bỏ qua resolution, model dùng mặc định của nó; với Atlas Cloud, mặc định đó (và mọi `output_resolution`, `target_resolution`, `quality` mang giá trị độ phân giải, `size`, `width` hoặc `height`, hoặc độ phân giải nêu trong ID model) cũng được kiểm tra theo danh sách này. |
 | `MULTIX_MCP_ALLOWED_ORIGINS` | không có | Origin trình duyệt chính xác (ví dụ `https://app.example.com`) được phép gọi `/mcp`. Không hỗ trợ `*` hay wildcard khác: `*` chỉ khớp origin `*` theo nghĩa đen, thứ trình duyệt không bao giờ gửi. Request có header `Origin` khác nhận `403`; request không có `Origin` (client phía server) được chấp nhận. Origin trong danh sách nhận header CORS, và preflight `OPTIONS` của chúng được trả lời mà không cần token. Request thật vẫn cần bearer token. |
 
 Binding `MCP_RATE_LIMITER` trong `wrangler.jsonc` dùng
@@ -192,9 +192,21 @@ phải là duy nhất trong tài khoản Cloudflare của bạn. Nếu Worker kh
     schema của nó không đọc được, vì Worker không giới hạn được nó. Input ảnh
     và cờ như `first_frame` hay `return_last_frame` không bị ảnh hưởng.
   - **Kiểm tra cuối:** mọi trường số giây và số frame, dù được gửi hay được
-    điền từ mặc định của schema, phải nằm trong giới hạn. `resolution` sẽ được
-    render (giá trị của caller hoặc mặc định của schema) phải nằm trong
-    `MULTIX_MCP_ALLOWED_RESOLUTIONS`. Giá trị `size`/`video_size`
+    điền từ mặc định của schema, phải nằm trong giới hạn. Mọi trường độ phân
+    giải sẽ được render (giá trị được gửi hoặc mặc định của schema) phải nằm
+    trong `MULTIX_MCP_ALLOWED_RESOLUTIONS`. Các trường độ phân giải là
+    `resolution`, `output_resolution`, `target_resolution`, và `quality` khi
+    giá trị, mặc định hoặc enum của nó trông như độ phân giải (`360p` đến
+    `1080p`, `2k`, `4k`). Số nguyên như `1080` được hiểu là `1080p`. `quality`
+    như `high` hay `standard` không phải độ phân giải nên được giữ nguyên. Chỉ
+    `resolution` là tham số của tool, nên model có trường độ phân giải khác
+    nằm ngoài danh sách sẽ bị từ chối. Model mà ID nêu một độ phân giải thành
+    token riêng, ngăn cách bởi `/`, `-` hoặc `_` (như
+    `kwaivgi/kling-video-o3-4k/...` hay `kling-v3.0-4k`, đều là `4k`), render
+    và tính phí ở độ phân giải đó, nên bị từ chối khi độ phân giải này không có
+    trong danh sách, kể cả khi trường độ phân giải của chính model có mặc định
+    hợp lệ. Các chuỗi trông giống như
+    `2.4k` hay `4kids` không được tính. Giá trị `size`/`video_size`
     (`1920*1080`) hoặc cặp `width`/`height` phải nằm trong độ phân giải lớn
     nhất được phép ở tỉ lệ 16:9, theo cả hai chiều: `1080p` cho phép cạnh dài
     tối đa 1920 và cạnh ngắn tối đa 1080, nên `1920*1920` bị từ chối. Giá trị
@@ -202,12 +214,14 @@ phải là duy nhất trong tài khoản Cloudflare của bạn. Nếu Worker kh
     không có mặc định bên ngoài) sẽ bị từ chối.
   - **Các hệ số giá khác** được gửi ở giá trị rẻ nhất, vì tool không có
     tham số cho chúng và mặc định của schema thường là lựa chọn đắt:
-    - **Công tắc tốn phí** `generate_audio`, `sound`, `audio`,
+    - **Công tắc tốn phí** `generate_audio`, `sound`, `audio`, `bgm`,
       `enable_thinking` và `hdr` được gửi ở trạng thái tắt: `false`, hoặc,
       khi schema dùng enum, giá trị `false`, `"no"`, `"off"`, `"none"` hoặc
       `"disabled"` của enum đó. `audio` kiểu chuỗi không có mặc định là URL
       đầu vào nên được giữ nguyên. Công tắc không có giá trị tắt sẽ bị từ
-      chối.
+      chối. `bgm` (nhạc nền) của Vidu mặc định bật. Cả Atlas Cloud lẫn Vidu
+      đều không công bố nó có làm đổi giá hay không, nên nó được coi là input
+      tính giá và được gửi ở trạng thái tắt.
     - **Số lượng output** được gửi là `1`. Các trường chính xác là `n`,
       `count`, `batch_size`, `batch_count`, `num_output`, `num_video`,
       `num_sample`, `num_generation`, `num_result`, `output_count`,
@@ -230,7 +244,8 @@ phải là duy nhất trong tài khoản Cloudflare của bạn. Nếu Worker kh
     - Bất kỳ trường nào ở trên có schema không đọc được sẽ bị từ chối.
 
   Giới hạn: Worker không giới hạn các input khác có thể làm đổi giá, như
-  `bgm`, `enable_prompt_expansion` hoặc trường `quality`. Model video-extend
+  `enable_prompt_expansion` hoặc trường `quality` không phải độ phân giải.
+  Model video-extend
   còn tính phí theo độ dài video đầu vào; Worker không đo được video từ xa,
   và tool MCP không có input video, nên model bắt buộc input này bị từ chối
   vì thiếu trường. Trường độ dài phần nối thêm khai báo rõ (`duration`) được

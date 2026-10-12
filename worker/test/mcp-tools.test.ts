@@ -665,10 +665,18 @@ describe("multix_generate_video", () => {
         generate_audio: { type: "boolean", default: true },
         sound: { type: "boolean", default: true },
         audio: { type: "boolean", default: true },
+        bgm: { type: "boolean", default: true },
         enable_thinking: { type: "boolean", default: true },
         hdr: { type: "boolean", default: false },
       },
-      { generate_audio: false, sound: false, audio: false, enable_thinking: false, hdr: false },
+      {
+        generate_audio: false,
+        sound: false,
+        audio: false,
+        bgm: false,
+        enable_thinking: false,
+        hdr: false,
+      },
     ],
     [
       "a yes/no audio enum",
@@ -750,6 +758,10 @@ describe("multix_generate_video", () => {
     [
       "a mode with no known ladder",
       { mode: { type: "string", enum: ["fast", "slow"], default: "slow" } },
+    ],
+    [
+      "a quality input that is not a resolution",
+      { quality: { type: "string", enum: ["standard", "high"], default: "high" } },
     ],
   ])("leaves %s alone", async (_label, props) => {
     const { model, fetch, submitted } = atlasVideoModel({
@@ -848,7 +860,7 @@ describe("multix_generate_video", () => {
       { image: "https://images.example.com/a.png", motion: "low" },
     ],
     ["pixverse/c1/text-to-video", {}, { duration: 5, sound: false }],
-    ["kwaivgi/kling-video-o3-4k/text-to-video", {}, { duration: 5, sound: false }],
+    ["vidu/q2/text-to-video", {}, { duration: 5, generate_audio: false, bgm: false }],
     ["luma/ray-3.2/text-to-video", {}, { duration: 5, hdr: false }],
   ])("submits the real %s schema with cheap values", async (name, args, expected) => {
     const { model, fetch, submitted } = atlasVideoModel(
@@ -1022,6 +1034,180 @@ describe("multix_generate_video", () => {
     );
     expect(result.isError).toBeFalsy();
     expect(submitted()).toEqual({ model, prompt: "pan", duration: 5, resolution: "1080p" });
+  });
+
+  it.each([
+    [
+      "a quality resolution default",
+      { quality: { type: "string", enum: ["720p", "1080p", "4k"], default: "4k" } },
+      ["prompt"],
+      /would render at 4k \(input "quality"\); this server allows .*use another model/,
+    ],
+    [
+      "a required quality resolution filled from its default",
+      { quality: { type: "string", enum: ["720p", "2k"], default: "2k" } },
+      ["prompt", "quality"],
+      /would render at 2k \(input "quality"\)/,
+    ],
+    [
+      "a quality resolution in a nullable union",
+      {
+        quality: {
+          anyOf: [{ type: "string", enum: ["720p", "4k"] }, { type: "null" }],
+          default: "4k",
+        },
+      },
+      ["prompt"],
+      /would render at 4k \(input "quality"\)/,
+    ],
+    [
+      "an integer output_resolution",
+      { output_resolution: { type: "integer", enum: [720, 1080, 2160], default: 2160 } },
+      ["prompt"],
+      /would render at 2160 \(input "output_resolution"\)/,
+    ],
+    [
+      "a target_resolution",
+      { target_resolution: { type: "string", enum: ["1080p", "2k"], default: "2k" } },
+      ["prompt"],
+      /would render at 2k \(input "target_resolution"\)/,
+    ],
+  ])(
+    "rejects %s outside the allowlist on Atlas Cloud before submit",
+    async (_label, props, required, message) => {
+      const { model, fetch, calls } = atlasVideoModel(
+        { duration: { type: "integer", default: 5 }, ...props },
+        required,
+      );
+      const result = await callTool(
+        fullEnv(),
+        "multix_generate_video",
+        { provider: "atlascloud", model, prompt: "pan" },
+        { fetch },
+      );
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toMatch(message);
+      expect(result.content[0].text).not.toContain(ATLAS_KEY);
+      expect(calls.some((c) => c.method === "POST")).toBe(false);
+    },
+  );
+
+  it.each([
+    [
+      "a quality resolution default",
+      { quality: { type: "string", enum: ["360p", "720p", "1080p"], default: "720p" } },
+    ],
+    [
+      "an integer output_resolution, read as 1080p",
+      { output_resolution: { type: "integer", enum: [720, 1080], default: 1080 } },
+    ],
+    [
+      "a target_resolution",
+      { target_resolution: { type: "string", enum: ["1080p", "2k"], default: "1080p" } },
+    ],
+  ])("accepts %s inside the allowlist on Atlas Cloud", async (_label, props) => {
+    const { model, fetch, submitted } = atlasVideoModel({
+      duration: { type: "integer", default: 5 },
+      ...props,
+    });
+    const result = await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "atlascloud", model, prompt: "pan" },
+      { fetch },
+    );
+    expect(result.isError).toBeFalsy();
+    expect(submitted()).toEqual({ model, prompt: "pan", duration: 5 });
+  });
+
+  it("checks the real PixVerse quality default against a narrowed allowlist", async () => {
+    const name = "pixverse/c1/text-to-video";
+    const { model, fetch, calls } = atlasVideoModel(
+      ATLAS_VIDEO_SCHEMAS[name] as Record<string, unknown>,
+      ["prompt"],
+      name,
+    );
+    const result = await callTool(
+      fullEnv({ MULTIX_MCP_ALLOWED_RESOLUTIONS: "480p" }),
+      "multix_generate_video",
+      { provider: "atlascloud", model, prompt: "pan" },
+      { fetch },
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/would render at 720p \(input "quality"\)/);
+    expect(calls.some((c) => c.method === "POST")).toBe(false);
+  });
+
+  const KLING_O3_4K = "kwaivgi/kling-video-o3-4k/text-to-video";
+
+  it.each([
+    [KLING_O3_4K, ATLAS_VIDEO_SCHEMAS[KLING_O3_4K] as Record<string, unknown>],
+    ["kwaivgi/kling-v3.0-4k/text-to-video", { duration: { type: "integer", default: 5 } }],
+    [
+      "kwaivgi/kling-v3.0-4k/image-to-video",
+      {
+        duration: { type: "integer", default: 5 },
+        resolution: { type: "string", default: "1080P" },
+      },
+    ],
+  ])(
+    "rejects %s, whose ID names 4k, by default even when its resolution input is allowed",
+    async (name, props) => {
+      const { model, fetch, calls } = atlasVideoModel(props, ["prompt"], name);
+      const result = await callTool(
+        fullEnv(),
+        "multix_generate_video",
+        { provider: "atlascloud", model, prompt: "pan" },
+        { fetch },
+      );
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toMatch(
+        /renders at 4k \(named in its ID\); this server allows 480p, 720p, 768p, 1080p, so use another model/,
+      );
+      expect(result.content[0].text).not.toContain(ATLAS_KEY);
+      expect(calls.some((c) => c.method === "POST")).toBe(false);
+    },
+  );
+
+  it("accepts a 4k-only model when the allowlist includes 4k", async () => {
+    const { model, fetch, submitted } = atlasVideoModel(
+      ATLAS_VIDEO_SCHEMAS[KLING_O3_4K] as Record<string, unknown>,
+      ["prompt"],
+      KLING_O3_4K,
+    );
+    const result = await callTool(
+      fullEnv({ MULTIX_MCP_ALLOWED_RESOLUTIONS: "720p,4K" }),
+      "multix_generate_video",
+      { provider: "atlascloud", model, prompt: "pan" },
+      { fetch },
+    );
+    expect(result.isError).toBeFalsy();
+    expect(submitted()).toEqual({ model, prompt: "pan", duration: 5, sound: false });
+  });
+
+  it.each([
+    ["a version number ending in k", "vendor/wan-2.4k/text-to-video", {}],
+    ["a word starting with 4k", "vendor/model-4kids/text-to-video", {}],
+    ["a 4k token glued to other text", "vendor/ultra4k-turbo/text-to-video", {}],
+    [
+      "an ID naming an allowed resolution",
+      "vendor/seedance-1080p/text-to-video",
+      { resolution: { type: "string", enum: ["720p", "1080p"], default: "1080p" } },
+    ],
+  ])("does not reject %s by its model ID", async (_label, name, props) => {
+    const { model, fetch, submitted } = atlasVideoModel(
+      { duration: { type: "integer", default: 5 }, ...props },
+      ["prompt"],
+      name,
+    );
+    const result = await callTool(
+      fullEnv(),
+      "multix_generate_video",
+      { provider: "atlascloud", model, prompt: "pan" },
+      { fetch },
+    );
+    expect(result.isError).toBeFalsy();
+    expect(submitted()).toMatchObject({ model, prompt: "pan", duration: 5 });
   });
 
   it("words Atlas field errors for MCP clients, without CLI hints", async () => {
