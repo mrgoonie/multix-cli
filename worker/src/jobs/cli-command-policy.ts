@@ -40,6 +40,13 @@ export interface CommandPolicy {
   forced?: Record<string, string>;
   /** Options a remote caller may not use. */
   unsupported?: string[];
+  /**
+   * Options whose value the CLI puts into an output file name (a prefix, a
+   * language code): letters, digits, `_` and `-` only, so it cannot add a path.
+   */
+  nameOptions?: string[];
+  /** Options the CLI collects when repeated but the catalog cannot tell (custom parser, no array default). */
+  repeatable?: string[];
   caps?: CapRules;
 }
 
@@ -109,7 +116,13 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   "elevenlabs voice-changer": { fileOptions: { input: "file" } },
   "elevenlabs transcribe": { fileOptions: { input: "file" } },
   "elevenlabs music": { fileOptions: { plan: "file" } },
-  "elevenlabs dub": { fileOptions: { input: "file" }, urlOptions: ["source-url"] },
+  "elevenlabs dub": {
+    fileOptions: { input: "file" },
+    urlOptions: ["source-url"],
+    nameOptions: ["target-lang"],
+  },
+  "elevenlabs dub-status": { nameOptions: ["download"] },
+  "elevenlabs voices design": { nameOptions: ["output-prefix"] },
   "elevenlabs isolate": { fileOptions: { input: "file" } },
   "elevenlabs align": { fileOptions: { input: "file", "text-file": "file" } },
   "fal image": { caps: IMAGE_COUNT },
@@ -128,6 +141,7 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   "heygen video-agent": {
     fileOptions: { file: "file" },
     assetRefOptions: ["file"],
+    repeatable: ["file"],
     urlOptions: ["callback-url"],
   },
   "heygen video": {
@@ -155,6 +169,7 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
       "reference-audio": "file",
     },
     assetRefOptions: ["image", "reference-image", "reference-video", "reference-audio"],
+    repeatable: ["reference-image", "reference-video", "reference-audio"],
     urlOptions: ["callback-url"],
     caps: VIDEO_CAPS,
   },

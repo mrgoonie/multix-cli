@@ -45,7 +45,7 @@ function commandDetail(command: CliCommand): Record<string, unknown> {
         description: option.description,
         required: option.required,
         takes_value: option.takesValue,
-        multiple: isRepeatable(option),
+        multiple: isRepeatable(option, policy),
       };
       if (option.default !== undefined) view.default = option.default;
       const input = policy.fileOptions?.[name];
@@ -53,6 +53,7 @@ function commandDetail(command: CliCommand): Record<string, unknown> {
       if (policy.assetRefOptions?.includes(name)) view.accepts_asset_ref = true;
       if (policy.urlOptions?.includes(name)) view.https_url = true;
       if (policy.forced?.[name] !== undefined) view.forced = policy.forced[name];
+      if (policy.nameOptions?.includes(name)) view.format = "letters, digits, _ and - only";
       if (name === OUTPUT_FILE_OPTION) view.output = "plain file name inside the job output";
       return view;
     });

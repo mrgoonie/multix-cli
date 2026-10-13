@@ -23,4 +23,14 @@ writeFileSync(join(out, "result.txt"), "hello");
 mkdirSync(join(out, "nested"));
 writeFileSync(join(out, "nested", "result.txt"), "again");
 if (argv.includes("--sleep")) await new Promise((r) => setTimeout(r, 30_000));
+// A key that straddles the 16 KB cut of stderr's tail.
+if (argv.includes("--key-at-cut")) {
+  process.stderr.write(`${process.env.GEMINI_API_KEY}${"x".repeat(16 * 1024 - 8)}`);
+}
+// More than the 16 MB output buffer.
+if (argv.includes("--flood")) {
+  const chunk = "y".repeat(1024 * 1024);
+  for (let i = 0; i < 20; i++) process.stdout.write(chunk);
+  await new Promise((r) => setTimeout(r, 5_000));
+}
 process.exit(argv.includes("--fail") ? 3 : 0);

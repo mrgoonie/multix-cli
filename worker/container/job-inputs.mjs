@@ -1,8 +1,9 @@
 /**
  * Download a job's input files into its directory. Only public https URLs are
- * fetched (redirects are followed by hand and re-checked), each download has
- * a size cap and a timeout, and the target path chosen by the Worker must stay
- * under `in/`.
+ * fetched: the host name is checked here, and the resolved address is checked
+ * when the socket connects (job-network.mjs), on every redirect hop, which is
+ * followed by hand. Each download has a size cap and a timeout, and the target
+ * path chosen by the Worker must stay under `in/`.
  */
 
 import { createWriteStream } from "node:fs";
@@ -10,10 +11,11 @@ import { mkdir } from "node:fs/promises";
 import { dirname, resolve, sep } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import { BlockedAddressError, publicHttpsGet } from "./job-network.mjs";
 
 export const MAX_INPUT_BYTES = 200 * 1024 * 1024;
 const DOWNLOAD_TIMEOUT_MS = 120_000;
-const MAX_REDIRECTS = 3;
+const MAX_REDIRECTS = 5;
 export const INPUT_PATH_RE = /^in\/(?:[A-Za-z0-9_-]{1,64}\/)?\d{1,3}-[A-Za-z0-9._-]{1,80}$/;
 
 const BLOCKED_HOSTS = new Set([
@@ -92,10 +94,18 @@ function sizeLimit(limit) {
   });
 }
 
-async function fetchFollowing(rawUrl, signal, doFetch) {
+async function fetchFollowing(rawUrl, signal, get) {
   let url = assertPublicHttps(rawUrl);
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-    const response = await doFetch(url, { redirect: "manual", signal });
+    let response;
+    try {
+      response = await get(url, { signal });
+    } catch (error) {
+      if (error instanceof BlockedAddressError || error?.code === "EBLOCKEDADDRESS") {
+        throw new InputError(new BlockedAddressError().message);
+      }
+      throw error;
+    }
     if (response.status >= 300 && response.status < 400 && response.headers.get("location")) {
       await response.body?.cancel();
       url = assertPublicHttps(new URL(response.headers.get("location"), url).toString());
@@ -113,10 +123,11 @@ async function fetchFollowing(rawUrl, signal, doFetch) {
 /**
  * @param {string} dir job directory
  * @param {{ url: string, path: string }[]} inputs
- * @param {{ signal?: AbortSignal, fetch?: typeof fetch, maxBytes?: number }} [options]
+ * @param {{ signal?: AbortSignal, get?: typeof publicHttpsGet, maxBytes?: number }} [options]
+ *   `get` is injected in tests; it performs one request without following redirects.
  */
 export async function downloadInputs(dir, inputs, options = {}) {
-  const doFetch = options.fetch ?? globalThis.fetch;
+  const get = options.get ?? publicHttpsGet;
   const maxBytes = options.maxBytes ?? MAX_INPUT_BYTES;
   for (const input of inputs) {
     const target = inputPath(dir, input.path);
@@ -125,9 +136,10 @@ export async function downloadInputs(dir, inputs, options = {}) {
     const signal = AbortSignal.any(signals);
     let response;
     try {
-      response = await fetchFollowing(input.url, signal, doFetch);
+      response = await fetchFollowing(input.url, signal, get);
     } catch (error) {
       if (error instanceof InputError) throw error;
+      if (options.signal?.aborted) throw error;
       throw new InputError("Input download failed: the host could not be reached in time");
     }
     const declared = Number(response.headers.get("content-length"));
@@ -144,6 +156,7 @@ export async function downloadInputs(dir, inputs, options = {}) {
       );
     } catch (error) {
       if (error instanceof InputError) throw error;
+      if (options.signal?.aborted) throw error;
       throw new InputError("Input download failed while reading the file");
     }
   }

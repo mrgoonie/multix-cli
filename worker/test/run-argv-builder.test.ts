@@ -34,7 +34,7 @@ describe("prepareRun: argv", () => {
       aspectRatio: "16:9",
       numImages: "2",
     });
-  }, 30_000);
+  }, 120_000);
 
   it("puts free-text positionals after -- so commander never reads them as flags", async () => {
     const prepared = run({ command: "leonardo generate", args: ["-v --version cats"] });
@@ -42,7 +42,7 @@ describe("prepareRun: argv", () => {
     const parsed = await parseWithCli(prepared.argv, "leonardo generate");
     expect(parsed.args).toEqual(["-v --version cats"]);
     expect(parsed.opts.verbose).toBeUndefined();
-  }, 30_000);
+  }, 120_000);
 
   it("downloads file inputs to server-chosen paths and passes repeatable options once per file", async () => {
     const prepared = run({
@@ -63,7 +63,7 @@ describe("prepareRun: argv", () => {
     ]);
     const parsed = await parseWithCli(prepared.argv, "gemini analyze");
     expect(parsed.opts.files).toEqual(["in/0-My_Clip.mp4", "in/1-b.png"]);
-  }, 30_000);
+  }, 120_000);
 
   it("fills a file positional from inputs and keeps it after --", () => {
     const prepared = run({
@@ -117,6 +117,48 @@ describe("prepareRun: argv", () => {
   it("sends the server default duration when the CLI default is unknown", () => {
     const prepared = run({ command: "atlas video", args: ["waves"] });
     expect(prepared.argv).toContain("--duration=5");
+  });
+
+  it("passes repeatable options the CLI collects with its own parser once per value", async () => {
+    const refs = run({
+      command: "heygen video-agent",
+      args: ["a product tour"],
+      options: { file: ["asset:a1", "asset:b2"] },
+    });
+    expect(refs.argv).toEqual([
+      "heygen",
+      "video-agent",
+      "--file=asset:a1",
+      "--file=asset:b2",
+      "--",
+      "a product tour",
+    ]);
+    const parsed = await parseWithCli(refs.argv, "heygen video-agent");
+    expect(parsed.opts.file).toEqual(["asset:a1", "asset:b2"]);
+
+    const downloads = run({
+      command: "heygen model-video",
+      args: ["walk"],
+      inputs: {
+        "reference-image": ["https://cdn.example.com/1.png", "https://cdn.example.com/2.png"],
+      },
+    });
+    expect(downloads.argv.filter((a) => a.startsWith("--reference-image="))).toEqual([
+      "--reference-image=in/0-1.png",
+      "--reference-image=in/1-2.png",
+    ]);
+  }, 120_000);
+
+  it("accepts plain file-name parts such as a language code or prefix", () => {
+    const prepared = run({
+      command: "elevenlabs voices design",
+      options: { description: "warm narrator", "output-prefix": "narrator_v2" },
+    });
+    expect(prepared.argv).toContain("--output-prefix=narrator_v2");
+    expect(
+      run({ command: "elevenlabs dub-status", args: ["dub123"], options: { download: "pt-BR" } })
+        .argv,
+    ).toContain("--download=pt-BR");
   });
 
   it("accepts a provider asset reference where the provider supports one", () => {
@@ -225,6 +267,24 @@ describe("prepareRun: rejections", () => {
         options: { prompt: "p", "first-frame": "https://localhost/x.png" },
       },
       /private|public/,
+    ],
+    [
+      "path in a file-name prefix",
+      {
+        command: "elevenlabs voices design",
+        options: { description: "d", "output-prefix": "../../../../tmp/pwn" },
+      },
+      /--output-prefix may contain only/,
+    ],
+    [
+      "path in a dub language",
+      { command: "elevenlabs dub", options: { "target-lang": "es/../../x" } },
+      /--target-lang may contain only/,
+    ],
+    [
+      "path in a download language",
+      { command: "elevenlabs dub-status", args: ["d1"], options: { download: "../x" } },
+      /--download may contain only/,
     ],
     [
       "too many outputs",

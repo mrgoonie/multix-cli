@@ -9,12 +9,24 @@ import { ValidationError } from "../../../src/core/errors.js";
 import type { R2Settings } from "../accounts/r2-settings.js";
 import type { ProviderKeys } from "../provider-secret-names.js";
 import { NON_SECRET_NAMES } from "../provider-secret-names.js";
+import { ACCOUNT_BUSY_ERROR, type JobQuota } from "./account-job-quota.js";
 import { GROUP_KEYS } from "./cli-command-policy.js";
-import { JOB_TIMEOUT_MS, type JobSpec, type JobView, isTerminal } from "./job-protocol.js";
+import {
+  JOB_TIMEOUT_MS,
+  type JobSpec,
+  type JobView,
+  SERVER_AT_CAPACITY_ERROR,
+  isTerminal,
+} from "./job-protocol.js";
 import type { JobBackend, JobStore } from "./job-store.js";
 import type { PreparedRun } from "./run-argv-builder.js";
 
-export const MAX_WAIT_SECONDS = 50;
+/**
+ * `wait_seconds` bounds the whole multix_run call, container start included,
+ * so a call returns within about MAX_WAIT_SECONDS + one status read (under
+ * the ~60 s many MCP clients allow).
+ */
+export const MAX_WAIT_SECONDS = 40;
 export const DEFAULT_WAIT_SECONDS = 25;
 const POLL_INTERVAL_MS = 2_000;
 
@@ -27,6 +39,8 @@ export interface JobToolsContext {
   keys: ProviderKeys;
   store: JobStore;
   backend: JobBackend;
+  /** Per-account active job slots. */
+  quota: JobQuota;
   r2Settings(): Promise<R2Settings | null>;
   /** Injected for tests. */
   sleep?: (ms: number) => Promise<void>;
@@ -118,13 +132,27 @@ export class JobRunner {
       timeoutMs: JOB_TIMEOUT_MS,
     };
     if (r2) spec.upload = { r2, keyPrefix: await outputKeyPrefix(this.ctx.userId, jobId) };
-    await this.ctx.store.create(jobId, {
-      userId: this.ctx.userId,
-      command: prepared.command,
-      createdAt: this.now(),
-    });
-    let view = await this.ctx.backend.start(jobId, spec);
+    const { userId } = this.ctx;
     const deadline = this.now() + waitSeconds * 1000;
+    if (!(await this.ctx.quota.acquire(userId, jobId))) {
+      throw new ValidationError(ACCOUNT_BUSY_ERROR);
+    }
+    let view: JobView;
+    try {
+      await this.ctx.store.create(jobId, {
+        userId,
+        command: prepared.command,
+        createdAt: this.now(),
+      });
+      view = await this.ctx.backend.start(jobId, spec, userId);
+    } catch (error) {
+      // The job Durable Object normally gives the slot back; here it may never have run.
+      await this.ctx.quota.release(userId, jobId).catch(() => undefined);
+      throw error;
+    }
+    if (view.status === "failed" && view.error === SERVER_AT_CAPACITY_ERROR) {
+      throw new ValidationError(SERVER_AT_CAPACITY_ERROR);
+    }
     while (!isTerminal(view.status) && this.now() < deadline) {
       await this.sleep(Math.min(POLL_INTERVAL_MS, deadline - this.now()));
       view = (await this.ctx.backend.status(jobId)) ?? view;

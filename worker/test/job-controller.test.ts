@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { type JobContainerPort, JobController, POLL_SECONDS } from "../src/jobs/job-controller.js";
-import type { JobResult, JobSpec, JobView } from "../src/jobs/job-protocol.js";
+import {
+  ContainerCapacityError,
+  type JobContainerPort,
+  JobController,
+  POLL_SECONDS,
+} from "../src/jobs/job-controller.js";
+import {
+  type JobResult,
+  type JobSpec,
+  type JobView,
+  SERVER_AT_CAPACITY_ERROR,
+} from "../src/jobs/job-protocol.js";
 
 const SPEC: JobSpec = {
   jobId: "00000000-0000-4000-8000-000000000000",
@@ -26,6 +36,8 @@ function fakePort(respond: (path: string, init?: RequestInit) => Response | Prom
     polls: [] as number[],
     destroyed: 0,
     started: 0,
+    released: 0,
+    running: false,
     t: 1_000,
   };
   const port: JobContainerPort = {
@@ -36,13 +48,21 @@ function fakePort(respond: (path: string, init?: RequestInit) => Response | Prom
     },
     startContainer: async () => {
       state.started++;
+      state.running = true;
     },
+    isContainerRunning: () => state.running,
     fetchContainer: async (path, init) => {
+      // Like the Durable Object: requests never boot a container.
+      if (!state.running) throw new Error("not running");
       state.requests.push({ path, body: typeof init?.body === "string" ? init.body : undefined });
       return respond(path, init);
     },
     destroyContainer: async () => {
       state.destroyed++;
+      state.running = false;
+    },
+    releaseSlot: async () => {
+      state.released++;
     },
     schedulePoll: async (seconds) => {
       state.polls.push(seconds);
@@ -75,6 +95,7 @@ describe("JobController", () => {
     expect(state.polls).toHaveLength(2);
     expect(state.stored).toMatchObject({ status: "succeeded", result: RESULT });
     expect(state.destroyed).toBe(1);
+    expect(state.released).toBe(1);
     expect(JSON.stringify(state.saved)).not.toContain("secret-value-123456");
     // Starting again returns the stored job instead of running it twice.
     expect((await controller.start(SPEC)).status).toBe("succeeded");
@@ -96,6 +117,74 @@ describe("JobController", () => {
       status: "failed",
       error: "The job container could not be started",
     });
+    expect(broken.state.released).toBe(1);
+
+    const full = fakePort(() => json({}));
+    full.port.startContainer = async () => {
+      throw new ContainerCapacityError();
+    };
+    expect(await new JobController(full.port).start(SPEC)).toMatchObject({
+      status: "failed",
+      error: SERVER_AT_CAPACITY_ERROR,
+    });
+    expect(full.state.released).toBe(1);
+  });
+
+  it("never boots a container to read or cancel a job whose container is gone", async () => {
+    const { port, state } = fakePort((path) =>
+      path === "/jobs" ? new Response(null, { status: 202 }) : json({ state: "running" }),
+    );
+    let starts = 0;
+    port.startContainer = async () => {
+      starts++;
+      state.running = true;
+    };
+    const controller = new JobController(port);
+    await controller.start(SPEC);
+    state.running = false; // crashed or evicted; onStop has not run yet
+    const requestsBefore = state.requests.length;
+    expect(await controller.status()).toMatchObject({
+      status: "failed",
+      error: "The job container stopped before the job finished",
+    });
+    expect(starts).toBe(1);
+    expect(state.requests).toHaveLength(requestsBefore);
+    expect(state.released).toBe(1);
+
+    const other = fakePort((path) =>
+      path === "/jobs" ? new Response(null, { status: 202 }) : json({ state: "running" }),
+    );
+    const second = new JobController(other.port);
+    await second.start(SPEC);
+    other.state.running = false;
+    expect(await second.cancel()).toMatchObject({ status: "canceled" });
+    expect(other.state.requests.map((r) => r.path)).toEqual(["/jobs"]);
+    expect(other.state.started).toBe(1);
+  });
+
+  it("keeps a final state recorded while the job was being handed to the container", async () => {
+    const { port, state } = fakePort((path) => {
+      if (path === "/jobs") {
+        // onStop runs while the POST is in flight and records the failure.
+        state.stored = { status: "failed", createdAt: 1, finishedAt: 2, error: "stopped" };
+        return new Response(null, { status: 202 });
+      }
+      return json({ state: "running" });
+    });
+    const view = await new JobController(port).start(SPEC);
+    expect(view).toMatchObject({ status: "failed", error: "stopped" });
+    expect(state.stored?.status).toBe("failed");
+    expect(state.polls).toEqual([]);
+  });
+
+  it("fails a job left in starting after its start call was lost", async () => {
+    const { port, state } = fakePort(() => json({}));
+    state.stored = { status: "starting", createdAt: state.t };
+    const controller = new JobController(port);
+    expect((await controller.status())?.status).toBe("starting");
+    state.t += 10 * 60_000;
+    expect(await controller.status()).toMatchObject({ status: "failed" });
+    expect(state.released).toBe(1);
   });
 
   it("cancels a running job and ignores a later stop", async () => {

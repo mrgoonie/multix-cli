@@ -3,45 +3,30 @@
  * (argv only, never a shell) with only the caller's keys in its env, collect
  * the files it wrote to out/, upload them to the caller's R2 bucket, and
  * report truncated, redacted stdout/stderr. The directory is always removed.
+ *
+ * One deadline (`spec.timeoutMs`, at most 30 minutes) covers the whole job:
+ * downloads, the CLI and uploads. The CLI gets what is left minus a reserve
+ * for uploads, so a finished job still has time to deliver its files before
+ * the Durable Object gives up on it.
  */
 
 import { execFile } from "node:child_process";
-import { lstat, mkdir, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { extname, join } from "node:path";
+import { join } from "node:path";
 import { InputError, downloadInputs } from "./job-inputs.mjs";
-import { createR2Uploader, safeOutputName } from "./r2-upload.mjs";
+import { collectOutputs, uploadOutputs } from "./job-outputs.mjs";
 
 export const MAX_TEXT_BYTES = 16 * 1024;
-const MAX_UPLOAD_BYTES = 500 * 1024 * 1024;
-const MAX_OUTPUT_FILES = 50;
+const MAX_CLI_BUFFER_BYTES = 16 * 1024 * 1024;
 const MAX_JOB_TIMEOUT_MS = 30 * 60_000;
+/** Time kept back from the CLI for uploads: a quarter of the budget, at most 5 minutes. */
+const MAX_UPLOAD_RESERVE_MS = 5 * 60_000;
 /** Env names a job may pass to the CLI: provider credentials and Cloudflare ids only. */
 const KEY_NAME_RE =
   /^(?:[A-Z][A-Z0-9]*_API_(?:KEY|TOKEN)|FAL_KEY|CLOUDFLARE_(?:ACCOUNT_ID|AI_GATEWAY_ID))$/;
 const NO_STORAGE_NOTE =
   "R2 storage is not configured: configure R2 in /dashboard to receive output files. Provider URLs printed by the CLI are returned unchanged.";
-
-const CONTENT_TYPES = {
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".webp": "image/webp",
-  ".gif": "image/gif",
-  ".mp4": "video/mp4",
-  ".webm": "video/webm",
-  ".mov": "video/quicktime",
-  ".mp3": "audio/mpeg",
-  ".wav": "audio/wav",
-  ".ogg": "audio/ogg",
-  ".m4a": "audio/mp4",
-  ".json": "application/json",
-  ".txt": "text/plain; charset=utf-8",
-  ".md": "text/markdown; charset=utf-8",
-  ".srt": "application/x-subrip",
-  ".vtt": "text/vtt",
-  ".glb": "model/gltf-binary",
-};
 
 export class SpecError extends Error {}
 
@@ -99,12 +84,13 @@ function runCli(bin, argv, options) {
     execFile(
       bin,
       argv,
-      { ...options, maxBuffer: 16 * 1024 * 1024, windowsHide: true },
+      { ...options, maxBuffer: MAX_CLI_BUFFER_BYTES, windowsHide: true },
       (error, stdout, stderr) => {
         const exitCode = error ? (typeof error.code === "number" ? error.code : null) : 0;
         resolve({
           exitCode,
           killed: Boolean(error?.killed),
+          overflow: error?.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER",
           stdout: String(stdout),
           stderr: String(stderr),
         });
@@ -113,59 +99,31 @@ function runCli(bin, argv, options) {
   });
 }
 
-/** Regular files under out/ (recursively), with safe, unique names. Symlinks are skipped. */
-async function collectOutputs(outDir) {
-  const found = [];
-  const walk = async (dir) => {
-    for (const entry of await readdir(dir, { withFileTypes: true })) {
-      const full = join(dir, entry.name);
-      if (entry.isDirectory()) await walk(full);
-      else if (entry.isFile()) found.push(full);
-    }
-  };
-  await walk(outDir);
-  const used = new Set();
-  const outputs = [];
-  for (const file of found.sort().slice(0, MAX_OUTPUT_FILES)) {
-    const base = safeOutputName(file);
-    if (!base) continue;
-    let name = base;
-    for (let i = 1; used.has(name); i++) name = `${i}-${base}`;
-    used.add(name);
-    outputs.push({ file, name, bytes: (await lstat(file)).size });
-  }
-  return outputs;
-}
-
-async function uploadOutputs(files, upload, fetchImpl) {
-  const r2 = createR2Uploader(upload.r2, { fetch: fetchImpl });
-  const outputs = [];
-  for (const { file, name, bytes } of files) {
-    if (bytes > MAX_UPLOAD_BYTES) {
-      outputs.push({ name, url: null, bytes });
-      continue;
-    }
-    const type = CONTENT_TYPES[extname(name).toLowerCase()] ?? "application/octet-stream";
-    const url = await r2.put(`${upload.keyPrefix}/${name}`, await readFile(file), type);
-    outputs.push({ name, url, bytes });
-  }
-  return outputs;
-}
-
 /**
  * @param {object} spec validated job spec
- * @param {{ signal?: AbortSignal, bin?: string, fetch?: typeof fetch, basePath?: string }} [options]
+ * @param {{ signal?: AbortSignal, bin?: string, fetch?: typeof fetch, get?: Function, basePath?: string }} [options]
+ *   `signal` cancels the job; `fetch` (uploads) and `get` (downloads) are injected in tests.
  */
 export async function runJob(spec, options = {}) {
   const secrets = secretsOf(spec);
+  const budget = Math.min(spec.timeoutMs, MAX_JOB_TIMEOUT_MS);
+  const startedAt = Date.now();
+  const deadline = AbortSignal.timeout(budget);
+  const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
   const dir = await mkdtemp(join(tmpdir(), "multix-job-"));
   const result = { status: "failed", exitCode: null, stdout: "", stderrTail: "", outputs: [] };
   if (!spec.upload) result.note = NO_STORAGE_NOTE;
+  const stopped = () => {
+    if (options.signal?.aborted) return "canceled";
+    return deadline.aborted ? "timed_out" : undefined;
+  };
   try {
     const outDir = join(dir, "out");
     await mkdir(join(dir, "in"));
     await mkdir(outDir);
-    await downloadInputs(dir, spec.inputs, { signal: options.signal, fetch: options.fetch });
+    await downloadInputs(dir, spec.inputs, { signal, get: options.get });
+    const reserve = Math.min(MAX_UPLOAD_RESERVE_MS, Math.floor(budget / 4));
+    const cliTimeout = Math.max(1, budget - (Date.now() - startedAt) - reserve);
     const run = await runCli(options.bin ?? "multix", spec.argv, {
       cwd: dir,
       env: {
@@ -176,26 +134,35 @@ export async function runJob(spec, options = {}) {
         NO_COLOR: "1",
         ...spec.env,
       },
-      timeout: Math.min(spec.timeoutMs, MAX_JOB_TIMEOUT_MS),
+      timeout: cliTimeout,
       killSignal: "SIGTERM",
-      signal: options.signal,
+      signal,
     });
     result.exitCode = run.exitCode;
-    result.stdout = redact(head(run.stdout), secrets);
-    result.stderrTail = redact(tail(run.stderr), secrets);
-    if (options.signal?.aborted) result.status = "canceled";
+    // Redact first: a key cut in half by truncation could not be matched any more.
+    result.stdout = head(redact(run.stdout, secrets));
+    result.stderrTail = tail(redact(run.stderr, secrets));
+    if (run.overflow) {
+      result.status = "failed";
+      result.error = "The CLI wrote more than 16 MB to stdout or stderr and was stopped";
+    } else if (stopped()) result.status = stopped();
     else if (run.killed) result.status = "timed_out";
     else result.status = run.exitCode === 0 ? "succeeded" : "failed";
 
     const files = await collectOutputs(outDir);
     result.outputs = spec.upload
-      ? await uploadOutputs(files, spec.upload, options.fetch)
+      ? await uploadOutputs(files, spec.upload, { fetch: options.fetch, signal })
       : files.map(({ name, bytes }) => ({ name, url: null, bytes }));
   } catch (error) {
-    if (options.signal?.aborted) result.status = "canceled";
-    else result.status = "failed";
+    result.status = stopped() ?? "failed";
     const known = error instanceof InputError || error?.name === "R2UploadError";
-    result.error = redact(known ? error.message : "The job failed inside the container", secrets);
+    const message =
+      result.status === "timed_out"
+        ? "The job did not finish within its time limit"
+        : known
+          ? error.message
+          : "The job failed inside the container";
+    result.error = redact(message, secrets);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

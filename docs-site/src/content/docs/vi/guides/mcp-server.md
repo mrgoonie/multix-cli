@@ -27,7 +27,7 @@ thay đổi cách `multix` chạy trên máy bạn.
 | `multix_prediction_status` | Poll một prediction theo provider và ID. |
 | `multix_prediction_cancel` | Hủy prediction đang chạy (chỉ Replicate). |
 | `multix_catalog` | Các lệnh CLI mà `multix_run` chạy được. Không có `group`: mọi nhóm lệnh, các lệnh trong nhóm và bạn đã lưu key cho nhóm đó chưa. Có `group`: positional và option của từng lệnh, option nào nhận file, và giá trị server bắt buộc. |
-| `multix_run` | Chạy một lệnh CLI trong container riêng bằng key đã lưu của bạn. Chờ tối đa `wait_seconds` (mặc định 25, tối đa 50), sau đó trả về kết quả hoặc job ID để poll. |
+| `multix_run` | Chạy một lệnh CLI trong container riêng bằng key đã lưu của bạn. Chờ tối đa `wait_seconds` (mặc định 25, tối đa 40, tính cả thời gian khởi động container), sau đó trả về kết quả hoặc job ID để poll. Mỗi tài khoản chạy tối đa 2 job cùng lúc. |
 | `multix_job_status` | Đọc job `multix_run`: trạng thái, URL output, stdout và phần cuối của stderr. |
 | `multix_job_cancel` | Dừng job đang chạy cùng container của nó. |
 
@@ -53,7 +53,8 @@ Bốn tool cuối chỉ xuất hiện khi Worker có binding container chạy jo
   200 MB) và truyền đường dẫn cục bộ cho CLI. Đường dẫn file thường bị từ
   chối. Ở chỗ provider nhận asset ID của chính nó, có thể truyền `asset:<id>`
   làm giá trị.
-- `wait_seconds`: thời gian lệnh gọi chờ job (0–50, mặc định 25).
+- `wait_seconds`: thời gian lệnh gọi chờ job, tính từ lúc gọi nên đã gồm cả
+  thời gian khởi động container (0–40, mặc định 25).
 
 Gọi `multix_catalog` kèm group để xem chính xác lệnh nhận option nào và option
 nào là file. Ví dụ một lệnh gọi:
@@ -80,15 +81,23 @@ Kết quả luôn có cùng dạng:
 }
 ```
 
-`status` là `starting`, `running`, `succeeded`, `failed`, `timed_out` hoặc
-`canceled`. Khi còn `starting` hoặc `running`, kết quả có gợi ý `next`: gọi
-`multix_job_status` với `job_id` mỗi 10–30 giây. Một job chạy được tối đa 30
-phút, và bản ghi của nó được giữ 7 ngày. Chỉ tài khoản đã khởi chạy job mới đọc
-hoặc hủy được job đó.
+`status` là `running`, `succeeded`, `failed`, `timed_out` hoặc `canceled`. Khi
+còn `running`, kết quả có gợi ý `next`: gọi `multix_job_status` với `job_id`
+mỗi 10–30 giây. Một giới hạn 30 phút áp dụng cho toàn bộ job: tải input, chạy
+CLI và tải output lên. Bản ghi của job được giữ 7 ngày. Chỉ tài khoản đã khởi
+chạy job mới đọc hoặc hủy được job đó.
 
-**File đầu ra cần R2.** Mọi file CLI ghi ra được tải lên bucket R2 của bạn dưới
+**Số job đồng thời.** Mỗi tài khoản chạy tối đa **2** job cùng lúc. Lệnh
+`multix_run` thứ ba báo lỗi `busy: you already have 2 running jobs` cho đến khi
+một job kết thúc; nếu cần, hủy bớt bằng `multix_job_cancel`. Suất chạy của job
+được trả lại khi job kết thúc, và tự giải phóng sau khoảng 45 phút nếu job bị
+mất. Khi mọi container chạy job trên server đều đang bận (`max_instances`),
+lệnh gọi báo lỗi `server at capacity`; hãy thử lại sau vài phút.
+
+**File đầu ra cần R2.** Các file CLI ghi ra được tải lên bucket R2 của bạn dưới
 `multix/<hash tài khoản>/<job id>/<tên>`, và `outputs` liệt kê URL công khai
-hoặc presigned của file. Nếu bạn chưa lưu bucket R2, job vẫn chạy nhưng mỗi
+hoặc presigned của chúng. Mỗi job báo cáo tối đa 50 file, và file lớn hơn
+500 MB được liệt kê với `url: null` thay vì được tải lên. Nếu bạn chưa lưu bucket R2, job vẫn chạy nhưng mỗi
 output có `url: null` và kết quả kèm `note` nhắc bạn cấu hình R2 tại
 `/dashboard`. stdout (gồm cả URL provider mà CLI in ra) vẫn được trả về trong
 cả hai trường hợp. Key không bao giờ xuất hiện trong `stdout` hay
@@ -98,8 +107,11 @@ Giới hạn của server cũng áp dụng cho `multix_run`: số output
 (`MULTIX_MCP_MAX_OUTPUTS`), độ dài video (`MULTIX_MCP_MAX_VIDEO_SECONDS`, cũng
 được gửi khi mặc định của lệnh video không rõ hoặc dài hơn) và độ phân giải
 (`MULTIX_MCP_ALLOWED_RESOLUTIONS`). Server tự chọn thư mục đầu ra, `--output`
-phải là tên file thuần, các lệnh ảnh OpenAI luôn dùng API driver, và giá trị
-`@file` bị từ chối.
+phải là tên file thuần, option mà CLI ghép vào tên file (như
+`elevenlabs voices design --output-prefix` hoặc mã ngôn ngữ khi lồng tiếng) chỉ
+nhận chữ cái, chữ số, `_` và `-`, các lệnh ảnh OpenAI luôn dùng API driver, và
+giá trị `@file` bị từ chối. Lệnh thay đổi chính tài khoản provider của bạn (ví
+dụ xóa một giọng ElevenLabs) chạy như mọi lệnh khác, bằng key của bạn.
 
 ### Không hỗ trợ từ xa
 
@@ -192,6 +204,8 @@ Cloudflare.
    `MULTIX_JOBS` bật `multix_run`. Để triển khai không kèm trình chạy CLI
    (không cần Docker, dùng được Workers Free), xóa `containers`,
    `durable_objects` và `exports`; khi đó bốn tool job không được liệt kê.
+   Binding `MULTIX_JOB_QUOTA` (class `AccountJobQuota`) giữ số job đang chạy
+   của từng tài khoản và phải đi cùng `MULTIX_JOBS`.
 4. **Đặt secret** và triển khai:
 
    ```bash
@@ -464,9 +478,13 @@ chung bộ đếm.
   dạng `--name=value`, positional nằm sau `--`, và CLI được chạy không qua
   shell. Tiến trình CLI chỉ nhận key của nhóm provider ứng với lệnh, một thư
   mục home tạm mới và `MULTIX_DISABLE_HOME_ENV=1`. URL input đi qua cùng lớp
-  chặn SSRF ở Worker và một lần nữa trong container ở mỗi lần redirect. Thư
-  mục tạm bị xóa khi job kết thúc, stdout và stderr được cắt còn 16 KB và
-  loại bỏ giá trị key, và log chỉ ghi job ID và trạng thái. Bản ghi
+  chặn SSRF ở Worker và một lần nữa trong container ở mỗi lần redirect;
+  container còn phân giải từng host và từ chối kết nối khi có bất kỳ địa chỉ
+  nào là private, loopback, link-local, CGNAT hoặc ULA, và chỉ kết nối tới
+  đúng các địa chỉ đã kiểm tra (tối đa 5 lần redirect). File đầu ra được
+  stream lên R2 mà không nạp toàn bộ vào bộ nhớ. Thư mục tạm bị xóa khi job
+  kết thúc, stdout và stderr được loại bỏ giá trị key rồi mới cắt còn 16 KB,
+  và log chỉ ghi job ID và trạng thái. Bản ghi
   `job:<id>` trong `ACCOUNTS_KV` chứa chủ sở hữu, lệnh và thời điểm bắt đầu,
   không bao giờ chứa key.
 - **MCP stateless:** không có MCP session. Mỗi request tạo một server mới với

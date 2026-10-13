@@ -5,7 +5,7 @@
 
 import catalogJson from "../cli-catalog.json";
 import type { CliCatalog, CliCommand, CliOption } from "./cli-catalog-types.js";
-import { EXCLUDED_COMMANDS } from "./cli-command-policy.js";
+import { type CommandPolicy, EXCLUDED_COMMANDS } from "./cli-command-policy.js";
 
 export const CLI_CATALOG: CliCatalog = catalogJson as CliCatalog;
 
@@ -40,9 +40,16 @@ export function optionName(option: CliOption): string {
   return option.long.replace(/^-+/, "");
 }
 
-/** An option that may be given more than once (variadic, or collected into an array). */
-export function isRepeatable(option: CliOption): boolean {
-  return option.variadic || Array.isArray(option.default);
+/**
+ * An option that may be given more than once: variadic, collected into an
+ * array default, or listed as repeatable by the command's policy.
+ */
+export function isRepeatable(option: CliOption, policy: CommandPolicy = {}): boolean {
+  return (
+    option.variadic ||
+    Array.isArray(option.default) ||
+    (policy.repeatable?.includes(optionName(option)) ?? false)
+  );
 }
 
 /** Split a command string into its path segments, collapsing whitespace. */

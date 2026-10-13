@@ -23,7 +23,7 @@ export interface JobSpec {
   inputs: JobInputFile[];
   /** Where to upload outputs; absent when the account has no R2 bucket configured. */
   upload?: { r2: R2Settings; keyPrefix: string };
-  /** Kill the CLI after this many milliseconds. */
+  /** Deadline for the whole job (downloads, CLI, uploads) in milliseconds. */
   timeoutMs: number;
 }
 
@@ -70,7 +70,21 @@ export function isTerminal(status: JobStatus): status is JobTerminalStatus {
   return TERMINAL_STATUSES.has(status);
 }
 
-/** How long the CLI may run inside the container. */
+/**
+ * Whole-job budget inside the container: downloads, the CLI and uploads share
+ * this one deadline (container/job-runner.mjs).
+ */
 export const JOB_TIMEOUT_MS = 30 * 60_000;
+/** The Durable Object gives up on a job that has not reported this long after it started. */
+export const JOB_GIVE_UP_MS = JOB_TIMEOUT_MS + 5 * 60_000;
+/**
+ * A per-account job slot expires on its own after this long, so a job whose
+ * Durable Object never released it (crash, lost RPC) cannot hold it forever.
+ * Longer than JOB_GIVE_UP_MS, so a live job never loses its slot.
+ */
+export const JOB_SLOT_LEASE_MS = JOB_GIVE_UP_MS + 10 * 60_000;
+/** Returned when every job container is in use (the `max_instances` limit). */
+export const SERVER_AT_CAPACITY_ERROR =
+  "server at capacity: every job container is in use; retry in a few minutes";
 /** Job records (KV and Durable Object storage) are kept this long. */
 export const JOB_RETENTION_SECONDS = 7 * 24 * 60 * 60;

@@ -56,12 +56,18 @@
       "max_instances": 10
     }
   ],
+  // MULTIX_JOB_QUOTA: one small Durable Object per account holding its active job slots
+  // (worker/src/jobs/account-job-quota.ts), so the per-account cap is strongly consistent.
   "durable_objects": {
-    "bindings": [{ "name": "MULTIX_JOBS", "class_name": "MultixJobContainer" }]
+    "bindings": [
+      { "name": "MULTIX_JOBS", "class_name": "MultixJobContainer" },
+      { "name": "MULTIX_JOB_QUOTA", "class_name": "AccountJobQuota" }
+    ]
   },
   // Declarative Durable Object config (wrangler 4.149+); replaces `migrations`.
   "exports": {
-    "MultixJobContainer": { "type": "durable-object", "storage": "sqlite" }
+    "MultixJobContainer": { "type": "durable-object", "storage": "sqlite" },
+    "AccountJobQuota": { "type": "durable-object", "storage": "sqlite" }
   },
   "vars": {
     "MULTIX_PUBLIC_URL": "https://multix.zuey.me",

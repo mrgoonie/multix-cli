@@ -4,6 +4,10 @@
  * https://<accountId>.r2.cloudflarestorage.com/<bucket>/<key>, presigned GET
  * links valid for 7 days when the bucket has no public base URL.
  *
+ * Bodies are streamed, never buffered: the request is signed with
+ * `x-amz-content-sha256: UNSIGNED-PAYLOAD` (aws4fetch's default for s3), so the
+ * body does not need to be hashed up front.
+ *
  * Errors carry the HTTP status and S3 error code only, never a URL (presigned
  * or not), header or credential.
  */
@@ -85,19 +89,36 @@ export function createR2Uploader(r2, options = {}) {
     });
 
   return {
-    /** PUT one object; returns the URL to hand back (public, or presigned for 7 days). */
-    async put(key, body, contentType) {
-      const headers = { "content-type": contentType };
-      const signed = await signer(objectUrl(key), "PUT", { headers, body }).sign();
+    /**
+     * PUT one object; returns the URL to hand back (public, or presigned for 7 days).
+     * @param {string} key
+     * @param {ReadableStream | Uint8Array | string} body streamed as is
+     * @param {string} contentType
+     * @param {{ contentLength?: number, signal?: AbortSignal }} [put]
+     */
+    async put(key, body, contentType, put = {}) {
+      const headers = {
+        "content-type": contentType,
+        "x-amz-content-sha256": "UNSIGNED-PAYLOAD",
+      };
+      const signed = await signer(objectUrl(key), "PUT", { headers }).sign();
+      const sendHeaders = new Headers(signed.headers);
+      if (put.contentLength !== undefined) {
+        sendHeaders.set("content-length", String(put.contentLength));
+      }
+      const signals = [AbortSignal.timeout(options.timeoutMs ?? 300_000)];
+      if (put.signal) signals.push(put.signal);
       let response;
       try {
         response = await doFetch(signed.url.toString(), {
           method: "PUT",
-          headers: signed.headers,
+          headers: sendHeaders,
           body,
-          signal: AbortSignal.timeout(options.timeoutMs ?? 300_000),
+          duplex: "half",
+          signal: AbortSignal.any(signals),
         });
       } catch {
+        if (put.signal?.aborted) throw put.signal.reason ?? new Error("aborted");
         throw new R2UploadError(0);
       }
       const text = await response.text().catch(() => "");

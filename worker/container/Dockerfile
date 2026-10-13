@@ -30,7 +30,7 @@ RUN chmod +x /app/dist/cli.js && ln -s /app/dist/cli.js /usr/local/bin/multix
 
 WORKDIR /job-server
 COPY --from=build /job-server/node_modules ./node_modules
-COPY worker/container/package.json worker/container/job-server.mjs worker/container/job-runner.mjs worker/container/job-inputs.mjs worker/container/r2-upload.mjs ./
+COPY worker/container/package.json worker/container/*.mjs ./
 
 ENV NODE_ENV=production PORT=8080
 # Each job gets its own mkdtemp directory under /tmp, removed when it ends.

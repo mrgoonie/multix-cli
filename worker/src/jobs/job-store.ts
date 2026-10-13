@@ -39,14 +39,15 @@ export class JobStore {
 
 /** Where jobs run: the per-job Durable Object in production, a stub in tests. */
 export interface JobBackend {
-  start(jobId: string, spec: JobSpec): Promise<JobView>;
+  /** Start the job; `userId` owns the account job slot the job gives back when it ends. */
+  start(jobId: string, spec: JobSpec, userId: string): Promise<JobView>;
   status(jobId: string): Promise<JobView | null>;
   cancel(jobId: string): Promise<JobView | null>;
 }
 
 /** RPC surface of MultixJobContainer used by the Worker. */
 export interface JobContainerStub {
-  startJob(spec: JobSpec): Promise<JobView>;
+  startJob(spec: JobSpec, userId: string): Promise<JobView>;
   jobStatus(): Promise<JobView | null>;
   cancelJob(): Promise<JobView | null>;
 }
@@ -57,7 +58,7 @@ export interface JobNamespace {
 
 export function durableJobBackend(namespace: JobNamespace): JobBackend {
   return {
-    start: (jobId, spec) => namespace.getByName(jobId).startJob(spec),
+    start: (jobId, spec, userId) => namespace.getByName(jobId).startJob(spec, userId),
     status: (jobId) => namespace.getByName(jobId).jobStatus(),
     cancel: (jobId) => namespace.getByName(jobId).cancelJob(),
   };

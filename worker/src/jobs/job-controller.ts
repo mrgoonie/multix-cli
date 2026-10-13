@@ -4,33 +4,52 @@
  * (multix-job-container.ts) supplies the port.
  *
  * start -> POST /jobs to the job server -> poll GET /jobs/current (self
- * scheduled, and on every status read) -> persist the final result -> destroy
- * the container. Only the job view is stored; the spec with its secrets is
- * never persisted.
+ * scheduled, and on every status read) -> persist the final result -> release
+ * the account's job slot -> destroy the container. Only the job view is
+ * stored; the spec with its secrets is never persisted.
+ *
+ * Only start() boots a container. Status reads and cancel talk to a container
+ * that is already running; when it is gone, the job is finished from the
+ * stored state instead of starting a new container to ask.
  */
 
 import {
-  JOB_TIMEOUT_MS,
+  JOB_GIVE_UP_MS,
   type JobResult,
   type JobSpec,
   type JobTerminalStatus,
   type JobView,
+  SERVER_AT_CAPACITY_ERROR,
   isTerminal,
 } from "./job-protocol.js";
 
 export interface JobContainerPort {
   load(): Promise<JobView | undefined>;
   save(view: JobView): Promise<void>;
+  /** Boot the container and wait for the job server; throws ContainerCapacityError when none is free. */
   startContainer(): Promise<void>;
+  /** Whether the container is running now (never starts it). */
+  isContainerRunning(): boolean;
+  /** Request to the job server of the running container; never starts one. */
   fetchContainer(path: string, init?: RequestInit): Promise<Response>;
   destroyContainer(): Promise<void>;
   schedulePoll(seconds: number): Promise<void>;
+  /** Give back the account's job slot (idempotent). */
+  releaseSlot(): Promise<void>;
   now(): number;
 }
 
+/** No container instance is free (`max_instances`) or the platform rate-limited the start. */
+export class ContainerCapacityError extends Error {
+  constructor() {
+    super(SERVER_AT_CAPACITY_ERROR);
+    this.name = "ContainerCapacityError";
+  }
+}
+
 export const POLL_SECONDS = 5;
-/** Extra time over the CLI timeout for downloads and uploads before a job counts as lost. */
-const UPLOAD_GRACE_MS = 15 * 60_000;
+/** A job still `starting` after this long lost its start call (the Durable Object was reset). */
+const START_GIVE_UP_MS = 5 * 60_000;
 
 interface CurrentJob {
   state: "idle" | "running" | "done";
@@ -66,9 +85,16 @@ export class JobController {
           `The job server refused the job (HTTP ${response.status})`,
         );
       }
-    } catch {
-      return this.finish(view, "failed", "The job container could not be started");
+    } catch (error) {
+      const message =
+        error instanceof ContainerCapacityError
+          ? SERVER_AT_CAPACITY_ERROR
+          : "The job container could not be started";
+      return this.finish(view, "failed", message);
     }
+    // The container may have stopped (and onStop recorded it) while the job was being handed over.
+    const latest = await this.port.load();
+    if (latest && isTerminal(latest.status)) return latest;
     const running: JobView = { ...view, status: "running" };
     await this.port.save(running);
     await this.port.schedulePoll(POLL_SECONDS);
@@ -78,7 +104,12 @@ export class JobController {
   /** The stored view, refreshed from the container while the job runs; undefined for an unknown job. */
   async status(): Promise<JobView | undefined> {
     const view = await this.port.load();
-    if (!view || isTerminal(view.status) || view.status === "starting") return view;
+    if (!view || isTerminal(view.status)) return view;
+    if (view.status === "starting") {
+      return this.port.now() - view.createdAt > START_GIVE_UP_MS
+        ? this.finish(view, "failed", "The job container could not be started")
+        : view;
+    }
     return this.refresh(view);
   }
 
@@ -91,11 +122,13 @@ export class JobController {
   async cancel(): Promise<JobView | undefined> {
     const view = await this.port.load();
     if (!view || isTerminal(view.status)) return view;
-    try {
-      const response = await this.port.fetchContainer("/jobs/current/cancel", { method: "POST" });
-      await response.body?.cancel();
-    } catch {
-      // The container is destroyed below either way.
+    if (this.port.isContainerRunning()) {
+      try {
+        const response = await this.port.fetchContainer("/jobs/current/cancel", { method: "POST" });
+        await response.body?.cancel();
+      } catch {
+        // The container is destroyed below either way.
+      }
     }
     return this.finish(view, "canceled", "Canceled by the caller");
   }
@@ -109,6 +142,9 @@ export class JobController {
   }
 
   private async refresh(view: JobView): Promise<JobView> {
+    if (!this.port.isContainerRunning()) {
+      return this.finish(view, "failed", "The job container stopped before the job finished");
+    }
     let current: unknown;
     try {
       const response = await this.port.fetchContainer("/jobs/current");
@@ -122,7 +158,7 @@ export class JobController {
     if (isCurrentJob(current) && current.state === "idle") {
       return this.finish(view, "failed", "The job container restarted and lost the job");
     }
-    if (this.port.now() - view.createdAt > JOB_TIMEOUT_MS + UPLOAD_GRACE_MS) {
+    if (this.port.now() - view.createdAt > JOB_GIVE_UP_MS) {
       return this.finish(view, "timed_out", "The job did not report a result in time");
     }
     return view;
@@ -138,6 +174,11 @@ export class JobController {
     if (result) done.result = result;
     if (error) done.error = error;
     await this.port.save(done);
+    try {
+      await this.port.releaseSlot();
+    } catch {
+      // The slot's lease expires on its own.
+    }
     try {
       await this.port.destroyContainer();
     } catch {

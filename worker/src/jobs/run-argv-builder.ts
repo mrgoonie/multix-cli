@@ -48,6 +48,8 @@ export const OUTPUT_DIR = "out";
 const OPTION_NAME_RE = /^[a-z0-9][a-z0-9-]{0,63}$/i;
 const OUTPUT_FILE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const ASSET_REF_RE = /^asset:[A-Za-z0-9_-]{1,128}$/;
+/** Values the CLI turns into part of a file name (see CommandPolicy.nameOptions). */
+export const NAME_PART_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
 const defaultIndex = new CatalogIndex();
 
@@ -68,7 +70,12 @@ function scalar(value: unknown, field: string): string {
   throw new ValidationError(`${field} must be a string or a number`);
 }
 
-function optionValue(option: CliOption, name: string, raw: RunOptionValue): string[] | true | null {
+function optionValue(
+  option: CliOption,
+  name: string,
+  raw: RunOptionValue,
+  repeatable: boolean,
+): string[] | true | null {
   const field = `--${name}`;
   if (!option.takesValue) {
     if (typeof raw !== "boolean")
@@ -78,7 +85,7 @@ function optionValue(option: CliOption, name: string, raw: RunOptionValue): stri
   if (raw === true && option.valueOptional) return true;
   if (typeof raw === "boolean") throw new ValidationError(`${field} takes a value`);
   if (Array.isArray(raw)) {
-    if (!isRepeatable(option)) throw new ValidationError(`${field} takes a single value`);
+    if (!repeatable) throw new ValidationError(`${field} takes a single value`);
     return raw.map((v, i) => scalar(v, `${field}[${i}]`));
   }
   return [scalar(raw, field)];
@@ -100,7 +107,9 @@ export function prepareRun(
   const targets = new Map<string, FileTarget>();
   for (const [name, kind] of Object.entries(policy.fileOptions ?? {})) {
     const option = options.get(name);
-    if (option) targets.set(name, { kind, multiple: kind === "dir" || isRepeatable(option) });
+    if (option) {
+      targets.set(name, { kind, multiple: kind === "dir" || isRepeatable(option, policy) });
+    }
   }
   for (const name of policy.filePositionals ?? []) {
     const positional = command.positionals.find((p) => p.name === name);
@@ -112,6 +121,7 @@ export function prepareRun(
   const unsupported = new Set([...GLOBALLY_UNSUPPORTED_OPTIONS, ...(policy.unsupported ?? [])]);
   const assetRefs = new Set(policy.assetRefOptions ?? []);
   const urlOptions = new Set(policy.urlOptions ?? []);
+  const nameOptions = new Set(policy.nameOptions ?? []);
   for (const [rawName, raw] of Object.entries(request.options ?? {})) {
     const name = rawName.replace(/^-+/, "");
     const option = OPTION_NAME_RE.test(name) ? options.get(name) : undefined;
@@ -127,8 +137,11 @@ export function prepareRun(
       if (raw !== forced) throw new ValidationError(`--${name} must be ${forced} on this server`);
       continue;
     }
-    const value = optionValue(option, name, raw);
+    const value = optionValue(option, name, raw, isRepeatable(option, policy));
     if (value === null) continue;
+    if (nameOptions.has(name) && value !== true && !value.every((v) => NAME_PART_RE.test(v))) {
+      throw new ValidationError(`--${name} may contain only letters, digits, _ and - (at most 64)`);
+    }
     if (targets.has(name)) {
       const refs = value === true ? [] : value;
       if (!assetRefs.has(name) || refs.length === 0 || !refs.every((v) => ASSET_REF_RE.test(v))) {

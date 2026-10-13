@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { R2Settings } from "../src/accounts/r2-settings.js";
-import type { JobSpec, JobView } from "../src/jobs/job-protocol.js";
+import { ACCOUNT_BUSY_ERROR, type JobQuota, takeSlot } from "../src/jobs/account-job-quota.js";
+import { type JobSpec, type JobView, SERVER_AT_CAPACITY_ERROR } from "../src/jobs/job-protocol.js";
 import { type JobToolsContext, NO_STORAGE_NOTE, outputKeyPrefix } from "../src/jobs/job-runner.js";
 import { type JobBackend, JobStore } from "../src/jobs/job-store.js";
 import { fakeKv } from "./fake-kv.js";
@@ -25,7 +26,7 @@ class FakeBackend implements JobBackend {
     private readonly runningPolls = 1,
   ) {}
 
-  async start(jobId: string, spec: JobSpec): Promise<JobView> {
+  async start(jobId: string, spec: JobSpec, _userId: string): Promise<JobView> {
     this.specs.set(jobId, spec);
     this.polls.set(jobId, 0);
     return { status: "running", createdAt: 1 };
@@ -60,6 +61,23 @@ const succeeded = (spec: JobSpec): JobView => ({
   },
 });
 
+/** In-memory JobQuota with the real slot rules, keyed by account. */
+class FakeQuota implements JobQuota {
+  readonly slots = new Map<string, Record<string, number>>();
+  readonly released: string[] = [];
+
+  async acquire(userId: string, jobId: string): Promise<boolean> {
+    const { ok, slots } = takeSlot(this.slots.get(userId) ?? {}, jobId, 0);
+    this.slots.set(userId, slots);
+    return ok;
+  }
+
+  async release(userId: string, jobId: string): Promise<void> {
+    this.released.push(jobId);
+    delete this.slots.get(userId)?.[jobId];
+  }
+}
+
 function jobsContext(
   backend: JobBackend,
   overrides: Partial<JobToolsContext> = {},
@@ -70,6 +88,7 @@ function jobsContext(
     keys: { GEMINI_API_KEY: GEMINI_KEY },
     store: new JobStore(fakeKv()),
     backend,
+    quota: new FakeQuota(),
     r2Settings: async () => null,
     sleep: async (ms) => {
       clock.t += ms;
@@ -202,6 +221,80 @@ describe("CLI runner tools", () => {
       { jobs: owner },
     );
     expect(missing.content[0].text).toBe("Job not found");
+  });
+
+  it("caps running jobs per account with a distinct busy error", async () => {
+    const backend = new FakeBackend(succeeded, 100);
+    const quota = new FakeQuota();
+    const run = (jobs: JobToolsContext) =>
+      callTool(
+        env,
+        "multix_run",
+        { command: "gemini generate", options: { prompt: "p" }, wait_seconds: 0 },
+        { jobs },
+      );
+    const mine = jobsContext(backend, { quota });
+    expect((await run(mine)).structuredContent.status).toBe("running");
+    expect((await run(mine)).structuredContent.status).toBe("running");
+    const third = await run(mine);
+    expect(third.isError).toBe(true);
+    expect(third.content[0].text).toBe(ACCOUNT_BUSY_ERROR);
+    expect(third.content[0].text).toMatch(/^busy: you already have 2 running jobs/);
+    expect(backend.specs.size).toBe(2);
+    // Another account is not affected.
+    const other = jobsContext(backend, { quota, userId: "gh-2" });
+    expect((await run(other)).structuredContent.status).toBe("running");
+  });
+
+  it("reports a full server separately and gives the slot back when the start fails", async () => {
+    const quota = new FakeQuota();
+    const full = new FakeBackend(succeeded);
+    full.start = async () => ({
+      status: "failed",
+      createdAt: 1,
+      finishedAt: 1,
+      error: SERVER_AT_CAPACITY_ERROR,
+    });
+    const atCapacity = await callTool(
+      env,
+      "multix_run",
+      { command: "gemini generate", options: { prompt: "p" } },
+      { jobs: jobsContext(full, { quota }) },
+    );
+    expect(atCapacity.isError).toBe(true);
+    expect(atCapacity.content[0].text).toBe(SERVER_AT_CAPACITY_ERROR);
+
+    const broken = new FakeBackend(succeeded);
+    broken.start = async () => {
+      throw new Error("rpc lost");
+    };
+    const failed = await callTool(
+      env,
+      "multix_run",
+      { command: "gemini generate", options: { prompt: "p" } },
+      { jobs: jobsContext(broken, { quota }) },
+    );
+    expect(failed.isError).toBe(true);
+    expect(quota.released).toHaveLength(1);
+    expect(Object.keys(quota.slots.get("gh-1") ?? {})).toHaveLength(1); // the capacity job's DO releases its own
+  });
+
+  it("counts the container start against wait_seconds", async () => {
+    const backend = new FakeBackend(succeeded, 100);
+    const jobs = jobsContext(backend);
+    const slowStart = backend.start.bind(backend);
+    backend.start = async (jobId, spec, userId) => {
+      jobs.clock.t += 30_000; // a cold start
+      return slowStart(jobId, spec, userId);
+    };
+    const result = await callTool(
+      env,
+      "multix_run",
+      { command: "gemini generate", options: { prompt: "p" }, wait_seconds: 40 },
+      { jobs },
+    );
+    expect(result.structuredContent.status).toBe("running");
+    expect(jobs.clock.t).toBe(40_000);
   });
 
   it("reports validation errors with CLI flag names and starts nothing", async () => {

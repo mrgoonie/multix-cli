@@ -694,13 +694,17 @@ instance runs at `https://multix.zuey.me/mcp` (invited GitHub accounts only).
 - CLI runner tools: `multix_catalog` (runnable commands, their options and
   file inputs), `multix_run` (run one CLI command, for example
   `gemini analyze` or `media optimize`, in its own Cloudflare Container with
-  ffmpeg and ImageMagick; waits up to `wait_seconds`, default 25, max 50),
-  `multix_job_status` and `multix_job_cancel`. File inputs are public
-  `https://` URLs. Output files are uploaded to the account's own R2 bucket
+  ffmpeg and ImageMagick; waits up to `wait_seconds`, default 25, max 40,
+  container start included), `multix_job_status` and `multix_job_cancel`.
+  Each account runs at most 2 jobs at once (`busy: …` otherwise; a full server
+  answers `server at capacity: …`), and one 30-minute limit covers downloads,
+  the CLI and uploads. File inputs are public `https://` URLs. Output files
+  (at most 50, up to 500 MB each) are streamed to the account's own R2 bucket
   and returned as URLs; without R2 the job still runs and the result says to
   configure R2 in `/dashboard`. Keys are redacted from stdout and stderr.
   These tools need the Workers Paid plan (Containers) and Docker at deploy
-  time; they are listed only when the `MULTIX_JOBS` binding exists.
+  time; they are listed only when the `MULTIX_JOBS` and `MULTIX_JOB_QUOTA`
+  bindings exist.
 - Auth: OAuth 2.1 (dynamic client registration, PKCE) with GitHub sign-in.
   Only GitHub logins or verified emails in the `MULTIX_ALLOWED_USERS` secret
   can sign in.
@@ -735,7 +739,7 @@ A `multix_run` call mirrors the CLI command it runs:
 
 It returns `{ job_id, status, outputs: [{ name, url, bytes }], stdout,
 stderr_tail, exit_code }`; poll `multix_job_status` while `status` is
-`starting` or `running`.
+`running`.
 
 To run your own: create a GitHub OAuth App (callback
 `<origin>/oauth/github/callback`), two KV namespaces, and set routes and vars in

@@ -496,8 +496,10 @@ For any other CLI command (Gemini, OpenAI, MiniMax, ElevenLabs, media/ffmpeg,
    name without dashes, `args` for positionals, and `inputs` with public
    `https://` URLs for file options (never local paths or `@file`):
    `{"command": "media optimize", "inputs": {"input": "https://…/logo.png"}}`.
-3. If `status` is `starting` or `running`, poll `multix_job_status` with
-   `job_id` every 10–30 s; `multix_job_cancel` stops it.
+3. If `status` is `running`, poll `multix_job_status` with `job_id` every
+   10–30 s; `multix_job_cancel` stops it. An account runs at most 2 jobs at
+   once: on `busy: …` wait for one to finish (or cancel one) instead of
+   retrying; on `server at capacity: …` retry after a few minutes.
 4. Read `outputs[].url`. Output files go to the user's own R2 bucket; when
    `url` is null and a `note` mentions R2, tell the user to configure R2 at
    `/dashboard`. `stdout` still holds any provider URLs the CLI printed.

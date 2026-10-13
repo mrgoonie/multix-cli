@@ -33,29 +33,41 @@ function spec(overrides: Record<string, unknown> = {}) {
   };
 }
 
+/** Mocked network: `fetch` for R2 uploads, and the same function as `get` for input downloads. */
 function mockFetch() {
-  const calls: { url: string; method: string; bytes: number }[] = [];
+  const calls: { url: string; method: string; bytes: number; length: string | null }[] = [];
   const fetch = async (input: string | URL, init?: RequestInit) => {
     const url = String(input);
-    const body = init?.body as Uint8Array | undefined;
-    calls.push({ url, method: init?.method ?? "GET", bytes: body?.byteLength ?? 0 });
+    const bytes = init?.body ? (await new Response(init.body).arrayBuffer()).byteLength : 0;
+    const length = new Headers(init?.headers).get("content-length");
+    calls.push({ url, method: init?.method ?? "GET", bytes, length });
     if (url === "https://cdn.example.com/photo.png") return new Response("PIXELS");
     if (url === "https://cdn.example.com/redirect") {
       return new Response(null, { status: 302, headers: { location: "https://127.0.0.1/x" } });
+    }
+    const hop = /^https:\/\/cdn\.example\.com\/hop(\d+)$/.exec(url);
+    if (hop) {
+      const next = Number(hop[1]) + 1;
+      const location = next > 5 ? "/photo.png" : `/hop${next}`;
+      return new Response(null, { status: 302, headers: { location } });
+    }
+    if (url === "https://rebind.example.com/x.png") {
+      const { BlockedAddressError } = await load("../container/job-network.mjs");
+      throw new BlockedAddressError();
     }
     if (url.startsWith("https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com/")) {
       return new Response("", { status: 200 });
     }
     throw new Error(`unexpected fetch ${url}`);
   };
-  return { fetch, calls };
+  return { fetch, get: fetch, calls };
 }
 
 describe("container job runner", () => {
   it("downloads inputs, runs the CLI with a clean env, and reports outputs (no R2)", async () => {
     const { runJob } = await load("../container/job-runner.mjs");
-    const { fetch } = mockFetch();
-    const result = await runJob(spec(), { bin: FAKE_BIN, fetch });
+    const { fetch, get } = mockFetch();
+    const result = await runJob(spec(), { bin: FAKE_BIN, fetch, get });
     expect(result.status).toBe("succeeded");
     expect(result.exitCode).toBe(0);
     const seen = JSON.parse(result.stdout);
@@ -83,11 +95,11 @@ describe("container job runner", () => {
 
   it("uploads every output under the job prefix with safe names", async () => {
     const { runJob } = await load("../container/job-runner.mjs");
-    const { fetch, calls } = mockFetch();
+    const { fetch, get, calls } = mockFetch();
     const keyPrefix = `multix/0123456789abcdef/${JOB_ID}`;
     const result = await runJob(
       spec({ upload: { r2: { ...R2, publicBaseUrl: "https://media.example.com" }, keyPrefix } }),
-      { bin: FAKE_BIN, fetch },
+      { bin: FAKE_BIN, fetch, get },
     );
     expect(result.status).toBe("succeeded");
     expect(result.outputs.map((o: { url: string }) => o.url)).toEqual([
@@ -99,14 +111,23 @@ describe("container job runner", () => {
       `/media/${keyPrefix}/result.txt`,
       `/media/${keyPrefix}/1-result.txt`,
     ]);
+    // Streamed from disk with an explicit length.
+    expect(puts.map((c) => [c.bytes, c.length])).toEqual([
+      [5, "5"],
+      [5, "5"],
+    ]);
     expect(JSON.stringify(result)).not.toContain(R2.secretAccessKey);
   }, 30_000);
 
   it("returns 7-day presigned links without a public base URL", async () => {
     const { runJob } = await load("../container/job-runner.mjs");
-    const { fetch } = mockFetch();
+    const { fetch, get } = mockFetch();
     const keyPrefix = `multix/0123456789abcdef/${JOB_ID}`;
-    const result = await runJob(spec({ upload: { r2: R2, keyPrefix } }), { bin: FAKE_BIN, fetch });
+    const result = await runJob(spec({ upload: { r2: R2, keyPrefix } }), {
+      bin: FAKE_BIN,
+      fetch,
+      get,
+    });
     const url = new URL(result.outputs[0].url);
     expect(url.searchParams.get("X-Amz-Expires")).toBe("604800");
     expect(url.searchParams.get("X-Amz-Signature")).toMatch(/^[0-9a-f]{64}$/);
@@ -114,28 +135,85 @@ describe("container job runner", () => {
 
   it("reports a failing CLI, a refused input and a timeout", async () => {
     const { runJob } = await load("../container/job-runner.mjs");
-    const { fetch } = mockFetch();
-    const failed = await runJob(spec({ argv: ["x", "--fail"] }), { bin: FAKE_BIN, fetch });
+    const { fetch, get } = mockFetch();
+    const failed = await runJob(spec({ argv: ["x", "--fail"] }), { bin: FAKE_BIN, fetch, get });
     expect(failed).toMatchObject({ status: "failed", exitCode: 3 });
 
     const redirected = await runJob(
       spec({ inputs: [{ url: "https://cdn.example.com/redirect", path: "in/0-a.png" }] }),
-      { bin: FAKE_BIN, fetch },
+      { bin: FAKE_BIN, fetch, get },
     );
     expect(redirected).toMatchObject({ status: "failed", exitCode: null });
     expect(redirected.error).toBe("Input URL must be a public https URL");
 
     const escaped = await runJob(
       spec({ inputs: [{ url: "https://cdn.example.com/photo.png", path: "in/../../x" }] }),
-      { bin: FAKE_BIN, fetch },
+      { bin: FAKE_BIN, fetch, get },
     );
     expect(escaped.error).toBe("Input path is not valid");
 
     const slow = await runJob(spec({ argv: ["x", "--sleep"], inputs: [], timeoutMs: 500 }), {
       bin: FAKE_BIN,
       fetch,
+      get,
     });
     expect(slow.status).toBe("timed_out");
+  }, 30_000);
+
+  it("follows up to 5 redirects and refuses an input that resolves to a private address", async () => {
+    const { runJob } = await load("../container/job-runner.mjs");
+    const { fetch, get } = mockFetch();
+    const five = await runJob(
+      spec({ inputs: [{ url: "https://cdn.example.com/hop1", path: "in/0-photo.png" }] }),
+      { bin: FAKE_BIN, fetch, get },
+    );
+    expect(five.status).toBe("succeeded");
+    expect(JSON.parse(five.stdout).input).toBe("PIXELS");
+    const six = await runJob(
+      spec({ inputs: [{ url: "https://cdn.example.com/hop0", path: "in/0-photo.png" }] }),
+      { bin: FAKE_BIN, fetch, get },
+    );
+    expect(six.error).toBe("Input download failed: too many redirects");
+    const rebound = await runJob(
+      spec({ inputs: [{ url: "https://rebind.example.com/x.png", path: "in/0-x.png" }] }),
+      { bin: FAKE_BIN, fetch, get },
+    );
+    expect(rebound.error).toBe("Input URL must resolve to a public address");
+  }, 30_000);
+
+  it("shares one deadline across downloads and the CLI", async () => {
+    const { runJob } = await load("../container/job-runner.mjs");
+    const { fetch } = mockFetch();
+    const stalled = (_url: URL, init: { signal: AbortSignal }) =>
+      new Promise<Response>((_resolve, reject) => {
+        init.signal.addEventListener("abort", () => reject(init.signal.reason));
+      });
+    const started = Date.now();
+    const result = await runJob(spec({ timeoutMs: 400 }), { bin: FAKE_BIN, fetch, get: stalled });
+    expect(Date.now() - started).toBeLessThan(5_000);
+    expect(result).toMatchObject({ status: "timed_out", exitCode: null });
+    expect(result.error).toBe("The job did not finish within its time limit");
+  }, 30_000);
+
+  it("redacts before truncating and reports an output flood as a failure", async () => {
+    const { runJob } = await load("../container/job-runner.mjs");
+    const { fetch, get } = mockFetch();
+    const cut = await runJob(spec({ argv: ["x", "--key-at-cut"], inputs: [] }), {
+      bin: FAKE_BIN,
+      fetch,
+      get,
+    });
+    // Cut through the marker, not through the key: no part of the key is left.
+    expect(cut.stderrTail.startsWith("…[truncated]\nedacted]")).toBe(true);
+    expect(cut.stderrTail).not.toContain(KEY.slice(-12));
+
+    const flood = await runJob(spec({ argv: ["x", "--flood"], inputs: [] }), {
+      bin: FAKE_BIN,
+      fetch,
+      get,
+    });
+    expect(flood.status).toBe("failed");
+    expect(flood.error).toMatch(/more than 16 MB/);
   }, 30_000);
 
   it("validates the job body shape and the env names it may pass", async () => {
@@ -146,6 +224,80 @@ describe("container job runner", () => {
     expect(() => validateSpec(spec({ argv: [] }))).toThrow();
     expect(() => validateSpec(spec({ upload: { r2: R2, keyPrefix: "../other" } }))).toThrow();
     expect(() => validateSpec(null)).toThrow();
+  });
+});
+
+describe("container network guard", () => {
+  it("accepts only public unicast addresses", async () => {
+    const { isPublicAddress } = await load("../container/job-network.mjs");
+    for (const ip of ["93.184.216.34", "1.1.1.1", "2606:4700:4700::1111", "::ffff:8.8.8.8"]) {
+      expect(isPublicAddress(ip), ip).toBe(true);
+    }
+    for (const ip of [
+      "0.0.0.0",
+      "10.1.2.3",
+      "100.64.0.1",
+      "100.127.255.254",
+      "127.0.0.1",
+      "169.254.169.254",
+      "172.16.0.1",
+      "172.31.255.255",
+      "192.168.1.1",
+      "192.0.0.1",
+      "198.18.0.1",
+      "224.0.0.1",
+      "255.255.255.255",
+      "::",
+      "::1",
+      "::ffff:127.0.0.1",
+      "::ffff:10.0.0.1",
+      "64:ff9b::a9fe:a9fe",
+      "2002:a00:1::",
+      "fc00::1",
+      "fd12:3456::1",
+      "fe80::1",
+      "ff02::1",
+      "2001:db8::1",
+      "not-an-ip",
+    ]) {
+      expect(isPublicAddress(ip), ip).toBe(false);
+    }
+  });
+
+  it("refuses a name that resolves to any private address and pins the checked ones", async () => {
+    const { createPublicLookup } = await load("../container/job-network.mjs");
+    const resolver =
+      (addresses: { address: string; family: number }[]) =>
+      (_host: string, _opts: unknown, cb: (e: unknown, a: unknown) => void) =>
+        cb(null, addresses);
+    const call = (lookup: Any, options: unknown) =>
+      new Promise<unknown[]>((resolve) =>
+        lookup("cdn.example.com", options, (...args: unknown[]) => resolve(args)),
+      );
+    const mixed = createPublicLookup(
+      resolver([
+        { address: "93.184.216.34", family: 4 },
+        { address: "10.0.0.5", family: 4 },
+      ]),
+    );
+    const [error] = await call(mixed, { all: true });
+    expect((error as Error).message).toBe("Input URL must resolve to a public address");
+
+    const good = [{ address: "93.184.216.34", family: 4 }];
+    const pinned = createPublicLookup(resolver(good));
+    expect(await call(pinned, { all: true })).toEqual([null, good]);
+    expect(await call(pinned, {})).toEqual([null, "93.184.216.34", 4]);
+  });
+
+  it("connects through the checked lookup, so a private answer never gets a socket", async () => {
+    const { createPublicLookup, publicHttpsGet } = await load("../container/job-network.mjs");
+    const lookup = createPublicLookup(
+      (_host: string, _opts: unknown, cb: (e: unknown, a: unknown) => void) =>
+        cb(null, [{ address: "127.0.0.1", family: 4 }]),
+    );
+    await expect(
+      publicHttpsGet(new URL("https://cdn.example.com/x.png"), { lookup }),
+    ).rejects.toMatchObject({ code: "EBLOCKEDADDRESS" });
   });
 });
 

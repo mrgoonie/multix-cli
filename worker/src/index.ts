@@ -26,6 +26,7 @@ import { isAllowed } from "./accounts/allowlist.js";
 import { type AppDeps, publicOrigin, resolveAppContext } from "./app-context.js";
 import { type WorkerEnv, serverSettings } from "./config.js";
 import { json, text } from "./http-responses.js";
+import { durableJobQuota } from "./jobs/account-job-quota.js";
 import type { JobToolsContext } from "./jobs/job-runner.js";
 import { JobStore, durableJobBackend } from "./jobs/job-store.js";
 import { handleMcpRequest } from "./mcp-api-handler.js";
@@ -80,15 +81,18 @@ async function handleAuthenticatedMcp(
   }
   const keys = await app.accounts.providerKeys(account.id);
   const toolEnv = toolEnvFor(serverSettings(env), keys);
-  const jobs: JobToolsContext | undefined = env.MULTIX_JOBS
-    ? {
-        userId: account.id,
-        keys,
-        store: new JobStore(env.ACCOUNTS_KV),
-        backend: deps.jobBackend ?? durableJobBackend(env.MULTIX_JOBS),
-        r2Settings: () => app.accounts.r2Settings(account.id),
-      }
-    : undefined;
+  // The CLI runner needs both Durable Objects: the per-job container and the per-account quota.
+  const jobs: JobToolsContext | undefined =
+    env.MULTIX_JOBS && env.MULTIX_JOB_QUOTA
+      ? {
+          userId: account.id,
+          keys,
+          store: new JobStore(env.ACCOUNTS_KV),
+          backend: deps.jobBackend ?? durableJobBackend(env.MULTIX_JOBS),
+          quota: durableJobQuota(env.MULTIX_JOB_QUOTA),
+          r2Settings: () => app.accounts.r2Settings(account.id),
+        }
+      : undefined;
   return handleMcpRequest(request, toolEnv, { fetch: deps.fetch, jobs });
 }
 
@@ -183,6 +187,7 @@ export function createWorker(deps: AppDeps = {}): ExportedHandler<WorkerEnv> {
   };
 }
 
+export { AccountJobQuota } from "./jobs/account-job-quota.js";
 export { MultixJobContainer } from "./jobs/multix-job-container.js";
 
 export default createWorker();

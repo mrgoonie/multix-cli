@@ -26,7 +26,7 @@ does not change how `multix` behaves on your machine.
 | `multix_prediction_status` | Poll a prediction by provider and ID. |
 | `multix_prediction_cancel` | Cancel a running prediction (Replicate only). |
 | `multix_catalog` | The CLI commands `multix_run` can run. Without `group`: every group, its commands and whether you saved keys for it. With `group`: each command's positionals and options, which ones take files, and the values the server forces. |
-| `multix_run` | Run one CLI command in its own container with your saved keys. Waits up to `wait_seconds` (default 25, max 50), then returns the result or a job ID to poll. |
+| `multix_run` | Run one CLI command in its own container with your saved keys. Waits up to `wait_seconds` (default 25, max 40, container start included), then returns the result or a job ID to poll. At most 2 running jobs per account. |
 | `multix_job_status` | Read a `multix_run` job: status, output URLs, stdout and the tail of stderr. |
 | `multix_job_cancel` | Stop a running job and its container. |
 
@@ -55,7 +55,8 @@ JSON:
   200 MB each) and passes the local paths to the CLI. Plain file paths are
   rejected. Where a provider accepts its own asset ID, `asset:<id>` can be
   given as the value instead.
-- `wait_seconds`: how long the call waits for the job (0–50, default 25).
+- `wait_seconds`: how long the call waits for the job, counted from the
+  call, so starting the container is included (0–40, default 25).
 
 Call `multix_catalog` with a group to see exactly which options a command
 takes and which of them are files. An example call:
@@ -82,15 +83,24 @@ The result is always the same shape:
 }
 ```
 
-`status` is `starting`, `running`, `succeeded`, `failed`, `timed_out` or
-`canceled`. While it is `starting` or `running`, the result has a `next` hint: call `multix_job_status` with
-the `job_id` every 10–30 seconds. A job can run for up to 30 minutes, and its
+`status` is `running`, `succeeded`, `failed`, `timed_out` or `canceled`.
+While it is `running`, the result has a `next` hint: call `multix_job_status`
+with the `job_id` every 10–30 seconds. One 30-minute limit covers the whole
+job: downloading inputs, running the CLI and uploading outputs. The job's
 record is kept for 7 days. Only the account that started a job can read or
 cancel it.
 
-**Output files need R2.** Every file the CLI writes is uploaded to your own R2
-bucket under `multix/<account hash>/<job id>/<name>`, and `outputs` lists its
-public or presigned URL. If you have not saved an R2 bucket, the job still
+**Concurrency.** Each account can have at most **2** jobs running at once. A
+third `multix_run` fails with `busy: you already have 2 running jobs` until one
+ends; cancel one with `multix_job_cancel` if needed. A job's slot is given back
+when it ends, and frees itself after about 45 minutes if the job was lost.
+When every job container on the server is in use (`max_instances`), the call
+fails with `server at capacity` instead; retry after a few minutes.
+
+**Output files need R2.** The files the CLI writes are uploaded to your own R2
+bucket under `multix/<account hash>/<job id>/<name>`, and `outputs` lists their
+public or presigned URLs. At most 50 files are reported per job, and a file
+over 500 MB is listed with `url: null` instead of being uploaded. If you have not saved an R2 bucket, the job still
 runs, but each output has `url: null` and the result carries a `note` asking
 you to configure R2 in `/dashboard`. stdout (with any provider URLs
 the CLI prints) is returned either way. Keys never appear in `stdout` or
@@ -100,8 +110,12 @@ Server limits apply to `multix_run` too: the output count
 (`MULTIX_MCP_MAX_OUTPUTS`), video length (`MULTIX_MCP_MAX_VIDEO_SECONDS`, also
 sent when a video command's default is unknown or longer) and resolution
 (`MULTIX_MCP_ALLOWED_RESOLUTIONS`). The server chooses the output directory,
-`--output` must be a plain file name, the OpenAI image commands always use the
-API driver, and `@file` values are rejected.
+`--output` must be a plain file name, options the CLI turns into part of a
+file name (such as `elevenlabs voices design --output-prefix` or a dub
+language) accept only letters, digits, `_` and `-`, the OpenAI image commands
+always use the API driver, and `@file` values are rejected. Commands that
+change your own provider account (for example deleting an ElevenLabs voice)
+run like any other, with your key.
 
 ### Not available remotely
 
@@ -193,7 +207,9 @@ image to Cloudflare.
    `MultixJobContainer`, instance type `basic`, at most 10 instances) and the
    `MULTIX_JOBS` Durable Object binding enable `multix_run`. To deploy without
    the CLI runner (no Docker, Workers Free), remove `containers`,
-   `durable_objects` and `exports`; the four job tools are then not listed.
+   `durable_objects` and `exports`; the four job tools are then not listed. The
+   `MULTIX_JOB_QUOTA` binding (class `AccountJobQuota`) holds each account's
+   running-job count and is required together with `MULTIX_JOBS`.
 4. **Set the secrets** and deploy:
 
    ```bash
@@ -463,9 +479,12 @@ within your Cloudflare account. If another Worker already uses `1001` or
   shell. The CLI process gets only the keys for the command's provider group,
   a fresh temporary home directory and `MULTIX_DISABLE_HOME_ENV=1`. Input URLs
   go through the same SSRF guard in the Worker and again in the container on
-  every redirect. The temporary directory is deleted when the job ends, stdout
-  and stderr are cut to 16 KB and scrubbed of key values, and only the job ID
-  and status are logged. The `job:<id>` record in `ACCOUNTS_KV` holds the
+  every redirect; the container also resolves each host and refuses to
+  connect when any address is private, loopback, link-local, CGNAT or ULA,
+    connecting only to the addresses it checked (at most 5 redirects). Output
+  files are streamed to R2 without being loaded into memory. The temporary
+  directory is deleted when the job ends, stdout and stderr are scrubbed of key
+  values and then cut to 16 KB, and only the job ID and status are logged. The `job:<id>` record in `ACCOUNTS_KV` holds the
   owner, command and start time, never keys.
 - **Stateless MCP:** no MCP sessions. Each request builds a fresh server with
   the caller's keys. OAuth state and accounts live in KV.
