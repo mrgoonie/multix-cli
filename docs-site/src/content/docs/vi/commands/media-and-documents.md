@@ -56,9 +56,9 @@ multix media batch --input-dir ./source --output-dir ./optimized
 ```
 
 Audio được encode lại thành mono 16 kHz với codec chọn theo phần mở rộng của
-output: `.mp3` dùng `libmp3lame`, `.m4a` và `.aac` dùng `aac`, `.ogg` và
-`.opus` dùng `libopus`, còn `.wav`, `.aiff` và `.flac` được ghi lossless
-(bỏ qua `--bitrate`). Phần mở rộng audio khác bị từ chối trước khi chạy ffmpeg.
+output: `.mp3` dùng `libmp3lame`, `.m4a`, `.aac`, `.mp4` và `.mka` dùng `aac`, `.ogg` và
+`.opus` dùng `libopus`, còn `.wav`, `.aiff` và `.flac` dùng codec lossless
+(bỏ qua `--bitrate`). Ảnh bìa nhúng trong file bị bỏ. Phần mở rộng audio khác bị từ chối trước khi chạy ffmpeg.
 
 ## Chuyển tài liệu
 

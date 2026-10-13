@@ -58,9 +58,9 @@ multix media batch --input-dir ./source --output-dir ./optimized
 ```
 
 Audio is re-encoded as 16 kHz mono with a codec chosen from the output
-extension: `.mp3` uses `libmp3lame`, `.m4a` and `.aac` use `aac`, `.ogg` and
-`.opus` use `libopus`, and `.wav`, `.aiff` and `.flac` are written lossless
-(`--bitrate` is ignored for them). Any other audio output extension is
+extension: `.mp3` uses `libmp3lame`, `.m4a`, `.aac`, `.mp4` and `.mka` use `aac`, `.ogg` and
+`.opus` use `libopus`, and `.wav`, `.aiff` and `.flac` use a lossless
+codec (`--bitrate` is ignored for them). Embedded cover art is dropped. Any other audio output extension is
 rejected before ffmpeg runs.
 
 ## Document conversion

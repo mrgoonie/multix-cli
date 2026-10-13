@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { AUDIO_EXTS } from "../../../../src/commands/media/detect-type.js";
 import { buildAudioArgs } from "../../../../src/commands/media/optimize-audio.js";
 import { ValidationError } from "../../../../src/core/errors.js";
 
@@ -12,6 +13,8 @@ describe("buildAudioArgs", () => {
     ["a.mp3", "libmp3lame"],
     ["a.m4a", "aac"],
     ["a.aac", "aac"],
+    ["a.mp4", "aac"],
+    ["a.mka", "aac"],
     ["a.ogg", "libopus"],
     ["a.opus", "libopus"],
     ["a.wav", "pcm_s16le"],
@@ -27,6 +30,7 @@ describe("buildAudioArgs", () => {
       "-i",
       "in.wav",
       "-y",
+      "-vn",
       "-c:a",
       "libmp3lame",
       "-b:a",
@@ -39,12 +43,29 @@ describe("buildAudioArgs", () => {
     ]);
   });
 
-  it("omits the bitrate for lossless codecs", () => {
-    expect(build("a.wav")).not.toContain("-b:a");
+  it("omits the bitrate for lossless codecs but keeps 16 kHz mono", () => {
+    expect(build("a.wav")).toEqual([
+      "-i",
+      "in.wav",
+      "-y",
+      "-vn",
+      "-c:a",
+      "pcm_s16le",
+      "-ar",
+      "16000",
+      "-ac",
+      "1",
+      "a.wav",
+    ]);
     expect(build("a.flac")).not.toContain("-b:a");
   });
 
-  it.each(["a.mp4", "a.txt", "a"])("rejects %s before ffmpeg runs", (output) => {
+  // batch writes each file under its input name, so every audio input must be a valid output
+  it.each([...AUDIO_EXTS])("accepts the batch input extension %s as an output", (ext) => {
+    expect(() => build(`a${ext}`)).not.toThrow();
+  });
+
+  it.each(["a.mov", "a.txt", "a"])("rejects %s with a ValidationError", (output) => {
     expect(() => build(output)).toThrow(ValidationError);
   });
 });
