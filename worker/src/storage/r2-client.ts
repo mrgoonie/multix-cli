@@ -59,12 +59,29 @@ function assertBucket(bucket: string): void {
   if (!BUCKET_RE.test(bucket)) throw new Error("Invalid R2 bucket name");
 }
 
+/** RFC 3986 encoding; encodeURIComponent leaves !'()* raw, which SigV4 signs encoded. */
+function encodeSegment(segment: string): string {
+  return encodeURIComponent(segment).replace(
+    /[!'()*]/g,
+    (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+}
+
+/**
+ * Encode an object key as a URL path. Empty, "." and ".." segments are refused:
+ * URL parsing collapses dot segments, so they could address another bucket.
+ */
 function encodeKey(key: string): string {
   const bytes = encoder.encode(key).byteLength;
-  if (bytes === 0 || bytes > MAX_KEY_BYTES || key.startsWith("/")) {
+  const segments = key.split("/");
+  if (
+    bytes === 0 ||
+    bytes > MAX_KEY_BYTES ||
+    segments.some((s) => s === "" || s === "." || s === "..")
+  ) {
     throw new Error("Invalid R2 object key");
   }
-  return key.split("/").map(encodeURIComponent).join("/");
+  return segments.map(encodeSegment).join("/");
 }
 
 async function errorCode(response: Response): Promise<string | undefined> {

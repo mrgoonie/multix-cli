@@ -21,8 +21,8 @@ const ok: Responder = () => new Response(null, { status: 200 });
 function r2Routes(list: Responder = ok, put: Responder = ok, del: Responder = ok) {
   return [
     route("GET", /^https:\/\/[0-9a-f]{32}\.r2\.cloudflarestorage\.com\/.*list-type=2/, list),
-    route("PUT", /\.r2\.cloudflarestorage\.com\/my-bucket\/\.multix-probe$/, put),
-    route("DELETE", /\.r2\.cloudflarestorage\.com\/my-bucket\/\.multix-probe$/, del),
+    route("PUT", /\.r2\.cloudflarestorage\.com\/my-bucket\/\.multix-probe-[0-9a-f-]+$/, put),
+    route("DELETE", /\.r2\.cloudflarestorage\.com\/my-bucket\/\.multix-probe-[0-9a-f-]+$/, del),
   ];
 }
 
@@ -192,6 +192,12 @@ describe("dashboard R2 storage", () => {
     const otherKey = importEncryptionKey(bytesToBase64(new Uint8Array(32).fill(9)));
     expect(await new AccountStore(env.ACCOUNTS_KV, otherKey).r2Settings(USER_ID)).toBeNull();
     expect(await store(env).r2Settings(USER_ID)).not.toBeNull();
+  });
+
+  it("treats a malformed settings record as not configured", async () => {
+    const { env } = await signedIn();
+    await env.ACCOUNTS_KV.put(`r2:${USER_ID}`, "{not json");
+    expect(await store(env).r2Settings(USER_ID)).toBeNull();
   });
 
   it("keeps the dashboard CSP: no scripts, inline styles only", async () => {

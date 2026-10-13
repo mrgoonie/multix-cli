@@ -76,9 +76,11 @@ provider và không tải lên R2.
    bucket). Không có URL công khai thì file nhận liên kết presigned có hiệu lực
    tối đa 7 ngày.
 3. **Check and save** liệt kê bucket (`ListObjectsV2`, một key), tải lên một
-   object rỗng `.multix-probe` rồi xóa nó. Nếu một bước thất bại thì không có
+   object rỗng `.multix-probe-*` rồi xóa nó. Nếu một bước thất bại thì không có
    gì được lưu; trang cho biết bước nào (credential bị từ chối, không có
-   bucket, token chỉ đọc, không kết nối được R2).
+   bucket, token chỉ đọc, không xóa được object thử, không kết nối được R2).
+   Nên dùng token chỉ cấp quyền cho một bucket: token toàn tài khoản truy cập
+   được mọi bucket.
 
 Thiết lập được lưu thành một bản ghi AES-GCM dưới `r2:<account>` trong
 `ACCOUNTS_KV`, giống provider key. Trang chỉ hiển thị tên bucket và URL công

@@ -34,6 +34,29 @@ describe("R2Client", () => {
     expect(JSON.stringify(call)).not.toContain(SECRET);
   });
 
+  it("refuses dot segments that URL parsing would collapse out of the bucket", async () => {
+    const r2 = mockFetch(route("PUT", /./, () => new Response(null)));
+    const client = new R2Client({ ...CREDS, fetch: r2.fetch });
+    for (const key of ["../other-bucket/x", ".", "a/../b", "a/./b", "a//b", "a/", "/a"]) {
+      await expect(client.putObject("my-bucket", key, "x", "text/plain")).rejects.toThrow(
+        "Invalid R2 object key",
+      );
+      await expect(client.deleteObject("my-bucket", key)).rejects.toThrow("Invalid R2 object key");
+    }
+    expect(r2.calls).toHaveLength(0);
+  });
+
+  it("encodes !'()* in key paths so the request path matches what SigV4 signs", async () => {
+    const r2 = mockFetch(route("PUT", /./, () => new Response(null)));
+    await new R2Client({ ...CREDS, fetch: r2.fetch }).putObject(
+      "my-bucket",
+      "a/it's (1)!*.png",
+      "x",
+      "image/png",
+    );
+    expect(r2.calls[0]?.url).toBe(`${HOST}/my-bucket/a/it%27s%20%281%29%21%2A.png`);
+  });
+
   it("lists one key to prove read access", async () => {
     const r2 = mockFetch(route("GET", /./, () => new Response("<ListBucketResult/>")));
     await new R2Client({ ...CREDS, fetch: r2.fetch }).listProbe("my-bucket");
@@ -101,8 +124,8 @@ describe("checkR2Access", () => {
       route("GET", /list-type=2/, () =>
         list === 200 ? new Response("<ListBucketResult/>") : xmlError(list, "Err"),
       ),
-      route("PUT", /\/\.multix-probe$/, () => new Response(null, { status: put })),
-      route("DELETE", /\/\.multix-probe$/, () => new Response(null, { status: del })),
+      route("PUT", /\/\.multix-probe-[0-9a-f-]+$/, () => new Response(null, { status: put })),
+      route("DELETE", /\/\.multix-probe-[0-9a-f-]+$/, () => new Response(null, { status: del })),
     );
   }
 

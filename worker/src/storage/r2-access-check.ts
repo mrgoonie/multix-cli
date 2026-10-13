@@ -10,8 +10,8 @@
 import type { FetchLike } from "../../../src/core/fetch-json.js";
 import { R2Client, type R2Credentials, R2RequestError } from "./r2-client.js";
 
-/** Object written and removed again by the write check. */
-export const R2_PROBE_KEY = ".multix-probe";
+/** Prefix of the object written and removed again by the write check; a random suffix keeps it off user objects. */
+export const R2_PROBE_PREFIX = ".multix-probe-";
 /** Per-request timeout for the checks, so a hung connection cannot stall the dashboard. */
 const CHECK_TIMEOUT_MS = 10_000;
 
@@ -49,10 +49,11 @@ export async function checkR2Access(
   fetch?: FetchLike,
 ): Promise<R2AccessResult> {
   const client = new R2Client({ ...settings, fetch, timeoutMs: CHECK_TIMEOUT_MS });
+  const probeKey = `${R2_PROBE_PREFIX}${crypto.randomUUID()}`;
   const steps: ["list" | "put" | "delete", () => Promise<void>][] = [
     ["list", () => client.listProbe(settings.bucket)],
-    ["put", () => client.putObject(settings.bucket, R2_PROBE_KEY, new Uint8Array(0), "text/plain")],
-    ["delete", () => client.deleteObject(settings.bucket, R2_PROBE_KEY)],
+    ["put", () => client.putObject(settings.bucket, probeKey, new Uint8Array(0), "text/plain")],
+    ["delete", () => client.deleteObject(settings.bucket, probeKey)],
   ];
   for (const [step, run] of steps) {
     try {

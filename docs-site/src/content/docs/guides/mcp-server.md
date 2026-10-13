@@ -77,9 +77,10 @@ URLs and do not upload to R2.
    `r2.dev` address serving the bucket). Without a public URL, files get
    presigned links valid for up to 7 days.
 3. **Check and save** lists the bucket (`ListObjectsV2`, one key), uploads an
-   empty `.multix-probe` object and deletes it again. Nothing is saved if a
+   empty `.multix-probe-*` object and deletes it again. Nothing is saved if a
    step fails; the page says which one (credentials refused, bucket missing,
-   read-only token, R2 unreachable).
+   read-only token, probe could not be deleted, R2 unreachable). Bucket-scoped
+   tokens are recommended: an account-wide token can reach every bucket.
 
 The settings are stored as one AES-GCM record under `r2:<account>` in
 `ACCOUNTS_KV`, like provider keys. The page shows only the bucket name and

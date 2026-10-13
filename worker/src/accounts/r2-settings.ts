@@ -128,9 +128,9 @@ export async function readR2Settings(
   cryptoKey: CryptoKey,
   userId: string,
 ): Promise<R2Settings | null> {
-  const record = await kv.get<StoredR2Settings>(r2SettingsKey(userId), { type: "json" });
-  if (!record) return null;
   try {
+    const record = await kv.get<StoredR2Settings>(r2SettingsKey(userId), { type: "json" });
+    if (!record) return null;
     const parsed: unknown = JSON.parse(await decryptSecret(cryptoKey, userId, RECORD_NAME, record));
     if (isR2Settings(parsed)) return parsed;
   } catch {

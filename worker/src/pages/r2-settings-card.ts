@@ -22,7 +22,7 @@ function status(summary: R2SettingsSummary | null, csrf: string): string {
   }
   const links = summary.publicBaseUrl
     ? `public URLs under <span class="mono">${escapeHtml(summary.publicBaseUrl)}</span>`
-    : "presigned links valid for 7 days";
+    : "presigned links valid for up to 7 days";
   return `<div class="row" style="justify-content:space-between;margin-bottom:12px">
 <div><span class="badge ok">Configured</span> Bucket <span class="mono">${escapeHtml(summary.bucket)}</span><br><small class="muted">Outputs get ${links}.</small></div>
 <form method="post" action="/dashboard/storage">${hidden("csrf", csrf)}<button class="btn danger small" name="intent" value="delete">Remove</button></form>
@@ -33,7 +33,7 @@ export function r2SettingsCard(summary: R2SettingsSummary | null, csrf: string):
   const action = summary ? "Check and replace" : "Check and save";
   return `<section class="card">
 <h2>R2 storage</h2>
-<p class="muted"><small>Your own Cloudflare R2 bucket for files your MCP jobs create. Use an R2 API token with Object Read &amp; Write on this bucket. Saving lists the bucket and writes, then deletes, an empty <span class="mono">.multix-probe</span> object; nothing is saved if a check fails. Saved credentials are encrypted and never shown again.</small></p>
+<p class="muted"><small>Your own Cloudflare R2 bucket for files your MCP jobs create. Use an R2 API token with Object Read &amp; Write on this bucket. Saving lists the bucket and writes, then deletes, an empty <span class="mono">.multix-probe-*</span> object; nothing is saved if a check fails. Saved credentials are encrypted and never shown again.</small></p>
 ${status(summary, csrf)}
 <form method="post" action="/dashboard/storage" autocomplete="off">
 ${hidden("csrf", csrf)}
