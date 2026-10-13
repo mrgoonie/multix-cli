@@ -691,7 +691,8 @@ instance runs at `https://multix.zuey.me/mcp` (invited GitHub accounts only).
   AI Gateway; returns an ID without blocking), `multix_prediction_status`,
   `multix_prediction_cancel` (Replicate). Results are provider URLs, not bytes.
 - Auth: OAuth 2.1 (dynamic client registration, PKCE) with GitHub sign-in.
-  Only GitHub logins or verified emails in `MULTIX_ALLOWED_USERS` can sign in.
+  Only GitHub logins or verified emails in the `MULTIX_ALLOWED_USERS` secret
+  can sign in.
   `/health` is public.
 - Per-account keys: each account saves its own provider keys at `/dashboard`
   (AES-GCM encrypted in KV) and spends its own credits. The dashboard also
@@ -717,6 +718,7 @@ cd worker && npx wrangler secret put GITHUB_CLIENT_ID
 npx wrangler secret put GITHUB_CLIENT_SECRET
 openssl rand -hex 32 | npx wrangler secret put SESSION_SECRET
 openssl rand -base64 32 | npx wrangler secret put SECRETS_ENCRYPTION_KEY
+npx wrangler secret put MULTIX_ALLOWED_USERS     # GitHub logins or emails
 cd .. && npm run deploy:mcp                   # or: npm run dev:mcp (local, port 8787)
 ```
 

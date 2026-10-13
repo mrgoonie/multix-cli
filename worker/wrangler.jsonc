@@ -3,6 +3,8 @@
 //   GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET   GitHub OAuth App (callback: <origin>/oauth/github/callback)
 //   SESSION_SECRET                           32+ random characters
 //   SECRETS_ENCRYPTION_KEY                   base64 of 32 random bytes (openssl rand -base64 32)
+//   MULTIX_ALLOWED_USERS                     GitHub logins or verified emails allowed to sign in
+//                                            (comma-separated; a secret so emails stay out of git)
 // Provider keys are not Worker secrets: each account saves its own in /dashboard.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
@@ -42,7 +44,6 @@
   ],
   "vars": {
     "MULTIX_PUBLIC_URL": "https://multix.zuey.me",
-    "MULTIX_ALLOWED_USERS": "mrgoonie",
     "MULTIX_MCP_MAX_OUTPUTS": "4",
     "MULTIX_MCP_MAX_VIDEO_SECONDS": "10",
     "MULTIX_MCP_ALLOWED_RESOLUTIONS": "480p,720p,768p,1080p"

@@ -75,9 +75,8 @@ Yêu cầu: Node 20+, tài khoản Cloudflare có zone cho tên miền của b�
    ```
 
 3. **Sửa `worker/wrangler.jsonc`:** đặt `routes` theo host của bạn,
-   `MULTIX_PUBLIC_URL` là origin công khai, và `MULTIX_ALLOWED_USERS` là các
-   login GitHub hoặc email đã xác minh được phép đăng nhập. File trong
-   repository đang cấu hình cho `multix.zuey.me`.
+   và `MULTIX_PUBLIC_URL` là origin công khai. File trong repository đang cấu
+   hình cho `multix.zuey.me`.
 4. **Đặt secret** và triển khai:
 
    ```bash
@@ -88,6 +87,8 @@ Yêu cầu: Node 20+, tài khoản Cloudflare có zone cho tên miền của b�
    npx wrangler secret put GITHUB_CLIENT_SECRET
    openssl rand -hex 32 | npx wrangler secret put SESSION_SECRET
    openssl rand -base64 32 | npx wrangler secret put SECRETS_ENCRYPTION_KEY
+   # Login GitHub hoặc email đã xác minh được phép đăng nhập, phân tách bằng dấu phẩy
+   npx wrangler secret put MULTIX_ALLOWED_USERS
    cd ..
    npm run deploy:mcp
    ```
@@ -161,8 +162,9 @@ Secret (đặt bằng `npx wrangler secret put <NAME>`):
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | GitHub OAuth App dùng để đăng nhập. |
 | `SESSION_SECRET` | Ít nhất 32 ký tự. Ký cookie dashboard và token của form. |
 | `SECRETS_ENCRYPTION_KEY` | Base64 của đúng 32 byte ngẫu nhiên. Mã hóa provider key đã lưu. |
+| `MULTIX_ALLOWED_USERS` | Login GitHub (không phân biệt hoa thường) hoặc email đã xác minh (mục có `@`) được phép đăng nhập, phân tách bằng dấu phẩy. Chưa đặt hoặc để trống thì không ai đăng nhập được. Đặt dưới dạng secret để danh sách (có thể chứa email) không nằm trong repository, và đổi được mà không cần deploy. |
 
-Nếu thiếu hoặc sai bất kỳ secret nào, hoặc `MULTIX_PUBLIC_URL` không phải
+Nếu thiếu hoặc sai một trong bốn secret đầu, hoặc `MULTIX_PUBLIC_URL` không phải
 origin `https://`, đăng nhập, trang phê duyệt và dashboard trả về `503` (fail
 closed). `http://localhost` được chấp nhận khi phát triển cục bộ.
 
@@ -171,7 +173,6 @@ closed). `http://localhost` được chấp nhận khi phát triển cục bộ.
 | Biến | Mặc định | Tác dụng |
 |---|---|---|
 | `MULTIX_PUBLIC_URL` | — (bắt buộc) | Origin công khai, ví dụ `https://mcp.example.com`. Dùng cho metadata OAuth, redirect và callback GitHub. |
-| `MULTIX_ALLOWED_USERS` | không ai | Login GitHub (không phân biệt hoa thường) hoặc email đã xác minh (mục có `@`) được phép đăng nhập, phân tách bằng dấu phẩy. Để trống thì không ai đăng nhập được. |
 | `MULTIX_MCP_ALLOWED_PROVIDERS` | tất cả | Allowlist provider, phân tách bằng dấu phẩy, ví dụ `replicate,heygen`. |
 | `MULTIX_MCP_ALLOWED_MODELS` | bất kỳ | Allowlist `provider:model`, ví dụ `replicate:black-forest-labs/flux-schnell,heygen:heygen-video-1`. Khi đặt, mọi model (kể cả model mặc định) phải có trong danh sách. |
 | `MULTIX_MCP_MAX_OUTPUTS` | `4` (tối đa 10) | Số `num_outputs` tối đa mỗi lần tạo ảnh. |

@@ -76,8 +76,7 @@ Requirements: Node 20+, a Cloudflare account with a zone for your domain, and
    ```
 
 3. **Edit `worker/wrangler.jsonc`:** set `routes` to your host,
-   `MULTIX_PUBLIC_URL` to the public origin, and `MULTIX_ALLOWED_USERS` to the
-   GitHub logins or verified emails that may sign in. The repository's file is
+   and `MULTIX_PUBLIC_URL` to the public origin. The repository's file is
    configured for `multix.zuey.me`.
 4. **Set the secrets** and deploy:
 
@@ -89,6 +88,8 @@ Requirements: Node 20+, a Cloudflare account with a zone for your domain, and
    npx wrangler secret put GITHUB_CLIENT_SECRET
    openssl rand -hex 32 | npx wrangler secret put SESSION_SECRET
    openssl rand -base64 32 | npx wrangler secret put SECRETS_ENCRYPTION_KEY
+   # GitHub logins or verified emails that may sign in, comma-separated
+   npx wrangler secret put MULTIX_ALLOWED_USERS
    cd ..
    npm run deploy:mcp
    ```
@@ -163,8 +164,9 @@ Secrets (set with `npx wrangler secret put <NAME>`):
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | GitHub OAuth App used for sign-in. |
 | `SESSION_SECRET` | At least 32 characters. Signs dashboard cookies and form tokens. |
 | `SECRETS_ENCRYPTION_KEY` | Base64 of exactly 32 random bytes. Encrypts saved provider keys. |
+| `MULTIX_ALLOWED_USERS` | Comma-separated GitHub logins (case-insensitive) or verified emails (entries containing `@`) that may sign in. Unset or empty allows nobody. It is a secret so the list (which may hold emails) stays out of the repository, and it changes without a deploy. |
 
-If any of them is missing or invalid, or `MULTIX_PUBLIC_URL` is not an
+If any of the first four is missing or invalid, or `MULTIX_PUBLIC_URL` is not an
 `https://` origin, sign-in, consent and the dashboard return `503` (fail
 closed). `http://localhost` is accepted for local development.
 
@@ -173,7 +175,6 @@ Set these as `vars` in `worker/wrangler.jsonc`:
 | Variable | Default | Effect |
 |---|---|---|
 | `MULTIX_PUBLIC_URL` | — (required) | Public origin, for example `https://mcp.example.com`. Used for OAuth metadata, redirects and the GitHub callback. |
-| `MULTIX_ALLOWED_USERS` | nobody | Comma-separated GitHub logins (case-insensitive) or verified emails (entries containing `@`) that may sign in. Empty allows nobody. |
 | `MULTIX_MCP_ALLOWED_PROVIDERS` | all | Comma-separated provider allowlist, e.g. `replicate,heygen`. |
 | `MULTIX_MCP_ALLOWED_MODELS` | any | Comma-separated `provider:model` allowlist, e.g. `replicate:black-forest-labs/flux-schnell,heygen:heygen-video-1`. When set, every model (including defaults) must be listed. |
 | `MULTIX_MCP_MAX_OUTPUTS` | `4` (ceiling 10) | Maximum `num_outputs` per image call. |
