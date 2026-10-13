@@ -77,6 +77,7 @@ describe("top-level --help", { timeout: SPAWN_TIMEOUT }, () => {
   for (const cmd of topLevelCommands) {
     it(`multix ${cmd} --help exits 0`, async () => {
       const result = await run([cmd, "--help"]);
+      expect(result.timedOut).toBe(false);
       expect(result.exitCode).toBe(0);
     });
   }
@@ -87,6 +88,7 @@ describe("subcommand --help", { timeout: SPAWN_TIMEOUT }, () => {
     for (const sub of cmds) {
       it(`multix ${group} ${sub} --help exits 0`, async () => {
         const result = await run([group, sub, "--help"]);
+        expect(result.timedOut).toBe(false);
         expect(result.exitCode).toBe(0);
       });
     }
