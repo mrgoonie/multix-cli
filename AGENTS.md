@@ -13,8 +13,22 @@ Every change starts from a GitHub issue. Before writing code:
 2. Assign yourself to the issue (`gh issue edit <n> --add-assignee @me`). An
    issue that is already assigned and labelled `in progress` belongs to someone
    else: comment and coordinate before touching it.
-3. Move the issue through the status labels as the work advances. Only one
+3. Claim it with a comment that names your session or branch
+   (`Claimed by <session>, branch <branch>`), then re-read the issue's comments.
+   If an earlier claim comment exists, the issue is taken: stop and help that
+   claim instead (review, evidence) rather than building a second fix.
+   Agent sessions often share one GitHub account and start from the same
+   trigger within seconds, so the assignee and the label alone cannot tell
+   two sessions apart; the earliest claim comment wins.
+4. Move the issue through the status labels as the work advances. Only one
    status label should be on an issue at a time — remove the previous one.
+
+Re-check right before you open a new issue or a PR: list the open PRs that
+close the issue and the issues created in the last hour (for example,
+`gh pr list --search "<n>"` and `gh issue list --search "created:>=<time>"`).
+If someone else's PR or issue already covers it, do not open yours. If yours
+turns out to be the duplicate, close it with a link to the earlier one
+instead of racing to merge, and carry over any evidence it adds.
 
 | Label | Meaning |
 |---|---|
