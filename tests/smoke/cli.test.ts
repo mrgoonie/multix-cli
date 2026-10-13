@@ -8,7 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { type Options, execa } from "execa";
-import { beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { isolatedEnv } from "./child-env.js";
 import { CHILD_TIMEOUT, SPAWN_TIMEOUT } from "./spawn-timeout.js";
 
