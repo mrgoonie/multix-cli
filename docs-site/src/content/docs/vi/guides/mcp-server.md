@@ -208,8 +208,10 @@ chung bộ đếm.
   trang phê duyệt ghi tên client và địa chỉ redirect của nó. Tài khoản không có
   trong `MULTIX_ALLOWED_USERS` bị từ chối trước khi lưu bất cứ thứ gì.
 - **Dashboard:** cookie có tiền tố `__Host-`, `Secure`, `HttpOnly`,
-  `SameSite=Lax` và được ký HMAC, phiên kéo dài 7 ngày. Mọi form cần CSRF token
-  theo tài khoản và header `Origin` cùng origin. Các trang gửi Content Security
+  `SameSite=Lax` và được ký HMAC, phiên kéo dài 7 ngày. **Sign out** kết thúc
+  mọi phiên dashboard của tài khoản trên mọi thiết bị (có thể mất khoảng một
+  phút để đến mọi location); kết nối MCP vẫn giữ cho đến khi bạn ngắt. Mọi form
+  cần CSRF token theo phiên và header `Origin` cùng origin. Các trang gửi Content Security
   Policy chặt và `frame-ancestors 'none'`.
 - **Cô lập tài khoản:** mỗi request `/mcp` chỉ tải key của tài khoản đã cấp
   token. Key không bao giờ xuất hiện trong trang, log hay kết quả tool.

@@ -108,7 +108,7 @@ export function dashboardPage(view: DashboardView): string {
     `${notice}<section class="card">
 <div class="row" style="justify-content:space-between">
 <div>${avatar}<strong>${escapeHtml(account.login)}</strong></div>
-<form method="post" action="/dashboard/logout"><input type="hidden" name="csrf" value="${escapeHtml(view.csrf)}"><button class="btn secondary small">Sign out</button></form>
+<form method="post" action="/dashboard/logout"><input type="hidden" name="csrf" value="${escapeHtml(view.csrf)}"><button class="btn secondary small" title="Ends the dashboard session on every device">Sign out</button></form>
 </div>
 </section>
 <section class="card">

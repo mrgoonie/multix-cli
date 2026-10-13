@@ -11,7 +11,10 @@ import { tokensMatch } from "../http-guards.js";
 
 export const SESSION_COOKIE = "__Host-multix-session";
 export const LOGIN_COOKIE = "__Host-multix-login";
-/** Dashboard sessions last a week; every request re-checks the allowlist. */
+/**
+ * Dashboard sessions last a week; every request re-checks the allowlist and
+ * the account's last sign-out, so signing out ends them server-side.
+ */
 export const SESSION_TTL_SECONDS = 7 * 24 * 3600;
 /** Time allowed to finish the GitHub sign-in round trip. */
 export const LOGIN_TTL_SECONDS = 10 * 60;
@@ -91,29 +94,40 @@ export function clearCookie(name: string): string {
 
 export interface Session {
   userId: string;
+  /** Issue time (ms). Sessions issued before the account's last sign-out are void. */
+  iat: number;
 }
 
 export function readSession(request: Request, secret: string): Promise<Session | undefined> {
   return verify<Session>(secret, "session", readCookie(request, SESSION_COOKIE));
 }
 
-export async function sessionCookie(secret: string, session: Session): Promise<string> {
+export async function sessionCookie(
+  secret: string,
+  userId: string,
+  now = Date.now(),
+): Promise<string> {
+  const session: Session = { userId, iat: now };
   return setCookie(
     SESSION_COOKIE,
-    await sign(secret, "session", session, SESSION_TTL_SECONDS),
+    await sign(secret, "session", session, SESSION_TTL_SECONDS, now),
     SESSION_TTL_SECONDS,
   );
 }
 
-/** CSRF token for dashboard forms, bound to the signed-in account. */
-export function csrfToken(secret: string, userId: string): Promise<string> {
-  return hmac(secret, `csrf:${userId}`);
+/** CSRF token for dashboard forms, bound to one session (account and issue time). */
+export function csrfToken(secret: string, session: Session): Promise<string> {
+  return hmac(secret, `csrf:${session.userId}:${session.iat}`);
 }
 
-export async function csrfValid(secret: string, userId: string, given: unknown): Promise<boolean> {
+export async function csrfValid(
+  secret: string,
+  session: Session,
+  given: unknown,
+): Promise<boolean> {
   return (
     typeof given === "string" &&
     given.length > 0 &&
-    tokensMatch(given, await csrfToken(secret, userId))
+    tokensMatch(given, await csrfToken(secret, session))
   );
 }

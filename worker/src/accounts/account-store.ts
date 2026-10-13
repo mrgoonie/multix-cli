@@ -1,11 +1,13 @@
 /**
- * Accounts in ACCOUNTS_KV, two JSON documents per account:
+ * Accounts in ACCOUNTS_KV, three entries per account:
  *
  * - `account:<userId>`: the GitHub identity used for the allowlist, rewritten
  *   at every sign-in.
  * - `secrets:<userId>`: the provider keys, each AES-GCM encrypted
  *   (provider-secret-crypto.ts), written only by the dashboard. Keeping them
  *   apart means a sign-in that reads a stale copy cannot drop a saved key.
+ * - `signed-out:<userId>`: time of the last "sign out", written only by
+ *   endSessions, so a stale read elsewhere can delay a sign-out but never undo it.
  *
  * Plaintext keys exist only in memory while a request uses them; nothing here
  * returns them to the dashboard.
@@ -66,6 +68,10 @@ function secretsKey(userId: string): string {
   return `secrets:${userId}`;
 }
 
+function signedOutKey(userId: string): string {
+  return `signed-out:${userId}`;
+}
+
 export function isProviderSecretName(name: string): name is ProviderSecretName {
   return (PROVIDER_SECRET_NAMES as readonly string[]).includes(name);
 }
@@ -100,6 +106,17 @@ export class AccountStore {
     };
     await this.put(account);
     return account;
+  }
+
+  /** End every dashboard session of the account issued before `now`. */
+  async endSessions(userId: string, now = Date.now()): Promise<void> {
+    await this.kv.put(signedOutKey(userId), String(now));
+  }
+
+  /** Time (ms) of the account's last sign-out; 0 if it never signed out. */
+  async signedOutAt(userId: string): Promise<number> {
+    const value = Number(await this.kv.get(signedOutKey(userId), "text"));
+    return Number.isFinite(value) ? value : 0;
   }
 
   /** Encrypted provider keys of the account (shown on the dashboard only as "saved"). */

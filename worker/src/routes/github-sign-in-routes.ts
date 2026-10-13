@@ -129,6 +129,6 @@ export async function finishGithubSignIn(ctx: AppContext, request: Request): Pro
   logEvent("info", "sign_in", { user: account.id });
   const headers = new Headers();
   headers.append("set-cookie", clearCookie(LOGIN_COOKIE));
-  headers.append("set-cookie", await sessionCookie(ctx.sessionSecret, { userId: account.id }));
+  headers.append("set-cookie", await sessionCookie(ctx.sessionSecret, account.id));
   return redirect(safeReturnTo(login.returnTo), headers);
 }
