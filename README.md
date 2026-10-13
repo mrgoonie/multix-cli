@@ -627,7 +627,7 @@ multix media batch --input-dir <dir> --output-dir <dir> [--quality 85] [--max-wi
 ```
 
 **Defaults:** quality=85, max-width=1920, bitrate=64k, chunk-duration=3600s.
-**Audio:** mono 16 kHz; the codec follows the output extension (`.mp3` → MP3, `.m4a`/`.aac`/`.mp4`/`.mka` → AAC, `.opus`/`.ogg` → Opus, `.wav`/`.aiff` → PCM, `.flac` → FLAC); other extensions are rejected. Embedded cover art is dropped.
+**Audio:** mono 16 kHz; the codec follows the output extension (`.mp3` → MP3, `.m4a`/`.aac`/`.mp4`/`.mka`/`.mkv`/`.mov` → AAC, `.opus`/`.ogg` → Opus, `.wav`/`.aiff` → PCM, `.flac` → FLAC); other extensions are rejected. Embedded cover art is dropped.
 **Video:** uses libx264 CRF encoding. Image optimization uses ImageMagick (replaces Pillow).
 
 ### `multix doc`

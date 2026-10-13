@@ -17,6 +17,8 @@ describe("buildAudioArgs", () => {
     ["a.aac", "aac"],
     ["a.mp4", "aac"],
     ["a.mka", "aac"],
+    ["a.mkv", "aac"],
+    ["a.mov", "aac"],
     ["a.opus", "libopus"],
     ["a.ogg", "libopus"],
     ["a.wav", "pcm_s16le"],

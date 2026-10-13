@@ -30,6 +30,8 @@ const AUDIO_CODECS: Record<string, AudioCodec> = {
   ".aac": { codec: "aac" },
   ".mp4": { codec: "aac" },
   ".mka": { codec: "aac" },
+  ".mkv": { codec: "aac" },
+  ".mov": { codec: "aac" },
   ".opus": { codec: "libopus" },
   ".ogg": { codec: "libopus" },
   ".wav": { codec: "pcm_s16le", lossless: true },

@@ -48,10 +48,10 @@ Với hệ điều hành hoặc package manager khác, dùng [trang download FFm
 rõ ràng để không đụng tới file gốc.
 
 Audio được encode lại thành mono 16 kHz với codec khớp đuôi file output:
-`.mp3` (MP3), `.m4a`/`.aac`/`.mp4`/`.mka` (AAC), `.opus`/`.ogg` (Opus), `.wav`/`.aiff` (PCM)
-hoặc `.flac` (FLAC). `--bitrate` chỉ áp dụng cho các định dạng lossy. Đuôi output
-khác sẽ bị từ chối trước khi chạy ffmpeg. Ảnh bìa nhúng trong file bị bỏ,
-nên output chỉ chứa audio.
+`.mp3` (MP3), `.m4a`/`.aac`/`.mp4`/`.mka`/`.mkv`/`.mov` (AAC), `.opus`/`.ogg`
+(Opus), `.wav`/`.aiff` (PCM) hoặc `.flac` (FLAC). `--bitrate` chỉ áp dụng cho
+các định dạng lossy. Đuôi output khác sẽ bị từ chối trước khi chạy ffmpeg. Ảnh
+bìa nhúng trong file bị bỏ, nên output chỉ chứa audio.
 
 ```bash
 multix media optimize --input video.mp4 --output optimized.mp4 --target-size 100

@@ -50,10 +50,10 @@ page](https://ffmpeg.org/download.html) and [ImageMagick download page](https://
 type. Use explicit outputs so original files remain untouched.
 
 Audio is re-encoded to mono 16 kHz with the codec that matches the output
-extension: `.mp3` (MP3), `.m4a`/`.aac`/`.mp4`/`.mka` (AAC), `.opus`/`.ogg` (Opus), `.wav`/`.aiff`
-(PCM) or `.flac` (FLAC). `--bitrate` applies to the lossy formats only. Any other
-output extension is rejected before ffmpeg runs. Embedded cover art is dropped,
-so the output holds audio only.
+extension: `.mp3` (MP3), `.m4a`/`.aac`/`.mp4`/`.mka`/`.mkv`/`.mov` (AAC),
+`.opus`/`.ogg` (Opus), `.wav`/`.aiff` (PCM) or `.flac` (FLAC). `--bitrate`
+applies to the lossy formats only. Any other output extension is rejected before
+ffmpeg runs. Embedded cover art is dropped, so the output holds audio only.
 
 ```bash
 multix media optimize --input video.mp4 --output optimized.mp4 --target-size 100
