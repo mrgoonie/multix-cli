@@ -2,10 +2,11 @@
 # server (job-server.mjs) that runs one CLI job per container.
 # Build context is the repository root (wrangler.jsonc: image_build_context ".."):
 #   docker build -f worker/container/Dockerfile .
-# Debian trixie: its imagemagick package is ImageMagick 7 (the CLI calls `magick`).
+# Alpine: small ffmpeg/ImageMagick 7 packages (the CLI calls `magick`) keep the
+# image light enough to push within the registry token's lifetime.
 # No secrets are baked in: keys arrive per job in the job server's POST body.
 
-FROM node:22-trixie-slim AS build
+FROM node:22-alpine AS build
 WORKDIR /src
 COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts --no-audit --no-fund
@@ -17,10 +18,8 @@ WORKDIR /job-server
 COPY worker/container/package.json worker/container/package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund
 
-FROM node:22-trixie-slim
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends ffmpeg imagemagick ca-certificates \
-  && rm -rf /var/lib/apt/lists/*
+FROM node:22-alpine
+RUN apk add --no-cache ffmpeg imagemagick ca-certificates
 
 WORKDIR /app
 COPY --from=build /src/package.json ./package.json
