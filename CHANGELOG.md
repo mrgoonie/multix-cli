@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0](https://github.com/mrgoonie/multix-cli/compare/v1.0.12...v1.1.0) (2026-10-13)
+
+
+### Added
+
+* **mcp:** OAuth sign-in and per-account provider keys dashboard ([#152](https://github.com/mrgoonie/multix-cli/issues/152)) ([d51e4a7](https://github.com/mrgoonie/multix-cli/commit/d51e4a715606bb00eaa638e1e04e6357e4220008))
+
 ## [1.0.12](https://github.com/mrgoonie/multix-cli/compare/v1.0.11...v1.0.12) (2026-10-12)
 
 
