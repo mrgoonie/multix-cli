@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1](https://github.com/mrgoonie/multix-cli/compare/v1.1.0...v1.1.1) (2026-10-13)
+
+
+### Fixed
+
+* **openai:** remove the Codex image driver's temp directory after each run ([#169](https://github.com/mrgoonie/multix-cli/issues/169)) ([88142d3](https://github.com/mrgoonie/multix-cli/commit/88142d3035dcb6a7923f232c5b8b700be9be8ecd)), closes [#164](https://github.com/mrgoonie/multix-cli/issues/164)
+
 ## [1.1.0](https://github.com/mrgoonie/multix-cli/compare/v1.0.12...v1.1.0) (2026-10-13)
 
 
