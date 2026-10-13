@@ -487,6 +487,21 @@ video, and accepts only public `https://` image URLs. Check `limits` from
 rejected, and an omitted `duration` becomes `default_video_seconds` (on Atlas
 Cloud, the model's own default when it is within `max_video_seconds`).
 
+For any other CLI command (Gemini, OpenAI, MiniMax, ElevenLabs, media/ffmpeg,
+`doc convert`, …), use the CLI runner tools when the server lists them:
+1. `multix_catalog` lists groups and whether the user saved keys
+   (`has_keys`); `multix_catalog {"group": "gemini"}` shows each command's
+   options and which ones take files.
+2. `multix_run` with `command` (e.g. `"gemini analyze"`), `options` by long
+   name without dashes, `args` for positionals, and `inputs` with public
+   `https://` URLs for file options (never local paths or `@file`):
+   `{"command": "media optimize", "inputs": {"input": "https://…/logo.png"}}`.
+3. If `status` is `starting` or `running`, poll `multix_job_status` with
+   `job_id` every 10–30 s; `multix_job_cancel` stops it.
+4. Read `outputs[].url`. Output files go to the user's own R2 bucket; when
+   `url` is null and a `note` mentions R2, tell the user to configure R2 at
+   `/dashboard`. `stdout` still holds any provider URLs the CLI printed.
+
 ## Security & scope
 
 This skill produces shell commands for the local `multix` CLI. It does NOT execute the commands itself, exfiltrate API keys, or modify provider accounts.

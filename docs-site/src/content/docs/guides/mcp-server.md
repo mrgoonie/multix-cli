@@ -1,13 +1,17 @@
 ---
 title: Remote MCP server on Cloudflare Workers
-description: Deploy the multix MCP server to Cloudflare Workers so remote AI agents can generate images and video over Streamable HTTP, with GitHub sign-in, OAuth and a dashboard for each account's provider keys.
+description: Deploy the multix MCP server to Cloudflare Workers so remote AI agents can generate images and video, or run any multix CLI command in a Cloudflare Container, over Streamable HTTP, with GitHub sign-in, OAuth and a dashboard for each account's provider keys and R2 bucket.
 ---
 
 The repository ships an optional, stateless [Model Context Protocol](https://modelcontextprotocol.io)
 server in `worker/`. It exposes multix's remote-friendly provider calls as MCP
 tools over **Streamable HTTP** at `/mcp`, so agents that cannot run the CLI
 locally (hosted assistants, web IDEs, other servers) can start image and video
-jobs and poll them.
+jobs and poll them. When the Worker is deployed with its job container, the
+same agents can also run almost any `multix` CLI command remotely: each run
+gets its own [Cloudflare Container](https://developers.cloudflare.com/containers/)
+with the CLI, ffmpeg and ImageMagick installed, and output files are uploaded
+to the caller's own R2 bucket.
 
 The worker is a separate package. It is not part of the published npm CLI and
 does not change how `multix` behaves on your machine.
@@ -21,20 +25,93 @@ does not change how `multix` behaves on your machine.
 | `multix_generate_video` | Text- or image-to-video on `replicate`, `atlascloud`, `heygen`, or `cloudflare` (Replicate via AI Gateway). Never blocks: returns a prediction ID. |
 | `multix_prediction_status` | Poll a prediction by provider and ID. |
 | `multix_prediction_cancel` | Cancel a running prediction (Replicate only). |
+| `multix_catalog` | The CLI commands `multix_run` can run. Without `group`: every group, its commands and whether you saved keys for it. With `group`: each command's positionals and options, which ones take files, and the values the server forces. |
+| `multix_run` | Run one CLI command in its own container with your saved keys. Waits up to `wait_seconds` (default 25, max 50), then returns the result or a job ID to poll. |
+| `multix_job_status` | Read a `multix_run` job: status, output URLs, stdout and the tail of stderr. |
+| `multix_job_cancel` | Stop a running job and its container. |
 
-Results contain provider-hosted **URLs**, never file bytes. Some providers
+The first five tools call provider APIs directly from the Worker. Their
+results contain provider-hosted **URLs**, never file bytes. Some providers
 return signed URLs that expire; download them promptly. When a job is still
 running, the result includes a `next` hint with the exact
 `multix_prediction_status` arguments to call.
 
+The last four tools appear only when the Worker has its job container binding
+(`MULTIX_JOBS`, see [Deploy](#deploy)).
+
+## Running CLI commands
+
+`multix_run` takes the same command and options you would type locally, as
+JSON:
+
+- `command`: the command path, for example `"gemini generate"` or
+  `"media optimize"`. `multix check` and `multix update` cannot run.
+- `options`: options by long name without dashes. Values are strings,
+  numbers, `true` for a flag (including `no-*` flags), or a list for an option
+  that repeats.
+- `args`: positionals, in order.
+- `inputs`: public `https://` URLs for options and positionals that take a
+  file, keyed by their name. The container downloads them (at most 10 files,
+  200 MB each) and passes the local paths to the CLI. Plain file paths are
+  rejected. Where a provider accepts its own asset ID, `asset:<id>` can be
+  given as the value instead.
+- `wait_seconds`: how long the call waits for the job (0–50, default 25).
+
+Call `multix_catalog` with a group to see exactly which options a command
+takes and which of them are files. An example call:
+
+```json
+{
+  "command": "gemini analyze",
+  "options": { "prompt": "Summarise this clip in three bullet points" },
+  "inputs": { "files": "https://cdn.example.com/clip.mp4" },
+  "wait_seconds": 40
+}
+```
+
+The result is always the same shape:
+
+```json
+{
+  "job_id": "4b0c…",
+  "status": "succeeded",
+  "outputs": [{ "name": "frame.png", "url": "https://…", "bytes": 48213 }],
+  "stdout": "…",
+  "stderr_tail": "",
+  "exit_code": 0
+}
+```
+
+`status` is `starting`, `running`, `succeeded`, `failed`, `timed_out` or
+`canceled`. While it is `starting` or `running`, the result has a `next` hint: call `multix_job_status` with
+the `job_id` every 10–30 seconds. A job can run for up to 30 minutes, and its
+record is kept for 7 days. Only the account that started a job can read or
+cancel it.
+
+**Output files need R2.** Every file the CLI writes is uploaded to your own R2
+bucket under `multix/<account hash>/<job id>/<name>`, and `outputs` lists its
+public or presigned URL. If you have not saved an R2 bucket, the job still
+runs, but each output has `url: null` and the result carries a `note` asking
+you to configure R2 in `/dashboard`. stdout (with any provider URLs
+the CLI prints) is returned either way. Keys never appear in `stdout` or
+`stderr_tail`: the values of your saved keys are replaced with `[redacted]`.
+
+Server limits apply to `multix_run` too: the output count
+(`MULTIX_MCP_MAX_OUTPUTS`), video length (`MULTIX_MCP_MAX_VIDEO_SECONDS`, also
+sent when a video command's default is unknown or longer) and resolution
+(`MULTIX_MCP_ALLOWED_RESOLUTIONS`). The server chooses the output directory,
+`--output` must be a plain file name, the OpenAI image commands always use the
+API driver, and `@file` values are rejected.
+
 ### Not available remotely
 
-Everything that needs the local file system or local binaries stays CLI-only:
-`--output`/downloads, local file inputs (only public `https://` image URLs are
-accepted), `doc-to-md`, ffmpeg and ImageMagick commands, Gemini/OpenAI/MiniMax
-and the other providers without a runtime-neutral client, Cloudflare Workers AI
-image and speech generation (they return bytes), the Codex image driver, and
-`multix update`.
+- Local files: give a public `https://` URL in `inputs` instead.
+- Interactive and local-only features: `multix update`, `multix check`, the
+  Codex image driver, `--stdin-ext`, and reading values from `@file`.
+- Choosing where files go: the server sets the output directory. Download
+  outputs from their R2 URLs.
+- Without the job container, `multix_run` and the other job tools are not
+  listed, and only the five provider tools are available.
 
 ## Accounts and credentials
 
@@ -65,9 +142,9 @@ Worker, and keys set there are ignored.
 
 ### R2 storage
 
-Each account can also save its own Cloudflare R2 bucket for files that
-server-side jobs create. The current image and video tools return provider
-URLs and do not upload to R2.
+Each account can also save its own Cloudflare R2 bucket. `multix_run` uploads
+every output file there; without a bucket, jobs still run but return no file
+URLs. The five provider tools return provider URLs and do not use R2.
 
 1. In the Cloudflare dashboard, create a bucket and an R2 API token with
    **Object Read & Write** on that bucket.
@@ -90,7 +167,11 @@ deletes them.
 ## Deploy
 
 Requirements: Node 20+, a Cloudflare account with a zone for your domain, and
-`wrangler` (installed as a worker dev dependency).
+`wrangler` (installed as a worker dev dependency). The CLI runner also needs
+the [Workers Paid plan](https://developers.cloudflare.com/containers/pricing/)
+(Containers) and Docker running on the machine that deploys: `wrangler deploy`
+builds `worker/container/Dockerfile` from the repository root and pushes the
+image to Cloudflare.
 
 1. **Create a GitHub OAuth App** at
    [github.com/settings/applications/new](https://github.com/settings/applications/new).
@@ -108,7 +189,11 @@ Requirements: Node 20+, a Cloudflare account with a zone for your domain, and
 
 3. **Edit `worker/wrangler.jsonc`:** set `routes` to your host,
    and `MULTIX_PUBLIC_URL` to the public origin. The repository's file is
-   configured for `multix.zuey.me`.
+   configured for `multix.zuey.me`. Its `containers` entry (class
+   `MultixJobContainer`, instance type `basic`, at most 10 instances) and the
+   `MULTIX_JOBS` Durable Object binding enable `multix_run`. To deploy without
+   the CLI runner (no Docker, Workers Free), remove `containers`,
+   `durable_objects` and `exports`; the four job tools are then not listed.
 4. **Set the secrets** and deploy:
 
    ```bash
@@ -184,7 +269,9 @@ provider as not configured.
 
 A typical video flow is `multix_generate_video` → repeat
 `multix_prediction_status` every 10–30 seconds until `done` is `true` → read
-`outputs`.
+`outputs`. For any other CLI command: `multix_catalog` → `multix_catalog` with
+the group → `multix_run` → repeat `multix_job_status` until `status` is
+`succeeded`, `failed`, `timed_out` or `canceled` → read `outputs`.
 
 ## Configuration
 
@@ -368,6 +455,18 @@ within your Cloudflare account. If another Worker already uses `1001` or
   truncated. A provider error that echoes part of a prompt (for example a
   moderation message) can therefore appear there. The same scrubbed text is
   returned to the client.
+- **CLI runner:** each `multix_run` job gets its own container (one Durable
+  Object per job) running as a non-root user. The Worker builds the argument
+  list from the CLI's command catalog and rejects unknown commands and
+  options, `@file` values, file paths and NUL characters; values are passed as
+  `--name=value` and positionals after `--`, and the CLI is started without a
+  shell. The CLI process gets only the keys for the command's provider group,
+  a fresh temporary home directory and `MULTIX_DISABLE_HOME_ENV=1`. Input URLs
+  go through the same SSRF guard in the Worker and again in the container on
+  every redirect. The temporary directory is deleted when the job ends, stdout
+  and stderr are cut to 16 KB and scrubbed of key values, and only the job ID
+  and status are logged. The `job:<id>` record in `ACCOUNTS_KV` holds the
+  owner, command and start time, never keys.
 - **Stateless MCP:** no MCP sessions. Each request builds a fresh server with
   the caller's keys. OAuth state and accounts live in KV.
 

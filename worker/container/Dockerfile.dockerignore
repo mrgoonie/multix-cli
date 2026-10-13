@@ -1,0 +1,11 @@
+# Build context is the repository root; send only what the image needs.
+*
+!package.json
+!package-lock.json
+!tsconfig.json
+!tsup.config.ts
+!src/**
+!worker/container/package.json
+!worker/container/package-lock.json
+!worker/container/*.mjs
+worker/container/*.test.mjs

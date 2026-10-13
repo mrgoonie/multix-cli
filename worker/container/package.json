@@ -1,0 +1,15 @@
+{
+  "name": "multix-job-server",
+  "private": true,
+  "type": "module",
+  "description": "Runs one multix CLI job per Cloudflare Container and uploads its outputs to R2",
+  "scripts": {
+    "start": "node job-server.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "aws4fetch": "1.0.20"
+  }
+}

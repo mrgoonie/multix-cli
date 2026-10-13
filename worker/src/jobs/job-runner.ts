@@ -1,0 +1,154 @@
+/**
+ * `multix_run` / `multix_job_status` / `multix_job_cancel` behind the MCP
+ * tools: record ownership, hand the job to its Durable Object, wait up to
+ * `wait_seconds` for it, and shape the result for the caller with every
+ * credential value scrubbed from the CLI's output.
+ */
+
+import { ValidationError } from "../../../src/core/errors.js";
+import type { R2Settings } from "../accounts/r2-settings.js";
+import type { ProviderKeys } from "../provider-secret-names.js";
+import { NON_SECRET_NAMES } from "../provider-secret-names.js";
+import { GROUP_KEYS } from "./cli-command-policy.js";
+import { JOB_TIMEOUT_MS, type JobSpec, type JobView, isTerminal } from "./job-protocol.js";
+import type { JobBackend, JobStore } from "./job-store.js";
+import type { PreparedRun } from "./run-argv-builder.js";
+
+export const MAX_WAIT_SECONDS = 50;
+export const DEFAULT_WAIT_SECONDS = 25;
+const POLL_INTERVAL_MS = 2_000;
+
+export const NO_STORAGE_NOTE =
+  "R2 storage is not configured: configure R2 in /dashboard to receive output files. Provider URLs printed by the CLI are returned unchanged.";
+
+export interface JobToolsContext {
+  userId: string;
+  /** The caller's decrypted provider keys. */
+  keys: ProviderKeys;
+  store: JobStore;
+  backend: JobBackend;
+  r2Settings(): Promise<R2Settings | null>;
+  /** Injected for tests. */
+  sleep?: (ms: number) => Promise<void>;
+  now?: () => number;
+}
+
+/** Thrown for a job that does not exist or belongs to another account. */
+export class JobNotFoundError extends ValidationError {
+  constructor() {
+    super("Job not found");
+  }
+}
+
+async function sha256Hex(text: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** R2 key prefix for a job's outputs: `multix/<sha256(userId)[0:16]>/<jobId>`. */
+export async function outputKeyPrefix(userId: string, jobId: string): Promise<string> {
+  return `multix/${(await sha256Hex(userId)).slice(0, 16)}/${jobId}`;
+}
+
+/** Only the keys the command's provider reads. */
+export function jobEnv(group: string, keys: ProviderKeys): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const name of GROUP_KEYS[group] ?? []) {
+    const value = keys[name]?.trim();
+    if (value) env[name] = value;
+  }
+  return env;
+}
+
+/** Values to scrub from anything returned: provider keys and R2 credentials. */
+function scrubList(keys: ProviderKeys, r2: R2Settings | null): string[] {
+  const values = Object.entries(keys)
+    .filter(([name]) => !NON_SECRET_NAMES.has(name as keyof ProviderKeys))
+    .map(([, value]) => value?.trim() ?? "");
+  if (r2) values.push(r2.secretAccessKey, r2.accessKeyId);
+  return values.filter((v) => v.length >= 8).sort((a, b) => b.length - a.length);
+}
+
+export function redactSecrets(text: string, secrets: readonly string[]): string {
+  let out = text;
+  for (const secret of secrets) out = out.split(secret).join("[redacted]");
+  return out;
+}
+
+export function jobPayload(
+  jobId: string,
+  view: JobView,
+  secrets: readonly string[],
+): Record<string, unknown> {
+  const result = view.result;
+  const payload: Record<string, unknown> = {
+    job_id: jobId,
+    status: view.status,
+    outputs: result?.outputs ?? [],
+    stdout: redactSecrets(result?.stdout ?? "", secrets),
+    stderr_tail: redactSecrets(result?.stderrTail ?? "", secrets),
+    exit_code: result?.exitCode ?? null,
+  };
+  const error = view.error ?? result?.error;
+  if (error) payload.error = redactSecrets(error, secrets);
+  if (result?.note) payload.note = result.note;
+  if (!isTerminal(view.status)) {
+    payload.next = { tool: "multix_job_status", arguments: { job_id: jobId } };
+  }
+  return payload;
+}
+
+export class JobRunner {
+  private readonly sleep: (ms: number) => Promise<void>;
+  private readonly now: () => number;
+
+  constructor(private readonly ctx: JobToolsContext) {
+    this.sleep = ctx.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+    this.now = ctx.now ?? Date.now;
+  }
+
+  async run(prepared: PreparedRun, waitSeconds: number): Promise<Record<string, unknown>> {
+    const r2 = await this.ctx.r2Settings();
+    const jobId = crypto.randomUUID();
+    const spec: JobSpec = {
+      jobId,
+      argv: prepared.argv,
+      env: jobEnv(prepared.group, this.ctx.keys),
+      inputs: prepared.inputs,
+      timeoutMs: JOB_TIMEOUT_MS,
+    };
+    if (r2) spec.upload = { r2, keyPrefix: await outputKeyPrefix(this.ctx.userId, jobId) };
+    await this.ctx.store.create(jobId, {
+      userId: this.ctx.userId,
+      command: prepared.command,
+      createdAt: this.now(),
+    });
+    let view = await this.ctx.backend.start(jobId, spec);
+    const deadline = this.now() + waitSeconds * 1000;
+    while (!isTerminal(view.status) && this.now() < deadline) {
+      await this.sleep(Math.min(POLL_INTERVAL_MS, deadline - this.now()));
+      view = (await this.ctx.backend.status(jobId)) ?? view;
+    }
+    const payload = jobPayload(jobId, view, scrubList(this.ctx.keys, r2));
+    if (!r2 && payload.note === undefined) payload.note = NO_STORAGE_NOTE;
+    return payload;
+  }
+
+  async status(jobId: string): Promise<Record<string, unknown>> {
+    await this.assertOwned(jobId);
+    const view = await this.ctx.backend.status(jobId);
+    if (!view) throw new JobNotFoundError();
+    return jobPayload(jobId, view, scrubList(this.ctx.keys, await this.ctx.r2Settings()));
+  }
+
+  async cancel(jobId: string): Promise<Record<string, unknown>> {
+    await this.assertOwned(jobId);
+    const view = await this.ctx.backend.cancel(jobId);
+    if (!view) throw new JobNotFoundError();
+    return jobPayload(jobId, view, scrubList(this.ctx.keys, await this.ctx.r2Settings()));
+  }
+
+  private async assertOwned(jobId: string): Promise<void> {
+    if (!(await this.ctx.store.ownedBy(jobId, this.ctx.userId))) throw new JobNotFoundError();
+  }
+}

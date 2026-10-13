@@ -686,10 +686,21 @@ video tools over Streamable HTTP at `/mcp`, for agents that cannot run the CLI
 locally. It is a separate package and is not included in the npm CLI. A hosted
 instance runs at `https://multix.zuey.me/mcp` (invited GitHub accounts only).
 
-- Tools: `multix_list_providers`, `multix_generate_image` (Replicate, Atlas
-  Cloud), `multix_generate_video` (Replicate, Atlas Cloud, HeyGen, Cloudflare
-  AI Gateway; returns an ID without blocking), `multix_prediction_status`,
-  `multix_prediction_cancel` (Replicate). Results are provider URLs, not bytes.
+- Provider tools: `multix_list_providers`, `multix_generate_image`
+  (Replicate, Atlas Cloud), `multix_generate_video` (Replicate, Atlas Cloud,
+  HeyGen, Cloudflare AI Gateway; returns an ID without blocking),
+  `multix_prediction_status`, `multix_prediction_cancel` (Replicate). Results
+  are provider URLs, not bytes.
+- CLI runner tools: `multix_catalog` (runnable commands, their options and
+  file inputs), `multix_run` (run one CLI command, for example
+  `gemini analyze` or `media optimize`, in its own Cloudflare Container with
+  ffmpeg and ImageMagick; waits up to `wait_seconds`, default 25, max 50),
+  `multix_job_status` and `multix_job_cancel`. File inputs are public
+  `https://` URLs. Output files are uploaded to the account's own R2 bucket
+  and returned as URLs; without R2 the job still runs and the result says to
+  configure R2 in `/dashboard`. Keys are redacted from stdout and stderr.
+  These tools need the Workers Paid plan (Containers) and Docker at deploy
+  time; they are listed only when the `MULTIX_JOBS` binding exists.
 - Auth: OAuth 2.1 (dynamic client registration, PKCE) with GitHub sign-in.
   Only GitHub logins or verified emails in the `MULTIX_ALLOWED_USERS` secret
   can sign in.
@@ -712,6 +723,20 @@ instance runs at `https://multix.zuey.me/mcp` (invited GitHub accounts only).
 claude mcp add --transport http multix https://multix.zuey.me/mcp
 ```
 
+A `multix_run` call mirrors the CLI command it runs:
+
+```json
+{
+  "command": "gemini analyze",
+  "options": { "prompt": "Summarise this clip" },
+  "inputs": { "files": "https://cdn.example.com/clip.mp4" }
+}
+```
+
+It returns `{ job_id, status, outputs: [{ name, url, bytes }], stdout,
+stderr_tail, exit_code }`; poll `multix_job_status` while `status` is
+`starting` or `running`.
+
 To run your own: create a GitHub OAuth App (callback
 `<origin>/oauth/github/callback`), two KV namespaces, and set routes and vars in
 `worker/wrangler.jsonc`, then:
@@ -725,6 +750,10 @@ openssl rand -base64 32 | npx wrangler secret put SECRETS_ENCRYPTION_KEY
 npx wrangler secret put MULTIX_ALLOWED_USERS     # GitHub logins or emails
 cd .. && npm run deploy:mcp                   # or: npm run dev:mcp (local, port 8787)
 ```
+
+`deploy:mcp` builds the job container image from `worker/container/Dockerfile`,
+so Docker must be running. To deploy without the CLI runner, remove
+`containers`, `durable_objects` and `exports` from `worker/wrangler.jsonc`.
 
 Full guide: [Remote MCP server](https://multix.zuey.me/guides/mcp-server/).
 

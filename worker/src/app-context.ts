@@ -12,10 +12,13 @@ import { isAllowed } from "./accounts/allowlist.js";
 import { importEncryptionKey } from "./accounts/provider-secret-crypto.js";
 import { type Session, readSession } from "./auth/signed-cookies.js";
 import { MIN_SESSION_SECRET_LENGTH, type WorkerEnv } from "./config.js";
+import type { JobBackend } from "./jobs/job-store.js";
 
 export interface AppDeps {
   /** Injected for tests; defaults to the Worker's fetch (GitHub and provider calls). */
   fetch?: FetchLike;
+  /** Injected for tests; defaults to the MULTIX_JOBS Durable Object namespace. */
+  jobBackend?: JobBackend;
 }
 
 export interface AppContext {

@@ -10,6 +10,7 @@
  */
 
 import type { OAuthHelpers } from "@cloudflare/workers-oauth-provider";
+import type { JobNamespace } from "./jobs/job-store.js";
 import {
   NON_SECRET_NAMES,
   PROVIDER_SECRET_NAMES,
@@ -70,6 +71,8 @@ export interface WorkerEnv extends ServerSettings {
   MCP_RATE_LIMITER?: RateLimiter;
   /** Optional Workers Rate Limiting binding applied per IP to sign-in and dashboard writes. */
   AUTH_RATE_LIMITER?: RateLimiter;
+  /** Durable Object namespace of MultixJobContainer (one container per multix_run job). */
+  MULTIX_JOBS?: JobNamespace;
 }
 
 /** Copy only the operator limits out of the Worker env (never Worker secrets). */

@@ -12,11 +12,14 @@ import type { FetchLike } from "../../src/core/fetch-json.js";
 import { type Env, MAX_BODY_BYTES, csv } from "./config.js";
 import { BodyTooLargeError, originAllowed, readBodyLimited } from "./http-guards.js";
 import { SECURITY_HEADERS, jsonRpcError, text } from "./http-responses.js";
+import type { JobToolsContext } from "./jobs/job-runner.js";
 import { createMcpServer } from "./mcp-server.js";
 
 export interface McpDeps {
   /** Injected for tests; defaults to the Worker's fetch. */
   fetch?: FetchLike;
+  /** The caller's job context for the CLI runner tools (absent = tools not offered). */
+  jobs?: JobToolsContext;
 }
 
 /** CORS headers for an allowed browser Origin; empty for non-browser callers. */
@@ -66,7 +69,7 @@ export async function handleMcpRequest(
     return withHeaders(jsonRpcError(400, -32600, "Batch requests are not supported"), cors);
   }
 
-  const server = createMcpServer(env, { fetch: deps.fetch, version });
+  const server = createMcpServer(env, { fetch: deps.fetch, version, jobs: deps.jobs });
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
     enableJsonResponse: true,

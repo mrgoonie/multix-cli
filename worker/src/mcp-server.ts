@@ -1,7 +1,8 @@
 /**
  * MCP tool surface. A fresh server is built per request (stateless
- * Streamable HTTP), so job state lives only at the provider and clients poll
- * by `provider` + `prediction_id`.
+ * Streamable HTTP). The provider tools keep job state at the provider
+ * (clients poll by `provider` + `prediction_id`); the CLI runner tools
+ * (jobs/job-tools.ts) keep it in a per-job Durable Object.
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -20,6 +21,8 @@ import {
   limitsFrom,
   secretValues,
 } from "./config.js";
+import type { JobToolsContext } from "./jobs/job-runner.js";
+import { registerJobTools } from "./jobs/job-tools.js";
 import {
   type JobResult,
   PROVIDERS,
@@ -57,6 +60,8 @@ export interface ServerDeps {
   /** Injected for tests; defaults to the Worker's fetch. */
   fetch?: FetchLike;
   version: string;
+  /** The caller's job context; the CLI runner tools are registered only when present. */
+  jobs?: JobToolsContext;
 }
 
 function ok(payload: Record<string, unknown>): CallToolResult {
@@ -142,6 +147,7 @@ async function runTool(
   tool: string,
   fields: Record<string, string | undefined>,
   body: () => Promise<Record<string, unknown>>,
+  cliFlagWording = true,
 ): Promise<CallToolResult> {
   const started = Date.now();
   try {
@@ -152,7 +158,7 @@ async function runTool(
     const secrets = secretValues(env);
     const expected = error instanceof MultixError || error instanceof PollTimeoutError;
     const text = error instanceof Error ? error.message : String(error);
-    const raw = error instanceof ValidationError ? toolArgWording(text) : text;
+    const raw = error instanceof ValidationError && cliFlagWording ? toolArgWording(text) : text;
     const message = sanitizeText(raw, secrets);
     logEvent(expected ? "warn" : "error", "tool_call", {
       tool,
@@ -357,6 +363,13 @@ export function createMcpServer(env: Env, deps: ServerDeps): McpServer {
         return jobPayload(await adapter.cancel(ctx, args.prediction_id));
       }),
   );
+
+  if (deps.jobs) {
+    // multix_run takes CLI option names, so its messages keep the --flag wording.
+    registerJobTools(server, limits, deps.jobs, (tool, fields, body) =>
+      runTool(env, tool, fields, body, false),
+    );
+  }
 
   return server;
 }

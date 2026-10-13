@@ -1,6 +1,6 @@
 ---
 title: MCP server từ xa trên Cloudflare Workers
-description: Triển khai multix MCP server lên Cloudflare Workers để AI agent từ xa tạo ảnh và video qua Streamable HTTP, với đăng nhập GitHub, OAuth và dashboard quản lý provider key của từng tài khoản.
+description: Triển khai multix MCP server lên Cloudflare Workers để AI agent từ xa tạo ảnh và video, hoặc chạy lệnh multix CLI bất kỳ trong Cloudflare Container, qua Streamable HTTP, với đăng nhập GitHub, OAuth và dashboard quản lý provider key cùng bucket R2 của từng tài khoản.
 ---
 
 Repository có kèm một [Model Context Protocol](https://modelcontextprotocol.io)
@@ -8,7 +8,11 @@ server tùy chọn, không trạng thái (stateless), trong thư mục `worker/`
 cung cấp các lệnh gọi provider phù hợp chạy từ xa của multix dưới dạng MCP tool
 qua **Streamable HTTP** tại `/mcp`, để các agent không chạy được CLI cục bộ
 (trợ lý hosted, web IDE, server khác) có thể khởi chạy job ảnh, video và theo
-dõi trạng thái.
+dõi trạng thái. Khi Worker được triển khai kèm container chạy job, các agent
+này còn chạy được hầu hết lệnh `multix` CLI từ xa: mỗi lần chạy có một
+[Cloudflare Container](https://developers.cloudflare.com/containers/) riêng đã
+cài CLI, ffmpeg và ImageMagick, và file đầu ra được tải lên bucket R2 của chính
+người gọi.
 
 Worker là package riêng. Nó không nằm trong CLI phát hành trên npm và không
 thay đổi cách `multix` chạy trên máy bạn.
@@ -22,18 +26,89 @@ thay đổi cách `multix` chạy trên máy bạn.
 | `multix_generate_video` | Tạo video từ văn bản hoặc ảnh trên `replicate`, `atlascloud`, `heygen` hoặc `cloudflare` (Replicate qua AI Gateway). Không bao giờ chờ: trả về prediction ID. |
 | `multix_prediction_status` | Poll một prediction theo provider và ID. |
 | `multix_prediction_cancel` | Hủy prediction đang chạy (chỉ Replicate). |
+| `multix_catalog` | Các lệnh CLI mà `multix_run` chạy được. Không có `group`: mọi nhóm lệnh, các lệnh trong nhóm và bạn đã lưu key cho nhóm đó chưa. Có `group`: positional và option của từng lệnh, option nào nhận file, và giá trị server bắt buộc. |
+| `multix_run` | Chạy một lệnh CLI trong container riêng bằng key đã lưu của bạn. Chờ tối đa `wait_seconds` (mặc định 25, tối đa 50), sau đó trả về kết quả hoặc job ID để poll. |
+| `multix_job_status` | Đọc job `multix_run`: trạng thái, URL output, stdout và phần cuối của stderr. |
+| `multix_job_cancel` | Dừng job đang chạy cùng container của nó. |
 
-Kết quả chứa **URL** do provider lưu trữ, không bao giờ chứa byte của file. Một
-số provider trả về URL có chữ ký sẽ hết hạn; hãy tải về sớm. Khi job còn chạy,
-kết quả có gợi ý `next` với đúng tham số cần gọi cho `multix_prediction_status`.
+Năm tool đầu gọi API của provider trực tiếp từ Worker. Kết quả của chúng chứa
+**URL** do provider lưu trữ, không bao giờ chứa byte của file. Một số provider
+trả về URL có chữ ký sẽ hết hạn; hãy tải về sớm. Khi job còn chạy, kết quả có
+gợi ý `next` với đúng tham số cần gọi cho `multix_prediction_status`.
+
+Bốn tool cuối chỉ xuất hiện khi Worker có binding container chạy job
+(`MULTIX_JOBS`, xem [Triển khai](#triển-khai)).
+
+## Chạy lệnh CLI
+
+`multix_run` nhận đúng lệnh và option bạn vẫn gõ trên máy, dưới dạng JSON:
+
+- `command`: đường dẫn lệnh, ví dụ `"gemini generate"` hoặc `"media optimize"`.
+  Không chạy được `multix check` và `multix update`.
+- `options`: option theo tên dài, không có dấu gạch ngang. Giá trị là chuỗi,
+  số, `true` cho cờ (kể cả cờ `no-*`), hoặc danh sách cho option lặp lại được.
+- `args`: các positional, theo thứ tự.
+- `inputs`: URL `https://` công khai cho option và positional nhận file, theo
+  tên của chúng. Container tải các file này về (tối đa 10 file, mỗi file
+  200 MB) và truyền đường dẫn cục bộ cho CLI. Đường dẫn file thường bị từ
+  chối. Ở chỗ provider nhận asset ID của chính nó, có thể truyền `asset:<id>`
+  làm giá trị.
+- `wait_seconds`: thời gian lệnh gọi chờ job (0–50, mặc định 25).
+
+Gọi `multix_catalog` kèm group để xem chính xác lệnh nhận option nào và option
+nào là file. Ví dụ một lệnh gọi:
+
+```json
+{
+  "command": "gemini analyze",
+  "options": { "prompt": "Tóm tắt clip này thành ba gạch đầu dòng" },
+  "inputs": { "files": "https://cdn.example.com/clip.mp4" },
+  "wait_seconds": 40
+}
+```
+
+Kết quả luôn có cùng dạng:
+
+```json
+{
+  "job_id": "4b0c…",
+  "status": "succeeded",
+  "outputs": [{ "name": "frame.png", "url": "https://…", "bytes": 48213 }],
+  "stdout": "…",
+  "stderr_tail": "",
+  "exit_code": 0
+}
+```
+
+`status` là `starting`, `running`, `succeeded`, `failed`, `timed_out` hoặc
+`canceled`. Khi còn `starting` hoặc `running`, kết quả có gợi ý `next`: gọi
+`multix_job_status` với `job_id` mỗi 10–30 giây. Một job chạy được tối đa 30
+phút, và bản ghi của nó được giữ 7 ngày. Chỉ tài khoản đã khởi chạy job mới đọc
+hoặc hủy được job đó.
+
+**File đầu ra cần R2.** Mọi file CLI ghi ra được tải lên bucket R2 của bạn dưới
+`multix/<hash tài khoản>/<job id>/<tên>`, và `outputs` liệt kê URL công khai
+hoặc presigned của file. Nếu bạn chưa lưu bucket R2, job vẫn chạy nhưng mỗi
+output có `url: null` và kết quả kèm `note` nhắc bạn cấu hình R2 tại
+`/dashboard`. stdout (gồm cả URL provider mà CLI in ra) vẫn được trả về trong
+cả hai trường hợp. Key không bao giờ xuất hiện trong `stdout` hay
+`stderr_tail`: giá trị các key đã lưu của bạn được thay bằng `[redacted]`.
+
+Giới hạn của server cũng áp dụng cho `multix_run`: số output
+(`MULTIX_MCP_MAX_OUTPUTS`), độ dài video (`MULTIX_MCP_MAX_VIDEO_SECONDS`, cũng
+được gửi khi mặc định của lệnh video không rõ hoặc dài hơn) và độ phân giải
+(`MULTIX_MCP_ALLOWED_RESOLUTIONS`). Server tự chọn thư mục đầu ra, `--output`
+phải là tên file thuần, các lệnh ảnh OpenAI luôn dùng API driver, và giá trị
+`@file` bị từ chối.
 
 ### Không hỗ trợ từ xa
 
-Mọi thứ cần hệ thống file hoặc binary cục bộ vẫn chỉ có trong CLI:
-`--output`/tải file, input là file cục bộ (chỉ chấp nhận URL ảnh `https://`
-công khai), `doc-to-md`, các lệnh ffmpeg và ImageMagick, Gemini/OpenAI/MiniMax
-và các provider khác chưa có client độc lập runtime, tạo ảnh và giọng nói
-Cloudflare Workers AI (trả về byte), Codex image driver và `multix update`.
+- File cục bộ: thay bằng URL `https://` công khai trong `inputs`.
+- Tính năng tương tác hoặc chỉ chạy cục bộ: `multix update`, `multix check`,
+  Codex image driver, `--stdin-ext`, và đọc giá trị từ `@file`.
+- Chọn nơi lưu file: server tự đặt thư mục đầu ra. Hãy tải output từ URL R2.
+- Khi không có container chạy job, `multix_run` và các tool job khác không
+  được liệt kê, chỉ còn năm tool provider.
 
 ## Tài khoản và credential
 
@@ -64,9 +139,10 @@ bị bỏ qua.
 
 ### Lưu trữ R2
 
-Mỗi tài khoản cũng có thể lưu bucket Cloudflare R2 của riêng mình cho các file
-do job phía server tạo ra. Các tool ảnh và video hiện tại trả về URL của
-provider và không tải lên R2.
+Mỗi tài khoản cũng có thể lưu bucket Cloudflare R2 của riêng mình.
+`multix_run` tải mọi file đầu ra lên đó; không có bucket thì job vẫn chạy
+nhưng không trả về URL file. Năm tool provider trả về URL của provider và
+không dùng R2.
 
 1. Trong Cloudflare dashboard, tạo một bucket và một R2 API token có quyền
    **Object Read & Write** trên bucket đó.
@@ -89,7 +165,11 @@ khai; khi thay thiết lập phải nhập lại secret. **Remove** sẽ xóa ch
 ## Triển khai
 
 Yêu cầu: Node 20+, tài khoản Cloudflare có zone cho tên miền của bạn, và
-`wrangler` (đã có trong dev dependency của worker).
+`wrangler` (đã có trong dev dependency của worker). Trình chạy CLI còn cần
+[gói Workers Paid](https://developers.cloudflare.com/containers/pricing/)
+(Containers) và Docker đang chạy trên máy triển khai: `wrangler deploy` build
+`worker/container/Dockerfile` từ thư mục gốc của repository và đẩy image lên
+Cloudflare.
 
 1. **Tạo GitHub OAuth App** tại
    [github.com/settings/applications/new](https://github.com/settings/applications/new).
@@ -107,7 +187,11 @@ Yêu cầu: Node 20+, tài khoản Cloudflare có zone cho tên miền của b�
 
 3. **Sửa `worker/wrangler.jsonc`:** đặt `routes` theo host của bạn,
    và `MULTIX_PUBLIC_URL` là origin công khai. File trong repository đang cấu
-   hình cho `multix.zuey.me`.
+   hình cho `multix.zuey.me`. Mục `containers` (class `MultixJobContainer`,
+   instance type `basic`, tối đa 10 instance) và binding Durable Object
+   `MULTIX_JOBS` bật `multix_run`. Để triển khai không kèm trình chạy CLI
+   (không cần Docker, dùng được Workers Free), xóa `containers`,
+   `durable_objects` và `exports`; khi đó bốn tool job không được liệt kê.
 4. **Đặt secret** và triển khai:
 
    ```bash
@@ -182,7 +266,9 @@ provider đó chưa được cấu hình.
 
 Luồng video thường gặp: `multix_generate_video` → gọi lại
 `multix_prediction_status` mỗi 10–30 giây đến khi `done` là `true` → đọc
-`outputs`.
+`outputs`. Với các lệnh CLI khác: `multix_catalog` → `multix_catalog` kèm
+group → `multix_run` → gọi lại `multix_job_status` đến khi `status` là
+`succeeded`, `failed`, `timed_out` hoặc `canceled` → đọc `outputs`.
 
 ## Cấu hình
 
@@ -371,6 +457,18 @@ chung bộ đếm.
   bearer token và query string của URL, và bị cắt ngắn. Vì vậy lỗi provider có
   lặp lại một phần prompt (ví dụ thông báo kiểm duyệt nội dung) có thể xuất
   hiện ở đó. Client nhận cùng nội dung đã làm sạch này.
+- **Trình chạy CLI:** mỗi job `multix_run` có container riêng (một Durable
+  Object cho mỗi job), chạy bằng user không phải root. Worker dựng danh sách
+  tham số từ catalog lệnh của CLI và từ chối lệnh, option không có trong
+  catalog, giá trị `@file`, đường dẫn file và ký tự NUL; giá trị được truyền
+  dạng `--name=value`, positional nằm sau `--`, và CLI được chạy không qua
+  shell. Tiến trình CLI chỉ nhận key của nhóm provider ứng với lệnh, một thư
+  mục home tạm mới và `MULTIX_DISABLE_HOME_ENV=1`. URL input đi qua cùng lớp
+  chặn SSRF ở Worker và một lần nữa trong container ở mỗi lần redirect. Thư
+  mục tạm bị xóa khi job kết thúc, stdout và stderr được cắt còn 16 KB và
+  loại bỏ giá trị key, và log chỉ ghi job ID và trạng thái. Bản ghi
+  `job:<id>` trong `ACCOUNTS_KV` chứa chủ sở hữu, lệnh và thời điểm bắt đầu,
+  không bao giờ chứa key.
 - **MCP stateless:** không có MCP session. Mỗi request tạo một server mới với
   key của caller. Trạng thái OAuth và tài khoản nằm trong KV.
 

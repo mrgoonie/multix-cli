@@ -14,6 +14,6 @@ export default defineConfig({
     environment: "node",
     include: ["test/**/*.test.ts"],
     // Bundle the library through Vite so the cloudflare:workers alias applies to it.
-    server: { deps: { inline: ["@cloudflare/workers-oauth-provider"] } },
+    server: { deps: { inline: ["@cloudflare/workers-oauth-provider", "@cloudflare/containers"] } },
   },
 });
