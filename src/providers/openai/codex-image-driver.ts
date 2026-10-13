@@ -87,7 +87,12 @@ export async function runCodexImageGeneration(opts: {
   try {
     return await runInTempDir(tmp, opts, runner, dest);
   } finally {
-    fs.rmSync(tmp, { recursive: true, force: true });
+    // Removal never throws: a leftover temp dir must not hide the image or Codex's error.
+    try {
+      fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    } catch {
+      // Best effort (e.g. antivirus holding a file on Windows); the OS temp dir is cleaned eventually.
+    }
   }
 }
 

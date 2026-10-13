@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { _resetOutputDir } from "../../../../src/core/output-dir.js";
 import {
   checkCodexAuthenticated,
@@ -101,5 +101,42 @@ describe("Codex image driver", () => {
     ).rejects.toThrow(/Codex image driver failed/);
     expect(workDir).toContain("multix-codex-image-");
     expect(fs.existsSync(workDir)).toBe(false);
+  });
+
+  it("keeps the result and the Codex error when the temp directory cannot be removed", async () => {
+    const realRm = fs.rmSync;
+    const rm = vi.spyOn(fs, "rmSync").mockImplementation((target, opts) => {
+      if (String(target).includes("multix-codex-image-")) throw new Error("EBUSY");
+      realRm(target, opts);
+    });
+    const workDirs: string[] = [];
+    try {
+      const saved = await runCodexImageGeneration({
+        prompt: "red square",
+        outputFormat: "png",
+        runner: async (_cmd, args, opts) => {
+          workDirs.push(opts?.cwd ?? "");
+          const match = /at (.+?\.png)/.exec(args.at(-1) ?? "");
+          if (!match?.[1]) throw new Error("output path missing in prompt");
+          fs.writeFileSync(match[1], "png");
+          return { stdout: "{}", stderr: "", exitCode: 0 };
+        },
+      });
+      expect(fs.existsSync(saved.path)).toBe(true);
+      await expect(
+        runCodexImageGeneration({
+          prompt: "red square",
+          outputFormat: "png",
+          runner: async (_cmd, _args, opts) => {
+            workDirs.push(opts?.cwd ?? "");
+            return { stdout: "", stderr: "boom", exitCode: 1 };
+          },
+        }),
+      ).rejects.toThrow(/Codex image driver failed: boom/);
+    } finally {
+      rm.mockRestore();
+      for (const dir of workDirs) if (dir) fs.rmSync(dir, { recursive: true, force: true });
+    }
+    expect(workDirs).toHaveLength(2);
   });
 });
