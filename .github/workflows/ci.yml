@@ -41,7 +41,13 @@ jobs:
         with:
           node-version: "22.x"
           cache: npm
-          cache-dependency-path: worker/package-lock.json
+          cache-dependency-path: |
+            package-lock.json
+            worker/package-lock.json
+
+      # The catalog and argv tests load the CLI's own commander tree from src/.
+      - name: Install CLI dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
 
       - name: Install worker dependencies
         run: npm ci --prefix worker
