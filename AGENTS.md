@@ -12,23 +12,17 @@ Every change starts from a GitHub issue. Before writing code:
    opening a second thread.
 2. Assign yourself to the issue (`gh issue edit <n> --add-assignee @me`). An
    issue that is already assigned and labelled `in progress` belongs to someone
-   else: comment and coordinate before touching it.
-3. Claim it with a comment that names your session or branch
-   (`Claimed by <session>, branch <branch>`), then re-read the issue's comments.
-   If an earlier claim comment exists, the issue is taken: stop and help that
-   claim instead (review, evidence) rather than building a second fix.
-   Agent sessions often share one GitHub account and start from the same
-   trigger within seconds, so the assignee and the label alone cannot tell
-   two sessions apart; the earliest claim comment wins.
+   else: comment and coordinate before touching it. Agent sessions often share
+   one GitHub account, so an assignee that is `@me` proves nothing; step 3
+   decides.
+3. Claim it with a comment `Claimed by <session>, branch <branch>`, then
+   re-read the issue's comments. The claim listed first on the issue wins. If
+   an earlier claim exists, stop and support it (review, evidence) instead of
+   building a second fix. Release a claim you abandon with a `Released`
+   comment. A claim with no linked branch, PR or comment for 24 hours is
+   stale: claim it anew and link the stale claim.
 4. Move the issue through the status labels as the work advances. Only one
    status label should be on an issue at a time — remove the previous one.
-
-Re-check right before you open a new issue or a PR: list the open PRs that
-close the issue and the issues created in the last hour (for example,
-`gh pr list --search "<n>"` and `gh issue list --search "created:>=<time>"`).
-If someone else's PR or issue already covers it, do not open yours. If yours
-turns out to be the duplicate, close it with a link to the earlier one
-instead of racing to merge, and carry over any evidence it adds.
 
 | Label | Meaning |
 |---|---|
@@ -47,6 +41,21 @@ gh issue edit 123 --remove-label "in progress" --add-label "in review"
 gh issue edit 123 --remove-label "in review" --add-label "done"     # after the PR is opened
 gh issue edit 123 --remove-label "done" --add-label "shipped"       # after merge
 ```
+
+Re-check right before you open a new issue or a PR, with direct reads rather
+than `--search` (the search index lags behind by up to a minute, which is
+exactly the window in which parallel sessions collide):
+
+```bash
+gh issue view 123 --json comments,closedByPullRequestsReferences   # claims and PRs that close it
+gh pr list --limit 20                                               # newest open PRs first
+gh issue list --limit 20                                            # newest open issues first
+```
+
+If another PR or issue already covers the work, do not open yours. When two
+cover the same work, keep the one tied to the earliest claim (or, with no
+claim, the one opened first); close the other with a link to it instead of
+racing to merge, and carry over any evidence it adds.
 
 Found an unrelated bug, security gap, or hardening opportunity while working?
 Open a new issue for it (with evidence) rather than widening the current PR.
