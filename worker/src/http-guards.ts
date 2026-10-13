@@ -1,4 +1,4 @@
-/** Request-level guards for /mcp: bearer auth, Origin check and bounded body reads. */
+/** Request-level guards: constant-time comparison, Origin check and bounded body reads. */
 
 const encoder = new TextEncoder();
 
@@ -15,13 +15,6 @@ export async function tokensMatch(given: string, expected: string): Promise<bool
   let diff = 0;
   for (let i = 0; i < a.length; i++) diff |= (a[i] as number) ^ (b[i] as number);
   return diff === 0;
-}
-
-/** Extract the token from `Authorization: Bearer <token>`; undefined when absent or malformed. */
-export function bearerToken(request: Request): string | undefined {
-  const header = request.headers.get("authorization");
-  const match = header ? /^Bearer[ \t]+(\S+)[ \t]*$/i.exec(header) : null;
-  return match?.[1];
 }
 
 /**

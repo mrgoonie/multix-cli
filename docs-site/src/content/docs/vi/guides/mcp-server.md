@@ -1,6 +1,6 @@
 ---
 title: MCP server từ xa trên Cloudflare Workers
-description: Triển khai multix MCP server lên Cloudflare Workers để AI agent từ xa tạo ảnh và video qua Streamable HTTP với xác thực bearer.
+description: Triển khai multix MCP server lên Cloudflare Workers để AI agent từ xa tạo ảnh và video qua Streamable HTTP, với đăng nhập GitHub, OAuth và dashboard quản lý provider key của từng tài khoản.
 ---
 
 Repository có kèm một [Model Context Protocol](https://modelcontextprotocol.io)
@@ -35,79 +35,118 @@ công khai), `doc-to-md`, các lệnh ffmpeg và ImageMagick, Gemini/OpenAI/Mini
 và các provider khác chưa có client độc lập runtime, tạo ảnh và giọng nói
 Cloudflare Workers AI (trả về byte), Codex image driver và `multix update`.
 
-## Mô hình credential
+## Tài khoản và credential
 
-Server là **single-tenant**. Provider key là secret của Worker thuộc về người
-triển khai, và mọi client đã xác thực đều tiêu credit của tài khoản đó. Client
-không bao giờ gửi provider key. Chỉ chia sẻ `MCP_AUTH_TOKEN` với client bạn tin
-tưởng giao ngân sách của các key đó, và dùng allowlist cùng giới hạn bên dưới
-để kiểm soát phạm vi.
+Server hỗ trợ **nhiều tài khoản**. Mỗi người đăng nhập bằng GitHub và lưu
+provider key của riêng mình trong dashboard tại `/dashboard`. Mỗi request MCP
+chạy bằng key của tài khoản đã phê duyệt kết nối, nên mỗi người tự tiêu credit
+của mình. Người vận hành không đặt provider key trên Worker, và key đặt ở đó sẽ
+bị bỏ qua.
+
+- **Ai được đăng nhập:** chỉ người dùng GitHub có trong `MULTIX_ALLOWED_USERS`.
+  Danh sách được kiểm tra khi đăng nhập và ở mọi request dashboard và `/mcp`,
+  nên xóa một tên sẽ cắt luôn các kết nối hiện có của tài khoản đó.
+- **Lưu key:** key được mã hóa bằng AES-GCM (khóa `SECRETS_ENCRYPTION_KEY`,
+  gắn với tài khoản và tên key) và lưu trong namespace `ACCOUNTS_KV`.
+  Dashboard chỉ cho biết key đã được đặt hay chưa và khi nào; giá trị đã lưu
+  không bao giờ được hiển thị lại. KV chỉ nhất quán dần, nên key mới thêm hoặc
+  vừa xóa có thể mất khoảng một phút để đến mọi location của Cloudflare.
+- **Token GitHub:** chỉ dùng một lần để đọc hồ sơ và email đã xác minh, rồi bị
+  bỏ đi. multix lưu GitHub user ID, login, tên, URL avatar và các email đã xác
+  minh.
 
 ## Triển khai
 
-Yêu cầu: Node 20+, tài khoản Cloudflare và `wrangler` (đã có trong dev
-dependency của worker).
+Yêu cầu: Node 20+, tài khoản Cloudflare có zone cho tên miền của bạn, và
+`wrangler` (đã có trong dev dependency của worker).
 
-```bash
-npm ci --prefix worker
-cd worker
-npx wrangler login
+1. **Tạo GitHub OAuth App** tại
+   [github.com/settings/applications/new](https://github.com/settings/applications/new).
+   Homepage URL: origin công khai của bạn (ví dụ `https://mcp.example.com`).
+   Authorization callback URL: `<origin>/oauth/github/callback`.
+2. **Tạo hai KV namespace** và điền ID vào `worker/wrangler.jsonc`
+   (`OAUTH_KV` chứa OAuth client, grant và token đã hash; `ACCOUNTS_KV` chứa
+   tài khoản và provider key đã mã hóa):
 
-# Bắt buộc: bearer token client phải gửi (ít nhất 32 ký tự)
-openssl rand -hex 32 | npx wrangler secret put MCP_AUTH_TOKEN
+   ```bash
+   cd worker
+   npx wrangler kv namespace create OAUTH_KV
+   npx wrangler kv namespace create ACCOUNTS_KV
+   ```
 
-# Provider key: chỉ đặt những key bạn muốn mở
-npx wrangler secret put REPLICATE_API_TOKEN
-npx wrangler secret put ATLASCLOUD_API_KEY
-npx wrangler secret put HEYGEN_API_KEY
-# Video Cloudflare cần cả bốn:
-npx wrangler secret put CLOUDFLARE_ACCOUNT_ID
-npx wrangler secret put CLOUDFLARE_API_TOKEN
-npx wrangler secret put CLOUDFLARE_AI_GATEWAY_ID
-# (cùng với REPLICATE_API_TOKEN ở trên)
+3. **Sửa `worker/wrangler.jsonc`:** đặt `routes` theo host của bạn,
+   `MULTIX_PUBLIC_URL` là origin công khai, và `MULTIX_ALLOWED_USERS` là các
+   login GitHub hoặc email đã xác minh được phép đăng nhập. File trong
+   repository đang cấu hình cho `multix.zuey.me`.
+4. **Đặt secret** và triển khai:
 
-cd ..
-npm run deploy:mcp
-```
+   ```bash
+   npm ci --prefix worker
+   cd worker
+   npx wrangler login
+   npx wrangler secret put GITHUB_CLIENT_ID
+   npx wrangler secret put GITHUB_CLIENT_SECRET
+   openssl rand -hex 32 | npx wrangler secret put SESSION_SECRET
+   openssl rand -base64 32 | npx wrangler secret put SECRETS_ENCRYPTION_KEY
+   cd ..
+   npm run deploy:mcp
+   ```
+
+Giữ kỹ `SECRETS_ENCRYPTION_KEY`: thay khóa này khiến mọi provider key đã lưu
+không đọc được nữa. Các provider đó sẽ báo chưa được cấu hình cho đến khi mỗi
+tài khoản lưu lại key. Thay `SESSION_SECRET`
+sẽ đăng xuất mọi người khỏi dashboard.
 
 Kiểm tra server (endpoint này công khai và chỉ trả về `{ "ok": true }`):
 
 ```bash
-curl https://multix-mcp.<your-subdomain>.workers.dev/health
+curl https://mcp.example.com/health
 ```
+
+### Dùng chung host với site khác
+
+Worker chỉ cần các path: `/mcp`, `/dashboard`, `/oauth/*`,
+`/.well-known/oauth-*` và `/health`. Route theo path được ưu tiên hơn Custom
+Domain trên cùng host, nên một Worker khác (ví dụ site tài liệu) vẫn phục vụ
+mọi path còn lại. `multix.zuey.me` được thiết lập theo cách này.
 
 ### Chạy cục bộ
 
-Sao chép `worker/.dev.vars.example` thành `worker/.dev.vars` (đã được
-git-ignore), điền token và các key cần thiết, rồi chạy:
+Tạo GitHub OAuth App thứ hai với callback
+`http://localhost:8787/oauth/github/callback`. Sao chép
+`worker/.dev.vars.example` thành `worker/.dev.vars` (đã được git-ignore), điền
+giá trị, rồi chạy:
 
 ```bash
-npm run dev:mcp   # http://localhost:8787/mcp
+npm run dev:mcp   # http://localhost:8787/mcp và /dashboard
 ```
 
 ## Kết nối client
 
-Mọi MCP client hỗ trợ Streamable HTTP với header tùy chỉnh đều dùng được. Gửi
-token dưới dạng bearer header:
-
-```json
-{
-  "mcpServers": {
-    "multix": {
-      "type": "http",
-      "url": "https://multix-mcp.<your-subdomain>.workers.dev/mcp",
-      "headers": { "Authorization": "Bearer <MCP_AUTH_TOKEN>" }
-    }
-  }
-}
-```
+1. Đăng nhập tại `<origin>/dashboard` và lưu các provider key bạn muốn dùng.
+2. Thêm server vào bất kỳ MCP client nào hỗ trợ server từ xa với OAuth
+   (Claude, Claude Code, Cursor, VS Code, …). Client tự đăng ký, mở trình
+   duyệt để đăng nhập GitHub, và yêu cầu bạn phê duyệt kết nối.
 
 Với Claude Code:
 
 ```bash
-claude mcp add --transport http multix https://multix-mcp.<your-subdomain>.workers.dev/mcp \
-  --header "Authorization: Bearer $MULTIX_MCP_TOKEN"
+claude mcp add --transport http multix https://mcp.example.com/mcp
 ```
+
+Sau đó chạy `/mcp` trong Claude Code và chọn **Authenticate**. Client khác:
+
+```json
+{
+  "mcpServers": {
+    "multix": { "type": "http", "url": "https://mcp.example.com/mcp" }
+  }
+}
+```
+
+Các client đã kết nối hiện trong dashboard, nơi nút **Disconnect** thu hồi
+quyền truy cập của chúng. Tool cần một provider mà bạn chưa lưu key sẽ báo
+provider đó chưa được cấu hình.
 
 Luồng video thường gặp: `multix_generate_video` → gọi lại
 `multix_prediction_status` mỗi 10–30 giây đến khi `done` là `true` → đọc
@@ -115,32 +154,64 @@ Luồng video thường gặp: `multix_generate_video` → gọi lại
 
 ## Cấu hình
 
-Đặt dưới dạng `vars` trong `worker/wrangler.jsonc` hoặc dưới dạng secret:
+Secret (đặt bằng `npx wrangler secret put <NAME>`):
+
+| Secret | Tác dụng |
+|---|---|
+| `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | GitHub OAuth App dùng để đăng nhập. |
+| `SESSION_SECRET` | Ít nhất 32 ký tự. Ký cookie dashboard và token của form. |
+| `SECRETS_ENCRYPTION_KEY` | Base64 của đúng 32 byte ngẫu nhiên. Mã hóa provider key đã lưu. |
+
+Nếu thiếu hoặc sai bất kỳ secret nào, hoặc `MULTIX_PUBLIC_URL` không phải
+origin `https://`, đăng nhập, trang phê duyệt và dashboard trả về `503` (fail
+closed). `http://localhost` được chấp nhận khi phát triển cục bộ.
+
+Đặt dưới dạng `vars` trong `worker/wrangler.jsonc`:
 
 | Biến | Mặc định | Tác dụng |
 |---|---|---|
-| `MCP_AUTH_TOKEN` | — (bắt buộc) | Bearer token. Nếu chưa đặt hoặc ngắn hơn 32 ký tự, `/mcp` trả về `503` (fail closed). |
+| `MULTIX_PUBLIC_URL` | — (bắt buộc) | Origin công khai, ví dụ `https://mcp.example.com`. Dùng cho metadata OAuth, redirect và callback GitHub. |
+| `MULTIX_ALLOWED_USERS` | không ai | Login GitHub (không phân biệt hoa thường) hoặc email đã xác minh (mục có `@`) được phép đăng nhập, phân tách bằng dấu phẩy. Để trống thì không ai đăng nhập được. |
 | `MULTIX_MCP_ALLOWED_PROVIDERS` | tất cả | Allowlist provider, phân tách bằng dấu phẩy, ví dụ `replicate,heygen`. |
 | `MULTIX_MCP_ALLOWED_MODELS` | bất kỳ | Allowlist `provider:model`, ví dụ `replicate:black-forest-labs/flux-schnell,heygen:heygen-video-1`. Khi đặt, mọi model (kể cả model mặc định) phải có trong danh sách. |
 | `MULTIX_MCP_MAX_OUTPUTS` | `4` (tối đa 10) | Số `num_outputs` tối đa mỗi lần tạo ảnh. |
 | `MULTIX_MCP_MAX_VIDEO_SECONDS` | `10` (tối đa 15) | `duration` video tối đa. Khi caller bỏ qua `duration`, server gửi rõ một thời lượng thay vì để mặc định của provider: `min(5, giới hạn)` giây với Replicate, HeyGen và Cloudflare; với Atlas Cloud xem [Giới hạn chi phí](#mô-hình-bảo-mật). |
 | `MULTIX_MCP_ALLOWED_RESOLUTIONS` | `480p,720p,768p,1080p` | Độ phân giải video caller được yêu cầu (`768p` là kích thước của HeyGen Video). Giá trị khác (ví dụ `4k`) bị từ chối trước khi gọi provider. Nếu bỏ qua resolution, model dùng mặc định của nó; với Atlas Cloud, mặc định đó (và mọi `output_resolution`, `target_resolution`, `quality` mang giá trị độ phân giải, `size`, `width` hoặc `height`, hoặc độ phân giải nêu trong ID model) cũng được kiểm tra theo danh sách này. |
-| `MULTIX_MCP_ALLOWED_ORIGINS` | không có | Origin trình duyệt chính xác (ví dụ `https://app.example.com`) được phép gọi `/mcp`. Không hỗ trợ `*` hay wildcard khác: `*` chỉ khớp origin `*` theo nghĩa đen, thứ trình duyệt không bao giờ gửi. Request có header `Origin` khác nhận `403`; request không có `Origin` (client phía server) được chấp nhận. Origin trong danh sách nhận header CORS, và preflight `OPTIONS` của chúng được trả lời mà không cần token. Request thật vẫn cần bearer token. |
+| `MULTIX_MCP_ALLOWED_ORIGINS` | không có | Origin trình duyệt chính xác (ví dụ `https://app.example.com`) được phép gọi `/mcp`. Không hỗ trợ `*` hay wildcard khác: `*` chỉ khớp origin `*` theo nghĩa đen, thứ trình duyệt không bao giờ gửi. Sau khi access token được kiểm tra, request có header `Origin` khác nhận `403`; request không có `Origin` (client phía server) được chấp nhận. Origin trong danh sách nhận header CORS. Preflight `OPTIONS` được lớp OAuth trả lời cho mọi origin. |
 
-Binding `MCP_RATE_LIMITER` trong `wrangler.jsonc` dùng
-[Workers Rate Limiting API](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/)
-cho phép khoảng 60 request mỗi phút cho mỗi IP client; request vượt mức nhận
-`429`. Giới hạn này chỉ gần đúng: Cloudflare đếm theo từng location và bộ đếm
-chỉ nhất quán dần, nên hãy xem nó là lớp chống lạm dụng, không phải ngân sách
+Hai binding [Workers Rate Limiting](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/)
+trong `wrangler.jsonc` chặn lạm dụng; request vượt mức nhận `429`:
+
+- `MCP_RATE_LIMITER`: khoảng 60 request `/mcp` mỗi phút cho mỗi tài khoản.
+- `AUTH_RATE_LIMITER`: khoảng 30 request mỗi phút cho mỗi IP client ở các
+  bước đăng nhập, yêu cầu ủy quyền, đăng ký client, cấp token và thao tác ghi
+  trên dashboard.
+
+Các giới hạn này chỉ gần đúng: Cloudflare đếm theo từng location và bộ đếm chỉ
+nhất quán dần, nên hãy xem chúng là lớp chống lạm dụng, không phải ngân sách
 chính xác. Điều chỉnh `simple.limit`/`simple.period` tại đó. `namespace_id`
 phải là duy nhất trong tài khoản Cloudflare của bạn. Nếu Worker khác đã dùng
-`1001`, hãy chọn số nguyên khác, nếu không hai Worker sẽ dùng chung bộ đếm.
+`1001` hoặc `1002`, hãy chọn số nguyên khác, nếu không hai Worker sẽ dùng
+chung bộ đếm.
 
 ## Mô hình bảo mật
 
-- **Xác thực:** mọi request `/mcp` cần `Authorization: Bearer <token>`. Phép so
-  sánh chạy thời gian hằng định trên digest SHA-256. Khi thất bại server trả
-  `401` không kèm chi tiết.
+- **Xác thực:** `/mcp` là protected resource OAuth 2.1, phục vụ bằng
+  [`@cloudflare/workers-oauth-provider`](https://github.com/cloudflare/workers-oauth-provider).
+  Client tìm thấy nó qua `/.well-known/oauth-protected-resource/mcp` và
+  `/.well-known/oauth-authorization-server`, đăng ký động (`/oauth/register`)
+  hoặc bằng Client ID Metadata Document, và dùng PKCE. Request không có access
+  token hợp lệ nhận `401` kèm challenge `WWW-Authenticate`. Token được lưu dạng
+  hash trong `OAUTH_KV`.
+- **Đăng nhập và phê duyệt:** GitHub OAuth (có PKCE và `state`), sau đó là
+  trang phê duyệt ghi tên client và địa chỉ redirect của nó. Tài khoản không có
+  trong `MULTIX_ALLOWED_USERS` bị từ chối trước khi lưu bất cứ thứ gì.
+- **Dashboard:** cookie có tiền tố `__Host-`, `Secure`, `HttpOnly`,
+  `SameSite=Lax` và được ký HMAC, phiên kéo dài 7 ngày. Mọi form cần CSRF token
+  theo tài khoản và header `Origin` cùng origin. Các trang gửi Content Security
+  Policy chặt và `frame-ancestors 'none'`.
+- **Cô lập tài khoản:** mỗi request `/mcp` chỉ tải key của tài khoản đã cấp
+  token. Key không bao giờ xuất hiện trong trang, log hay kết quả tool.
 - **Kiểm tra input:** mọi tham số tool được kiểm tra bằng schema zod (prompt ≤
   4000 ký tự, ID chỉ gồm `[A-Za-z0-9_-]`, số có giới hạn). Body lớn hơn 64 KiB
   bị từ chối với `413`. JSON-RPC batch (body dạng mảng) bị từ chối với `400` /
@@ -266,7 +337,8 @@ phải là duy nhất trong tài khoản Cloudflare của bạn. Nếu Worker kh
   bearer token và query string của URL, và bị cắt ngắn. Vì vậy lỗi provider có
   lặp lại một phần prompt (ví dụ thông báo kiểm duyệt nội dung) có thể xuất
   hiện ở đó. Client nhận cùng nội dung đã làm sạch này.
-- **Stateless:** không session, không lưu trữ. Mỗi request tạo một server mới.
+- **MCP stateless:** không có MCP session. Mỗi request tạo một server mới với
+  key của caller. Trạng thái OAuth và tài khoản nằm trong KV.
 
 Trong CI, bundle Worker được kiểm tra để bảo đảm không chứa module `node:*`,
 không import module có sẵn của Node theo tên trần (`fs`, `child_process`,

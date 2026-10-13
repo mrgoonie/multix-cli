@@ -1,7 +1,6 @@
 import type { Env } from "../src/config.js";
-import { type HandlerDeps, handleRequest } from "../src/index.js";
+import { type McpDeps, handleMcpRequest } from "../src/mcp-api-handler.js";
 
-export const TOKEN = "test-token-0123456789abcdef0123456789abcdef";
 export const REPLICATE_KEY = "r8_replicate_secret_value_123456";
 export const ATLAS_KEY = "atlas_secret_value_123456789";
 export const HEYGEN_KEY = "heygen_secret_value_123456789";
@@ -9,7 +8,6 @@ export const CF_TOKEN = "cf_secret_value_1234567890";
 
 export function fullEnv(overrides: Partial<Env> = {}): Env {
   return {
-    MCP_AUTH_TOKEN: TOKEN,
     REPLICATE_API_TOKEN: REPLICATE_KEY,
     ATLASCLOUD_API_KEY: ATLAS_KEY,
     HEYGEN_API_KEY: HEYGEN_KEY,
@@ -29,6 +27,15 @@ export interface RecordedCall {
 
 type Route = (call: RecordedCall) => Response | undefined;
 
+/** JSON bodies are parsed; anything else (e.g. form-encoded) is kept as text. */
+function parseBody(raw: string): unknown {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return raw;
+  }
+}
+
 /** Fake provider fetch: the first route returning a Response wins; unmatched calls fail loudly. */
 export function mockFetch(...routes: Route[]) {
   const calls: RecordedCall[] = [];
@@ -42,7 +49,7 @@ export function mockFetch(...routes: Route[]) {
       url: input,
       method: init?.method ?? "GET",
       headers,
-      body: raw ? JSON.parse(raw) : undefined,
+      body: raw ? parseBody(raw) : undefined,
     };
     calls.push(call);
     for (const route of routes) {
@@ -79,7 +86,6 @@ export function mcpRequest(
   return new Request("https://mcp.example.com/mcp", {
     method: "POST",
     headers: {
-      authorization: `Bearer ${TOKEN}`,
       accept: "application/json, text/event-stream",
       "content-type": "application/json",
       ...headers,
@@ -95,9 +101,9 @@ export async function rpc(
   env: Env,
   method: string,
   params = {},
-  deps: HandlerDeps = {},
+  deps: McpDeps = {},
 ): Promise<Json> {
-  const response = await handleRequest(mcpRequest(method, params), env, deps);
+  const response = await handleMcpRequest(mcpRequest(method, params), env, deps);
   if (response.status !== 200) throw new Error(`HTTP ${response.status}: ${await response.text()}`);
   return response.json();
 }
@@ -107,7 +113,7 @@ export async function callTool(
   env: Env,
   name: string,
   args: Record<string, unknown>,
-  deps: HandlerDeps = {},
+  deps: McpDeps = {},
 ): Promise<Json> {
   const body = await rpc(env, "tools/call", { name, arguments: args }, deps);
   if (body.error) throw new Error(`JSON-RPC error: ${JSON.stringify(body.error)}`);

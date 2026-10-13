@@ -681,30 +681,42 @@ Cloudflare video is intentionally separate: it has no thumbnail flags, and `gene
 
 ## Remote MCP server (Cloudflare Workers)
 
-`worker/` contains an optional, stateless MCP server that exposes remote-safe
-image and video tools over Streamable HTTP at `/mcp`, for agents that cannot
-run the CLI locally. It is a separate package and is not included in the npm
-CLI.
+`worker/` contains an optional MCP server that exposes remote-safe image and
+video tools over Streamable HTTP at `/mcp`, for agents that cannot run the CLI
+locally. It is a separate package and is not included in the npm CLI. A hosted
+instance runs at `https://multix.zuey.me/mcp` (invited GitHub accounts only).
 
 - Tools: `multix_list_providers`, `multix_generate_image` (Replicate, Atlas
   Cloud), `multix_generate_video` (Replicate, Atlas Cloud, HeyGen, Cloudflare
   AI Gateway; returns an ID without blocking), `multix_prediction_status`,
   `multix_prediction_cancel` (Replicate). Results are provider URLs, not bytes.
-- Auth: `Authorization: Bearer <MCP_AUTH_TOKEN>` (at least 32 characters; the
-  server returns `503` if it is unset). `/health` is public.
-- Single-tenant: provider keys are Worker secrets, and every caller spends the
-  deployer's credits. Limit exposure with `MULTIX_MCP_ALLOWED_PROVIDERS`,
-  `MULTIX_MCP_ALLOWED_MODELS`, `MULTIX_MCP_MAX_OUTPUTS`,
-  `MULTIX_MCP_MAX_VIDEO_SECONDS` (also sent as `min(5, cap)` when a caller
-  omits `duration`), `MULTIX_MCP_ALLOWED_RESOLUTIONS` (default
-  `480p,720p,768p,1080p`), `MULTIX_MCP_ALLOWED_ORIGINS` (exact browser origins, with
-  CORS), and the approximate per-IP rate limiter. JSON-RPC batches are
-  rejected.
+- Auth: OAuth 2.1 (dynamic client registration, PKCE) with GitHub sign-in.
+  Only GitHub logins or verified emails in `MULTIX_ALLOWED_USERS` can sign in.
+  `/health` is public.
+- Per-account keys: each account saves its own provider keys at `/dashboard`
+  (AES-GCM encrypted in KV) and spends its own credits. The dashboard also
+  lists and disconnects MCP clients. Limit exposure further with
+  `MULTIX_MCP_ALLOWED_PROVIDERS`, `MULTIX_MCP_ALLOWED_MODELS`,
+  `MULTIX_MCP_MAX_OUTPUTS`, `MULTIX_MCP_MAX_VIDEO_SECONDS` (also sent as
+  `min(5, cap)` when a caller omits `duration`),
+  `MULTIX_MCP_ALLOWED_RESOLUTIONS` (default `480p,720p,768p,1080p`),
+  `MULTIX_MCP_ALLOWED_ORIGINS` (exact browser origins, with CORS), and the
+  approximate per-account rate limiter. JSON-RPC batches are rejected.
+
+```bash
+claude mcp add --transport http multix https://multix.zuey.me/mcp
+```
+
+To run your own: create a GitHub OAuth App (callback
+`<origin>/oauth/github/callback`), two KV namespaces, and set routes and vars in
+`worker/wrangler.jsonc`, then:
 
 ```bash
 npm ci --prefix worker
-cd worker && openssl rand -hex 32 | npx wrangler secret put MCP_AUTH_TOKEN
-npx wrangler secret put REPLICATE_API_TOKEN   # and any other provider keys
+cd worker && npx wrangler secret put GITHUB_CLIENT_ID
+npx wrangler secret put GITHUB_CLIENT_SECRET
+openssl rand -hex 32 | npx wrangler secret put SESSION_SECRET
+openssl rand -base64 32 | npx wrangler secret put SECRETS_ENCRYPTION_KEY
 cd .. && npm run deploy:mcp                   # or: npm run dev:mcp (local, port 8787)
 ```
 

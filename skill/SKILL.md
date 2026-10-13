@@ -470,9 +470,12 @@ multix update
 
 ## Remote MCP server
 
-If the user cannot run the CLI locally but has deployed the optional multix
-MCP Worker (`worker/` in the repo; guide: https://multix.zuey.me/guides/mcp-server/),
-call its tools instead: `multix_list_providers` first, then
+If the user cannot run the CLI locally but has access to a multix MCP server
+(the hosted `https://multix.zuey.me/mcp` or their own deploy of `worker/`;
+guide: https://multix.zuey.me/guides/mcp-server/), call its tools instead. The
+server signs in with GitHub OAuth and uses the provider keys the user saved at
+`/dashboard`; a provider reported as not configured needs a key saved there.
+Call `multix_list_providers` first, then
 `multix_generate_image` / `multix_generate_video`, and poll
 `multix_prediction_status` until `done` is true. It returns provider URLs (no
 local files), supports only Replicate, Atlas Cloud, HeyGen, and Cloudflare

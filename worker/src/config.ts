@@ -1,28 +1,22 @@
 /**
  * Worker bindings and server limits.
  *
- * Secrets (MCP_AUTH_TOKEN and provider keys) come from `wrangler secret put`
- * (or `.dev.vars` locally) and are never returned to clients. Plain settings
- * may be set as `vars` in wrangler.jsonc.
+ * Two shapes live here:
+ * - `WorkerEnv`: what Cloudflare binds to the Worker (KV namespaces, Worker
+ *   secrets from `wrangler secret put`, plain `vars` from wrangler.jsonc).
+ * - `Env`: the per-request tool configuration. Provider keys in it belong to
+ *   the signed-in account (decrypted from ACCOUNTS_KV); the operator's
+ *   `MULTIX_MCP_*` limits are copied in from `WorkerEnv`.
  */
+
+import type { OAuthHelpers } from "@cloudflare/workers-oauth-provider";
 
 export interface RateLimiter {
   limit(options: { key: string }): Promise<{ success: boolean }>;
 }
 
-export interface Env {
-  /** Bearer token MCP clients must send. Required: the server refuses /mcp without it. */
-  MCP_AUTH_TOKEN?: string;
-
-  REPLICATE_API_TOKEN?: string;
-  /** Fallback name accepted by the CLI too. */
-  REPLICATE_API_KEY?: string;
-  ATLASCLOUD_API_KEY?: string;
-  HEYGEN_API_KEY?: string;
-  CLOUDFLARE_ACCOUNT_ID?: string;
-  CLOUDFLARE_API_TOKEN?: string;
-  CLOUDFLARE_AI_GATEWAY_ID?: string;
-
+/** Operator-wide tool limits, set as `vars` in wrangler.jsonc. */
+export interface ServerSettings {
   /** Comma-separated provider allowlist. Unset = every configured provider. */
   MULTIX_MCP_ALLOWED_PROVIDERS?: string;
   /** Comma-separated `provider:model` allowlist. Unset = any model. */
@@ -35,13 +29,68 @@ export interface Env {
   MULTIX_MCP_ALLOWED_RESOLUTIONS?: string;
   /** Comma-separated browser origins allowed to call /mcp. Requests with other Origins get 403. */
   MULTIX_MCP_ALLOWED_ORIGINS?: string;
-
-  /** Optional Workers Rate Limiting binding applied to /mcp. */
-  MCP_RATE_LIMITER?: RateLimiter;
 }
 
-/** Shortest accepted MCP_AUTH_TOKEN; shorter values are treated as unset (fail closed). */
-export const MIN_AUTH_TOKEN_LENGTH = 32;
+/** Provider credentials an account can store from the dashboard. */
+export const PROVIDER_SECRET_NAMES = [
+  "REPLICATE_API_TOKEN",
+  "ATLASCLOUD_API_KEY",
+  "HEYGEN_API_KEY",
+  "CLOUDFLARE_ACCOUNT_ID",
+  "CLOUDFLARE_API_TOKEN",
+  "CLOUDFLARE_AI_GATEWAY_ID",
+] as const;
+export type ProviderSecretName = (typeof PROVIDER_SECRET_NAMES)[number];
+
+export type ProviderKeys = Partial<Record<ProviderSecretName, string>>;
+
+/** Per-request tool configuration: operator limits plus the caller's own provider keys. */
+export interface Env extends ServerSettings, ProviderKeys {
+  /** Fallback name for REPLICATE_API_TOKEN accepted by the shared Replicate client. */
+  REPLICATE_API_KEY?: string;
+}
+
+/** Cloudflare bindings, Worker secrets and vars. */
+export interface WorkerEnv extends ServerSettings {
+  /** OAuth grants, tokens and registered clients (managed by workers-oauth-provider). */
+  OAUTH_KV: KVNamespace;
+  /** Accounts and their encrypted provider keys. */
+  ACCOUNTS_KV: KVNamespace;
+  /** Set by OAuthProvider before the default handler runs. */
+  OAUTH_PROVIDER?: OAuthHelpers;
+
+  /** Public origin, e.g. https://multix.zuey.me. The MCP resource is `${origin}/mcp`. */
+  MULTIX_PUBLIC_URL?: string;
+  /** Comma-separated GitHub logins and/or verified emails allowed to sign in. Empty = nobody. */
+  MULTIX_ALLOWED_USERS?: string;
+
+  GITHUB_CLIENT_ID?: string;
+  GITHUB_CLIENT_SECRET?: string;
+  /** HMAC key (32+ chars) for dashboard session and sign-in cookies. */
+  SESSION_SECRET?: string;
+  /** Base64 of 32 random bytes: AES-256-GCM key for stored provider keys. */
+  SECRETS_ENCRYPTION_KEY?: string;
+
+  /** Optional Workers Rate Limiting binding applied per account to /mcp. */
+  MCP_RATE_LIMITER?: RateLimiter;
+  /** Optional Workers Rate Limiting binding applied per IP to sign-in and dashboard writes. */
+  AUTH_RATE_LIMITER?: RateLimiter;
+}
+
+/** Copy only the operator limits out of the Worker env (never Worker secrets). */
+export function serverSettings(env: ServerSettings): ServerSettings {
+  return {
+    MULTIX_MCP_ALLOWED_PROVIDERS: env.MULTIX_MCP_ALLOWED_PROVIDERS,
+    MULTIX_MCP_ALLOWED_MODELS: env.MULTIX_MCP_ALLOWED_MODELS,
+    MULTIX_MCP_MAX_OUTPUTS: env.MULTIX_MCP_MAX_OUTPUTS,
+    MULTIX_MCP_MAX_VIDEO_SECONDS: env.MULTIX_MCP_MAX_VIDEO_SECONDS,
+    MULTIX_MCP_ALLOWED_RESOLUTIONS: env.MULTIX_MCP_ALLOWED_RESOLUTIONS,
+    MULTIX_MCP_ALLOWED_ORIGINS: env.MULTIX_MCP_ALLOWED_ORIGINS,
+  };
+}
+
+/** Shortest accepted SESSION_SECRET; shorter values are treated as unset (fail closed). */
+export const MIN_SESSION_SECRET_LENGTH = 32;
 /** Max JSON-RPC request body. Tool inputs are small; media is passed by URL. */
 export const MAX_BODY_BYTES = 64 * 1024;
 export const MAX_PROMPT_CHARS = 4000;
@@ -99,7 +148,6 @@ export function limitsFrom(env: Env): Limits {
 /** Every secret value configured on the Worker, for scrubbing error text. */
 export function secretValues(env: Env): string[] {
   return [
-    env.MCP_AUTH_TOKEN,
     env.REPLICATE_API_TOKEN,
     env.REPLICATE_API_KEY,
     env.ATLASCLOUD_API_KEY,

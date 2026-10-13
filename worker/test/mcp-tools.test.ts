@@ -5,7 +5,6 @@ import {
   CF_TOKEN,
   HEYGEN_KEY,
   REPLICATE_KEY,
-  TOKEN,
   callTool,
   fullEnv,
   jsonResponse,
@@ -60,7 +59,7 @@ describe("multix_list_providers", () => {
     });
     const result = await callTool(env, "multix_list_providers", {});
     const text = result.content[0].text as string;
-    for (const secret of [TOKEN, REPLICATE_KEY, ATLAS_KEY, CF_TOKEN, "acct123"]) {
+    for (const secret of [REPLICATE_KEY, ATLAS_KEY, CF_TOKEN, "acct123"]) {
       expect(text).not.toContain(secret);
     }
     const byId = Object.fromEntries(

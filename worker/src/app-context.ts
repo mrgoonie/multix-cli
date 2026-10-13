@@ -1,0 +1,101 @@
+/**
+ * Per-request context for the sign-in, consent and dashboard routes.
+ * Resolving it fails closed: a missing or weak Worker secret means the routes
+ * answer 503 instead of running half-configured.
+ */
+
+import type { OAuthHelpers } from "@cloudflare/workers-oauth-provider";
+import type { FetchLike } from "../../src/core/fetch-json.js";
+import { AccountStore } from "./accounts/account-store.js";
+import type { Account } from "./accounts/account-store.js";
+import { isAllowed } from "./accounts/allowlist.js";
+import { importEncryptionKey } from "./accounts/provider-secret-crypto.js";
+import { readSession } from "./auth/signed-cookies.js";
+import { MIN_SESSION_SECRET_LENGTH, type WorkerEnv } from "./config.js";
+
+export interface AppDeps {
+  /** Injected for tests; defaults to the Worker's fetch (GitHub and provider calls). */
+  fetch?: FetchLike;
+}
+
+export interface AppContext {
+  env: WorkerEnv;
+  /** Public origin without a trailing slash, e.g. https://multix.zuey.me. */
+  origin: string;
+  sessionSecret: string;
+  githubClientId: string;
+  githubClientSecret: string;
+  accounts: AccountStore;
+  fetch: FetchLike;
+}
+
+/** Normalised public origin, or undefined when MULTIX_PUBLIC_URL is missing or not https. */
+export function publicOrigin(env: WorkerEnv): string | undefined {
+  const raw = env.MULTIX_PUBLIC_URL?.trim();
+  if (!raw) return undefined;
+  try {
+    const url = new URL(raw);
+    const loopback = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+    if (url.protocol !== "https:" && !(url.protocol === "http:" && loopback)) return undefined;
+    return url.origin;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function resolveAppContext(
+  env: WorkerEnv,
+  deps: AppDeps,
+): Promise<AppContext | undefined> {
+  const origin = publicOrigin(env);
+  const sessionSecret = env.SESSION_SECRET?.trim() ?? "";
+  const githubClientId = env.GITHUB_CLIENT_ID?.trim() ?? "";
+  const githubClientSecret = env.GITHUB_CLIENT_SECRET?.trim() ?? "";
+  if (
+    !origin ||
+    sessionSecret.length < MIN_SESSION_SECRET_LENGTH ||
+    !githubClientId ||
+    !githubClientSecret ||
+    !env.ACCOUNTS_KV
+  ) {
+    return undefined;
+  }
+  let encryptionKey: Promise<CryptoKey>;
+  try {
+    encryptionKey = importEncryptionKey(env.SECRETS_ENCRYPTION_KEY);
+    await encryptionKey;
+  } catch {
+    return undefined;
+  }
+  return {
+    env,
+    origin,
+    sessionSecret,
+    githubClientId,
+    githubClientSecret,
+    accounts: new AccountStore(env.ACCOUNTS_KV, encryptionKey),
+    fetch: deps.fetch ?? ((input, init) => fetch(input, init)),
+  };
+}
+
+/** The signed-in account, if the session is valid and the account is still allowlisted. */
+export async function signedInAccount(
+  ctx: AppContext,
+  request: Request,
+): Promise<Account | undefined> {
+  const session = await readSession(request, ctx.sessionSecret);
+  if (!session) return undefined;
+  const account = await ctx.accounts.get(session.userId);
+  if (!account || !isAllowed(ctx.env.MULTIX_ALLOWED_USERS, account)) return undefined;
+  return account;
+}
+
+export function oauthHelpers(env: WorkerEnv): OAuthHelpers {
+  if (!env.OAUTH_PROVIDER) throw new Error("OAUTH_PROVIDER helpers are not available");
+  return env.OAUTH_PROVIDER;
+}
+
+/** Form POSTs must come from our own pages (on top of SameSite=Lax cookies and CSRF tokens). */
+export function sameOriginPost(ctx: AppContext, request: Request): boolean {
+  return request.headers.get("origin") === ctx.origin;
+}

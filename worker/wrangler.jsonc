@@ -1,24 +1,48 @@
 // multix remote MCP server. Separate from docs-site/wrangler.jsonc (the docs site).
-// Secrets are never stored here: set them with `npx wrangler secret put <NAME>`.
+// Secrets are never stored here: set them with `npx wrangler secret put <NAME>`:
+//   GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET   GitHub OAuth App (callback: <origin>/oauth/github/callback)
+//   SESSION_SECRET                           32+ random characters
+//   SECRETS_ENCRYPTION_KEY                   base64 of 32 random bytes (openssl rand -base64 32)
+// Provider keys are not Worker secrets: each account saves its own in /dashboard.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "multix-mcp",
   "main": "src/index.ts",
   "compatibility_date": "2026-09-01",
   // No nodejs_compat: the bundle must not depend on Node built-ins.
+  // global_fetch_strictly_public: required for MCP Client ID Metadata Documents (URL client ids).
+  "compatibility_flags": ["global_fetch_strictly_public"],
   "observability": { "enabled": true },
-  // Approximate per-IP limit for /mcp: Workers rate limiting is per Cloudflare
-  // location and eventually consistent, so it is not an exact budget.
-  // namespace_id must be unique per account: pick another integer if any other
-  // Worker on your account already uses 1001, or the two will share counters.
+  "workers_dev": false,
+  // multix.zuey.me itself is the docs site's Custom Domain. These routes run before it,
+  // so only the MCP, OAuth and dashboard paths reach this Worker.
+  "routes": [
+    { "pattern": "multix.zuey.me/mcp", "zone_name": "zuey.me" },
+    { "pattern": "multix.zuey.me/mcp/*", "zone_name": "zuey.me" },
+    { "pattern": "multix.zuey.me/dashboard", "zone_name": "zuey.me" },
+    { "pattern": "multix.zuey.me/dashboard/*", "zone_name": "zuey.me" },
+    { "pattern": "multix.zuey.me/oauth/*", "zone_name": "zuey.me" },
+    { "pattern": "multix.zuey.me/.well-known/oauth-*", "zone_name": "zuey.me" },
+    { "pattern": "multix.zuey.me/health", "zone_name": "zuey.me" }
+  ],
+  "kv_namespaces": [
+    // OAuth clients, grants and tokens (hashed / encrypted by workers-oauth-provider).
+    { "binding": "OAUTH_KV", "id": "fcd61b4086be4e7292c7f5035f4024a7" },
+    // Accounts and their AES-GCM encrypted provider keys.
+    { "binding": "ACCOUNTS_KV", "id": "2a5452266a1f477d9a374a56525a81f9" }
+  ],
+  // Approximate limits: Workers rate limiting is per Cloudflare location and
+  // eventually consistent, so it is not an exact budget. namespace_id must be
+  // unique per account: pick other integers if another Worker already uses these.
   "ratelimits": [
-    {
-      "name": "MCP_RATE_LIMITER",
-      "namespace_id": "1001",
-      "simple": { "limit": 60, "period": 60 }
-    }
+    // Per account on /mcp.
+    { "name": "MCP_RATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 60, "period": 60 } },
+    // Per IP on sign-in, authorization, token, registration and dashboard writes.
+    { "name": "AUTH_RATE_LIMITER", "namespace_id": "1002", "simple": { "limit": 30, "period": 60 } }
   ],
   "vars": {
+    "MULTIX_PUBLIC_URL": "https://multix.zuey.me",
+    "MULTIX_ALLOWED_USERS": "mrgoonie",
     "MULTIX_MCP_MAX_OUTPUTS": "4",
     "MULTIX_MCP_MAX_VIDEO_SECONDS": "10",
     "MULTIX_MCP_ALLOWED_RESOLUTIONS": "480p,720p,768p,1080p"

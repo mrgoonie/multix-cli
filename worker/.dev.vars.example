@@ -1,10 +1,13 @@
 # Copy to .dev.vars for `npm run dev:mcp` (wrangler dev). .dev.vars is gitignored.
-# Generate a token with: openssl rand -hex 32   (at least 32 characters)
-MCP_AUTH_TOKEN=
-# Provider keys (set only the ones you use)
-REPLICATE_API_TOKEN=
-ATLASCLOUD_API_KEY=
-HEYGEN_API_KEY=
-CLOUDFLARE_ACCOUNT_ID=
-CLOUDFLARE_API_TOKEN=
-CLOUDFLARE_AI_GATEWAY_ID=
+# Values here override the vars in wrangler.jsonc.
+MULTIX_PUBLIC_URL=http://localhost:8787
+# GitHub logins or verified emails allowed to sign in (comma-separated)
+MULTIX_ALLOWED_USERS=
+# A GitHub OAuth App with callback http://localhost:8787/oauth/github/callback
+GITHUB_CLIENT_ID=
+GITHUB_CLIENT_SECRET=
+# openssl rand -hex 32   (at least 32 characters)
+SESSION_SECRET=
+# openssl rand -base64 32   (exactly 32 bytes, base64)
+SECRETS_ENCRYPTION_KEY=
+# Provider keys are not set here: save them per account at /dashboard.

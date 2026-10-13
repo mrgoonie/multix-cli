@@ -1,166 +1,86 @@
 /**
- * multix remote MCP server for Cloudflare Workers.
+ * multix remote MCP server for Cloudflare Workers, with OAuth and an account dashboard.
  *
- *   GET  /health  public, minimal: { ok: true }
- *   POST /mcp     MCP Streamable HTTP (stateless, JSON responses), bearer auth required
+ *   GET  /health                                    public, minimal: { ok: true }
+ *   POST /mcp                                       MCP Streamable HTTP; OAuth access token required
+ *   GET  /.well-known/oauth-protected-resource/mcp  RFC 9728 metadata (library)
+ *   GET  /.well-known/oauth-authorization-server    RFC 8414 metadata (library)
+ *   POST /oauth/register, /oauth/token              DCR and token endpoint (library)
+ *   *    /oauth/authorize                           consent page (GitHub sign-in first)
+ *   GET  /oauth/github/callback                     GitHub sign-in callback
+ *   *    /dashboard[/…]                             account dashboard (provider keys, clients)
  *
- * The Worker never spawns the CLI and never touches a file system: tools call
- * the runtime-neutral provider HTTP clients and return provider output URLs.
+ * Each MCP request runs with the provider keys of the account that approved
+ * the client, decrypted for that request only. The Worker never spawns the
+ * CLI and never touches a file system.
  */
 
-import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import { version } from "../../package.json";
-import type { FetchLike } from "../../src/core/fetch-json.js";
-import { type Env, MAX_BODY_BYTES, MIN_AUTH_TOKEN_LENGTH, csv } from "./config.js";
 import {
-  BodyTooLargeError,
-  bearerToken,
-  originAllowed,
-  readBodyLimited,
-  tokensMatch,
-} from "./http-guards.js";
-import { createMcpServer } from "./mcp-server.js";
+  OAuthProvider,
+  type OAuthResourceAuth,
+  insufficientScope,
+} from "@cloudflare/workers-oauth-provider";
+import { toolEnvFor } from "./accounts/account-store.js";
+import { isAllowed } from "./accounts/allowlist.js";
+import { type AppDeps, publicOrigin, resolveAppContext } from "./app-context.js";
+import { type WorkerEnv, serverSettings } from "./config.js";
+import { json, text } from "./http-responses.js";
+import { handleMcpRequest } from "./mcp-api-handler.js";
 import { logEvent } from "./redaction.js";
+import { handleDashboard } from "./routes/dashboard-routes.js";
+import { GITHUB_CALLBACK_PATH, finishGithubSignIn } from "./routes/github-sign-in-routes.js";
+import {
+  AUTHORIZE_PATH,
+  type GrantProps,
+  MCP_SCOPE,
+  handleAuthorize,
+} from "./routes/oauth-authorize-routes.js";
 
-export interface HandlerDeps {
-  /** Injected for tests; defaults to the Worker's fetch. */
-  fetch?: FetchLike;
+function notConfigured(): Response {
+  logEvent("error", "server_not_configured", {});
+  return text(503, "Service Unavailable");
 }
 
-const SECURITY_HEADERS = {
-  "cache-control": "no-store",
-  "x-content-type-options": "nosniff",
-};
-
-function json(status: number, body: unknown, headers: Record<string, string> = {}): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "content-type": "application/json", ...SECURITY_HEADERS, ...headers },
-  });
+/** The library validated the token; it leaves checking the token's scope to the handler. */
+function tokenAuth(ctx: ExecutionContext): OAuthResourceAuth | undefined {
+  return (ctx as ExecutionContext & { auth?: OAuthResourceAuth }).auth;
 }
 
-function text(status: number, body: string, headers: Record<string, string> = {}): Response {
-  return new Response(body, {
-    status,
-    headers: { "content-type": "text/plain; charset=utf-8", ...SECURITY_HEADERS, ...headers },
-  });
+function grantProps(ctx: ExecutionContext): GrantProps | undefined {
+  const props = (ctx as ExecutionContext & { props?: unknown }).props as
+    | Partial<GrantProps>
+    | undefined;
+  return typeof props?.userId === "string" ? { userId: props.userId } : undefined;
 }
 
-function jsonRpcError(status: number, code: number, message: string): Response {
-  return json(status, { jsonrpc: "2.0", error: { code, message }, id: null });
-}
-
-/** Request headers a browser MCP client sends on /mcp. */
-const CORS_ALLOW_HEADERS = "authorization, content-type, accept, mcp-protocol-version";
-
-/** CORS headers for an allowed browser Origin; empty for non-browser callers. */
-function corsHeaders(origin: string | null): Record<string, string> {
-  if (origin === null) return {};
-  return {
-    "access-control-allow-origin": origin,
-    "access-control-expose-headers": "www-authenticate, retry-after",
-    vary: "Origin",
-  };
-}
-
-function withHeaders(response: Response, extra: Record<string, string>): Response {
-  if (Object.keys(extra).length === 0) return response;
-  const headers = new Headers(response.headers);
-  for (const [k, v] of Object.entries(extra)) headers.set(k, v);
-  return new Response(response.body, { status: response.status, headers });
-}
-
-async function handleMcp(request: Request, env: Env, deps: HandlerDeps): Promise<Response> {
-  // Fail closed: without a strong token there is no way to tell callers apart.
-  const expected = env.MCP_AUTH_TOKEN?.trim();
-  if (!expected || expected.length < MIN_AUTH_TOKEN_LENGTH) {
-    logEvent("error", "mcp_not_configured", {});
-    return text(503, "Service Unavailable");
+/** /mcp with a valid token: load the account, enforce allowlist and rate limit, run the tools. */
+async function handleAuthenticatedMcp(
+  request: Request,
+  env: WorkerEnv,
+  ctx: ExecutionContext,
+  deps: AppDeps,
+): Promise<Response> {
+  const auth = tokenAuth(ctx);
+  if (!auth?.scope.includes(MCP_SCOPE)) {
+    return auth ? insufficientScope(auth, [MCP_SCOPE]) : text(401, "Unauthorized");
   }
-
-  if (!originAllowed(request, csv(env.MULTIX_MCP_ALLOWED_ORIGINS))) {
+  const app = await resolveAppContext(env, deps);
+  if (!app) return notConfigured();
+  const props = grantProps(ctx);
+  const account = props ? await app.accounts.get(props.userId) : null;
+  if (!account || !isAllowed(env.MULTIX_ALLOWED_USERS, account)) {
     return text(403, "Forbidden");
   }
-  // From here on the Origin is absent (non-browser client) or explicitly allowed.
-  const origin = request.headers.get("origin");
-  const cors = corsHeaders(origin);
-
-  // CORS preflight carries no Authorization header, so it is answered before auth,
-  // and only for an allowed Origin. It grants nothing: the real request still needs the token.
-  if (request.method === "OPTIONS" && origin !== null) {
-    return new Response(null, {
-      status: 204,
-      headers: {
-        ...SECURITY_HEADERS,
-        ...cors,
-        "access-control-allow-methods": "POST, OPTIONS",
-        "access-control-allow-headers": CORS_ALLOW_HEADERS,
-        "access-control-max-age": "600",
-      },
-    });
-  }
-
-  return withHeaders(await handleAuthorizedMcp(request, env, deps, expected), cors);
-}
-
-async function handleAuthorizedMcp(
-  request: Request,
-  env: Env,
-  deps: HandlerDeps,
-  expected: string,
-): Promise<Response> {
   if (env.MCP_RATE_LIMITER) {
-    const key = request.headers.get("cf-connecting-ip") ?? "unknown";
-    const { success } = await env.MCP_RATE_LIMITER.limit({ key });
+    const { success } = await env.MCP_RATE_LIMITER.limit({ key: account.id });
     if (!success) return text(429, "Too Many Requests", { "retry-after": "60" });
   }
-
-  const token = bearerToken(request);
-  if (!token || !(await tokensMatch(token, expected))) {
-    return text(401, "Unauthorized", { "www-authenticate": 'Bearer realm="multix"' });
-  }
-
-  // Stateless server: no standalone SSE stream and no sessions to delete.
-  if (request.method !== "POST") {
-    return jsonRpcError(405, -32000, "Method not allowed");
-  }
-
-  let parsedBody: unknown;
-  try {
-    parsedBody = JSON.parse(await readBodyLimited(request, MAX_BODY_BYTES));
-  } catch (error) {
-    if (error instanceof BodyTooLargeError) {
-      return jsonRpcError(413, -32600, "Request body too large");
-    }
-    return jsonRpcError(400, -32700, "Parse error");
-  }
-  // One HTTP request must be one JSON-RPC message, so the rate limit also bounds
-  // tool calls. Batching was removed from MCP in protocol 2025-06-18.
-  if (Array.isArray(parsedBody)) {
-    return jsonRpcError(400, -32600, "Batch requests are not supported");
-  }
-
-  const server = createMcpServer(env, { fetch: deps.fetch, version });
-  const transport = new WebStandardStreamableHTTPServerTransport({
-    sessionIdGenerator: undefined,
-    enableJsonResponse: true,
-  });
-  try {
-    await server.connect(transport);
-    const response = await transport.handleRequest(request, { parsedBody });
-    const headers = new Headers(response.headers);
-    for (const [k, v] of Object.entries(SECURITY_HEADERS)) headers.set(k, v);
-    return new Response(response.body, { status: response.status, headers });
-  } finally {
-    await server.close();
-  }
+  const toolEnv = toolEnvFor(serverSettings(env), await app.accounts.providerKeys(account.id));
+  return handleMcpRequest(request, toolEnv, { fetch: deps.fetch });
 }
 
-export async function handleRequest(
-  request: Request,
-  env: Env,
-  deps: HandlerDeps = {},
-): Promise<Response> {
+/** Everything that is not the protected /mcp resource or a library-owned OAuth endpoint. */
+async function handleDefault(request: Request, env: WorkerEnv, deps: AppDeps): Promise<Response> {
   const { pathname } = new URL(request.url);
   if (pathname === "/health") {
     if (request.method !== "GET" && request.method !== "HEAD") {
@@ -168,12 +88,86 @@ export async function handleRequest(
     }
     return json(200, { ok: true });
   }
-  if (pathname === "/mcp") return handleMcp(request, env, deps);
-  return text(404, "Not Found");
+  const isDashboard = pathname === "/dashboard" || pathname.startsWith("/dashboard/");
+  if (pathname !== AUTHORIZE_PATH && pathname !== GITHUB_CALLBACK_PATH && !isDashboard) {
+    return text(404, "Not Found");
+  }
+  const app = await resolveAppContext(env, deps);
+  if (!app) return notConfigured();
+  if (pathname === AUTHORIZE_PATH) return handleAuthorize(app, request);
+  if (pathname === GITHUB_CALLBACK_PATH) {
+    if (request.method !== "GET") return text(405, "Method Not Allowed", { allow: "GET" });
+    return finishGithubSignIn(app, request);
+  }
+  return handleDashboard(app, request);
 }
 
-export default {
-  fetch(request: Request, env: Env): Promise<Response> {
-    return handleRequest(request, env);
-  },
-};
+function createOAuthProvider(origin: string, deps: AppDeps): OAuthProvider<WorkerEnv> {
+  return new OAuthProvider<WorkerEnv>({
+    apiRoute: "/mcp",
+    apiHandler: {
+      fetch: (request, env, ctx) => handleAuthenticatedMcp(request, env as WorkerEnv, ctx, deps),
+    },
+    defaultHandler: {
+      fetch: (request, env) => handleDefault(request as Request, env as WorkerEnv, deps),
+    },
+    authorizeEndpoint: AUTHORIZE_PATH,
+    tokenEndpoint: "/oauth/token",
+    clientRegistrationEndpoint: "/oauth/register",
+    scopesSupported: [MCP_SCOPE],
+    requiredScopes: [MCP_SCOPE],
+    // URL client ids (MCP Client ID Metadata Documents); needs global_fetch_strictly_public.
+    clientIdMetadataDocumentEnabled: true,
+    resourceMetadata: {
+      resource: `${origin}/mcp`,
+      authorization_servers: [origin],
+      resource_name: "multix MCP",
+    },
+  });
+}
+
+/**
+ * Paths that start a sign-in, may fetch a client metadata document, or change
+ * state; rate limited per IP when AUTH_RATE_LIMITER is bound.
+ */
+function isAuthRequest(request: Request, pathname: string): boolean {
+  if (
+    pathname === "/dashboard/login" ||
+    pathname === GITHUB_CALLBACK_PATH ||
+    pathname === AUTHORIZE_PATH
+  ) {
+    return true;
+  }
+  return (
+    request.method === "POST" &&
+    (pathname.startsWith("/oauth/") || pathname.startsWith("/dashboard"))
+  );
+}
+
+export function createWorker(deps: AppDeps = {}): ExportedHandler<WorkerEnv> {
+  const providers = new Map<string, OAuthProvider<WorkerEnv>>();
+  return {
+    async fetch(request, env, ctx) {
+      const req = request as unknown as Request;
+      const { pathname } = new URL(req.url);
+      if (pathname === "/health") return handleDefault(req, env, deps);
+      const origin = publicOrigin(env);
+      if (!origin || !env.OAUTH_KV) return notConfigured();
+
+      if (env.AUTH_RATE_LIMITER && isAuthRequest(req, pathname)) {
+        const key = req.headers.get("cf-connecting-ip") ?? "unknown";
+        const { success } = await env.AUTH_RATE_LIMITER.limit({ key });
+        if (!success) return text(429, "Too Many Requests", { "retry-after": "60" });
+      }
+
+      let provider = providers.get(origin);
+      if (!provider) {
+        provider = createOAuthProvider(origin, deps);
+        providers.set(origin, provider);
+      }
+      return provider.fetch(request, env, ctx);
+    },
+  };
+}
+
+export default createWorker();

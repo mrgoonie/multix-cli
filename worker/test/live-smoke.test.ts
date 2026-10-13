@@ -12,7 +12,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { Env } from "../src/config.js";
-import { TOKEN, callTool, rpc } from "./helpers.js";
+import { callTool, rpc } from "./helpers.js";
 
 const vars =
   (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env ?? {};
@@ -22,7 +22,6 @@ const videoEnabled = enabled && vars.MULTIX_MCP_LIVE_VIDEO === "1";
 
 function liveEnv(): Env {
   return {
-    MCP_AUTH_TOKEN: TOKEN,
     REPLICATE_API_TOKEN: replicateToken,
     MULTIX_MCP_ALLOWED_PROVIDERS: "replicate",
     MULTIX_MCP_MAX_OUTPUTS: "1",
