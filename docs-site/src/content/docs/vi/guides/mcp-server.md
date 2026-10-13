@@ -211,7 +211,7 @@ chung bộ đếm.
   `SameSite=Lax` và được ký HMAC, phiên kéo dài 7 ngày. **Sign out** kết thúc
   mọi phiên dashboard của tài khoản trên mọi thiết bị (có thể mất khoảng một
   phút để đến mọi location); kết nối MCP vẫn giữ cho đến khi bạn ngắt. Mọi form
-  cần CSRF token theo tài khoản và header `Origin` cùng origin. Các trang gửi Content Security
+  cần CSRF token theo phiên và header `Origin` cùng origin. Các trang gửi Content Security
   Policy chặt và `frame-ancestors 'none'`.
 - **Cô lập tài khoản:** mỗi request `/mcp` chỉ tải key của tài khoản đã cấp
   token. Key không bao giờ xuất hiện trong trang, log hay kết quả tool.

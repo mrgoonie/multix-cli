@@ -11,13 +11,9 @@
  * account's CSRF token. Values are validated but never echoed back.
  */
 
-import {
-  MAX_SECRET_CHARS,
-  isProviderSecretName,
-  sessionVersionOf,
-} from "../accounts/account-store.js";
+import { MAX_SECRET_CHARS, isProviderSecretName } from "../accounts/account-store.js";
 import type { Account } from "../accounts/account-store.js";
-import { type AppContext, oauthHelpers, sameOriginPost, signedInAccount } from "../app-context.js";
+import { type AppContext, oauthHelpers, sameOriginPost, signedInSession } from "../app-context.js";
 import { SESSION_COOKIE, clearCookie, csrfToken, csrfValid } from "../auth/signed-cookies.js";
 import { html, redirect, text } from "../http-responses.js";
 import { type ConnectedClient, dashboardPage, signInPage } from "../pages/dashboard-page.js";
@@ -50,8 +46,8 @@ async function connectedClients(ctx: AppContext, account: Account): Promise<Conn
 }
 
 async function showDashboard(ctx: AppContext, request: Request): Promise<Response> {
-  const account = await signedInAccount(ctx, request);
-  if (!account) {
+  const signedIn = await signedInSession(ctx, request);
+  if (!signedIn) {
     const headers = new Headers();
     // A cookie that no longer maps to an allowed account is dropped.
     if (request.headers.get("cookie")?.includes(SESSION_COOKIE)) {
@@ -59,13 +55,14 @@ async function showDashboard(ctx: AppContext, request: Request): Promise<Respons
     }
     return html(200, signInPage(), headers);
   }
+  const { account, session } = signedIn;
   const noticeKey = new URL(request.url).searchParams.get("notice") ?? "";
   return html(
     200,
     dashboardPage({
       account,
       secrets: await ctx.accounts.secrets(account.id),
-      csrf: await csrfToken(ctx.sessionSecret, account.id, sessionVersionOf(account)),
+      csrf: await csrfToken(ctx.sessionSecret, session),
       mcpUrl: `${ctx.origin}/mcp`,
       clients: await connectedClients(ctx, account),
       notice: NOTICES[noticeKey],
@@ -75,12 +72,11 @@ async function showDashboard(ctx: AppContext, request: Request): Promise<Respons
 
 async function handlePost(ctx: AppContext, request: Request, pathname: string): Promise<Response> {
   if (!sameOriginPost(ctx, request)) return text(403, "Forbidden");
-  const account = await signedInAccount(ctx, request);
-  if (!account) return redirect("/dashboard");
+  const signedIn = await signedInSession(ctx, request);
+  if (!signedIn) return redirect("/dashboard");
+  const { account, session } = signedIn;
   const form = await request.formData();
-  if (
-    !(await csrfValid(ctx.sessionSecret, account.id, sessionVersionOf(account), form.get("csrf")))
-  ) {
+  if (!(await csrfValid(ctx.sessionSecret, session, form.get("csrf")))) {
     return text(403, "Forbidden");
   }
 

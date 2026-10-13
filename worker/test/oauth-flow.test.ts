@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { sign } from "../src/auth/signed-cookies.js";
 import { jsonResponse, route } from "./helpers.js";
 import {
   GITHUB_SECRET,
@@ -498,7 +499,36 @@ describe("server-side sign-out", () => {
       intent: "save",
     });
     expect(saved.status).toBe(403);
+    // The new sign-in never rewrites the sign-out time, so old cookies stay void.
+    expect(await (await copy.request("/dashboard")).text()).toContain("Sign in with GitHub");
+    expect(await (await browser.request("/dashboard")).text()).toContain("Connected MCP clients");
     // MCP connections are grants, not dashboard sessions: they keep working.
     expect((await mcpCall(browser, token, "tools/list")).status).toBe(200);
+  });
+
+  it("binds the CSRF token to one session", async () => {
+    const env = oauthEnv();
+    const laptop = newBrowser(env, githubFetch(OCTOCAT).fetch);
+    const phone = newBrowser(env, githubFetch(OCTOCAT).fetch);
+    await signIn(laptop);
+    await new Promise((resolve) => setTimeout(resolve, 2));
+    await signIn(phone);
+    const laptopCsrf = hiddenField(await (await laptop.request("/dashboard")).text(), "csrf");
+    const fields = { name: "HEYGEN_API_KEY", value: "hg_key_123456", intent: "save" };
+    expect((await phone.post("/dashboard/secrets", { ...fields, csrf: laptopCsrf })).status).toBe(
+      403,
+    );
+    expect((await laptop.post("/dashboard/secrets", { ...fields, csrf: laptopCsrf })).status).toBe(
+      303,
+    );
+  });
+
+  it("rejects a signed session cookie that has no issue time", async () => {
+    const env = oauthEnv();
+    const browser = newBrowser(env, githubFetch(OCTOCAT).fetch);
+    await signIn(browser);
+    const legacy = await sign(SESSION_SECRET, "session", { userId: `gh-${OCTOCAT.id}` }, 3600);
+    browser.cookies.set("__Host-multix-session", legacy);
+    expect(await (await browser.request("/dashboard")).text()).toContain("Sign in with GitHub");
   });
 });

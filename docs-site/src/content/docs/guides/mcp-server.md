@@ -211,7 +211,7 @@ within your Cloudflare account. If another Worker already uses `1001` or
   `SameSite=Lax` and HMAC-signed, with a 7-day session. **Sign out** ends
   every dashboard session of the account on every device (it can take about a
   minute to reach every location); MCP connections stay until you disconnect
-  them. Every form needs a per-account CSRF token and a same-origin `Origin`
+  them. Every form needs a per-session CSRF token and a same-origin `Origin`
   header. Pages send a strict Content Security Policy and
   `frame-ancestors 'none'`.
 - **Account isolation:** each `/mcp` request loads only the keys of the

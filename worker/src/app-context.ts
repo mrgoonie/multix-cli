@@ -7,10 +7,10 @@
 import type { OAuthHelpers } from "@cloudflare/workers-oauth-provider";
 import type { FetchLike } from "../../src/core/fetch-json.js";
 import { AccountStore } from "./accounts/account-store.js";
-import { type Account, sessionVersionOf } from "./accounts/account-store.js";
+import type { Account } from "./accounts/account-store.js";
 import { isAllowed } from "./accounts/allowlist.js";
 import { importEncryptionKey } from "./accounts/provider-secret-crypto.js";
-import { readSession } from "./auth/signed-cookies.js";
+import { type Session, readSession } from "./auth/signed-cookies.js";
 import { MIN_SESSION_SECRET_LENGTH, type WorkerEnv } from "./config.js";
 
 export interface AppDeps {
@@ -78,18 +78,37 @@ export async function resolveAppContext(
   };
 }
 
-/** The signed-in account, if the session is valid and the account is still allowlisted. */
+export interface SignedIn {
+  account: Account;
+  session: Session;
+}
+
+/**
+ * The signed-in account and its session, if the session is valid, was issued
+ * after the account's last sign-out, and the account is still allowlisted.
+ */
+export async function signedInSession(
+  ctx: AppContext,
+  request: Request,
+): Promise<SignedIn | undefined> {
+  const session = await readSession(request, ctx.sessionSecret);
+  // Cookies from before sessions carried an issue time are void, never "issued at 0".
+  if (!session || typeof session.iat !== "number") return undefined;
+  const [account, signedOutAt] = await Promise.all([
+    ctx.accounts.get(session.userId),
+    ctx.accounts.signedOutAt(session.userId),
+  ]);
+  if (!account || !isAllowed(ctx.env.MULTIX_ALLOWED_USERS, account)) return undefined;
+  // KV may take ~60 s to show a sign-out made in another location.
+  if (session.iat <= signedOutAt) return undefined;
+  return { account, session };
+}
+
 export async function signedInAccount(
   ctx: AppContext,
   request: Request,
 ): Promise<Account | undefined> {
-  const session = await readSession(request, ctx.sessionSecret);
-  if (!session) return undefined;
-  const account = await ctx.accounts.get(session.userId);
-  if (!account || !isAllowed(ctx.env.MULTIX_ALLOWED_USERS, account)) return undefined;
-  // Signed out since this session was issued (KV may take ~60 s to reach every location).
-  if (session.v !== sessionVersionOf(account)) return undefined;
-  return account;
+  return (await signedInSession(ctx, request))?.account;
 }
 
 export function oauthHelpers(env: WorkerEnv): OAuthHelpers {
