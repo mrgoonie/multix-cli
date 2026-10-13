@@ -474,3 +474,31 @@ describe("hardening", () => {
     expect((await mcpCall(owner, token, "tools/list")).status).toBe(200);
   });
 });
+
+describe("server-side sign-out", () => {
+  it("ends every dashboard session of the account, including copied cookies", async () => {
+    const env = oauthEnv();
+    const browser = newBrowser(env, githubFetch(OCTOCAT).fetch);
+    const token = await authorizeAndGetToken(browser, await registerClient(browser));
+    const oldCsrf = hiddenField(await (await browser.request("/dashboard")).text(), "csrf");
+    // A second device (or a stolen cookie) holding the same session.
+    const copy = newBrowser(env, githubFetch(OCTOCAT).fetch);
+    for (const [name, value] of browser.cookies) copy.cookies.set(name, value);
+    expect(await (await copy.request("/dashboard")).text()).toContain("Connected MCP clients");
+
+    await browser.post("/dashboard/logout", { csrf: oldCsrf });
+    expect(await (await copy.request("/dashboard")).text()).toContain("Sign in with GitHub");
+
+    // Signing in again issues a new session; forms from before the sign-out are rejected.
+    await signIn(browser);
+    const saved = await browser.post("/dashboard/secrets", {
+      csrf: oldCsrf,
+      name: "HEYGEN_API_KEY",
+      value: "hg_key_123456",
+      intent: "save",
+    });
+    expect(saved.status).toBe(403);
+    // MCP connections are grants, not dashboard sessions: they keep working.
+    expect((await mcpCall(browser, token, "tools/list")).status).toBe(200);
+  });
+});

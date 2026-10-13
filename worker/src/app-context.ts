@@ -7,7 +7,7 @@
 import type { OAuthHelpers } from "@cloudflare/workers-oauth-provider";
 import type { FetchLike } from "../../src/core/fetch-json.js";
 import { AccountStore } from "./accounts/account-store.js";
-import type { Account } from "./accounts/account-store.js";
+import { type Account, sessionVersionOf } from "./accounts/account-store.js";
 import { isAllowed } from "./accounts/allowlist.js";
 import { importEncryptionKey } from "./accounts/provider-secret-crypto.js";
 import { readSession } from "./auth/signed-cookies.js";
@@ -87,6 +87,8 @@ export async function signedInAccount(
   if (!session) return undefined;
   const account = await ctx.accounts.get(session.userId);
   if (!account || !isAllowed(ctx.env.MULTIX_ALLOWED_USERS, account)) return undefined;
+  // Signed out since this session was issued (KV may take ~60 s to reach every location).
+  if (session.v !== sessionVersionOf(account)) return undefined;
   return account;
 }
 

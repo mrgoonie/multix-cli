@@ -41,6 +41,11 @@ export interface Account {
   emails: string[];
   createdAt: number;
   lastLoginAt: number;
+  /**
+   * Dashboard sessions carry this number; signing out increments it, which
+   * ends every session of the account on every device (missing means 0).
+   */
+  sessionVersion?: number;
 }
 
 export interface GithubIdentity {
@@ -64,6 +69,10 @@ function key(userId: string): string {
 
 function secretsKey(userId: string): string {
   return `secrets:${userId}`;
+}
+
+export function sessionVersionOf(account: Account): number {
+  return account.sessionVersion ?? 0;
 }
 
 export function isProviderSecretName(name: string): name is ProviderSecretName {
@@ -97,9 +106,18 @@ export class AccountStore {
       emails: identity.emails.map((e) => e.toLowerCase()),
       createdAt: existing?.createdAt ?? now,
       lastLoginAt: now,
+      sessionVersion: existing?.sessionVersion ?? 0,
     };
     await this.put(account);
     return account;
+  }
+
+  /** End every dashboard session of the account (sign out everywhere). */
+  async endSessions(userId: string): Promise<void> {
+    const account = await this.get(userId);
+    if (!account) return;
+    account.sessionVersion = sessionVersionOf(account) + 1;
+    await this.put(account);
   }
 
   /** Encrypted provider keys of the account (shown on the dashboard only as "saved"). */

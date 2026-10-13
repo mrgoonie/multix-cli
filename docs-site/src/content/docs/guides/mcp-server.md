@@ -208,9 +208,12 @@ within your Cloudflare account. If another Worker already uses `1001` or
   page that names the client and its redirect address. Accounts not on
   `MULTIX_ALLOWED_USERS` are refused before anything is stored.
 - **Dashboard:** cookies are `__Host-` prefixed, `Secure`, `HttpOnly`,
-  `SameSite=Lax` and HMAC-signed, with a 7-day session. Every form needs a
-  per-account CSRF token and a same-origin `Origin` header. Pages send a
-  strict Content Security Policy and `frame-ancestors 'none'`.
+  `SameSite=Lax` and HMAC-signed, with a 7-day session. **Sign out** ends
+  every dashboard session of the account on every device (it can take about a
+  minute to reach every location); MCP connections stay until you disconnect
+  them. Every form needs a per-account CSRF token and a same-origin `Origin`
+  header. Pages send a strict Content Security Policy and
+  `frame-ancestors 'none'`.
 - **Account isolation:** each `/mcp` request loads only the keys of the
   account that granted the token. Keys never appear in pages, logs or tool
   results.

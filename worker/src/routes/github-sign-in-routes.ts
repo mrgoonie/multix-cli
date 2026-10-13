@@ -8,6 +8,7 @@
  * trip cannot be turned into an open redirect.
  */
 
+import { sessionVersionOf } from "../accounts/account-store.js";
 import { isAllowed } from "../accounts/allowlist.js";
 import { randomBase64Url } from "../accounts/base64.js";
 import type { AppContext } from "../app-context.js";
@@ -129,6 +130,12 @@ export async function finishGithubSignIn(ctx: AppContext, request: Request): Pro
   logEvent("info", "sign_in", { user: account.id });
   const headers = new Headers();
   headers.append("set-cookie", clearCookie(LOGIN_COOKIE));
-  headers.append("set-cookie", await sessionCookie(ctx.sessionSecret, { userId: account.id }));
+  headers.append(
+    "set-cookie",
+    await sessionCookie(ctx.sessionSecret, {
+      userId: account.id,
+      v: sessionVersionOf(account),
+    }),
+  );
   return redirect(safeReturnTo(login.returnTo), headers);
 }

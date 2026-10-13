@@ -11,7 +11,10 @@ import { tokensMatch } from "../http-guards.js";
 
 export const SESSION_COOKIE = "__Host-multix-session";
 export const LOGIN_COOKIE = "__Host-multix-login";
-/** Dashboard sessions last a week; every request re-checks the allowlist. */
+/**
+ * Dashboard sessions last a week; every request re-checks the allowlist and
+ * the account's session version, so signing out ends them server-side.
+ */
 export const SESSION_TTL_SECONDS = 7 * 24 * 3600;
 /** Time allowed to finish the GitHub sign-in round trip. */
 export const LOGIN_TTL_SECONDS = 10 * 60;
@@ -91,6 +94,8 @@ export function clearCookie(name: string): string {
 
 export interface Session {
   userId: string;
+  /** The account's sessionVersion when the session was issued. */
+  v: number;
 }
 
 export function readSession(request: Request, secret: string): Promise<Session | undefined> {
@@ -105,15 +110,23 @@ export async function sessionCookie(secret: string, session: Session): Promise<s
   );
 }
 
-/** CSRF token for dashboard forms, bound to the signed-in account. */
-export function csrfToken(secret: string, userId: string): Promise<string> {
-  return hmac(secret, `csrf:${userId}`);
+/**
+ * CSRF token for dashboard forms, bound to the signed-in account and its
+ * session version, so tokens from before a sign-out stop working.
+ */
+export function csrfToken(secret: string, userId: string, sessionVersion: number): Promise<string> {
+  return hmac(secret, `csrf:${userId}:${sessionVersion}`);
 }
 
-export async function csrfValid(secret: string, userId: string, given: unknown): Promise<boolean> {
+export async function csrfValid(
+  secret: string,
+  userId: string,
+  sessionVersion: number,
+  given: unknown,
+): Promise<boolean> {
   return (
     typeof given === "string" &&
     given.length > 0 &&
-    tokensMatch(given, await csrfToken(secret, userId))
+    tokensMatch(given, await csrfToken(secret, userId, sessionVersion))
   );
 }

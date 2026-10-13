@@ -5,13 +5,17 @@
  *   GET  /dashboard/login                 start GitHub sign-in
  *   POST /dashboard/secrets               save or remove one provider key
  *   POST /dashboard/connections/revoke    disconnect one MCP client (revoke its grant)
- *   POST /dashboard/logout                end the dashboard session
+ *   POST /dashboard/logout                end every dashboard session of the account
  *
  * Every POST needs a same-origin Origin header, a valid session and the
  * account's CSRF token. Values are validated but never echoed back.
  */
 
-import { MAX_SECRET_CHARS, isProviderSecretName } from "../accounts/account-store.js";
+import {
+  MAX_SECRET_CHARS,
+  isProviderSecretName,
+  sessionVersionOf,
+} from "../accounts/account-store.js";
 import type { Account } from "../accounts/account-store.js";
 import { type AppContext, oauthHelpers, sameOriginPost, signedInAccount } from "../app-context.js";
 import { SESSION_COOKIE, clearCookie, csrfToken, csrfValid } from "../auth/signed-cookies.js";
@@ -61,7 +65,7 @@ async function showDashboard(ctx: AppContext, request: Request): Promise<Respons
     dashboardPage({
       account,
       secrets: await ctx.accounts.secrets(account.id),
-      csrf: await csrfToken(ctx.sessionSecret, account.id),
+      csrf: await csrfToken(ctx.sessionSecret, account.id, sessionVersionOf(account)),
       mcpUrl: `${ctx.origin}/mcp`,
       clients: await connectedClients(ctx, account),
       notice: NOTICES[noticeKey],
@@ -74,11 +78,14 @@ async function handlePost(ctx: AppContext, request: Request, pathname: string): 
   const account = await signedInAccount(ctx, request);
   if (!account) return redirect("/dashboard");
   const form = await request.formData();
-  if (!(await csrfValid(ctx.sessionSecret, account.id, form.get("csrf")))) {
+  if (
+    !(await csrfValid(ctx.sessionSecret, account.id, sessionVersionOf(account), form.get("csrf")))
+  ) {
     return text(403, "Forbidden");
   }
 
   if (pathname === "/dashboard/logout") {
+    await ctx.accounts.endSessions(account.id);
     return redirect("/dashboard", { "set-cookie": clearCookie(SESSION_COOKIE) });
   }
 
