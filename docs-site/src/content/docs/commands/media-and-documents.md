@@ -49,9 +49,15 @@ page](https://ffmpeg.org/download.html) and [ImageMagick download page](https://
 `multix media` chooses an appropriate ffmpeg or ImageMagick flow from the input
 type. Use explicit outputs so original files remain untouched.
 
+Audio is re-encoded to mono 16 kHz with the codec that matches the output
+extension: `.mp3` (MP3), `.m4a`/`.aac` (AAC), `.opus`/`.ogg` (Opus), `.wav`/`.aiff`
+(PCM) or `.flac` (FLAC). `--bitrate` applies to the lossy formats only. Any other
+output extension is rejected before ffmpeg runs.
+
 ```bash
 multix media optimize --input video.mp4 --output optimized.mp4 --target-size 100
 multix media optimize --input photo.png --output photo.webp --quality 85 --max-width 1920
+multix media optimize --input voice.wav --output voice.mp3 --bitrate 64k
 multix media split --input long-video.mp4 --chunk-duration 3600
 multix media batch --input-dir ./source --output-dir ./optimized
 ```

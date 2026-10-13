@@ -47,8 +47,14 @@ Với hệ điều hành hoặc package manager khác, dùng [trang download FFm
 `multix media` chọn flow ffmpeg hoặc ImageMagick theo loại input. Dùng output
 rõ ràng để không đụng tới file gốc.
 
+Audio được encode lại thành mono 16 kHz với codec khớp đuôi file output:
+`.mp3` (MP3), `.m4a`/`.aac` (AAC), `.opus`/`.ogg` (Opus), `.wav`/`.aiff` (PCM)
+hoặc `.flac` (FLAC). `--bitrate` chỉ áp dụng cho các định dạng lossy. Đuôi output
+khác sẽ bị từ chối trước khi chạy ffmpeg.
+
 ```bash
 multix media optimize --input video.mp4 --output optimized.mp4 --target-size 100
+multix media optimize --input voice.wav --output voice.mp3 --bitrate 64k
 multix media optimize --input photo.png --output photo.webp --quality 85 --max-width 1920
 multix media split --input long-video.mp4 --chunk-duration 3600
 multix media batch --input-dir ./source --output-dir ./optimized
