@@ -6,9 +6,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { execa } from "execa";
 import { describe, expect, it } from "vitest";
+import { CHILD_TIMEOUT, SPAWN_TIMEOUT } from "./spawn-timeout.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLI = path.resolve(__dirname, "../../dist/cli.js");
+const run = (args: string[]) =>
+  execa("node", [CLI, ...args], { reject: false, timeout: CHILD_TIMEOUT });
 
 const topLevelCommands = [
   "check",
@@ -67,20 +70,20 @@ const subcommands: Record<string, string[]> = {
   doc: ["convert"],
 };
 
-describe("top-level --help", () => {
+describe("top-level --help", { timeout: SPAWN_TIMEOUT }, () => {
   for (const cmd of topLevelCommands) {
     it(`multix ${cmd} --help exits 0`, async () => {
-      const result = await execa("node", [CLI, cmd, "--help"], { reject: false });
+      const result = await run([cmd, "--help"]);
       expect(result.exitCode).toBe(0);
     });
   }
 });
 
-describe("subcommand --help", () => {
+describe("subcommand --help", { timeout: SPAWN_TIMEOUT }, () => {
   for (const [group, cmds] of Object.entries(subcommands)) {
     for (const sub of cmds) {
       it(`multix ${group} ${sub} --help exits 0`, async () => {
-        const result = await execa("node", [CLI, group, sub, "--help"], { reject: false });
+        const result = await run([group, sub, "--help"]);
         expect(result.exitCode).toBe(0);
       });
     }

@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import { execa } from "execa";
 import { describe, expect, it } from "vitest";
 import { isolatedEnv } from "./child-env.js";
+import { CHILD_TIMEOUT, SPAWN_TIMEOUT } from "./spawn-timeout.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "../..");
@@ -21,7 +22,6 @@ const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"))
   types: string;
   exports: Record<string, Record<string, string>>;
 };
-const SPAWN_TIMEOUT = 15_000;
 /** Test-only helpers that must stay out of the published entry. */
 const INTERNAL = ["_resetEnvLoader", "_resetOutputDir"];
 /** An allowed project `.env` name with a dummy value; set only if loadEnv runs. */
@@ -73,7 +73,7 @@ describe("package entry (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
         env,
         extendEnv: false,
         reject: false,
-        timeout: SPAWN_TIMEOUT - 1_000,
+        timeout: CHILD_TIMEOUT,
       });
       expect(result.stderr).toBe("");
       expect(result.exitCode).toBe(0);

@@ -10,11 +10,10 @@ import { fileURLToPath } from "node:url";
 import { type Options, execa } from "execa";
 import { beforeAll, describe, expect, it } from "vitest";
 import { isolatedEnv } from "./child-env.js";
+import { CHILD_TIMEOUT, SPAWN_TIMEOUT } from "./spawn-timeout.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLI = path.resolve(__dirname, "../../dist/cli.js");
-/** Each test spawns `node`; cold starts under a parallel full-suite run can exceed vitest's 5 s default. */
-const SPAWN_TIMEOUT = 15_000;
 
 /**
  * Spawn `node dist/cli.js`. The child is killed shortly before the vitest
@@ -24,7 +23,7 @@ const SPAWN_TIMEOUT = 15_000;
 const run = (
   args: string[],
   opts: Pick<Options, "cwd" | "env" | "extendEnv" | "input" | "timeout"> = {},
-) => execa("node", [CLI, ...args], { reject: false, timeout: SPAWN_TIMEOUT - 1_000, ...opts });
+) => execa("node", [CLI, ...args], { reject: false, timeout: CHILD_TIMEOUT, ...opts });
 
 /** stdin temp dirs the CLI left (or is holding) inside `dir`. */
 const stdinDirs = (dir: string) => fs.readdirSync(dir).filter((d) => d.startsWith("multix-stdin-"));
