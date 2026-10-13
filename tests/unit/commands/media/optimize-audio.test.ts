@@ -52,6 +52,12 @@ describe("buildAudioArgs", () => {
     expect(() => buildAudioArgs({ ...base, output: "a.wma" })).toThrow(/\.wma/);
   });
 
+  it("rejects an Opus bitrate above the 256k mono limit", () => {
+    expect(() => buildAudioArgs({ ...base, bitrate: "320k", output: "a.opus" })).toThrow(/256k/);
+    expect(buildAudioArgs({ ...base, bitrate: "256k", output: "a.ogg" })).toContain("256k");
+    expect(buildAudioArgs({ ...base, bitrate: "320k", output: "a.mp3" })).toContain("320k");
+  });
+
   it("rejects an output without an extension", () => {
     expect(() => buildAudioArgs({ ...base, output: "audio" })).toThrow(/\(none\)/);
   });

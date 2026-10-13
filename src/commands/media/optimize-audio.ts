@@ -50,6 +50,14 @@ export function buildAudioArgs(opts: {
     );
   }
 
+  // libopus caps a mono stream at 256 kbps and fails inside ffmpeg above that.
+  const kbps = /^(\d+)k$/i.exec(opts.bitrate);
+  if (audio.codec === "libopus" && kbps && Number(kbps[1]) > 256) {
+    throw new ValidationError(
+      `Opus output supports at most 256k for mono audio, got ${opts.bitrate}`,
+    );
+  }
+
   return [
     "-i",
     opts.input,
