@@ -167,3 +167,15 @@ test("every docs page is covered by a CSP that allows only first-party scripts",
     }
   }
 });
+
+test("inline script detection skips only external and JSON-LD scripts", async () => {
+  const { inlineScriptHashes } = await import("../scripts/write-security-headers.mjs");
+  const html = [
+    '<script src="/a.js"></script>',
+    '<script type="module" src="/b.js"></script>',
+    '<script type="application/ld+json">{}</script>',
+    "<script>one()</script>",
+    '<script data-src="/lazy.js">two()</script>',
+  ].join("");
+  assert.equal(inlineScriptHashes(html).size, 2);
+});

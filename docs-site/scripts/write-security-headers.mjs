@@ -32,7 +32,7 @@ async function htmlFiles(dir) {
 /** SHA-256 hashes of inline executable scripts (JSON-LD data blocks are not scripts). */
 export function inlineScriptHashes(html) {
   const hashes = new Set();
-  for (const match of html.matchAll(/<script(?![^>]*\bsrc=)([^>]*)>([\s\S]*?)<\/script>/g)) {
+  for (const match of html.matchAll(/<script(?![^>]*\ssrc=)([^>]*)>([\s\S]*?)<\/script>/g)) {
     if (/type="application\/ld\+json"/.test(match[1])) continue;
     hashes.add(`'sha256-${createHash("sha256").update(match[2]).digest("base64")}'`);
   }
