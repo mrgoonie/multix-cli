@@ -10,4 +10,4 @@ GITHUB_CLIENT_SECRET=
 SESSION_SECRET=
 # openssl rand -base64 32   (exactly 32 bytes, base64)
 SECRETS_ENCRYPTION_KEY=
-# Provider keys are not set here: save them per account at /dashboard.
+# Provider keys and R2 bucket settings are not set here: save them per account at /dashboard.

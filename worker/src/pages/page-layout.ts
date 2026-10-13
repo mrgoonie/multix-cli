@@ -28,7 +28,7 @@ pre{background:var(--bg);border:1px solid var(--border);border-radius:8px;paddin
 .secret{border-top:1px solid var(--border);padding:14px 0}
 .secret:first-of-type{border-top:0;padding-top:0}
 .secret-head{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px}
-input[type=password],input[type=text]{flex:1 1 260px;min-width:0;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font:inherit}
+input[type=password],input[type=text],input[type=url]{flex:1 1 260px;min-width:0;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font:inherit}
 .badge{font-size:12px;border-radius:999px;padding:2px 8px;border:1px solid var(--border)}
 .badge.ok{color:var(--ok);border-color:currentColor}.badge.off{color:var(--muted)}
 .notice{border-left:3px solid var(--ok);padding:8px 12px;background:var(--card);border-radius:8px;margin-bottom:16px}
@@ -36,6 +36,13 @@ input[type=password],input[type=text]{flex:1 1 260px;min-width:0;background:var(
 .avatar{width:28px;height:28px;border-radius:50%;vertical-align:middle;margin-right:6px}
 table{width:100%;border-collapse:collapse}td{padding:8px 0;border-top:1px solid var(--border);vertical-align:middle}
 tr:first-child td{border-top:0}
+details.provider{border-top:1px solid var(--border);padding:10px 0}
+details.provider:first-of-type{border-top:0}
+details.provider summary{cursor:pointer;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+details.provider[open] summary{margin-bottom:10px}
+details.provider .secret:first-of-type{border-top:0;padding-top:0}
+.fields{display:grid;gap:8px;margin-bottom:12px}
+.fields label{display:grid;gap:4px}
 `;
 
 export function page(title: string, body: string): string {
@@ -53,6 +60,11 @@ export function page(title: string, body: string): string {
 ${body}
 </main></body>
 </html>`;
+}
+
+/** Minute-precision UTC timestamp for "saved at" and "connected at" labels. */
+export function formatDate(ms: number): string {
+  return `${new Date(ms).toISOString().slice(0, 16).replace("T", " ")} UTC`;
 }
 
 /** A single-card page for errors and simple notices. */

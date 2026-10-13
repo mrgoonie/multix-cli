@@ -695,8 +695,12 @@ instance runs at `https://multix.zuey.me/mcp` (invited GitHub accounts only).
   can sign in.
   `/health` is public.
 - Per-account keys: each account saves its own provider keys at `/dashboard`
-  (AES-GCM encrypted in KV) and spends its own credits. The dashboard also
-  lists and disconnects MCP clients. Limit exposure further with
+  (AES-GCM encrypted in KV) and spends its own credits. The dashboard has an
+  input for every key env name the CLI reads (grouped by provider) plus the
+  Cloudflare Workers AI names, and an R2 storage card for the account's own
+  bucket (account ID, access key pair, bucket, optional `https://` public
+  URL; checked with a list, upload and delete of an empty `.multix-probe`
+  object before it is saved). It also lists and disconnects MCP clients. Limit exposure further with
   `MULTIX_MCP_ALLOWED_PROVIDERS`, `MULTIX_MCP_ALLOWED_MODELS`,
   `MULTIX_MCP_MAX_OUTPUTS`, `MULTIX_MCP_MAX_VIDEO_SECONDS` (also sent as
   `min(5, cap)` when a caller omits `duration`),

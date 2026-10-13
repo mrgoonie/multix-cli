@@ -55,6 +55,36 @@ Worker, and keys set there are ignored.
 - **GitHub token:** used once to read the profile and verified emails, then
   discarded. multix stores the GitHub user ID, login, name, avatar URL and
   verified emails.
+- **Which keys:** the dashboard has an input for every key env name the CLI
+  reads, grouped by provider with a link to where you create the key
+  (Gemini, OpenRouter, OpenAI, MiniMax, Leonardo.Ai, BytePlus with
+  `ARK_API_KEY` as fallback, ElevenLabs, fal.ai, Atlas Cloud, Replicate with
+  `REPLICATE_API_KEY` as fallback, HeyGen), plus the Cloudflare Workers AI
+  account ID, API token and optional AI Gateway ID. The image and video tools
+  above use only the Replicate, Atlas Cloud, HeyGen and Cloudflare keys.
+
+### R2 storage
+
+Each account can also save its own Cloudflare R2 bucket for files that
+server-side jobs create. The current image and video tools return provider
+URLs and do not upload to R2.
+
+1. In the Cloudflare dashboard, create a bucket and an R2 API token with
+   **Object Read & Write** on that bucket.
+2. In the **R2 storage** card at `/dashboard`, enter the account ID (32 hex
+   characters), the token's access key ID and secret access key, the bucket
+   name and, optionally, an `https://` public base URL (a custom domain or
+   `r2.dev` address serving the bucket). Without a public URL, files get
+   presigned links valid for up to 7 days.
+3. **Check and save** lists the bucket (`ListObjectsV2`, one key), uploads an
+   empty `.multix-probe` object and deletes it again. Nothing is saved if a
+   step fails; the page says which one (credentials refused, bucket missing,
+   read-only token, R2 unreachable).
+
+The settings are stored as one AES-GCM record under `r2:<account>` in
+`ACCOUNTS_KV`, like provider keys. The page shows only the bucket name and
+public URL; replacing the settings asks for the secret again. **Remove**
+deletes them.
 
 ## Deploy
 

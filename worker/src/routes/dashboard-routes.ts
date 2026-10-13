@@ -4,6 +4,7 @@
  *   GET  /dashboard                       sign-in landing, or the account view
  *   GET  /dashboard/login                 start GitHub sign-in
  *   POST /dashboard/secrets               save or remove one provider key
+ *   POST /dashboard/storage               check and save, or remove, the account's R2 settings
  *   POST /dashboard/connections/revoke    disconnect one MCP client (revoke its grant)
  *   POST /dashboard/logout                end every dashboard session of the account
  *
@@ -19,12 +20,17 @@ import { html, redirect, text } from "../http-responses.js";
 import { type ConnectedClient, dashboardPage, signInPage } from "../pages/dashboard-page.js";
 import { logEvent } from "../redaction.js";
 import { startGithubSignIn } from "./github-sign-in-routes.js";
+import { type Notice, R2_NOTICES, handleR2SettingsPost } from "./r2-settings-routes.js";
 
-const NOTICES: Record<string, string> = {
-  saved: "Key saved.",
-  removed: "Key removed.",
-  disconnected: "Client disconnected. It must sign in again to use your account.",
-  invalid: "That value was not saved: it must be 1–1024 characters without spaces or line breaks.",
+const NOTICES: Record<string, Notice> = {
+  saved: { text: "Key saved." },
+  removed: { text: "Key removed." },
+  disconnected: { text: "Client disconnected. It must sign in again to use your account." },
+  invalid: {
+    text: "That value was not saved: it must be 1–1024 characters without spaces or line breaks.",
+    warn: true,
+  },
+  ...R2_NOTICES,
 };
 
 /** Printable ASCII, no whitespace: every supported provider key and id fits. */
@@ -57,15 +63,17 @@ async function showDashboard(ctx: AppContext, request: Request): Promise<Respons
   }
   const { account, session } = signedIn;
   const noticeKey = new URL(request.url).searchParams.get("notice") ?? "";
+  const r2 = await ctx.accounts.r2Settings(account.id);
   return html(
     200,
     dashboardPage({
       account,
       secrets: await ctx.accounts.secrets(account.id),
+      r2: r2 ? { bucket: r2.bucket, publicBaseUrl: r2.publicBaseUrl } : null,
       csrf: await csrfToken(ctx.sessionSecret, session),
       mcpUrl: `${ctx.origin}/mcp`,
       clients: await connectedClients(ctx, account),
-      notice: NOTICES[noticeKey],
+      notice: Object.hasOwn(NOTICES, noticeKey) ? NOTICES[noticeKey] : undefined,
     }),
   );
 }
@@ -101,6 +109,8 @@ async function handlePost(ctx: AppContext, request: Request, pathname: string): 
     logEvent("info", "provider_key_saved", { user: account.id, name });
     return redirect("/dashboard?notice=saved");
   }
+
+  if (pathname === "/dashboard/storage") return handleR2SettingsPost(ctx, account, form);
 
   if (pathname === "/dashboard/connections/revoke") {
     const grantId = String(form.get("grant_id") ?? "");

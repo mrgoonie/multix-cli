@@ -54,6 +54,35 @@ bị bỏ qua.
 - **Token GitHub:** chỉ dùng một lần để đọc hồ sơ và email đã xác minh, rồi bị
   bỏ đi. multix lưu GitHub user ID, login, tên, URL avatar và các email đã xác
   minh.
+- **Những key nào:** dashboard có ô nhập cho mọi tên biến môi trường chứa key
+  mà CLI đọc, nhóm theo provider kèm liên kết đến trang tạo key (Gemini,
+  OpenRouter, OpenAI, MiniMax, Leonardo.Ai, BytePlus với `ARK_API_KEY` làm tên
+  dự phòng, ElevenLabs, fal.ai, Atlas Cloud, Replicate với `REPLICATE_API_KEY`
+  làm tên dự phòng, HeyGen), cùng account ID, API token và AI Gateway ID (tùy
+  chọn) của Cloudflare Workers AI. Các tool ảnh và video ở trên chỉ dùng key
+  Replicate, Atlas Cloud, HeyGen và Cloudflare.
+
+### Lưu trữ R2
+
+Mỗi tài khoản cũng có thể lưu bucket Cloudflare R2 của riêng mình cho các file
+do job phía server tạo ra. Các tool ảnh và video hiện tại trả về URL của
+provider và không tải lên R2.
+
+1. Trong Cloudflare dashboard, tạo một bucket và một R2 API token có quyền
+   **Object Read & Write** trên bucket đó.
+2. Trong thẻ **R2 storage** tại `/dashboard`, nhập account ID (32 ký tự hex),
+   access key ID và secret access key của token, tên bucket và, nếu muốn, một
+   URL gốc công khai `https://` (custom domain hoặc địa chỉ `r2.dev` phục vụ
+   bucket). Không có URL công khai thì file nhận liên kết presigned có hiệu lực
+   tối đa 7 ngày.
+3. **Check and save** liệt kê bucket (`ListObjectsV2`, một key), tải lên một
+   object rỗng `.multix-probe` rồi xóa nó. Nếu một bước thất bại thì không có
+   gì được lưu; trang cho biết bước nào (credential bị từ chối, không có
+   bucket, token chỉ đọc, không kết nối được R2).
+
+Thiết lập được lưu thành một bản ghi AES-GCM dưới `r2:<account>` trong
+`ACCOUNTS_KV`, giống provider key. Trang chỉ hiển thị tên bucket và URL công
+khai; khi thay thiết lập phải nhập lại secret. **Remove** sẽ xóa chúng.
 
 ## Triển khai
 

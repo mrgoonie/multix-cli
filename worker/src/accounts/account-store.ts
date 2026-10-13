@@ -1,5 +1,5 @@
 /**
- * Accounts in ACCOUNTS_KV, three entries per account:
+ * Accounts in ACCOUNTS_KV, up to four entries per account:
  *
  * - `account:<userId>`: the GitHub identity used for the allowlist, rewritten
  *   at every sign-in.
@@ -8,6 +8,8 @@
  *   apart means a sign-in that reads a stale copy cannot drop a saved key.
  * - `signed-out:<userId>`: time of the last "sign out", written only by
  *   endSessions, so a stale read elsewhere can delay a sign-out but never undo it.
+ * - `r2:<userId>`: the account's own R2 bucket settings, one AES-GCM record
+ *   (r2-settings.ts), written only by the dashboard.
  *
  * Plaintext keys exist only in memory while a request uses them; nothing here
  * returns them to the dashboard.
@@ -23,14 +25,25 @@ import {
   type ProviderSecretName,
   type ServerSettings,
 } from "../config.js";
+import { isProviderSecretName } from "../provider-secret-names.js";
 import { logEvent } from "../redaction.js";
 import { type EncryptedValue, decryptSecret, encryptSecret } from "./provider-secret-crypto.js";
+import {
+  type R2Settings,
+  readR2Settings,
+  removeR2Settings,
+  writeR2Settings,
+} from "./r2-settings.js";
+
+export { isProviderSecretName };
 
 export interface StoredSecret extends EncryptedValue {
   updatedAt: number;
 }
 
 export type SecretRecords = Partial<Record<ProviderSecretName, StoredSecret>>;
+
+export type { R2Settings };
 
 export interface Account {
   /** `gh-<numeric GitHub id>`: stable across login renames; no `:` (OAuth token format). */
@@ -70,10 +83,6 @@ function secretsKey(userId: string): string {
 
 function signedOutKey(userId: string): string {
   return `signed-out:${userId}`;
-}
-
-export function isProviderSecretName(name: string): name is ProviderSecretName {
-  return (PROVIDER_SECRET_NAMES as readonly string[]).includes(name);
 }
 
 export class AccountStore {
@@ -162,6 +171,19 @@ export class AccountStore {
       }
     }
     return keys;
+  }
+
+  /** The account's decrypted R2 settings for one request, or null when none are saved. */
+  async r2Settings(userId: string): Promise<R2Settings | null> {
+    return readR2Settings(this.kv, await this.encryptionKey, userId);
+  }
+
+  async saveR2Settings(userId: string, settings: R2Settings, now = Date.now()): Promise<void> {
+    await writeR2Settings(this.kv, await this.encryptionKey, userId, settings, now);
+  }
+
+  async deleteR2Settings(userId: string): Promise<void> {
+    await removeR2Settings(this.kv, userId);
   }
 }
 

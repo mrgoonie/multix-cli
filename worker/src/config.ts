@@ -10,6 +10,11 @@
  */
 
 import type { OAuthHelpers } from "@cloudflare/workers-oauth-provider";
+import {
+  NON_SECRET_NAMES,
+  PROVIDER_SECRET_NAMES,
+  type ProviderKeys,
+} from "./provider-secret-names.js";
 
 export interface RateLimiter {
   limit(options: { key: string }): Promise<{ success: boolean }>;
@@ -31,30 +36,20 @@ export interface ServerSettings {
   MULTIX_MCP_ALLOWED_ORIGINS?: string;
 }
 
-/** Provider credentials an account can store from the dashboard. */
-export const PROVIDER_SECRET_NAMES = [
-  "REPLICATE_API_TOKEN",
-  "ATLASCLOUD_API_KEY",
-  "HEYGEN_API_KEY",
-  "CLOUDFLARE_ACCOUNT_ID",
-  "CLOUDFLARE_API_TOKEN",
-  "CLOUDFLARE_AI_GATEWAY_ID",
-] as const;
-export type ProviderSecretName = (typeof PROVIDER_SECRET_NAMES)[number];
-
-export type ProviderKeys = Partial<Record<ProviderSecretName, string>>;
+export {
+  PROVIDER_SECRET_NAMES,
+  type ProviderKeys,
+  type ProviderSecretName,
+} from "./provider-secret-names.js";
 
 /** Per-request tool configuration: operator limits plus the caller's own provider keys. */
-export interface Env extends ServerSettings, ProviderKeys {
-  /** Fallback name for REPLICATE_API_TOKEN accepted by the shared Replicate client. */
-  REPLICATE_API_KEY?: string;
-}
+export interface Env extends ServerSettings, ProviderKeys {}
 
 /** Cloudflare bindings, Worker secrets and vars. */
 export interface WorkerEnv extends ServerSettings {
   /** OAuth grants, tokens and registered clients (managed by workers-oauth-provider). */
   OAUTH_KV: KVNamespace;
-  /** Accounts and their encrypted provider keys. */
+  /** Accounts, their encrypted provider keys and R2 settings. */
   ACCOUNTS_KV: KVNamespace;
   /** Set by OAuthProvider before the default handler runs. */
   OAUTH_PROVIDER?: OAuthHelpers;
@@ -145,15 +140,9 @@ export function limitsFrom(env: Env): Limits {
   };
 }
 
-/** Every secret value configured on the Worker, for scrubbing error text. */
+/** Every provider key value in the tool env, for scrubbing error text. */
 export function secretValues(env: Env): string[] {
-  return [
-    env.REPLICATE_API_TOKEN,
-    env.REPLICATE_API_KEY,
-    env.ATLASCLOUD_API_KEY,
-    env.HEYGEN_API_KEY,
-    env.CLOUDFLARE_API_TOKEN,
-  ]
-    .map((v) => v?.trim())
+  return PROVIDER_SECRET_NAMES.filter((name) => !NON_SECRET_NAMES.has(name))
+    .map((name) => env[name]?.trim())
     .filter((v): v is string => typeof v === "string" && v.length >= 8);
 }

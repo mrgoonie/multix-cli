@@ -5,7 +5,7 @@
 //   SECRETS_ENCRYPTION_KEY                   base64 of 32 random bytes (openssl rand -base64 32)
 //   MULTIX_ALLOWED_USERS                     GitHub logins or verified emails allowed to sign in
 //                                            (comma-separated; a secret so emails stay out of git)
-// Provider keys are not Worker secrets: each account saves its own in /dashboard.
+// Provider keys and R2 bucket settings are not Worker secrets: each account saves its own in /dashboard.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "multix-mcp",
