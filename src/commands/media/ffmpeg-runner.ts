@@ -41,18 +41,31 @@ export interface RunFfmpegOptions {
   logger?: Logger;
 }
 
+const FFMPEG_ERROR_MAX_CHARS = 1000;
+
+/**
+ * Formats ffmpeg stderr for an error message. ffmpeg reports the cause last,
+ * so a long log keeps its tail rather than its head.
+ */
+export function ffmpegErrorMessage(stderr: string): string {
+  const text = stderr.trim();
+  const tail =
+    text.length > FFMPEG_ERROR_MAX_CHARS ? `…${text.slice(-FFMPEG_ERROR_MAX_CHARS)}` : text;
+  return `ffmpeg failed: ${tail}`;
+}
+
 /** Run ffmpeg with the given argument array. Throws ProviderError on non-zero exit. */
 export async function runFfmpeg(args: string[], opts: RunFfmpegOptions = {}): Promise<void> {
   const { verbose, logger } = opts;
   logger?.debug(`ffmpeg ${args.join(" ")}`);
 
   try {
-    const result = await execa("ffmpeg", args, { reject: true, all: true });
+    // -hide_banner keeps the version and build configuration out of stderr.
+    const result = await execa("ffmpeg", ["-hide_banner", ...args], { reject: true, all: true });
     if (verbose && result.stderr) logger?.debug(result.stderr);
   } catch (e) {
     const err = e as ExecaError;
-    const stderr = (err.stderr ?? err.all ?? "").toString().slice(0, 1000);
-    throw new ProviderError(`ffmpeg failed: ${stderr}`, "ffmpeg");
+    throw new ProviderError(ffmpegErrorMessage((err.stderr ?? err.all ?? "").toString()), "ffmpeg");
   }
 }
 
