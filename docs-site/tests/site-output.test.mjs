@@ -145,3 +145,25 @@ test("media and document guides explain the local executable prerequisites", asy
     assert.match(guide, /winget install -e --id ImageMagick\.ImageMagick/);
   }
 });
+
+test("every docs page is covered by a CSP that allows only first-party scripts", async () => {
+  const { inlineScriptHashes } = await import("../scripts/write-security-headers.mjs");
+  const headers = await readDist("_headers");
+  const csp = /Content-Security-Policy: (.+)/.exec(headers)?.[1] ?? "";
+  assert.match(headers, /^\/\*$/m);
+  assert.match(csp, /script-src 'self' 'wasm-unsafe-eval' /);
+  assert.match(csp, /frame-ancestors 'none'/);
+  assert.doesNotMatch(csp, /script-src[^;]*'unsafe-inline'/);
+  assert.doesNotMatch(csp, /https?:/);
+  // The MCP dashboard shares this origin: every inline script must be allowed by hash.
+  const pages = ["404.html"];
+  for (const route of documentationRoutes) {
+    const path = route === "index" ? "index.html" : `${route}/index.html`;
+    pages.push(path, `vi/${path}`);
+  }
+  for (const path of pages) {
+    for (const hash of inlineScriptHashes(await readDist(path))) {
+      assert.ok(csp.includes(hash), `${path}: ${hash}`);
+    }
+  }
+});

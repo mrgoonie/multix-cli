@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "astro build",
+    "build": "astro build && node scripts/write-security-headers.mjs",
     "check": "astro check",
     "dev": "astro dev",
     "preview": "astro preview",
