@@ -628,6 +628,7 @@ multix media batch --input-dir <dir> --output-dir <dir> [--quality 85] [--max-wi
 
 **Defaults:** quality=85, max-width=1920, bitrate=64k, chunk-duration=3600s.
 **Video:** uses libx264 CRF encoding. Image optimization uses ImageMagick (replaces Pillow).
+**Audio:** 16 kHz mono; the codec follows the output extension (`.mp3` → libmp3lame, `.m4a`/`.aac` → aac, `.ogg`/`.opus` → libopus, `.wav`/`.aiff`/`.flac` lossless, `--bitrate` ignored). Other audio output extensions are rejected before ffmpeg runs.
 
 ### `multix doc`
 

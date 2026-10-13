@@ -50,9 +50,15 @@ rõ ràng để không đụng tới file gốc.
 ```bash
 multix media optimize --input video.mp4 --output optimized.mp4 --target-size 100
 multix media optimize --input photo.png --output photo.webp --quality 85 --max-width 1920
+multix media optimize --input voice.wav --output voice.mp3 --bitrate 64k
 multix media split --input long-video.mp4 --chunk-duration 3600
 multix media batch --input-dir ./source --output-dir ./optimized
 ```
+
+Audio được encode lại thành mono 16 kHz với codec chọn theo phần mở rộng của
+output: `.mp3` dùng `libmp3lame`, `.m4a` và `.aac` dùng `aac`, `.ogg` và
+`.opus` dùng `libopus`, còn `.wav`, `.aiff` và `.flac` được ghi lossless
+(bỏ qua `--bitrate`). Phần mở rộng audio khác bị từ chối trước khi chạy ffmpeg.
 
 ## Chuyển tài liệu
 

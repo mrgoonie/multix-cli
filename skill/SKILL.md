@@ -359,7 +359,7 @@ multix doc convert --input report.pdf [--auto-name] [--output ./out.md]
 cat report.pdf | multix doc convert --input - --output ./out.md   # "-" reads stdin; --stdin-ext <ext> (e.g. pdf) if undetected
 
 # Media optimization (ffmpeg + ImageMagick)
-multix media optimize --input <file> --output <file> [--target-size <MB>] [--quality 85] [--max-width 1920]
+multix media optimize --input <file> --output <file> [--target-size <MB>] [--quality 85] [--max-width 1920] [--bitrate 64k]   # audio codec follows output ext: .mp3/.m4a/.aac/.ogg/.opus/.wav/.aiff/.flac
 multix media split --input <video> [--chunk-duration 3600]
 multix media batch --input-dir <dir> --output-dir <dir>
 ```
