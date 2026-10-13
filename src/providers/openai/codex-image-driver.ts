@@ -84,6 +84,19 @@ export async function runCodexImageGeneration(opts: {
   fs.mkdirSync(path.dirname(dest), { recursive: true });
 
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "multix-codex-image-"));
+  try {
+    return await runInTempDir(tmp, opts, runner, dest);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+async function runInTempDir(
+  tmp: string,
+  opts: { prompt: string; refs?: string[] },
+  runner: ProcessRunner,
+  dest: string,
+): Promise<{ path: string }> {
   const schema = path.join(tmp, "schema.json");
   const result = path.join(tmp, "result.json");
   fs.writeFileSync(

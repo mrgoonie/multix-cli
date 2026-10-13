@@ -69,4 +69,37 @@ describe("Codex image driver", () => {
       }),
     ).rejects.toThrow(/did not create/);
   });
+
+  it("removes its temp directory after a successful run", async () => {
+    let workDir = "";
+    await runCodexImageGeneration({
+      prompt: "red square",
+      outputFormat: "png",
+      runner: async (_cmd, args, opts) => {
+        workDir = opts?.cwd ?? "";
+        const match = /at (.+?\.png)/.exec(args.at(-1) ?? "");
+        if (!match?.[1]) throw new Error("output path missing in prompt");
+        fs.writeFileSync(match[1], "png");
+        return { stdout: "{}", stderr: "", exitCode: 0 };
+      },
+    });
+    expect(workDir).toContain("multix-codex-image-");
+    expect(fs.existsSync(workDir)).toBe(false);
+  });
+
+  it("removes its temp directory when Codex fails", async () => {
+    let workDir = "";
+    await expect(
+      runCodexImageGeneration({
+        prompt: "red square",
+        outputFormat: "png",
+        runner: async (_cmd, _args, opts) => {
+          workDir = opts?.cwd ?? "";
+          return { stdout: "", stderr: "boom", exitCode: 1 };
+        },
+      }),
+    ).rejects.toThrow(/Codex image driver failed/);
+    expect(workDir).toContain("multix-codex-image-");
+    expect(fs.existsSync(workDir)).toBe(false);
+  });
 });
