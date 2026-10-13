@@ -9,6 +9,15 @@ import { describe, expect, it } from "vitest";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLI = path.resolve(__dirname, "../../dist/cli.js");
+/**
+ * Each test spawns `node`; cold starts on slow runners (Windows CI) can exceed
+ * vitest's 5 s default. The child is killed shortly before the test times out,
+ * so a hung CLI never outlives the test that started it.
+ */
+const SPAWN_TIMEOUT = 30_000;
+
+const runHelp = (args: string[]) =>
+  execa("node", [CLI, ...args, "--help"], { reject: false, timeout: SPAWN_TIMEOUT - 1_000 });
 
 const topLevelCommands = [
   "check",
@@ -67,20 +76,20 @@ const subcommands: Record<string, string[]> = {
   doc: ["convert"],
 };
 
-describe("top-level --help", () => {
+describe("top-level --help", { timeout: SPAWN_TIMEOUT }, () => {
   for (const cmd of topLevelCommands) {
     it(`multix ${cmd} --help exits 0`, async () => {
-      const result = await execa("node", [CLI, cmd, "--help"], { reject: false });
+      const result = await runHelp([cmd]);
       expect(result.exitCode).toBe(0);
     });
   }
 });
 
-describe("subcommand --help", () => {
+describe("subcommand --help", { timeout: SPAWN_TIMEOUT }, () => {
   for (const [group, cmds] of Object.entries(subcommands)) {
     for (const sub of cmds) {
       it(`multix ${group} ${sub} --help exits 0`, async () => {
-        const result = await execa("node", [CLI, group, sub, "--help"], { reject: false });
+        const result = await runHelp([group, sub]);
         expect(result.exitCode).toBe(0);
       });
     }
