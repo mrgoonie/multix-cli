@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.2](https://github.com/mrgoonie/multix-cli/compare/v1.2.1...v1.2.2) (2026-10-13)
+
+
+### Fixed
+
+* **media:** drop cover art and keep mp4/mka/mkv/mov audio outputs ([#185](https://github.com/mrgoonie/multix-cli/issues/185)) ([7356d92](https://github.com/mrgoonie/multix-cli/commit/7356d921f5fc96e1ac61d6e68aabaaeffa6dbf51))
+
 ## [1.2.1](https://github.com/mrgoonie/multix-cli/compare/v1.2.0...v1.2.1) (2026-10-13)
 
 
