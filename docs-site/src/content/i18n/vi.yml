@@ -1,0 +1,5 @@
+# Vietnamese UI string overrides for Starlight. Starlight's built-in Vietnamese
+# strings are complete, so nothing is overridden yet. The file must exist:
+# Starlight always reads the `i18n` collection, and Astro warns on every build
+# when that collection is missing or empty.
+{}
