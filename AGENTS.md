@@ -50,9 +50,8 @@ Open a new issue for it (with evidence) rather than widening the current PR.
   `release-please-config.json`); `chore`, `ci`, `build`, `test` and `style` do
   not. A `!` in the commit type or a `BREAKING CHANGE:` footer publishes a new
   major version; use it only for a deliberate breaking change.
-- Dependencies: adopt a new release only once it is at least 14 days old
-  (`npm view <pkg> time --json`), and keep lockfile diffs confined to the
-  packages you meant to change.
+- Dependencies: keep lockfile diffs confined to the packages you meant to
+  change.
 
 ## Verification before review
 
