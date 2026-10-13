@@ -1,0 +1,16 @@
+---
+// Same page as Starlight's built-in 404 route, which is disabled in
+// astro.config.mjs because it warns on every build when no docs entry named
+// 404 exists.
+import StarlightPage from "@astrojs/starlight/components/StarlightPage.astro";
+---
+
+<StarlightPage
+  frontmatter={{
+    title: "404",
+    template: "splash",
+    editUrl: false,
+    pagefind: false,
+    hero: { tagline: Astro.locals.t("404.text") },
+  }}
+/>

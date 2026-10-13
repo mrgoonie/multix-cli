@@ -38,6 +38,9 @@ export default defineConfig({
       title: "multix",
       description:
         "Command reference for the multix AI multimodal CLI: images, video, speech, music, media, and document conversion.",
+      // Starlight's own 404 route looks up a docs entry named 404 and Astro 7.3
+      // warns when it is missing; src/pages/404.astro renders the same page.
+      disable404Route: true,
       defaultLocale: "root",
       locales: {
         root: { label: "English", lang: "en" },
