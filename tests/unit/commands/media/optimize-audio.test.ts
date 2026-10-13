@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { AUDIO_EXTS } from "../../../../src/commands/media/detect-type.js";
 import { buildAudioArgs } from "../../../../src/commands/media/optimize-audio.js";
 import { ValidationError } from "../../../../src/core/errors.js";
 
@@ -14,6 +15,8 @@ describe("buildAudioArgs", () => {
     ["a.mp3", "libmp3lame"],
     ["a.m4a", "aac"],
     ["a.aac", "aac"],
+    ["a.mp4", "aac"],
+    ["a.mka", "aac"],
     ["a.opus", "libopus"],
     ["a.ogg", "libopus"],
     ["a.wav", "pcm_s16le"],
@@ -29,6 +32,7 @@ describe("buildAudioArgs", () => {
       "-i",
       "in.wav",
       "-y",
+      "-vn",
       "-c:a",
       "libmp3lame",
       "-b:a",
@@ -45,6 +49,27 @@ describe("buildAudioArgs", () => {
     for (const output of ["a.wav", "a.flac", "a.aiff"]) {
       expect(buildAudioArgs({ ...base, output })).not.toContain("-b:a");
     }
+  });
+
+  it("keeps 16 kHz mono for lossless codecs", () => {
+    expect(buildAudioArgs({ ...base, output: "a.wav" })).toEqual([
+      "-i",
+      "in.wav",
+      "-y",
+      "-vn",
+      "-c:a",
+      "pcm_s16le",
+      "-ar",
+      "16000",
+      "-ac",
+      "1",
+      "a.wav",
+    ]);
+  });
+
+  // media batch writes each file under its input name, so every audio input must be a valid output.
+  it.each([...AUDIO_EXTS])("accepts the batch input extension %s as an output", (ext) => {
+    expect(() => buildAudioArgs({ ...base, output: `a${ext}` })).not.toThrow();
   });
 
   it("rejects an unsupported output extension with a ValidationError", () => {

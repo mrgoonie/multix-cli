@@ -28,6 +28,8 @@ const AUDIO_CODECS: Record<string, AudioCodec> = {
   ".mp3": { codec: "libmp3lame" },
   ".m4a": { codec: "aac" },
   ".aac": { codec: "aac" },
+  ".mp4": { codec: "aac" },
+  ".mka": { codec: "aac" },
   ".opus": { codec: "libopus" },
   ".ogg": { codec: "libopus" },
   ".wav": { codec: "pcm_s16le", lossless: true },
@@ -62,6 +64,7 @@ export function buildAudioArgs(opts: {
     "-i",
     opts.input,
     "-y",
+    "-vn", // drop embedded cover art; the output is audio only
     "-c:a",
     audio.codec,
     ...(audio.lossless ? [] : ["-b:a", opts.bitrate]),
