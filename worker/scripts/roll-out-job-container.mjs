@@ -158,8 +158,23 @@ async function latestRollout(appId) {
   return Array.isArray(rollouts) ? rollouts[0] : undefined;
 }
 
+/**
+ * The push deploy changes only the image; other container settings need a manual
+ * run with apply_container_settings. Flag a max_instances mismatch so it is not missed.
+ */
+function warnOnSettingsDrift(app) {
+  const jsonc = readFileSync(resolve(WORKER_DIR, "wrangler.jsonc"), "utf8");
+  const wanted = Number(/"max_instances"\s*:\s*(\d+)/.exec(jsonc)?.[1]);
+  if (Number.isFinite(wanted) && app.max_instances !== undefined && wanted !== app.max_instances) {
+    console.log(
+      `::warning::wrangler.jsonc max_instances is ${wanted} but the container application has ${app.max_instances}. Run "Deploy MCP server" manually with apply_container_settings.`,
+    );
+  }
+}
+
 const image = buildAndPush();
 const app = await findApplication();
+warnOnSettingsDrift(app);
 const configuration = { ...app.configuration, image };
 if (app.configuration?.image === image) {
   // Already the configured image, for example on a re-run: finish only if a
