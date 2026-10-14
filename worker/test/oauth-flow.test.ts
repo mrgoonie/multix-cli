@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { sign } from "../src/auth/signed-cookies.js";
 import { jsonResponse, route } from "./helpers.js";
 import {
@@ -477,7 +477,14 @@ describe("hardening", () => {
 });
 
 describe("server-side sign-out", () => {
+  // Sessions are ordered by millisecond timestamps, so these tests drive the
+  // clock: a session issued in the sign-out's millisecond counts as signed out.
+  const freezeClock = () => vi.useFakeTimers({ toFake: ["Date"], now: 1_800_000_000_000 });
+  const tick = () => vi.setSystemTime(Date.now() + 1);
+  afterEach(() => vi.useRealTimers());
+
   it("ends every dashboard session of the account, including copied cookies", async () => {
+    freezeClock();
     const env = oauthEnv();
     const browser = newBrowser(env, githubFetch(OCTOCAT).fetch);
     const token = await authorizeAndGetToken(browser, await registerClient(browser));
@@ -491,6 +498,7 @@ describe("server-side sign-out", () => {
     expect(await (await copy.request("/dashboard")).text()).toContain("Sign in with GitHub");
 
     // Signing in again issues a new session; forms from before the sign-out are rejected.
+    tick();
     await signIn(browser);
     const saved = await browser.post("/dashboard/secrets", {
       csrf: oldCsrf,
@@ -507,11 +515,12 @@ describe("server-side sign-out", () => {
   });
 
   it("binds the CSRF token to one session", async () => {
+    freezeClock();
     const env = oauthEnv();
     const laptop = newBrowser(env, githubFetch(OCTOCAT).fetch);
     const phone = newBrowser(env, githubFetch(OCTOCAT).fetch);
     await signIn(laptop);
-    await new Promise((resolve) => setTimeout(resolve, 2));
+    tick();
     await signIn(phone);
     const laptopCsrf = hiddenField(await (await laptop.request("/dashboard")).text(), "csrf");
     const fields = { name: "HEYGEN_API_KEY", value: "hg_key_123456", intent: "save" };
