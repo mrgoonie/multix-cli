@@ -17,15 +17,14 @@
   "observability": { "enabled": true },
   "workers_dev": false,
   // multix.zuey.me itself is the docs site's Custom Domain. These routes run before it,
-  // so only the MCP, OAuth, dashboard and REST API paths reach this Worker.
+  // so only the MCP, OAuth, dashboard and REST API paths reach this Worker. Patterns match
+  // the query string too, so a path without a trailing `*` misses `/dashboard?notice=…`.
   "routes": [
-    { "pattern": "multix.zuey.me/mcp", "zone_name": "zuey.me" },
-    { "pattern": "multix.zuey.me/mcp/*", "zone_name": "zuey.me" },
-    { "pattern": "multix.zuey.me/dashboard", "zone_name": "zuey.me" },
-    { "pattern": "multix.zuey.me/dashboard/*", "zone_name": "zuey.me" },
+    { "pattern": "multix.zuey.me/mcp*", "zone_name": "zuey.me" },
+    { "pattern": "multix.zuey.me/dashboard*", "zone_name": "zuey.me" },
     { "pattern": "multix.zuey.me/oauth/*", "zone_name": "zuey.me" },
     { "pattern": "multix.zuey.me/.well-known/oauth-*", "zone_name": "zuey.me" },
-    { "pattern": "multix.zuey.me/health", "zone_name": "zuey.me" },
+    { "pattern": "multix.zuey.me/health*", "zone_name": "zuey.me" },
     { "pattern": "multix.zuey.me/api/*", "zone_name": "zuey.me" }
   ],
   "kv_namespaces": [
