@@ -682,30 +682,28 @@ Cloudflare video is intentionally separate: it has no thumbnail flags, and `gene
 
 ## Remote MCP server (Cloudflare Workers)
 
-`worker/` contains an optional MCP server that exposes remote-safe image and
-video tools over Streamable HTTP at `/mcp`, for agents that cannot run the CLI
-locally. It is a separate package and is not included in the npm CLI. A hosted
+`worker/` contains an optional MCP server that runs multix CLI commands in
+Cloudflare Containers over Streamable HTTP at `/mcp`, for agents that cannot
+run the CLI locally. It is a separate package and is not included in the npm CLI. A hosted
 instance runs at `https://multix.zuey.me/mcp` (invited GitHub accounts only).
 
-- Provider tools: `multix_list_providers`, `multix_generate_image`
-  (Replicate, Atlas Cloud), `multix_generate_video` (Replicate, Atlas Cloud,
-  HeyGen, Cloudflare AI Gateway; returns an ID without blocking),
-  `multix_prediction_status`, `multix_prediction_cancel` (Replicate). Results
-  are provider URLs, not bytes.
-- CLI runner tools: `multix_catalog` (runnable commands, their options and
-  file inputs), `multix_run` (run one CLI command, for example
+- Tools: `multix_catalog` (runnable commands, their options and file inputs,
+  and `has_keys` per group from the caller's saved keys; always listed),
+  `multix_run` (run one CLI command, for example
   `gemini analyze` or `media optimize`, in its own Cloudflare Container with
   ffmpeg and ImageMagick; waits up to `wait_seconds`, default 25, max 40,
   container start included), `multix_job_status` and `multix_job_cancel`.
-  Each account runs at most 2 jobs at once (`busy: …` otherwise; a full server
-  answers `server at capacity: …`), and one 30-minute limit covers downloads,
+  Each account runs at most `MULTIX_MAX_JOBS_PER_ACCOUNT` jobs at once
+  (default 2; `busy: …` otherwise) and the server at most
+  `MULTIX_MAX_JOBS_TOTAL` (default 10, keep it at or below the container
+  `max_instances`; `server at capacity: …` otherwise), and one 30-minute limit covers downloads,
   the CLI and uploads. File inputs are public `https://` URLs. Output files
   (at most 50, up to 500 MB each) are streamed to the account's own R2 bucket
   and returned as URLs; without R2 the job still runs and the result says to
   configure R2 in `/dashboard`. Keys are redacted from stdout and stderr.
-  These tools need the Workers Paid plan (Containers) and Docker at deploy
-  time; they are listed only when the `MULTIX_JOBS` and `MULTIX_JOB_QUOTA`
-  bindings exist.
+  The three job tools need the Workers Paid plan (Containers) and Docker at
+  deploy time; they are listed only when the `MULTIX_JOBS` and
+  `MULTIX_JOB_QUOTA` bindings exist.
 - Auth: OAuth 2.1 (dynamic client registration, PKCE) with GitHub sign-in.
   Only GitHub logins or verified emails in the `MULTIX_ALLOWED_USERS` secret
   can sign in.
@@ -717,9 +715,8 @@ instance runs at `https://multix.zuey.me/mcp` (invited GitHub accounts only).
   bucket (account ID, access key pair, bucket, optional `https://` public
   URL; checked with a list, upload and delete of an empty `.multix-probe-*`
   object before it is saved). It also lists and disconnects MCP clients. Limit exposure further with
-  `MULTIX_MCP_ALLOWED_PROVIDERS`, `MULTIX_MCP_ALLOWED_MODELS`,
   `MULTIX_MCP_MAX_OUTPUTS`, `MULTIX_MCP_MAX_VIDEO_SECONDS` (also sent as
-  `min(5, cap)` when a caller omits `duration`),
+  `min(5, cap)` when a command's default duration is unknown or longer),
   `MULTIX_MCP_ALLOWED_RESOLUTIONS` (default `480p,720p,768p,1080p`),
   `MULTIX_MCP_ALLOWED_ORIGINS` (exact browser origins, with CORS), and the
   approximate per-account rate limiter. JSON-RPC batches are rejected.

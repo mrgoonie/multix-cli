@@ -476,20 +476,12 @@ If the user cannot run the CLI locally but has access to a multix MCP server
 guide: https://multix.zuey.me/guides/mcp-server/), call its tools instead. The
 server signs in with GitHub OAuth and uses the provider keys the user saved at
 `/dashboard` (every key the CLI reads can be saved there, plus the account's
-own R2 bucket for job files); a provider reported as not configured needs a key
-saved there.
-Call `multix_list_providers` first, then
-`multix_generate_image` / `multix_generate_video`, and poll
-`multix_prediction_status` until `done` is true. It returns provider URLs (no
-local files), supports only Replicate, Atlas Cloud, HeyGen, and Cloudflare
-video, and accepts only public `https://` image URLs. Check `limits` from
-`multix_list_providers` before a video call: `duration` above
-`max_video_seconds` or a `resolution` outside `allowed_resolutions` is
-rejected, and an omitted `duration` becomes `default_video_seconds` (on Atlas
-Cloud, the model's own default when it is within `max_video_seconds`).
-
-For any other CLI command (Gemini, OpenAI, MiniMax, ElevenLabs, media/ffmpeg,
-`doc convert`, …), use the CLI runner tools when the server lists them:
+own R2 bucket for job files); a group with `has_keys: false` in
+`multix_catalog` needs a key saved there.
+Every provider call (image, video, audio, media/ffmpeg, `doc convert`, …)
+goes through the CLI runner. `multix_catalog` is always listed;
+`multix_run`, `multix_job_status` and `multix_job_cancel` appear only when the
+server has its job container:
 1. `multix_catalog` lists groups and whether the user saved keys
    (`has_keys`); `multix_catalog {"group": "gemini"}` shows each command's
    options and which ones take files.
@@ -498,8 +490,8 @@ For any other CLI command (Gemini, OpenAI, MiniMax, ElevenLabs, media/ffmpeg,
    `https://` URLs for file options (never local paths or `@file`):
    `{"command": "media optimize", "inputs": {"input": "https://…/logo.png"}}`.
 3. If `status` is `running`, poll `multix_job_status` with `job_id` every
-   10–30 s; `multix_job_cancel` stops it. An account runs at most 2 jobs at
-   once: on `busy: …` wait for one to finish (or cancel one) instead of
+   10–30 s; `multix_job_cancel` stops it. An account runs only a few jobs at
+   once (2 by default): on `busy: …` wait for one to finish (or cancel one) instead of
    retrying; on `server at capacity: …` retry after a few minutes.
 4. Read `outputs[].url`. Output files go to the user's own R2 bucket; when
    `url` is null and a `note` mentions R2, tell the user to configure R2 at

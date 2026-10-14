@@ -1,17 +1,15 @@
 ---
 title: Remote MCP server on Cloudflare Workers
-description: Deploy the multix MCP server to Cloudflare Workers so remote AI agents can generate images and video, or run any multix CLI command in a Cloudflare Container, over Streamable HTTP, with GitHub sign-in, OAuth and a dashboard for each account's provider keys and R2 bucket.
+description: Deploy the multix MCP server to Cloudflare Workers so remote AI agents can run multix CLI commands in a Cloudflare Container, over Streamable HTTP, with GitHub sign-in, OAuth and a dashboard for each account's provider keys and R2 bucket.
 ---
 
 The repository ships an optional, stateless [Model Context Protocol](https://modelcontextprotocol.io)
-server in `worker/`. It exposes multix's remote-friendly provider calls as MCP
-tools over **Streamable HTTP** at `/mcp`, so agents that cannot run the CLI
-locally (hosted assistants, web IDEs, other servers) can start image and video
-jobs and poll them. When the Worker is deployed with its job container, the
-same agents can also run almost any `multix` CLI command remotely: each run
-gets its own [Cloudflare Container](https://developers.cloudflare.com/containers/)
-with the CLI, ffmpeg and ImageMagick installed, and output files are uploaded
-to the caller's own R2 bucket.
+server in `worker/`. It serves MCP tools over **Streamable HTTP** at `/mcp`, so
+agents that cannot run the CLI locally (hosted assistants, web IDEs, other
+servers) can run almost any `multix` CLI command remotely: each run gets its
+own [Cloudflare Container](https://developers.cloudflare.com/containers/) with
+the CLI, ffmpeg and ImageMagick installed, and output files are uploaded to the
+caller's own R2 bucket. Every provider call goes through `multix_run`.
 
 The worker is a separate package. It is not part of the published npm CLI and
 does not change how `multix` behaves on your machine.
@@ -20,24 +18,14 @@ does not change how `multix` behaves on your machine.
 
 | Tool | Purpose |
 |---|---|
-| `multix_list_providers` | Which providers are enabled and configured, allowed models, and server limits. |
-| `multix_generate_image` | Text-to-image on `replicate` or `atlascloud`. Waits up to `wait_seconds` (default 20, max 25), then returns either the output URLs or a prediction ID to poll. |
-| `multix_generate_video` | Text- or image-to-video on `replicate`, `atlascloud`, `heygen`, or `cloudflare` (Replicate via AI Gateway). Never blocks: returns a prediction ID. |
-| `multix_prediction_status` | Poll a prediction by provider and ID. |
-| `multix_prediction_cancel` | Cancel a running prediction (Replicate only). |
-| `multix_catalog` | The CLI commands `multix_run` can run. Without `group`: every group, its commands and whether you saved keys for it. With `group`: each command's positionals and options, which ones take files, and the values the server forces. |
-| `multix_run` | Run one CLI command in its own container with your saved keys. Waits up to `wait_seconds` (default 25, max 40, container start included), then returns the result or a job ID to poll. At most 2 running jobs per account. |
+| `multix_catalog` | The CLI commands `multix_run` can run. Without `group`: every group, its commands and whether you saved keys for it (`has_keys`). With `group`: each command's positionals and options, which ones take files, and the values the server forces. |
+| `multix_run` | Run one CLI command in its own container with your saved keys. Waits up to `wait_seconds` (default 25, max 40, container start included), then returns the result or a job ID to poll. At most 2 running jobs per account by default (`MULTIX_MAX_JOBS_PER_ACCOUNT`). |
 | `multix_job_status` | Read a `multix_run` job: status, output URLs, stdout and the tail of stderr. |
 | `multix_job_cancel` | Stop a running job and its container. |
 
-The first five tools call provider APIs directly from the Worker. Their
-results contain provider-hosted **URLs**, never file bytes. Some providers
-return signed URLs that expire; download them promptly. When a job is still
-running, the result includes a `next` hint with the exact
-`multix_prediction_status` arguments to call.
-
-The last four tools appear only when the Worker has its job container binding
-(`MULTIX_JOBS`, see [Deploy](#deploy)).
+`multix_catalog` is always listed. `multix_run`, `multix_job_status` and
+`multix_job_cancel` appear only when the Worker has its job bindings
+(`MULTIX_JOBS` and `MULTIX_JOB_QUOTA`, see [Deploy](#deploy)).
 
 ## Running CLI commands
 
@@ -90,12 +78,14 @@ job: downloading inputs, running the CLI and uploading outputs. The job's
 record is kept for 7 days. Only the account that started a job can read or
 cancel it.
 
-**Concurrency.** Each account can have at most **2** jobs running at once. A
-third `multix_run` fails with `busy: you already have 2 running jobs` until one
-ends; cancel one with `multix_job_cancel` if needed. A job's slot is given back
-when it ends, and frees itself after about 45 minutes if the job was lost.
-When every job container on the server is in use (`max_instances`), the call
-fails with `server at capacity` instead; retry after a few minutes.
+**Concurrency.** Each account can have at most **2** jobs running at once
+(`MULTIX_MAX_JOBS_PER_ACCOUNT`). One more `multix_run` fails with
+`busy: you already have 2 running jobs; wait for one to finish or cancel it`
+until one ends; cancel one with `multix_job_cancel` if needed. A job's slot is
+given back when it ends, and frees itself after about 45 minutes if the job was
+lost. When the server already runs `MULTIX_MAX_JOBS_TOTAL` jobs (default 10)
+across all accounts, the call fails with `server at capacity` instead; retry
+after a few minutes.
 
 **Output files need R2.** The files the CLI writes are uploaded to your own R2
 bucket under `multix/<account hash>/<job id>/<name>`, and `outputs` lists their
@@ -124,8 +114,8 @@ run like any other, with your key.
   Codex image driver, `--stdin-ext`, and reading values from `@file`.
 - Choosing where files go: the server sets the output directory. Download
   outputs from their R2 URLs.
-- Without the job container, `multix_run` and the other job tools are not
-  listed, and only the five provider tools are available.
+- Without the job container, only `multix_catalog` is listed, so no command
+  can run.
 
 ## Accounts and credentials
 
@@ -151,14 +141,13 @@ Worker, and keys set there are ignored.
   (Gemini, OpenRouter, OpenAI, MiniMax, Leonardo.Ai, BytePlus with
   `ARK_API_KEY` as fallback, ElevenLabs, fal.ai, Atlas Cloud, Replicate with
   `REPLICATE_API_KEY` as fallback, HeyGen), plus the Cloudflare Workers AI
-  account ID, API token and optional AI Gateway ID. The image and video tools
-  above use only the Replicate, Atlas Cloud, HeyGen and Cloudflare keys.
+  account ID, API token and optional AI Gateway ID.
 
 ### R2 storage
 
 Each account can also save its own Cloudflare R2 bucket. `multix_run` uploads
 every output file there; without a bucket, jobs still run but return no file
-URLs. The five provider tools return provider URLs and do not use R2.
+URLs.
 
 1. In the Cloudflare dashboard, create a bucket and an R2 API token with
    **Object Read & Write** on that bucket.
@@ -207,9 +196,10 @@ image to Cloudflare.
    `MultixJobContainer`, instance type `basic`, at most 10 instances) and the
    `MULTIX_JOBS` Durable Object binding enable `multix_run`. To deploy without
    the CLI runner (no Docker, Workers Free), remove `containers`,
-   `durable_objects` and `exports`; the four job tools are then not listed. The
-   `MULTIX_JOB_QUOTA` binding (class `AccountJobQuota`) holds each account's
-   running-job count and is required together with `MULTIX_JOBS`.
+   `durable_objects` and `exports`; only `multix_catalog` is then listed. The
+   `MULTIX_JOB_QUOTA` binding (class `AccountJobQuota`) holds the running-job
+   counts per account and server-wide, and is required together with
+   `MULTIX_JOBS`.
 4. **Set the secrets** and deploy:
 
    ```bash
@@ -227,7 +217,8 @@ image to Cloudflare.
    ```
 
 Keep `SECRETS_ENCRYPTION_KEY` safe: replacing it makes every saved provider key
-unreadable. Those providers then report as not configured until each account
+unreadable. Those keys then count as not saved (`has_keys: false` in
+`multix_catalog`) until each account
 saves its keys again. Replacing
 `SESSION_SECRET` signs everyone out of the dashboard.
 
@@ -280,14 +271,13 @@ Then run `/mcp` in Claude Code and choose **Authenticate**. Other clients:
 ```
 
 Connected clients appear in the dashboard, where **Disconnect** revokes their
-access. A tool that needs a provider you have not saved a key for reports that
-provider as not configured.
+access. `multix_catalog` reports `has_keys: false` for a group whose keys you
+have not saved; save them in the dashboard before running its commands.
 
-A typical video flow is `multix_generate_video` → repeat
-`multix_prediction_status` every 10–30 seconds until `done` is `true` → read
-`outputs`. For any other CLI command: `multix_catalog` → `multix_catalog` with
-the group → `multix_run` → repeat `multix_job_status` until `status` is
-`succeeded`, `failed`, `timed_out` or `canceled` → read `outputs`.
+A typical flow, for example a video: `multix_catalog` → `multix_catalog` with
+the group (such as `replicate`) → `multix_run` → repeat `multix_job_status`
+every 10–30 seconds until `status` is `succeeded`, `failed`, `timed_out` or
+`canceled` → read `outputs`.
 
 ## Configuration
 
@@ -309,12 +299,12 @@ Set these as `vars` in `worker/wrangler.jsonc`:
 | Variable | Default | Effect |
 |---|---|---|
 | `MULTIX_PUBLIC_URL` | — (required) | Public origin, for example `https://mcp.example.com`. Used for OAuth metadata, redirects and the GitHub callback. |
-| `MULTIX_MCP_ALLOWED_PROVIDERS` | all | Comma-separated provider allowlist, e.g. `replicate,heygen`. |
-| `MULTIX_MCP_ALLOWED_MODELS` | any | Comma-separated `provider:model` allowlist, e.g. `replicate:black-forest-labs/flux-schnell,heygen:heygen-video-1`. When set, every model (including defaults) must be listed. |
-| `MULTIX_MCP_MAX_OUTPUTS` | `4` (ceiling 10) | Maximum `num_outputs` per image call. |
-| `MULTIX_MCP_MAX_VIDEO_SECONDS` | `10` (ceiling 15) | Maximum video `duration`. When a caller omits `duration`, the server sends a length explicitly instead of leaving the provider default: `min(5, cap)` seconds on Replicate, HeyGen and Cloudflare; on Atlas Cloud see [Spend guard](#security-model). |
-| `MULTIX_MCP_ALLOWED_RESOLUTIONS` | `480p,720p,768p,1080p` | Video resolutions a caller may request (`768p` is a HeyGen Video size). Anything else (for example `4k`) is rejected before the provider call. An omitted resolution uses the model default; on Atlas Cloud that default (and any `output_resolution`, `target_resolution`, resolution-valued `quality`, `size`, `width` or `height`, or a resolution named in the model ID) is checked against this list too. |
+| `MULTIX_MCP_MAX_OUTPUTS` | `4` (ceiling 10) | Maximum output count (for example `--num-images`) per `multix_run` call. |
+| `MULTIX_MCP_MAX_VIDEO_SECONDS` | `10` (ceiling 15) | Maximum video duration. When a caller omits it and the command's default is unknown or longer, the server sends `min(5, cap)` seconds. |
+| `MULTIX_MCP_ALLOWED_RESOLUTIONS` | `480p,720p,768p,1080p` | Video resolutions a caller may request (`768p` is a HeyGen Video size). Anything else (for example `4k`), given or the command's default, is rejected before the job starts. |
 | `MULTIX_MCP_ALLOWED_ORIGINS` | none | Exact browser origins (for example `https://app.example.com`) allowed to call `/mcp`. `*` and other wildcards are not supported: `*` only matches a literal `*` origin, which browsers never send. After the access token is checked, requests with any other `Origin` header get `403`; requests without an `Origin` (server-side clients) are allowed. Listed origins get CORS headers. `OPTIONS` preflights are answered for any origin by the OAuth layer. |
+| `MULTIX_MAX_JOBS_PER_ACCOUNT` | `2` (ceiling 50) | `multix_run` jobs one account may run at the same time. |
+| `MULTIX_MAX_JOBS_TOTAL` | `10` (ceiling 1000) | `multix_run` jobs the server may run at the same time across all accounts. Keep it at or below the container `max_instances` in `wrangler.jsonc`, which is the platform ceiling. |
 
 Two [Workers Rate Limiting](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/)
 bindings in `wrangler.jsonc` bound abuse; excess requests get `429`:
@@ -352,121 +342,23 @@ within your Cloudflare account. If another Worker already uses `1001` or
   account that granted the token. Keys never appear in pages, logs or tool
   results.
 - **Input validation:** all tool arguments are validated with zod schemas
-  (prompt ≤ 4000 characters, IDs restricted to `[A-Za-z0-9_-]`, bounded
-  numbers). Request bodies over 64 KiB are rejected with `413`. JSON-RPC
+  (bounded string lengths, list sizes and numbers), and `multix_run` options
+  are checked against the CLI's command catalog. Request bodies over 64 KiB are rejected with `413`. JSON-RPC
   batches (array bodies) are rejected with `400` / `-32600`, so one HTTP
   request is always one tool call and the rate limit bounds calls too.
-- **SSRF guard:** `image_url` must be `https://` on the default port, with a
-  public DNS host name. IP literals, credentials in the URL, `localhost`,
-  `.local`/`.internal` style names, and cloud metadata hosts are rejected
-  before any provider call.
-- **Spend guard:** output count, video duration, and video resolution are
-  capped, and video calls never wait. On Replicate, HeyGen and Cloudflare a
-  video `duration` is always sent explicitly (the caller's value or
-  `min(5, cap)`), so a provider default can never exceed the cap. Replicate
-  models that name their length input something other than `duration` cannot
-  be capped this way.
-
-  Atlas Cloud fills any field left out from the model schema, so the Worker
-  reads the schema first and applies these rules before submit. Every
-  rejection happens before any billable call.
-
-  - **No schema:** if the model schema cannot be loaded (catalog error, or a
-    model the public catalog does not list), every Atlas video call is
-    rejected, whatever the caller passed, and nothing is sent. Only a retry
-    once the schema loads helps; pinning models does not lift this check.
-  - **Seconds fields:** `duration`, `seconds`, `length`, `num_seconds` and
-    `video_length`. Values may be numbers or strings such as `"8"` or `"8s"`,
-    and an `anyOf`/`oneOf` with a single non-null member is unwrapped. A
-    seconds field whose type cannot be read this way is rejected.
-  - **Caller passed `duration`:** it goes to the first seconds field, in the
-    schema's format (`4` becomes `"4s"` when the enum is `"4s"`/`"8s"`).
-  - **Every other seconds field is sent explicitly:** its schema default when
-    that is within the cap, the cap when the default is longer, and
-    `min(5, cap)` when there is no positive default. The value is snapped to
-    the schema's allowed values: the largest enum value at or below it (else
-    the smallest one within the cap), inside `minimum`/`maximum`. Zero and
-    negative values (often "auto" or "smart" length) are never sent. If no
-    allowed value fits within the cap, the call is rejected.
-  - **Frame counts** (`num_frames`, `frames`): capped at `cap × fps` using the
-    schema's `fps` (or `frames_per_second`) default, and sent explicitly.
-    Without a declared frame rate, one frame per second is assumed, so only a
-    default of at most `cap` frames passes; anything else is rejected.
-  - **Other length-like inputs:** any other field whose name contains
-    `frame`, `second`, `duration` or `length`, or ends in `_len` (for example
-    `frame_count` or `clip_length`), is rejected when it is numeric or its
-    schema cannot be read, since the Worker cannot cap it. Image and flag
-    inputs such as `first_frame` or `return_last_frame` are not affected.
-  - **Final check:** every seconds and frame field, sent or filled from the
-    schema default, must be within the cap. Every resolution field that will
-    be rendered (the value sent or the schema default) must be in
-    `MULTIX_MCP_ALLOWED_RESOLUTIONS`. The resolution fields are `resolution`,
-    `output_resolution`, `target_resolution`, and `quality` when its value,
-    default or enum looks like a resolution (such as `720p`, `1080p`, `2k`,
-    `4k`, or an integer video height such as `1080`). An integer such as
-    `1080` is read as `1080p`; `4k` and `2160p` are different allowlist
-    entries. A `quality` such as `high`, `standard` or a `1`–`5` scale is not
-    a resolution and is left alone; a `quality` schema this server cannot read
-    (`$ref`, `allOf`) is rejected. Only `resolution` is
-    a tool argument, so a model whose other resolution field is outside the
-    list is rejected. A model whose ID names a resolution as a whole token
-    between `/`, `-` or `_` (such as `kwaivgi/kling-video-o3-4k/...` or
-    `kling-v3.0-4k`, both `4k`) renders and bills at that resolution, so it is
-    rejected when that resolution is not in the list, even if its own
-    resolution field defaults to an allowed value. The same applies to a
-    `template` preset that names a resolution (the Tencent upscaler's default
-    `anime-enhance-4k` is `4k`); with no default, every listed preset must be
-    allowed, and a `template` schema this server cannot read is rejected.
-    Lookalikes such as `2.4k` or `4kids` do not count. A `size`/`video_size`
-    (`1920*1080`) or `width`/`height` pair must fit the largest allowed resolution at 16:9 in
-    either orientation: `1080p` allows a long side up to 1920 and a short side
-    up to 1080, so `1920*1920` is rejected. A value, or a schema shape
-    (`$ref`, `allOf`, a union with several members and no outer default), that
-    cannot be read is rejected.
-  - **Other price multipliers** are sent at their cheapest values, because
-    the tool has no argument for them and schema defaults are often the
-    expensive choice:
-    - **Cost switches** `generate_audio`, `sound`, `audio`, `bgm`,
-      `enable_thinking` and `hdr` are sent off: `false`, or, when the schema
-      uses an enum, its value `false`, `"no"`, `"off"`, `"none"` or
-      `"disabled"`. A string `audio` with no default is an input URL and is
-      left alone. A switch that has no off value is rejected. Vidu's `bgm`
-      (background music) defaults to on. Neither Atlas Cloud nor Vidu
-      publishes whether it changes the price, so it is treated as a price
-      input and sent off.
-    - **Output count** is sent as `1`. The fields are exactly `n`, `count`,
-      `batch_size`, `batch_count`, `num_output`, `num_video`, `num_sample`,
-      `num_generation`, `num_result`, `output_count`, `video_count`,
-      `sample_count` and `generation_count` (each also with a plural `s`,
-      such as `num_videos` or `videos_count`). Other `*_count` fields, such as
-      `face_count`, are not output counts (`frame_count` is a length, see
-      above). If the schema does not allow `1`, the call is rejected.
-    - **Price tiers** use a fixed table, cheapest first: `thinking_level`
-      (`minimal`, `low`, `medium`, `default`, `high`), `motion` (`low`,
-      `medium`, `high`), `bitrate_mode` (`standard`, `high`) and `mode`
-      (`wan-std` < `wan-pro`, `std` < `pro`, or `standard` <
-      `professional`). The cheapest listed value in the schema enum is sent
-      when every enum value is listed or the default is listed. Otherwise a
-      listed default above the cheapest tier is rejected, and an unknown
-      default is left alone. Pinning `thinking_level`, `motion` and the other
-      tiers to the cheapest value can lower output quality. Operators who
-      need a higher tier should call the model with the multix CLI directly
-      (`multix atlas run <model> --input '{...}'`).
-    - Any of these fields whose schema cannot be read is rejected.
-
-  Limitations: the Worker does not cap other inputs that may change the
-  price, such as `enable_prompt_expansion` or a `quality` field that is not
-  a resolution.
-  Video-extend models also bill the input video's length; the Worker cannot
-  measure a remote video, and the MCP tool has no video input, so a model
-  that requires one is rejected for the missing field. An explicit extension
-  length field (`duration`) is capped like any other. When the schema
-  declares no size field and no default, the model picks its own output size.
-  Pin vetted models with `MULTIX_MCP_ALLOWED_MODELS`.
+- **SSRF guard:** every URL in `multix_run` `inputs` must be `https://` on the
+  default port, with a public DNS host name. IP literals, credentials in the
+  URL, `localhost`, `.local`/`.internal` style names, and cloud metadata hosts
+  are rejected before the job starts.
+- **Spend guard:** `multix_run` caps output count, video duration and video
+  resolution on the options the server knows for each command (see
+  [Running CLI commands](#running-cli-commands)). Other inputs that may change
+  the price, such as the raw JSON `--input` of `replicate run` or
+  `atlas run`, are not capped.
 - **Logging and redaction:** successful calls are logged at `info` with tool
-  name, provider, model, outcome, and latency only. Prompts are never logged as
+  name, command (or catalog group), outcome, and latency only. Prompts are never logged as
   a field. Failed calls are logged at `warn` (expected errors) or `error`, with
-  an extra `detail` field. It holds the provider or validation error message,
+  an extra `detail` field. It holds the validation or job error message,
   scrubbed of configured secrets, bearer tokens, and URL query strings, and
   truncated. A provider error that echoes part of a prompt (for example a
   moderation message) can therefore appear there. The same scrubbed text is
@@ -493,16 +385,3 @@ The Worker bundle is checked in CI to contain no `node:*` module, no bare Node
 built-in import (`fs`, `child_process`, `path`, …), no `commander` or `execa`,
 and no CLI entry code. The Worker source is also type-checked without Node
 typings.
-
-## Live smoke test
-
-CI uses mocked provider calls only. To check a real provider end to end, run
-the opt-in live test. It is skipped unless both `MULTIX_MCP_LIVE=1` and a
-Replicate token are set. It runs the Worker handler in-process: `tools/list`,
-then one single-output image. Add `MULTIX_MCP_LIVE_VIDEO=1` to also start a
-video, read its status, and cancel it. It spends a few cents and never prints
-credential values.
-
-```bash
-MULTIX_MCP_LIVE=1 REPLICATE_API_TOKEN=r8_... npm test --prefix worker -- live-smoke
-```
