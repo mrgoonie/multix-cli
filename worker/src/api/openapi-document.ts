@@ -138,7 +138,7 @@ export function openApiDocument(origin: string): Json {
         put: {
           summary: "Check and save R2 storage settings",
           description:
-            "Lists the bucket, uploads and deletes an empty `.multix-probe-*` object, and saves only if every step succeeds (422 otherwise). Use an R2 token with Object Read & Write on the bucket.",
+            "Lists the bucket, uploads and deletes an empty `.multix-probe-*` object under the directory path, and saves only if every step succeeds (422 otherwise). Use an R2 token with Object Read & Write on the bucket.",
           operationId: "putStorage",
           requestBody: jsonBody(ref("StorageInput"), {
             account_id: "0123456789abcdef0123456789abcdef",
@@ -146,6 +146,7 @@ export function openApiDocument(origin: string): Json {
             secret_access_key: "<secret access key>",
             bucket: "multix-outputs",
             public_base_url: "https://media.example.com",
+            prefix: "agents/outputs",
           }),
           responses: {
             ...ok("Saved", ref("Storage")),
@@ -342,6 +343,10 @@ export function openApiDocument(origin: string): Json {
             account_id: { type: "string" },
             bucket: { type: "string" },
             public_base_url: { type: ["string", "null"] },
+            prefix: {
+              type: "string",
+              description: "Directory job outputs are written under (`<prefix>/<account>/<job>/`)",
+            },
           },
         },
         StorageInput: {
@@ -357,6 +362,13 @@ export function openApiDocument(origin: string): Json {
               format: "uri",
               description:
                 "Optional https base URL; without it outputs get presigned links valid up to 7 days",
+            },
+            prefix: {
+              type: "string",
+              maxLength: 256,
+              default: "multix",
+              description:
+                "Optional directory path inside the bucket. Letters, digits, `.`, `_`, `-` and `/`; surrounding slashes are dropped; `.` and `..` segments are rejected",
             },
           },
         },

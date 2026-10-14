@@ -6,7 +6,7 @@
  */
 
 import { ValidationError } from "../../../src/core/errors.js";
-import type { R2Settings } from "../accounts/r2-settings.js";
+import { DEFAULT_R2_PREFIX, type R2Settings, r2Prefix } from "../accounts/r2-settings.js";
 import type { ProviderKeys } from "../provider-secret-names.js";
 import { NON_SECRET_NAMES } from "../provider-secret-names.js";
 import { type JobCaps, type JobQuota, quotaError } from "./account-job-quota.js";
@@ -65,8 +65,12 @@ async function sha256Hex(text: string): Promise<string> {
 }
 
 /** R2 key prefix for a job's outputs: `multix/<sha256(userId)[0:16]>/<jobId>`. */
-export async function outputKeyPrefix(userId: string, jobId: string): Promise<string> {
-  return `multix/${(await sha256Hex(userId)).slice(0, 16)}/${jobId}`;
+export async function outputKeyPrefix(
+  userId: string,
+  jobId: string,
+  directory: string = DEFAULT_R2_PREFIX,
+): Promise<string> {
+  return `${directory}/${(await sha256Hex(userId)).slice(0, 16)}/${jobId}`;
 }
 
 /** Only the keys the command's provider reads. */
@@ -136,7 +140,8 @@ export class JobRunner {
       inputs: prepared.inputs,
       timeoutMs: JOB_TIMEOUT_MS,
     };
-    if (r2) spec.upload = { r2, keyPrefix: await outputKeyPrefix(this.ctx.userId, jobId) };
+    if (r2)
+      spec.upload = { r2, keyPrefix: await outputKeyPrefix(this.ctx.userId, jobId, r2Prefix(r2)) };
     const { userId } = this.ctx;
     const deadline = this.now() + waitSeconds * 1000;
     const acquired = await this.ctx.quota.acquire(userId, jobId);

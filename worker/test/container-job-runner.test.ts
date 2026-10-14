@@ -119,6 +119,20 @@ describe("container job runner", () => {
     expect(JSON.stringify(result)).not.toContain(R2.secretAccessKey);
   }, 30_000);
 
+  it.each([
+    [`team/out/0123456789abcdef/${JOB_ID}`, true],
+    [`0123456789abcdef/${JOB_ID}`, false],
+    [`../0123456789abcdef/${JOB_ID}`, false],
+    [`a/./0123456789abcdef/${JOB_ID}`, false],
+    [`a b/0123456789abcdef/${JOB_ID}`, false],
+    ["multix/0123456789abcdef/not-a-job", false],
+  ])("checks the upload key prefix %s", async (keyPrefix, valid) => {
+    const { validateSpec } = await load("../container/job-runner.mjs");
+    const check = () => validateSpec(spec({ upload: { r2: R2, keyPrefix } }));
+    if (valid) expect(check).not.toThrow();
+    else expect(check).toThrow("Invalid job");
+  });
+
   it("returns 7-day presigned links without a public base URL", async () => {
     const { runJob } = await load("../container/job-runner.mjs");
     const { fetch, get } = mockFetch();

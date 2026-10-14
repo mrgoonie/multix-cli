@@ -50,11 +50,24 @@ export function validateSpec(spec) {
     (spec.upload === undefined ||
       (spec.upload &&
         typeof spec.upload.keyPrefix === "string" &&
-        /^multix\/[0-9a-f]{16}\/[0-9a-f-]{36}$/.test(spec.upload.keyPrefix) &&
+        validKeyPrefix(spec.upload.keyPrefix) &&
         spec.upload.r2 &&
         typeof spec.upload.r2 === "object"));
   if (!ok) throw new SpecError("Invalid job");
   return spec;
+}
+
+/** `<directory>/<16 hex account hash>/<job id>`; the directory is checked again here because it came from account settings. */
+function validKeyPrefix(prefix) {
+  if (prefix.length > 512) return false;
+  const segments = prefix.split("/");
+  if (segments.length < 3) return false;
+  const [hash, jobId] = segments.slice(-2);
+  return (
+    /^[0-9a-f]{16}$/.test(hash) &&
+    /^[0-9a-f-]{36}$/.test(jobId) &&
+    segments.slice(0, -2).every((s) => /^[A-Za-z0-9._-]+$/.test(s) && s !== "." && s !== "..")
+  );
 }
 
 export function redact(text, secrets) {

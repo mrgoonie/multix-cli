@@ -16,6 +16,7 @@
 import { isProviderSecretName, isValidSecretValue } from "../accounts/account-store.js";
 import type { Account } from "../accounts/account-store.js";
 import { API_KEY_NAME_RE, ApiKeyStore, TooManyApiKeysError } from "../accounts/api-key-store.js";
+import { r2Prefix } from "../accounts/r2-settings.js";
 import { type AppContext, oauthHelpers, sameOriginPost, signedInSession } from "../app-context.js";
 import { SESSION_COOKIE, clearCookie, csrfToken, csrfValid } from "../auth/signed-cookies.js";
 import { html, redirect, text } from "../http-responses.js";
@@ -86,7 +87,7 @@ async function showDashboard(
     dashboardPage({
       account,
       secrets: await ctx.accounts.secrets(account.id),
-      r2: r2 ? { bucket: r2.bucket, publicBaseUrl: r2.publicBaseUrl } : null,
+      r2: r2 ? { bucket: r2.bucket, publicBaseUrl: r2.publicBaseUrl, prefix: r2Prefix(r2) } : null,
       csrf: await csrfToken(ctx.sessionSecret, session),
       origin: ctx.origin,
       mcpUrl: `${ctx.origin}/mcp`,

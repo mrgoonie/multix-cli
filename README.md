@@ -713,7 +713,7 @@ instance runs at `https://multix.zuey.me/mcp` (invited GitHub accounts only).
   input for every key env name the CLI reads (grouped by provider) plus the
   Cloudflare Workers AI names, and an R2 storage card for the account's own
   bucket (account ID, access key pair, bucket, optional `https://` public
-  URL; checked with a list, upload and delete of an empty `.multix-probe-*`
+  URL, optional directory path, default `multix`; checked with a list, upload and delete of an empty `.multix-probe-*`
   object before it is saved). It also lists and disconnects MCP clients. Limit exposure further with
   `MULTIX_MCP_MAX_OUTPUTS`, `MULTIX_MCP_MAX_VIDEO_SECONDS` (also sent as
   `min(5, cap)` when a command's default duration is unknown or longer),

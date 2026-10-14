@@ -18,12 +18,16 @@ const SECRET = "r2-secret-access-key-0123456789abcdef";
 type Responder = (call: RecordedCall) => Response;
 const ok: Responder = () => new Response(null, { status: 200 });
 
+/** The probe object sits in the output directory: `<bucket>/<prefix>/.multix-probe-<uuid>`. */
+const PROBE_URL =
+  /\.r2\.cloudflarestorage\.com\/my-bucket\/([A-Za-z0-9._\/-]+\/)?\.multix-probe-[0-9a-f-]+$/;
+
 /** Fake R2 endpoint for the bucket check; each step can be overridden. */
 function r2Routes(list: Responder = ok, put: Responder = ok, del: Responder = ok) {
   return [
     route("GET", /^https:\/\/[0-9a-f]{32}\.r2\.cloudflarestorage\.com\/.*list-type=2/, list),
-    route("PUT", /\.r2\.cloudflarestorage\.com\/my-bucket\/\.multix-probe-[0-9a-f-]+$/, put),
-    route("DELETE", /\.r2\.cloudflarestorage\.com\/my-bucket\/\.multix-probe-[0-9a-f-]+$/, del),
+    route("PUT", PROBE_URL, put),
+    route("DELETE", PROBE_URL, del),
   ];
 }
 
@@ -98,6 +102,9 @@ describe("dashboard R2 storage", () => {
     expect(r2Calls[0]?.url).toBe(
       `https://${ACCOUNT_ID}.r2.cloudflarestorage.com/my-bucket?list-type=2&max-keys=1`,
     );
+    expect(new URL(r2Calls[1]?.url ?? "").pathname).toMatch(
+      /^\/my-bucket\/multix\/\.multix-probe-/,
+    );
 
     expect(await store(env).r2Settings(USER_ID)).toEqual({
       accountId: ACCOUNT_ID,
@@ -114,10 +121,37 @@ describe("dashboard R2 storage", () => {
 
     const page = await (await browser.request("/dashboard?notice=r2-saved")).text();
     expect(page).toContain("R2 storage saved.");
-    expect(page).toContain(`Bucket <span class="mono">my-bucket</span>`);
+    expect(page).toContain(
+      `Bucket <span class="mono">my-bucket</span>, directory <span class="mono">multix/</span>`,
+    );
     expect(page).toContain("https://media.example.com/out");
     expect(page).not.toContain(SECRET);
     expect(page).not.toContain(ACCESS_KEY_ID);
+  });
+
+  it("saves a directory path, probes inside it and prefills it on the form", async () => {
+    const { env, github, browser, csrf } = await signedIn(...r2Routes());
+    const response = await browser.post(
+      "/dashboard/storage",
+      r2Form(csrf, { prefix: " /agents//outputs-2026/ " }),
+    );
+    expect(response.headers.get("location")).toBe("/dashboard?notice=r2-saved");
+    const put = github.calls.find((c) => c.method === "PUT");
+    expect(new URL(put?.url ?? "").pathname).toMatch(
+      /^\/my-bucket\/agents\/outputs-2026\/\.multix-probe-[0-9a-f-]+$/,
+    );
+    expect((await store(env).r2Settings(USER_ID))?.prefix).toBe("agents/outputs-2026");
+    const page = await (await browser.request("/dashboard")).text();
+    expect(page).toContain(`directory <span class="mono">agents/outputs-2026/</span>`);
+    expect(page).toContain(`name="prefix" maxlength="256" value="agents/outputs-2026"`);
+  });
+
+  it("stores no prefix for the default directory", async () => {
+    const { env, browser, csrf } = await signedIn(...r2Routes());
+    await browser.post("/dashboard/storage", r2Form(csrf, { prefix: "/multix/" }));
+    const saved = await store(env).r2Settings(USER_ID);
+    expect(saved).not.toBeNull();
+    expect(saved?.prefix).toBeUndefined();
   });
 
   it.each([
@@ -130,6 +164,11 @@ describe("dashboard R2 storage", () => {
     [{ public_base_url: "http://media.example.com" }, "r2-invalid-url"],
     [{ public_base_url: "https://media.example.com/?token=1" }, "r2-invalid-url"],
     [{ public_base_url: "https://user:pw@media.example.com" }, "r2-invalid-url"],
+    [{ prefix: "outputs/../secrets" }, "r2-invalid-prefix"],
+    [{ prefix: "./outputs" }, "r2-invalid-prefix"],
+    [{ prefix: "out puts" }, "r2-invalid-prefix"],
+    [{ prefix: "out?x=1" }, "r2-invalid-prefix"],
+    [{ prefix: "a".repeat(257) }, "r2-invalid-prefix"],
   ])("rejects %j before calling R2", async (overrides, notice) => {
     const { env, github, browser, csrf } = await signedIn(...r2Routes());
     const response = await browser.post("/dashboard/storage", r2Form(csrf, overrides));

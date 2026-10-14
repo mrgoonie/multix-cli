@@ -6,7 +6,7 @@
  */
 
 import type { Account } from "../accounts/account-store.js";
-import { type R2SettingsProblem, parseR2Settings } from "../accounts/r2-settings.js";
+import { type R2SettingsProblem, parseR2Settings, r2Prefix } from "../accounts/r2-settings.js";
 import type { AppContext } from "../app-context.js";
 import { redirect } from "../http-responses.js";
 import { logEvent } from "../redaction.js";
@@ -32,6 +32,10 @@ const PROBLEM_NOTICES: Record<R2SettingsProblem, Notice> = {
   },
   url: {
     text: "R2 settings not saved: the public base URL must be an https URL without a query string or fragment.",
+    warn: true,
+  },
+  prefix: {
+    text: "R2 settings not saved: the directory path may only use letters, digits, dots, underscores, hyphens and slashes (no . or .. segments, at most 256 characters).",
     warn: true,
   },
 };
@@ -86,10 +90,11 @@ export async function handleR2SettingsPost(
     secretAccessKey: field(form, "secret_access_key"),
     bucket: field(form, "bucket"),
     publicBaseUrl: field(form, "public_base_url"),
+    prefix: field(form, "prefix"),
   });
   if (!parsed.ok) return redirect(`/dashboard?notice=r2-invalid-${parsed.problem}`);
 
-  const result = await checkR2Access(parsed.settings, ctx.fetch);
+  const result = await checkR2Access(parsed.settings, ctx.fetch, r2Prefix(parsed.settings));
   if (result !== "ok") {
     logEvent("warn", "r2_settings_check_failed", { user: account.id, result });
     return redirect(`/dashboard?notice=r2-${result}`);

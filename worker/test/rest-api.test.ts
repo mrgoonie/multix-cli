@@ -190,6 +190,18 @@ describe("REST API account endpoints", () => {
     const text = await invalid.text();
     expect(text).toContain("account_id");
     expect(text).not.toContain("very-secret-value-0000");
+    const badPrefix = await api(browser, key, "/storage", {
+      method: "PUT",
+      body: JSON.stringify({
+        account_id: "0123456789abcdef0123456789abcdef",
+        access_key_id: "AKIDEXAMPLE0123456789",
+        secret_access_key: "very-secret-value-0000",
+        bucket: "my-bucket",
+        prefix: "out/../etc",
+      }),
+    });
+    expect(badPrefix.status).toBe(400);
+    expect(await badPrefix.text()).toContain("prefix may only use");
     expect(await body(await api(browser, key, "/storage"))).toEqual({ configured: false });
   });
 

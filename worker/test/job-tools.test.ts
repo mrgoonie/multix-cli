@@ -204,6 +204,19 @@ describe("CLI runner tools", () => {
     expect(payload.stderr_tail).toBe("debug [redacted]");
   });
 
+  it("uploads under the account's chosen directory path", async () => {
+    const backend = new FakeBackend(succeeded, 0);
+    const jobs = jobsContext(backend, { r2Settings: async () => ({ ...R2, prefix: "team/out" }) });
+    const result = await callTool(
+      env,
+      "multix_run",
+      { command: "gemini generate", options: { prompt: "a cat" } },
+      { jobs },
+    );
+    const spec = backend.specs.get(result.structuredContent.job_id);
+    expect(spec?.upload?.keyPrefix).toMatch(/^team\/out\/[0-9a-f]{16}\/[0-9a-f-]{36}$/);
+  });
+
   it("returns a running job after wait_seconds and lets only its owner read or cancel it", async () => {
     const backend = new FakeBackend(succeeded, 100);
     const store = new JobStore(fakeKv());

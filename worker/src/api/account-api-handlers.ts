@@ -7,7 +7,7 @@
 import type { Account, SecretChanges } from "../accounts/account-store.js";
 import { isProviderSecretName, isValidSecretValue } from "../accounts/account-store.js";
 import { ApiKeyStore, publicApiKey } from "../accounts/api-key-store.js";
-import { type R2SettingsProblem, parseR2Settings } from "../accounts/r2-settings.js";
+import { type R2SettingsProblem, parseR2Settings, r2Prefix } from "../accounts/r2-settings.js";
 import type { AppContext } from "../app-context.js";
 import { json } from "../http-responses.js";
 import { PROVIDER_SECRET_NAMES } from "../provider-secret-names.js";
@@ -134,6 +134,7 @@ export async function getStorage(app: AppContext, caller: ApiCaller): Promise<Re
           account_id: r2.accountId,
           bucket: r2.bucket,
           public_base_url: r2.publicBaseUrl ?? null,
+          prefix: r2Prefix(r2),
         }
       : { configured: false },
   );
@@ -144,6 +145,8 @@ const STORAGE_PROBLEMS: Record<R2SettingsProblem, string> = {
   keys: "access_key_id must be 16-128 letters or digits and secret_access_key 16-1024 characters without spaces",
   bucket: "bucket must be 3-63 lower-case letters, digits or hyphens",
   url: "public_base_url must be an https URL without a query string or fragment",
+  prefix:
+    "prefix may only use letters, digits, '.', '_', '-' and '/' (no '.' or '..' segments, at most 256 characters)",
 };
 
 function field(body: Record<string, unknown>, name: string): string {
@@ -164,9 +167,10 @@ export async function putStorage(
     secretAccessKey: field(body, "secret_access_key"),
     bucket: field(body, "bucket"),
     publicBaseUrl: field(body, "public_base_url"),
+    prefix: field(body, "prefix"),
   });
   if (!parsed.ok) throw new ApiError(400, "bad_request", STORAGE_PROBLEMS[parsed.problem]);
-  const result = await checkR2Access(parsed.settings, app.fetch);
+  const result = await checkR2Access(parsed.settings, app.fetch, r2Prefix(parsed.settings));
   if (result !== "ok") {
     logEvent("warn", "r2_settings_check_failed", { user: caller.account.id, result });
     throw new ApiError(

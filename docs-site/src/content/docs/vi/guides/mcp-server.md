@@ -86,7 +86,8 @@ trên mọi tài khoản, lệnh gọi báo lỗi `server at capacity`; hãy th�
 phút.
 
 **File đầu ra cần R2.** Các file CLI ghi ra được tải lên bucket R2 của bạn dưới
-`multix/<hash tài khoản>/<job id>/<tên>`, và `outputs` liệt kê URL công khai
+`<thư mục>/<hash tài khoản>/<job id>/<tên>` (thư mục là `multix` trừ khi bạn
+chọn thư mục khác), và `outputs` liệt kê URL công khai
 hoặc presigned của chúng. Mỗi job báo cáo tối đa 50 file, và file lớn hơn
 500 MB được liệt kê với `url: null` thay vì được tải lên. Nếu bạn chưa lưu bucket R2, job vẫn chạy nhưng mỗi
 output có `url: null` và kết quả kèm `note` nhắc bạn cấu hình R2 tại
@@ -159,9 +160,12 @@ nhưng không trả về URL file.
    access key ID và secret access key của token, tên bucket và, nếu muốn, một
    URL gốc công khai `https://` (custom domain hoặc địa chỉ `r2.dev` phục vụ
    bucket). Không có URL công khai thì file nhận liên kết presigned có hiệu lực
-   tối đa 7 ngày.
+   tối đa 7 ngày. **Directory path** (mặc định `multix`) là thư mục trong
+   bucket chứa file đầu ra, ví dụ `agents/outputs`. Chỉ dùng chữ, số, `.`, `_`,
+   `-` và `/` (tối đa 256 ký tự, không có đoạn `.` hay `..`); dấu `/` ở đầu và
+   cuối được bỏ đi.
 3. **Check and save** liệt kê bucket (`ListObjectsV2`, một key), tải lên một
-   object rỗng `.multix-probe-*` rồi xóa nó. Nếu một bước thất bại thì không có
+   object rỗng `.multix-probe-*` vào thư mục đó rồi xóa nó. Nếu một bước thất bại thì không có
    gì được lưu; trang cho biết bước nào (credential bị từ chối, không có
    bucket, token chỉ đọc, không xóa được object thử, không kết nối được R2).
    Nên dùng token chỉ cấp quyền cho một bucket: token toàn tài khoản truy cập

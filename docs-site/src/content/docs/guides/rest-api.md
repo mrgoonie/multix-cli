@@ -168,12 +168,14 @@ curl -s -X PUT https://multix.zuey.me/api/v1/storage \
   -H "Content-Type: application/json" \
   --data @- <<JSON
 {"account_id": "$R2_ACCOUNT_ID", "access_key_id": "$R2_ACCESS_KEY_ID", "secret_access_key": "$R2_SECRET_ACCESS_KEY",
- "bucket": "my-multix-outputs", "public_base_url": "https://files.example.com"}
+ "bucket": "my-multix-outputs", "public_base_url": "https://files.example.com", "prefix": "agents/outputs"}
 JSON
 ```
 
-`public_base_url` is optional. The response, like `GET /storage`, never
-includes the access keys.
+`public_base_url` is optional. `prefix` (optional, default `multix`) is the
+directory in the bucket that job outputs go to: letters, digits, `.`, `_`, `-`
+and `/`, at most 256 characters, no `.` or `..` segments. The response, like
+`GET /storage`, returns it and never includes the access keys.
 
 ## Run a job and poll it
 

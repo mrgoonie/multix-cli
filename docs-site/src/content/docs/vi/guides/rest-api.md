@@ -169,12 +169,14 @@ curl -s -X PUT https://multix.zuey.me/api/v1/storage \
   -H "Content-Type: application/json" \
   --data @- <<JSON
 {"account_id": "$R2_ACCOUNT_ID", "access_key_id": "$R2_ACCESS_KEY_ID", "secret_access_key": "$R2_SECRET_ACCESS_KEY",
- "bucket": "my-multix-outputs", "public_base_url": "https://files.example.com"}
+ "bucket": "my-multix-outputs", "public_base_url": "https://files.example.com", "prefix": "agents/outputs"}
 JSON
 ```
 
-`public_base_url` là tùy chọn. Response, giống `GET /storage`, không bao giờ
-chứa access key.
+`public_base_url` là tùy chọn. `prefix` (tùy chọn, mặc định `multix`) là thư
+mục trong bucket chứa file đầu ra của job: chữ, số, `.`, `_`, `-` và `/`, tối đa
+256 ký tự, không có đoạn `.` hay `..`. Response, giống `GET /storage`, trả về
+giá trị này và không bao giờ chứa access key.
 
 ## Chạy job và theo dõi
 

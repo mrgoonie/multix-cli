@@ -18,7 +18,15 @@ export interface R2Settings {
   bucket: string;
   /** https base URL serving the bucket (custom domain or r2.dev); without it outputs get presigned links. */
   publicBaseUrl?: string;
+  /** Directory inside the bucket for job outputs; absent means DEFAULT_R2_PREFIX. */
+  prefix?: string;
 }
+
+/** Directory job outputs go to when none is chosen (the layout before the setting existed). */
+export const DEFAULT_R2_PREFIX = "multix";
+export const MAX_R2_PREFIX_CHARS = 256;
+/** One path segment: letters, digits, dot, underscore, hyphen. `.` and `..` are rejected separately. */
+const PREFIX_SEGMENT_RE = /^[A-Za-z0-9._-]+$/;
 
 interface StoredR2Settings extends EncryptedValue {
   updatedAt: number;
@@ -32,7 +40,7 @@ const ACCESS_KEY_ID_RE = /^[A-Za-z0-9]{16,128}$/;
 const SECRET_ACCESS_KEY_RE = /^[\x21-\x7e]{16,1024}$/;
 
 /** Which field was rejected; the dashboard maps it to a fixed message, never echoing the value. */
-export type R2SettingsProblem = "account" | "keys" | "bucket" | "url";
+export type R2SettingsProblem = "account" | "keys" | "bucket" | "url" | "prefix";
 
 export type R2SettingsParse =
   | { ok: true; settings: R2Settings }
@@ -44,6 +52,21 @@ export interface R2SettingsFields {
   secretAccessKey: string;
   bucket: string;
   publicBaseUrl: string;
+  /** Optional; missing or blank means DEFAULT_R2_PREFIX. */
+  prefix?: string;
+}
+
+/**
+ * Directory path for job outputs: surrounding and repeated slashes removed,
+ * every segment safe and not `.` or `..`. Returns "" for a blank value and
+ * undefined when the value is rejected.
+ */
+export function normaliseR2Prefix(raw: string): string | undefined {
+  const segments = raw.trim().split("/").filter(Boolean);
+  const prefix = segments.join("/");
+  if (prefix.length > MAX_R2_PREFIX_CHARS) return undefined;
+  const safe = segments.every((s) => PREFIX_SEGMENT_RE.test(s) && s !== "." && s !== "..");
+  return safe ? prefix : undefined;
 }
 
 /** https only, no credentials, query or fragment; returned without a trailing slash. */
@@ -60,6 +83,11 @@ function normalisePublicBaseUrl(raw: string): string | undefined {
   }
   if (raw.includes("?") || raw.includes("#")) return undefined;
   return `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
+}
+
+/** Directory the account's job outputs are written under. */
+export function r2Prefix(settings: R2Settings): string {
+  return settings.prefix || DEFAULT_R2_PREFIX;
 }
 
 /** Validate dashboard input before any request is made with it (the account id becomes a hostname). */
@@ -80,6 +108,9 @@ export function parseR2Settings(fields: R2SettingsFields): R2SettingsParse {
     if (!publicBaseUrl) return { ok: false, problem: "url" };
     settings.publicBaseUrl = publicBaseUrl;
   }
+  const prefix = normaliseR2Prefix(fields.prefix ?? "");
+  if (prefix === undefined) return { ok: false, problem: "prefix" };
+  if (prefix && prefix !== DEFAULT_R2_PREFIX) settings.prefix = prefix;
   return { ok: true, settings };
 }
 
@@ -100,6 +131,7 @@ export async function writeR2Settings(
     secretAccessKey: settings.secretAccessKey,
     bucket: settings.bucket,
     ...(settings.publicBaseUrl ? { publicBaseUrl: settings.publicBaseUrl } : {}),
+    ...(settings.prefix ? { prefix: settings.prefix } : {}),
   };
   const encrypted = await encryptSecret(cryptoKey, userId, RECORD_NAME, JSON.stringify(plain));
   const record: StoredR2Settings = { ...encrypted, updatedAt: now };
@@ -114,7 +146,8 @@ function isR2Settings(value: unknown): value is R2Settings {
     typeof v.accessKeyId === "string" &&
     typeof v.secretAccessKey === "string" &&
     typeof v.bucket === "string" &&
-    (v.publicBaseUrl === undefined || typeof v.publicBaseUrl === "string")
+    (v.publicBaseUrl === undefined || typeof v.publicBaseUrl === "string") &&
+    (v.prefix === undefined || typeof v.prefix === "string")
   );
 }
 

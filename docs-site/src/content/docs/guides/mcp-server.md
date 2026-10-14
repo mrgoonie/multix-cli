@@ -88,7 +88,8 @@ across all accounts, the call fails with `server at capacity` instead; retry
 after a few minutes.
 
 **Output files need R2.** The files the CLI writes are uploaded to your own R2
-bucket under `multix/<account hash>/<job id>/<name>`, and `outputs` lists their
+bucket under `<directory>/<account hash>/<job id>/<name>` (the directory is
+`multix` unless you choose another one), and `outputs` lists their
 public or presigned URLs. At most 50 files are reported per job, and a file
 over 500 MB is listed with `url: null` instead of being uploaded. If you have not saved an R2 bucket, the job still
 runs, but each output has `url: null` and the result carries a `note` asking
@@ -162,9 +163,13 @@ URLs.
    characters), the token's access key ID and secret access key, the bucket
    name and, optionally, an `https://` public base URL (a custom domain or
    `r2.dev` address serving the bucket). Without a public URL, files get
-   presigned links valid for up to 7 days.
+   presigned links valid for up to 7 days. **Directory path** (default
+   `multix`) is the folder in the bucket that outputs go to, for example
+   `agents/outputs`. It may use letters, digits, `.`, `_`, `-` and `/`
+   (at most 256 characters, no `.` or `..` segments); surrounding slashes are
+   dropped.
 3. **Check and save** lists the bucket (`ListObjectsV2`, one key), uploads an
-   empty `.multix-probe-*` object and deletes it again. Nothing is saved if a
+   empty `.multix-probe-*` object into the directory path and deletes it again. Nothing is saved if a
    step fails; the page says which one (credentials refused, bucket missing,
    read-only token, probe could not be deleted, R2 unreachable). Bucket-scoped
    tokens are recommended: an account-wide token can reach every bucket.

@@ -4,12 +4,15 @@
  * never rendered, and saving always asks for the secret again.
  */
 
+import { DEFAULT_R2_PREFIX, MAX_R2_PREFIX_CHARS } from "../accounts/r2-settings.js";
 import { escapeHtml } from "../http-responses.js";
 
 /** What the card may show about saved settings. */
 export interface R2SettingsSummary {
   bucket: string;
   publicBaseUrl?: string;
+  /** Directory job outputs are written under. */
+  prefix: string;
 }
 
 function hidden(name: string, value: string): string {
@@ -24,7 +27,7 @@ function status(summary: R2SettingsSummary | null, csrf: string): string {
     ? `public URLs under <span class="mono">${escapeHtml(summary.publicBaseUrl)}</span>`
     : "presigned links valid for up to 7 days";
   return `<div class="row" style="justify-content:space-between;margin-bottom:12px">
-<div><span class="badge ok">Configured</span> Bucket <span class="mono">${escapeHtml(summary.bucket)}</span><br><small class="muted">Outputs get ${links}.</small></div>
+<div><span class="badge ok">Configured</span> Bucket <span class="mono">${escapeHtml(summary.bucket)}</span>, directory <span class="mono">${escapeHtml(summary.prefix)}/</span><br><small class="muted">Outputs get ${links}.</small></div>
 <form method="post" action="/dashboard/storage">${hidden("csrf", csrf)}<button class="btn danger small" name="intent" value="delete">Remove</button></form>
 </div>`;
 }
@@ -42,6 +45,7 @@ ${hidden("csrf", csrf)}
 <label><small>Access key ID</small><input type="text" name="access_key_id" required maxlength="128" spellcheck="false"></label>
 <label><small>Secret access key</small><input type="password" name="secret_access_key" required maxlength="1024" spellcheck="false"></label>
 <label><small>Bucket name</small><input type="text" name="bucket" required pattern="[a-z0-9][a-z0-9\\-]{1,61}[a-z0-9]" maxlength="63" spellcheck="false"></label>
+<label><small>Directory path (optional, default <span class="mono">${DEFAULT_R2_PREFIX}</span>; outputs go to <span class="mono">&lt;path&gt;/&lt;account&gt;/&lt;job&gt;/</span>)</small><input type="text" name="prefix" maxlength="${MAX_R2_PREFIX_CHARS}" value="${escapeHtml(summary?.prefix ?? DEFAULT_R2_PREFIX)}" placeholder="${DEFAULT_R2_PREFIX}" spellcheck="false"></label>
 <label><small>Public base URL (optional, https custom domain or r2.dev)</small><input type="url" name="public_base_url" maxlength="2048" placeholder="https://media.example.com" spellcheck="false"></label>
 </div>
 <button class="btn small" name="intent" value="save">${action}</button>

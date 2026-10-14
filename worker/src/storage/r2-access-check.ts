@@ -47,9 +47,11 @@ function classify(error: unknown, step: "list" | "put" | "delete"): R2AccessResu
 export async function checkR2Access(
   settings: R2Credentials & { bucket: string },
   fetch?: FetchLike,
+  /** Directory the probe object is written in, so it lands where outputs will. */
+  directory = "",
 ): Promise<R2AccessResult> {
   const client = new R2Client({ ...settings, fetch, timeoutMs: CHECK_TIMEOUT_MS });
-  const probeKey = `${R2_PROBE_PREFIX}${crypto.randomUUID()}`;
+  const probeKey = `${directory ? `${directory}/` : ""}${R2_PROBE_PREFIX}${crypto.randomUUID()}`;
   const steps: ["list" | "put" | "delete", () => Promise<void>][] = [
     ["list", () => client.listProbe(settings.bucket)],
     ["put", () => client.putObject(settings.bucket, probeKey, new Uint8Array(0), "text/plain")],
