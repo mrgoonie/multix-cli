@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0](https://github.com/mrgoonie/multix-cli/compare/v1.4.0...v1.5.0) (2026-10-14)
+
+
+### Added
+
+* **mcp:** REST API with account API keys and API docs ([#200](https://github.com/mrgoonie/multix-cli/issues/200)) ([d4ee172](https://github.com/mrgoonie/multix-cli/commit/d4ee17295de8e06d9e7693b28abd5f5bb1ef854e))
+
 ## [1.4.0](https://github.com/mrgoonie/multix-cli/compare/v1.3.0...v1.4.0) (2026-10-14)
 
 
