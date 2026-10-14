@@ -174,7 +174,8 @@ JSON
 
 `public_base_url` is optional. `prefix` (optional, default `multix`) is the
 directory in the bucket that job outputs go to: letters, digits, `.`, `_`, `-`
-and `/`, at most 256 characters, no `.` or `..` segments. The response, like
+and `/`, at most 256 characters, no `.` or `..` segments. `PUT` replaces the
+whole setting, so leaving `prefix` out resets it to `multix`. The response, like
 `GET /storage`, returns it and never includes the access keys.
 
 ## Run a job and poll it

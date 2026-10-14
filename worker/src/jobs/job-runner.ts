@@ -64,7 +64,7 @@ async function sha256Hex(text: string): Promise<string> {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-/** R2 key prefix for a job's outputs: `multix/<sha256(userId)[0:16]>/<jobId>`. */
+/** R2 key prefix for a job's outputs: `<directory>/<sha256(userId)[0:16]>/<jobId>`, directory `multix` by default. */
 export async function outputKeyPrefix(
   userId: string,
   jobId: string,

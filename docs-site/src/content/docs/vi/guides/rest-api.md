@@ -175,7 +175,8 @@ JSON
 
 `public_base_url` là tùy chọn. `prefix` (tùy chọn, mặc định `multix`) là thư
 mục trong bucket chứa file đầu ra của job: chữ, số, `.`, `_`, `-` và `/`, tối đa
-256 ký tự, không có đoạn `.` hay `..`. Response, giống `GET /storage`, trả về
+256 ký tự, không có đoạn `.` hay `..`. `PUT` thay toàn bộ cấu hình, nên bỏ
+`prefix` sẽ đặt lại thư mục về `multix`. Response, giống `GET /storage`, trả về
 giá trị này và không bao giờ chứa access key.
 
 ## Chạy job và theo dõi

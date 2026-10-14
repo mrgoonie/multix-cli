@@ -365,10 +365,9 @@ export function openApiDocument(origin: string): Json {
             },
             prefix: {
               type: "string",
-              maxLength: 256,
               default: "multix",
               description:
-                "Optional directory path inside the bucket. Letters, digits, `.`, `_`, `-` and `/`; surrounding slashes are dropped; `.` and `..` segments are rejected",
+                "Optional directory path inside the bucket. Letters, digits, `.`, `_`, `-` and `/`; surrounding and repeated slashes are dropped, then the path may be at most 256 characters with no `.` or `..` segments. Omitting it on PUT resets the directory to `multix`",
             },
           },
         },
