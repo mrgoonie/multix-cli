@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { sign } from "../src/auth/signed-cookies.js";
 import { jsonResponse, route } from "./helpers.js";
 import {
@@ -477,7 +477,19 @@ describe("hardening", () => {
 });
 
 describe("server-side sign-out", () => {
+  // Session issue times and the sign-out time are compared to the millisecond, so
+  // these tests drive the clock instead of depending on how fast the machine runs.
+  const freezeClock = () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(Date.UTC(2026, 0, 1));
+  };
+  const advanceClock = (ms: number) => vi.setSystemTime(Date.now() + ms);
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("ends every dashboard session of the account, including copied cookies", async () => {
+    freezeClock();
     const env = oauthEnv();
     const browser = newBrowser(env, githubFetch(OCTOCAT).fetch);
     const token = await authorizeAndGetToken(browser, await registerClient(browser));
@@ -491,6 +503,7 @@ describe("server-side sign-out", () => {
     expect(await (await copy.request("/dashboard")).text()).toContain("Sign in with GitHub");
 
     // Signing in again issues a new session; forms from before the sign-out are rejected.
+    advanceClock(1000);
     await signIn(browser);
     const saved = await browser.post("/dashboard/secrets", {
       csrf: oldCsrf,
@@ -499,19 +512,28 @@ describe("server-side sign-out", () => {
       intent: "save",
     });
     expect(saved.status).toBe(403);
-    // The new sign-in never rewrites the sign-out time, so old cookies stay void.
+    // The new sign-in never rewrites the sign-out time, so old cookies stay void
+    // while a session issued after the sign-out but before the new sign-in stays valid.
     expect(await (await copy.request("/dashboard")).text()).toContain("Sign in with GitHub");
+    const between = newBrowser(env, githubFetch(OCTOCAT).fetch);
+    const betweenSession = { userId: `gh-${OCTOCAT.id}`, iat: Date.now() - 500 };
+    between.cookies.set(
+      "__Host-multix-session",
+      await sign(SESSION_SECRET, "session", betweenSession, 3600),
+    );
+    expect(await (await between.request("/dashboard")).text()).toContain("Connected MCP clients");
     expect(await (await browser.request("/dashboard")).text()).toContain("Connected MCP clients");
     // MCP connections are grants, not dashboard sessions: they keep working.
     expect((await mcpCall(browser, token, "tools/list")).status).toBe(200);
   });
 
   it("binds the CSRF token to one session", async () => {
+    freezeClock();
     const env = oauthEnv();
     const laptop = newBrowser(env, githubFetch(OCTOCAT).fetch);
     const phone = newBrowser(env, githubFetch(OCTOCAT).fetch);
     await signIn(laptop);
-    await new Promise((resolve) => setTimeout(resolve, 2));
+    advanceClock(1000);
     await signIn(phone);
     const laptopCsrf = hiddenField(await (await laptop.request("/dashboard")).text(), "csrf");
     const fields = { name: "HEYGEN_API_KEY", value: "hg_key_123456", intent: "save" };
