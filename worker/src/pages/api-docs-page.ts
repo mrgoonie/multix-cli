@@ -1,11 +1,12 @@
 /**
  * /api/docs: a readable reference of the REST API, rendered from the same
  * OpenAPI document served at /api/v1/openapi.json, so the two cannot drift.
- * Server-rendered without JavaScript, like every other page.
+ * Server-rendered like every other page; its examples have copy buttons.
  */
 
 import { openApiDocument } from "../api/openapi-document.js";
 import { escapeHtml } from "../http-responses.js";
+import { copyBlock } from "./copy-button.js";
 import { page } from "./page-layout.js";
 
 type Json = Record<string, unknown>;
@@ -50,7 +51,7 @@ function operationCard(base: string, path: string, method: string, operation: Js
 <div class="secret-head"><div><span class="badge ok mono">${method.toUpperCase()}</span> <span class="mono">/api/v1${escapeHtml(path)}</span></div></div>
 <p><strong>${escapeHtml(String(operation.summary ?? ""))}</strong></p>
 ${description}
-<pre>${escapeHtml(curlFor(base, method, path, exampleOf(operation)))}</pre>
+${copyBlock(curlFor(base, method, path, exampleOf(operation)), `${method.toUpperCase()} ${path} example`)}
 <p class="muted"><small>${statusList(operation)}</small></p>
 </div>`;
 }
@@ -71,7 +72,7 @@ export function apiDocsPage(origin: string): string {
 <h1>multix REST API</h1>
 <p>${escapeHtml(String(info.description))}</p>
 <p class="muted"><small>Base URL <span class="mono">${escapeHtml(base)}</span> · machine-readable spec: <a href="/api/v1/openapi.json">/api/v1/openapi.json</a> · create keys in <a href="/dashboard">/dashboard</a></small></p>
-<pre>export MULTIX_API_KEY=mxk_…   # from /dashboard, shown once</pre>
+${copyBlock("export MULTIX_API_KEY=mxk_…   # from /dashboard, shown once", "export command")}
 <p class="muted"><small>Errors are JSON: <span class="mono">{"error":{"code":"bad_request","message":"…"}}</span>. Requests share the per-account rate limit of the MCP endpoint.</small></p>
 </section>
 <section class="card">

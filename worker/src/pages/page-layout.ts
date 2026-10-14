@@ -1,10 +1,12 @@
 /**
  * Shared HTML shell for the dashboard, consent and message pages.
- * Server-rendered, no JavaScript; the CSP in http-responses.ts allows inline
- * styles only. Every interpolated value must go through escapeHtml().
+ * Server-rendered. The only script is COPY_SCRIPT (copy buttons), which the
+ * CSP in http-responses.ts allows by hash; everything else works without it.
+ * Every interpolated value must go through escapeHtml().
  */
 
 import { escapeHtml } from "../http-responses.js";
+import { COPY_SCRIPT } from "./copy-script.js";
 
 const STYLES = `
 :root{--bg:#f6f7f9;--card:#fff;--text:#14161a;--muted:#5c6370;--border:#dfe2e7;--accent:#2f5bea;--accent-text:#fff;--ok:#1d7a46;--warn:#9a5b00;--danger:#c2312b;color-scheme:light dark}
@@ -43,6 +45,19 @@ details.provider[open] summary{margin-bottom:10px}
 details.provider .secret:first-of-type{border-top:0;padding-top:0}
 .fields{display:grid;gap:8px;margin-bottom:12px}
 .fields label{display:grid;gap:4px}
+.copy-wrap{position:relative;display:flex;flex:1 1 260px;min-width:0;margin:0 0 12px}
+.copy-wrap>input{flex:1 1 auto;padding-right:44px}
+.copy-wrap>pre{flex:1 1 auto;min-width:0;margin:0;padding-right:48px}
+.copy-btn{display:none;position:absolute;top:6px;right:6px;width:30px;height:30px;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--muted);cursor:pointer;padding:0}
+.js .copy-btn{display:inline-flex}
+.copy-wrap>input+.copy-btn{top:50%;transform:translateY(-50%)}
+.copy-btn:hover{color:var(--text);border-color:var(--muted)}
+.copy-btn:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.copy-btn svg{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.copy-btn .i-done{display:none}
+.copy-btn[data-state=copied]{color:var(--ok);border-color:var(--ok)}
+.copy-btn[data-state=copied] .i-copy{display:none}.copy-btn[data-state=copied] .i-done{display:inline}
+.copy-btn[data-state=failed]{color:var(--danger);border-color:var(--danger)}
 `;
 
 export function page(title: string, body: string): string {
@@ -58,7 +73,7 @@ export function page(title: string, body: string): string {
 <body><main>
 <header><div class="brand">multix <span>MCP</span></div></header>
 ${body}
-</main></body>
+</main><script>${COPY_SCRIPT}</script></body>
 </html>`;
 }
 

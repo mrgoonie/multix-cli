@@ -9,6 +9,7 @@ import type { Account, SecretRecords } from "../accounts/account-store.js";
 import type { ApiKeyRecord } from "../accounts/api-key-store.js";
 import { escapeHtml } from "../http-responses.js";
 import { type NewApiKey, apiKeysCard, newApiKeyNotice } from "./api-keys-card.js";
+import { copyBlock } from "./copy-button.js";
 import { formatDate, page } from "./page-layout.js";
 import { providerKeysCard } from "./provider-keys-card.js";
 import { type R2SettingsSummary, r2SettingsCard } from "./r2-settings-card.js";
@@ -82,8 +83,9 @@ export function dashboardPage(view: DashboardView): string {
 <section class="card">
 <h2>Connect an MCP client</h2>
 <p>Add this remote MCP server URL in your client (Claude, Cursor, VS Code…). It opens this site to sign in and approve the connection.</p>
-<pre>${escapeHtml(view.mcpUrl)}</pre>
-<p class="muted"><small>Claude Code: <span class="mono">claude mcp add --transport http multix ${escapeHtml(view.mcpUrl)}</span></small></p>
+${copyBlock(view.mcpUrl, "MCP server URL")}
+<p class="muted"><small>Claude Code:</small></p>
+${copyBlock(`claude mcp add --transport http multix ${view.mcpUrl}`, "Claude Code command")}
 </section>
 ${providerKeysCard(view.secrets, view.csrf)}
 ${r2SettingsCard(view.r2, view.csrf)}

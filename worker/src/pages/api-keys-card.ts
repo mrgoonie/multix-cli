@@ -7,6 +7,7 @@
 import type { ApiKeyRecord } from "../accounts/api-key-store.js";
 import { MAX_API_KEYS_PER_ACCOUNT } from "../accounts/api-key-store.js";
 import { escapeHtml } from "../http-responses.js";
+import { copyField } from "./copy-button.js";
 import { formatDate } from "./page-layout.js";
 
 /** A key created by this request, shown once. */
@@ -24,7 +25,7 @@ export function newApiKeyNotice(created: NewApiKey): string {
   return `<section class="card" id="new-api-key">
 <h2>API key created: ${escapeHtml(created.name)}</h2>
 <p>Copy it now. It is shown only once; if you lose it, revoke it and create another. Do not reload this page: that sends the form again and creates another key.</p>
-<div class="row"><input type="text" id="new-api-key-value" readonly value="${escapeHtml(created.key)}" aria-label="New API key" spellcheck="false"></div>
+${copyField(created.key, "New API key", "new-api-key-value")}
 </section>`;
 }
 

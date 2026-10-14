@@ -5,6 +5,7 @@ import { importEncryptionKey } from "../src/accounts/provider-secret-crypto.js";
 import type { WorkerEnv } from "../src/config.js";
 import { HTML_SECURITY_HEADERS } from "../src/http-responses.js";
 import { PROVIDER_KEY_GROUPS, PROVIDER_SECRET_NAMES } from "../src/provider-secret-names.js";
+import { withoutCopyScript } from "./copy-script-helpers.js";
 import { type RecordedCall, route } from "./helpers.js";
 import { githubFetch, hiddenField, newBrowser, oauthEnv, signIn } from "./oauth-harness.js";
 
@@ -65,7 +66,7 @@ describe("dashboard provider keys", () => {
       expect(page).toContain(`<input type="hidden" name="name" value="${name}">`);
     }
     expect(page).toContain("read only when BYTEPLUS_API_KEY is not set");
-    expect(page).not.toMatch(/<script/i);
+    expect(withoutCopyScript(page)).not.toMatch(/<script/i);
   });
 
   it("stores a CLI-only key encrypted and returns it with the account's provider keys", async () => {
@@ -200,13 +201,13 @@ describe("dashboard R2 storage", () => {
     expect(await store(env).r2Settings(USER_ID)).toBeNull();
   });
 
-  it("keeps the dashboard CSP: no scripts, inline styles only", async () => {
+  it("keeps the dashboard CSP: only the hashed copy script, inline styles", async () => {
     const { browser } = await signedIn();
     const response = await browser.request("/dashboard");
     expect(response.headers.get("content-security-policy")).toBe(
       HTML_SECURITY_HEADERS["content-security-policy"],
     );
     expect(response.headers.get("content-security-policy")).toContain("default-src 'none'");
-    expect(await response.text()).not.toMatch(/<script|\son[a-z]+=/i);
+    expect(withoutCopyScript(await response.text())).not.toMatch(/<script|\son[a-z]+=/i);
   });
 });

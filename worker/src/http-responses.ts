@@ -1,12 +1,15 @@
 /** Small response builders shared by the MCP endpoint, sign-in routes and dashboard. */
 
+import { COPY_SCRIPT_HASH } from "./pages/copy-script.js";
+
 export const SECURITY_HEADERS: Record<string, string> = {
   "cache-control": "no-store",
   "x-content-type-options": "nosniff",
 };
 
 /**
- * Headers for every HTML page: no framing, no scripts, no third-party resources,
+ * Headers for every HTML page: no framing, no script but the copy-button one
+ * (allowed by hash), no third-party resources,
  * no referrer sent to other origins. `same-origin` rather than `no-referrer`:
  * under `no-referrer` browsers send `Origin: null` on form POSTs, which the
  * dashboard's and consent page's same-origin check would reject. No `form-action`: browsers apply it to the redirect after
@@ -14,8 +17,7 @@ export const SECURITY_HEADERS: Record<string, string> = {
  */
 export const HTML_SECURITY_HEADERS: Record<string, string> = {
   ...SECURITY_HEADERS,
-  "content-security-policy":
-    "default-src 'none'; style-src 'unsafe-inline'; img-src https://avatars.githubusercontent.com; frame-ancestors 'none'; base-uri 'none'",
+  "content-security-policy": `default-src 'none'; script-src '${COPY_SCRIPT_HASH}'; style-src 'unsafe-inline'; img-src https://avatars.githubusercontent.com; frame-ancestors 'none'; base-uri 'none'`,
   "x-frame-options": "DENY",
   "referrer-policy": "same-origin",
 };

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { sign } from "../src/auth/signed-cookies.js";
+import { withoutCopyScript } from "./copy-script-helpers.js";
 import { jsonResponse, route } from "./helpers.js";
 import {
   GITHUB_SECRET,
@@ -186,7 +187,7 @@ describe("authorize, consent and per-account keys", () => {
         `/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent("http://localhost:3333/callback")}&code_challenge=abcdefghijabcdefghijabcdefghijabcdefghij123&code_challenge_method=S256&state=s`,
       )
     ).text();
-    expect(page).not.toContain("<script>");
+    expect(withoutCopyScript(page)).not.toContain("<script>");
   });
 });
 
