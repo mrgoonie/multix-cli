@@ -5,6 +5,7 @@
  *   GET  /dashboard/login                 start GitHub sign-in
  *   POST /dashboard/secrets               save or remove one provider key
  *   POST /dashboard/storage               check and save, or remove, the account's R2 settings
+ *   POST /dashboard/api-keys              create (shown once) or revoke a REST API key
  *   POST /dashboard/connections/revoke    disconnect one MCP client (revoke its grant)
  *   POST /dashboard/logout                end every dashboard session of the account
  *
@@ -12,11 +13,13 @@
  * account's CSRF token. Values are validated but never echoed back.
  */
 
-import { MAX_SECRET_CHARS, isProviderSecretName } from "../accounts/account-store.js";
+import { isProviderSecretName, isValidSecretValue } from "../accounts/account-store.js";
 import type { Account } from "../accounts/account-store.js";
+import { API_KEY_NAME_RE, ApiKeyStore, TooManyApiKeysError } from "../accounts/api-key-store.js";
 import { type AppContext, oauthHelpers, sameOriginPost, signedInSession } from "../app-context.js";
 import { SESSION_COOKIE, clearCookie, csrfToken, csrfValid } from "../auth/signed-cookies.js";
 import { html, redirect, text } from "../http-responses.js";
+import type { NewApiKey } from "../pages/api-keys-card.js";
 import { type ConnectedClient, dashboardPage, signInPage } from "../pages/dashboard-page.js";
 import { logEvent } from "../redaction.js";
 import { startGithubSignIn } from "./github-sign-in-routes.js";
@@ -30,11 +33,17 @@ const NOTICES: Record<string, Notice> = {
     text: "That value was not saved: it must be 1–1024 characters without spaces or line breaks.",
     warn: true,
   },
+  "api-key-revoked": { text: "API key revoked. It can keep working for up to a minute." },
+  "api-key-invalid-name": {
+    text: "API key not created: the name must be 1–64 printable characters.",
+    warn: true,
+  },
+  "api-key-limit": {
+    text: "API key not created: revoke a key first, an account can hold at most 10.",
+    warn: true,
+  },
   ...R2_NOTICES,
 };
-
-/** Printable ASCII, no whitespace: every supported provider key and id fits. */
-const VALUE_RE = /^[\x21-\x7e]+$/;
 
 async function connectedClients(ctx: AppContext, account: Account): Promise<ConnectedClient[]> {
   const oauth = oauthHelpers(ctx.env);
@@ -51,7 +60,11 @@ async function connectedClients(ctx: AppContext, account: Account): Promise<Conn
   );
 }
 
-async function showDashboard(ctx: AppContext, request: Request): Promise<Response> {
+async function showDashboard(
+  ctx: AppContext,
+  request: Request,
+  newApiKey?: NewApiKey,
+): Promise<Response> {
   const signedIn = await signedInSession(ctx, request);
   if (!signedIn) {
     const headers = new Headers();
@@ -71,9 +84,12 @@ async function showDashboard(ctx: AppContext, request: Request): Promise<Respons
       secrets: await ctx.accounts.secrets(account.id),
       r2: r2 ? { bucket: r2.bucket, publicBaseUrl: r2.publicBaseUrl } : null,
       csrf: await csrfToken(ctx.sessionSecret, session),
+      origin: ctx.origin,
       mcpUrl: `${ctx.origin}/mcp`,
+      apiKeys: await new ApiKeyStore(ctx.env.ACCOUNTS_KV).list(account.id),
+      newApiKey,
       clients: await connectedClients(ctx, account),
-      notice: Object.hasOwn(NOTICES, noticeKey) ? NOTICES[noticeKey] : undefined,
+      notice: !newApiKey && Object.hasOwn(NOTICES, noticeKey) ? NOTICES[noticeKey] : undefined,
     }),
   );
 }
@@ -102,7 +118,7 @@ async function handlePost(ctx: AppContext, request: Request, pathname: string): 
       return redirect("/dashboard?notice=removed");
     }
     const value = String(form.get("value") ?? "").trim();
-    if (value.length > MAX_SECRET_CHARS || !VALUE_RE.test(value)) {
+    if (!isValidSecretValue(value)) {
       return redirect("/dashboard?notice=invalid");
     }
     await ctx.accounts.setSecret(account.id, name, value);
@@ -111,6 +127,26 @@ async function handlePost(ctx: AppContext, request: Request, pathname: string): 
   }
 
   if (pathname === "/dashboard/storage") return handleR2SettingsPost(ctx, account, form);
+
+  if (pathname === "/dashboard/api-keys") {
+    const store = new ApiKeyStore(ctx.env.ACCOUNTS_KV);
+    if (form.get("intent") === "revoke") {
+      await store.revoke(account.id, String(form.get("id") ?? ""));
+      logEvent("info", "api_key_revoked", { user: account.id });
+      return redirect("/dashboard?notice=api-key-revoked");
+    }
+    const name = String(form.get("name") ?? "").trim();
+    if (!API_KEY_NAME_RE.test(name)) return redirect("/dashboard?notice=api-key-invalid-name");
+    try {
+      const { key } = await store.create(account.id, name);
+      logEvent("info", "api_key_created", { user: account.id });
+      // Rendered in this response only: never stored, never put in a URL.
+      return showDashboard(ctx, request, { name, key });
+    } catch (error) {
+      if (error instanceof TooManyApiKeysError) return redirect("/dashboard?notice=api-key-limit");
+      throw error;
+    }
+  }
 
   if (pathname === "/dashboard/connections/revoke") {
     const grantId = String(form.get("grant_id") ?? "");

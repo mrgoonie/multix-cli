@@ -49,6 +49,9 @@ export interface JobToolsContext {
   now?: () => number;
 }
 
+/** Thrown when the account or the server already runs as many jobs as allowed. */
+export class JobCapacityError extends ValidationError {}
+
 /** Thrown for a job that does not exist or belongs to another account. */
 export class JobNotFoundError extends ValidationError {
   constructor() {
@@ -137,7 +140,7 @@ export class JobRunner {
     const { userId } = this.ctx;
     const deadline = this.now() + waitSeconds * 1000;
     const acquired = await this.ctx.quota.acquire(userId, jobId);
-    if (acquired !== "ok") throw new ValidationError(quotaError(acquired, this.ctx.caps));
+    if (acquired !== "ok") throw new JobCapacityError(quotaError(acquired, this.ctx.caps));
     let view: JobView;
     try {
       await this.ctx.store.create(jobId, {
@@ -152,7 +155,7 @@ export class JobRunner {
       throw error;
     }
     if (view.status === "failed" && view.error === SERVER_AT_CAPACITY_ERROR) {
-      throw new ValidationError(SERVER_AT_CAPACITY_ERROR);
+      throw new JobCapacityError(SERVER_AT_CAPACITY_ERROR);
     }
     while (!isTerminal(view.status) && this.now() < deadline) {
       await this.sleep(Math.min(POLL_INTERVAL_MS, deadline - this.now()));

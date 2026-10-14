@@ -1,11 +1,14 @@
 /**
  * Dashboard pages: the sign-in landing and the signed-in account view
- * (connection instructions, provider keys, R2 storage, connected MCP clients).
+ * (connection instructions, provider keys, R2 storage, API keys, connected
+ * MCP clients).
  * Stored key values are never rendered: only whether one is set and when.
  */
 
 import type { Account, SecretRecords } from "../accounts/account-store.js";
+import type { ApiKeyRecord } from "../accounts/api-key-store.js";
 import { escapeHtml } from "../http-responses.js";
+import { type NewApiKey, apiKeysCard, newApiKeyNotice } from "./api-keys-card.js";
 import { formatDate, page } from "./page-layout.js";
 import { providerKeysCard } from "./provider-keys-card.js";
 import { type R2SettingsSummary, r2SettingsCard } from "./r2-settings-card.js";
@@ -23,7 +26,12 @@ export interface DashboardView {
   /** Bucket and public URL of the saved R2 settings, or null when none are saved. */
   r2: R2SettingsSummary | null;
   csrf: string;
+  /** Public origin, e.g. https://multix.zuey.me. */
+  origin: string;
   mcpUrl: string;
+  apiKeys: ApiKeyRecord[];
+  /** Set only on the response that created the key. */
+  newApiKey?: NewApiKey;
   clients: ConnectedClient[];
   notice?: { text: string; warn?: boolean };
 }
@@ -65,7 +73,7 @@ export function dashboardPage(view: DashboardView): string {
     : "";
   return page(
     "multix MCP dashboard",
-    `${notice}<section class="card">
+    `${notice}${view.newApiKey ? newApiKeyNotice(view.newApiKey) : ""}<section class="card">
 <div class="row" style="justify-content:space-between">
 <div>${avatar}<strong>${escapeHtml(account.login)}</strong></div>
 <form method="post" action="/dashboard/logout"><input type="hidden" name="csrf" value="${escapeHtml(view.csrf)}"><button class="btn secondary small" title="Ends the dashboard session on every device">Sign out</button></form>
@@ -79,6 +87,7 @@ export function dashboardPage(view: DashboardView): string {
 </section>
 ${providerKeysCard(view.secrets, view.csrf)}
 ${r2SettingsCard(view.r2, view.csrf)}
+${apiKeysCard(view.apiKeys, view.csrf, view.origin)}
 ${clientsCard(view)}`,
   );
 }

@@ -8,7 +8,9 @@
  *   POST /oauth/register, /oauth/token              DCR and token endpoint (library)
  *   *    /oauth/authorize                           consent page (GitHub sign-in first)
  *   GET  /oauth/github/callback                     GitHub sign-in callback
- *   *    /dashboard[/…]                             account dashboard (provider keys, clients)
+ *   *    /dashboard[/…]                             account dashboard (provider keys, storage, API keys, clients)
+ *   *    /api/v1/…                                  REST API; account API key required (api/api-router.ts)
+ *   GET  /api/docs                                  REST API reference (public)
  *
  * Each MCP request runs with the provider keys of the account that approved
  * the client, decrypted for that request only. The Worker itself never spawns
@@ -23,13 +25,13 @@ import {
 } from "@cloudflare/workers-oauth-provider";
 import { toolEnvFor } from "./accounts/account-store.js";
 import { isAllowed } from "./accounts/allowlist.js";
+import { API_PREFIX, handleApi } from "./api/api-router.js";
 import { type AppDeps, publicOrigin, resolveAppContext } from "./app-context.js";
-import { type WorkerEnv, jobCapsFrom, serverSettings } from "./config.js";
-import { json, text } from "./http-responses.js";
-import { durableJobQuota } from "./jobs/account-job-quota.js";
-import type { JobToolsContext } from "./jobs/job-runner.js";
-import { JobStore, durableJobBackend } from "./jobs/job-store.js";
+import { type WorkerEnv, serverSettings } from "./config.js";
+import { html, json, text } from "./http-responses.js";
+import { jobsContextFor } from "./jobs/job-context.js";
 import { handleMcpRequest } from "./mcp-api-handler.js";
+import { apiDocsPage } from "./pages/api-docs-page.js";
 import { logEvent } from "./redaction.js";
 import { handleDashboard } from "./routes/dashboard-routes.js";
 import { GITHUB_CALLBACK_PATH, finishGithubSignIn } from "./routes/github-sign-in-routes.js";
@@ -39,6 +41,8 @@ import {
   MCP_SCOPE,
   handleAuthorize,
 } from "./routes/oauth-authorize-routes.js";
+
+const API_DOCS_PATH = "/api/docs";
 
 function notConfigured(): Response {
   logEvent("error", "server_not_configured", {});
@@ -81,20 +85,7 @@ async function handleAuthenticatedMcp(
   }
   const keys = await app.accounts.providerKeys(account.id);
   const toolEnv = toolEnvFor(serverSettings(env), keys);
-  // The CLI runner needs both Durable Objects: the per-job container and the per-account quota.
-  const caps = jobCapsFrom(env);
-  const jobs: JobToolsContext | undefined =
-    env.MULTIX_JOBS && env.MULTIX_JOB_QUOTA
-      ? {
-          userId: account.id,
-          keys,
-          store: new JobStore(env.ACCOUNTS_KV),
-          backend: deps.jobBackend ?? durableJobBackend(env.MULTIX_JOBS),
-          quota: durableJobQuota(env.MULTIX_JOB_QUOTA, caps),
-          caps,
-          r2Settings: () => app.accounts.r2Settings(account.id),
-        }
-      : undefined;
+  const jobs = jobsContextFor(env, app, account.id, keys, deps);
   return handleMcpRequest(request, toolEnv, { jobs });
 }
 
@@ -108,11 +99,21 @@ async function handleDefault(request: Request, env: WorkerEnv, deps: AppDeps): P
     return json(200, { ok: true });
   }
   const isDashboard = pathname === "/dashboard" || pathname.startsWith("/dashboard/");
-  if (pathname !== AUTHORIZE_PATH && pathname !== GITHUB_CALLBACK_PATH && !isDashboard) {
+  const isApi = pathname === API_PREFIX || pathname.startsWith(`${API_PREFIX}/`);
+  if (pathname === API_DOCS_PATH) {
+    const origin = publicOrigin(env);
+    if (!origin) return notConfigured();
+    if (request.method !== "GET" && request.method !== "HEAD") {
+      return text(405, "Method Not Allowed", { allow: "GET, HEAD" });
+    }
+    return html(200, apiDocsPage(origin));
+  }
+  if (pathname !== AUTHORIZE_PATH && pathname !== GITHUB_CALLBACK_PATH && !isDashboard && !isApi) {
     return text(404, "Not Found");
   }
   const app = await resolveAppContext(env, deps);
   if (!app) return notConfigured();
+  if (isApi) return handleApi(app, deps, request);
   if (pathname === AUTHORIZE_PATH) return handleAuthorize(app, request);
   if (pathname === GITHUB_CALLBACK_PATH) {
     if (request.method !== "GET") return text(405, "Method Not Allowed", { allow: "GET" });

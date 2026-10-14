@@ -66,8 +66,19 @@ export interface GithubIdentity {
   emails: string[];
 }
 
-/** Longest provider value accepted from the dashboard. */
+/** Longest provider value accepted from the dashboard and the API. */
 export const MAX_SECRET_CHARS = 1024;
+
+/** Printable ASCII, no whitespace: every supported provider key and id fits. */
+const SECRET_VALUE_RE = /^[\x21-\x7e]+$/;
+
+/** Whether a (trimmed) provider value may be saved. */
+export function isValidSecretValue(value: string): boolean {
+  return value.length <= MAX_SECRET_CHARS && SECRET_VALUE_RE.test(value);
+}
+
+/** Changes for updateSecrets: a value to save, or null to remove the key. */
+export type SecretChanges = Partial<Record<ProviderSecretName, string | null>>;
 
 export function accountIdFor(githubId: number): string {
   return `gh-${githubId}`;
@@ -142,6 +153,21 @@ export class AccountStore {
     const secrets = await this.secrets(userId);
     const encrypted = await encryptSecret(await this.encryptionKey, userId, name, value);
     secrets[name] = { ...encrypted, updatedAt: now };
+    await this.kv.put(secretsKey(userId), JSON.stringify(secrets));
+  }
+
+  /** Save and remove several keys with one read and one write of the account's record. */
+  async updateSecrets(userId: string, changes: SecretChanges, now = Date.now()): Promise<void> {
+    const secrets = await this.secrets(userId);
+    const cryptoKey = await this.encryptionKey;
+    for (const [name, value] of Object.entries(changes) as [ProviderSecretName, string | null][]) {
+      if (value === null) {
+        delete secrets[name];
+      } else {
+        const encrypted = await encryptSecret(cryptoKey, userId, name, value);
+        secrets[name] = { ...encrypted, updatedAt: now };
+      }
+    }
     await this.kv.put(secretsKey(userId), JSON.stringify(secrets));
   }
 
