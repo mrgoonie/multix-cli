@@ -116,6 +116,12 @@ npm run check:mcp    # when worker/ or a client it imports changed
   not published with the CLI. When you change a client it uses, run
   `npm run check:mcp` (worker typecheck, tests, and a bundle check that fails
   on any `node:*` or bare Node built-in import, `commander`, `execa`, or CLI code).
+- The job container (`worker/container/`) is rolled out before the Worker
+  (`worker/scripts/roll-out-job-container.mjs`, run by `deploy-mcp.yml`), so a
+  new container must still accept the job spec sent by the Worker that is live.
+  Widen what the container accepts first; the Worker may then send the new form
+  in the same or a later change. Never make the container reject what the live
+  Worker sends.
 
 ## Documentation
 

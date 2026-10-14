@@ -1,7 +1,7 @@
 name: Deploy MCP server
 
-# Deploys worker/ (the remote MCP server at multix.zuey.me/mcp) and builds and
-# pushes its job container image. The image is built from this repository's
+# Builds the job container image and rolls it out first, then deploys worker/
+# (the remote MCP server at multix.zuey.me/mcp). The image is built from this repository's
 # CLI source, so CLI changes redeploy it too. Worker secrets (GitHub OAuth,
 # SESSION_SECRET, SECRETS_ENCRYPTION_KEY, MULTIX_ALLOWED_USERS) are set once
 # with `wrangler secret put` and are not touched here.
@@ -58,9 +58,20 @@ jobs:
           npm test --prefix worker
           npm run check:bundle --prefix worker
 
-      # wrangler builds worker/container/Dockerfile with the runner's Docker and
-      # pushes it to the Cloudflare registry before rolling out the Worker.
-      - name: Deploy
+      # Container first: `wrangler deploy` alone activates the Worker before its
+      # container rollout, so a new Worker could send jobs to old containers.
+      # This builds and pushes the image, rolls it out to every instance and waits;
+      # if the rollout fails, the Worker is not deployed.
+      - name: Roll out the job container
+        run: node worker/scripts/roll-out-job-container.mjs
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      # Rebuilds the image from the Docker cache, so the container application
+      # normally shows no changes; container settings in wrangler.jsonc
+      # (instance type, max_instances) are still applied here.
+      - name: Deploy the Worker
         run: npm run deploy --prefix worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
