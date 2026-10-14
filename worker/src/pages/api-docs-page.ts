@@ -20,7 +20,9 @@ function exampleOf(operation: Json): unknown {
 }
 
 function curlFor(base: string, method: string, path: string, example: unknown): string {
-  const lines = [`curl -X ${method.toUpperCase()} ${base}${path.replace(/\{(\w+)\}/g, "<$1>")} \\`];
+  const lines = [
+    `curl -X ${method.toUpperCase()} ${base}${path.replace(/\{(\w+)\}/g, (_, name: string) => `$${name.toUpperCase()}`)} \\`,
+  ];
   lines.push(`  -H "Authorization: Bearer $MULTIX_API_KEY"${example === undefined ? "" : " \\"}`);
   if (example !== undefined) {
     // Body on stdin, so values substituted from the environment stay out of the process list.
@@ -72,7 +74,7 @@ export function apiDocsPage(origin: string): string {
 <h1>multix REST API</h1>
 <p>${escapeHtml(String(info.description))}</p>
 <p class="muted"><small>Base URL <span class="mono">${escapeHtml(base)}</span> · machine-readable spec: <a href="/api/v1/openapi.json">/api/v1/openapi.json</a> · create keys in <a href="/dashboard">/dashboard</a></small></p>
-${copyBlock("export MULTIX_API_KEY=mxk_…   # from /dashboard, shown once", "export command")}
+${copyBlock("export MULTIX_API_KEY='paste the key from /dashboard here'", "export command")}
 <p class="muted"><small>Errors are JSON: <span class="mono">{"error":{"code":"bad_request","message":"…"}}</span>. Requests share the per-account rate limit of the MCP endpoint.</small></p>
 </section>
 <section class="card">

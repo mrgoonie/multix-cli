@@ -32,6 +32,7 @@ async function createApiKey(browser: Browser, name = "ci"): Promise<string> {
   });
   expect(created.status).toBe(200);
   const page = await created.text();
+  expect(page).toContain('aria-label="Copy New API key"');
   const match = /id="new-api-key-value" readonly value="(mxk_[A-Za-z0-9_-]{43})"/.exec(page);
   if (!match?.[1]) throw new Error("no new key on the page");
   return match[1];

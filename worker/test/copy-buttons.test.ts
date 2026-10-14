@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { HTML_SECURITY_HEADERS } from "../src/http-responses.js";
+import { apiDocsPage } from "../src/pages/api-docs-page.js";
 import { copyBlock, copyField } from "../src/pages/copy-button.js";
 import { COPY_SCRIPT, COPY_SCRIPT_HASH } from "../src/pages/copy-script.js";
 import { page } from "../src/pages/page-layout.js";
@@ -16,16 +17,26 @@ describe("copy buttons", () => {
     expect(csp).toContain("default-src 'none'");
   });
 
-  it("renders the script once per page, exactly as hashed", () => {
-    const html = page("t", "<p>x</p>");
+  it("adds the script, exactly as hashed, only to pages with a copy button", () => {
+    const html = page("t", copyBlock("x", "x"));
     expect(html.split("<script>").length - 1).toBe(1);
     expect(html).toContain(`<script>${COPY_SCRIPT}</script>`);
+    expect(html).toContain('id="copy-status"');
+    expect(page("t", "<p>x</p>")).not.toContain("<script");
+  });
+
+  it("puts copy buttons on the API docs examples, with shell variables for path ids", () => {
+    const docs = apiDocsPage("https://multix.example");
+    expect(docs.split("data-copy ").length - 1).toBeGreaterThan(10);
+    expect(docs).toContain("/api/v1/jobs/$ID ");
+    expect(docs).not.toMatch(/&#60;(id|name)&#62;/);
   });
 
   it("escapes values and labels in fields and blocks", () => {
     const field = copyField('a"<b>', 'K"ey', "new-api-key-value");
     expect(field).toContain('value="a&#34;&#60;b&#62;"');
     expect(field).toContain('aria-label="Copy K&#34;ey"');
+    expect(field).toContain('data-label="Copy K&#34;ey"');
     expect(field).toContain('id="new-api-key-value" readonly');
     expect(copyBlock("<x>", "cmd")).toContain("<pre>&#60;x&#62;</pre>");
   });

@@ -11,7 +11,8 @@ const DONE_ICON =
   '<svg class="i-done" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
 
 function copyButton(label: string): string {
-  return `<button type="button" class="copy-btn" data-copy aria-label="Copy ${escapeHtml(label)}" title="Copy">${COPY_ICON}${DONE_ICON}</button>`;
+  const aria = escapeHtml(`Copy ${label}`);
+  return `<button type="button" class="copy-btn" data-copy data-label="${aria}" aria-label="${aria}" title="Copy">${COPY_ICON}${DONE_ICON}</button>`;
 }
 
 /** A read-only input with a copy button inside its right edge. */

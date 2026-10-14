@@ -47,7 +47,7 @@ details.provider .secret:first-of-type{border-top:0;padding-top:0}
 .fields label{display:grid;gap:4px}
 .copy-wrap{position:relative;display:flex;flex:1 1 260px;min-width:0;margin:0 0 12px}
 .copy-wrap>input{flex:1 1 auto;padding-right:44px}
-.copy-wrap>pre{flex:1 1 auto;min-width:0;margin:0;padding-right:48px}
+.copy-wrap>pre{flex:1 1 auto;min-width:0;margin:0;padding-right:48px;white-space:pre-wrap;overflow-wrap:anywhere}
 .copy-btn{display:none;position:absolute;top:6px;right:6px;width:30px;height:30px;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--muted);cursor:pointer;padding:0}
 .js .copy-btn{display:inline-flex}
 .copy-wrap>input+.copy-btn{top:50%;transform:translateY(-50%)}
@@ -58,7 +58,14 @@ details.provider .secret:first-of-type{border-top:0;padding-top:0}
 .copy-btn[data-state=copied]{color:var(--ok);border-color:var(--ok)}
 .copy-btn[data-state=copied] .i-copy{display:none}.copy-btn[data-state=copied] .i-done{display:inline}
 .copy-btn[data-state=failed]{color:var(--danger);border-color:var(--danger)}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 `;
+
+/** The copy script and its live region, only on pages that have a copy button. */
+function copySupport(body: string): string {
+  if (!body.includes("data-copy")) return "";
+  return `<div id="copy-status" class="sr-only" role="status" aria-live="polite"></div><script>${COPY_SCRIPT}</script>`;
+}
 
 export function page(title: string, body: string): string {
   return `<!doctype html>
@@ -73,7 +80,7 @@ export function page(title: string, body: string): string {
 <body><main>
 <header><div class="brand">multix <span>MCP</span></div></header>
 ${body}
-</main><script>${COPY_SCRIPT}</script></body>
+</main>${copySupport(body)}</body>
 </html>`;
 }
 

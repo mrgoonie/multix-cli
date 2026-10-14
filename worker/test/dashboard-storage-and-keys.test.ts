@@ -208,6 +208,9 @@ describe("dashboard R2 storage", () => {
       HTML_SECURITY_HEADERS["content-security-policy"],
     );
     expect(response.headers.get("content-security-policy")).toContain("default-src 'none'");
-    expect(withoutCopyScript(await response.text())).not.toMatch(/<script|\son[a-z]+=/i);
+    const page = await response.text();
+    expect(page).toContain('aria-label="Copy MCP server URL"');
+    expect(page).toContain('aria-label="Copy Claude Code command"');
+    expect(withoutCopyScript(page)).not.toMatch(/<script|\son[a-z]+=/i);
   });
 });
