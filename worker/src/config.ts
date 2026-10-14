@@ -10,7 +10,12 @@
  */
 
 import type { OAuthHelpers } from "@cloudflare/workers-oauth-provider";
-import type { JobQuotaNamespace } from "./jobs/account-job-quota.js";
+import {
+  type JobCaps,
+  type JobQuotaNamespace,
+  MAX_ACTIVE_JOBS_PER_ACCOUNT,
+  MAX_ACTIVE_JOBS_TOTAL,
+} from "./jobs/account-job-quota.js";
 import type { JobNamespace } from "./jobs/job-store.js";
 import {
   NON_SECRET_NAMES,
@@ -24,11 +29,7 @@ export interface RateLimiter {
 
 /** Operator-wide tool limits, set as `vars` in wrangler.jsonc. */
 export interface ServerSettings {
-  /** Comma-separated provider allowlist. Unset = every configured provider. */
-  MULTIX_MCP_ALLOWED_PROVIDERS?: string;
-  /** Comma-separated `provider:model` allowlist. Unset = any model. */
-  MULTIX_MCP_ALLOWED_MODELS?: string;
-  /** Max images per generate_image call (default 4, hard cap 10). */
+  /** Max images per multix_run call (default 4, hard cap 10). */
   MULTIX_MCP_MAX_OUTPUTS?: string;
   /** Max video duration in seconds (default 10, hard cap 15). */
   MULTIX_MCP_MAX_VIDEO_SECONDS?: string;
@@ -74,15 +75,17 @@ export interface WorkerEnv extends ServerSettings {
   AUTH_RATE_LIMITER?: RateLimiter;
   /** Durable Object namespace of MultixJobContainer (one container per multix_run job). */
   MULTIX_JOBS?: JobNamespace;
-  /** Durable Object namespace of AccountJobQuota (active job slots per account). */
+  /** Durable Object namespace of AccountJobQuota (active job slots per account and server-wide). */
   MULTIX_JOB_QUOTA?: JobQuotaNamespace;
+  /** Jobs one account may run at the same time (default 2, at most 50). */
+  MULTIX_MAX_JOBS_PER_ACCOUNT?: string;
+  /** Jobs the server may run at the same time (default 10, at most 1000; keep <= containers max_instances). */
+  MULTIX_MAX_JOBS_TOTAL?: string;
 }
 
 /** Copy only the operator limits out of the Worker env (never Worker secrets). */
 export function serverSettings(env: ServerSettings): ServerSettings {
   return {
-    MULTIX_MCP_ALLOWED_PROVIDERS: env.MULTIX_MCP_ALLOWED_PROVIDERS,
-    MULTIX_MCP_ALLOWED_MODELS: env.MULTIX_MCP_ALLOWED_MODELS,
     MULTIX_MCP_MAX_OUTPUTS: env.MULTIX_MCP_MAX_OUTPUTS,
     MULTIX_MCP_MAX_VIDEO_SECONDS: env.MULTIX_MCP_MAX_VIDEO_SECONDS,
     MULTIX_MCP_ALLOWED_RESOLUTIONS: env.MULTIX_MCP_ALLOWED_RESOLUTIONS,
@@ -94,11 +97,7 @@ export function serverSettings(env: ServerSettings): ServerSettings {
 export const MIN_SESSION_SECRET_LENGTH = 32;
 /** Max JSON-RPC request body. Tool inputs are small; media is passed by URL. */
 export const MAX_BODY_BYTES = 64 * 1024;
-export const MAX_PROMPT_CHARS = 4000;
 export const MAX_URL_CHARS = 2048;
-/** Longest an image call waits for a result before returning a prediction id. */
-export const MAX_IMAGE_WAIT_SECONDS = 25;
-export const DEFAULT_IMAGE_WAIT_SECONDS = 20;
 
 const OUTPUTS_DEFAULT = 4;
 const OUTPUTS_CEILING = 10;
@@ -151,4 +150,19 @@ export function secretValues(env: Env): string[] {
   return PROVIDER_SECRET_NAMES.filter((name) => !NON_SECRET_NAMES.has(name))
     .map((name) => env[name]?.trim())
     .filter((v): v is string => typeof v === "string" && v.length >= 8);
+}
+
+const JOBS_PER_ACCOUNT_CEILING = 50;
+const JOBS_TOTAL_CEILING = 1000;
+
+/** Concurrent job caps from the Worker vars; invalid or missing values use the defaults. */
+export function jobCapsFrom(env: WorkerEnv): JobCaps {
+  return {
+    perAccount: boundedInt(
+      env.MULTIX_MAX_JOBS_PER_ACCOUNT,
+      MAX_ACTIVE_JOBS_PER_ACCOUNT,
+      JOBS_PER_ACCOUNT_CEILING,
+    ),
+    total: boundedInt(env.MULTIX_MAX_JOBS_TOTAL, MAX_ACTIVE_JOBS_TOTAL, JOBS_TOTAL_CEILING),
+  };
 }

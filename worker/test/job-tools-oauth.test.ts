@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AccountJobQuota, type JobQuotaNamespace } from "../src/jobs/account-job-quota.js";
-import type { JobSpec, JobView } from "../src/jobs/job-protocol.js";
-import type { JobContainerStub, JobNamespace } from "../src/jobs/job-store.js";
+import { fakeNamespace, fakeQuotaNamespace } from "./fake-job-bindings.js";
 import {
   authorizeAndGetToken,
   githubFetch,
@@ -14,56 +12,6 @@ import {
 
 const OCTOCAT = { id: 1, login: "octocat" };
 const GEMINI_KEY = "AIza-gemini-secret-value-1234";
-
-/** MULTIX_JOBS stand-in: one stub per job name, finishing as soon as it starts. */
-function fakeNamespace() {
-  const specs = new Map<string, JobSpec>();
-  const namespace: JobNamespace = {
-    getByName(name: string): JobContainerStub {
-      const done = (): JobView => ({
-        status: "succeeded",
-        createdAt: 1,
-        finishedAt: 2,
-        result: {
-          status: "succeeded",
-          exitCode: 0,
-          stdout: `key=${specs.get(name)?.env.GEMINI_API_KEY}`,
-          stderrTail: "",
-          outputs: [],
-        },
-      });
-      return {
-        startJob: async (spec) => {
-          specs.set(name, spec);
-          return done();
-        },
-        jobStatus: async () => (specs.has(name) ? done() : null),
-        cancelJob: async () => null,
-      };
-    },
-  };
-  return { namespace, specs };
-}
-
-/** MULTIX_JOB_QUOTA stand-in: the real AccountJobQuota class over in-memory storage. */
-function fakeQuotaNamespace(): JobQuotaNamespace {
-  const objects = new Map<string, AccountJobQuota>();
-  return {
-    getByName(name: string) {
-      let quota = objects.get(name);
-      if (!quota) {
-        const data = new Map<string, unknown>();
-        const storage = {
-          get: async (key: string) => structuredClone(data.get(key)),
-          put: async (key: string, value: unknown) => void data.set(key, structuredClone(value)),
-        };
-        quota = new AccountJobQuota({ storage } as never, {} as never);
-        objects.set(name, quota);
-      }
-      return quota;
-    },
-  };
-}
 
 async function toolResult(response: Response) {
   expect(response.status).toBe(200);

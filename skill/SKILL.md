@@ -1,7 +1,7 @@
 ---
 name: multix
 description: AI multimodal CLI — generate and edit images (OpenAI, Codex driver, Gemini Nano Banana, Imagen, MiniMax, OpenRouter, Leonardo, BytePlus Seedream, Cloudflare Workers AI FLUX.1 Schnell, fal.ai FLUX, Replicate FLUX), generate video (Gemini Veo, MiniMax Hailuo, OpenRouter via Veo/Seedance/Kling, Leonardo via Motion/Veo/Kling/Hailuo/Seedance/LTX, BytePlus Seedance, Cloudflare AI Gateway via Replicate, fal.ai queue models, Replicate direct API models incl. P-Video, HeyGen Video Agent and scripted avatar videos), video translation and lipsync (HeyGen), TTS/STT/music (OpenAI, Gemini Flash TTS incl. Gemini 3.8 with delivery-style control, MiniMax, Cloudflare Workers AI MeloTTS, ElevenLabs), 3D models (BytePlus Hyper3D/Hitem3d), analyze/transcribe media, convert documents to Markdown, optimize media via ffmpeg/ImageMagick, and self-update the CLI. Use whenever the user wants to create, edit, or transform images/video/audio/3D/documents from a CLI, mentions any of: OpenAI, Codex image driver, image-to-image, i2i, image edit, watercolor/cyberpunk style transfer, reference image, OpenRouter, Nano Banana, Flux, Seedream, Veo, Hailuo, Seedance, Kling, Cloudflare Workers AI, AI Gateway, fal.ai, Atlas Cloud, Replicate, replicate.com models, Replicate predictions, HeyGen, avatar video, talking head, Video Agent, video translation, dubbing, lipsync, video generation, text-to-video, image-to-video, i2v, ElevenLabs voice cloning, updating/upgrading multix, or asks for batch media optimization.
-version: 1.3.0 # x-release-please-version
+version: 1.5.0 # x-release-please-version
 ---
 
 # multix — AI Multimodal CLI
@@ -476,20 +476,12 @@ If the user cannot run the CLI locally but has access to a multix MCP server
 guide: https://multix.zuey.me/guides/mcp-server/), call its tools instead. The
 server signs in with GitHub OAuth and uses the provider keys the user saved at
 `/dashboard` (every key the CLI reads can be saved there, plus the account's
-own R2 bucket for job files); a provider reported as not configured needs a key
-saved there.
-Call `multix_list_providers` first, then
-`multix_generate_image` / `multix_generate_video`, and poll
-`multix_prediction_status` until `done` is true. It returns provider URLs (no
-local files), supports only Replicate, Atlas Cloud, HeyGen, and Cloudflare
-video, and accepts only public `https://` image URLs. Check `limits` from
-`multix_list_providers` before a video call: `duration` above
-`max_video_seconds` or a `resolution` outside `allowed_resolutions` is
-rejected, and an omitted `duration` becomes `default_video_seconds` (on Atlas
-Cloud, the model's own default when it is within `max_video_seconds`).
-
-For any other CLI command (Gemini, OpenAI, MiniMax, ElevenLabs, media/ffmpeg,
-`doc convert`, …), use the CLI runner tools when the server lists them:
+own R2 bucket for job files); a group with `has_keys: false` in
+`multix_catalog` needs a key saved there.
+Every provider call (image, video, audio, media/ffmpeg, `doc convert`, …)
+goes through the CLI runner. `multix_catalog` is always listed;
+`multix_run`, `multix_job_status` and `multix_job_cancel` appear only when the
+server has its job container:
 1. `multix_catalog` lists groups and whether the user saved keys
    (`has_keys`); `multix_catalog {"group": "gemini"}` shows each command's
    options and which ones take files.
@@ -498,12 +490,17 @@ For any other CLI command (Gemini, OpenAI, MiniMax, ElevenLabs, media/ffmpeg,
    `https://` URLs for file options (never local paths or `@file`):
    `{"command": "media optimize", "inputs": {"input": "https://…/logo.png"}}`.
 3. If `status` is `running`, poll `multix_job_status` with `job_id` every
-   10–30 s; `multix_job_cancel` stops it. An account runs at most 2 jobs at
-   once: on `busy: …` wait for one to finish (or cancel one) instead of
+   10–30 s; `multix_job_cancel` stops it. An account runs only a few jobs at
+   once (2 by default): on `busy: …` wait for one to finish (or cancel one) instead of
    retrying; on `server at capacity: …` retry after a few minutes.
 4. Read `outputs[].url`. Output files go to the user's own R2 bucket; when
    `url` is null and a `note` mentions R2, tell the user to configure R2 at
    `/dashboard`. `stdout` still holds any provider URLs the CLI printed.
+
+Without an MCP client, the same server has a REST API at `/api/v1`
+(`Authorization: Bearer <mxk_… key>` from the user's `/dashboard`; `POST /jobs`
+takes the `multix_run` input and returns `202` while running, poll `next.path`).
+Guide: https://multix.zuey.me/guides/rest-api/, reference: https://multix.zuey.me/api/docs.
 
 ## Security & scope
 

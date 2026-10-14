@@ -15,7 +15,7 @@ import { MIN_SESSION_SECRET_LENGTH, type WorkerEnv } from "./config.js";
 import type { JobBackend } from "./jobs/job-store.js";
 
 export interface AppDeps {
-  /** Injected for tests; defaults to the Worker's fetch (GitHub and provider calls). */
+  /** Injected for tests; defaults to the Worker's fetch (GitHub sign-in and R2 checks). */
   fetch?: FetchLike;
   /** Injected for tests; defaults to the MULTIX_JOBS Durable Object namespace. */
   jobBackend?: JobBackend;

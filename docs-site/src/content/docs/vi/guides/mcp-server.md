@@ -1,18 +1,16 @@
 ---
 title: MCP server từ xa trên Cloudflare Workers
-description: Triển khai multix MCP server lên Cloudflare Workers để AI agent từ xa tạo ảnh và video, hoặc chạy lệnh multix CLI bất kỳ trong Cloudflare Container, qua Streamable HTTP, với đăng nhập GitHub, OAuth và dashboard quản lý provider key cùng bucket R2 của từng tài khoản.
+description: Triển khai multix MCP server lên Cloudflare Workers để AI agent từ xa chạy lệnh multix CLI trong Cloudflare Container, qua Streamable HTTP, với đăng nhập GitHub, OAuth và dashboard quản lý provider key cùng bucket R2 của từng tài khoản.
 ---
 
 Repository có kèm một [Model Context Protocol](https://modelcontextprotocol.io)
 server tùy chọn, không trạng thái (stateless), trong thư mục `worker/`. Server
-cung cấp các lệnh gọi provider phù hợp chạy từ xa của multix dưới dạng MCP tool
-qua **Streamable HTTP** tại `/mcp`, để các agent không chạy được CLI cục bộ
-(trợ lý hosted, web IDE, server khác) có thể khởi chạy job ảnh, video và theo
-dõi trạng thái. Khi Worker được triển khai kèm container chạy job, các agent
-này còn chạy được hầu hết lệnh `multix` CLI từ xa: mỗi lần chạy có một
+cung cấp MCP tool qua **Streamable HTTP** tại `/mcp`, để các agent không chạy
+được CLI cục bộ (trợ lý hosted, web IDE, server khác) chạy được hầu hết lệnh
+`multix` CLI từ xa: mỗi lần chạy có một
 [Cloudflare Container](https://developers.cloudflare.com/containers/) riêng đã
 cài CLI, ffmpeg và ImageMagick, và file đầu ra được tải lên bucket R2 của chính
-người gọi.
+người gọi. Mọi lệnh gọi provider đều đi qua `multix_run`.
 
 Worker là package riêng. Nó không nằm trong CLI phát hành trên npm và không
 thay đổi cách `multix` chạy trên máy bạn.
@@ -21,23 +19,14 @@ thay đổi cách `multix` chạy trên máy bạn.
 
 | Tool | Mục đích |
 |---|---|
-| `multix_list_providers` | Provider nào được bật và đã cấu hình, model được phép, và giới hạn của server. |
-| `multix_generate_image` | Tạo ảnh từ văn bản trên `replicate` hoặc `atlascloud`. Chờ tối đa `wait_seconds` (mặc định 20, tối đa 25), sau đó trả về URL output hoặc prediction ID để poll. |
-| `multix_generate_video` | Tạo video từ văn bản hoặc ảnh trên `replicate`, `atlascloud`, `heygen` hoặc `cloudflare` (Replicate qua AI Gateway). Không bao giờ chờ: trả về prediction ID. |
-| `multix_prediction_status` | Poll một prediction theo provider và ID. |
-| `multix_prediction_cancel` | Hủy prediction đang chạy (chỉ Replicate). |
-| `multix_catalog` | Các lệnh CLI mà `multix_run` chạy được. Không có `group`: mọi nhóm lệnh, các lệnh trong nhóm và bạn đã lưu key cho nhóm đó chưa. Có `group`: positional và option của từng lệnh, option nào nhận file, và giá trị server bắt buộc. |
-| `multix_run` | Chạy một lệnh CLI trong container riêng bằng key đã lưu của bạn. Chờ tối đa `wait_seconds` (mặc định 25, tối đa 40, tính cả thời gian khởi động container), sau đó trả về kết quả hoặc job ID để poll. Mỗi tài khoản chạy tối đa 2 job cùng lúc. |
+| `multix_catalog` | Các lệnh CLI mà `multix_run` chạy được. Không có `group`: mọi nhóm lệnh, các lệnh trong nhóm và bạn đã lưu key cho nhóm đó chưa (`has_keys`). Có `group`: positional và option của từng lệnh, option nào nhận file, và giá trị server bắt buộc. |
+| `multix_run` | Chạy một lệnh CLI trong container riêng bằng key đã lưu của bạn. Chờ tối đa `wait_seconds` (mặc định 25, tối đa 40, tính cả thời gian khởi động container), sau đó trả về kết quả hoặc job ID để poll. Mặc định mỗi tài khoản chạy tối đa 2 job cùng lúc (`MULTIX_MAX_JOBS_PER_ACCOUNT`). |
 | `multix_job_status` | Đọc job `multix_run`: trạng thái, URL output, stdout và phần cuối của stderr. |
 | `multix_job_cancel` | Dừng job đang chạy cùng container của nó. |
 
-Năm tool đầu gọi API của provider trực tiếp từ Worker. Kết quả của chúng chứa
-**URL** do provider lưu trữ, không bao giờ chứa byte của file. Một số provider
-trả về URL có chữ ký sẽ hết hạn; hãy tải về sớm. Khi job còn chạy, kết quả có
-gợi ý `next` với đúng tham số cần gọi cho `multix_prediction_status`.
-
-Bốn tool cuối chỉ xuất hiện khi Worker có binding container chạy job
-(`MULTIX_JOBS`, xem [Triển khai](#triển-khai)).
+`multix_catalog` luôn được liệt kê. `multix_run`, `multix_job_status` và
+`multix_job_cancel` chỉ xuất hiện khi Worker có các binding chạy job
+(`MULTIX_JOBS` và `MULTIX_JOB_QUOTA`, xem [Triển khai](#triển-khai)).
 
 ## Chạy lệnh CLI
 
@@ -87,12 +76,14 @@ mỗi 10–30 giây. Một giới hạn 30 phút áp dụng cho toàn bộ job: 
 CLI và tải output lên. Bản ghi của job được giữ 7 ngày. Chỉ tài khoản đã khởi
 chạy job mới đọc hoặc hủy được job đó.
 
-**Số job đồng thời.** Mỗi tài khoản chạy tối đa **2** job cùng lúc. Lệnh
-`multix_run` thứ ba báo lỗi `busy: you already have 2 running jobs` cho đến khi
-một job kết thúc; nếu cần, hủy bớt bằng `multix_job_cancel`. Suất chạy của job
-được trả lại khi job kết thúc, và tự giải phóng sau khoảng 45 phút nếu job bị
-mất. Khi mọi container chạy job trên server đều đang bận (`max_instances`),
-lệnh gọi báo lỗi `server at capacity`; hãy thử lại sau vài phút.
+**Số job đồng thời.** Mỗi tài khoản chạy tối đa **2** job cùng lúc
+(`MULTIX_MAX_JOBS_PER_ACCOUNT`). Lệnh `multix_run` tiếp theo báo lỗi
+`busy: you already have 2 running jobs; wait for one to finish or cancel it`
+cho đến khi một job kết thúc; nếu cần, hủy bớt bằng `multix_job_cancel`. Suất
+chạy của job được trả lại khi job kết thúc, và tự giải phóng sau khoảng 45 phút
+nếu job bị mất. Khi server đã chạy đủ `MULTIX_MAX_JOBS_TOTAL` job (mặc định 10)
+trên mọi tài khoản, lệnh gọi báo lỗi `server at capacity`; hãy thử lại sau vài
+phút.
 
 **File đầu ra cần R2.** Các file CLI ghi ra được tải lên bucket R2 của bạn dưới
 `multix/<hash tài khoản>/<job id>/<tên>`, và `outputs` liệt kê URL công khai
@@ -119,8 +110,8 @@ dụ xóa một giọng ElevenLabs) chạy như mọi lệnh khác, bằng key c
 - Tính năng tương tác hoặc chỉ chạy cục bộ: `multix update`, `multix check`,
   Codex image driver, `--stdin-ext`, và đọc giá trị từ `@file`.
 - Chọn nơi lưu file: server tự đặt thư mục đầu ra. Hãy tải output từ URL R2.
-- Khi không có container chạy job, `multix_run` và các tool job khác không
-  được liệt kê, chỉ còn năm tool provider.
+- Khi không có container chạy job, chỉ `multix_catalog` được liệt kê, nên
+  không lệnh nào chạy được.
 
 ## Tài khoản và credential
 
@@ -146,15 +137,21 @@ bị bỏ qua.
   OpenRouter, OpenAI, MiniMax, Leonardo.Ai, BytePlus với `ARK_API_KEY` làm tên
   dự phòng, ElevenLabs, fal.ai, Atlas Cloud, Replicate với `REPLICATE_API_KEY`
   làm tên dự phòng, HeyGen), cùng account ID, API token và AI Gateway ID (tùy
-  chọn) của Cloudflare Workers AI. Các tool ảnh và video ở trên chỉ dùng key
-  Replicate, Atlas Cloud, HeyGen và Cloudflare.
+  chọn) của Cloudflare Workers AI.
+
+### API key cho REST API
+
+Thẻ **API keys** trong `/dashboard` tạo và thu hồi API key của tài khoản
+(`mxk_…`, chỉ hiển thị một lần, tối đa 10 key mỗi tài khoản) cho REST API tại
+`/api/v1`, giúp script và CI quản lý provider key, lưu trữ R2 và chạy job mà
+không cần MCP. Xem [REST API](/vi/guides/rest-api/) và tài liệu tham chiếu tại
+`/api/docs`.
 
 ### Lưu trữ R2
 
 Mỗi tài khoản cũng có thể lưu bucket Cloudflare R2 của riêng mình.
 `multix_run` tải mọi file đầu ra lên đó; không có bucket thì job vẫn chạy
-nhưng không trả về URL file. Năm tool provider trả về URL của provider và
-không dùng R2.
+nhưng không trả về URL file.
 
 1. Trong Cloudflare dashboard, tạo một bucket và một R2 API token có quyền
    **Object Read & Write** trên bucket đó.
@@ -203,9 +200,9 @@ Cloudflare.
    instance type `basic`, tối đa 10 instance) và binding Durable Object
    `MULTIX_JOBS` bật `multix_run`. Để triển khai không kèm trình chạy CLI
    (không cần Docker, dùng được Workers Free), xóa `containers`,
-   `durable_objects` và `exports`; khi đó bốn tool job không được liệt kê.
+   `durable_objects` và `exports`; khi đó chỉ `multix_catalog` được liệt kê.
    Binding `MULTIX_JOB_QUOTA` (class `AccountJobQuota`) giữ số job đang chạy
-   của từng tài khoản và phải đi cùng `MULTIX_JOBS`.
+   theo từng tài khoản và trên toàn server, và phải đi cùng `MULTIX_JOBS`.
 4. **Đặt secret** và triển khai:
 
    ```bash
@@ -223,7 +220,8 @@ Cloudflare.
    ```
 
 Giữ kỹ `SECRETS_ENCRYPTION_KEY`: thay khóa này khiến mọi provider key đã lưu
-không đọc được nữa. Các provider đó sẽ báo chưa được cấu hình cho đến khi mỗi
+không đọc được nữa. Các key đó sẽ được coi là chưa lưu (`has_keys: false`
+trong `multix_catalog`) cho đến khi mỗi
 tài khoản lưu lại key. Thay `SESSION_SECRET`
 sẽ đăng xuất mọi người khỏi dashboard.
 
@@ -236,7 +234,7 @@ curl https://mcp.example.com/health
 ### Dùng chung host với site khác
 
 Worker chỉ cần các path: `/mcp`, `/dashboard`, `/oauth/*`,
-`/.well-known/oauth-*` và `/health`. Route theo path được ưu tiên hơn Custom
+`/.well-known/oauth-*`, `/health` và `/api/*`. Route theo path được ưu tiên hơn Custom
 Domain trên cùng host, nên một Worker khác (ví dụ site tài liệu) vẫn phục vụ
 mọi path còn lại. `multix.zuey.me` được thiết lập theo cách này.
 
@@ -275,14 +273,14 @@ Sau đó chạy `/mcp` trong Claude Code và chọn **Authenticate**. Client kh�
 ```
 
 Các client đã kết nối hiện trong dashboard, nơi nút **Disconnect** thu hồi
-quyền truy cập của chúng. Tool cần một provider mà bạn chưa lưu key sẽ báo
-provider đó chưa được cấu hình.
+quyền truy cập của chúng. `multix_catalog` báo `has_keys: false` cho group
+mà bạn chưa lưu key; hãy lưu key trong dashboard trước khi chạy lệnh của group
+đó.
 
-Luồng video thường gặp: `multix_generate_video` → gọi lại
-`multix_prediction_status` mỗi 10–30 giây đến khi `done` là `true` → đọc
-`outputs`. Với các lệnh CLI khác: `multix_catalog` → `multix_catalog` kèm
-group → `multix_run` → gọi lại `multix_job_status` đến khi `status` là
-`succeeded`, `failed`, `timed_out` hoặc `canceled` → đọc `outputs`.
+Luồng thường gặp, ví dụ tạo video: `multix_catalog` → `multix_catalog` kèm
+group (như `replicate`) → `multix_run` → gọi lại `multix_job_status` mỗi
+10–30 giây đến khi `status` là `succeeded`, `failed`, `timed_out` hoặc
+`canceled` → đọc `outputs`.
 
 ## Cấu hình
 
@@ -304,20 +302,21 @@ closed). `http://localhost` được chấp nhận khi phát triển cục bộ.
 | Biến | Mặc định | Tác dụng |
 |---|---|---|
 | `MULTIX_PUBLIC_URL` | — (bắt buộc) | Origin công khai, ví dụ `https://mcp.example.com`. Dùng cho metadata OAuth, redirect và callback GitHub. |
-| `MULTIX_MCP_ALLOWED_PROVIDERS` | tất cả | Allowlist provider, phân tách bằng dấu phẩy, ví dụ `replicate,heygen`. |
-| `MULTIX_MCP_ALLOWED_MODELS` | bất kỳ | Allowlist `provider:model`, ví dụ `replicate:black-forest-labs/flux-schnell,heygen:heygen-video-1`. Khi đặt, mọi model (kể cả model mặc định) phải có trong danh sách. |
-| `MULTIX_MCP_MAX_OUTPUTS` | `4` (tối đa 10) | Số `num_outputs` tối đa mỗi lần tạo ảnh. |
-| `MULTIX_MCP_MAX_VIDEO_SECONDS` | `10` (tối đa 15) | `duration` video tối đa. Khi caller bỏ qua `duration`, server gửi rõ một thời lượng thay vì để mặc định của provider: `min(5, giới hạn)` giây với Replicate, HeyGen và Cloudflare; với Atlas Cloud xem [Giới hạn chi phí](#mô-hình-bảo-mật). |
-| `MULTIX_MCP_ALLOWED_RESOLUTIONS` | `480p,720p,768p,1080p` | Độ phân giải video caller được yêu cầu (`768p` là kích thước của HeyGen Video). Giá trị khác (ví dụ `4k`) bị từ chối trước khi gọi provider. Nếu bỏ qua resolution, model dùng mặc định của nó; với Atlas Cloud, mặc định đó (và mọi `output_resolution`, `target_resolution`, `quality` mang giá trị độ phân giải, `size`, `width` hoặc `height`, hoặc độ phân giải nêu trong ID model) cũng được kiểm tra theo danh sách này. |
+| `MULTIX_MCP_MAX_OUTPUTS` | `4` (tối đa 10) | Số output tối đa (ví dụ `--num-images`) mỗi lần gọi `multix_run`. |
+| `MULTIX_MCP_MAX_VIDEO_SECONDS` | `10` (tối đa 15) | Thời lượng video tối đa. Khi caller bỏ qua thời lượng và mặc định của lệnh không rõ hoặc dài hơn, server gửi `min(5, giới hạn)` giây. |
+| `MULTIX_MCP_ALLOWED_RESOLUTIONS` | `480p,720p,768p,1080p` | Độ phân giải video caller được yêu cầu (`768p` là kích thước của HeyGen Video). Giá trị khác (ví dụ `4k`), do caller truyền hay là mặc định của lệnh, bị từ chối trước khi job bắt đầu. |
 | `MULTIX_MCP_ALLOWED_ORIGINS` | không có | Origin trình duyệt chính xác (ví dụ `https://app.example.com`) được phép gọi `/mcp`. Không hỗ trợ `*` hay wildcard khác: `*` chỉ khớp origin `*` theo nghĩa đen, thứ trình duyệt không bao giờ gửi. Sau khi access token được kiểm tra, request có header `Origin` khác nhận `403`; request không có `Origin` (client phía server) được chấp nhận. Origin trong danh sách nhận header CORS. Preflight `OPTIONS` được lớp OAuth trả lời cho mọi origin. |
+| `MULTIX_MAX_JOBS_PER_ACCOUNT` | `2` (tối đa 50) | Số job `multix_run` một tài khoản được chạy cùng lúc. |
+| `MULTIX_MAX_JOBS_TOTAL` | `10` (tối đa 1000) | Số job `multix_run` server được chạy cùng lúc trên mọi tài khoản. Giữ giá trị này không vượt `max_instances` của container trong `wrangler.jsonc`, là trần của nền tảng. |
 
 Hai binding [Workers Rate Limiting](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/)
 trong `wrangler.jsonc` chặn lạm dụng; request vượt mức nhận `429`:
 
-- `MCP_RATE_LIMITER`: khoảng 60 request `/mcp` mỗi phút cho mỗi tài khoản.
+- `MCP_RATE_LIMITER`: khoảng 60 request mỗi phút cho mỗi tài khoản, dùng chung
+  cho `/mcp` và REST API.
 - `AUTH_RATE_LIMITER`: khoảng 30 request mỗi phút cho mỗi IP client ở các
-  bước đăng nhập, yêu cầu ủy quyền, đăng ký client, cấp token và thao tác ghi
-  trên dashboard.
+  bước đăng nhập, yêu cầu ủy quyền, đăng ký client, cấp token, thao tác ghi
+  trên dashboard và request REST API thiếu API key hoặc key không hợp lệ.
 
 Các giới hạn này chỉ gần đúng: Cloudflare đếm theo từng location và bộ đếm chỉ
 nhất quán dần, nên hãy xem chúng là lớp chống lạm dụng, không phải ngân sách
@@ -346,128 +345,25 @@ chung bộ đếm.
   Policy chặt và `frame-ancestors 'none'`.
 - **Cô lập tài khoản:** mỗi request `/mcp` chỉ tải key của tài khoản đã cấp
   token. Key không bao giờ xuất hiện trong trang, log hay kết quả tool.
-- **Kiểm tra input:** mọi tham số tool được kiểm tra bằng schema zod (prompt ≤
-  4000 ký tự, ID chỉ gồm `[A-Za-z0-9_-]`, số có giới hạn). Body lớn hơn 64 KiB
+- **Kiểm tra input:** mọi tham số tool được kiểm tra bằng schema zod (độ dài
+  chuỗi, kích thước danh sách và số đều có giới hạn), và option của
+  `multix_run` được đối chiếu với catalog lệnh của CLI. Body lớn hơn 64 KiB
   bị từ chối với `413`. JSON-RPC batch (body dạng mảng) bị từ chối với `400` /
   `-32600`, nên mỗi request HTTP luôn là một lần gọi tool và rate limit cũng
   giới hạn số lần gọi.
-- **Chống SSRF:** `image_url` phải là `https://` trên cổng mặc định, với tên
-  miền DNS công khai. Địa chỉ IP, credential trong URL, `localhost`, tên kiểu
-  `.local`/`.internal` và host metadata của cloud bị từ chối trước khi gọi
-  provider.
-- **Giới hạn chi phí:** số output, thời lượng video và độ phân giải video có
-  giới hạn, và lệnh tạo video không bao giờ chờ. Với Replicate, HeyGen và
-  Cloudflare, `duration` của video luôn được gửi rõ ràng (giá trị của caller
-  hoặc `min(5, giới hạn)`), nên mặc định của provider không thể vượt giới hạn.
-  Model Replicate đặt tên input thời lượng khác `duration` thì không giới hạn
-  được theo cách này.
-
-  Atlas Cloud tự điền mọi trường bị bỏ trống từ schema của model, nên Worker
-  đọc schema trước và áp dụng các quy tắc sau trước khi submit. Mọi trường hợp
-  bị từ chối đều xảy ra trước bất kỳ lệnh gọi tính phí nào.
-
-  - **Không có schema:** nếu không tải được schema của model (lỗi catalog,
-    hoặc model không có trong catalog công khai), mọi lệnh tạo video Atlas đều
-    bị từ chối, dù caller truyền gì, và không có request nào được gửi. Chỉ
-    thử lại khi schema tải được mới giúp được; ghim model không bỏ qua bước
-    kiểm tra này.
-  - **Trường số giây:** `duration`, `seconds`, `length`, `num_seconds` và
-    `video_length`. Giá trị có thể là số hoặc chuỗi như `"8"` hay `"8s"`, và
-    `anyOf`/`oneOf` chỉ có một thành phần khác null sẽ được mở ra. Trường số
-    giây có type không đọc được theo cách này sẽ bị từ chối.
-  - **Caller truyền `duration`:** giá trị được gửi vào trường số giây đầu
-    tiên, theo định dạng của schema (`4` thành `"4s"` khi enum là
-    `"4s"`/`"8s"`).
-  - **Mọi trường số giây khác đều được gửi rõ ràng:** mặc định của schema nếu
-    nằm trong giới hạn, chính giới hạn nếu mặc định dài hơn, và
-    `min(5, giới hạn)` nếu không có mặc định dương. Giá trị được làm tròn theo
-    các giá trị schema cho phép: giá trị enum lớn nhất không vượt nó (nếu
-    không có thì giá trị nhỏ nhất trong giới hạn), trong khoảng
-    `minimum`/`maximum`. Không bao giờ gửi giá trị 0 hoặc âm (thường nghĩa là
-    thời lượng "auto" hay "smart"). Nếu không có giá trị hợp lệ nào nằm trong
-    giới hạn, lệnh gọi bị từ chối.
-  - **Số frame** (`num_frames`, `frames`): giới hạn ở `giới hạn × fps`, dùng
-    mặc định `fps` (hoặc `frames_per_second`) của schema, và được gửi rõ ràng.
-    Nếu schema không khai báo frame rate, server giả định một frame mỗi giây,
-    nên chỉ mặc định không quá `giới hạn` frame mới được chấp nhận; trường hợp
-    khác bị từ chối.
-  - **Input khác giống thời lượng:** mọi trường khác có tên chứa `frame`,
-    `second`, `duration` hoặc `length`, hoặc kết thúc bằng `_len` (ví dụ
-    `frame_count` hay `clip_length`), đều bị từ chối khi là số hoặc khi
-    schema của nó không đọc được, vì Worker không giới hạn được nó. Input ảnh
-    và cờ như `first_frame` hay `return_last_frame` không bị ảnh hưởng.
-  - **Kiểm tra cuối:** mọi trường số giây và số frame, dù được gửi hay được
-    điền từ mặc định của schema, phải nằm trong giới hạn. Mọi trường độ phân
-    giải sẽ được render (giá trị được gửi hoặc mặc định của schema) phải nằm
-    trong `MULTIX_MCP_ALLOWED_RESOLUTIONS`. Các trường độ phân giải là
-    `resolution`, `output_resolution`, `target_resolution`, và `quality` khi
-    giá trị, mặc định hoặc enum của nó trông như độ phân giải (ví dụ `720p`,
-    `1080p`, `2k`, `4k`, hoặc số nguyên là chiều cao video như `1080`). Số
-    nguyên như `1080` được hiểu là `1080p`; `4k` và `2160p` là hai mục khác
-    nhau trong allowlist. `quality` như `high`, `standard` hay thang `1`–`5`
-    không phải độ phân giải nên được giữ nguyên; `quality` có schema mà server
-    không đọc được (`$ref`, `allOf`) sẽ bị từ chối. Chỉ
-    `resolution` là tham số của tool, nên model có trường độ phân giải khác
-    nằm ngoài danh sách sẽ bị từ chối. Model mà ID nêu một độ phân giải thành
-    token riêng, ngăn cách bởi `/`, `-` hoặc `_` (như
-    `kwaivgi/kling-video-o3-4k/...` hay `kling-v3.0-4k`, đều là `4k`), render
-    và tính phí ở độ phân giải đó, nên bị từ chối khi độ phân giải này không có
-    trong danh sách, kể cả khi trường độ phân giải của chính model có mặc định
-    hợp lệ. Quy tắc này cũng áp dụng cho preset `template` có nêu độ phân giải
-    (mặc định `anime-enhance-4k` của Tencent upscaler là `4k`); nếu không có
-    mặc định thì mọi preset trong danh sách đều phải được cho phép, và schema
-    `template` mà server không đọc được sẽ bị từ chối. Các chuỗi trông giống như
-    `2.4k` hay `4kids` không được tính. Giá trị `size`/`video_size`
-    (`1920*1080`) hoặc cặp `width`/`height` phải nằm trong độ phân giải lớn
-    nhất được phép ở tỉ lệ 16:9, theo cả hai chiều: `1080p` cho phép cạnh dài
-    tối đa 1920 và cạnh ngắn tối đa 1080, nên `1920*1920` bị từ chối. Giá trị
-    hoặc dạng schema không đọc được (`$ref`, `allOf`, union nhiều thành phần
-    không có mặc định bên ngoài) sẽ bị từ chối.
-  - **Các hệ số giá khác** được gửi ở giá trị rẻ nhất, vì tool không có
-    tham số cho chúng và mặc định của schema thường là lựa chọn đắt:
-    - **Công tắc tốn phí** `generate_audio`, `sound`, `audio`, `bgm`,
-      `enable_thinking` và `hdr` được gửi ở trạng thái tắt: `false`, hoặc,
-      khi schema dùng enum, giá trị `false`, `"no"`, `"off"`, `"none"` hoặc
-      `"disabled"` của enum đó. `audio` kiểu chuỗi không có mặc định là URL
-      đầu vào nên được giữ nguyên. Công tắc không có giá trị tắt sẽ bị từ
-      chối. `bgm` (nhạc nền) của Vidu mặc định bật. Cả Atlas Cloud lẫn Vidu
-      đều không công bố nó có làm đổi giá hay không, nên nó được coi là input
-      tính giá và được gửi ở trạng thái tắt.
-    - **Số lượng output** được gửi là `1`. Các trường chính xác là `n`,
-      `count`, `batch_size`, `batch_count`, `num_output`, `num_video`,
-      `num_sample`, `num_generation`, `num_result`, `output_count`,
-      `video_count`, `sample_count` và `generation_count` (mỗi tên cũng khớp
-      dạng số nhiều có `s`, như `num_videos` hoặc `videos_count`). Các trường
-      `*_count` khác, như `face_count`, không phải số lượng output
-      (`frame_count` là độ dài, xem ở trên). Nếu schema không cho phép `1`,
-      lệnh gọi bị từ chối.
-    - **Bậc giá** dùng một bảng cố định, rẻ nhất trước: `thinking_level`
-      (`minimal`, `low`, `medium`, `default`, `high`), `motion` (`low`,
-      `medium`, `high`), `bitrate_mode` (`standard`, `high`) và `mode`
-      (`wan-std` < `wan-pro`, `std` < `pro`, hoặc `standard` <
-      `professional`). Giá trị rẻ nhất có trong bảng của enum được gửi khi mọi
-      giá trị enum đều có trong bảng hoặc mặc định có trong bảng. Nếu không,
-      mặc định có trong bảng mà cao hơn bậc rẻ nhất sẽ bị từ chối, còn mặc
-      định không xác định được giữ nguyên. Việc cố định `thinking_level`,
-      `motion` và các bậc khác ở mức rẻ nhất có thể làm giảm chất lượng đầu
-      ra. Operator cần bậc cao hơn nên gọi model trực tiếp bằng multix CLI
-      (`multix atlas run <model> --input '{...}'`).
-    - Bất kỳ trường nào ở trên có schema không đọc được sẽ bị từ chối.
-
-  Giới hạn: Worker không giới hạn các input khác có thể làm đổi giá, như
-  `enable_prompt_expansion` hoặc trường `quality` không phải độ phân giải.
-  Model video-extend
-  còn tính phí theo độ dài video đầu vào; Worker không đo được video từ xa,
-  và tool MCP không có input video, nên model bắt buộc input này bị từ chối
-  vì thiếu trường. Trường độ dài phần nối thêm khai báo rõ (`duration`) được
-  giới hạn như mọi trường khác. Khi schema không khai báo trường kích thước
-  và không có mặc định, model tự chọn kích thước đầu ra. Hãy dùng
-  `MULTIX_MCP_ALLOWED_MODELS` để chỉ cho phép model đã kiểm duyệt.
+- **Chống SSRF:** mọi URL trong `inputs` của `multix_run` phải là `https://`
+  trên cổng mặc định, với tên miền DNS công khai. Địa chỉ IP, credential trong
+  URL, `localhost`, tên kiểu `.local`/`.internal` và host metadata của cloud bị
+  từ chối trước khi job bắt đầu.
+- **Giới hạn chi phí:** `multix_run` giới hạn số output, thời lượng video và
+  độ phân giải video trên các option mà server biết cho từng lệnh (xem
+  [Chạy lệnh CLI](#chạy-lệnh-cli)). Các input khác có thể làm đổi giá, như
+  JSON `--input` thô của `replicate run` hoặc `atlas run`, không bị giới hạn.
 - **Log và che thông tin nhạy cảm:** lệnh gọi thành công được log ở mức `info`,
-  chỉ gồm tên tool, provider, model, kết quả và độ trễ. Prompt không bao giờ
+  chỉ gồm tên tool, lệnh (hoặc group của catalog), kết quả và độ trễ. Prompt không bao giờ
   được log thành một trường riêng. Lệnh gọi thất bại được log ở mức `warn` (lỗi
   dự kiến) hoặc `error`, kèm thêm trường `detail`. Trường này chứa thông báo lỗi
-  từ provider hoặc từ bước kiểm tra input, đã loại bỏ secret đã cấu hình,
+  từ bước kiểm tra input hoặc từ job, đã loại bỏ secret đã cấu hình,
   bearer token và query string của URL, và bị cắt ngắn. Vì vậy lỗi provider có
   lặp lại một phần prompt (ví dụ thông báo kiểm duyệt nội dung) có thể xuất
   hiện ở đó. Client nhận cùng nội dung đã làm sạch này.
@@ -494,16 +390,3 @@ Trong CI, bundle Worker được kiểm tra để bảo đảm không chứa mod
 không import module có sẵn của Node theo tên trần (`fs`, `child_process`,
 `path`, …), không có `commander` hay `execa`, và không có mã entry của CLI. Mã
 nguồn Worker cũng được kiểm tra kiểu mà không có typings của Node.
-
-## Kiểm thử live
-
-CI chỉ dùng lệnh gọi provider giả lập. Để kiểm tra provider thật từ đầu đến
-cuối, hãy chạy bài test live tùy chọn. Bài test bị bỏ qua trừ khi đặt cả
-`MULTIX_MCP_LIVE=1` và token Replicate. Nó chạy handler của Worker ngay trong
-tiến trình: `tools/list`, rồi tạo một ảnh duy nhất. Thêm
-`MULTIX_MCP_LIVE_VIDEO=1` để bắt đầu thêm một video, đọc trạng thái và hủy nó.
-Bài test tốn vài cent và không bao giờ in giá trị credential.
-
-```bash
-MULTIX_MCP_LIVE=1 REPLICATE_API_TOKEN=r8_... npm test --prefix worker -- live-smoke
-```

@@ -17,7 +17,7 @@
   "observability": { "enabled": true },
   "workers_dev": false,
   // multix.zuey.me itself is the docs site's Custom Domain. These routes run before it,
-  // so only the MCP, OAuth and dashboard paths reach this Worker.
+  // so only the MCP, OAuth, dashboard and REST API paths reach this Worker.
   "routes": [
     { "pattern": "multix.zuey.me/mcp", "zone_name": "zuey.me" },
     { "pattern": "multix.zuey.me/mcp/*", "zone_name": "zuey.me" },
@@ -25,7 +25,8 @@
     { "pattern": "multix.zuey.me/dashboard/*", "zone_name": "zuey.me" },
     { "pattern": "multix.zuey.me/oauth/*", "zone_name": "zuey.me" },
     { "pattern": "multix.zuey.me/.well-known/oauth-*", "zone_name": "zuey.me" },
-    { "pattern": "multix.zuey.me/health", "zone_name": "zuey.me" }
+    { "pattern": "multix.zuey.me/health", "zone_name": "zuey.me" },
+    { "pattern": "multix.zuey.me/api/*", "zone_name": "zuey.me" }
   ],
   "kv_namespaces": [
     // OAuth clients, grants and tokens (hashed / encrypted by workers-oauth-provider).
@@ -52,7 +53,8 @@
       "image": "./container/Dockerfile",
       "image_build_context": "..",
       "instance_type": "basic",
-      // Also the most jobs that can run at once across all accounts.
+      // Platform ceiling on job containers. MULTIX_MAX_JOBS_TOTAL (below) is the cap the
+      // Worker enforces; keep it at or under this value.
       "max_instances": 10
     }
   ],
@@ -73,6 +75,9 @@
     "MULTIX_PUBLIC_URL": "https://multix.zuey.me",
     "MULTIX_MCP_MAX_OUTPUTS": "4",
     "MULTIX_MCP_MAX_VIDEO_SECONDS": "10",
-    "MULTIX_MCP_ALLOWED_RESOLUTIONS": "480p,720p,768p,1080p"
+    "MULTIX_MCP_ALLOWED_RESOLUTIONS": "480p,720p,768p,1080p",
+    // multix_run jobs running at once: per account, and across the server.
+    "MULTIX_MAX_JOBS_PER_ACCOUNT": "2",
+    "MULTIX_MAX_JOBS_TOTAL": "10"
   }
 }

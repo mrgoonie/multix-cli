@@ -69,7 +69,7 @@ describe("/mcp request handling", () => {
       jsonrpc: "2.0",
       id,
       method: "tools/call",
-      params: { name: "multix_list_providers", arguments: {} },
+      params: { name: "multix_catalog", arguments: {} },
     });
     const response = await handleMcpRequest(post(JSON.stringify([call(1), call(2)])), fullEnv());
     expect(response.status).toBe(400);
