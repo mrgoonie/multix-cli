@@ -31,6 +31,7 @@ jobs:
   deploy:
     name: Deploy to Cloudflare (multix.zuey.me/mcp)
     runs-on: ubuntu-latest
+    timeout-minutes: 60
 
     steps:
       - name: Checkout

@@ -118,10 +118,12 @@ npm run check:mcp    # when worker/ or a client it imports changed
   on any `node:*` or bare Node built-in import, `commander`, `execa`, or CLI code).
 - The job container (`worker/container/`) is rolled out before the Worker
   (`worker/scripts/roll-out-job-container.mjs`, run by `deploy-mcp.yml`), so a
-  new container must still accept the job spec sent by the Worker that is live.
-  Widen what the container accepts first; the Worker may then send the new form
-  in the same or a later change. Never make the container reject what the live
-  Worker sends.
+  new container must work with the Worker that is still live, in both
+  directions: accept the job spec it sends, and keep its responses
+  (`/jobs/current` and job results) and R2 output layout readable by it. Widen
+  what the container accepts first; the Worker may then send the new form in
+  the same or a later change. Rolling back the Worker does not roll back the
+  container, so the same rule covers a rollback.
 
 ## Documentation
 

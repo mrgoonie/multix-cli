@@ -37,6 +37,9 @@ const BUILD_CONTEXT = resolve(WORKER_DIR, "..");
 const ROLLOUT_STEPS = [10, 100];
 const POLL_MS = 10_000;
 const ROLLOUT_TIMEOUT_MS = 20 * 60_000;
+const REQUEST_TIMEOUT_MS = 30_000;
+/** Consecutive failed status reads tolerated while polling. */
+const POLL_ERRORS_ALLOWED = 3;
 
 const token = process.env.CLOUDFLARE_API_TOKEN;
 const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
@@ -59,6 +62,7 @@ async function api(method, path, body) {
     method,
     headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
   const text = await response.text();
   let json;
@@ -122,8 +126,18 @@ async function findApplication() {
 
 async function waitForRollout(appId, rolloutId) {
   const deadline = Date.now() + ROLLOUT_TIMEOUT_MS;
+  let errors = 0;
   for (;;) {
-    const rollout = await api("GET", `/applications/${appId}/rollouts/${rolloutId}`);
+    let rollout;
+    try {
+      rollout = await api("GET", `/applications/${appId}/rollouts/${rolloutId}`);
+      errors = 0;
+    } catch (error) {
+      if (++errors > POLL_ERRORS_ALLOWED) throw error;
+      console.log(`Rollout status read failed (${errors}/${POLL_ERRORS_ALLOWED}); retrying`);
+      await new Promise((r) => setTimeout(r, POLL_MS));
+      continue;
+    }
     const p = rollout.progress ?? {};
     console.log(
       `Rollout ${rollout.status}: step ${p.current_step ?? "?"}/${p.total_steps ?? "?"}, ${p.updated_instances ?? "?"}/${p.total_instances ?? "?"} instances updated`,
@@ -138,15 +152,34 @@ async function waitForRollout(appId, rolloutId) {
   }
 }
 
+/** Newest rollout of the application, or undefined when it has none. */
+async function latestRollout(appId) {
+  const rollouts = await api("GET", `/applications/${appId}/rollouts?limit=1`);
+  return Array.isArray(rollouts) ? rollouts[0] : undefined;
+}
+
 const image = buildAndPush();
 const app = await findApplication();
-if (app.configuration?.image === image) {
-  console.log("The container application already runs this image; nothing to roll out.");
-  process.exit(0);
-}
 const configuration = { ...app.configuration, image };
-console.log(`Updating ${APP_NAME} to ${image.split("@")[1]}`);
-await api("PATCH", `/applications/${app.id}`, { configuration });
+if (app.configuration?.image === image) {
+  // Already the configured image, for example on a re-run: finish only if a
+  // rollout to it completed, wait for one in progress, otherwise roll out again.
+  const last = await latestRollout(app.id);
+  if (last?.target_configuration?.image === image) {
+    if (last.status === "completed") {
+      console.log("The container application already runs this image; nothing to roll out.");
+      process.exit(0);
+    }
+    if (last.status === "pending" || last.status === "progressing") {
+      await waitForRollout(app.id, last.id);
+      console.log("Container rollout completed; the Worker can be deployed.");
+      process.exit(0);
+    }
+  }
+} else {
+  console.log(`Updating ${APP_NAME} to ${image.split("@")[1]}`);
+  await api("PATCH", `/applications/${app.id}`, { configuration });
+}
 const rollout = await api("POST", `/applications/${app.id}/rollouts`, {
   description: "Container-first update before the Worker deploy",
   strategy: "rolling",
