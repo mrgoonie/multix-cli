@@ -119,7 +119,9 @@ export function durableJobQuota(
       try {
         taken = await server().acquire(jobId, caps.total);
       } finally {
-        if (!taken) await account.release(jobId).catch(() => undefined);
+        // The server call may have saved its slot and then failed to answer
+        // (e.g. the object restarted), so give back both; releasing is idempotent.
+        if (!taken) await Promise.allSettled([account.release(jobId), server().release(jobId)]);
       }
       return taken ? "ok" : "server-busy";
     },

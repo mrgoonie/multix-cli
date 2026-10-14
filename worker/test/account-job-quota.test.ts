@@ -89,6 +89,28 @@ describe("durableJobQuota", () => {
     expect(await quota.acquire("gh-3", "d")).toBe("ok");
     expect(SERVER_SLOTS_NAME.startsWith("gh-")).toBe(false);
   });
+
+  it("frees both slots when the server call saves its slot and then fails", async () => {
+    const ns = namespace();
+    const real = ns.getByName(SERVER_SLOTS_NAME);
+    const flaky: JobQuotaNamespace = {
+      getByName(name) {
+        if (name !== SERVER_SLOTS_NAME) return ns.getByName(name);
+        return {
+          acquire: async (jobId: string, limit?: number) => {
+            await real.acquire(jobId, limit);
+            throw new Error("object restarted");
+          },
+          release: (jobId: string) => real.release(jobId),
+        } as never;
+      },
+    };
+    await expect(
+      durableJobQuota(flaky, { perAccount: 1, total: 1 }).acquire("gh-1", "a"),
+    ).rejects.toThrow();
+    const quota = durableJobQuota(ns, { perAccount: 1, total: 1 });
+    expect(await quota.acquire("gh-1", "b")).toBe("ok");
+  });
 });
 
 describe("jobCapsFrom", () => {
