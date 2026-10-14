@@ -4,6 +4,8 @@ import {
   type JobContainerPort,
   JobController,
   POLL_SECONDS,
+  SLOT_RELEASE_ATTEMPTS,
+  SLOT_RELEASE_RETRY_SECONDS,
 } from "../src/jobs/job-controller.js";
 import {
   type JobResult,
@@ -37,6 +39,8 @@ function fakePort(respond: (path: string, init?: RequestInit) => Response | Prom
     destroyed: 0,
     started: 0,
     released: 0,
+    releaseFailures: 0,
+    releaseRetries: [] as { attempt: number; seconds: number }[],
     running: false,
     t: 1_000,
   };
@@ -62,7 +66,14 @@ function fakePort(respond: (path: string, init?: RequestInit) => Response | Prom
       state.running = false;
     },
     releaseSlot: async () => {
+      if (state.releaseFailures > 0) {
+        state.releaseFailures--;
+        throw new Error("quota object unavailable");
+      }
       state.released++;
+    },
+    scheduleSlotRelease: async (attempt, seconds) => {
+      state.releaseRetries.push({ attempt, seconds });
     },
     schedulePoll: async (seconds) => {
       state.polls.push(seconds);
@@ -198,6 +209,28 @@ describe("JobController", () => {
     expect(state.requests.map((r) => r.path)).toContain("/jobs/current/cancel");
     await controller.stopped();
     expect(state.stored?.status).toBe("canceled");
+  });
+
+  it("retries a failed slot release with a growing delay, then leaves it to the lease", async () => {
+    const { port, state } = fakePort((path) =>
+      path === "/jobs" ? new Response(null, { status: 202 }) : json({ state: "running" }),
+    );
+    const controller = new JobController(port);
+    await controller.start(SPEC);
+    state.releaseFailures = 1;
+    await controller.cancel();
+    expect(state.released).toBe(0);
+    expect(state.releaseRetries).toEqual([{ attempt: 2, seconds: SLOT_RELEASE_RETRY_SECONDS }]);
+    await controller.releaseSlot(2);
+    expect(state.released).toBe(1);
+
+    state.releaseFailures = 99;
+    state.releaseRetries = [];
+    for (let attempt = 1; attempt <= SLOT_RELEASE_ATTEMPTS; attempt++) {
+      await controller.releaseSlot(attempt);
+    }
+    expect(state.releaseRetries.map((r) => r.attempt)).toEqual([2, 3, 4, 5]);
+    expect(state.releaseRetries.map((r) => r.seconds)).toEqual([30, 60, 90, 120]);
   });
 
   it("fails a job whose container stopped or lost it, and times out a silent one", async () => {

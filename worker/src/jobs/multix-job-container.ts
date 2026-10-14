@@ -78,6 +78,9 @@ export class MultixJobContainer extends Container<JobContainerEnv> {
       const quota = this.env.MULTIX_JOB_QUOTA;
       if (slot && quota) await durableJobQuota(quota).release(slot.userId, slot.jobId);
     },
+    scheduleSlotRelease: async (attempt, seconds) => {
+      await this.schedule(seconds, "retrySlotRelease", attempt);
+    },
     now: () => Date.now(),
   });
 
@@ -101,6 +104,11 @@ export class MultixJobContainer extends Container<JobContainerEnv> {
   /** Scheduled: keep polling the job server until the job ends. */
   async pollJob(): Promise<void> {
     await this.controller.poll();
+  }
+
+  /** Scheduled: try again to give back the job's quota slots after a failed release. */
+  async retrySlotRelease(attempt: number): Promise<void> {
+    await this.controller.releaseSlot(attempt);
   }
 
   /**
