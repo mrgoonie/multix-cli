@@ -25,8 +25,18 @@ function ok(description: string, schema: Json, status = "200"): Json {
 const ERRORS: Json = {
   "400": { $ref: "#/components/responses/BadRequest" },
   "401": { $ref: "#/components/responses/Unauthorized" },
+  "403": { $ref: "#/components/responses/Forbidden" },
   "429": { $ref: "#/components/responses/RateLimited" },
 };
+
+/** Extra errors of operations that take a JSON body. */
+const BODY_ERRORS: Json = {
+  "413": { $ref: "#/components/responses/PayloadTooLarge" },
+  "415": { $ref: "#/components/responses/UnsupportedMediaType" },
+};
+
+/** Extra error of the job operations when the server has no job containers. */
+const JOB_ERRORS: Json = { "503": { $ref: "#/components/responses/Unavailable" } };
 
 const JOB_ID = {
   name: "id",
@@ -81,7 +91,11 @@ export function openApiDocument(origin: string): Json {
             },
             { keys: { GEMINI_API_KEY: "<value>", OPENAI_API_KEY: null } },
           ),
-          responses: { ...ok("Saved and removed names", ref("KeyChange")), ...ERRORS },
+          responses: {
+            ...ok("Saved and removed names", ref("KeyChange")),
+            ...ERRORS,
+            ...BODY_ERRORS,
+          },
         },
       },
       "/provider-keys/{name}": {
@@ -105,7 +119,7 @@ export function openApiDocument(origin: string): Json {
             },
             { value: "<value>" },
           ),
-          responses: { ...ok("Saved", ref("KeyChange")), ...ERRORS },
+          responses: { ...ok("Saved", ref("KeyChange")), ...ERRORS, ...BODY_ERRORS },
         },
         delete: {
           summary: "Remove one provider key",
@@ -137,6 +151,7 @@ export function openApiDocument(origin: string): Json {
             ...ok("Saved", ref("Storage")),
             "422": { $ref: "#/components/responses/StorageCheckFailed" },
             ...ERRORS,
+            ...BODY_ERRORS,
           },
         },
         delete: {
@@ -176,7 +191,9 @@ export function openApiDocument(origin: string): Json {
           responses: {
             ...ok("Job ended", ref("Job")),
             ...ok("Job still running", ref("Job"), "202"),
+            ...JOB_ERRORS,
             ...ERRORS,
+            ...BODY_ERRORS,
           },
         },
       },
@@ -189,6 +206,7 @@ export function openApiDocument(origin: string): Json {
             ...ok("Job ended", ref("Job")),
             ...ok("Job still running", ref("Job"), "202"),
             "404": { $ref: "#/components/responses/NotFound" },
+            ...JOB_ERRORS,
             ...ERRORS,
           },
         },
@@ -202,6 +220,7 @@ export function openApiDocument(origin: string): Json {
           responses: {
             ...ok("Job", ref("Job")),
             "404": { $ref: "#/components/responses/NotFound" },
+            ...JOB_ERRORS,
             ...ERRORS,
           },
         },
@@ -243,6 +262,22 @@ export function openApiDocument(origin: string): Json {
         },
         Unauthorized: {
           description: "Missing, unknown or revoked API key",
+          content: { "application/json": { schema: ref("Error") } },
+        },
+        Forbidden: {
+          description: "The account is not on the server's sign-in allowlist",
+          content: { "application/json": { schema: ref("Error") } },
+        },
+        PayloadTooLarge: {
+          description: "Body larger than 64 KiB",
+          content: { "application/json": { schema: ref("Error") } },
+        },
+        UnsupportedMediaType: {
+          description: "Content-Type is not application/json",
+          content: { "application/json": { schema: ref("Error") } },
+        },
+        Unavailable: {
+          description: "This server does not run jobs",
           content: { "application/json": { schema: ref("Error") } },
         },
         NotFound: {

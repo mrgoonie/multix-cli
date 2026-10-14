@@ -23,7 +23,7 @@ function hidden(name: string, value: string): string {
 export function newApiKeyNotice(created: NewApiKey): string {
   return `<section class="card" id="new-api-key">
 <h2>API key created: ${escapeHtml(created.name)}</h2>
-<p>Copy it now. It is shown only once; if you lose it, revoke it and create another.</p>
+<p>Copy it now. It is shown only once; if you lose it, revoke it and create another. Do not reload this page: that sends the form again and creates another key.</p>
 <div class="row"><input type="text" id="new-api-key-value" readonly value="${escapeHtml(created.key)}" aria-label="New API key" spellcheck="false"></div>
 </section>`;
 }

@@ -34,6 +34,10 @@ const NOTICES: Record<string, Notice> = {
     warn: true,
   },
   "api-key-revoked": { text: "API key revoked. It can keep working for up to a minute." },
+  "api-key-not-found": {
+    text: "No API key was revoked: it was not found, it may already be gone.",
+    warn: true,
+  },
   "api-key-invalid-name": {
     text: "API key not created: the name must be 1–64 printable characters.",
     warn: true,
@@ -131,7 +135,9 @@ async function handlePost(ctx: AppContext, request: Request, pathname: string): 
   if (pathname === "/dashboard/api-keys") {
     const store = new ApiKeyStore(ctx.env.ACCOUNTS_KV);
     if (form.get("intent") === "revoke") {
-      await store.revoke(account.id, String(form.get("id") ?? ""));
+      const id = String(form.get("id") ?? "");
+      const revoked = /^[A-Za-z0-9_-]{1,128}$/.test(id) && (await store.revoke(account.id, id));
+      if (!revoked) return redirect("/dashboard?notice=api-key-not-found");
       logEvent("info", "api_key_revoked", { user: account.id });
       return redirect("/dashboard?notice=api-key-revoked");
     }

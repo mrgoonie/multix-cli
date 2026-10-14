@@ -47,9 +47,9 @@ curl -s https://multix.zuey.me/api/v1/me \
   -H "Authorization: Bearer $MULTIX_API_KEY"
 ```
 
-Mỗi request kiểm tra key, rồi danh sách được phép đăng nhập
-(`MULTIX_ALLOWED_USERS`, nên xóa một tài khoản khỏi danh sách cũng chặn luôn
-các API key của nó), rồi giới hạn tốc độ theo tài khoản. Body của request là
+Mỗi request kiểm tra key, rồi giới hạn tốc độ theo tài khoản, rồi danh sách
+được phép đăng nhập (`MULTIX_ALLOWED_USERS`, nên xóa một tài khoản khỏi danh
+sách cũng chặn luôn các API key của nó). Body của request là
 JSON (`Content-Type: application/json`, tối đa 64 KiB).
 
 ## Endpoint
@@ -81,13 +81,16 @@ Giá trị phải gồm 1–1024 ký tự in được, không có khoảng trắ
 ## Provider key
 
 Đặt một key, lấy giá trị từ biến môi trường để nó không nằm trong lịch sử
-shell:
+shell. Body được gửi qua stdin (`--data @-`) nên giá trị cũng không hiện trong
+danh sách tiến trình:
 
 ```bash
 curl -s -X PUT https://multix.zuey.me/api/v1/provider-keys/GEMINI_API_KEY \
   -H "Authorization: Bearer $MULTIX_API_KEY" \
   -H "Content-Type: application/json" \
-  -d "{\"value\": \"$GEMINI_API_KEY\"}"
+  --data @- <<JSON
+{"value": "$GEMINI_API_KEY"}
+JSON
 ```
 
 Đặt và xóa nhiều key trong một request (`null` xóa key). Response chỉ liệt kê
@@ -97,7 +100,9 @@ tên: `{ "saved": [...], "removed": [...] }`.
 curl -s -X PATCH https://multix.zuey.me/api/v1/provider-keys \
   -H "Authorization: Bearer $MULTIX_API_KEY" \
   -H "Content-Type: application/json" \
-  -d "{\"keys\": {\"GEMINI_API_KEY\": \"$GEMINI_API_KEY\", \"OPENAI_API_KEY\": \"$OPENAI_API_KEY\", \"FAL_KEY\": null}}"
+  --data @- <<JSON
+{"keys": {"GEMINI_API_KEY": "$GEMINI_API_KEY", "OPENAI_API_KEY": "$OPENAI_API_KEY", "FAL_KEY": null}}
+JSON
 ```
 
 Một tên không hợp lệ khiến cả request bị từ chối với `400`, nên không có
@@ -130,7 +135,9 @@ const keys = {};
 for (const line of readFileSync(process.argv[2] ?? ".env", "utf8").split(/\r?\n/)) {
   const m = /^\s*(?:export\s+)?([A-Z][A-Z0-9_]*)\s*=\s*(.*)$/.exec(line);
   if (!m || !accepted.has(m[1])) continue;
-  const value = m[2].trim().replace(/^(['"])(.*)\1$/, "$2");
+  const raw = m[2].trim();
+  // Quoted values are kept as written; unquoted ones lose a trailing " # comment".
+  const value = /^(['"]).*\1$/.test(raw) ? raw.slice(1, -1) : raw.replace(/\s+#.*$/, "");
   if (value) keys[m[1]] = value;
 }
 if (Object.keys(keys).length === 0) throw new Error("No provider keys found in the .env file");
@@ -160,7 +167,10 @@ bại.
 curl -s -X PUT https://multix.zuey.me/api/v1/storage \
   -H "Authorization: Bearer $MULTIX_API_KEY" \
   -H "Content-Type: application/json" \
-  -d "{\"account_id\": \"$R2_ACCOUNT_ID\", \"access_key_id\": \"$R2_ACCESS_KEY_ID\", \"secret_access_key\": \"$R2_SECRET_ACCESS_KEY\", \"bucket\": \"my-multix-outputs\", \"public_base_url\": \"https://files.example.com\"}"
+  --data @- <<JSON
+{"account_id": "$R2_ACCOUNT_ID", "access_key_id": "$R2_ACCESS_KEY_ID", "secret_access_key": "$R2_SECRET_ACCESS_KEY",
+ "bucket": "my-multix-outputs", "public_base_url": "https://files.example.com"}
+JSON
 ```
 
 `public_base_url` là tùy chọn. Response, giống `GET /storage`, không bao giờ
@@ -191,7 +201,7 @@ Body có cùng dạng với kết quả của `multix_run` (`job_id`, `status`, 
 cho biết có cần theo dõi tiếp hay không:
 
 - `200`: job đã kết thúc (`succeeded`, `failed`, `timed_out` hoặc `canceled`).
-- `202`: job vẫn `running`; `next.path` là URL cần gọi lại, ví dụ
+- `202`: job vẫn `starting` hoặc `running`; `next.path` là URL cần gọi lại, ví dụ
   `/api/v1/jobs/<job_id>`.
 
 Gọi lại mỗi 10–30 giây cho đến khi mã trạng thái không còn là `202`:

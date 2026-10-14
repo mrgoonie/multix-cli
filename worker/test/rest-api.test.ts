@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { ApiKeyStore } from "../src/accounts/api-key-store.js";
 import { openApiDocument } from "../src/api/openapi-document.js";
 import { fakeNamespace, fakeQuotaNamespace } from "./fake-job-bindings.js";
+import { fakeKv } from "./fake-kv.js";
 import {
   type Browser,
   ORIGIN,
@@ -89,6 +91,33 @@ describe("REST API keys", () => {
     const key = await createApiKey(browser);
     env.MULTIX_ALLOWED_USERS = "someone-else";
     expect((await api(browser, key, "/me")).status).toBe(403);
+  });
+
+  it("keeps every key listed when keys are created at the same time", async () => {
+    const store = new ApiKeyStore(fakeKv());
+    const created = await Promise.all(["a", "b", "c"].map((name) => store.create("gh-1", name)));
+    expect((await store.list("gh-1")).map((r) => r.name).sort()).toEqual(["a", "b", "c"]);
+    expect(await store.list("gh-12")).toEqual([]);
+    expect(await store.revoke("gh-2", created[0]?.record.id ?? "")).toBe(false);
+    expect(await store.revoke("gh-1", created[0]?.record.id ?? "")).toBe(true);
+    expect(await store.verify(created[0]?.key ?? "")).toBeNull();
+    expect(await store.verify(created[1]?.key ?? "")).toMatchObject({ userId: "gh-1" });
+  });
+
+  it("says so when a dashboard revoke matches no key", async () => {
+    const { browser } = await signedInBrowser();
+    const key = await createApiKey(browser);
+    const { api_key_id: id } = await body(await api(browser, key, "/me"));
+    const dashboard = await (await browser.request("/dashboard")).text();
+    const revoke = (keyId: string) =>
+      browser.post("/dashboard/api-keys", {
+        csrf: hiddenField(dashboard, "csrf"),
+        intent: "revoke",
+        id: keyId,
+      });
+    expect((await revoke("no-such-key")).headers.get("location")).toContain("api-key-not-found");
+    expect((await revoke(id)).headers.get("location")).toContain("api-key-revoked");
+    expect((await api(browser, key, "/me")).status).toBe(401);
   });
 });
 

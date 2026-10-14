@@ -4,8 +4,10 @@
  * - `apikey:<sha256 hex of the key>` -> { userId, id }: the lookup used to
  *   authenticate a request. Only the hash is stored; the key itself is shown
  *   once, when it is created.
- * - `apikeys:<userId>` -> ApiKeyRecord[]: what the dashboard and
- *   GET /api/v1/api-keys list (name, a short prefix, creation time).
+ * - `apikeys:<userId>:<id>` -> ApiKeyRecord, also kept as the entry's
+ *   metadata: what the dashboard and GET /api/v1/api-keys list (name, a short
+ *   prefix, creation time). One entry per key, so two changes at once cannot
+ *   drop a key from the list and leave it working but impossible to revoke.
  *
  * Keys are `mxk_` plus 43 base64url characters (32 random bytes), so they
  * cannot be guessed and a hash without a salt is enough. KV is eventually
@@ -65,8 +67,12 @@ function lookupKey(hash: string): string {
   return `apikey:${hash}`;
 }
 
-function listKey(userId: string): string {
-  return `apikeys:${userId}`;
+function listPrefix(userId: string): string {
+  return `apikeys:${userId}:`;
+}
+
+function recordKey(userId: string, id: string): string {
+  return `${listPrefix(userId)}${id}`;
 }
 
 /** Whether a string has the shape of an API key (checked before any KV read). */
@@ -78,17 +84,29 @@ export class ApiKeyStore {
   constructor(private readonly kv: KVNamespace) {}
 
   async list(userId: string): Promise<ApiKeyRecord[]> {
-    return (await this.kv.get<ApiKeyRecord[]>(listKey(userId), { type: "json" })) ?? [];
+    const records: ApiKeyRecord[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await this.kv.list<ApiKeyRecord>({ prefix: listPrefix(userId), cursor });
+      for (const entry of page.keys) if (entry.metadata) records.push(entry.metadata);
+      cursor = page.list_complete ? undefined : page.cursor;
+    } while (cursor);
+    return records.sort((a, b) => a.createdAt - b.createdAt);
   }
 
-  /** Create a key; the returned `key` is the only time its value exists outside the caller. */
+  /**
+   * Create a key; the returned `key` is the only time its value exists outside
+   * the caller. Two creates at the same moment can both pass the limit check,
+   * which only lets an account briefly hold one or two keys over the limit.
+   */
   async create(
     userId: string,
     name: string,
     now = Date.now(),
   ): Promise<{ key: string; record: ApiKeyRecord }> {
-    const records = await this.list(userId);
-    if (records.length >= MAX_API_KEYS_PER_ACCOUNT) throw new TooManyApiKeysError();
+    if ((await this.list(userId)).length >= MAX_API_KEYS_PER_ACCOUNT) {
+      throw new TooManyApiKeysError();
+    }
     const key = `${KEY_PREFIX}${base64url(crypto.getRandomValues(new Uint8Array(32)))}`;
     const hash = await sha256Hex(key);
     const record: ApiKeyRecord = {
@@ -98,18 +116,21 @@ export class ApiKeyStore {
       createdAt: now,
       hash,
     };
+    // Record first, lookup last: a failure in between leaves a listed key that
+    // does not authenticate, never a working key that cannot be revoked.
+    const serialized = JSON.stringify(record);
+    await this.kv.put(recordKey(userId, record.id), serialized, { metadata: record });
     await this.kv.put(lookupKey(hash), JSON.stringify({ userId, id: record.id } as ApiKeyLookup));
-    await this.kv.put(listKey(userId), JSON.stringify([...records, record]));
     return { key, record };
   }
 
   /** Revoke one of the account's keys; false when the account has no key with that id. */
   async revoke(userId: string, id: string): Promise<boolean> {
-    const records = await this.list(userId);
-    const record = records.find((r) => r.id === id);
+    const record = await this.kv.get<ApiKeyRecord>(recordKey(userId, id), { type: "json" });
     if (!record) return false;
+    // Lookup first: if the second delete fails, the key no longer works and stays listed to retry.
     await this.kv.delete(lookupKey(record.hash));
-    await this.kv.put(listKey(userId), JSON.stringify(records.filter((r) => r.id !== id)));
+    await this.kv.delete(recordKey(userId, id));
     return true;
   }
 

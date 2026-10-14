@@ -18,8 +18,8 @@
  *   GET    /api/v1/api-keys                    the account's API keys (no values)
  *   DELETE /api/v1/api-keys/{id}               revoke an API key
  *
- * Every authenticated request checks the key, the sign-in allowlist and the
- * per-account rate limit shared with /mcp. Failed authentication is rate
+ * Every authenticated request checks the key, the per-account rate limit
+ * shared with /mcp and the sign-in allowlist. Failed authentication is rate
  * limited per IP.
  */
 
@@ -76,6 +76,14 @@ async function authenticate(app: AppContext, request: Request): Promise<ApiCalle
       "Send an API key from /dashboard as Authorization: Bearer <key>",
       { "www-authenticate": 'Bearer realm="multix"' },
     );
+  }
+  // Per-account limit before the allowlist, so a key of a removed account is limited too.
+  const limiter = app.env.MCP_RATE_LIMITER;
+  if (limiter) {
+    const { success } = await limiter.limit({ key: owner.userId });
+    if (!success) {
+      return apiError(429, "rate_limited", "Too many requests", { "retry-after": "60" });
+    }
   }
   const account = await app.accounts.get(owner.userId);
   if (!account || !isAllowed(app.env.MULTIX_ALLOWED_USERS, account)) {
@@ -181,14 +189,10 @@ export async function handleApi(
     routeName = parts[0] ?? "root";
     const caller = await authenticate(app, request);
     if (caller instanceof Response) return caller;
-    const limiter = app.env.MCP_RATE_LIMITER;
-    if (limiter) {
-      const { success } = await limiter.limit({ key: caller.account.id });
-      if (!success) {
-        return apiError(429, "rate_limited", "Too many requests", { "retry-after": "60" });
-      }
-    }
-    const keys = await app.accounts.providerKeys(caller.account.id);
+    // Only the catalog and jobs use the decrypted keys; the other routes must keep
+    // working (e.g. to revoke an API key) even if a stored key cannot be decrypted.
+    const needsKeys = routeName === "catalog" || routeName === "jobs";
+    const keys: ProviderKeys = needsKeys ? await app.accounts.providerKeys(caller.account.id) : {};
     // Scrub the caller's own key values from any error message that echoes CLI output.
     secrets = secretValues(keys);
     return await route(app, deps, caller, keys, request, parts, url);

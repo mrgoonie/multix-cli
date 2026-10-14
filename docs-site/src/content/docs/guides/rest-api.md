@@ -47,9 +47,9 @@ curl -s https://multix.zuey.me/api/v1/me \
   -H "Authorization: Bearer $MULTIX_API_KEY"
 ```
 
-Every request checks the key, then the sign-in allowlist
-(`MULTIX_ALLOWED_USERS`, so removing an account from it also blocks its API
-keys), then the per-account rate limit. Request bodies are JSON
+Every request checks the key, then the per-account rate limit, then the
+sign-in allowlist (`MULTIX_ALLOWED_USERS`, so removing an account from it also
+blocks its API keys). Request bodies are JSON
 (`Content-Type: application/json`, at most 64 KiB).
 
 ## Endpoints
@@ -81,13 +81,16 @@ lists all of them. A value must be 1–1024 printable characters without spaces.
 ## Provider keys
 
 Set one key, reading the value from your environment so it does not land in
-shell history:
+shell history. The body goes on stdin (`--data @-`), so the value does not show
+in the process list either:
 
 ```bash
 curl -s -X PUT https://multix.zuey.me/api/v1/provider-keys/GEMINI_API_KEY \
   -H "Authorization: Bearer $MULTIX_API_KEY" \
   -H "Content-Type: application/json" \
-  -d "{\"value\": \"$GEMINI_API_KEY\"}"
+  --data @- <<JSON
+{"value": "$GEMINI_API_KEY"}
+JSON
 ```
 
 Set and remove several in one request (`null` removes a key). The response
@@ -97,7 +100,9 @@ lists names only: `{ "saved": [...], "removed": [...] }`.
 curl -s -X PATCH https://multix.zuey.me/api/v1/provider-keys \
   -H "Authorization: Bearer $MULTIX_API_KEY" \
   -H "Content-Type: application/json" \
-  -d "{\"keys\": {\"GEMINI_API_KEY\": \"$GEMINI_API_KEY\", \"OPENAI_API_KEY\": \"$OPENAI_API_KEY\", \"FAL_KEY\": null}}"
+  --data @- <<JSON
+{"keys": {"GEMINI_API_KEY": "$GEMINI_API_KEY", "OPENAI_API_KEY": "$OPENAI_API_KEY", "FAL_KEY": null}}
+JSON
 ```
 
 An unknown name rejects the whole request with `400`, so nothing is half
@@ -129,7 +134,9 @@ const keys = {};
 for (const line of readFileSync(process.argv[2] ?? ".env", "utf8").split(/\r?\n/)) {
   const m = /^\s*(?:export\s+)?([A-Z][A-Z0-9_]*)\s*=\s*(.*)$/.exec(line);
   if (!m || !accepted.has(m[1])) continue;
-  const value = m[2].trim().replace(/^(['"])(.*)\1$/, "$2");
+  const raw = m[2].trim();
+  // Quoted values are kept as written; unquoted ones lose a trailing " # comment".
+  const value = /^(['"]).*\1$/.test(raw) ? raw.slice(1, -1) : raw.replace(/\s+#.*$/, "");
   if (value) keys[m[1]] = value;
 }
 if (Object.keys(keys).length === 0) throw new Error("No provider keys found in the .env file");
@@ -159,7 +166,10 @@ step fails, nothing is saved and the response is
 curl -s -X PUT https://multix.zuey.me/api/v1/storage \
   -H "Authorization: Bearer $MULTIX_API_KEY" \
   -H "Content-Type: application/json" \
-  -d "{\"account_id\": \"$R2_ACCOUNT_ID\", \"access_key_id\": \"$R2_ACCESS_KEY_ID\", \"secret_access_key\": \"$R2_SECRET_ACCESS_KEY\", \"bucket\": \"my-multix-outputs\", \"public_base_url\": \"https://files.example.com\"}"
+  --data @- <<JSON
+{"account_id": "$R2_ACCOUNT_ID", "access_key_id": "$R2_ACCESS_KEY_ID", "secret_access_key": "$R2_SECRET_ACCESS_KEY",
+ "bucket": "my-multix-outputs", "public_base_url": "https://files.example.com"}
+JSON
 ```
 
 `public_base_url` is optional. The response, like `GET /storage`, never
@@ -189,7 +199,7 @@ The body has the same shape as a `multix_run` result (`job_id`, `status`,
 configured). The HTTP status tells you whether to poll:
 
 - `200`: the job ended (`succeeded`, `failed`, `timed_out` or `canceled`).
-- `202`: the job is still `running`; `next.path` is the URL to poll, for
+- `202`: the job is still `starting` or `running`; `next.path` is the URL to poll, for
   example `/api/v1/jobs/<job_id>`.
 
 Poll every 10–30 seconds until the status is no longer `202`:

@@ -22,8 +22,9 @@ function curlFor(base: string, method: string, path: string, example: unknown): 
   const lines = [`curl -X ${method.toUpperCase()} ${base}${path.replace(/\{(\w+)\}/g, "<$1>")} \\`];
   lines.push(`  -H "Authorization: Bearer $MULTIX_API_KEY"${example === undefined ? "" : " \\"}`);
   if (example !== undefined) {
+    // Body on stdin, so values substituted from the environment stay out of the process list.
     lines.push(`  -H "Content-Type: application/json" \\`);
-    lines.push(`  -d '${JSON.stringify(example)}'`);
+    lines.push("  --data @- <<JSON", JSON.stringify(example), "JSON");
   }
   return lines.join("\n");
 }
