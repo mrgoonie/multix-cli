@@ -733,12 +733,13 @@ describe("download hardening", () => {
     releaseClaim(file);
   });
 
+  // Creating 1000 files can take longer than the default 5 s on Windows runners.
   it("claimOutputPath gives up on a multi-output name after a bounded number of attempts", () => {
     const file = path.join(tmp, "z.mp4");
     fs.writeFileSync(file, "x");
     for (let n = 1; n < 1000; n++) fs.writeFileSync(path.join(tmp, `z-${n}.mp4`), "x");
     expect(() => claimOutputPath(file, "unique")).toThrow(/No free file name .* 1000 attempts/);
-  });
+  }, 30_000);
 
   it("saves an svg output as .svg and never converts it", async () => {
     const svg = `data:image/svg+xml;base64,${Buffer.from("<svg/>").toString("base64")}`;
