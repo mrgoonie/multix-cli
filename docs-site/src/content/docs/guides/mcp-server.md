@@ -143,6 +143,13 @@ Worker, and keys set there are ignored.
   `REPLICATE_API_KEY` as fallback, HeyGen), plus the Cloudflare Workers AI
   account ID, API token and optional AI Gateway ID.
 
+### API keys for the REST API
+
+The **API keys** card in `/dashboard` creates and revokes account API keys
+(`mxk_…`, shown once, at most 10 per account) for the REST API at `/api/v1`,
+which lets scripts and CI manage provider keys and R2 storage and run jobs
+without MCP. See [REST API](/guides/rest-api/) and the reference at `/api/docs`.
+
 ### R2 storage
 
 Each account can also save its own Cloudflare R2 bucket. `multix_run` uploads
@@ -231,7 +238,7 @@ curl https://mcp.example.com/health
 ### Sharing a host with another site
 
 The Worker only needs these paths: `/mcp`, `/dashboard`, `/oauth/*`,
-`/.well-known/oauth-*` and `/health`. Path routes take priority over a Custom
+`/.well-known/oauth-*`, `/health` and `/api/*`. Path routes take priority over a Custom
 Domain on the same host, so another Worker (for example a docs site) can keep
 serving every other path. `multix.zuey.me` is set up this way.
 
@@ -309,9 +316,11 @@ Set these as `vars` in `worker/wrangler.jsonc`:
 Two [Workers Rate Limiting](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/)
 bindings in `wrangler.jsonc` bound abuse; excess requests get `429`:
 
-- `MCP_RATE_LIMITER`: about 60 `/mcp` requests per minute per account.
+- `MCP_RATE_LIMITER`: about 60 requests per minute per account, shared by
+  `/mcp` and the REST API.
 - `AUTH_RATE_LIMITER`: about 30 requests per minute per client IP on sign-in,
-  authorization, client registration, token and dashboard writes.
+  authorization, client registration, token, dashboard writes and REST API
+  requests with a missing or invalid API key.
 
 The limits are approximate: Cloudflare counts per location and the counters are
 eventually consistent, so treat them as abuse protection, not an exact budget.

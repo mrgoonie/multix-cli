@@ -759,6 +759,20 @@ so Docker must be running. To deploy without the CLI runner, remove
 
 Full guide: [Remote MCP server](https://multix.zuey.me/guides/mcp-server/).
 
+### REST API
+
+The same server exposes a JSON REST API at `/api/v1` for scripts and CI
+(manage provider keys and R2 storage, read the catalog, run and poll jobs).
+Create an account API key (`mxk_…`, shown once) in the **API keys** card at
+`/dashboard` and send it as `Authorization: Bearer <key>`:
+
+```bash
+curl -s https://multix.zuey.me/api/v1/me -H "Authorization: Bearer $MULTIX_API_KEY"
+```
+
+Guide: [REST API](https://multix.zuey.me/guides/rest-api/). Reference:
+[`/api/docs`](https://multix.zuey.me/api/docs) (OpenAPI at `/api/v1/openapi.json`).
+
 ## Troubleshooting
 
 **No API key found:** Run `multix check` — it prints setup instructions.

@@ -112,6 +112,11 @@ export default defineConfig({
               translations: { vi: "MCP server từ xa" },
               slug: "guides/mcp-server",
             },
+            {
+              label: "REST API",
+              translations: { vi: "REST API" },
+              slug: "guides/rest-api",
+            },
           ],
         },
         {

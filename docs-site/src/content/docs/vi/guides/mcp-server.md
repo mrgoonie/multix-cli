@@ -139,6 +139,14 @@ bị bỏ qua.
   làm tên dự phòng, HeyGen), cùng account ID, API token và AI Gateway ID (tùy
   chọn) của Cloudflare Workers AI.
 
+### API key cho REST API
+
+Thẻ **API keys** trong `/dashboard` tạo và thu hồi API key của tài khoản
+(`mxk_…`, chỉ hiển thị một lần, tối đa 10 key mỗi tài khoản) cho REST API tại
+`/api/v1`, giúp script và CI quản lý provider key, lưu trữ R2 và chạy job mà
+không cần MCP. Xem [REST API](/vi/guides/rest-api/) và tài liệu tham chiếu tại
+`/api/docs`.
+
 ### Lưu trữ R2
 
 Mỗi tài khoản cũng có thể lưu bucket Cloudflare R2 của riêng mình.
@@ -226,7 +234,7 @@ curl https://mcp.example.com/health
 ### Dùng chung host với site khác
 
 Worker chỉ cần các path: `/mcp`, `/dashboard`, `/oauth/*`,
-`/.well-known/oauth-*` và `/health`. Route theo path được ưu tiên hơn Custom
+`/.well-known/oauth-*`, `/health` và `/api/*`. Route theo path được ưu tiên hơn Custom
 Domain trên cùng host, nên một Worker khác (ví dụ site tài liệu) vẫn phục vụ
 mọi path còn lại. `multix.zuey.me` được thiết lập theo cách này.
 
@@ -304,10 +312,11 @@ closed). `http://localhost` được chấp nhận khi phát triển cục bộ.
 Hai binding [Workers Rate Limiting](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/)
 trong `wrangler.jsonc` chặn lạm dụng; request vượt mức nhận `429`:
 
-- `MCP_RATE_LIMITER`: khoảng 60 request `/mcp` mỗi phút cho mỗi tài khoản.
+- `MCP_RATE_LIMITER`: khoảng 60 request mỗi phút cho mỗi tài khoản, dùng chung
+  cho `/mcp` và REST API.
 - `AUTH_RATE_LIMITER`: khoảng 30 request mỗi phút cho mỗi IP client ở các
-  bước đăng nhập, yêu cầu ủy quyền, đăng ký client, cấp token và thao tác ghi
-  trên dashboard.
+  bước đăng nhập, yêu cầu ủy quyền, đăng ký client, cấp token, thao tác ghi
+  trên dashboard và request REST API thiếu API key hoặc key không hợp lệ.
 
 Các giới hạn này chỉ gần đúng: Cloudflare đếm theo từng location và bộ đếm chỉ
 nhất quán dần, nên hãy xem chúng là lớp chống lạm dụng, không phải ngân sách

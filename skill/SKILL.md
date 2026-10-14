@@ -497,6 +497,11 @@ server has its job container:
    `url` is null and a `note` mentions R2, tell the user to configure R2 at
    `/dashboard`. `stdout` still holds any provider URLs the CLI printed.
 
+Without an MCP client, the same server has a REST API at `/api/v1`
+(`Authorization: Bearer <mxk_… key>` from the user's `/dashboard`; `POST /jobs`
+takes the `multix_run` input and returns `202` while running, poll `next.path`).
+Guide: https://multix.zuey.me/guides/rest-api/, reference: https://multix.zuey.me/api/docs.
+
 ## Security & scope
 
 This skill produces shell commands for the local `multix` CLI. It does NOT execute the commands itself, exfiltrate API keys, or modify provider accounts.
