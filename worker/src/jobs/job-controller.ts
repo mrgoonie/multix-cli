@@ -13,6 +13,7 @@
  * stored state instead of starting a new container to ask.
  */
 
+import { logEvent } from "../redaction.js";
 import {
   JOB_GIVE_UP_MS,
   type JobResult,
@@ -178,12 +179,18 @@ export class JobController {
   async releaseSlot(attempt = 1): Promise<void> {
     try {
       await this.port.releaseSlot();
-    } catch {
-      if (attempt >= SLOT_RELEASE_ATTEMPTS) return; // The slot's lease expires on its own.
+    } catch (error) {
+      const name = error instanceof Error ? error.name : "unknown";
+      if (attempt >= SLOT_RELEASE_ATTEMPTS) {
+        // The slot's lease expires on its own; log it so "server at capacity" errors can be traced.
+        logEvent("error", "job_slot_release_gave_up", { attempt, error: name });
+        return;
+      }
+      logEvent("warn", "job_slot_release_failed", { attempt, error: name });
       try {
         await this.port.scheduleSlotRelease(attempt + 1, SLOT_RELEASE_RETRY_SECONDS * attempt);
       } catch {
-        // Could not schedule a retry; the lease still bounds how long the slot stays taken.
+        logEvent("error", "job_slot_release_unscheduled", { attempt });
       }
     }
   }

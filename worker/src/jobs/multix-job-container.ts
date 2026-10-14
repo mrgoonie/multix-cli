@@ -79,7 +79,7 @@ export class MultixJobContainer extends Container<JobContainerEnv> {
       if (slot && quota) await durableJobQuota(quota).release(slot.userId, slot.jobId);
     },
     scheduleSlotRelease: async (attempt, seconds) => {
-      await this.schedule(seconds, "retrySlotRelease", attempt);
+      await this.schedule(seconds, "retrySlotRelease" satisfies keyof MultixJobContainer, attempt);
     },
     now: () => Date.now(),
   });
