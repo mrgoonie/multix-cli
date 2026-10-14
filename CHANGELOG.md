@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.2](https://github.com/mrgoonie/multix-cli/compare/v1.6.1...v1.6.2) (2026-10-14)
+
+
+### Fixed
+
+* **mcp:** route dashboard, MCP and health URLs with a query string to the Worker ([#210](https://github.com/mrgoonie/multix-cli/issues/210)) ([d5666f3](https://github.com/mrgoonie/multix-cli/commit/d5666f35e033b6ee84b30be9e7830f3466e9bce9))
+
 ## [1.6.1](https://github.com/mrgoonie/multix-cli/compare/v1.6.0...v1.6.1) (2026-10-14)
 
 
