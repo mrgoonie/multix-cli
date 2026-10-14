@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { R2Settings } from "../src/accounts/r2-settings.js";
-import { ACCOUNT_BUSY_ERROR, type JobQuota, takeSlot } from "../src/jobs/account-job-quota.js";
+import {
+  type AcquireResult,
+  DEFAULT_JOB_CAPS,
+  type JobCaps,
+  type JobQuota,
+  SERVER_SLOTS_NAME,
+  accountBusyError,
+  takeSlot,
+} from "../src/jobs/account-job-quota.js";
 import { type JobSpec, type JobView, SERVER_AT_CAPACITY_ERROR } from "../src/jobs/job-protocol.js";
 import { type JobToolsContext, NO_STORAGE_NOTE, outputKeyPrefix } from "../src/jobs/job-runner.js";
 import { type JobBackend, JobStore } from "../src/jobs/job-store.js";
@@ -61,20 +69,30 @@ const succeeded = (spec: JobSpec): JobView => ({
   },
 });
 
-/** In-memory JobQuota with the real slot rules, keyed by account. */
+/** In-memory JobQuota with the real slot rules, keyed by account plus one server-wide set. */
 class FakeQuota implements JobQuota {
   readonly slots = new Map<string, Record<string, number>>();
   readonly released: string[] = [];
 
-  async acquire(userId: string, jobId: string): Promise<boolean> {
-    const { ok, slots } = takeSlot(this.slots.get(userId) ?? {}, jobId, 0);
-    this.slots.set(userId, slots);
+  constructor(readonly caps: JobCaps = DEFAULT_JOB_CAPS) {}
+
+  private take(name: string, jobId: string, limit: number): boolean {
+    const { ok, slots } = takeSlot(this.slots.get(name) ?? {}, jobId, 0, limit);
+    this.slots.set(name, slots);
     return ok;
+  }
+
+  async acquire(userId: string, jobId: string): Promise<AcquireResult> {
+    if (!this.take(userId, jobId, this.caps.perAccount)) return "account-busy";
+    if (this.take(SERVER_SLOTS_NAME, jobId, this.caps.total)) return "ok";
+    delete this.slots.get(userId)?.[jobId];
+    return "server-busy";
   }
 
   async release(userId: string, jobId: string): Promise<void> {
     this.released.push(jobId);
     delete this.slots.get(userId)?.[jobId];
+    delete this.slots.get(SERVER_SLOTS_NAME)?.[jobId];
   }
 }
 
@@ -89,6 +107,7 @@ function jobsContext(
     store: new JobStore(fakeKv()),
     backend,
     quota: new FakeQuota(),
+    caps: DEFAULT_JOB_CAPS,
     r2Settings: async () => null,
     sleep: async (ms) => {
       clock.t += ms;
@@ -102,7 +121,7 @@ function jobsContext(
 const env = fullEnv({ GEMINI_API_KEY: GEMINI_KEY });
 
 describe("CLI runner tools", () => {
-  it("are listed only when the job backend is available", async () => {
+  it("lists the job tools only when the job backend is available", async () => {
     const withJobs = await rpc(
       env,
       "tools/list",
@@ -118,9 +137,9 @@ describe("CLI runner tools", () => {
         "multix_job_cancel",
       ]),
     );
-    expect(names).toHaveLength(9);
+    expect(names).toHaveLength(4);
     const without = await rpc(env, "tools/list");
-    expect(without.result.tools).toHaveLength(5);
+    expect(without.result.tools.map((t: { name: string }) => t.name)).toEqual(["multix_catalog"]);
   });
 
   it("multix_catalog lists groups with key readiness and never key values", async () => {
@@ -238,12 +257,37 @@ describe("CLI runner tools", () => {
     expect((await run(mine)).structuredContent.status).toBe("running");
     const third = await run(mine);
     expect(third.isError).toBe(true);
-    expect(third.content[0].text).toBe(ACCOUNT_BUSY_ERROR);
+    expect(third.content[0].text).toBe(accountBusyError(2));
     expect(third.content[0].text).toMatch(/^busy: you already have 2 running jobs/);
     expect(backend.specs.size).toBe(2);
     // Another account is not affected.
     const other = jobsContext(backend, { quota, userId: "gh-2" });
     expect((await run(other)).structuredContent.status).toBe("running");
+  });
+
+  it("applies configured caps: per account and server-wide", async () => {
+    const backend = new FakeBackend(succeeded, 100);
+    const caps = { perAccount: 1, total: 2 };
+    const quota = new FakeQuota(caps);
+    const run = (userId: string) =>
+      callTool(
+        env,
+        "multix_run",
+        { command: "gemini generate", options: { prompt: "p" }, wait_seconds: 0 },
+        { jobs: jobsContext(backend, { quota, caps, userId }) },
+      );
+    expect((await run("gh-1")).structuredContent.status).toBe("running");
+    const second = await run("gh-1");
+    expect(second.content[0].text).toBe(
+      "busy: you already have 1 running job; wait for one to finish or cancel it",
+    );
+    expect((await run("gh-2")).structuredContent.status).toBe("running");
+    const full = await run("gh-3");
+    expect(full.isError).toBe(true);
+    expect(full.content[0].text).toBe(SERVER_AT_CAPACITY_ERROR);
+    // The refused job keeps no account slot.
+    expect(Object.keys(quota.slots.get("gh-3") ?? {})).toHaveLength(0);
+    expect(backend.specs.size).toBe(2);
   });
 
   it("reports a full server separately and gives the slot back when the start fails", async () => {

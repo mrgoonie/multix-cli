@@ -60,16 +60,7 @@ describe("MCP discovery", () => {
 describe("authorize, consent and per-account keys", () => {
   it("runs tools with the keys of the account that approved the client", async () => {
     const env = oauthEnv();
-    const github = githubFetch(
-      OCTOCAT,
-      route("GET", /^https:\/\/api\.replicate\.com\/v1\/predictions\/abc123$/, () =>
-        jsonResponse({
-          id: "abc123",
-          status: "succeeded",
-          output: ["https://replicate.delivery/x.png"],
-        }),
-      ),
-    );
+    const github = githubFetch(OCTOCAT);
     const browser = newBrowser(env, github.fetch);
     const clientId = await registerClient(browser);
     const token = await authorizeAndGetToken(browser, clientId);
@@ -81,12 +72,16 @@ describe("authorize, consent and per-account keys", () => {
       JSON.stringify([...(env.ACCOUNTS_KV as unknown as { dump(): Map<string, unknown> }).dump()]),
     ).not.toContain("gho_fake");
 
-    let list = await toolResult(
-      await mcpCall(browser, token, "tools/call", { name: "multix_list_providers", arguments: {} }),
-    );
-    const replicate = () =>
-      list.structuredContent.providers.find((p: { id: string }) => p.id === "replicate");
-    expect(replicate().configured).toBe(false);
+    const replicateReady = async () =>
+      (
+        await toolResult(
+          await mcpCall(browser, token, "tools/call", {
+            name: "multix_catalog",
+            arguments: { group: "replicate" },
+          }),
+        )
+      ).structuredContent.has_keys;
+    expect(await replicateReady()).toBe(false);
 
     // Save a key from the dashboard.
     const dashboard = await (await browser.request("/dashboard")).text();
@@ -110,20 +105,7 @@ describe("authorize, consent and per-account keys", () => {
     expect(stored).not.toContain(SAVED_KEY);
     expect(await (await browser.request("/dashboard")).text()).not.toContain(SAVED_KEY);
 
-    list = await toolResult(
-      await mcpCall(browser, token, "tools/call", { name: "multix_list_providers", arguments: {} }),
-    );
-    expect(replicate().configured).toBe(true);
-
-    const status = await toolResult(
-      await mcpCall(browser, token, "tools/call", {
-        name: "multix_prediction_status",
-        arguments: { provider: "replicate", prediction_id: "abc123" },
-      }),
-    );
-    expect(status.structuredContent).toMatchObject({ status: "succeeded", done: true });
-    const providerCall = github.calls.find((c) => c.url.includes("api.replicate.com"));
-    expect(providerCall?.headers.authorization).toBe(`Bearer ${SAVED_KEY}`);
+    expect(await replicateReady()).toBe(true);
   });
 
   it("does not let one account use another account's keys", async () => {
@@ -140,13 +122,13 @@ describe("authorize, consent and per-account keys", () => {
 
     const other = newBrowser(env, githubFetch({ id: 2, login: "hubot" }).fetch);
     const token = await authorizeAndGetToken(other, await registerClient(other));
-    const list = await toolResult(
-      await mcpCall(other, token, "tools/call", { name: "multix_list_providers", arguments: {} }),
+    const catalog = await toolResult(
+      await mcpCall(other, token, "tools/call", {
+        name: "multix_catalog",
+        arguments: { group: "replicate" },
+      }),
     );
-    const replicate = list.structuredContent.providers.find(
-      (p: { id: string }) => p.id === "replicate",
-    );
-    expect(replicate.configured).toBe(false);
+    expect(catalog.structuredContent.has_keys).toBe(false);
   });
 
   it("ignores provider keys set as Worker secrets by the operator", async () => {
@@ -154,13 +136,13 @@ describe("authorize, consent and per-account keys", () => {
     Object.assign(env, { REPLICATE_API_TOKEN: "r8_operator_key_should_not_be_used" });
     const browser = newBrowser(env, githubFetch(OCTOCAT).fetch);
     const token = await authorizeAndGetToken(browser, await registerClient(browser));
-    const list = await toolResult(
-      await mcpCall(browser, token, "tools/call", { name: "multix_list_providers", arguments: {} }),
+    const catalog = await toolResult(
+      await mcpCall(browser, token, "tools/call", {
+        name: "multix_catalog",
+        arguments: { group: "replicate" },
+      }),
     );
-    const replicate = list.structuredContent.providers.find(
-      (p: { id: string }) => p.id === "replicate",
-    );
-    expect(replicate.configured).toBe(false);
+    expect(catalog.structuredContent.has_keys).toBe(false);
   });
 
   it("sends a signed-out browser through GitHub sign-in and back to the consent page", async () => {
@@ -378,13 +360,13 @@ describe("hardening", () => {
   const accountsKv = (env: ReturnType<typeof oauthEnv>) =>
     env.ACCOUNTS_KV as unknown as KVNamespace;
   const providerConfigured = async (browser: ReturnType<typeof newBrowser>, token: string) => {
-    const list = await toolResult(
-      await mcpCall(browser, token, "tools/call", { name: "multix_list_providers", arguments: {} }),
+    const catalog = await toolResult(
+      await mcpCall(browser, token, "tools/call", { name: "multix_catalog", arguments: {} }),
     );
     return Object.fromEntries(
-      list.structuredContent.providers.map((p: { id: string; configured: boolean }) => [
-        p.id,
-        p.configured,
+      catalog.structuredContent.groups.map((g: { group: string; has_keys: boolean }) => [
+        g.group,
+        g.has_keys,
       ]),
     );
   };

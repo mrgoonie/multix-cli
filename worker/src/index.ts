@@ -24,7 +24,7 @@ import {
 import { toolEnvFor } from "./accounts/account-store.js";
 import { isAllowed } from "./accounts/allowlist.js";
 import { type AppDeps, publicOrigin, resolveAppContext } from "./app-context.js";
-import { type WorkerEnv, serverSettings } from "./config.js";
+import { type WorkerEnv, jobCapsFrom, serverSettings } from "./config.js";
 import { json, text } from "./http-responses.js";
 import { durableJobQuota } from "./jobs/account-job-quota.js";
 import type { JobToolsContext } from "./jobs/job-runner.js";
@@ -82,6 +82,7 @@ async function handleAuthenticatedMcp(
   const keys = await app.accounts.providerKeys(account.id);
   const toolEnv = toolEnvFor(serverSettings(env), keys);
   // The CLI runner needs both Durable Objects: the per-job container and the per-account quota.
+  const caps = jobCapsFrom(env);
   const jobs: JobToolsContext | undefined =
     env.MULTIX_JOBS && env.MULTIX_JOB_QUOTA
       ? {
@@ -89,11 +90,12 @@ async function handleAuthenticatedMcp(
           keys,
           store: new JobStore(env.ACCOUNTS_KV),
           backend: deps.jobBackend ?? durableJobBackend(env.MULTIX_JOBS),
-          quota: durableJobQuota(env.MULTIX_JOB_QUOTA),
+          quota: durableJobQuota(env.MULTIX_JOB_QUOTA, caps),
+          caps,
           r2Settings: () => app.accounts.r2Settings(account.id),
         }
       : undefined;
-  return handleMcpRequest(request, toolEnv, { fetch: deps.fetch, jobs });
+  return handleMcpRequest(request, toolEnv, { jobs });
 }
 
 /** Everything that is not the protected /mcp resource or a library-owned OAuth endpoint. */

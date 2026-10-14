@@ -1,23 +1,49 @@
 /**
- * Per-account cap on jobs that run at the same time. One small Durable Object
- * per account (`MULTIX_JOB_QUOTA.getByName(userId)`) holds that account's
- * active job slots, so the count is strongly consistent: a Durable Object
- * handles one call at a time, and its storage reads and writes cannot
+ * Caps on jobs that run at the same time: per account and server-wide. One
+ * small Durable Object per account (`MULTIX_JOB_QUOTA.getByName(userId)`)
+ * holds that account's active job slots, and one more under SERVER_SLOTS_NAME
+ * holds every running job, so both counts are strongly consistent: a Durable
+ * Object handles one call at a time, and its storage reads and writes cannot
  * interleave with another call.
  *
- * A slot is taken before the job starts and given back when the job's Durable
- * Object records a final state (done, failed, canceled, timed out) or when the
- * Worker could not start the job. Every slot also carries a lease: a slot that
- * was never given back (crash, lost RPC) frees itself when the lease expires.
+ * A job takes its account slot, then its server slot, before it starts, and
+ * gives both back when the job's Durable Object records a final state (done,
+ * failed, canceled, timed out) or when the Worker could not start the job.
+ * Every slot also carries a lease: a slot that was never given back (crash,
+ * lost RPC) frees itself when the lease expires.
+ *
+ * The caps are the Worker vars MULTIX_MAX_JOBS_PER_ACCOUNT and
+ * MULTIX_MAX_JOBS_TOTAL (config.ts jobCapsFrom). The container `max_instances`
+ * in wrangler.jsonc stays the platform ceiling above MULTIX_MAX_JOBS_TOTAL.
  */
 
 import { DurableObject } from "cloudflare:workers";
-import { JOB_SLOT_LEASE_MS } from "./job-protocol.js";
+import { JOB_SLOT_LEASE_MS, SERVER_AT_CAPACITY_ERROR } from "./job-protocol.js";
 
-/** Jobs one account may have running at the same time. */
+/** Default jobs one account may have running at the same time. */
 export const MAX_ACTIVE_JOBS_PER_ACCOUNT = 2;
+/** Default jobs the whole server may run at the same time (the container `max_instances`). */
+export const MAX_ACTIVE_JOBS_TOTAL = 10;
 
-export const ACCOUNT_BUSY_ERROR = `busy: you already have ${MAX_ACTIVE_JOBS_PER_ACCOUNT} running jobs; wait for one to finish or stop it with multix_job_cancel`;
+/**
+ * Durable Object name of the server-wide slots. Account ids are `gh-<id>`, so
+ * this name never collides with an account's own object.
+ */
+export const SERVER_SLOTS_NAME = "server:all";
+
+export interface JobCaps {
+  perAccount: number;
+  total: number;
+}
+
+export const DEFAULT_JOB_CAPS: JobCaps = {
+  perAccount: MAX_ACTIVE_JOBS_PER_ACCOUNT,
+  total: MAX_ACTIVE_JOBS_TOTAL,
+};
+
+export function accountBusyError(perAccount: number): string {
+  return `busy: you already have ${perAccount} running ${perAccount === 1 ? "job" : "jobs"}; wait for one to finish or cancel it`;
+}
 
 /** Job id -> lease expiry (epoch ms). */
 export type JobSlots = Record<string, number>;
@@ -42,10 +68,10 @@ export function takeSlot(
 const SLOTS_KEY = "slots";
 
 export class AccountJobQuota extends DurableObject {
-  /** Take a slot for `jobId`; false when the account already runs the maximum. */
-  async acquire(jobId: string): Promise<boolean> {
+  /** Take a slot for `jobId`; false when `limit` slots are already taken. */
+  async acquire(jobId: string, limit = MAX_ACTIVE_JOBS_PER_ACCOUNT): Promise<boolean> {
     const current = (await this.ctx.storage.get<JobSlots>(SLOTS_KEY)) ?? {};
-    const { ok, slots } = takeSlot(current, jobId, Date.now());
+    const { ok, slots } = takeSlot(current, jobId, Date.now(), limit);
     await this.ctx.storage.put(SLOTS_KEY, slots);
     return ok;
   }
@@ -61,7 +87,7 @@ export class AccountJobQuota extends DurableObject {
 
 /** RPC surface of AccountJobQuota. */
 export interface AccountJobQuotaStub {
-  acquire(jobId: string): Promise<boolean>;
+  acquire(jobId: string, limit?: number): Promise<boolean>;
   release(jobId: string): Promise<void>;
 }
 
@@ -69,15 +95,41 @@ export interface JobQuotaNamespace {
   getByName(name: string): AccountJobQuotaStub;
 }
 
+/** Why a job could not take its slots. */
+export type AcquireResult = "ok" | "account-busy" | "server-busy";
+
 /** What the Worker and the job Durable Object use: slots addressed by account. */
 export interface JobQuota {
-  acquire(userId: string, jobId: string): Promise<boolean>;
+  /** Take the account slot, then the server slot; on failure nothing stays taken. */
+  acquire(userId: string, jobId: string): Promise<AcquireResult>;
+  /** Give back both slots of the job (idempotent). */
   release(userId: string, jobId: string): Promise<void>;
 }
 
-export function durableJobQuota(namespace: JobQuotaNamespace): JobQuota {
+export function durableJobQuota(
+  namespace: JobQuotaNamespace,
+  caps: JobCaps = DEFAULT_JOB_CAPS,
+): JobQuota {
+  const server = () => namespace.getByName(SERVER_SLOTS_NAME);
   return {
-    acquire: (userId, jobId) => namespace.getByName(userId).acquire(jobId),
-    release: (userId, jobId) => namespace.getByName(userId).release(jobId),
+    async acquire(userId, jobId) {
+      const account = namespace.getByName(userId);
+      if (!(await account.acquire(jobId, caps.perAccount))) return "account-busy";
+      let taken = false;
+      try {
+        taken = await server().acquire(jobId, caps.total);
+      } finally {
+        if (!taken) await account.release(jobId).catch(() => undefined);
+      }
+      return taken ? "ok" : "server-busy";
+    },
+    async release(userId, jobId) {
+      await Promise.all([namespace.getByName(userId).release(jobId), server().release(jobId)]);
+    },
   };
+}
+
+/** The caller-facing message for a refused acquire. */
+export function quotaError(result: Exclude<AcquireResult, "ok">, caps: JobCaps): string {
+  return result === "account-busy" ? accountBusyError(caps.perAccount) : SERVER_AT_CAPACITY_ERROR;
 }

@@ -1,14 +1,15 @@
 /**
  * The CLI runner's MCP tools: discover commands, run one in a per-job
- * container, read and cancel jobs. Registered only when the server has the
- * job Durable Object binding (see index.ts).
+ * container, read and cancel jobs. multix_catalog only reads the caller's
+ * keys and is always offered; the job tools need the job Durable Object
+ * bindings (see index.ts) and are offered only when `jobs` is given.
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import type { Limits } from "../config.js";
-import { MAX_ACTIVE_JOBS_PER_ACCOUNT } from "./account-job-quota.js";
+import type { ProviderKeys } from "../provider-secret-names.js";
 import { catalogPayload } from "./catalog-view.js";
 import {
   DEFAULT_WAIT_SECONDS,
@@ -35,11 +36,10 @@ const urlListSchema = z.union([
 export function registerJobTools(
   server: McpServer,
   limits: Limits,
-  jobs: JobToolsContext,
+  keys: ProviderKeys,
+  jobs: JobToolsContext | undefined,
   runTool: RunToolFn,
 ): void {
-  const runner = new JobRunner(jobs);
-
   server.registerTool(
     "multix_catalog",
     {
@@ -57,15 +57,18 @@ export function registerJobTools(
     },
     async (args) =>
       runTool("multix_catalog", { group: args.group }, async () =>
-        catalogPayload(jobs.keys, args.group),
+        catalogPayload(keys, args.group),
       ),
   );
+
+  if (!jobs) return;
+  const runner = new JobRunner(jobs);
 
   server.registerTool(
     "multix_run",
     {
       title: "Run a multix CLI command",
-      description: `Run one multix CLI command in an isolated container with your saved keys. command: e.g. "gemini generate". options: by long name without dashes ({"prompt": "...", "num-images": 2, "no-webp": true}). args: positionals in order. inputs: https URLs for file options or positionals (downloaded for the CLI). Output files go to your R2 bucket (configure it in /dashboard) and come back as URLs. Waits up to wait_seconds (max ${MAX_WAIT_SECONDS}, container start included); if still running, poll multix_job_status. At most ${MAX_ACTIVE_JOBS_PER_ACCOUNT} running jobs per account. Caps: ${limits.maxOutputs} outputs, ${limits.maxVideoSeconds} s video, resolutions ${limits.allowedResolutions.join("/")}.`,
+      description: `Run one multix CLI command in an isolated container with your saved keys. command: e.g. "gemini generate". options: by long name without dashes ({"prompt": "...", "num-images": 2, "no-webp": true}). args: positionals in order. inputs: https URLs for file options or positionals (downloaded for the CLI). Output files go to your R2 bucket (configure it in /dashboard) and come back as URLs. Waits up to wait_seconds (max ${MAX_WAIT_SECONDS}, container start included); if still running, poll multix_job_status. At most ${jobs.caps.perAccount} running jobs per account. Caps: ${limits.maxOutputs} outputs, ${limits.maxVideoSeconds} s video, resolutions ${limits.allowedResolutions.join("/")}.`,
       inputSchema: {
         command: z.string().min(1).max(100).describe("Command path from multix_catalog"),
         args: z.array(z.string()).max(20).optional(),

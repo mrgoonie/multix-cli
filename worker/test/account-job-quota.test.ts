@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { jobCapsFrom } from "../src/config.js";
 import {
   AccountJobQuota,
+  type JobQuotaNamespace,
   MAX_ACTIVE_JOBS_PER_ACCOUNT,
+  SERVER_SLOTS_NAME,
+  durableJobQuota,
   takeSlot,
 } from "../src/jobs/account-job-quota.js";
 import { JOB_GIVE_UP_MS, JOB_SLOT_LEASE_MS } from "../src/jobs/job-protocol.js";
@@ -53,5 +57,51 @@ describe("AccountJobQuota", () => {
     await quota.release("job-1"); // idempotent
     expect(await quota.acquire("job-3")).toBe(true);
     expect(await quota.acquire("job-4")).toBe(false);
+  });
+});
+
+describe("durableJobQuota", () => {
+  function namespace() {
+    const objects = new Map<string, AccountJobQuota>();
+    const ns: JobQuotaNamespace = {
+      getByName(name) {
+        let quota = objects.get(name);
+        if (!quota) {
+          quota = new AccountJobQuota(fakeState() as never, {} as never);
+          objects.set(name, quota);
+        }
+        return quota;
+      },
+    };
+    return ns;
+  }
+
+  it("takes an account slot and a server slot, and rolls back the account slot when the server is full", async () => {
+    const ns = namespace();
+    const quota = durableJobQuota(ns, { perAccount: 2, total: 2 });
+    expect(await quota.acquire("gh-1", "a")).toBe("ok");
+    expect(await quota.acquire("gh-2", "b")).toBe("ok");
+    expect(await quota.acquire("gh-1", "c")).toBe("server-busy");
+    // gh-1 still holds only "a": the refused job left no account slot behind.
+    expect(await ns.getByName("gh-1").acquire("probe", 2)).toBe(true);
+    await quota.release("gh-2", "b");
+    expect(await quota.acquire("gh-1", "c")).toBe("account-busy");
+    expect(await quota.acquire("gh-3", "d")).toBe("ok");
+    expect(SERVER_SLOTS_NAME.startsWith("gh-")).toBe(false);
+  });
+});
+
+describe("jobCapsFrom", () => {
+  it("reads the Worker vars with defaults and ceilings", () => {
+    expect(jobCapsFrom({} as never)).toEqual({ perAccount: 2, total: 10 });
+    expect(
+      jobCapsFrom({ MULTIX_MAX_JOBS_PER_ACCOUNT: "3", MULTIX_MAX_JOBS_TOTAL: "25" } as never),
+    ).toEqual({ perAccount: 3, total: 25 });
+    expect(
+      jobCapsFrom({ MULTIX_MAX_JOBS_PER_ACCOUNT: "0", MULTIX_MAX_JOBS_TOTAL: "abc" } as never),
+    ).toEqual({ perAccount: 2, total: 10 });
+    expect(
+      jobCapsFrom({ MULTIX_MAX_JOBS_PER_ACCOUNT: "999", MULTIX_MAX_JOBS_TOTAL: "99999" } as never),
+    ).toEqual({ perAccount: 50, total: 1000 });
   });
 });

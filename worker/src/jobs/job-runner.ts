@@ -9,7 +9,7 @@ import { ValidationError } from "../../../src/core/errors.js";
 import type { R2Settings } from "../accounts/r2-settings.js";
 import type { ProviderKeys } from "../provider-secret-names.js";
 import { NON_SECRET_NAMES } from "../provider-secret-names.js";
-import { ACCOUNT_BUSY_ERROR, type JobQuota } from "./account-job-quota.js";
+import { type JobCaps, type JobQuota, quotaError } from "./account-job-quota.js";
 import { GROUP_KEYS } from "./cli-command-policy.js";
 import {
   JOB_TIMEOUT_MS,
@@ -39,8 +39,10 @@ export interface JobToolsContext {
   keys: ProviderKeys;
   store: JobStore;
   backend: JobBackend;
-  /** Per-account active job slots. */
+  /** Per-account and server-wide active job slots. */
   quota: JobQuota;
+  /** The caps `quota` enforces, for messages and tool descriptions. */
+  caps: JobCaps;
   r2Settings(): Promise<R2Settings | null>;
   /** Injected for tests. */
   sleep?: (ms: number) => Promise<void>;
@@ -134,9 +136,8 @@ export class JobRunner {
     if (r2) spec.upload = { r2, keyPrefix: await outputKeyPrefix(this.ctx.userId, jobId) };
     const { userId } = this.ctx;
     const deadline = this.now() + waitSeconds * 1000;
-    if (!(await this.ctx.quota.acquire(userId, jobId))) {
-      throw new ValidationError(ACCOUNT_BUSY_ERROR);
-    }
+    const acquired = await this.ctx.quota.acquire(userId, jobId);
+    if (acquired !== "ok") throw new ValidationError(quotaError(acquired, this.ctx.caps));
     let view: JobView;
     try {
       await this.ctx.store.create(jobId, {
