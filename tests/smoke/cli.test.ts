@@ -46,6 +46,7 @@ describe("multix --help (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     expect(out).toContain("openai");
     expect(out).toContain("atlas");
     expect(out).toContain("replicate");
+    expect(out).toContain("runway");
     expect(out).toContain("heygen");
   });
 
@@ -80,6 +81,29 @@ describe("multix --help (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     for (const sub of ["run", "image", "video", "status", "cancel"]) {
       expect(out).toContain(sub);
     }
+  });
+
+  it("lists runway subcommands and documents wait/download semantics", async () => {
+    const result = await run(["runway", "--help"]);
+    expect(result.exitCode).toBe(0);
+    const out = result.stdout + result.stderr;
+    for (const sub of ["video", "image", "status", "cancel"]) {
+      expect(out).toContain(sub);
+    }
+    const video = await run(["runway", "video", "--help"]);
+    const videoOut = video.stdout + video.stderr;
+    for (const flag of ["--model", "--image", "--ratio", "--duration", "--wait", "--no-download"]) {
+      expect(videoOut).toContain(flag);
+    }
+  });
+
+  it("fails runway commands without RUNWAYML_API_SECRET with a config error", async () => {
+    const result = await run(["runway", "video", "a city"], {
+      env: { RUNWAYML_API_SECRET: "", MULTIX_DISABLE_HOME_ENV: "1" },
+    });
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("RUNWAYML_API_SECRET is not set");
+    expect(result.stderr).not.toMatch(/\n\s+at /);
   });
 
   it("lists atlas subcommands", async () => {

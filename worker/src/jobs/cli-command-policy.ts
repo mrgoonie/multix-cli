@@ -138,6 +138,12 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   "replicate run": { unsupported: ["file"] },
   "replicate image": { caps: { count: ["num-outputs"] } },
   "replicate video": { fileOptions: { image: "file" }, caps: VIDEO_CAPS },
+  // --ratio is checked against each model's fixed list by the CLI (at most 1920x1080).
+  "runway video": { fileOptions: { image: "file" }, caps: { duration: ["duration"] } },
+  "runway image": {
+    fileOptions: { reference: "file" },
+    repeatable: ["reference", "reference-tag"],
+  },
   "heygen video-agent": {
     fileOptions: { file: "file" },
     assetRefOptions: ["file"],
@@ -196,6 +202,7 @@ export const GROUP_KEYS: Readonly<Record<string, readonly ProviderSecretName[]>>
   fal: ["FAL_KEY"],
   atlas: ["ATLASCLOUD_API_KEY"],
   replicate: ["REPLICATE_API_TOKEN", "REPLICATE_API_KEY"],
+  runway: ["RUNWAYML_API_SECRET"],
   heygen: ["HEYGEN_API_KEY"],
 };
 

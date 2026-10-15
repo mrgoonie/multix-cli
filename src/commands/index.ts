@@ -16,6 +16,7 @@ import { registerMinimaxCommands } from "../providers/minimax/commands/index.js"
 import { registerOpenAICommands } from "../providers/openai/commands/index.js";
 import { registerOpenRouterCommands } from "../providers/openrouter/commands/index.js";
 import { registerReplicateCommands } from "../providers/replicate/commands/index.js";
+import { registerRunwayCommands } from "../providers/runway/commands/index.js";
 import { registerCheckCommand } from "./check.js";
 import { registerDocCommands } from "./doc/index.js";
 import { registerMediaCommands } from "./media/index.js";
@@ -35,6 +36,7 @@ export function registerCommands(program: Command): void {
   registerFalCommands(program);
   registerAtlasCloudCommands(program);
   registerReplicateCommands(program);
+  registerRunwayCommands(program);
   registerHeygenCommands(program);
   registerMediaCommands(program);
   registerDocCommands(program);

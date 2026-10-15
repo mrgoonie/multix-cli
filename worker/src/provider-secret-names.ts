@@ -31,6 +31,7 @@ const CLI_KEY_NAMES = [
   "ATLASCLOUD_API_KEY",
   "REPLICATE_API_TOKEN",
   "REPLICATE_API_KEY",
+  "RUNWAYML_API_SECRET",
   "HEYGEN_API_KEY",
 ] as const;
 
@@ -87,6 +88,7 @@ export const CLI_PROVIDER_KEY_GROUPS: readonly ProviderKeyGroup[] = [
     link: "https://replicate.com/account/api-tokens",
     names: ["REPLICATE_API_TOKEN", "REPLICATE_API_KEY"],
   },
+  { provider: "Runway", link: "https://dev.runwayml.com/", names: ["RUNWAYML_API_SECRET"] },
   { provider: "HeyGen", link: "https://app.heygen.com/developers/api", names: ["HEYGEN_API_KEY"] },
 ];
 

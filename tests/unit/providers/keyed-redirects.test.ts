@@ -28,6 +28,7 @@ import { postOpenAIForm } from "../../../src/providers/openai/client.js";
 import { downloadOpenRouterVideo } from "../../../src/providers/openrouter/commands/video-status.js";
 import type { OpenRouterVideoPollResponse } from "../../../src/providers/openrouter/video-client.js";
 import { ReplicateClient } from "../../../src/providers/replicate/client.js";
+import { RunwayClient } from "../../../src/providers/runway/client.js";
 
 const KEY = "SECRET-KEY-123";
 const EVIL = "https://evil.test/collect";
@@ -111,6 +112,17 @@ describe("API requests never follow a redirect to another origin", () => {
     await expect(client.getPrediction("abc123")).rejects.toThrow();
     expect(calls).toHaveLength(1);
     expect(leaked(calls, "https://api.replicate.com")).toBe(false);
+  });
+
+  it("Runway JSON calls (Authorization)", async () => {
+    const { fetch, calls } = redirectingFetch(302);
+    const client = new RunwayClient({ apiKey: KEY, fetch, sleep: async () => {} });
+    await expect(client.getTask("0f0e0d0c-1111-4222-8333-444455556666")).rejects.toThrow();
+    await expect(
+      client.textToVideo({ model: "gen4.5", promptText: "x", ratio: "1280:720", duration: 5 }),
+    ).rejects.toThrow();
+    expect(calls).toHaveLength(2);
+    expect(leaked(calls, "https://api.dev.runwayml.com")).toBe(false);
   });
 
   it("Atlas Cloud JSON calls and uploads (Authorization)", async () => {

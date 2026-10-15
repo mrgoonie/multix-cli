@@ -16,6 +16,7 @@ import { formatDate } from "./page-layout.js";
 /** Labels that differ from the default "API key" / fallback wording. */
 const LABELS: Partial<Record<ProviderSecretName, string>> = {
   REPLICATE_API_TOKEN: "API token",
+  RUNWAYML_API_SECRET: "API secret",
   CLOUDFLARE_ACCOUNT_ID: "Account ID",
   CLOUDFLARE_API_TOKEN: "API token (Workers AI permission)",
   CLOUDFLARE_AI_GATEWAY_ID: "AI Gateway ID (optional)",

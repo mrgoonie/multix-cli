@@ -149,6 +149,36 @@ describe("prepareRun: argv", () => {
     ]);
   }, 120_000);
 
+  it("runs runway video and image with downloaded inputs, repeated references and capped duration", async () => {
+    const video = run({
+      command: "runway video",
+      args: ["camera pans"],
+      options: { model: "gen4_turbo", ratio: "960:960" },
+      inputs: { image: "https://cdn.example.com/still.png" },
+    });
+    expect(video.group).toBe("runway");
+    expect(video.argv).toContain("--image=in/0-still.png");
+    expect(video.argv).toContain("--duration=5");
+    rejects(
+      { command: "runway video", args: ["p"], options: { duration: 60 } },
+      /at most 10 seconds/,
+    );
+
+    const image = run({
+      command: "runway image",
+      args: ["a photo of @hero at sea"],
+      options: { "reference-tag": ["hero", "boat"] },
+      inputs: { reference: ["https://cdn.example.com/1.png", "https://cdn.example.com/2.png"] },
+    });
+    const parsed = await parseWithCli(image.argv, "runway image");
+    expect(parsed.opts.reference).toEqual(["in/0-1.png", "in/1-2.png"]);
+    expect(parsed.opts.referenceTag).toEqual(["hero", "boat"]);
+    rejects(
+      { command: "runway image", args: ["p"], options: { reference: "/etc/passwd" } },
+      /reference/,
+    );
+  }, 120_000);
+
   it("accepts plain file-name parts such as a language code or prefix", () => {
     const prepared = run({
       command: "elevenlabs voices design",

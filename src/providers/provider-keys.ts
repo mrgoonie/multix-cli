@@ -11,6 +11,7 @@ import { FAL_ROUTING } from "./fal/models.js";
 import { HEYGEN_ROUTING } from "./heygen/models.js";
 import { LEONARDO_ROUTING } from "./leonardo/models.js";
 import { REPLICATE_ROUTING } from "./replicate/models.js";
+import { RUNWAY_DASHBOARD_LINK, RUNWAY_ROUTING } from "./runway/models.js";
 
 export interface ProviderEntry {
   name: string;
@@ -86,6 +87,12 @@ export const PROVIDER_KEYS: readonly ProviderEntry[] = [
     ...keyNames(REPLICATE_ROUTING),
     optional: true,
     link: "https://replicate.com/account/api-tokens",
+  },
+  {
+    name: "Runway",
+    ...keyNames(RUNWAY_ROUTING),
+    optional: true,
+    link: RUNWAY_DASHBOARD_LINK,
   },
   {
     name: "HeyGen",
