@@ -11,9 +11,11 @@ on:
 permissions:
   contents: read
 
-# Never run two deploys at once; a newer push supersedes a queued one.
+# Never run two deploys at once; a newer push supersedes a queued one. Runs
+# from other refs get their own group so they cannot cancel a queued main
+# deploy (the production environment rejects them anyway).
 concurrency:
-  group: deploy-docs
+  group: ${{ github.ref == 'refs/heads/main' && 'deploy-docs' || format('deploy-docs-{0}', github.run_id) }}
   cancel-in-progress: false
 
 jobs:
