@@ -48,6 +48,9 @@ export interface VideoPlan {
 /** Validate every flag against the model's limits before anything is sent or billed. */
 export function planVideo(prompt: string | undefined, opts: VideoOpts, model: string): VideoPlan {
   const spec = videoModelSpec(model);
+  if (opts.image !== undefined && !opts.image.trim()) {
+    throw new ValidationError("--image must not be empty");
+  }
   const mode = opts.image ? "image" : "text";
   if (mode === "text" && !spec.textRatios) {
     throw new ValidationError(`${model} is image-to-video only: pass --image <path|url>`);
@@ -138,6 +141,7 @@ export function registerRunwayVideoCommand(parent: Command): void {
       waitTimeoutMs,
       logger,
       download: opts.download !== false,
+      rawUrls: opts.download === false,
       output: opts.output,
     });
   });

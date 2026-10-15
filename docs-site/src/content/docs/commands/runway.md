@@ -97,12 +97,16 @@ multix runway cancel <id> --delete             # delete a finished task and its 
 
 - `status` prints the task ID, status, progress, `estimatedCost`, `cost`,
   `failure` and `failureCode` when present, and output URLs without their
-  signed query strings. It never prints the prompt or inputs.
+  signed query strings. It never prints the prompt or inputs. `status --wait`
+  without `--download` prints the same summary once the task finishes; only
+  `--no-download` on `video --wait` or `image` prints the signed URLs.
 - Terminal statuses are `SUCCEEDED`, `FAILED` and `CANCELLED`. `FAILED` and
   `CANCELLED` exit non-zero; a one-shot `status` on a running task exits 0 and
   prints the resume command.
 - `cancel` refuses a task that already finished unless you pass `--delete`,
-  because deleting a finished task also removes its outputs.
+  because deleting a finished task also removes its outputs. Runway has no
+  cancel-only call, so a task that finishes in the moment between the status
+  check and the cancel is deleted as well.
 - `--wait-timeout <ms>` bounds polling (defaults: video and `status` 15 min,
   image 5 min). A timeout prints the resume command; the task keeps running.
   Tasks are polled every 5 seconds or more, as Runway asks.

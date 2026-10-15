@@ -95,12 +95,15 @@ multix runway cancel <id> --delete             # xóa task đã xong cùng outpu
 
 - `status` in task ID, trạng thái, tiến độ, `estimatedCost`, `cost`, `failure`
   và `failureCode` khi có, cùng URL output đã bỏ query string đã ký. Lệnh không
-  bao giờ in prompt hay input.
+  bao giờ in prompt hay input. `status --wait` không kèm `--download` in cùng
+  bản tóm tắt đó khi task kết thúc; chỉ `--no-download` trên `video --wait`
+  hoặc `image` mới in URL đã ký.
 - Trạng thái kết thúc gồm `SUCCEEDED`, `FAILED` và `CANCELLED`. `FAILED` và
   `CANCELLED` thoát với mã khác 0; lệnh `status` xem một lần với task đang chạy
   thoát với mã 0 và in lệnh để tiếp tục.
 - `cancel` từ chối task đã kết thúc trừ khi bạn truyền `--delete`, vì xóa task
-  đã kết thúc cũng xóa luôn output của nó.
+  đã kết thúc cũng xóa luôn output của nó. Runway không có lệnh chỉ-hủy, nên
+  task kết thúc đúng lúc giữa bước kiểm tra trạng thái và bước hủy cũng bị xóa.
 - `--wait-timeout <ms>` giới hạn thời gian poll (mặc định: video và `status`
   15 phút, image 5 phút). Khi hết giờ, CLI in lệnh để tiếp tục; task vẫn chạy.
   Task được poll cách nhau ít nhất 5 giây, theo yêu cầu của Runway.

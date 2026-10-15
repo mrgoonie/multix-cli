@@ -2,10 +2,13 @@
  * Node-only wiring for the Runway client: env resolution and defaults.
  * Key: RUNWAYML_API_SECRET (the name Runway's SDKs read).
  * RUNWAY_BASE_URL overrides the API root (mock servers, proxies, tests).
+ * MULTIX_UPLOAD_MIN_KBPS (shared with Gemini) scales the create timeout for
+ * requests that carry inline images.
  */
 
 import { resolveKey, resolveProviderBaseUrl } from "../../core/env-loader.js";
 import { ConfigError } from "../../core/errors.js";
+import { minUploadBytesPerSec } from "../gemini/local-files.js";
 import { RunwayClient } from "./client.js";
 import {
   DEFAULT_RUNWAY_IMAGE_MODEL,
@@ -40,5 +43,9 @@ export function runwayImageModel(): string {
 
 /** Build a client from env. Throws ConfigError when no API secret is configured. */
 export function createRunwayClient(): RunwayClient {
-  return new RunwayClient({ apiKey: requireRunwaySecret(), baseUrl: runwayBaseUrl() });
+  return new RunwayClient({
+    apiKey: requireRunwaySecret(),
+    baseUrl: runwayBaseUrl(),
+    minUploadBytesPerSec: minUploadBytesPerSec(),
+  });
 }

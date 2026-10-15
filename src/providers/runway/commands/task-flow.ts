@@ -1,7 +1,7 @@
 /**
  * Shared submit → (wait) → report flow for `runway video|image|status`.
  * Output URLs are signed, so summaries print them without query strings;
- * `--no-download` prints the raw URLs on request.
+ * only an explicit `--no-download` prints the raw URLs.
  */
 
 import type { Command } from "commander";
@@ -81,6 +81,11 @@ export function logCreated(logger: Logger, created: RunwayCreatedTask): void {
 
 export interface ReportOptions {
   download: boolean;
+  /**
+   * Without download, print the signed output URLs as-is (an explicit
+   * `--no-download`) instead of the summary with query strings removed.
+   */
+  rawUrls?: boolean;
   output?: string;
   logger: Logger;
   /** Post-process saved files (e.g. WebP conversion) before they are listed. */
@@ -91,12 +96,9 @@ export interface ReportOptions {
 export async function reportOutputs(task: RunwayTask, opts: ReportOptions): Promise<string[]> {
   const urls = task.output ?? [];
   if (task.cost) opts.logger.info(`Billed: ${formatCredits(task.cost.credits)}`);
-  if (urls.length === 0) {
-    console.log(JSON.stringify(summarizeTask(task), null, 2));
-    return [];
-  }
   if (!opts.download) {
-    for (const url of urls) console.log(url);
+    if (opts.rawUrls) for (const url of urls) console.log(url);
+    else console.log(JSON.stringify(summarizeTask(task), null, 2));
     return [];
   }
   const saved = await saveTaskOutputs(task.id, urls, {

@@ -158,9 +158,10 @@ size limit for each downloaded Replicate, Runway or Atlas Cloud output file
 for the download policy.
 
 `MULTIX_UPLOAD_MIN_KBPS` sets the slowest upload speed, in kilobytes (1,000
-bytes) per second, that a Gemini Files API upload is given time for (default
-`1000`, so 1 MB/s plus one minute; at least `1`). Lower it on a slow link so
-large uploads do not time out; see [Gemini](/commands/gemini/).
+bytes) per second, that a Gemini Files API upload or a Runway request carrying
+inline images is given time for (default `1000`, so 1 MB/s plus one minute; at
+least `1`). Lower it on a slow link so large uploads do not time out; see
+[Gemini](/commands/gemini/) and [Runway](/commands/runway/).
 
 Atlas Cloud accepts `ATLASCLOUD_BASE_URL` (media API base, default
 `https://api.atlascloud.ai/api/v1`; it must use `https://`, and plain `http://`

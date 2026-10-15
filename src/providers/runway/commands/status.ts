@@ -2,6 +2,8 @@
  * multix runway status <taskId> — inspect or resume a task without creating a
  * new one. Prints a JSON summary (output URLs without their signed query
  * strings); --wait polls to a terminal status; --download saves the outputs.
+ * Signed output URLs are never printed here: `--no-download` on video/image
+ * is the explicit way to get them.
  * FAILED/CANCELLED tasks exit non-zero.
  */
 

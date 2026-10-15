@@ -168,6 +168,17 @@ describe("RunwayClient create", () => {
   });
 });
 
+describe("RunwayClient create timeout", () => {
+  it("grows with the request body at the slowest allowed upload speed", () => {
+    const c = new RunwayClient({ apiKey: SECRET, minUploadBytesPerSec: 250_000 });
+    const small = c.createTimeoutMs(t2v);
+    expect(small).toBeGreaterThanOrEqual(60_000);
+    expect(small).toBeLessThan(61_000);
+    const big = { ...t2v, promptImage: "x".repeat(15_000_000) };
+    expect(c.createTimeoutMs(big)).toBeGreaterThanOrEqual(60_000 + 60_000);
+  });
+});
+
 describe("RunwayClient tasks", () => {
   it("rejects a task id that is not a UUID before any request", async () => {
     const { client: c, calls } = client({});
@@ -247,7 +258,12 @@ describe("RunwayClient tasks", () => {
       { id: "nope", status: "RUNNING" },
       { id: TASK_ID, status: "SUCCEEDED" },
       { id: TASK_ID, status: "SUCCEEDED", output: [1] },
+      { id: TASK_ID, status: "SUCCEEDED", output: [] },
       { id: TASK_ID, status: "RUNNING", cost: "free" },
+      { id: TASK_ID, status: "RUNNING", progress: "50%" },
+      { id: TASK_ID, status: "FAILED", failure: { reason: "x" } },
+      { id: TASK_ID, status: "FAILED", failureCode: 42 },
+      { id: TASK_ID, status: "PENDING", createdAt: 1700000000 },
     ];
     for (const body of cases) {
       const { client: c } = client({ [`GET /v1/tasks/${TASK_ID}`]: [{ json: body }] });

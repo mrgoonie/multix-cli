@@ -156,10 +156,11 @@ về (mặc định 2048); xem [Replicate](/vi/commands/replicate/),
 biết chính sách tải file.
 
 `MULTIX_UPLOAD_MIN_KBPS` đặt tốc độ upload chậm nhất, tính theo kilobyte (1.000
-byte) mỗi giây, mà một lần upload lên Gemini Files API được cho đủ thời gian
-(mặc định `1000`, tức 1 MB/s cộng thêm một phút; tối thiểu `1`). Giảm giá trị
-này khi đường truyền chậm để file lớn không bị hết thời gian chờ; xem
-[Gemini](/vi/commands/gemini/).
+byte) mỗi giây, mà một lần upload lên Gemini Files API hoặc một request Runway
+chứa ảnh inline được cho đủ thời gian (mặc định `1000`, tức 1 MB/s cộng thêm
+một phút; tối thiểu `1`). Giảm giá trị này khi đường truyền chậm để file lớn
+không bị hết thời gian chờ; xem [Gemini](/vi/commands/gemini/) và
+[Runway](/vi/commands/runway/).
 
 Atlas Cloud nhận `ATLASCLOUD_BASE_URL` (base của media API, mặc định
 `https://api.atlascloud.ai/api/v1`; phải dùng `https://`, còn `http://` chỉ được

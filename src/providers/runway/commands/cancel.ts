@@ -1,7 +1,9 @@
 /**
  * multix runway cancel <taskId> — cancel a pending or running task
  * (DELETE /v1/tasks/{id}). The same endpoint deletes a finished task and its
- * outputs, so a finished task is only deleted with an explicit --delete.
+ * outputs, so a task already finished at the status check is only deleted
+ * with an explicit --delete. Runway has no cancel-only verb: a task that
+ * finishes between the check and the DELETE is deleted too.
  */
 
 import type { Command } from "commander";

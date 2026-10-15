@@ -144,6 +144,7 @@ export function registerRunwayImageCommand(parent: Command): void {
       waitTimeoutMs,
       logger,
       download: opts.download !== false,
+      rawUrls: opts.download === false,
       output: opts.output,
       finalize: (files) =>
         finalizeGeneratedImages(files, {

@@ -87,6 +87,7 @@ describe("validation before any request", () => {
     [["video", "x", "-m", "gen4_turbo"], /gen4_turbo is image-to-video only: pass --image/],
     [["video", "a".repeat(1001)], /Prompt is 1001 characters; Runway accepts up to 1000/],
     [["video", "x", "--output", "a.mp4"], /--output and --download\/--no-download need --wait/],
+    [["video", "x", "--image", " "], /--image must not be empty/],
     [["image", "x", "-m", "gen4_image_turbo"], /gen4_image_turbo needs at least 1 --reference/],
     [["image", "x", "-m", "dall-e"], /Unsupported Runway image model/],
     [["image", "x", "--ratio", "4096:4096"], /--ratio 4096:4096 is not supported by gen4_image/],
@@ -374,6 +375,16 @@ describe("runway status", () => {
     await run("status", TASK_ID);
     const json = JSON.parse(output[0] as string);
     expect(json).toMatchObject({ id: TASK_ID, status: "SUCCEEDED", cost: { credits: 60 } });
+    expect(text()).not.toContain("SIGNED_TOKEN");
+  });
+
+  it("--wait without --download prints the summary, never the signed URLs", async () => {
+    stub({
+      [TASK_PATH]: [{ json: task("SUCCEEDED", { output: [OUTPUT_URL] }) }],
+    });
+    await run("status", TASK_ID, "--wait");
+    const json = JSON.parse(output.find((line) => line.startsWith("{")) as string);
+    expect(json).toMatchObject({ id: TASK_ID, status: "SUCCEEDED" });
     expect(text()).not.toContain("SIGNED_TOKEN");
   });
 

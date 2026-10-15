@@ -41,6 +41,8 @@ const CREATE_MAX_RETRIES = 2;
 const CREATE_RETRY_CAP_MS = 30_000;
 const REQUEST_TIMEOUT_MS = 60_000;
 const UPLOAD_TIMEOUT_MS = 300_000;
+/** Slowest uplink a create request allows for before timing out (1 MB/s). */
+const DEFAULT_MIN_UPLOAD_BYTES_PER_SEC = 1_000_000;
 /** Runway asks clients not to poll a task more often than every five seconds. */
 const MIN_POLL_INTERVAL_MS = 5_000;
 
@@ -180,9 +182,20 @@ export function validateTask(value: unknown): RunwayTask {
   if (!isCredits(task.estimatedCost) || !isCredits(task.cost)) {
     throw new ProviderError("Malformed Runway response: invalid cost", PROVIDER);
   }
+  const present = (v: unknown) => v !== undefined && v !== null;
+  if (
+    (present(task.failure) && typeof task.failure !== "string") ||
+    (present(task.failureCode) && typeof task.failureCode !== "string") ||
+    (present(task.createdAt) && typeof task.createdAt !== "string") ||
+    (present(task.progress) && typeof task.progress !== "number")
+  ) {
+    throw new ProviderError("Malformed Runway response: unexpected task field type", PROVIDER);
+  }
   if (
     task.status === "SUCCEEDED" &&
-    (!Array.isArray(task.output) || !task.output.every((u) => typeof u === "string"))
+    (!Array.isArray(task.output) ||
+      task.output.length === 0 ||
+      !task.output.every((u) => typeof u === "string" && u.length > 0))
   ) {
     throw new ProviderError("Malformed Runway response: succeeded task without output", PROVIDER);
   }
@@ -207,6 +220,12 @@ export interface RunwayClientOptions {
   fetch?: FetchLike;
   /** Injectable for tests (429 retry back-off). */
   sleep?: (ms: number) => Promise<void>;
+  /**
+   * Slowest upload speed to allow for, in bytes per second. Create requests
+   * can carry inline images of several MB, so their timeout grows with the
+   * body size at this rate. Defaults to 1 MB/s.
+   */
+  minUploadBytesPerSec?: number;
 }
 
 export interface WaitOptions {
@@ -232,6 +251,7 @@ export class RunwayClient {
   private readonly baseUrl: string;
   private readonly doFetch: FetchLike;
   private readonly sleep: (ms: number) => Promise<void>;
+  private readonly minUploadBytesPerSec: number;
 
   constructor(opts: RunwayClientOptions) {
     if (!opts.apiKey) throw new ProviderError("Runway API secret is required", PROVIDER);
@@ -239,6 +259,13 @@ export class RunwayClient {
     this.baseUrl = (opts.baseUrl || DEFAULT_RUNWAY_BASE_URL).replace(/\/+$/, "");
     this.doFetch = opts.fetch ?? ((input, init) => globalThis.fetch(input, init));
     this.sleep = opts.sleep ?? defaultSleep;
+    this.minUploadBytesPerSec = opts.minUploadBytesPerSec ?? DEFAULT_MIN_UPLOAD_BYTES_PER_SEC;
+  }
+
+  /** Base timeout plus the time the body needs at the slowest allowed upload speed. */
+  createTimeoutMs(body: unknown): number {
+    const bytes = new TextEncoder().encode(JSON.stringify(body)).length;
+    return REQUEST_TIMEOUT_MS + Math.ceil((bytes / this.minUploadBytesPerSec) * 1000);
   }
 
   /** Raw request: throws HttpError so polling can classify transient failures. */
@@ -265,9 +292,10 @@ export class RunwayClient {
   /** POST a generation request; retries only 429 (nothing was created). */
   private async create(path: string, body: { model: string }): Promise<RunwayCreatedTask> {
     const subject = `model ${body.model}`;
+    const timeoutMs = this.createTimeoutMs(body);
     for (let attempt = 0; ; attempt++) {
       try {
-        return validateCreatedTask(await this.raw<unknown>(path, "POST", body));
+        return validateCreatedTask(await this.raw<unknown>(path, "POST", body, timeoutMs));
       } catch (error) {
         if (error instanceof HttpError && error.status === 429 && attempt < CREATE_MAX_RETRIES) {
           const delay = Math.min(error.retryAfterMs ?? 2000 * (attempt + 1), CREATE_RETRY_CAP_MS);
