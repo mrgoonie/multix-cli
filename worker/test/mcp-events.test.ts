@@ -406,6 +406,35 @@ describe("events/subscribe", () => {
     expect(body.error.message).toContain("at most");
   });
 
+  it("refuses a client whose connection was just revoked", async () => {
+    const { contextFor, hubFor, stored } = setup();
+    await hubFor("u1").hub.removeByClient("client-1", "dashboard:u1");
+    const body = await modernRpc(fullEnv(), "events/subscribe", subscribeParams(), {
+      events: contextFor("u1"),
+    });
+    expect(body.error.code).toBe(-32600);
+    expect(body.error.message).toContain("revoked");
+    expect(stored("u1")).toEqual([]);
+  });
+
+  it("verifies again when the subscription stops being live before the refresh lands", async () => {
+    const { contextFor, hubFor, remote, clock } = setup();
+    const deps = { events: contextFor("u1") };
+    await modernRpc(fullEnv(), "events/subscribe", subscribeParams(), deps);
+    expect(verifications(remote.calls)).toBe(1);
+    // The state still reads verified, but the record expires before the write.
+    const hub = hubFor("u1").hub;
+    const original = hub.mcpSubscriptionState.bind(hub);
+    deps.events.events.mcpSubscriptionState = async (...args) => {
+      const state = await original(...args);
+      clock.now += 2 * DEFAULT_TTL_MS;
+      return state;
+    };
+    const body = await modernRpc(fullEnv(), "events/subscribe", subscribeParams(), deps);
+    expect(body.result.id).toMatch(/^sub_/);
+    expect(verifications(remote.calls)).toBe(2);
+  });
+
   it("answers an unexpected failure with a generic internal error", async () => {
     const { contextFor } = setup();
     const events = contextFor("u1");

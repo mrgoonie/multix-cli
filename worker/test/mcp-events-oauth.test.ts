@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
+import type { AccountEventsNamespace } from "../src/events/account-events.js";
 import { SECRET, callbackRoute, dohRoute } from "./events-helpers.js";
 import { fakeEventsNamespace } from "./fake-job-bindings.js";
 import {
+  type Browser,
   authorizeAndGetToken,
   githubFetch,
   hiddenField,
@@ -23,11 +25,13 @@ const TARGET = {
 };
 const SUBSCRIBE = { ...TARGET, delivery: { ...TARGET.delivery, secret: SECRET } };
 
-function eventsEnv() {
+function eventsEnv(
+  namespace?: (events: ReturnType<typeof fakeEventsNamespace>) => AccountEventsNamespace,
+) {
   const events = fakeEventsNamespace();
   const env = oauthEnv({
     MULTIX_ALLOWED_USERS: "octocat,hubot",
-    MULTIX_EVENTS: events.namespace,
+    MULTIX_EVENTS: namespace ? namespace(events) : events.namespace,
   });
   /** Every account's subscriptions, by account. */
   const subscriptions = async () =>
@@ -38,6 +42,20 @@ function eventsEnv() {
       })),
     );
   return { env, subscriptions };
+}
+
+/** The grant ids of the connected clients listed on the dashboard. */
+async function grantIds(browser: Browser): Promise<string[]> {
+  const page = await (await browser.request("/dashboard")).text();
+  return [...page.matchAll(/name="grant_id" value="([^"]+)"/g)].map((m) => m[1] ?? "");
+}
+
+async function revoke(browser: Browser, grantId: string): Promise<Response> {
+  const page = await (await browser.request("/dashboard")).text();
+  return browser.post("/dashboard/connections/revoke", {
+    csrf: hiddenField(page, "csrf"),
+    grant_id: grantId,
+  });
 }
 
 const remote = () => [dohRoute(HOST, ["93.184.216.34"]), callbackRoute(HOST)];
@@ -108,6 +126,51 @@ describe("MCP Events over OAuth", () => {
       csrf: hiddenField(page, "csrf"),
       grant_id: hiddenField(page, "grant_id"),
     });
+    expect((await subscriptions()).map((a) => a.subs.length)).toEqual([0]);
+  });
+
+  it("removes only the revoked client's subscriptions", async () => {
+    const { env, subscriptions } = eventsEnv();
+    const browser = newBrowser(
+      env,
+      githubFetch(OCTOCAT, ...remote(), callbackRoute(HOST, "/cb2")).fetch,
+    );
+    const first = await authorizeAndGetToken(browser, await registerClient(browser, "First"));
+    const [firstGrant] = await grantIds(browser);
+    const second = await authorizeAndGetToken(browser, await registerClient(browser, "Second"));
+    await modernMcpCall(browser, first, "events/subscribe", SUBSCRIBE);
+    const other = { ...SUBSCRIBE, delivery: { ...SUBSCRIBE.delivery, url: `https://${HOST}/cb2` } };
+    const kept = await json(await modernMcpCall(browser, second, "events/subscribe", other));
+
+    await revoke(browser, firstGrant ?? "");
+    const [account] = await subscriptions();
+    expect(account?.subs.map((s) => s.id)).toEqual([kept.result.id]);
+  });
+
+  it("keeps the connection when its subscriptions could not be removed, so a retry removes them", async () => {
+    let failures = 1;
+    const { env, subscriptions } = eventsEnv((events) => ({
+      getByName(name) {
+        const stub = events.namespace.getByName(name);
+        return Object.assign(Object.create(stub), {
+          removeByClient: (clientId: string, actor: string) => {
+            if (failures-- > 0) throw new Error("Durable Object reset");
+            return stub.removeByClient(clientId, actor);
+          },
+        });
+      },
+    }));
+    const browser = newBrowser(env, githubFetch(OCTOCAT, ...remote()).fetch);
+    const token = await authorizeAndGetToken(browser, await registerClient(browser));
+    await modernMcpCall(browser, token, "events/subscribe", SUBSCRIBE);
+    const [grant] = await grantIds(browser);
+
+    await expect(revoke(browser, grant ?? "")).rejects.toThrow("Durable Object reset");
+    expect(await grantIds(browser)).toEqual([grant]);
+    expect((await subscriptions()).map((a) => a.subs.length)).toEqual([1]);
+
+    expect((await revoke(browser, grant ?? "")).status).toBe(303);
+    expect(await grantIds(browser)).toEqual([]);
     expect((await subscriptions()).map((a) => a.subs.length)).toEqual([0]);
   });
 

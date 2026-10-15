@@ -291,7 +291,7 @@ export function openApiDocument(origin: string): Json {
         },
         post: {
           summary: "Subscribe a webhook to job events",
-          description: `Deliveries are POSTed to \`callback_url\` (public https, default port, not this server) and signed with Standard Webhooks headers (\`webhook-id\`, \`webhook-timestamp\`, \`webhook-signature\`). Delivery is at least once: dedupe on \`webhook-id\`. Failed deliveries are retried with backoff for about a day, then dead-lettered. At most ${MAX_ACTIVE_SUBSCRIPTIONS} active subscriptions per account. The signing secret is returned only in this response.`,
+          description: `Deliveries are POSTed to \`callback_url\` (public https, default port, not this server) and signed with Standard Webhooks headers (\`webhook-id\`, \`webhook-timestamp\`, \`webhook-signature\`). Delivery is at least once: dedupe on \`webhook-id\`. Failed deliveries are retried with backoff for about a day, then dead-lettered. At most ${MAX_ACTIVE_SUBSCRIPTIONS} active subscriptions per account, counting those an MCP client made over MCP Events. The signing secret is returned only in this response.`,
           operationId: "createEventSubscription",
           requestBody: jsonBody(ref("EventSubscriptionInput"), {
             callback_url: "https://hooks.example.com/multix",
@@ -629,6 +629,15 @@ export function openApiDocument(origin: string): Json {
             consecutive_dead_letters: { type: "integer" },
             last_success_at: { type: "string", format: "date-time" },
             last_failure_at: { type: "string", format: "date-time" },
+            source: {
+              type: "string",
+              enum: ["mcp"],
+              description: "Present on subscriptions an MCP client made over MCP Events",
+            },
+            job_id: {
+              type: "string",
+              description: "MCP subscriptions narrowed to one job receive only its events",
+            },
           },
         },
         EventSubscriptionCreated: {

@@ -178,27 +178,42 @@ export function registerEventMethods(server: McpServer, ctx: EventsContext): voi
       throw invalidParams(
         `An account may have at most ${MAX_ACTIVE_SUBSCRIPTIONS} active subscriptions; unsubscribe one first`,
       );
-    if (!state.verified) {
+    const verify = async () => {
       const failure = await verifyCallback(ctx.fetch, url, p.delivery.secret, id, now);
       if (failure) {
         logEvent("warn", "event_subscribe", { eventName: name, ok: false, reason: failure });
         throw callbackError(failure);
       }
-    }
+    };
+    if (!state.verified) await verify();
 
-    const result = await ctx.events.upsertMcpSubscription(
-      {
-        id,
-        callbackUrl: url,
-        event: name,
-        ...(args.job_id !== undefined ? { jobId: args.job_id } : {}),
-        secret: p.delivery.secret,
-        ttlMs: grantedTtlMs(p.ttlMs),
-        ...(ctx.clientId ? { clientId: ctx.clientId } : {}),
-      },
-      actor,
-    );
-    if (!result.ok) throw invalidParams(result.message);
+    const upsert = (reusesVerification: boolean) =>
+      ctx.events.upsertMcpSubscription(
+        {
+          id,
+          callbackUrl: url,
+          event: name,
+          ...(args.job_id !== undefined ? { jobId: args.job_id } : {}),
+          secret: p.delivery.secret,
+          ttlMs: grantedTtlMs(p.ttlMs),
+          ...(ctx.clientId ? { clientId: ctx.clientId } : {}),
+          reusesVerification,
+        },
+        actor,
+      );
+    let result = await upsert(state.verified);
+    // The subscription stopped being live (disabled, expired, removed) between
+    // the state check and the write: verify the callback after all.
+    if (!result.ok && result.error === "needs_verification") {
+      await verify();
+      result = await upsert(false);
+    }
+    if (!result.ok) {
+      if (result.error === "client_revoked") {
+        throw new ProtocolError(ProtocolErrorCode.InvalidRequest, result.message);
+      }
+      throw invalidParams(result.message);
+    }
     logEvent("info", "event_subscribe", {
       eventName: name,
       id,

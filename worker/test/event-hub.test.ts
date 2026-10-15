@@ -7,12 +7,16 @@ import {
   HOUSEKEEPING_INTERVAL_MS,
   MAX_ACTIVE_SUBSCRIPTIONS,
   MAX_DELIVERY_ATTEMPTS,
+  MCP_RECORD_RETENTION_MS,
+  MCP_SECRET_ROTATION_MS,
+  type McpSubscriptionInput,
   RETRY_DELAYS_SECONDS,
+  REVOKED_CLIENT_FENCE_MS,
   SEEN_RETENTION_MS,
   type SubscriptionInput,
 } from "../src/events/event-hub.js";
 import { jobEvents } from "../src/events/job-events.js";
-import { verifyWebhook } from "../src/events/webhook-signing.js";
+import { generateWebhookSecret, verifyWebhook } from "../src/events/webhook-signing.js";
 import { fakeDoStorage } from "./fake-do-storage.js";
 
 const JOB_ID = "00000000-0000-4000-8000-000000000001";
@@ -378,5 +382,175 @@ describe("EventHub housekeeping", () => {
     clock.t += SEEN_RETENTION_MS + HOUSEKEEPING_INTERVAL_MS;
     await hub.alarm();
     expect([...fake.data.keys()].some((k) => k.startsWith("seen:"))).toBe(false);
+  });
+});
+
+const MCP_INPUT: McpSubscriptionInput = {
+  id: "sub_0123456789abcdef01234567",
+  callbackUrl: "https://hooks.example.com/mcp",
+  event: "multix.job.completed",
+  secret: generateWebhookSecret(),
+  ttlMs: 60 * 60_000,
+  clientId: "client-a",
+};
+
+async function upsert(hub: EventHub, input: Partial<McpSubscriptionInput> = {}) {
+  const result = await hub.upsertMcpSubscription({ ...MCP_INPUT, ...input }, "mcp:client-a");
+  if (!result.ok) throw new Error(result.message);
+  return result;
+}
+
+describe("EventHub MCP subscriptions", () => {
+  it("lists MCP subscriptions with their source and job filter, never the secret", async () => {
+    const { hub } = harness();
+    await subscribe(hub);
+    await upsert(hub, { jobId: JOB_ID });
+    const views = await hub.listSubscriptions();
+    const mcp = views.find((v) => v.id === MCP_INPUT.id);
+    expect(mcp).toMatchObject({ source: "mcp", job_id: JOB_ID });
+    expect(views.find((v) => v.id !== MCP_INPUT.id)).not.toHaveProperty("source");
+    expect(JSON.stringify(views)).not.toContain(MCP_INPUT.secret);
+  });
+
+  it("needs a new verification to revive a disabled subscription, and resets its counters", async () => {
+    const { hub, runAlarm } = harness(() => new Response(null, { status: 410 }));
+    await upsert(hub);
+    await hub.publish([event()]);
+    await runAlarm();
+    expect(await hub.getSubscription(MCP_INPUT.id)).toMatchObject({ status: "disabled" });
+    const state = await hub.mcpSubscriptionState(
+      MCP_INPUT.id,
+      MCP_INPUT.callbackUrl,
+      MCP_INPUT.secret,
+    );
+    expect(state).toEqual({ verified: false, atLimit: false });
+    // A caller that skipped verification on a stale state is refused.
+    const stale = await hub.upsertMcpSubscription(
+      { ...MCP_INPUT, reusesVerification: true },
+      "mcp:client-a",
+    );
+    expect(stale).toMatchObject({ ok: false, error: "needs_verification" });
+    await upsert(hub);
+    expect(await hub.getSubscription(MCP_INPUT.id)).toMatchObject({
+      status: "active",
+      consecutive_dead_letters: 0,
+    });
+  });
+
+  it("counts an expired record with the same id against the limit when reviving it", async () => {
+    const { hub, clock } = harness();
+    await upsert(hub, { ttlMs: 5 * 60_000 });
+    clock.t += 10 * 60_000;
+    for (let i = 0; i < MAX_ACTIVE_SUBSCRIPTIONS; i++) {
+      await subscribe(hub, { ...INPUT, callbackUrl: `https://hooks.example.com/${i}` });
+    }
+    const state = await hub.mcpSubscriptionState(
+      MCP_INPUT.id,
+      MCP_INPUT.callbackUrl,
+      MCP_INPUT.secret,
+    );
+    expect(state).toEqual({ verified: false, atLimit: true });
+    expect(await hub.upsertMcpSubscription(MCP_INPUT, "mcp:client-a")).toMatchObject({
+      ok: false,
+      error: "limit_reached",
+    });
+  });
+
+  it("signs with both secrets during the rotation window, then with the new one only", async () => {
+    const { hub, sent, clock, runAlarm } = harness();
+    await upsert(hub, { ttlMs: 7 * 24 * 60 * 60_000 });
+    const newSecret = generateWebhookSecret();
+    await upsert(hub, { secret: newSecret, ttlMs: 7 * 24 * 60 * 60_000 });
+    await hub.publish([event()]);
+    await runAlarm();
+    expect(sent[0]?.headers.get("webhook-signature")?.split(" ")).toHaveLength(2);
+    expect(sent).toHaveLength(1);
+
+    clock.t += MCP_SECRET_ROTATION_MS + 1;
+    await hub.publish([event("succeeded", "00000000-0000-4000-8000-0000000000bb")]);
+    await runAlarm();
+    expect(sent).toHaveLength(2);
+    const last = sent.at(-1);
+    expect(last?.headers.get("webhook-signature")?.split(" ")).toHaveLength(1);
+    expect(
+      await verifyWebhook(
+        newSecret,
+        {
+          id: last?.headers.get("webhook-id") ?? "",
+          timestamp: last?.headers.get("webhook-timestamp") ?? "",
+          signature: last?.headers.get("webhook-signature") ?? "",
+        },
+        last?.body ?? "",
+        Math.floor(clock.t / 1000),
+      ),
+    ).toBe(true);
+
+    // A refresh after the window drops the expired previous secret for good.
+    await upsert(hub, { secret: newSecret, ttlMs: 7 * 24 * 60 * 60_000 });
+    await hub.publish([event("succeeded", "00000000-0000-4000-8000-0000000000aa")]);
+    await runAlarm();
+    expect(sent).toHaveLength(3);
+    expect(sent.at(-1)?.headers.get("webhook-signature")?.split(" ")).toHaveLength(1);
+  });
+
+  it("sends REST and MCP subscriptions their own envelopes in one publish", async () => {
+    const { hub, sent, runAlarm } = harness();
+    const { subscription } = await subscribe(hub);
+    await upsert(hub);
+    const published = event();
+    await hub.publish([published]);
+    await runAlarm();
+    const rest = sent.find((s) => s.url === INPUT.callbackUrl);
+    const mcp = sent.find((s) => s.url === MCP_INPUT.callbackUrl);
+    expect(JSON.parse(rest?.body ?? "")).toEqual(published);
+    expect(rest?.headers.has("x-mcp-subscription-id")).toBe(false);
+    expect(JSON.parse(mcp?.body ?? "")).toMatchObject({ eventId: published.id, cursor: null });
+    expect(mcp?.headers.get("x-mcp-subscription-id")).toBe(MCP_INPUT.id);
+    expect(subscription.id).not.toBe(MCP_INPUT.id);
+  });
+
+  it("fences a removed client so a subscribe in flight cannot recreate its subscriptions", async () => {
+    const { hub, clock, fake } = harness();
+    await upsert(hub);
+    await upsert(hub, { id: "sub_fedcba9876543210fedcba98", clientId: "client-b" });
+    expect(await hub.removeByClient("client-a", "dashboard:u1")).toBe(1);
+    expect(await hub.upsertMcpSubscription(MCP_INPUT, "mcp:client-a")).toMatchObject({
+      ok: false,
+      error: "client_revoked",
+    });
+    // Other clients of the account are untouched.
+    expect((await hub.listSubscriptions()).map((v) => v.id)).toEqual([
+      "sub_fedcba9876543210fedcba98",
+    ]);
+    // After the fence the client (signed in again) may subscribe, and housekeeping drops the fence.
+    clock.t += REVOKED_CLIENT_FENCE_MS;
+    await upsert(hub);
+    clock.t += HOUSEKEEPING_INTERVAL_MS;
+    await hub.alarm();
+    expect([...fake.data.keys()].some((k) => k.startsWith("revoked:"))).toBe(false);
+  });
+
+  it("does not count dead letters of an expired subscription against a later refresh", async () => {
+    const { hub, clock, runAlarm } = harness(() => new Response("down", { status: 503 }));
+    await upsert(hub, { ttlMs: 5 * 60_000 });
+    await hub.publish([event()]);
+    await runAlarm();
+    // The retry falls due after the subscription expired.
+    clock.t += 10 * 60_000;
+    await runAlarm();
+    const dead = await hub.deadLetters();
+    expect(dead[0]?.reason).toBe("subscription expired");
+    expect(await hub.getSubscription(MCP_INPUT.id)).toMatchObject({ consecutive_dead_letters: 0 });
+  });
+
+  it("drops expired MCP records a day after they expire", async () => {
+    const { hub, clock, fake } = harness();
+    await upsert(hub, { ttlMs: 5 * 60_000 });
+    clock.t += HOUSEKEEPING_INTERVAL_MS;
+    await hub.alarm();
+    expect(await hub.getSubscription(MCP_INPUT.id)).toMatchObject({ status: "expired" });
+    clock.t += MCP_RECORD_RETENTION_MS + HOUSEKEEPING_INTERVAL_MS;
+    await hub.alarm();
+    expect(fake.data.has(`sub:${MCP_INPUT.id}`)).toBe(false);
   });
 });

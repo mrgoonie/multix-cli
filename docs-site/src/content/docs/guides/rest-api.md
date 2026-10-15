@@ -305,6 +305,10 @@ below. The secret is shown **once**: store it in your secret store right away.
 If it is lost, revoke the subscription with
 `DELETE /events/subscriptions/{id}` and create another. An account can have at
 most **10** active subscriptions; one more returns `409 limit_reached`.
+Subscriptions an MCP client made over
+[MCP Events](/guides/mcp-server/) count toward the same limit and are listed
+too, with `"source": "mcp"` and, when narrowed to one job, its `job_id` (only
+that job's events are delivered to them).
 
 ### Verify signatures
 

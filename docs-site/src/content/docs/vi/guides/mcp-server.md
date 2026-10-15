@@ -357,10 +357,14 @@ Subscription chỉ dùng kiểu gửi **webhook**:
 - Subscription MCP và REST dùng chung một kho cho mỗi tài khoản (Durable Object
   `AccountEvents`) và chung giới hạn 10 subscription đang hoạt động, nên không
   tài khoản nào đọc, gia hạn hay xóa được subscription của tài khoản khác.
-  Chúng cũng hiện trong `GET /api/v1/events/subscriptions`. Ngắt kết nối một
-  client trong dashboard sẽ xóa các subscription client đó đã tạo. Sự kiện cũ
-  không được phát lại: `cursor` từ subscription trước sẽ nhận
-  `truncated: true`.
+  Chúng cũng hiện trong `GET /api/v1/events/subscriptions`, có
+  `"source": "mcp"` và `job_id` khi chỉ theo dõi một job. Ngắt kết nối một
+  client trong dashboard sẽ xóa các subscription client đó đã tạo hoặc gia hạn
+  gần nhất, và trong 10 phút sau đó từ chối `events/subscribe` của client này
+  bằng `-32600`, để một yêu cầu đang xử lý dở không tạo lại được subscription.
+  Khi gia hạn mà subscription đã bị vô hiệu hóa hoặc hết hạn, server xác minh
+  lại callback. Sự kiện cũ không được phát lại: `cursor` từ subscription trước
+  sẽ nhận `truncated: true`.
 
 `subscriptions/listen` không được hỗ trợ (danh sách tool cố định theo mỗi lần
 triển khai).

@@ -363,9 +363,13 @@ Subscriptions use **webhook** delivery only:
 - MCP and REST subscriptions share one store per account (the `AccountEvents`
   Durable Object) and its limit of 10 active subscriptions, so no account can
   read, refresh or remove another's. They also show in
-  `GET /api/v1/events/subscriptions`. Disconnecting a client in the dashboard
-  removes the subscriptions it made. Past events are not replayed: a `cursor`
-  from an earlier subscription answers `truncated: true`.
+  `GET /api/v1/events/subscriptions`, marked `"source": "mcp"` and with
+  `job_id` when narrowed to one job. Disconnecting a client in the dashboard
+  removes the subscriptions it created or last refreshed, and for 10 minutes
+  refuses that client's `events/subscribe` with `-32600`, so a request still in
+  flight cannot bring one back. A refresh that finds its subscription disabled
+  or expired verifies the callback again. Past events are not replayed: a
+  `cursor` from an earlier subscription answers `truncated: true`.
 
 `subscriptions/listen` is not served (the tool list is fixed per deployment).
 

@@ -14,6 +14,7 @@
  *   q:<dueAt>:<deliveryId>     queued delivery, ordered by due time
  *   dead:<at>:<deliveryId>     dead letter (ids, reason, attempts; no payload)
  *   audit:<at>:<n>             audit log
+ *   revoked:<clientId>         when an OAuth client's subscriptions were removed (fence)
  *   meta:housekept             last housekeeping run
  *
  * Subscriptions made over MCP Events (`events/subscribe`) carry an `mcp`
@@ -40,6 +41,15 @@ export const MIN_SUBSCRIPTION_TTL_SECONDS = 60 * 60;
 export const MAX_SUBSCRIPTION_TTL_SECONDS = 90 * 24 * 60 * 60;
 /** After an MCP refresh changes the secret, deliveries are signed with both for this long. */
 export const MCP_SECRET_ROTATION_MS = 60 * 60_000;
+/**
+ * After a client's subscriptions are removed (its connection was revoked), the
+ * client may not create or refresh one for this long. Covers a subscribe that
+ * was verifying its callback during the revoke, and a revoked token still
+ * accepted from an edge cache (about a minute).
+ */
+export const REVOKED_CLIENT_FENCE_MS = 10 * 60_000;
+/** MCP subscriptions are only revived by subscribing again, so expired ones go sooner. */
+export const MCP_RECORD_RETENTION_MS = 24 * 60 * 60_000;
 /** Wait before retry n (1-based) of a failed delivery; the delivery is dead-lettered after the last. */
 export const RETRY_DELAYS_SECONDS = [30, 120, 600, 1800, 3600, 3 * 3600, 6 * 3600, 12 * 3600];
 export const MAX_DELIVERY_ATTEMPTS = RETRY_DELAYS_SECONDS.length + 1;
@@ -106,11 +116,20 @@ export interface McpSubscriptionInput {
   secret: string;
   ttlMs: number;
   clientId?: string;
+  /**
+   * The callback was not verified for this call because mcpSubscriptionState
+   * reported it verified: the upsert then refuses unless that still holds.
+   */
+  reusesVerification?: boolean;
 }
 
 export type McpUpsertResult =
   | { ok: true; created: boolean; expiresAt: number }
-  | { ok: false; error: "limit_reached"; message: string };
+  | {
+      ok: false;
+      error: "limit_reached" | "client_revoked" | "needs_verification";
+      message: string;
+    };
 
 export interface McpSubscriptionState {
   /** A live subscription with this id, callback and secret exists: a refresh needs no new verification. */
@@ -163,6 +182,10 @@ export interface SubscriptionView {
   consecutive_dead_letters: number;
   last_success_at?: string;
   last_failure_at?: string;
+  /** "mcp" on subscriptions made over MCP Events (`events/subscribe`). */
+  source?: "mcp";
+  /** MCP subscriptions narrowed to one job: only that job's events are delivered. */
+  job_id?: string;
 }
 
 export interface SubscriptionInput {
@@ -206,6 +229,7 @@ const TIME_DIGITS = 15;
 const pad = (ms: number) => String(Math.max(0, Math.floor(ms))).padStart(TIME_DIGITS, "0");
 const queueKey = (dueAt: number, id: string) => `q:${pad(dueAt)}:${id}`;
 const subKey = (id: string) => `sub:${id}`;
+const revokedKey = (clientId: string) => `revoked:${clientId}`;
 const iso = (ms: number) => new Date(ms).toISOString();
 
 function limitReached(): { ok: false; error: "limit_reached"; message: string } {
@@ -242,6 +266,10 @@ export function subscriptionView(sub: Subscription): SubscriptionView {
   if (sub.statusReason) view.status_reason = sub.statusReason;
   if (sub.lastSuccessAt) view.last_success_at = iso(sub.lastSuccessAt);
   if (sub.lastFailureAt) view.last_failure_at = iso(sub.lastFailureAt);
+  if (sub.mcp) {
+    view.source = "mcp";
+    if (sub.mcp.jobId !== undefined) view.job_id = sub.mcp.jobId;
+  }
   return view;
 }
 
@@ -337,10 +365,29 @@ export class EventHub {
   ): Promise<McpUpsertResult> {
     const now = this.ports.now();
     // REST ids (`sub_` + 16 base64url characters) never take the derived MCP form (24 hex).
-    const existing = await this.storage.get<Subscription>(subKey(input.id));
-    if (!(existing && this.isLive(existing, now))) {
-      if ((await this.liveCount(now)) >= MAX_ACTIVE_SUBSCRIPTIONS) return limitReached();
+    if (input.clientId) {
+      const revokedAt = await this.storage.get<number>(revokedKey(input.clientId));
+      if (revokedAt !== undefined && now - revokedAt < REVOKED_CLIENT_FENCE_MS) {
+        return {
+          ok: false,
+          error: "client_revoked",
+          message: "This client's connection was revoked; sign in again and retry later",
+        };
+      }
     }
+    const existing = await this.storage.get<Subscription>(subKey(input.id));
+    const live = existing !== undefined && this.isLive(existing, now);
+    if (
+      input.reusesVerification &&
+      !(live && existing?.callbackUrl === input.callbackUrl && existing.secret === input.secret)
+    ) {
+      return {
+        ok: false,
+        error: "needs_verification",
+        message: "The subscription changed; verify the callback again",
+      };
+    }
+    if (!live && (await this.liveCount(now)) >= MAX_ACTIVE_SUBSCRIPTIONS) return limitReached();
     let previousSecret = existing?.mcp?.previousSecret;
     if (previousSecret && previousSecret.until <= now) previousSecret = undefined;
     if (existing && existing.secret !== input.secret) {
@@ -360,7 +407,7 @@ export class EventHub {
       updatedAt: now,
       expiresAt: now + input.ttlMs,
       deliveredCount: existing?.deliveredCount ?? 0,
-      consecutiveDeadLetters: existing?.status === "active" ? existing.consecutiveDeadLetters : 0,
+      consecutiveDeadLetters: live ? (existing?.consecutiveDeadLetters ?? 0) : 0,
       mcp,
     };
     if (existing?.lastSuccessAt) sub.lastSuccessAt = existing.lastSuccessAt;
@@ -375,8 +422,15 @@ export class EventHub {
     return { ok: true, created: !existing, expiresAt: sub.expiresAt };
   }
 
-  /** Revoke every MCP subscription created or last refreshed by `clientId`; returns how many. */
+  /**
+   * Revoke every MCP subscription created or last refreshed by `clientId`;
+   * returns how many. The client is fenced first (REVOKED_CLIENT_FENCE_MS), so
+   * a subscribe still in flight cannot bring one back.
+   */
   async removeByClient(clientId: string, actor: string): Promise<number> {
+    const now = this.ports.now();
+    await this.storage.put({ [revokedKey(clientId)]: now });
+    await this.ensureAlarm(now + HOUSEKEEPING_INTERVAL_MS);
     let removed = 0;
     for (const sub of await this.subscriptions()) {
       if (sub.mcp?.clientId === clientId && (await this.unsubscribe(sub.id, actor))) removed++;
@@ -527,7 +581,8 @@ export class EventHub {
       return;
     }
     if (!this.isLive(before, now)) {
-      await this.deadLetterDelivery(key, delivery, `subscription ${before.status}`, now);
+      const status = before.status === "active" ? "expired" : before.status;
+      await this.deadLetterDelivery(key, delivery, `subscription ${status}`, now);
       return;
     }
     const outcome = await this.send(before, delivery, now);
@@ -654,7 +709,7 @@ export class EventHub {
     });
     let disabled: string | undefined;
     await this.updateSubscription(delivery.subscriptionId, (sub) => {
-      if (sub.status !== "active") return;
+      if (!this.isLive(sub, at)) return;
       sub.lastFailureAt = at;
       sub.consecutiveDeadLetters++;
       if (gone) disabled = "the endpoint answered 410 Gone";
@@ -695,9 +750,15 @@ export class EventHub {
           actor: "system",
           subscriptionId: sub.id,
         });
-      } else if (sub.status !== "active" && now - sub.updatedAt > RECORD_RETENTION_MS) {
+      } else if (
+        sub.status !== "active" &&
+        now - sub.updatedAt > (sub.mcp ? MCP_RECORD_RETENTION_MS : RECORD_RETENTION_MS)
+      ) {
         drop.push(subKey(sub.id));
       }
+    }
+    for (const [key, at] of await this.storage.list<number>({ prefix: "revoked:" })) {
+      if (now - at >= REVOKED_CLIENT_FENCE_MS) drop.push(key);
     }
     let start: string | undefined;
     for (;;) {
@@ -731,6 +792,7 @@ export class EventHub {
     }
     const hasState =
       (await this.storage.list({ prefix: "sub:", limit: 1 })).size > 0 ||
+      (await this.storage.list({ prefix: "revoked:", limit: 1 })).size > 0 ||
       (await this.storage.list({ prefix: "seen:", limit: 1 })).size > 0;
     if (hasState) await this.storage.setAlarm(this.ports.now() + HOUSEKEEPING_INTERVAL_MS);
   }

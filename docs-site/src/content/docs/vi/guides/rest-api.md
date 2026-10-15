@@ -307,7 +307,10 @@ lần gửi), `secret` (`whsec_…`) và `signing`, phần tóm tắt cơ chế 
 Secret chỉ hiển thị **một lần**: lưu ngay vào kho secret của bạn. Nếu làm mất,
 hãy thu hồi subscription bằng `DELETE /events/subscriptions/{id}` rồi tạo cái
 khác. Mỗi tài khoản có tối đa **10** subscription đang hoạt động; tạo thêm sẽ
-nhận `409 limit_reached`.
+nhận `409 limit_reached`. Subscription do client MCP tạo qua
+[MCP Events](/vi/guides/mcp-server/) tính chung vào giới hạn này và cũng được
+liệt kê, có `"source": "mcp"` và `job_id` khi chỉ theo dõi một job (chỉ sự
+kiện của job đó được gửi tới chúng).
 
 ### Xác minh chữ ký
 

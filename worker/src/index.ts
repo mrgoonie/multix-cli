@@ -123,7 +123,7 @@ async function handleDefault(request: Request, env: WorkerEnv, deps: AppDeps): P
     if (request.method !== "GET") return text(405, "Method Not Allowed", { allow: "GET" });
     return finishGithubSignIn(app, request);
   }
-  return handleDashboard(app, request);
+  return handleDashboard(app, request, deps);
 }
 
 function createOAuthProvider(origin: string, deps: AppDeps): OAuthProvider<WorkerEnv> {
