@@ -63,6 +63,7 @@ not filtered. On Windows the check ignores case, as the OS does.
 | `FAL_KEY` | fal.ai |
 | `ATLASCLOUD_API_KEY` | Atlas Cloud |
 | `REPLICATE_API_TOKEN` or `REPLICATE_API_KEY` | Replicate (direct API) |
+| `RUNWAYML_API_SECRET` | Runway (credits, $0.01 each) |
 | `HEYGEN_API_KEY` | HeyGen (API credits are billed separately from web plans) |
 
 ```bash
@@ -148,10 +149,12 @@ settings include `IMAGE_GEN_MODEL`, `VIDEO_GEN_MODEL`, `MULTIMODAL_MODEL`,
 `REPLICATE_BASE_URL` (API root for mocks or proxies), `REPLICATE_IMAGE_MODEL`
 (default `black-forest-labs/flux-schnell`), and `REPLICATE_VIDEO_MODEL`
 (default `prunaai/p-video`). Cloudflare AI Gateway video reads only
-`REPLICATE_API_TOKEN`. `MULTIX_MAX_DOWNLOAD_MB` sets the size limit for each
-downloaded Replicate or Atlas Cloud output file (default 2048); see
-[Replicate](/commands/replicate/#outputs) and [Atlas Cloud](/commands/atlascloud/#output)
-for the download policy.
+`REPLICATE_API_TOKEN`. Runway accepts `RUNWAY_BASE_URL` (API root for mocks or
+proxies), `RUNWAY_VIDEO_MODEL` (default `gen4.5`), and `RUNWAY_IMAGE_MODEL`
+(default `gen4_image`). `MULTIX_MAX_DOWNLOAD_MB` sets the size limit for each
+downloaded Replicate, Runway, or Atlas Cloud output file (default 2048); see
+[Replicate](/commands/replicate/#outputs), [Runway](/commands/runway/#outputs),
+and [Atlas Cloud](/commands/atlascloud/#output) for the download policy.
 
 `MULTIX_UPLOAD_MIN_KBPS` sets the slowest upload speed, in kilobytes (1,000
 bytes) per second, that a Gemini Files API upload is given time for (default

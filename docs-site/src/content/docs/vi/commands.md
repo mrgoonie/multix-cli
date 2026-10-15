@@ -19,6 +19,7 @@ description: Chọn nhóm lệnh multix phù hợp với workflow media của b�
 | [fal.ai](/vi/commands/fal/) | Bất kỳ model queue nào của fal, cộng lệnh tiện lợi image/video. |
 | [Atlas Cloud](/vi/commands/atlascloud/) | Bất kỳ model Atlas Cloud nào: ảnh, chỉnh sửa ảnh, video, âm thanh, 3D và prediction bất đồng bộ có thể tiếp tục. |
 | [Replicate](/vi/commands/replicate/) | Bất kỳ model Replicate nào qua API trực tiếp, lệnh tiện lợi image/video, cùng status/cancel prediction. |
+| [Runway](/vi/commands/runway/) | Video Gen-4.5 từ văn bản hoặc ảnh, ảnh Gen-4 với ảnh tham chiếu, cùng status/cancel task. |
 | [HeyGen](/vi/commands/heygen/) | Video Agent tạo video từ prompt, video avatar theo kịch bản, dịch video, lipsync và TTS. |
 | `multix media` | Tối ưu, cắt và batch file bằng ffmpeg/ImageMagick. |
 | `multix doc` | Chuyển tài liệu sang Markdown qua Gemini. |

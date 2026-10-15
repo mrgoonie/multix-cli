@@ -18,6 +18,7 @@ description: Choose a source-backed command reference for any multix AI provider
 | fal.ai | [Commands](/commands/fal/) | Any queue model, plus image/video convenience commands | Status/result use the model's app id (first two path segments), not the full model id. |
 | Atlas Cloud | [Commands](/commands/atlascloud/) | Any model: image, image edit, video, audio, and 3D | Inputs are validated against each model's schema; `--async` plus `status --wait --download` resumes a job. |
 | Replicate | [Commands](/commands/replicate/) | Any model via the direct API, plus image/video convenience commands | Community models need a version; resume or cancel jobs by prediction ID. |
+| Runway | [Commands](/commands/runway/) | Gen-4.5 video and Gen-4 images | Video submits without waiting by default; resume or cancel tasks by ID. |
 | HeyGen | [Commands](/commands/heygen/) | Video Agent (prompt-to-video), scripted avatar video, translation, lipsync, TTS, templates | API credits are billed separately from HeyGen web plans; use `status --type` matching the job (`agent` takes a session ID). |
 
 Use `multix <provider> --help` and the specific subcommand's `--help` before

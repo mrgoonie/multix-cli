@@ -28,6 +28,7 @@ const topLevelCommands = [
   "atlas",
   "atlascloud",
   "replicate",
+  "runway",
   "heygen",
   "media",
   "doc",
@@ -53,6 +54,7 @@ const subcommands: Record<string, string[]> = {
     "upload",
   ],
   replicate: ["run", "image", "video", "status", "cancel"],
+  runway: ["video", "image", "status", "cancel", "models"],
   heygen: [
     "video-agent",
     "video",

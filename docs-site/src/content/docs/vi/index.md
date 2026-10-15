@@ -19,7 +19,7 @@ hero:
 ## Một CLI cho workflow media thực tế
 
 `multix` hỗ trợ OpenAI, Gemini, MiniMax, OpenRouter, Leonardo, BytePlus,
-Cloudflare, ElevenLabs, fal.ai và Replicate mà không biến credential provider thành
+Cloudflare, ElevenLabs, fal.ai, Replicate và Runway mà không biến credential provider thành
 framework phức tạp.
 
 ```bash

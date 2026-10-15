@@ -145,7 +145,7 @@ bị bỏ qua.
   mà CLI đọc, nhóm theo provider kèm liên kết đến trang tạo key (Gemini,
   OpenRouter, OpenAI, MiniMax, Leonardo.Ai, BytePlus với `ARK_API_KEY` làm tên
   dự phòng, ElevenLabs, fal.ai, Atlas Cloud, Replicate với `REPLICATE_API_KEY`
-  làm tên dự phòng, HeyGen), cùng account ID, API token và AI Gateway ID (tùy
+  làm tên dự phòng, Runway, HeyGen), cùng account ID, API token và AI Gateway ID (tùy
   chọn) của Cloudflare Workers AI.
 
 ### API key cho REST API

@@ -28,6 +28,7 @@ import { HEYGEN_ROUTING } from "./providers/heygen/models.js";
 import { LEONARDO_ROUTING } from "./providers/leonardo/models.js";
 import { PROVIDER_KEYS } from "./providers/provider-keys.js";
 import { REPLICATE_ROUTING } from "./providers/replicate/models.js";
+import { RUNWAY_ROUTING } from "./providers/runway/models.js";
 
 /**
  * Names multix reads that a project `.env` may NOT set: opt-ins that widen
@@ -82,6 +83,8 @@ const INLINE_SETTINGS = [
   "FAL_VIDEO_IMAGE_MODEL",
   "REPLICATE_IMAGE_MODEL",
   "REPLICATE_VIDEO_MODEL",
+  "RUNWAY_VIDEO_MODEL",
+  "RUNWAY_IMAGE_MODEL",
   "CLOUDFLARE_AI_IMAGE_MODEL",
   "CLOUDFLARE_AI_TTS_MODEL",
   // Read in providers/cloudflare/client.ts (collectPayloadHeader).
@@ -96,6 +99,7 @@ const ROUTING = [
   HEYGEN_ROUTING,
   LEONARDO_ROUTING,
   REPLICATE_ROUTING,
+  RUNWAY_ROUTING,
 ];
 
 /** Every fixed name a project `.env` may set (numbered Gemini keys are matched by pattern). */

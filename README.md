@@ -4,7 +4,7 @@ AI multimodal CLI — generate images/video/speech/music, analyze and transcribe
 
 ![Isometric technical illustration of multix media workflows](docs-site/public/images/multix-isometric-banner.png)
 
-Supports **OpenAI** (image, image edits, TTS, STT, optional Codex image driver), **Gemini** (analyze, transcribe, generate, Veo video, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), **Cloudflare** (Workers AI image and speech; AI Gateway-routed Replicate video), **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment), **fal.ai** (generic model runner, image, video via the fal queue API), and **Atlas Cloud** (any model: image, image edit, video, audio, 3D, with resumable async predictions), **Replicate** (generic model runner, image, video, async prediction status/cancel via the direct Replicate API), **HeyGen** (v3 Video Agent prompt-to-video, scripted avatar videos, video translation, lipsync, TTS).
+Supports **OpenAI** (image, image edits, TTS, STT, optional Codex image driver), **Gemini** (analyze, transcribe, generate, Veo video, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), **Cloudflare** (Workers AI image and speech; AI Gateway-routed Replicate video), **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment), **fal.ai** (generic model runner, image, video via the fal queue API), and **Atlas Cloud** (any model: image, image edit, video, audio, 3D, with resumable async predictions), **Replicate** (generic model runner, image, video, async prediction status/cancel via the direct Replicate API), **Runway** (Gen-4.5 text/image-to-video, Gen-4 image with reference images, task status/cancel), **HeyGen** (v3 Video Agent prompt-to-video, scripted avatar videos, video translation, lipsync, TTS).
 
 ## Documentation
 
@@ -95,10 +95,13 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `REPLICATE_BASE_URL` | No | Override Replicate API root (default `https://api.replicate.com/v1`) |
 | `REPLICATE_IMAGE_MODEL` | No | Default `multix replicate image` model (default `black-forest-labs/flux-schnell`) |
 | `REPLICATE_VIDEO_MODEL` | No | Default `multix replicate video` model (default `prunaai/p-video`) |
+| `RUNWAYML_API_SECRET` | For Runway | [Runway developer portal](https://dev.runwayml.com/) API secret for `multix runway`; billed in credits ($0.01 each) |
+| `RUNWAY_BASE_URL` | No | Override Runway API root for mocks/proxies (default `https://api.dev.runwayml.com`) |
+| `RUNWAY_VIDEO_MODEL` / `RUNWAY_IMAGE_MODEL` | No | Default `multix runway video` / `image` models (default `gen4.5`, `gen4_image`) |
 | `CLOUDFLARE_AI_IMAGE_MODEL` | No | Image model setting; only `@cf/black-forest-labs/flux-1-schnell` is accepted |
 | `CLOUDFLARE_AI_TTS_MODEL` | No | Speech model setting; only `@cf/myshell-ai/melotts` is accepted |
 | `MULTIX_OUTPUT_DIR` | No | Override default output dir (`./multix-output`) |
-| `MULTIX_MAX_DOWNLOAD_MB` | No | Size limit per downloaded Replicate or Atlas Cloud output file (default `2048`) |
+| `MULTIX_MAX_DOWNLOAD_MB` | No | Size limit per downloaded Replicate, Runway, or Atlas Cloud output file (default `2048`) |
 | `MULTIX_UPLOAD_MIN_KBPS` | No | Slowest Gemini Files API upload speed to allow for, in KB/s (default `1000`); lower it on slow links |
 | `MULTIX_IMAGE_FORMAT` | No | `webp` (default) or `original` to keep provider image format/quality |
 | `OPENROUTER_IMAGE_MODEL` | No | Default OpenRouter model |
@@ -569,6 +572,36 @@ multix replicate cancel <prediction-id>
 - Output downloads use `https://` only and refuse `localhost` and loopback, private, link-local, or other special-purpose IP literals (hostnames are not resolved), including on redirects. Files are written to `<path>.part` and renamed when complete, so a failed download never clobbers an existing file. Hosts other than `replicate.delivery` are downloaded with a warning that names the host. Each file is capped at `MULTIX_MAX_DOWNLOAD_MB` (default 2048).
 - `replicate image` converts images to WebP by default; `--image-format original`, `--no-webp`, `MULTIX_IMAGE_FORMAT=original`, an explicit `--output-format`, or a non-`.webp` `--output` extension keeps the provider format.
 - Local files (`--image`, `--file key=path`) up to 256 KB are inlined as data URIs; larger files (< 100 MB) are uploaded via the Replicate Files API.
+
+### `multix runway`
+
+Direct [Runway](https://dev.runwayml.com/) API provider for Runway's own Gen-4 models. Unknown model IDs are refused before any paid request; `multix runway models` lists models, ratios, durations, and reference limits offline.
+
+```bash
+# Text-to-video (gen4.5: 1280:720 or 720:1280), or image-to-video with --image
+# (gen4.5 or gen4_turbo; also 1104:832, 832:1104, 960:960, 1584:672)
+multix runway video "a slow pan over mountains" [-m gen4.5|gen4_turbo] [--image <path|url>] [--duration 5] [--ratio 1280:720] [--seed <n>] [--public-figure-threshold auto|low] [--wait]
+
+# Text-to-image (gen4_image: 0-3 references; gen4_image_turbo: 1-3); tag=path lets the prompt say @tag
+multix runway image "@hero on a rooftop at dusk" [-m gen4_image|gen4_image_turbo] [--ratio 1280:720] [--ref hero=./person.png] [--async]
+
+# Shared flags: [--wait-timeout <ms>] [--download] [--no-download] [--output <path>] [--json] [-v]
+
+# Check, resume, or cancel a task by id
+multix runway status <task-id> [--wait] [--download] [--output <path>] [--json]
+multix runway cancel <task-id> [--delete]
+multix runway models [--json]
+```
+
+**Notes:**
+- Auth: `Authorization: Bearer $RUNWAYML_API_SECRET`. Runway bills in credits ($0.01 each); creating a task prints its estimated maximum cost.
+- `runway video` is paid per second, so it submits and prints the task id with check/resume/cancel commands; `--wait` or `--download` polls (at most once every 5 seconds) and saves the video. `runway image` waits and downloads unless `--async`.
+- `--duration` is 2-10 seconds (default 5). `--ref` repeats up to 3 times; a tag is 3-16 letters, digits, or underscores starting with a letter.
+- `FAILED` and `CANCELLED` tasks exit non-zero. `cancel` refuses a finished task unless `--delete`, which deletes the task and its outputs.
+- Creates are retried only on 429. If submitting fails with a network error, timeout, 5xx, or an unreadable response, the task may still have been created and billed (Runway has no idempotency key); check https://dev.runwayml.com/ before retrying.
+- Outputs are saved as `runway-<id8>-NN.<ext>`. Their signed URLs expire after 24-48 hours; every `status` read issues fresh ones, so `multix runway status <id> --download` retries a failed download. Downloads follow the same `https://`-only, private-address, `.part`, and `MULTIX_MAX_DOWNLOAD_MB` rules as Replicate.
+- `runway image` converts images to WebP by default; `--image-format original`, `--no-webp`, `MULTIX_IMAGE_FORMAT=original`, or a non-`.webp` `--output` extension keeps the provider format.
+- Image inputs (`--image`, `--ref`): local JPEG/PNG/WebP files whose data URI fits in 5 MB are inlined; larger files (up to 200 MB) are uploaded to Runway ephemeral storage (`runway://`, kept 24 hours). URLs must be `https://` on a public domain name (no IP addresses), at most 2048 characters; `runway://` URIs pass through.
 
 ### `multix heygen`
 

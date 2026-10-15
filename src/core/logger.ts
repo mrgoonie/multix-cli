@@ -31,14 +31,19 @@ export interface Logger {
   header(msg: string): void;
 }
 
-export function createLogger(opts: { verbose: boolean }): Logger {
+/**
+ * `stderr: true` sends every message to stderr, keeping stdout clean for
+ * machine-readable output such as `--json`.
+ */
+export function createLogger(opts: { verbose: boolean; stderr?: boolean }): Logger {
   const { verbose } = opts;
+  const out = opts.stderr ? console.error : console.log;
   return {
     info(msg) {
-      console.log(c(ANSI.blue, `  ${msg}`));
+      out(c(ANSI.blue, `  ${msg}`));
     },
     success(msg) {
-      console.log(c(ANSI.green, `✓ ${msg}`));
+      out(c(ANSI.green, `✓ ${msg}`));
     },
     warn(msg) {
       console.warn(c(ANSI.yellow, `⚠ ${msg}`));
@@ -47,11 +52,11 @@ export function createLogger(opts: { verbose: boolean }): Logger {
       console.error(c(ANSI.red, `✗ ${msg}`));
     },
     debug(msg) {
-      if (verbose) console.log(c(ANSI.dim, `  [debug] ${msg}`));
+      if (verbose) out(c(ANSI.dim, `  [debug] ${msg}`));
     },
     header(msg) {
       const line = "=".repeat(60);
-      console.log(c(ANSI.bold + ANSI.cyan, `\n${line}\n${msg}\n${line}\n`));
+      out(c(ANSI.bold + ANSI.cyan, `\n${line}\n${msg}\n${line}\n`));
     },
   };
 }

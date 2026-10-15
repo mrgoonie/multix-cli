@@ -19,6 +19,7 @@ description: Choose the multix command group that matches your media workflow.
 | [fal.ai](/commands/fal/) | Any fal queue model, plus image/video convenience commands. |
 | [Atlas Cloud](/commands/atlascloud/) | Any Atlas Cloud model: image, image edit, video, audio, 3D, and resumable async predictions. |
 | [Replicate](/commands/replicate/) | Any Replicate model via the direct API, image/video wrappers, and prediction status/cancel. |
+| [Runway](/commands/runway/) | Gen-4.5 text/image-to-video, Gen-4 images with reference images, and task status/cancel. |
 | [HeyGen](/commands/heygen/) | Video Agent prompt-to-video, scripted avatar videos, video translation, lipsync, and TTS. |
 | `multix media` | Optimize, split, and batch-process files with ffmpeg/ImageMagick. |
 | `multix doc` | Convert supported documents to Markdown through Gemini. |

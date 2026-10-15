@@ -7676,6 +7676,457 @@
       ]
     },
     {
+      "group": "runway",
+      "description": "Runway: Gen-4.5 video, Gen-4 image, task status and cancel",
+      "commands": [
+        {
+          "command": "runway video",
+          "description": "Generate video with Runway (default model: gen4.5); submits and prints the task id unless --wait",
+          "positionals": [
+            {
+              "name": "prompt",
+              "description": "",
+              "required": false,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--model",
+              "flags": "-m, --model <id>",
+              "description": "Model: gen4.5 (text or image to video) | gen4_turbo (image to video)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-m"
+            },
+            {
+              "long": "--image",
+              "flags": "--image <path|url>",
+              "description": "First-frame image: JPEG/PNG/WebP file, https URL or runway:// URI",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--duration",
+              "flags": "--duration <seconds>",
+              "description": "Length in seconds (2-10)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "5"
+            },
+            {
+              "long": "--ratio",
+              "flags": "--ratio <w:h>",
+              "description": "Output resolution, e.g. 1280:720, 720:1280 (image-to-video also 1104:832, 832:1104, 960:960, 1584:672)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "1280:720"
+            },
+            {
+              "long": "--seed",
+              "flags": "--seed <n>",
+              "description": "Seed for reproducible output (0-4294967295)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--public-figure-threshold",
+              "flags": "--public-figure-threshold <level>",
+              "description": "Content moderation for public figures: auto | low",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--wait",
+              "flags": "--wait",
+              "description": "Wait for the task to finish, then download the video (see --no-download)",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--wait-timeout",
+              "flags": "--wait-timeout <ms>",
+              "description": "Polling timeout in milliseconds",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "900000"
+            },
+            {
+              "long": "--download",
+              "flags": "--download",
+              "description": "Download outputs once the task succeeds",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--no-download",
+              "flags": "--no-download",
+              "description": "Print the (signed) output URLs instead of downloading",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": true
+            },
+            {
+              "long": "--output",
+              "flags": "--output <path>",
+              "description": "Output file path, or a directory for multiple outputs",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--json",
+              "flags": "--json",
+              "description": "Print a JSON summary on stdout",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        },
+        {
+          "command": "runway image",
+          "description": "Generate an image with Runway (default model: gen4_image); waits and downloads unless --async",
+          "positionals": [
+            {
+              "name": "prompt",
+              "description": "",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--model",
+              "flags": "-m, --model <id>",
+              "description": "Model: gen4_image | gen4_image_turbo (needs --ref)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-m"
+            },
+            {
+              "long": "--ratio",
+              "flags": "--ratio <w:h>",
+              "description": "Output resolution, e.g. 1920:1080, 1080:1920, 1024:1024, 1280:720 (see `multix runway models`)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "1280:720"
+            },
+            {
+              "long": "--ref",
+              "flags": "--ref <[tag=]path|url>",
+              "description": "Reference image (repeatable, up to 3); tag=path lets the prompt mention it as @tag",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": true,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--seed",
+              "flags": "--seed <n>",
+              "description": "Seed for reproducible output (0-4294967295)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--public-figure-threshold",
+              "flags": "--public-figure-threshold <level>",
+              "description": "Content moderation for public figures: auto | low",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--async",
+              "flags": "--async",
+              "description": "Submit and print the task id instead of waiting",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--image-format",
+              "flags": "--image-format <mode>",
+              "description": "Final image format: webp (default, cwebp -q 85) | original (keep provider format/quality)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--no-webp",
+              "flags": "--no-webp",
+              "description": "Keep the provider's original image format and quality",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": true
+            },
+            {
+              "long": "--wait-timeout",
+              "flags": "--wait-timeout <ms>",
+              "description": "Polling timeout in milliseconds",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "300000"
+            },
+            {
+              "long": "--download",
+              "flags": "--download",
+              "description": "Download outputs once the task succeeds",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--no-download",
+              "flags": "--no-download",
+              "description": "Print the (signed) output URLs instead of downloading",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": true
+            },
+            {
+              "long": "--output",
+              "flags": "--output <path>",
+              "description": "Output file path, or a directory for multiple outputs",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--json",
+              "flags": "--json",
+              "description": "Print a JSON summary on stdout",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        },
+        {
+          "command": "runway status",
+          "description": "Get a Runway task's status; --wait/--download to resume it",
+          "positionals": [
+            {
+              "name": "taskId",
+              "description": "",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--wait",
+              "flags": "--wait",
+              "description": "Poll until the task reaches a terminal status",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--wait-timeout",
+              "flags": "--wait-timeout <ms>",
+              "description": "Polling timeout in milliseconds",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "900000"
+            },
+            {
+              "long": "--download",
+              "flags": "--download",
+              "description": "Download outputs once the task succeeds",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--no-download",
+              "flags": "--no-download",
+              "description": "Print the (signed) output URLs instead of downloading",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": true
+            },
+            {
+              "long": "--output",
+              "flags": "--output <path>",
+              "description": "Output file path, or a directory for multiple outputs",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--json",
+              "flags": "--json",
+              "description": "Print a JSON summary on stdout",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        },
+        {
+          "command": "runway cancel",
+          "description": "Cancel a running Runway task (--delete also removes a finished task)",
+          "positionals": [
+            {
+              "name": "taskId",
+              "description": "",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--delete",
+              "flags": "--delete",
+              "description": "Delete the task and its outputs if it already finished",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        },
+        {
+          "command": "runway models",
+          "description": "List supported Runway models, ratios and limits",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--json",
+              "flags": "--json",
+              "description": "Print JSON",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            }
+          ]
+        }
+      ]
+    },
+    {
       "group": "heygen",
       "description": "HeyGen v3: Video Agent prompt-to-video, scripted avatar videos, translation, lipsync, TTS",
       "commands": [

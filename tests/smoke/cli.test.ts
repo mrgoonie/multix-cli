@@ -46,6 +46,7 @@ describe("multix --help (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     expect(out).toContain("openai");
     expect(out).toContain("atlas");
     expect(out).toContain("replicate");
+    expect(out).toContain("runway");
     expect(out).toContain("heygen");
   });
 
@@ -78,6 +79,15 @@ describe("multix --help (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     expect(result.exitCode).toBe(0);
     const out = result.stdout + result.stderr;
     for (const sub of ["run", "image", "video", "status", "cancel"]) {
+      expect(out).toContain(sub);
+    }
+  });
+
+  it("lists runway subcommands", async () => {
+    const result = await run(["runway", "--help"]);
+    expect(result.exitCode).toBe(0);
+    const out = result.stdout + result.stderr;
+    for (const sub of ["video", "image", "status", "cancel", "models"]) {
       expect(out).toContain(sub);
     }
   });

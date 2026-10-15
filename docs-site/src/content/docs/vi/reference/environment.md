@@ -61,6 +61,7 @@ Windows, việc kiểm tra không phân biệt hoa thường, giống hệ đi�
 | `FAL_KEY` | fal.ai |
 | `ATLASCLOUD_API_KEY` | Atlas Cloud |
 | `REPLICATE_API_TOKEN` hoặc `REPLICATE_API_KEY` | Replicate (API trực tiếp) |
+| `RUNWAYML_API_SECRET` | Runway (tính phí bằng credit, $0.01 mỗi credit) |
 | `HEYGEN_API_KEY` | HeyGen (credit API tính riêng với gói web) |
 
 ```bash
@@ -146,10 +147,12 @@ Chỉ đặt override khi cần thay default. Các biến gồm `IMAGE_GEN_MODEL
 `REPLICATE_BASE_URL` (API root cho mock hoặc proxy), `REPLICATE_IMAGE_MODEL`
 (mặc định `black-forest-labs/flux-schnell`) và `REPLICATE_VIDEO_MODEL`
 (mặc định `prunaai/p-video`). Video qua Cloudflare AI Gateway chỉ đọc
-`REPLICATE_API_TOKEN`. `MULTIX_MAX_DOWNLOAD_MB` đặt giới hạn dung lượng cho
-mỗi file output Replicate hoặc Atlas Cloud được tải về (mặc định 2048); xem
-[Replicate](/vi/commands/replicate/) và [Atlas Cloud](/vi/commands/atlascloud/)
-để biết chính sách tải file.
+`REPLICATE_API_TOKEN`. Runway nhận `RUNWAY_BASE_URL` (API root cho mock hoặc
+proxy), `RUNWAY_VIDEO_MODEL` (mặc định `gen4.5`) và `RUNWAY_IMAGE_MODEL`
+(mặc định `gen4_image`). `MULTIX_MAX_DOWNLOAD_MB` đặt giới hạn dung lượng cho
+mỗi file output Replicate, Runway hoặc Atlas Cloud được tải về (mặc định
+2048); xem [Replicate](/vi/commands/replicate/), [Runway](/vi/commands/runway/)
+và [Atlas Cloud](/vi/commands/atlascloud/) để biết chính sách tải file.
 
 `MULTIX_UPLOAD_MIN_KBPS` đặt tốc độ upload chậm nhất, tính theo kilobyte (1.000
 byte) mỗi giây, mà một lần upload lên Gemini Files API được cho đủ thời gian

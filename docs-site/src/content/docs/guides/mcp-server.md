@@ -149,7 +149,7 @@ Worker, and keys set there are ignored.
   reads, grouped by provider with a link to where you create the key
   (Gemini, OpenRouter, OpenAI, MiniMax, Leonardo.Ai, BytePlus with
   `ARK_API_KEY` as fallback, ElevenLabs, fal.ai, Atlas Cloud, Replicate with
-  `REPLICATE_API_KEY` as fallback, HeyGen), plus the Cloudflare Workers AI
+  `REPLICATE_API_KEY` as fallback, Runway, HeyGen), plus the Cloudflare Workers AI
   account ID, API token and optional AI Gateway ID.
 
 ### API keys for the REST API
