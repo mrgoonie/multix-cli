@@ -207,6 +207,9 @@ Cloudflare.
    `durable_objects` và `exports`; khi đó chỉ `multix_catalog` được liệt kê.
    Binding `MULTIX_JOB_QUOTA` (class `AccountJobQuota`) giữ số job đang chạy
    theo từng tài khoản và trên toàn server, và phải đi cùng `MULTIX_JOBS`.
+   Binding `MULTIX_EVENT_SUBSCRIPTIONS` (class `EventSubscriptions`) lưu các
+   subscription [MCP Events](#mcp-events-giao-thức-2026-07-28); thiếu binding
+   này thì `server/discover` không cung cấp events.
 4. **Đặt secret** và triển khai:
 
    ```bash
@@ -285,6 +288,62 @@ Luồng thường gặp, ví dụ tạo video: `multix_catalog` → `multix_cata
 group (như `replicate`) → `multix_run` → gọi lại `multix_job_status` mỗi
 10–30 giây đến khi `status` là `succeeded`, `failed`, `timed_out` hoặc
 `canceled` → đọc `outputs`.
+
+## MCP Events (giao thức 2026-07-28)
+
+Server hỗ trợ hai phiên bản giao thức MCP trên cùng endpoint `/mcp`:
+
+- **Client đời 2025** (handshake `initialize`, giao thức `2025-06-18` trở về
+  trước) vẫn nhận các tool y như trước. Không có gì thay đổi với các client này.
+- **Client 2026-07-28** thương lượng qua `server/discover` và gửi phiên bản
+  giao thức trong mỗi request. `server/discover` liệt kê `2026-07-28` và, khi
+  Worker có binding `MULTIX_EVENT_SUBSCRIPTIONS`, capability `events`, để
+  client đăng ký
+  [MCP Events](https://developers.openai.com/plugins/build/mcp-events) bằng
+  `events/list`, `events/subscribe` và `events/unsubscribe`.
+
+| Sự kiện | Khi nào |
+|---|---|
+| `multix.job.completed` | Một job `multix_run` bạn khởi chạy đã thành công. |
+| `multix.job.failed` | Job thất bại. |
+| `multix.job.canceled` | Job bị hủy. |
+| `multix.job.timed_out` | Job hết thời gian. |
+| `multix.asset.ready` | Một file output của job đã được lưu vào bucket R2 của bạn. |
+
+Mọi sự kiện nhận một tham số tùy chọn, `job_id`, để chỉ theo dõi một job bạn
+sở hữu; bỏ trống thì subscription áp dụng cho mọi job của bạn. Payload chỉ chứa
+id, trạng thái cuối, lệnh, thời điểm và object key trên R2, không bao giờ chứa
+key, prompt, log hay URL đã ký. Bản phát hành này định nghĩa danh mục và lưu
+subscription; việc gửi sự kiện khi job kết thúc được theo dõi riêng
+([#223](https://github.com/mrgoonie/multix-cli/issues/223)).
+
+Subscription chỉ dùng kiểu gửi **webhook**:
+
+- Callback phải là `https://` ở cổng mặc định với host name công khai, và mọi
+  địa chỉ mà tên đó phân giải ra phải là địa chỉ công khai. IP literal,
+  credential trong URL, tên kiểu `localhost` và địa chỉ private, loopback,
+  link-local, CGNAT, ULA bị từ chối với `-32602`, trước khi gửi bất cứ thứ gì.
+- Client cung cấp secret `whsec_` (base64 của 24–64 byte). Trước khi chấp nhận
+  subscription, server POST một thông điệp đã ký
+  `{ "type": "verification", "challenge": … }` (header
+  [Standard Webhooks](https://www.standardwebhooks.com)) và chờ phản hồi 2xx
+  trả lại đúng challenge trong 10 giây. Redirect không được đi theo. Nếu thất
+  bại, server trả `-32015` kèm `data.reason` (`challenge_failed`, `timeout`,
+  `connection_refused`, `http_4xx` hoặc `http_5xx`) và không lưu gì. Một lần
+  xác minh thành công được dùng lại trong 24 giờ cho cùng URL và secret.
+- Đăng ký lại với cùng sự kiện, tham số và callback sẽ gia hạn subscription
+  hiện có (cùng `id`). Khi đổi secret, server vẫn ký thêm bằng secret cũ trong
+  một giờ. Thời hạn mặc định 24 giờ, được giới hạn trong khoảng 5 phút đến 7
+  ngày; `ttlMs: null` nhận 7 ngày, không bao giờ vô hạn. Hãy gia hạn trước
+  `refreshBefore`.
+- Mỗi tài khoản giữ tối đa 20 subscription, lưu trong một Durable Object riêng
+  cho từng tài khoản, secret được mã hóa bằng `SECRETS_ENCRYPTION_KEY`, nên
+  không tài khoản nào đọc, gia hạn hay xóa được subscription của tài khoản
+  khác. Sự kiện cũ không được phát lại: `cursor` từ subscription trước sẽ nhận
+  `truncated: true`.
+
+`subscriptions/listen` không được hỗ trợ (danh sách tool cố định theo mỗi lần
+triển khai).
 
 ## Cấu hình
 
@@ -387,8 +446,14 @@ chung bộ đếm.
   và log chỉ ghi job ID và trạng thái. Bản ghi
   `job:<id>` trong `ACCOUNTS_KV` chứa chủ sở hữu, lệnh và thời điểm bắt đầu,
   không bao giờ chứa key.
+- **Callback sự kiện:** khi đăng ký, server từ chối callback không công khai
+  theo tên và theo mọi địa chỉ phân giải được (DNS over HTTPS); cờ
+  `global_fetch_strictly_public` của Worker từ chối địa chỉ private thêm lần
+  nữa lúc kết nối (DNS rebinding); request tới callback không bao giờ đi theo
+  redirect, và chỉ loại lỗi xác minh được trả về hoặc ghi log.
 - **MCP stateless:** không có MCP session. Mỗi request tạo một server mới với
-  key của caller. Trạng thái OAuth và tài khoản nằm trong KV.
+  key của caller. Trạng thái OAuth và tài khoản nằm trong KV; subscription sự
+  kiện nằm trong một Durable Object riêng cho từng tài khoản.
 
 Trong CI, bundle Worker được kiểm tra để bảo đảm không chứa module `node:*`,
 không import module có sẵn của Node theo tên trần (`fs`, `child_process`,

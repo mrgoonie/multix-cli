@@ -704,6 +704,12 @@ instance runs at `https://multix.zuey.me/mcp` (invited GitHub accounts only).
   The three job tools need the Workers Paid plan (Containers) and Docker at
   deploy time; they are listed only when the `MULTIX_JOBS` and
   `MULTIX_JOB_QUOTA` bindings exist.
+- Protocol: 2025 clients (`initialize`) keep the tools-only surface; clients
+  on protocol `2026-07-28` negotiate through `server/discover` and can
+  subscribe to MCP Events (`multix.job.completed`, `multix.job.failed`,
+  `multix.job.canceled`, `multix.job.timed_out`, `multix.asset.ready`) with
+  verified, signed `https://` webhooks to public hosts. Subscriptions are kept
+  per account in the `MULTIX_EVENT_SUBSCRIPTIONS` Durable Object.
 - Auth: OAuth 2.1 (dynamic client registration, PKCE) with GitHub sign-in.
   Only GitHub logins or verified emails in the `MULTIX_ALLOWED_USERS` secret
   can sign in.

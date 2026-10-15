@@ -5,8 +5,7 @@
  * bindings (see index.ts) and are offered only when `jobs` is given.
  */
 
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import type { CallToolResult, McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import type { Limits } from "../config.js";
 import type { ProviderKeys } from "../provider-secret-names.js";
@@ -72,8 +71,8 @@ export function registerJobTools(
       inputSchema: {
         command: z.string().min(1).max(100).describe("Command path from multix_catalog"),
         args: z.array(z.string()).max(20).optional(),
-        options: z.record(optionValueSchema).optional(),
-        inputs: z.record(urlListSchema).optional(),
+        options: z.record(z.string(), optionValueSchema).optional(),
+        inputs: z.record(z.string(), urlListSchema).optional(),
         wait_seconds: z.number().int().min(0).max(MAX_WAIT_SECONDS).optional(),
       },
       annotations: { readOnlyHint: false, openWorldHint: true },

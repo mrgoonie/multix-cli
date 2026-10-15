@@ -1,15 +1,17 @@
 /**
- * MCP tool surface. A fresh server is built per request (stateless
- * Streamable HTTP). Every tool is a CLI runner tool (jobs/job-tools.ts):
- * multix_catalog, multix_run, multix_job_status and multix_job_cancel, with
- * job state in a per-job Durable Object.
+ * MCP surface. A fresh server is built per request (stateless Streamable
+ * HTTP). Every tool is a CLI runner tool (jobs/job-tools.ts): multix_catalog,
+ * multix_run, multix_job_status and multix_job_cancel, with job state in a
+ * per-job Durable Object. Servers answering protocol 2026-07-28 requests also
+ * offer MCP Events (events/events-methods.ts) when the deployment has the
+ * subscription store.
  */
 
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { CfWorkerJsonSchemaValidator } from "@modelcontextprotocol/sdk/validation/cfworker";
+import { type CallToolResult, McpServer } from "@modelcontextprotocol/server";
+import { CfWorkerJsonSchemaValidator } from "@modelcontextprotocol/server/validators/cf-worker";
 import { MultixError } from "../../src/core/errors.js";
 import { type Env, limitsFrom, secretValues } from "./config.js";
+import { type EventsContext, registerEventMethods } from "./events/events-methods.js";
 import type { JobToolsContext } from "./jobs/job-runner.js";
 import { registerJobTools } from "./jobs/job-tools.js";
 import { logEvent, sanitizeText } from "./redaction.js";
@@ -20,6 +22,13 @@ export interface ServerDeps {
   version: string;
   /** The caller's job context; the job tools are registered only when present. */
   jobs?: JobToolsContext;
+  /**
+   * Protocol era of the request: `modern` (2026-07-28, negotiated through
+   * server/discover) or `legacy` (2025 initialize handshake). Defaults to legacy.
+   */
+  era?: "legacy" | "modern";
+  /** The caller's MCP Events context; events are offered only to modern requests when present. */
+  events?: EventsContext;
 }
 
 function ok(payload: Record<string, unknown>): CallToolResult {
@@ -69,15 +78,21 @@ async function runTool(
 
 export function createMcpServer(env: Env, deps: ServerDeps): McpServer {
   const limits = limitsFrom(env);
+  const events = deps.era === "modern" ? deps.events : undefined;
   const server = new McpServer(
     { name: SERVER_NAME, version: deps.version },
-    { jsonSchemaValidator: new CfWorkerJsonSchemaValidator() },
+    {
+      jsonSchemaValidator: new CfWorkerJsonSchemaValidator(),
+      // `events` is the MCP Events capability (not in the SDK's typed list).
+      ...(events ? { capabilities: { events: {} } as Record<string, object> } : {}),
+    },
   );
 
   // `env` holds only the caller's own provider keys (toolEnvFor in index.ts).
   registerJobTools(server, limits, env, deps.jobs, (tool, fields, body) =>
     runTool(env, tool, fields, body),
   );
+  if (events) registerEventMethods(server, events);
 
   return server;
 }

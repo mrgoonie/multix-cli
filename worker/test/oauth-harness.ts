@@ -7,6 +7,7 @@
 import { bytesToBase64, bytesToBase64Url } from "../src/accounts/base64.js";
 import type { WorkerEnv } from "../src/config.js";
 import { createWorker } from "../src/index.js";
+import { modernRequest } from "./events-helpers.js";
 import { fakeKv } from "./fake-kv.js";
 import { type RecordedCall, jsonResponse, mockFetch, route } from "./helpers.js";
 
@@ -200,4 +201,17 @@ export function mcpCall(browser: Browser, token: string | undefined, method: str
     headers,
     body: JSON.stringify({ jsonrpc: "2.0", id: rpcId++, method, params }),
   });
+}
+
+/** A 2026-07-28 request (per-request `_meta` envelope) to /mcp. */
+export async function modernMcpCall(
+  browser: Browser,
+  token: string | undefined,
+  method: string,
+  params: Record<string, unknown> = {},
+) {
+  const request = modernRequest(method, params);
+  const headers = new Headers(request.headers);
+  if (token) headers.set("authorization", `Bearer ${token}`);
+  return browser.request("/mcp", { method: "POST", headers, body: await request.text() });
 }

@@ -2,7 +2,8 @@
  * multix remote MCP server for Cloudflare Workers, with OAuth and an account dashboard.
  *
  *   GET  /health                                    public, minimal: { ok: true }
- *   POST /mcp                                       MCP Streamable HTTP; OAuth access token required
+ *   POST /mcp                                       MCP Streamable HTTP (2025 and 2026-07-28 with
+ *                                                   MCP Events); OAuth access token required
  *   GET  /.well-known/oauth-protected-resource/mcp  RFC 9728 metadata (library)
  *   GET  /.well-known/oauth-authorization-server    RFC 8414 metadata (library)
  *   POST /oauth/register, /oauth/token              DCR and token endpoint (library)
@@ -28,6 +29,7 @@ import { isAllowed } from "./accounts/allowlist.js";
 import { API_PREFIX, handleApi } from "./api/api-router.js";
 import { type AppDeps, publicOrigin, resolveAppContext } from "./app-context.js";
 import { type WorkerEnv, serverSettings } from "./config.js";
+import { eventsContextFor } from "./events/events-context.js";
 import { html, json, text } from "./http-responses.js";
 import { jobsContextFor } from "./jobs/job-context.js";
 import { handleMcpRequest } from "./mcp-api-handler.js";
@@ -86,7 +88,8 @@ async function handleAuthenticatedMcp(
   const keys = await app.accounts.providerKeys(account.id);
   const toolEnv = toolEnvFor(serverSettings(env), keys);
   const jobs = jobsContextFor(env, app, account.id, keys, deps);
-  return handleMcpRequest(request, toolEnv, { jobs });
+  const events = eventsContextFor(env, app, account.id, auth.clientId);
+  return handleMcpRequest(request, toolEnv, { jobs, events });
 }
 
 /** Everything that is not the protected /mcp resource or a library-owned OAuth endpoint. */
@@ -190,6 +193,7 @@ export function createWorker(deps: AppDeps = {}): ExportedHandler<WorkerEnv> {
   };
 }
 
+export { EventSubscriptions } from "./events/event-subscriptions.js";
 export { AccountJobQuota } from "./jobs/account-job-quota.js";
 export { MultixJobContainer } from "./jobs/multix-job-container.js";
 
