@@ -4,6 +4,10 @@
  * own microVM and nothing is shared between accounts. The job server in the
  * image (container/job-server.mjs) listens on 8080.
  *
+ * When the job ends, its final view and lifecycle events (events/job-events.ts)
+ * are stored in one write and relayed to the owner's AccountEvents object by
+ * a scheduled call (events/event-outbox.ts).
+ *
  * The Worker talks to it over RPC only (startJob / jobStatus / cancelJob);
  * no route forwards outside requests to the container. Only startJob boots
  * the container: requests to the job server go straight to the running
@@ -12,13 +16,17 @@
 
 import { Container } from "@cloudflare/containers";
 import type { StopParams } from "@cloudflare/containers";
+import type { AccountEventsNamespace } from "../events/account-events.js";
+import type { MultixEvent } from "../events/event-catalog.js";
+import { OUTBOX_PREFIX, outboxKey, relayOutbox } from "../events/event-outbox.js";
+import { jobEvents } from "../events/job-events.js";
 import { type JobQuotaNamespace, durableJobQuota } from "./account-job-quota.js";
 import { ContainerCapacityError, JobController } from "./job-controller.js";
 import type { JobSpec, JobView } from "./job-protocol.js";
 import { JOB_RETENTION_SECONDS } from "./job-protocol.js";
 
 const JOB_KEY = "job";
-/** `{ userId, jobId }` of the account slot this job holds. */
+/** `{ userId, jobId, command }`: the account slot this job holds and what its events report. */
 const SLOT_KEY = "slot";
 const JOB_SERVER_PORT = 8080;
 /** A status or cancel request to the job server never waits longer than this. */
@@ -26,11 +34,14 @@ const JOB_SERVER_TIMEOUT_MS = 10_000;
 
 interface JobContainerEnv {
   MULTIX_JOB_QUOTA?: JobQuotaNamespace;
+  MULTIX_EVENTS?: AccountEventsNamespace;
 }
 
 interface SlotRecord {
   userId: string;
   jobId: string;
+  /** CLI command, e.g. "gemini generate"; absent on jobs started before events existed. */
+  command?: string;
 }
 
 /** Errors @cloudflare/containers raises when no instance can be had (max_instances, rate limit). */
@@ -49,6 +60,21 @@ export class MultixJobContainer extends Container<JobContainerEnv> {
   private readonly controller = new JobController({
     load: () => this.ctx.storage.get<JobView>(JOB_KEY),
     save: (view) => this.ctx.storage.put(JOB_KEY, view),
+    saveFinal: async (view) => {
+      const slot = await this.ctx.storage.get<SlotRecord>(SLOT_KEY);
+      const events =
+        slot && this.env.MULTIX_EVENTS
+          ? jobEvents({ jobId: slot.jobId, command: slot.command ?? "" }, view)
+          : [];
+      const writes: Record<string, unknown> = { [JOB_KEY]: view };
+      for (const event of events) writes[outboxKey(event.id)] = event;
+      // No await between the write and schedule()'s synchronous SQL insert, so the
+      // view, the outbox entries and the relay schedule are committed together.
+      const saved = this.ctx.storage.put(writes);
+      const relay = events.length > 0 ? this.scheduleRelay(1, 0) : undefined;
+      await saved;
+      await relay;
+    },
     startContainer: async () => {
       try {
         await this.startAndWaitForPorts({
@@ -84,10 +110,15 @@ export class MultixJobContainer extends Container<JobContainerEnv> {
     now: () => Date.now(),
   });
 
-  /** Start the job once; `userId` identifies the account slot to give back when it ends. */
-  async startJob(spec: JobSpec, userId: string): Promise<JobView> {
+  /**
+   * Start the job once; `userId` identifies the account slot to give back
+   * when it ends and the account its events go to.
+   */
+  async startJob(spec: JobSpec, userId: string, command?: string): Promise<JobView> {
     if (!(await this.ctx.storage.get(JOB_KEY))) {
-      await this.ctx.storage.put(SLOT_KEY, { userId, jobId: spec.jobId } satisfies SlotRecord);
+      const slot: SlotRecord = { userId, jobId: spec.jobId };
+      if (command) slot.command = command;
+      await this.ctx.storage.put(SLOT_KEY, slot);
       await this.schedule(JOB_RETENTION_SECONDS, "expireJob");
     }
     return this.controller.start(spec);
@@ -111,13 +142,39 @@ export class MultixJobContainer extends Container<JobContainerEnv> {
     await this.controller.releaseSlot(attempt);
   }
 
+  /** Scheduled: hand the job's stored events to the owner's AccountEvents object. */
+  async relayEvents(attempt = 1): Promise<void> {
+    const events = this.env.MULTIX_EVENTS;
+    await relayOutbox(
+      {
+        list: () => this.ctx.storage.list<MultixEvent>({ prefix: OUTBOX_PREFIX }),
+        delete: async (keys) => {
+          await this.ctx.storage.delete(keys);
+        },
+        publish: events
+          ? async (list) => {
+              const slot = await this.ctx.storage.get<SlotRecord>(SLOT_KEY);
+              if (slot) await events.getByName(slot.userId).publish(list);
+            }
+          : undefined,
+        scheduleRelay: (next, seconds) => this.scheduleRelay(next, seconds),
+      },
+      attempt,
+    );
+  }
+
+  private async scheduleRelay(attempt: number, seconds: number): Promise<void> {
+    await this.schedule(seconds, "relayEvents" satisfies keyof MultixJobContainer, attempt);
+  }
+
   /**
    * Scheduled: drop the job's data once the retention period is over. Only
    * this class's keys are removed; deleteAll() would also drop the
    * schedule table that @cloudflare/containers updates right after this call.
    */
   async expireJob(): Promise<void> {
-    await this.ctx.storage.delete([JOB_KEY, SLOT_KEY]);
+    const outbox = await this.ctx.storage.list({ prefix: OUTBOX_PREFIX });
+    await this.ctx.storage.delete([JOB_KEY, SLOT_KEY, ...outbox.keys()]);
   }
 
   override async onStop(_params: StopParams): Promise<void> {

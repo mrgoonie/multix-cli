@@ -1,9 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { decryptSecret, importEncryptionKey } from "../src/accounts/provider-secret-crypto.js";
-import {
-  MAX_SUBSCRIPTIONS_PER_ACCOUNT,
-  type StoredSubscription,
-} from "../src/events/event-subscriptions.js";
+import type { MultixEvent } from "../src/events/event-catalog.js";
+import { EventHub, MAX_ACTIVE_SUBSCRIPTIONS, type Subscription } from "../src/events/event-hub.js";
 import {
   CALLBACK_ENDPOINT_ERROR,
   DEFAULT_TTL_MS,
@@ -11,6 +8,7 @@ import {
   MAX_TTL_MS,
   MIN_TTL_MS,
 } from "../src/events/events-methods.js";
+import { verifyWebhook } from "../src/events/webhook-signing.js";
 import { JobStore } from "../src/jobs/job-store.js";
 import { handleMcpRequest } from "../src/mcp-api-handler.js";
 import {
@@ -21,9 +19,9 @@ import {
   modernRequest,
   modernRpc,
 } from "./events-helpers.js";
-import { fakeEventSubscriptions } from "./fake-event-subscriptions.js";
+import { fakeDoStorage } from "./fake-do-storage.js";
 import { fakeKv } from "./fake-kv.js";
-import { fullEnv, mcpRequest, mockFetch, rpc } from "./helpers.js";
+import { type RecordedCall, fullEnv, mcpRequest, mockFetch, rpc } from "./helpers.js";
 
 type RpcError = { error: { code: number } };
 
@@ -31,10 +29,10 @@ const HOST = "hooks.example.com";
 const CALLBACK = `https://${HOST}/cb`;
 const NOW = 1_800_000_000_000;
 const JOB_ID = "6f1c2a7e-3b4d-4e5f-8a9b-0c1d2e3f4a5b";
-const ENCRYPTION_KEY = Buffer.alloc(32, 7).toString("base64");
+const ORIGIN = "https://mcp.example.com";
 
-function setup(options: { callbackStatus?: number; now?: () => number } = {}) {
-  const namespace = fakeEventSubscriptions();
+function setup(options: { callbackStatus?: number } = {}) {
+  const clock = { now: NOW };
   const kv = fakeKv();
   const jobs = new JobStore(kv);
   const remote = mockFetch(
@@ -42,16 +40,34 @@ function setup(options: { callbackStatus?: number; now?: () => number } = {}) {
     dohRoute("internal.example.com", ["10.0.0.7"]),
     callbackRoute(HOST, "/cb", options.callbackStatus),
   );
+  const hubs = new Map<string, { hub: EventHub; data: Map<string, unknown> }>();
+  const hubFor = (userId: string) => {
+    let entry = hubs.get(userId);
+    if (!entry) {
+      const { storage, data } = fakeDoStorage();
+      entry = {
+        hub: new EventHub({ storage, fetch: remote.fetch, now: () => clock.now }),
+        data,
+      };
+      hubs.set(userId, entry);
+    }
+    return entry;
+  };
+  /** The subscription records stored in an account's hub. */
+  const stored = (userId: string) =>
+    [...hubFor(userId).data]
+      .filter(([k]) => k.startsWith("sub:"))
+      .map(([, v]) => v as Subscription);
   const contextFor = (userId: string): EventsContext => ({
     userId,
     clientId: "client-1",
-    subscriptions: namespace.getByName(userId),
-    encryptionKey: importEncryptionKey(ENCRYPTION_KEY),
+    events: hubFor(userId).hub,
+    origin: ORIGIN,
     fetch: remote.fetch,
     jobs,
-    now: options.now ?? (() => NOW),
+    now: () => clock.now,
   });
-  return { namespace, jobs, remote, contextFor };
+  return { clock, hubFor, stored, jobs, remote, contextFor };
 }
 
 function subscribeParams(overrides: Record<string, unknown> = {}) {
@@ -184,8 +200,8 @@ describe("events/list", () => {
 });
 
 describe("events/subscribe", () => {
-  it("verifies the callback, stores the subscription encrypted and returns its id", async () => {
-    const { contextFor, namespace, remote } = setup();
+  it("verifies the callback, stores the subscription in the account's hub and returns its id", async () => {
+    const { contextFor, stored, remote } = setup();
     const body = await modernRpc(fullEnv(), "events/subscribe", subscribeParams(), {
       events: contextFor("u1"),
     });
@@ -197,22 +213,22 @@ describe("events/subscribe", () => {
       truncated: false,
     });
     expect(verifications(remote.calls)).toBe(1);
-    const stored = [...namespace.storage("u1").data.values()];
-    expect(JSON.stringify(stored)).not.toContain(SECRET.slice(6));
-    const [sub] = await namespace.getByName("u1").list(NOW);
-    expect(sub).toMatchObject({
-      url: CALLBACK,
-      name: "multix.job.completed",
-      clientId: "client-1",
-    });
+    expect(stored("u1")).toEqual([
+      expect.objectContaining({
+        id: body.result.id,
+        callbackUrl: CALLBACK,
+        events: ["multix.job.completed"],
+        status: "active",
+        mcp: { clientId: "client-1" },
+      }),
+    ]);
   });
 
   it("refreshes the same subscription when called again, reusing the verification", async () => {
-    let now = NOW;
-    const { contextFor, namespace, remote } = setup({ now: () => now });
+    const { clock, contextFor, stored, remote } = setup();
     const deps = { events: contextFor("u1") };
     const first = await modernRpc(fullEnv(), "events/subscribe", subscribeParams(), deps);
-    now += 60_000;
+    clock.now += 60_000;
     const again = await modernRpc(
       fullEnv(),
       "events/subscribe",
@@ -220,16 +236,16 @@ describe("events/subscribe", () => {
       deps,
     );
     expect(again.result.id).toBe(first.result.id);
-    expect(again.result.refreshBefore).toBe(new Date(now + 2 * 60 * 60_000).toISOString());
+    expect(again.result.refreshBefore).toBe(new Date(clock.now + 2 * 60 * 60_000).toISOString());
     expect(verifications(remote.calls)).toBe(1);
-    const subs = await namespace.getByName("u1").list(now);
+    const subs = stored("u1");
     expect(subs).toHaveLength(1);
     expect(subs[0]?.createdAt).toBe(NOW);
-    expect(subs[0]?.previousSecret).toBeUndefined();
+    expect(subs[0]?.mcp?.previousSecret).toBeUndefined();
   });
 
   it("keeps the previous secret for a rotation window when the secret changes", async () => {
-    const { contextFor, namespace, remote } = setup();
+    const { contextFor, stored, remote } = setup();
     const deps = { events: contextFor("u1") };
     await modernRpc(fullEnv(), "events/subscribe", subscribeParams(), deps);
     const rotated = `whsec_${Buffer.alloc(32, 3).toString("base64")}`;
@@ -240,21 +256,10 @@ describe("events/subscribe", () => {
       deps,
     );
     expect(verifications(remote.calls)).toBe(2);
-    const [sub] = await namespace.getByName("u1").list(NOW);
-    expect(sub?.previousSecret?.until).toBeGreaterThan(NOW);
-    const key = await importEncryptionKey(ENCRYPTION_KEY);
-    const aad = `event-subscription:${sub?.id}`;
-    expect(await decryptSecret(key, "u1", aad, sub?.secret as StoredSubscription["secret"])).toBe(
-      rotated,
-    );
-    expect(
-      await decryptSecret(
-        key,
-        "u1",
-        aad,
-        sub?.previousSecret?.secret as StoredSubscription["secret"],
-      ),
-    ).toBe(SECRET);
+    const [sub] = stored("u1");
+    expect(sub?.secret).toBe(rotated);
+    expect(sub?.mcp?.previousSecret).toEqual({ secret: SECRET, until: expect.any(Number) });
+    expect(sub?.mcp?.previousSecret?.until).toBeGreaterThan(NOW);
   });
 
   it("clamps the requested lifetime and never grants an unlimited one", async () => {
@@ -309,6 +314,10 @@ describe("events/subscribe", () => {
       { delivery: { mode: "webhook", url: "https://internal.example.com/cb", secret: SECRET } },
     ],
     [
+      "a callback on this server",
+      { delivery: { mode: "webhook", url: "https://mcp.example.com/cb", secret: SECRET } },
+    ],
+    [
       "an oversized secret",
       { delivery: { mode: "webhook", url: CALLBACK, secret: `whsec_${"A".repeat(200)}` } },
     ],
@@ -323,13 +332,13 @@ describe("events/subscribe", () => {
   });
 
   it("returns CallbackEndpointError when verification fails, and stores nothing", async () => {
-    const { contextFor, namespace } = setup({ callbackStatus: 500 });
+    const { contextFor, stored } = setup({ callbackStatus: 500 });
     const body = await modernRpc(fullEnv(), "events/subscribe", subscribeParams(), {
       events: contextFor("u1"),
     });
     expect(body.error.code).toBe(CALLBACK_ENDPOINT_ERROR);
     expect(body.error.data).toEqual({ reason: "http_5xx" });
-    expect(await namespace.getByName("u1").list(NOW)).toEqual([]);
+    expect(stored("u1")).toEqual([]);
   });
 
   it("filters by a job only when the caller owns it", async () => {
@@ -347,26 +356,20 @@ describe("events/subscribe", () => {
     expect(allowed.result.id).toMatch(/^sub_/);
   });
 
-  it(`caps an account at ${MAX_SUBSCRIPTIONS_PER_ACCOUNT} subscriptions`, async () => {
-    const { contextFor, namespace } = setup();
-    const deps = { events: contextFor("u1") };
-    const store = namespace.getByName("u1");
-    for (let i = 0; i < MAX_SUBSCRIPTIONS_PER_ACCOUNT; i++) {
-      const record = { id: `sub_${i}`, name: "multix.job.failed", arguments: {}, url: CALLBACK };
-      await store.upsert(
-        {
-          ...record,
-          secret: { v: 1, iv: "", ct: "" },
-          createdAt: NOW,
-          updatedAt: NOW,
-          expiresAt: NOW + 60_000,
-        },
-        NOW,
+  it(`shares the ${MAX_ACTIVE_SUBSCRIPTIONS}-subscription limit with the REST API`, async () => {
+    const { contextFor, hubFor, remote } = setup();
+    for (let i = 0; i < MAX_ACTIVE_SUBSCRIPTIONS; i++) {
+      await hubFor("u1").hub.subscribe(
+        { callbackUrl: CALLBACK, events: ["multix.job.failed"], ttlSeconds: 3600 },
+        "api_key:k1",
       );
     }
-    const body = await modernRpc(fullEnv(), "events/subscribe", subscribeParams(), deps);
+    const body = await modernRpc(fullEnv(), "events/subscribe", subscribeParams(), {
+      events: contextFor("u1"),
+    });
     expect(body.error.code).toBe(-32602);
-    expect(body.error.message).toContain("limit");
+    expect(body.error.message).toContain("at most");
+    expect(verifications(remote.calls)).toBe(0);
   });
 
   it("logs the subscribed event without replacing the log event name", async () => {
@@ -386,19 +389,27 @@ describe("events/subscribe", () => {
   });
 
   it("refuses a subscription that loses the race for the last slot", async () => {
-    const { contextFor } = setup();
+    const { contextFor, hubFor } = setup();
     const events = contextFor("u1");
-    // The count check passes, but the store is full by the time the write lands.
-    events.subscriptions.upsert = async () => "limit";
+    // The count check passes, but the hub is full by the time the write lands.
+    events.events = {
+      ...events.events,
+      mcpSubscriptionState: (...args) => hubFor("u1").hub.mcpSubscriptionState(...args),
+      upsertMcpSubscription: async () => ({
+        ok: false,
+        error: "limit_reached",
+        message: "An account may have at most 10 active subscriptions",
+      }),
+    };
     const body = await modernRpc(fullEnv(), "events/subscribe", subscribeParams(), { events });
     expect(body.error.code).toBe(-32602);
-    expect(body.error.message).toContain("limit");
+    expect(body.error.message).toContain("at most");
   });
 
   it("answers an unexpected failure with a generic internal error", async () => {
     const { contextFor } = setup();
     const events = contextFor("u1");
-    events.subscriptions.get = async () => {
+    events.events.mcpSubscriptionState = async () => {
       throw new Error("storage failed at /internal/path for sub:abc");
     };
     const body = await modernRpc(fullEnv(), "events/subscribe", subscribeParams(), { events });
@@ -408,7 +419,7 @@ describe("events/subscribe", () => {
 
 describe("events/unsubscribe", () => {
   it("removes the subscription and is idempotent", async () => {
-    const { contextFor, namespace } = setup();
+    const { contextFor, stored } = setup();
     const deps = { events: contextFor("u1") };
     await modernRpc(fullEnv(), "events/subscribe", subscribeParams(), deps);
     const target = {
@@ -419,7 +430,7 @@ describe("events/unsubscribe", () => {
     expect((await modernRpc(fullEnv(), "events/unsubscribe", target, deps)).result).toMatchObject({
       resultType: "complete",
     });
-    expect(await namespace.getByName("u1").list(NOW)).toEqual([]);
+    expect(stored("u1")).toEqual([]);
     expect((await modernRpc(fullEnv(), "events/unsubscribe", target, deps)).error).toBeUndefined();
   });
 
@@ -444,7 +455,7 @@ describe("events/unsubscribe", () => {
   });
 
   it("cannot remove or see another account's subscription", async () => {
-    const { contextFor, namespace } = setup();
+    const { contextFor, stored } = setup();
     await modernRpc(fullEnv(), "events/subscribe", subscribeParams(), { events: contextFor("u1") });
     const target = {
       name: "multix.job.completed",
@@ -452,7 +463,117 @@ describe("events/unsubscribe", () => {
       delivery: { mode: "webhook", url: CALLBACK },
     };
     await modernRpc(fullEnv(), "events/unsubscribe", target, { events: contextFor("u2") });
-    expect(await namespace.getByName("u1").list(NOW)).toHaveLength(1);
-    expect(await namespace.getByName("u2").list(NOW)).toEqual([]);
+    expect(stored("u1")).toHaveLength(1);
+    expect(stored("u2")).toEqual([]);
+  });
+});
+
+function jobEvent(
+  name: MultixEvent["name"],
+  jobId: string,
+  id = `evt_${jobId}_${name}`,
+): MultixEvent {
+  return {
+    id,
+    name,
+    schema_version: 1,
+    occurred_at: new Date(NOW).toISOString(),
+    resource: { type: "job", id: jobId },
+    data: {
+      job_id: jobId,
+      status: "succeeded",
+      command: "gemini generate",
+      provider: "gemini",
+      created_at: new Date(NOW - 60_000).toISOString(),
+      finished_at: new Date(NOW).toISOString(),
+      exit_code: 0,
+      outputs: [],
+    },
+  };
+}
+
+describe("event delivery to MCP subscribers", () => {
+  const deliveries = (calls: RecordedCall[]) =>
+    calls.filter(
+      (c) => c.method === "POST" && c.url === CALLBACK && !(c.body as { type?: string }).type,
+    );
+
+  it("sends the MCP Events body, signed, with the subscription id header", async () => {
+    const { contextFor, hubFor, remote } = setup();
+    const sub = await modernRpc(fullEnv(), "events/subscribe", subscribeParams(), {
+      events: contextFor("u1"),
+    });
+    const { hub } = hubFor("u1");
+    await hub.publish([jobEvent("multix.job.completed", JOB_ID)]);
+    await hub.alarm();
+
+    const [delivery] = deliveries(remote.calls);
+    expect(delivery?.body).toEqual({
+      eventId: `evt_${JOB_ID}_multix.job.completed`,
+      name: "multix.job.completed",
+      timestamp: new Date(NOW).toISOString(),
+      data: expect.objectContaining({ job_id: JOB_ID, status: "succeeded" }),
+      cursor: null,
+    });
+    expect(delivery?.headers["x-mcp-subscription-id"]).toBe(sub.result.id);
+    expect(delivery?.headers["webhook-id"]).toBe(`evt_${JOB_ID}_multix.job.completed`);
+    const valid = await verifyWebhook(
+      SECRET,
+      {
+        id: delivery?.headers["webhook-id"] as string,
+        timestamp: delivery?.headers["webhook-timestamp"] as string,
+        signature: delivery?.headers["webhook-signature"] as string,
+      },
+      JSON.stringify(delivery?.body),
+      Math.floor(NOW / 1000),
+    );
+    expect(valid).toBe(true);
+  });
+
+  it("delivers only the subscribed job's events when narrowed by job_id", async () => {
+    const { contextFor, hubFor, jobs, remote } = setup();
+    await jobs.create(JOB_ID, { userId: "u1", command: "gemini generate", createdAt: NOW });
+    await modernRpc(
+      fullEnv(),
+      "events/subscribe",
+      subscribeParams({ arguments: { job_id: JOB_ID } }),
+      { events: contextFor("u1") },
+    );
+    const { hub } = hubFor("u1");
+    await hub.publish([
+      jobEvent("multix.job.completed", "11111111-2222-4333-8444-555555555555"),
+      jobEvent("multix.job.completed", JOB_ID),
+    ]);
+    await hub.alarm();
+    const sent = deliveries(remote.calls);
+    expect(sent).toHaveLength(1);
+    expect((sent[0]?.body as { data: { job_id: string } }).data.job_id).toBe(JOB_ID);
+  });
+
+  it("signs with the old and the new secret during the rotation window", async () => {
+    const { contextFor, hubFor, remote } = setup();
+    const deps = { events: contextFor("u1") };
+    await modernRpc(fullEnv(), "events/subscribe", subscribeParams(), deps);
+    const rotated = `whsec_${Buffer.alloc(32, 3).toString("base64")}`;
+    await modernRpc(
+      fullEnv(),
+      "events/subscribe",
+      subscribeParams({ delivery: { mode: "webhook", url: CALLBACK, secret: rotated } }),
+      deps,
+    );
+    const { hub } = hubFor("u1");
+    await hub.publish([jobEvent("multix.job.completed", JOB_ID)]);
+    await hub.alarm();
+    const [delivery] = deliveries(remote.calls);
+    const headers = {
+      id: delivery?.headers["webhook-id"] as string,
+      timestamp: delivery?.headers["webhook-timestamp"] as string,
+      signature: delivery?.headers["webhook-signature"] as string,
+    };
+    expect(headers.signature.split(" ")).toHaveLength(2);
+    const body = JSON.stringify(delivery?.body);
+    for (const secret of [SECRET, rotated]) {
+      expect(await verifyWebhook(secret, headers, body, Math.floor(NOW / 1000))).toBe(true);
+    }
   });
 });

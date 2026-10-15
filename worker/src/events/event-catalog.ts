@@ -1,112 +1,165 @@
 /**
- * The MCP Events catalog served by `events/list`: one entry per event a
- * client may subscribe to, with the JSON Schema of its subscription
- * `arguments` and of the `data` it will receive.
+ * Events the server publishes when a `multix_run` job ends, and their
+ * envelope. The envelope follows the shared MCP Events contract
+ * (bestagentkits/mcp-event-hub): a stable `id` per logical event, a
+ * namespaced `name`, a schema version, the time it happened and the resource
+ * it is about. The owning account never appears in a payload: it only picks
+ * which account's subscriptions receive the event.
  *
- * Payloads stay minimal: ids, final status, the command and its group, a
- * timestamp and an R2 object key. Never provider keys, prompts, logs, media
- * or expiring signed URLs. Publishing these events when a job ends is a
- * separate change; this catalog only defines what can be subscribed to.
+ * Payloads carry identifiers and final state only. Prompts, CLI output, error
+ * text, provider data and output URLs (often presigned) are left out; callers
+ * read those with `multix_job_status` / `GET /api/v1/jobs/{id}`, which stays
+ * the source of truth.
  */
 
-import { z } from "zod";
+export const EVENT_SCHEMA_VERSION = 1;
 
-/** Delivery modes this server supports. ChatGPT supports webhook only. */
-export const DELIVERY_MODES = ["webhook"] as const;
+export const JOB_EVENT_NAMES = [
+  "multix.job.completed",
+  "multix.job.failed",
+  "multix.job.canceled",
+  "multix.job.timed_out",
+] as const;
 
-/** Subscription arguments of every job event: optionally narrow to one job. */
-export const jobEventArguments = z
-  .object({
-    job_id: z
-      .string()
-      .max(64)
-      .optional()
-      .describe("Only events of this multix_run job; omit for every job you start"),
-  })
-  .strict();
+export const ASSET_READY_EVENT = "multix.asset.ready";
 
-export type JobEventArguments = z.infer<typeof jobEventArguments>;
+export const EVENT_NAMES = [...JOB_EVENT_NAMES, ASSET_READY_EVENT] as const;
 
-const jobFields = {
-  jobId: z.string().describe("Job id returned by multix_run"),
-  command: z.string().describe("CLI command path, e.g. gemini generate"),
-  group: z.string().describe("Command group (provider), e.g. gemini"),
-  occurredAt: z.string().describe("ISO 8601 time the job reached this state"),
-};
+export type JobEventName = (typeof JOB_EVENT_NAMES)[number];
+export type EventName = (typeof EVENT_NAMES)[number];
 
-function jobPayload(status: string) {
-  return z.object({ ...jobFields, status: z.literal(status) }).strict();
+export function isEventName(value: unknown): value is EventName {
+  return typeof value === "string" && (EVENT_NAMES as readonly string[]).includes(value);
 }
 
-interface EventDefinition {
+/** One output file of a job, without its URL. */
+export interface EventOutput {
   name: string;
-  description: string;
-  payload: z.ZodType;
+  bytes: number;
+  /** Whether the file was uploaded to the account's R2 bucket. */
+  stored: boolean;
 }
 
-const DEFINITIONS: EventDefinition[] = [
+export interface JobEventData {
+  job_id: string;
+  status: "succeeded" | "failed" | "canceled" | "timed_out";
+  /** CLI command the job ran, e.g. "gemini generate". */
+  command: string;
+  /** Command group, which is the provider for provider commands, e.g. "gemini". */
+  provider: string;
+  created_at: string;
+  finished_at: string;
+  exit_code: number | null;
+  outputs: EventOutput[];
+}
+
+export interface AssetReadyData {
+  job_id: string;
+  command: string;
+  provider: string;
+  /** Position of the file in the job's `outputs`. */
+  index: number;
+  name: string;
+  bytes: number;
+}
+
+export interface MultixEvent {
+  /** Stable per logical event; receivers dedupe on it (also sent as `webhook-id`). */
+  id: string;
+  name: EventName;
+  schema_version: number;
+  /** ISO 8601. */
+  occurred_at: string;
+  resource: { type: "job"; id: string };
+  data: JobEventData | AssetReadyData;
+}
+
+const outputSchema = {
+  type: "object",
+  required: ["name", "bytes", "stored"],
+  properties: {
+    name: { type: "string" },
+    bytes: { type: "integer" },
+    stored: { type: "boolean" },
+  },
+} as const;
+
+const jobDataSchema = {
+  type: "object",
+  required: [
+    "job_id",
+    "status",
+    "command",
+    "provider",
+    "created_at",
+    "finished_at",
+    "exit_code",
+    "outputs",
+  ],
+  properties: {
+    job_id: { type: "string", format: "uuid" },
+    status: { type: "string", enum: ["succeeded", "failed", "canceled", "timed_out"] },
+    command: { type: "string" },
+    provider: { type: "string" },
+    created_at: { type: "string", format: "date-time" },
+    finished_at: { type: "string", format: "date-time" },
+    exit_code: { type: ["integer", "null"] },
+    outputs: { type: "array", items: outputSchema },
+  },
+} as const;
+
+const assetDataSchema = {
+  type: "object",
+  required: ["job_id", "command", "provider", "index", "name", "bytes"],
+  properties: {
+    job_id: { type: "string", format: "uuid" },
+    command: { type: "string" },
+    provider: { type: "string" },
+    index: { type: "integer" },
+    name: { type: "string" },
+    bytes: { type: "integer" },
+  },
+} as const;
+
+export interface EventCatalogEntry {
+  name: EventName;
+  description: string;
+  schema_version: number;
+  /** JSON Schema of the envelope's `data`. */
+  data_schema: object;
+}
+
+export const EVENT_CATALOG: readonly EventCatalogEntry[] = [
   {
     name: "multix.job.completed",
-    description: "A multix_run job you started finished successfully.",
-    payload: jobPayload("succeeded"),
+    description: "A job finished and the CLI exited successfully.",
+    schema_version: EVENT_SCHEMA_VERSION,
+    data_schema: jobDataSchema,
   },
   {
     name: "multix.job.failed",
-    description: "A multix_run job you started failed.",
-    payload: jobPayload("failed"),
+    description:
+      "A job ended with an error (CLI failure, container lost, start failure). Read the error with multix_job_status.",
+    schema_version: EVENT_SCHEMA_VERSION,
+    data_schema: jobDataSchema,
   },
   {
     name: "multix.job.canceled",
-    description: "A multix_run job you started was canceled.",
-    payload: jobPayload("canceled"),
+    description: "A job was canceled by its owner.",
+    schema_version: EVENT_SCHEMA_VERSION,
+    data_schema: jobDataSchema,
   },
   {
     name: "multix.job.timed_out",
-    description: "A multix_run job you started ran out of time.",
-    payload: jobPayload("timed_out"),
+    description: "A job did not finish within the server's time limit.",
+    schema_version: EVENT_SCHEMA_VERSION,
+    data_schema: jobDataSchema,
   },
   {
-    name: "multix.asset.ready",
+    name: ASSET_READY_EVENT,
     description:
-      "An output file of a multix_run job you started was stored in your R2 bucket. Read it through multix_job_status.",
-    payload: z
-      .object({
-        jobId: jobFields.jobId,
-        assetKey: z.string().describe("Object key in your R2 bucket"),
-        contentType: z.string().optional(),
-        occurredAt: jobFields.occurredAt,
-      })
-      .strict(),
+      "An output file of a successful job was stored in the account's R2 bucket. Get its URL with multix_job_status.",
+    schema_version: EVENT_SCHEMA_VERSION,
+    data_schema: assetDataSchema,
   },
 ];
-
-export interface CatalogEntry {
-  name: string;
-  description: string;
-  delivery: string[];
-  inputSchema: Record<string, unknown>;
-  payloadSchema: Record<string, unknown>;
-}
-
-function jsonSchema(schema: z.ZodType): Record<string, unknown> {
-  const { $schema: _, ...rest } = z.toJSONSchema(schema) as Record<string, unknown>;
-  return rest;
-}
-
-let catalog: CatalogEntry[] | undefined;
-
-/** Every event this server offers (the same for every account: all are about the caller's own jobs). */
-export function eventCatalog(): CatalogEntry[] {
-  catalog ??= DEFINITIONS.map((d) => ({
-    name: d.name,
-    description: d.description,
-    delivery: [...DELIVERY_MODES],
-    inputSchema: jsonSchema(jobEventArguments),
-    payloadSchema: jsonSchema(d.payload),
-  }));
-  return catalog;
-}
-
-export function isKnownEvent(name: string): boolean {
-  return DEFINITIONS.some((d) => d.name === name);
-}

@@ -22,6 +22,7 @@ export type ApiErrorCode =
   | "unsupported_media_type"
   | "rate_limited"
   | "busy"
+  | "limit_reached"
   | "unavailable"
   | "storage_check_failed"
   | "internal";

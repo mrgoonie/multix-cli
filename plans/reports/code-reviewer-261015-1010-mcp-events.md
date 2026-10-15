@@ -158,3 +158,4 @@ The plan's Outcome items are implemented. Its Validation list is met by the mock
 - L1, L2, L5: extra reserved ranges, idempotent unsubscribe for impossible targets, tests for the limit race and the rotated secret.
 - Also fixed: event log lines no longer overwrite the log event name with the subscribed event name.
 - Left for #223: L3 (verification budget is bounded by the 60/min rate limit), L4 (expired rows are dropped on writes; delivery must filter on `expiresAt`), L6 (concurrent rotation keeps one of the two previous secrets).
+- After #224 merged, the separate `EventSubscriptions` store was dropped: MCP subscriptions live in the `AccountEvents` hub (shared limit of 10, secrets stored like REST ones), which delivers them. The per-delivery address re-check is #226.

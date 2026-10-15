@@ -709,7 +709,8 @@ instance runs at `https://multix.zuey.me/mcp` (invited GitHub accounts only).
   subscribe to MCP Events (`multix.job.completed`, `multix.job.failed`,
   `multix.job.canceled`, `multix.job.timed_out`, `multix.asset.ready`) with
   verified, signed `https://` webhooks to public hosts. Subscriptions are kept
-  per account in the `MULTIX_EVENT_SUBSCRIPTIONS` Durable Object.
+  per account in the `MULTIX_EVENTS` Durable Object, next to the REST
+  webhook subscriptions.
 - Auth: OAuth 2.1 (dynamic client registration, PKCE) with GitHub sign-in.
   Only GitHub logins or verified emails in the `MULTIX_ALLOWED_USERS` secret
   can sign in.
@@ -776,7 +777,14 @@ Create an account API key (`mxk_…`, shown once) in the **API keys** card at
 curl -s https://multix.zuey.me/api/v1/me -H "Authorization: Bearer $MULTIX_API_KEY"
 ```
 
-Guide: [REST API](https://multix.zuey.me/guides/rest-api/). Reference:
+To be told when a job ends instead of polling, subscribe an https endpoint at
+`POST /api/v1/events/subscriptions`: the server sends signed
+[Standard Webhooks](https://www.standardwebhooks.com) events
+(`multix.job.completed`, `multix.job.failed`, …) carrying ids and final state
+only; polling stays the fallback.
+
+Guide: [REST API](https://multix.zuey.me/guides/rest-api/), including
+[job event webhooks](https://multix.zuey.me/guides/rest-api/#job-event-webhooks). Reference:
 [`/api/docs`](https://multix.zuey.me/api/docs) (OpenAPI at `/api/v1/openapi.json`).
 
 ## Troubleshooting

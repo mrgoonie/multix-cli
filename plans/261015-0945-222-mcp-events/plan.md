@@ -8,17 +8,19 @@ Status: implemented, in review
   envelope) through `@modelcontextprotocol/server` 2.x, next to the unchanged
   2025 `initialize` path.
 - Modern clients see the `events` capability and can call `events/list`,
-  `events/subscribe`, `events/unsubscribe`, backed by a per-account
-  `EventSubscriptions` Durable Object (sqlite), secrets encrypted with
-  `SECRETS_ENCRYPTION_KEY`.
-- Publishing job lifecycle events stays in #223.
+  `events/subscribe`, `events/unsubscribe`, backed by the per-account
+  `AccountEvents` hub from #223/#224, which also delivers the events.
+- MCP subscriptions are hub records with an `mcp` part (job filter, rotation
+  secret, OAuth client); their deliveries use the MCP Events body
+  (`eventId`, `name`, `timestamp`, `data`, `cursor`) and the
+  `X-MCP-Subscription-Id` header.
 
 ## Constraints and non-goals
 
 - Existing tools, OAuth and REST API unchanged; legacy responses stay JSON.
 - No Node built-ins in the Worker bundle (`check:bundle`).
 - No replay (`cursor` answers `truncated: true`), no `subscriptions/listen`.
-- No delivery worker in this change.
+- Delivery, retries and dead letters are the hub's (#224).
 
 ## Design
 
@@ -27,9 +29,9 @@ Status: implemented, in review
 | Era routing | `isLegacyRequest` → existing `WebStandardStreamableHTTPServerTransport` (JSON); else `createMcpHandler(..., { legacy: "reject", responseMode: "json" })` |
 | Media type | 415 on the modern leg (SDK leaves it to hand-wired compositions) |
 | Identity | `sub_` + 24 hex of SHA-256 over canonical `[account, url, name, arguments]` |
-| SSRF | `assertPublicHttpsUrl` + DoH A/AAAA public-address check + `redirect: "manual"`; delivery (#223) must re-check addresses per request (DNS rebinding) |
-| Verification | Standard Webhooks signed challenge, 10 s, 4 KiB answer cap, cached 24 h per (url, secret) |
-| Lifetime | default 24 h, clamp 5 min–7 d, `null` → 7 d; secret rotation window 1 h; 20 per account |
+| SSRF | `assertPublicHttpsUrl` + DoH A/AAAA public-address check + not this server + `redirect: "manual"`; per-delivery re-check is #226 |
+| Verification | Standard Webhooks signed challenge, 10 s, 4 KiB answer cap; skipped when refreshing a live subscription with the same callback and secret |
+| Lifetime | default 24 h, clamp 5 min–7 d, `null` → 7 d; secret rotation window 1 h; 10 active per account, shared with REST |
 
 ## Files
 
@@ -52,5 +54,7 @@ Status: implemented, in review
 
 ## Rollback
 
-Revert the merge commit. The `EventSubscriptions` class stays declared in
-`exports`; removing it later needs a delete-class step for the Durable Object.
+Revert the merge commit. No Durable Object class is added (the hub's
+`AccountEvents` already exists); MCP subscription records left in the hub
+keep being delivered until they expire (at most 7 days) or are revoked over
+REST.

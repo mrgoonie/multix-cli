@@ -13,26 +13,22 @@
 import { type McpServer, ProtocolError, ProtocolErrorCode } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import type { FetchLike } from "../../../src/core/fetch-json.js";
-import { decryptSecret, encryptSecret } from "../accounts/provider-secret-crypto.js";
 import { MAX_URL_CHARS } from "../config.js";
 import type { JobStore } from "../jobs/job-store.js";
 import { logEvent, sanitizeText } from "../redaction.js";
 import { assertPublicHttpsUrl } from "../url-guard.js";
+import type { AccountEventsStub } from "./account-events.js";
 import { CallbackDnsError, CallbackUrlError, assertPublicCallbackUrl } from "./callback-guard.js";
 import { type VerificationFailure, verifyCallback } from "./callback-verification.js";
+import { type EventName, isEventName } from "./event-catalog.js";
+import { MAX_ACTIVE_SUBSCRIPTIONS } from "./event-hub.js";
 import {
   DELIVERY_MODES,
   type JobEventArguments,
-  eventCatalog,
-  isKnownEvent,
   jobEventArguments,
-} from "./event-catalog.js";
-import {
-  type EventSubscriptionsStub,
-  MAX_SUBSCRIPTIONS_PER_ACCOUNT,
-  type StoredSubscription,
-} from "./event-subscriptions.js";
-import { sha256Hex, subscriptionId } from "./subscription-identity.js";
+  mcpEventCatalog,
+} from "./mcp-event-catalog.js";
+import { subscriptionId } from "./subscription-identity.js";
 import { MAX_SECRET_CHARS, isValidSecret } from "./webhook-signing.js";
 
 /** `CallbackEndpointError` in the OpenAI MCP Events guide. */
@@ -41,18 +37,15 @@ export const CALLBACK_ENDPOINT_ERROR = -32015;
 export const DEFAULT_TTL_MS = 24 * 60 * 60_000;
 export const MIN_TTL_MS = 5 * 60_000;
 export const MAX_TTL_MS = 7 * 24 * 60 * 60_000;
-/** A passed verification is reused this long for the same callback URL and secret. */
-export const VERIFICATION_CACHE_MS = 24 * 60 * 60_000;
-/** After a refresh changes the secret, deliveries are signed with both for this long. */
-export const SECRET_ROTATION_MS = 60 * 60_000;
 
 export interface EventsContext {
   userId: string;
-  /** OAuth client of the token, recorded on the subscription for audit. */
+  /** OAuth client of the token; a revoked connection takes its subscriptions with it. */
   clientId?: string;
-  subscriptions: EventSubscriptionsStub;
-  /** AES-GCM key for signing secrets at rest (SECRETS_ENCRYPTION_KEY). */
-  encryptionKey: Promise<CryptoKey>;
+  /** The caller's AccountEvents object, which also delivers the events. */
+  events: AccountEventsStub;
+  /** This server's origin; callbacks may not point back at it. */
+  origin: string;
   /** Outbound fetch for DNS checks and verification. */
   fetch: FetchLike;
   /** Ownership records, to check a `job_id` filter belongs to the caller. */
@@ -104,9 +97,13 @@ export function grantedTtlMs(requested: number | null | undefined): number {
   return Math.max(MIN_TTL_MS, Math.min(requested, MAX_TTL_MS));
 }
 
-function checkEvent(name: string, mode: string): void {
-  if (!isKnownEvent(name)) throw invalidParams(`Unknown event: ${name.slice(0, 64)}`);
-  if (!(DELIVERY_MODES as readonly string[]).includes(mode)) {
+function isDeliveryMode(mode: string): boolean {
+  return (DELIVERY_MODES as readonly string[]).includes(mode);
+}
+
+function checkEvent(name: string, mode: string): asserts name is EventName {
+  if (!isEventName(name)) throw invalidParams(`Unknown event: ${name.slice(0, 64)}`);
+  if (!isDeliveryMode(mode)) {
     throw invalidParams(`Unsupported delivery mode; supported: ${DELIVERY_MODES.join(", ")}`);
   }
 }
@@ -115,6 +112,22 @@ function parseArguments(raw: Record<string, unknown> | undefined): JobEventArgum
   const parsed = jobEventArguments.safeParse(raw ?? {});
   if (!parsed.success) throw invalidParams("arguments do not match the event's inputSchema");
   return parsed.data;
+}
+
+/** Callback URL checks shared with the REST API: public https, not this server. */
+async function checkCallback(ctx: EventsContext, raw: string): Promise<string> {
+  let url: string;
+  try {
+    url = await assertPublicCallbackUrl(raw, ctx.fetch);
+  } catch (error) {
+    if (error instanceof CallbackUrlError) throw invalidParams(error.message);
+    if (error instanceof CallbackDnsError) throw callbackError("connection_refused");
+    throw error;
+  }
+  if (new URL(url).hostname.toLowerCase() === new URL(ctx.origin).hostname.toLowerCase()) {
+    throw invalidParams("delivery.url must not point at this server");
+  }
+  return url;
 }
 
 /**
@@ -137,21 +150,19 @@ function guarded<P, R>(method: string, handler: (params: P) => Promise<R>) {
   };
 }
 
-function secretAad(id: string): string {
-  return `event-subscription:${id}`;
-}
-
 export function registerEventMethods(server: McpServer, ctx: EventsContext): void {
   const now = ctx.now ?? Date.now;
+  const actor = `mcp:${ctx.clientId ?? "unknown"}`;
 
   server.server.setRequestHandler(
     "events/list",
     { params: listParams },
-    guarded("events/list", async () => ({ events: eventCatalog() })),
+    guarded("events/list", async () => ({ events: mcpEventCatalog() })),
   );
 
   const subscribe = guarded("events/subscribe", async (p: z.infer<typeof subscribeParams>) => {
-    checkEvent(p.name, p.delivery.mode);
+    const name = p.name;
+    checkEvent(name, p.delivery.mode);
     const args = parseArguments(p.arguments);
     if (args.job_id !== undefined && !(await ctx.jobs?.ownedBy(args.job_id, ctx.userId))) {
       throw invalidParams("Job not found");
@@ -159,73 +170,44 @@ export function registerEventMethods(server: McpServer, ctx: EventsContext): voi
     if (!isValidSecret(p.delivery.secret)) {
       throw invalidParams("delivery.secret must be whsec_ followed by base64 of 24-64 bytes");
     }
-    let url: string;
-    try {
-      url = await assertPublicCallbackUrl(p.delivery.url, ctx.fetch);
-    } catch (error) {
-      if (error instanceof CallbackUrlError) throw invalidParams(error.message);
-      if (error instanceof CallbackDnsError) throw callbackError("connection_refused");
-      throw error;
-    }
+    const url = await checkCallback(ctx, p.delivery.url);
+    const id = await subscriptionId({ principal: ctx.userId, url, name, arguments: args });
 
-    const id = await subscriptionId({
-      principal: ctx.userId,
-      url,
-      name: p.name,
-      arguments: args,
-    });
-    const started = now();
-    const existing = await ctx.subscriptions.get(id, started);
-    if (
-      !existing &&
-      (await ctx.subscriptions.list(started)).length >= MAX_SUBSCRIPTIONS_PER_ACCOUNT
-    ) {
-      throw invalidParams(`Subscription limit reached (${MAX_SUBSCRIPTIONS_PER_ACCOUNT})`);
-    }
-
-    const verificationKey = await sha256Hex(`${url}\n${p.delivery.secret}`);
-    if ((await ctx.subscriptions.verifiedUntil(verificationKey)) <= started) {
+    const state = await ctx.events.mcpSubscriptionState(id, url, p.delivery.secret);
+    if (state.atLimit)
+      throw invalidParams(
+        `An account may have at most ${MAX_ACTIVE_SUBSCRIPTIONS} active subscriptions; unsubscribe one first`,
+      );
+    if (!state.verified) {
       const failure = await verifyCallback(ctx.fetch, url, p.delivery.secret, id, now);
       if (failure) {
-        logEvent("warn", "event_subscribe", { eventName: p.name, ok: false, reason: failure });
+        logEvent("warn", "event_subscribe", { eventName: name, ok: false, reason: failure });
         throw callbackError(failure);
       }
-      await ctx.subscriptions.markVerified(verificationKey, now() + VERIFICATION_CACHE_MS, now());
     }
 
-    const key = await ctx.encryptionKey;
-    const at = now();
-    let previousSecret = existing?.previousSecret;
-    if (previousSecret && previousSecret.until <= at) previousSecret = undefined;
-    if (existing) {
-      const current = await decryptSecret(key, ctx.userId, secretAad(id), existing.secret).catch(
-        () => null,
-      );
-      if (current !== p.delivery.secret && current !== null) {
-        previousSecret = { secret: existing.secret, until: at + SECRET_ROTATION_MS };
-      }
-    }
-    const expiresAt = at + grantedTtlMs(p.ttlMs);
-    const record: StoredSubscription = {
+    const result = await ctx.events.upsertMcpSubscription(
+      {
+        id,
+        callbackUrl: url,
+        event: name,
+        ...(args.job_id !== undefined ? { jobId: args.job_id } : {}),
+        secret: p.delivery.secret,
+        ttlMs: grantedTtlMs(p.ttlMs),
+        ...(ctx.clientId ? { clientId: ctx.clientId } : {}),
+      },
+      actor,
+    );
+    if (!result.ok) throw invalidParams(result.message);
+    logEvent("info", "event_subscribe", {
+      eventName: name,
       id,
-      name: p.name,
-      arguments: args,
-      url,
-      secret: await encryptSecret(key, ctx.userId, secretAad(id), p.delivery.secret),
-      ...(previousSecret ? { previousSecret } : {}),
-      ...(ctx.clientId ? { clientId: ctx.clientId } : {}),
-      createdAt: at,
-      updatedAt: at,
-      expiresAt,
-    };
-    const result = await ctx.subscriptions.upsert(record, at);
-    if (result === "limit") {
-      throw invalidParams(`Subscription limit reached (${MAX_SUBSCRIPTIONS_PER_ACCOUNT})`);
-    }
-    logEvent("info", "event_subscribe", { eventName: p.name, id, ok: true, result });
+      ok: true,
+      result: result.created ? "created" : "updated",
+    });
     return {
       id,
-      refreshBefore: new Date(expiresAt).toISOString(),
+      refreshBefore: new Date(result.expiresAt).toISOString(),
       cursor: null,
       // No replay: history before this subscription is never available.
       truncated: p.cursor !== undefined && p.cursor !== null,
@@ -239,12 +221,7 @@ export function registerEventMethods(server: McpServer, ctx: EventsContext): voi
   const unsubscribe = guarded(
     "events/unsubscribe",
     async (p: z.infer<typeof unsubscribeParams>) => {
-      if (
-        !isKnownEvent(p.name) ||
-        !(DELIVERY_MODES as readonly string[]).includes(p.delivery.mode)
-      ) {
-        return {};
-      }
+      if (!isEventName(p.name) || !isDeliveryMode(p.delivery.mode)) return {};
       const args = jobEventArguments.safeParse(p.arguments ?? {});
       if (!args.success) return {};
       let url: string;
@@ -259,7 +236,7 @@ export function registerEventMethods(server: McpServer, ctx: EventsContext): voi
         name: p.name,
         arguments: args.data,
       });
-      const removed = await ctx.subscriptions.remove(id);
+      const removed = await ctx.events.unsubscribe(id, actor);
       logEvent("info", "event_unsubscribe", { eventName: p.name, id, removed });
       return {};
     },

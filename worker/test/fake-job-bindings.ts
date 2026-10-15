@@ -1,11 +1,14 @@
 /**
- * In-memory stand-ins for the job Durable Object bindings (MULTIX_JOBS and
- * MULTIX_JOB_QUOTA) used by the OAuth and REST API tests.
+ * In-memory stand-ins for the Durable Object bindings (MULTIX_JOBS,
+ * MULTIX_JOB_QUOTA and MULTIX_EVENTS) used by the OAuth and REST API tests.
  */
 
+import type { AccountEventsNamespace, AccountEventsStub } from "../src/events/account-events.js";
+import { EventHub } from "../src/events/event-hub.js";
 import { AccountJobQuota, type JobQuotaNamespace } from "../src/jobs/account-job-quota.js";
 import type { JobSpec, JobView } from "../src/jobs/job-protocol.js";
 import type { JobContainerStub, JobNamespace } from "../src/jobs/job-store.js";
+import { fakeDoStorage } from "./fake-do-storage.js";
 
 /** MULTIX_JOBS stand-in: one stub per job name, finishing as soon as it starts. */
 export function fakeNamespace() {
@@ -55,4 +58,31 @@ export function fakeQuotaNamespace(): JobQuotaNamespace {
       return quota;
     },
   };
+}
+
+/**
+ * MULTIX_EVENTS stand-in: the real EventHub per account over in-memory
+ * storage, with webhook deliveries captured instead of sent.
+ */
+export function fakeEventsNamespace(respond: () => Response = () => new Response("ok")) {
+  const hubs = new Map<string, EventHub>();
+  const sent: { account: string; url: string; body: string }[] = [];
+  const namespace: AccountEventsNamespace = {
+    getByName(name: string): AccountEventsStub {
+      let hub = hubs.get(name);
+      if (!hub) {
+        hub = new EventHub({
+          storage: fakeDoStorage().storage,
+          now: () => Date.now(),
+          fetch: async (url, init) => {
+            sent.push({ account: name, url, body: String(init.body) });
+            return respond();
+          },
+        });
+        hubs.set(name, hub);
+      }
+      return hub;
+    },
+  };
+  return { namespace, hubs, sent };
 }

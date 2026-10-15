@@ -4,9 +4,14 @@
  * (multix-job-container.ts) supplies the port.
  *
  * start -> POST /jobs to the job server -> poll GET /jobs/current (self
- * scheduled, and on every status read) -> persist the final result -> release
- * the account's job slot -> destroy the container. Only the job view is
- * stored; the spec with its secrets is never persisted.
+ * scheduled, and on every status read) -> persist the final result together
+ * with its lifecycle events -> release the account's job slot -> destroy the
+ * container. Only the job view is stored; the spec with its secrets is never
+ * persisted.
+ *
+ * A job reaches a final state once: poll, status reads, cancel and the
+ * container's stop can all race to finish it, and only the first one records
+ * a result (and its events); the others return the recorded one.
  *
  * Only start() boots a container. Status reads and cancel talk to a container
  * that is already running; when it is gone, the job is finished from the
@@ -31,6 +36,8 @@ export const SLOT_RELEASE_RETRY_SECONDS = 30;
 export interface JobContainerPort {
   load(): Promise<JobView | undefined>;
   save(view: JobView): Promise<void>;
+  /** Store the final view and its lifecycle events in one write, then schedule their relay. */
+  saveFinal(view: JobView): Promise<void>;
   /** Boot the container and wait for the job server; throws ContainerCapacityError when none is free. */
   startContainer(): Promise<void>;
   /** Whether the container is running now (never starts it). */
@@ -201,10 +208,13 @@ export class JobController {
     error?: string,
     result?: JobResult,
   ): Promise<JobView> {
+    // Another call may have finished the job while this one waited on the container.
+    const latest = await this.port.load();
+    if (latest && isTerminal(latest.status)) return latest;
     const done: JobView = { status, createdAt: view.createdAt, finishedAt: this.port.now() };
     if (result) done.result = result;
     if (error) done.error = error;
-    await this.port.save(done);
+    await this.port.saveFinal(done);
     await this.releaseSlot();
     try {
       await this.port.destroyContainer();

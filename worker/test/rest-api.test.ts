@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { ApiKeyStore } from "../src/accounts/api-key-store.js";
 import { openApiDocument } from "../src/api/openapi-document.js";
-import { fakeNamespace, fakeQuotaNamespace } from "./fake-job-bindings.js";
+import type { EventHub } from "../src/events/event-hub.js";
+import { jobEvents } from "../src/events/job-events.js";
+import { fakeEventsNamespace, fakeNamespace, fakeQuotaNamespace } from "./fake-job-bindings.js";
 import { fakeKv } from "./fake-kv.js";
 import {
   type Browser,
@@ -283,6 +285,122 @@ describe("REST API jobs", () => {
       body: JSON.stringify({ command: "gemini generate", options: { prompt: "p" } }),
     });
     expect(run.status).toBe(503);
+  });
+});
+
+describe("REST API events", () => {
+  const CALLBACK = "https://hooks.example.com/multix?token=abc";
+
+  it("creates, lists, reads and revokes a subscription, showing the secret only once", async () => {
+    const events = fakeEventsNamespace();
+    const { browser } = await signedInBrowser({ MULTIX_EVENTS: events.namespace });
+    const key = await createApiKey(browser);
+
+    const catalog = await body(await api(browser, key, "/events"));
+    expect(catalog.events.map((e: Json) => e.name)).toContain("multix.job.completed");
+
+    const created = await api(browser, key, "/events/subscriptions", {
+      method: "POST",
+      body: JSON.stringify({ callback_url: CALLBACK, events: ["multix.job.failed"] }),
+    });
+    expect(created.status).toBe(201);
+    const { subscription, secret, signing } = await body(created);
+    expect(secret).toMatch(/^whsec_/);
+    expect(signing.headers).toEqual(["webhook-id", "webhook-timestamp", "webhook-signature"]);
+    expect(subscription).toMatchObject({ status: "active", events: ["multix.job.failed"] });
+    expect(subscription.callback_url).not.toContain("abc");
+
+    const listed = await api(browser, key, "/events/subscriptions");
+    const listText = await listed.text();
+    expect(JSON.parse(listText).subscriptions).toHaveLength(1);
+    expect(listText).not.toContain(secret);
+    const one = await body(await api(browser, key, `/events/subscriptions/${subscription.id}`));
+    expect(one.subscription.id).toBe(subscription.id);
+
+    const revoked = await api(browser, key, `/events/subscriptions/${subscription.id}`, {
+      method: "DELETE",
+    });
+    expect(await body(revoked)).toEqual({ revoked: subscription.id });
+    expect((await api(browser, key, `/events/subscriptions/${subscription.id}`)).status).toBe(404);
+    expect(
+      (await api(browser, key, `/events/subscriptions/${subscription.id}`, { method: "DELETE" }))
+        .status,
+    ).toBe(404);
+
+    const audit = await body(await api(browser, key, "/events/audit"));
+    expect(audit.audit.map((e: Json) => e.action)).toEqual([
+      "subscription.revoked",
+      "subscription.created",
+    ]);
+    expect(audit.audit[0].actor).toMatch(/^api_key:/);
+    expect(await body(await api(browser, key, "/events/dead-letters"))).toEqual({
+      dead_letters: [],
+    });
+  });
+
+  it("keeps each account's subscriptions and deliveries to itself", async () => {
+    const events = fakeEventsNamespace();
+    const env = oauthEnv({
+      MULTIX_ALLOWED_USERS: "octocat,hubot",
+      MULTIX_EVENTS: events.namespace,
+    });
+    const owner = newBrowser(env, githubFetch(OCTOCAT).fetch);
+    await signIn(owner);
+    const ownerKey = await createApiKey(owner);
+    const { subscription } = await body(
+      await api(owner, ownerKey, "/events/subscriptions", {
+        method: "POST",
+        body: JSON.stringify({ callback_url: "https://owner.example.com/in" }),
+      }),
+    );
+
+    const other = newBrowser(env, githubFetch({ id: 2, login: "hubot" }).fetch);
+    await signIn(other);
+    const otherKey = await createApiKey(other);
+    const path = `/events/subscriptions/${subscription.id}`;
+    expect((await api(other, otherKey, path)).status).toBe(404);
+    expect((await api(other, otherKey, path, { method: "DELETE" })).status).toBe(404);
+    expect(await body(await api(other, otherKey, "/events/subscriptions"))).toEqual({
+      subscriptions: [],
+    });
+    expect((await api(owner, ownerKey, path)).status).toBe(200);
+
+    // A job event published to one account reaches only that account's callback.
+    expect([...events.hubs.keys()]).toEqual(["gh-1", "gh-2"]);
+    const finished = jobEvents(
+      { jobId: "00000000-0000-4000-8000-000000000001", command: "gemini generate" },
+      { status: "failed", createdAt: 1, finishedAt: 2 },
+    );
+    const ownerHub = events.namespace.getByName("gh-1") as EventHub;
+    await ownerHub.publish(finished);
+    await ownerHub.alarm();
+    expect(events.sent.map((s) => [s.account, s.url])).toEqual([
+      ["gh-1", "https://owner.example.com/in"],
+    ]);
+  });
+
+  it("rejects bad callbacks and answers 503 without the events binding", async () => {
+    const events = fakeEventsNamespace();
+    const { browser } = await signedInBrowser({ MULTIX_EVENTS: events.namespace });
+    const key = await createApiKey(browser);
+    for (const callback_url of [
+      "http://hooks.example.com/in",
+      "https://10.0.0.1/in",
+      `${ORIGIN}/x`,
+    ]) {
+      const bad = await api(browser, key, "/events/subscriptions", {
+        method: "POST",
+        body: JSON.stringify({ callback_url }),
+      });
+      expect(bad.status, callback_url).toBe(400);
+    }
+
+    const bare = await signedInBrowser();
+    const bareKey = await createApiKey(bare.browser);
+    expect((await api(bare.browser, bareKey, "/events")).status).toBe(200);
+    const unavailable = await api(bare.browser, bareKey, "/events/subscriptions");
+    expect(unavailable.status).toBe(503);
+    expect(await body(unavailable)).toMatchObject({ error: { code: "unavailable" } });
   });
 });
 

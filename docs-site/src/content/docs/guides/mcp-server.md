@@ -78,6 +78,14 @@ job: downloading inputs, running the CLI and uploading outputs. The job's
 record is kept for 7 days. Only the account that started a job can read or
 cancel it.
 
+**Webhooks instead of polling.** A script or service can also be told when a
+job ends: subscribe an https endpoint with an [account API key](#api-keys-for-the-rest-api)
+and the server POSTs a signed event (`multix.job.completed`, `failed`,
+`canceled`, `timed_out`, plus `multix.asset.ready` per stored output). Events
+carry ids and final state only, so read the outputs with `multix_job_status`
+when one arrives; polling stays the fallback. See
+[Job event webhooks](/guides/rest-api/#job-event-webhooks).
+
 **Concurrency.** Each account can have at most **2** jobs running at once
 (`MULTIX_MAX_JOBS_PER_ACCOUNT`). One more `multix_run` fails with
 `busy: you already have 2 running jobs; wait for one to finish or cancel it`
@@ -211,9 +219,12 @@ image to Cloudflare.
    `durable_objects` and `exports`; only `multix_catalog` is then listed. The
    `MULTIX_JOB_QUOTA` binding (class `AccountJobQuota`) holds the running-job
    counts per account and server-wide, and is required together with
-   `MULTIX_JOBS`. The `MULTIX_EVENT_SUBSCRIPTIONS` binding (class
-   `EventSubscriptions`) stores [MCP Events](#mcp-events-protocol-2026-07-28)
-   subscriptions; without it `server/discover` does not offer events.
+   `MULTIX_JOBS`. The `MULTIX_EVENTS` binding (class `AccountEvents`) holds
+   each account's [webhook subscriptions](/guides/rest-api/#job-event-webhooks)
+   and deliveries, from the REST API and from
+   [MCP Events](#mcp-events-protocol-2026-07-28); without it the
+   `/api/v1/events` routes answer `503` and `server/discover` does not offer
+   events.
 4. **Set the secrets** and deploy:
 
    ```bash
@@ -301,7 +312,7 @@ The server speaks two MCP protocol revisions on the same `/mcp` endpoint:
   get the tools exactly as before. Nothing changes for them.
 - **2026-07-28 clients** negotiate through `server/discover` and send the
   protocol version on every request. `server/discover` lists `2026-07-28`
-  and, when the Worker has the `MULTIX_EVENT_SUBSCRIPTIONS` binding, the
+  and, when the Worker has the `MULTIX_EVENTS` binding, the
   `events` capability, so the client can subscribe to
   [MCP Events](https://developers.openai.com/plugins/build/mcp-events) with
   `events/list`, `events/subscribe` and `events/unsubscribe`.
@@ -315,11 +326,18 @@ The server speaks two MCP protocol revisions on the same `/mcp` endpoint:
 | `multix.asset.ready` | One of its output files was stored in your R2 bucket. |
 
 Every event takes one optional argument, `job_id`, to narrow it to one job you
-own; without it the subscription covers all your jobs. Payloads carry ids, the
-final status, the command, a timestamp and an R2 object key, never keys,
-prompts, logs or signed URLs. This release defines the catalog and stores
-subscriptions; sending the events when a job ends is tracked separately
-([#223](https://github.com/mrgoonie/multix-cli/issues/223)).
+own; without it the subscription covers all your jobs. `events/list` gives
+each event's `payloadSchema`: the same `data` as the
+[REST webhooks](/guides/rest-api/#job-event-webhooks) (ids, final status,
+command, provider, times, exit code and output names and sizes), never keys,
+prompts, logs or signed URLs.
+
+Each delivery is a `POST` with the MCP Events body
+`{ "eventId", "name", "timestamp", "data", "cursor": null }`, the
+`webhook-id` (equal to `eventId`), `webhook-timestamp` and `webhook-signature`
+headers, and `X-MCP-Subscription-Id`. Failed deliveries are retried with
+backoff and then dead-lettered, as for REST subscriptions; dedupe on
+`eventId`.
 
 Subscriptions use **webhook** delivery only:
 
@@ -335,17 +353,19 @@ Subscriptions use **webhook** delivery only:
   followed. A failure answers `-32015` with `data.reason` (`challenge_failed`,
   `timeout`, `connection_refused`, `http_4xx` or `http_5xx`; a callback host
   that cannot be resolved also reports `connection_refused`) and stores
-  nothing. A passed verification is reused for 24 hours for the same URL and
-  secret.
+  nothing. Refreshing a live subscription with the same callback and secret
+  is not verified again.
 - Subscribing again with the same event, arguments and callback refreshes the
   existing subscription (same `id`). Changing the secret keeps signing with the
   old one too for one hour. Lifetimes default to 24 hours and are clamped to
   between 5 minutes and 7 days; `ttlMs: null` gets 7 days, never unlimited.
   Refresh before `refreshBefore`.
-- An account holds at most 20 subscriptions. They live in a Durable Object per
-  account, with secrets encrypted by `SECRETS_ENCRYPTION_KEY`, so no account
-  can read, refresh or remove another's. Past events are not replayed: a
-  `cursor` from an earlier subscription answers `truncated: true`.
+- MCP and REST subscriptions share one store per account (the `AccountEvents`
+  Durable Object) and its limit of 10 active subscriptions, so no account can
+  read, refresh or remove another's. They also show in
+  `GET /api/v1/events/subscriptions`. Disconnecting a client in the dashboard
+  removes the subscriptions it made. Past events are not replayed: a `cursor`
+  from an earlier subscription answers `truncated: true`.
 
 `subscriptions/listen` is not served (the tool list is fixed per deployment).
 
@@ -453,9 +473,10 @@ within your Cloudflare account. If another Worker already uses `1001` or
 - **Event callbacks:** subscribe-time checks refuse non-public callbacks by
   name and by every resolved address (DNS over HTTPS), callback requests never
   follow redirects, and only the failure category of a verification is
-  returned or logged. A host re-pointed to a private address right after the
-  check (DNS rebinding) is not caught at subscribe time, so event delivery
-  repeats the address check before every request.
+  returned or logged. A host re-pointed to a private address after the check
+  (DNS rebinding) is not caught at subscribe time; re-checking the address
+  before each delivery is tracked in
+  [#226](https://github.com/mrgoonie/multix-cli/issues/226).
 - **Stateless MCP:** no MCP sessions. Each request builds a fresh server with
   the caller's keys. OAuth state and accounts live in KV; event subscriptions
   live in a Durable Object per account.

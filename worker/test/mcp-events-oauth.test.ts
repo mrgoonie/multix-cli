@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SECRET, callbackRoute, dohRoute } from "./events-helpers.js";
-import { fakeEventSubscriptions } from "./fake-event-subscriptions.js";
+import { fakeEventsNamespace } from "./fake-job-bindings.js";
 import {
   authorizeAndGetToken,
   githubFetch,
@@ -24,11 +24,19 @@ const TARGET = {
 const SUBSCRIBE = { ...TARGET, delivery: { ...TARGET.delivery, secret: SECRET } };
 
 function eventsEnv() {
-  const subscriptions = fakeEventSubscriptions();
+  const events = fakeEventsNamespace();
   const env = oauthEnv({
     MULTIX_ALLOWED_USERS: "octocat,hubot",
-    MULTIX_EVENT_SUBSCRIPTIONS: subscriptions,
+    MULTIX_EVENTS: events.namespace,
   });
+  /** Every account's subscriptions, by account. */
+  const subscriptions = async () =>
+    Promise.all(
+      [...events.hubs].map(async ([account, hub]) => ({
+        account,
+        subs: await hub.listSubscriptions(),
+      })),
+    );
   return { env, subscriptions };
 }
 
@@ -53,9 +61,12 @@ describe("MCP Events over OAuth", () => {
       await modernMcpCall(browser, token, "events/subscribe", SUBSCRIBE),
     );
     expect(subscribed.result.id).toMatch(/^sub_/);
-    const [owner] = subscriptions.names();
-    const [stored] = await subscriptions.getByName(owner as string).list(Date.now());
-    expect(stored?.clientId).toBeTruthy();
+    expect(await subscriptions()).toEqual([
+      {
+        account: expect.any(String),
+        subs: [expect.objectContaining({ id: subscribed.result.id, events: [TARGET.name] })],
+      },
+    ]);
 
     // The 2025 handshake on the same token still sees tools only.
     const init = await json(
@@ -81,9 +92,7 @@ describe("MCP Events over OAuth", () => {
       grant_id: hiddenField(page, "grant_id"),
     });
     expect((await modernMcpCall(browser, token, "events/subscribe", SUBSCRIBE)).status).toBe(401);
-    for (const name of subscriptions.names()) {
-      expect(await subscriptions.getByName(name).list(Date.now())).toEqual([]);
-    }
+    for (const { subs } of await subscriptions()) expect(subs).toEqual([]);
   });
 
   it("removes the client's subscriptions when its connection is revoked", async () => {
@@ -92,15 +101,14 @@ describe("MCP Events over OAuth", () => {
     const token = await authorizeAndGetToken(browser, await registerClient(browser));
     const created = await json(await modernMcpCall(browser, token, "events/subscribe", SUBSCRIBE));
     expect(created.result.id).toMatch(/^sub_/);
-    const [name] = subscriptions.names();
-    expect(await subscriptions.getByName(name as string).list(Date.now())).toHaveLength(1);
+    expect((await subscriptions()).map((a) => a.subs.length)).toEqual([1]);
 
     const page = await (await browser.request("/dashboard")).text();
     await browser.post("/dashboard/connections/revoke", {
       csrf: hiddenField(page, "csrf"),
       grant_id: hiddenField(page, "grant_id"),
     });
-    expect(await subscriptions.getByName(name as string).list(Date.now())).toEqual([]);
+    expect((await subscriptions()).map((a) => a.subs.length)).toEqual([0]);
   });
 
   it("keeps each account's subscriptions apart", async () => {
@@ -117,10 +125,6 @@ describe("MCP Events over OAuth", () => {
     );
 
     expect(theirs.result.id).not.toBe(mine.result.id);
-    const names = subscriptions.names();
-    expect(names).toHaveLength(2);
-    for (const name of names) {
-      expect(await subscriptions.getByName(name).list(Date.now())).toHaveLength(1);
-    }
+    expect((await subscriptions()).map((a) => a.subs.length)).toEqual([1, 1]);
   });
 });

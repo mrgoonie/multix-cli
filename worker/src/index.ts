@@ -11,6 +11,7 @@
  *   GET  /oauth/github/callback                     GitHub sign-in callback
  *   *    /dashboard[/…]                             account dashboard (provider keys, storage, API keys, clients)
  *   *    /api/v1/…                                  REST API; account API key required (api/api-router.ts)
+ *                                                   (incl. /api/v1/events: job event webhooks, events/)
  *   GET  /api/docs                                  REST API reference (public)
  *
  * Each MCP request runs with the provider keys of the account that approved
@@ -88,7 +89,7 @@ async function handleAuthenticatedMcp(
   const keys = await app.accounts.providerKeys(account.id);
   const toolEnv = toolEnvFor(serverSettings(env), keys);
   const jobs = jobsContextFor(env, app, account.id, keys, deps);
-  const events = eventsContextFor(env, app, account.id, auth.clientId);
+  const events = eventsContextFor(env, app, deps, account.id, auth.clientId);
   return handleMcpRequest(request, toolEnv, { jobs, events });
 }
 
@@ -193,7 +194,7 @@ export function createWorker(deps: AppDeps = {}): ExportedHandler<WorkerEnv> {
   };
 }
 
-export { EventSubscriptions } from "./events/event-subscriptions.js";
+export { AccountEvents } from "./events/account-events.js";
 export { AccountJobQuota } from "./jobs/account-job-quota.js";
 export { MultixJobContainer } from "./jobs/multix-job-container.js";
 

@@ -1,6 +1,6 @@
 ---
 title: REST API và API key của tài khoản
-description: Dùng REST API của multix MCP server từ script và CI bằng API key của tài khoản để quản lý provider key và lưu trữ R2, đọc catalog CLI, và chạy, theo dõi, hủy job CLI.
+description: Dùng REST API của multix MCP server từ script và CI bằng API key của tài khoản để quản lý provider key và lưu trữ R2, đọc catalog CLI, chạy, theo dõi, hủy job CLI, và nhận webhook có chữ ký khi job kết thúc.
 ---
 
 [MCP server từ xa](/vi/guides/mcp-server/) còn cung cấp một REST API dạng JSON
@@ -73,6 +73,13 @@ Mọi path đều tương đối với `/api/v1`.
 | `POST` | `/jobs/{id}/cancel` | Dừng một job đang chạy. |
 | `GET` | `/api-keys` | Các API key của tài khoản (`id`, `name`, `prefix`, `created_at`), không bao giờ có chính key. |
 | `DELETE` | `/api-keys/{id}` | Thu hồi một API key. Một key có thể tự thu hồi chính nó. |
+| `GET` | `/events` | Danh mục sự kiện: tên, mô tả và JSON Schema của `data` cho từng sự kiện. |
+| `GET` | `/events/subscriptions` | Các subscription webhook của tài khoản, cả đang hoạt động lẫn không. Không bao giờ liệt kê secret. |
+| `POST` | `/events/subscriptions` | Đăng ký một callback URL nhận sự kiện job; trả về secret ký một lần duy nhất. |
+| `GET` | `/events/subscriptions/{id}` | Một subscription. |
+| `DELETE` | `/events/subscriptions/{id}` | Thu hồi một subscription. |
+| `GET` | `/events/dead-letters` | Các lần gửi đã bị bỏ cuộc (ID, lý do, số lần thử; không kèm payload). |
+| `GET` | `/events/audit` | Nhật ký audit của subscription: tạo, thu hồi, vô hiệu hóa, hết hạn. |
 
 Tên provider key là tên biến môi trường mà CLI đọc (ví dụ `GEMINI_API_KEY`),
 cùng các tên của Cloudflare Workers AI; `GET /provider-keys` liệt kê tất cả.
@@ -222,6 +229,146 @@ cat job.json   # outputs[].url chứa các file trong bucket R2 của bạn
 Dừng job đang chạy bằng `POST /jobs/{id}/cancel`. Chỉ tài khoản đã bắt đầu job
 mới đọc hoặc hủy được nó; tài khoản khác nhận `404`.
 
+## Webhook sự kiện job
+
+Thay vì polling, hãy đăng ký một endpoint https nhận sự kiện job. Khi job kết
+thúc, server POST một sự kiện JSON có chữ ký tới mọi subscription phù hợp của
+tài khoản đã khởi chạy job. Polling `GET /jobs/{id}` (hoặc `multix_job_status`
+qua MCP) vẫn hoạt động và là phương án dự phòng khi một lần gửi bị trễ hoặc
+thất lạc.
+
+### Sự kiện
+
+| Sự kiện | Khi nào |
+|---|---|
+| `multix.job.completed` | Job kết thúc và CLI thoát thành công. |
+| `multix.job.failed` | Job kết thúc với lỗi (CLI lỗi, mất container, không khởi động được). |
+| `multix.job.canceled` | Job bị chủ sở hữu hủy. |
+| `multix.job.timed_out` | Job không xong trong giới hạn thời gian của server. |
+| `multix.asset.ready` | Một file output của job thành công đã được lưu vào bucket R2 của tài khoản (mỗi file đã lưu một sự kiện, tối đa 20 mỗi job). |
+
+`GET /events` trả về cùng danh sách này kèm JSON Schema của `data` cho từng sự
+kiện; endpoint đó và `worker/src/events/event-catalog.ts` là nguồn chuẩn cho
+các trường của payload.
+
+Mọi sự kiện có cùng một envelope:
+
+```json
+{
+  "id": "evt_<job_id>_succeeded",
+  "name": "multix.job.completed",
+  "schema_version": 1,
+  "occurred_at": "2026-01-01T12:00:00.000Z",
+  "resource": { "type": "job", "id": "<job_id>" },
+  "data": {
+    "job_id": "<job_id>",
+    "status": "succeeded",
+    "command": "gemini generate",
+    "provider": "gemini",
+    "created_at": "2026-01-01T11:59:20.000Z",
+    "finished_at": "2026-01-01T12:00:00.000Z",
+    "exit_code": 0,
+    "outputs": [{ "name": "image-1.png", "bytes": 482113, "stored": true }]
+  }
+}
+```
+
+`multix.asset.ready` mang `job_id`, `command`, `provider`, vị trí `index` của
+file trong `outputs`, `name` và `bytes` của file. Payload chỉ chứa ID và trạng
+thái cuối: không bao giờ có prompt, output của CLI, nội dung lỗi, key hay URL
+(URL output thường là URL presigned). Hãy đọc những thứ đó bằng
+`GET /jobs/{id}` hoặc `multix_job_status` khi nhận được sự kiện.
+
+### Đăng ký
+
+`POST /events/subscriptions` nhận:
+
+- `callback_url` (bắt buộc): URL `https://` công khai theo tên host, dùng cổng
+  mặc định, không trỏ về chính server multix.
+- `events` (tùy chọn): tên các sự kiện muốn nhận; mặc định là tất cả.
+- `ttl_seconds` (tùy chọn): thời gian sống của subscription, từ 3600 (1 giờ)
+  đến 7776000 (90 ngày); mặc định 2592000 (30 ngày). Không gia hạn được: hãy
+  tạo subscription mới trước khi subscription cũ hết hạn.
+- `description` (tùy chọn): tối đa 200 ký tự.
+
+```bash
+curl -s -X POST https://multix.zuey.me/api/v1/events/subscriptions \
+  -H "Authorization: Bearer $MULTIX_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "callback_url": "https://hooks.example.com/multix",
+    "events": ["multix.job.completed", "multix.job.failed"],
+    "description": "CI notifier"
+  }'
+```
+
+Response `201` gồm `subscription` (`id`, `status`, `expires_at` và các bộ đếm
+lần gửi), `secret` (`whsec_…`) và `signing`, phần tóm tắt cơ chế ký bên dưới.
+Secret chỉ hiển thị **một lần**: lưu ngay vào kho secret của bạn. Nếu làm mất,
+hãy thu hồi subscription bằng `DELETE /events/subscriptions/{id}` rồi tạo cái
+khác. Mỗi tài khoản có tối đa **10** subscription đang hoạt động; tạo thêm sẽ
+nhận `409 limit_reached`.
+
+### Xác minh chữ ký
+
+Các lần gửi tuân theo [Standard Webhooks](https://www.standardwebhooks.com).
+Mỗi request mang:
+
+- `webhook-id`: `id` của sự kiện;
+- `webhook-timestamp`: thời điểm gửi lần thử này, tính bằng giây Unix;
+- `webhook-signature`: `v1,<base64 của HMAC-SHA256 trên "<webhook-id>.<webhook-timestamp>.<raw body>">`.
+
+Khóa HMAC là phần sau `whsec_` của secret, giải mã base64. Hãy từ chối lần gửi
+có chữ ký không khớp hoặc timestamp lệch quá 5 phút so với đồng hồ của bạn, và
+tính HMAC trên raw body đúng như khi nhận, trước khi parse. Thư viện Standard
+Webhooks nào cũng dùng được; với Node.js thuần:
+
+```js
+import { createHmac, timingSafeEqual } from "node:crypto";
+
+const TOLERANCE_SECONDS = 5 * 60;
+
+// headers: header của request (tên viết thường); rawBody: body đúng như khi nhận, trước JSON.parse.
+export function verifyMultixWebhook(secret, headers, rawBody) {
+  const id = headers["webhook-id"];
+  const timestamp = headers["webhook-timestamp"];
+  if (!id || !/^\d+$/.test(timestamp ?? "")) return false;
+  if (Math.abs(Date.now() / 1000 - Number(timestamp)) > TOLERANCE_SECONDS) return false;
+  const key = Buffer.from(secret.slice("whsec_".length), "base64");
+  const mac = createHmac("sha256", key).update(`${id}.${timestamp}.${rawBody}`).digest("base64");
+  const expected = Buffer.from(`v1,${mac}`);
+  return (headers["webhook-signature"] ?? "").split(" ").some((candidate) => {
+    const given = Buffer.from(candidate);
+    return given.length === expected.length && timingSafeEqual(given, expected);
+  });
+}
+```
+
+### Cơ chế gửi
+
+- **Ít nhất một lần.** Cùng một sự kiện có thể đến nhiều lần, ví dụ khi câu
+  trả lời của bạn bị mất và lần gửi được thử lại. Hãy khử trùng lặp theo
+  `webhook-id`: đó là `id` của sự kiện, giống nhau ở mọi lần thử.
+- **Thành công** là bất kỳ câu trả lời `2xx` nào trong vòng 10 giây. Hãy trả
+  lời nhanh rồi xử lý sau.
+- **Thử lại.** Hết thời gian chờ, lỗi mạng, `408`, `429` hoặc `5xx` được thử
+  lại với độ trễ tăng dần 30 giây, 2 phút, 10 phút, 30 phút, 1 giờ, 3 giờ,
+  6 giờ và 12 giờ (tổng cộng khoảng một ngày; lịch này là
+  `RETRY_DELAYS_SECONDS` trong `worker/src/events/event-hub.ts`). Header
+  `Retry-After` tính bằng giây có thể kéo dài một lần chờ, tối đa 1 giờ. Sau
+  lần thử cuối, sự kiện được chuyển vào dead letter.
+- **Không thử lại** với mọi câu trả lời khác: redirect (`3xx`, không bao giờ
+  được theo) hoặc `4xx` khác đưa sự kiện vào dead letter ngay.
+- **Vô hiệu hóa.** Câu trả lời `410 Gone` vô hiệu hóa subscription, 5 dead
+  letter liên tiếp cũng vậy. Subscription bị vô hiệu hóa hoặc hết hạn vẫn được
+  liệt kê kèm `status` và `status_reason`, nhưng không nhận gì nữa; hãy tạo
+  subscription mới.
+
+`GET /events/dead-letters` liệt kê các sự kiện đã bị bỏ cuộc, còn
+`GET /events/audit` cho biết khi nào subscription được tạo, thu hồi, vô hiệu
+hóa hoặc hết hạn. Để bắt kịp sau sự cố, hãy đọc các job có tên ở đó bằng
+`GET /jobs/{id}`.
+
 ## Lỗi
 
 Lỗi là JSON có `code` cố định và thông báo không bao giờ chứa giá trị đã gửi:
@@ -235,14 +382,15 @@ Lỗi là JSON có `code` cố định và thông báo không bao giờ chứa g
 | `400` | `bad_request` | JSON, trường hoặc giá trị không hợp lệ, tên provider key không hợp lệ, hoặc lệnh, option hay input mà `multix_run` sẽ từ chối. |
 | `401` | `unauthorized` | Thiếu API key, sai định dạng, không tồn tại hoặc đã bị thu hồi. |
 | `403` | `forbidden` | Tài khoản không còn trong danh sách được phép đăng nhập. |
-| `404` | `not_found` | Path, job hoặc API key không tồn tại, hoặc job của tài khoản khác. |
+| `404` | `not_found` | Path, job, API key hoặc subscription sự kiện không tồn tại, hoặc thuộc tài khoản khác. |
 | `405` | `method_not_allowed` | Sai method; header `Allow` liệt kê các method được chấp nhận. |
 | `413` | `payload_too_large` | Body lớn hơn 64 KiB. |
 | `415` | `unsupported_media_type` | Body không gửi dưới dạng `application/json`. |
+| `409` | `limit_reached` | Tài khoản đã có 10 subscription sự kiện đang hoạt động. |
 | `422` | `storage_check_failed` | Kiểm tra quyền truy cập R2 thất bại; không có gì được lưu. |
 | `429` | `rate_limited` | Quá nhiều request; thử lại sau số giây trong `Retry-After`. |
 | `429` | `busy` | Đã chạm giới hạn job: số job đang chạy của tài khoản hoặc tổng số job của server. Chờ một job kết thúc (hoặc hủy một job) thay vì thử lại ngay. |
-| `503` | `unavailable` | Server không có job container, nên không chạy được job. |
+| `503` | `unavailable` | Server không có job container, nên không chạy được job, hoặc không có binding sự kiện, nên các route sự kiện bị tắt. |
 | `500` | `internal` | Lỗi server không lường trước. |
 
 Tập mã lỗi được định nghĩa trong `worker/src/api/api-http.ts`.
@@ -259,4 +407,6 @@ Tập mã lỗi được định nghĩa trong `worker/src/api/api-http.ts`.
   mỗi job, cùng các giới hạn của server về số output, độ dài và độ phân giải
   video.
 - **API key:** tối đa 10 key mỗi tài khoản; chỉ tạo được trong dashboard.
+- **Subscription sự kiện:** tối đa 10 subscription đang hoạt động mỗi tài
+  khoản; thời gian sống từ 1 giờ đến 90 ngày (mặc định 30 ngày).
 - **Body:** object JSON tối đa 64 KiB.

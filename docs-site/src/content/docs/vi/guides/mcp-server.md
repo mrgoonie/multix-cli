@@ -76,6 +76,14 @@ mỗi 10–30 giây. Một giới hạn 30 phút áp dụng cho toàn bộ job: 
 CLI và tải output lên. Bản ghi của job được giữ 7 ngày. Chỉ tài khoản đã khởi
 chạy job mới đọc hoặc hủy được job đó.
 
+**Webhook thay cho polling.** Script hoặc dịch vụ cũng có thể được báo khi job
+kết thúc: đăng ký một endpoint https bằng [API key của tài khoản](#api-key-cho-rest-api)
+và server sẽ POST một sự kiện có chữ ký (`multix.job.completed`, `failed`,
+`canceled`, `timed_out`, cùng `multix.asset.ready` cho mỗi output đã lưu). Sự
+kiện chỉ mang ID và trạng thái cuối, nên hãy đọc output bằng
+`multix_job_status` khi nhận được sự kiện; polling vẫn là phương án dự phòng.
+Xem [Webhook sự kiện job](/vi/guides/rest-api/#webhook-sự-kiện-job).
+
 **Số job đồng thời.** Mỗi tài khoản chạy tối đa **2** job cùng lúc
 (`MULTIX_MAX_JOBS_PER_ACCOUNT`). Lệnh `multix_run` tiếp theo báo lỗi
 `busy: you already have 2 running jobs; wait for one to finish or cancel it`
@@ -207,9 +215,11 @@ Cloudflare.
    `durable_objects` và `exports`; khi đó chỉ `multix_catalog` được liệt kê.
    Binding `MULTIX_JOB_QUOTA` (class `AccountJobQuota`) giữ số job đang chạy
    theo từng tài khoản và trên toàn server, và phải đi cùng `MULTIX_JOBS`.
-   Binding `MULTIX_EVENT_SUBSCRIPTIONS` (class `EventSubscriptions`) lưu các
-   subscription [MCP Events](#mcp-events-giao-thức-2026-07-28); thiếu binding
-   này thì `server/discover` không cung cấp events.
+   Binding `MULTIX_EVENTS` (class `AccountEvents`) giữ
+   [subscription webhook](/vi/guides/rest-api/#webhook-sự-kiện-job) và các lần
+   gửi của từng tài khoản, tạo qua REST API lẫn
+   [MCP Events](#mcp-events-giao-thức-2026-07-28); thiếu binding này, các route
+   `/api/v1/events` trả về `503` và `server/discover` không cung cấp events.
 4. **Đặt secret** và triển khai:
 
    ```bash
@@ -297,7 +307,7 @@ Server hỗ trợ hai phiên bản giao thức MCP trên cùng endpoint `/mcp`:
   vẫn nhận các tool y như trước. Không có gì thay đổi với các client này.
 - **Client 2026-07-28** thương lượng qua `server/discover` và gửi phiên bản
   giao thức trong mỗi request. `server/discover` liệt kê `2026-07-28` và, khi
-  Worker có binding `MULTIX_EVENT_SUBSCRIPTIONS`, capability `events`, để
+  Worker có binding `MULTIX_EVENTS`, capability `events`, để
   client đăng ký
   [MCP Events](https://developers.openai.com/plugins/build/mcp-events) bằng
   `events/list`, `events/subscribe` và `events/unsubscribe`.
@@ -311,11 +321,17 @@ Server hỗ trợ hai phiên bản giao thức MCP trên cùng endpoint `/mcp`:
 | `multix.asset.ready` | Một file output của job đã được lưu vào bucket R2 của bạn. |
 
 Mọi sự kiện nhận một tham số tùy chọn, `job_id`, để chỉ theo dõi một job bạn
-sở hữu; bỏ trống thì subscription áp dụng cho mọi job của bạn. Payload chỉ chứa
-id, trạng thái cuối, lệnh, thời điểm và object key trên R2, không bao giờ chứa
-key, prompt, log hay URL đã ký. Bản phát hành này định nghĩa danh mục và lưu
-subscription; việc gửi sự kiện khi job kết thúc được theo dõi riêng
-([#223](https://github.com/mrgoonie/multix-cli/issues/223)).
+sở hữu; bỏ trống thì subscription áp dụng cho mọi job của bạn. `events/list`
+trả về `payloadSchema` của từng sự kiện: cùng phần `data` với
+[webhook REST](/vi/guides/rest-api/#webhook-sự-kiện-job) (id, trạng thái cuối,
+lệnh, provider, thời điểm, exit code, tên và kích thước file output), không bao
+giờ chứa key, prompt, log hay URL đã ký.
+
+Mỗi lần gửi là một `POST` với body MCP Events
+`{ "eventId", "name", "timestamp", "data", "cursor": null }`, các header
+`webhook-id` (bằng `eventId`), `webhook-timestamp`, `webhook-signature` và
+`X-MCP-Subscription-Id`. Lần gửi thất bại được thử lại với backoff rồi chuyển
+vào dead letter, giống subscription REST; hãy khử trùng lặp theo `eventId`.
 
 Subscription chỉ dùng kiểu gửi **webhook**:
 
@@ -330,17 +346,20 @@ Subscription chỉ dùng kiểu gửi **webhook**:
   trả lại đúng challenge trong 10 giây. Redirect không được đi theo. Nếu thất
   bại, server trả `-32015` kèm `data.reason` (`challenge_failed`, `timeout`,
   `connection_refused`, `http_4xx` hoặc `http_5xx`; host callback
-  không phân giải được cũng báo `connection_refused`) và không lưu gì. Một lần
-  xác minh thành công được dùng lại trong 24 giờ cho cùng URL và secret.
+  không phân giải được cũng báo `connection_refused`) và không lưu gì. Gia hạn
+  một subscription còn hiệu lực với cùng callback và secret thì không xác minh
+  lại.
 - Đăng ký lại với cùng sự kiện, tham số và callback sẽ gia hạn subscription
   hiện có (cùng `id`). Khi đổi secret, server vẫn ký thêm bằng secret cũ trong
   một giờ. Thời hạn mặc định 24 giờ, được giới hạn trong khoảng 5 phút đến 7
   ngày; `ttlMs: null` nhận 7 ngày, không bao giờ vô hạn. Hãy gia hạn trước
   `refreshBefore`.
-- Mỗi tài khoản giữ tối đa 20 subscription, lưu trong một Durable Object riêng
-  cho từng tài khoản, secret được mã hóa bằng `SECRETS_ENCRYPTION_KEY`, nên
-  không tài khoản nào đọc, gia hạn hay xóa được subscription của tài khoản
-  khác. Sự kiện cũ không được phát lại: `cursor` từ subscription trước sẽ nhận
+- Subscription MCP và REST dùng chung một kho cho mỗi tài khoản (Durable Object
+  `AccountEvents`) và chung giới hạn 10 subscription đang hoạt động, nên không
+  tài khoản nào đọc, gia hạn hay xóa được subscription của tài khoản khác.
+  Chúng cũng hiện trong `GET /api/v1/events/subscriptions`. Ngắt kết nối một
+  client trong dashboard sẽ xóa các subscription client đó đã tạo. Sự kiện cũ
+  không được phát lại: `cursor` từ subscription trước sẽ nhận
   `truncated: true`.
 
 `subscriptions/listen` không được hỗ trợ (danh sách tool cố định theo mỗi lần
@@ -450,9 +469,10 @@ chung bộ đếm.
 - **Callback sự kiện:** khi đăng ký, server từ chối callback không công khai
   theo tên và theo mọi địa chỉ phân giải được (DNS over HTTPS); request tới
   callback không bao giờ đi theo redirect, và chỉ loại lỗi xác minh được trả
-  về hoặc ghi log. Host bị trỏ sang địa chỉ private ngay sau bước kiểm tra
-  (DNS rebinding) không bị phát hiện lúc đăng ký, nên việc gửi sự kiện kiểm
-  tra lại địa chỉ trước mỗi request.
+  về hoặc ghi log. Host bị trỏ sang địa chỉ private sau bước kiểm tra (DNS
+  rebinding) không bị phát hiện lúc đăng ký; việc kiểm tra lại địa chỉ trước
+  mỗi lần gửi được theo dõi ở
+  [#226](https://github.com/mrgoonie/multix-cli/issues/226).
 - **MCP stateless:** không có MCP session. Mỗi request tạo một server mới với
   key của caller. Trạng thái OAuth và tài khoản nằm trong KV; subscription sự
   kiện nằm trong một Durable Object riêng cho từng tài khoản.

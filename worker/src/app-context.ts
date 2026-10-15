@@ -12,6 +12,7 @@ import { isAllowed } from "./accounts/allowlist.js";
 import { importEncryptionKey } from "./accounts/provider-secret-crypto.js";
 import { type Session, readSession } from "./auth/signed-cookies.js";
 import { MIN_SESSION_SECRET_LENGTH, type WorkerEnv } from "./config.js";
+import type { AccountEventsNamespace } from "./events/account-events.js";
 import type { JobBackend } from "./jobs/job-store.js";
 
 export interface AppDeps {
@@ -19,6 +20,8 @@ export interface AppDeps {
   fetch?: FetchLike;
   /** Injected for tests; defaults to the MULTIX_JOBS Durable Object namespace. */
   jobBackend?: JobBackend;
+  /** Injected for tests; defaults to the MULTIX_EVENTS Durable Object namespace. */
+  events?: AccountEventsNamespace;
 }
 
 export interface AppContext {

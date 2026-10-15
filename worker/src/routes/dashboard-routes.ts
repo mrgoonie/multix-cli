@@ -59,10 +59,11 @@ async function removeClientSubscriptions(
   userId: string,
   clientId: string,
 ): Promise<number> {
-  if (!ctx.env.MULTIX_EVENT_SUBSCRIPTIONS) return 0;
+  const events = ctx.env.MULTIX_EVENTS;
+  if (!events) return 0;
   const remaining = await oauthHelpers(ctx.env).listUserGrants(userId);
   if (remaining.items.some((g) => g.clientId === clientId)) return 0;
-  return ctx.env.MULTIX_EVENT_SUBSCRIPTIONS.getByName(userId).removeByClient(clientId);
+  return events.getByName(userId).removeByClient(clientId, `dashboard:${userId}`);
 }
 
 async function connectedClients(ctx: AppContext, account: Account): Promise<ConnectedClient[]> {

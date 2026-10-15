@@ -34,6 +34,7 @@ function fakePort(respond: (path: string, init?: RequestInit) => Response | Prom
   const state = {
     stored: undefined as JobView | undefined,
     saved: [] as JobView[],
+    finals: [] as JobView[],
     requests: [] as { path: string; body?: string }[],
     polls: [] as number[],
     destroyed: 0,
@@ -49,6 +50,11 @@ function fakePort(respond: (path: string, init?: RequestInit) => Response | Prom
     save: async (view) => {
       state.stored = view;
       state.saved.push(view);
+    },
+    saveFinal: async (view) => {
+      state.stored = view;
+      state.saved.push(view);
+      state.finals.push(view);
     },
     startContainer: async () => {
       state.started++;
@@ -258,6 +264,31 @@ describe("JobController", () => {
     expect((await c.status())?.status).toBe("running");
     silent.state.t += 2 * 60 * 60_000;
     expect((await c.status())?.status).toBe("timed_out");
+  });
+
+  it("records one final state when a status read, the poll and the stop race to finish", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const { port, state } = fakePort(async (path) => {
+      if (path === "/jobs") return new Response(null, { status: 202 });
+      await gate;
+      return json({ state: "done", result: RESULT });
+    });
+    const controller = new JobController(port);
+    await controller.start(SPEC);
+    // Both reads wait on the container; the container stops meanwhile.
+    const read = controller.status();
+    const poll = controller.poll();
+    await controller.stopped();
+    release();
+    const [view] = await Promise.all([read, poll]);
+    expect(state.finals).toHaveLength(1);
+    expect(state.finals[0]).toMatchObject({ status: "failed" });
+    expect(view).toEqual(state.finals[0]);
+    expect(state.released).toBe(1);
+    expect(state.destroyed).toBe(1);
   });
 
   it("reports an unknown job as undefined", async () => {

@@ -1,7 +1,7 @@
 ---
 name: multix
 description: AI multimodal CLI — generate and edit images (OpenAI, Codex driver, Gemini Nano Banana, Imagen, MiniMax, OpenRouter, Leonardo, BytePlus Seedream, Cloudflare Workers AI FLUX.1 Schnell, fal.ai FLUX, Replicate FLUX), generate video (Gemini Veo, MiniMax Hailuo, OpenRouter via Veo/Seedance/Kling, Leonardo via Motion/Veo/Kling/Hailuo/Seedance/LTX, BytePlus Seedance, Cloudflare AI Gateway via Replicate, fal.ai queue models, Replicate direct API models incl. P-Video, HeyGen Video Agent and scripted avatar videos), video translation and lipsync (HeyGen), TTS/STT/music (OpenAI, Gemini Flash TTS incl. Gemini 3.8 with delivery-style control, MiniMax, Cloudflare Workers AI MeloTTS, ElevenLabs), 3D models (BytePlus Hyper3D/Hitem3d), analyze/transcribe media, convert documents to Markdown, optimize media via ffmpeg/ImageMagick, and self-update the CLI. Use whenever the user wants to create, edit, or transform images/video/audio/3D/documents from a CLI, mentions any of: OpenAI, Codex image driver, image-to-image, i2i, image edit, watercolor/cyberpunk style transfer, reference image, OpenRouter, Nano Banana, Flux, Seedream, Veo, Hailuo, Seedance, Kling, Cloudflare Workers AI, AI Gateway, fal.ai, Atlas Cloud, Replicate, replicate.com models, Replicate predictions, HeyGen, avatar video, talking head, Video Agent, video translation, dubbing, lipsync, video generation, text-to-video, image-to-video, i2v, ElevenLabs voice cloning, updating/upgrading multix, or asks for batch media optimization.
-version: 1.7.0 # x-release-please-version
+version: 1.8.0 # x-release-please-version
 ---
 
 # multix — AI Multimodal CLI
@@ -500,6 +500,10 @@ server has its job container:
 Without an MCP client, the same server has a REST API at `/api/v1`
 (`Authorization: Bearer <mxk_… key>` from the user's `/dashboard`; `POST /jobs`
 takes the `multix_run` input and returns `202` while running, poll `next.path`).
+A service that should be told when jobs end can subscribe an https endpoint with
+`POST /events/subscriptions` (signed Standard Webhooks events with ids and
+final state only; the secret is shown once); it still reads outputs with
+`GET /jobs/{id}` or `multix_job_status`, and polling stays the fallback.
 Guide: https://multix.zuey.me/guides/rest-api/, reference: https://multix.zuey.me/api/docs.
 
 ## Security & scope
