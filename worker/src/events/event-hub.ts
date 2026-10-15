@@ -52,6 +52,10 @@ export const MAX_AUDIT_ENTRIES = 200;
 export const HOUSEKEEPING_INTERVAL_MS = 6 * 60 * 60_000;
 /** Largest signed body; job events are a few hundred bytes. */
 export const MAX_EVENT_BYTES = 16 * 1024;
+/** Durable Object storage limit on keys per get/put/delete call. */
+const MAX_KEYS_PER_CALL = 128;
+/** Page size of the dedupe-record scan during housekeeping. */
+const SCAN_PAGE = 1000;
 
 export type SubscriptionStatus = "active" | "disabled" | "expired";
 
@@ -264,17 +268,20 @@ export class EventHub {
   async unsubscribe(id: string, actor: string): Promise<boolean> {
     const sub = await this.storage.get<Subscription>(subKey(id));
     if (!sub) return false;
+    // The subscription goes first: deliveries still queued for it are dropped by
+    // the alarm too, so revoke holds even if removing them below is cut short.
+    await this.storage.delete([subKey(id)]);
     const queued = await this.storage.list<QueuedDelivery>({ prefix: "q:" });
-    const keys = [subKey(id)];
+    const keys: string[] = [];
     for (const [key, delivery] of queued) {
       if (delivery.subscriptionId === id) keys.push(key);
     }
-    await this.storage.delete(keys);
+    await this.deleteKeys(keys);
     await this.audit({
       action: "subscription.revoked",
       actor,
       subscriptionId: id,
-      detail: keys.length > 1 ? `${keys.length - 1} queued deliveries dropped` : undefined,
+      detail: keys.length > 0 ? `${keys.length} queued deliveries dropped` : undefined,
     });
     return true;
   }
@@ -295,12 +302,14 @@ export class EventHub {
    * Accept events for this account. Each event is recorded as seen together
    * with its queued deliveries in one write, so a crash never leaves an event
    * marked seen without its deliveries; publishing an event again is a no-op.
+   * An event no live subscription wants leaves nothing behind.
    */
   async publish(events: readonly MultixEvent[]): Promise<{ accepted: number; duplicates: number }> {
     const now = this.ports.now();
     let accepted = 0;
     let duplicates = 0;
     let queued = (await this.storage.list({ prefix: "q:" })).size;
+    let stored = false;
     for (const event of events) {
       if (!isEventName(event?.name) || typeof event.id !== "string" || !event.id) continue;
       if (await this.storage.get(`seen:${event.id}`)) {
@@ -310,8 +319,10 @@ export class EventHub {
       const subs = (await this.subscriptions()).filter(
         (s) => this.isLive(s, now) && s.events.includes(event.name),
       );
+      accepted++;
+      if (subs.length === 0) continue;
       const writes: Record<string, unknown> = { [`seen:${event.id}`]: now };
-      const tooLarge = JSON.stringify(event).length > MAX_EVENT_BYTES;
+      const tooLarge = new TextEncoder().encode(JSON.stringify(event)).length > MAX_EVENT_BYTES;
       for (const sub of subs) {
         const delivery: QueuedDelivery = {
           id: `dlv_${randomBase64Url(12)}`,
@@ -334,10 +345,12 @@ export class EventHub {
         queued++;
       }
       await this.storage.put(writes);
-      accepted++;
+      stored = true;
       logEvent("info", "event_published", { event: event.name, matched: subs.length });
     }
+    // Queued deliveries go out now; dedupe records and dead letters still need housekeeping.
     if (queued > 0) await this.ensureAlarm(now);
+    else if (stored) await this.ensureAlarm(now + HOUSEKEEPING_INTERVAL_MS);
     return { accepted, duplicates };
   }
 
@@ -364,11 +377,12 @@ export class EventHub {
         for (const [key, delivery] of entries) await this.deliver(key, delivery);
       }),
     );
+    // Housekeeping runs at most every few hours, so a backlog does not starve it.
+    await this.housekeep();
     if (due.size >= DELIVERY_BATCH) {
       await this.storage.setAlarm(this.ports.now());
       return;
     }
-    await this.housekeep();
     await this.scheduleNext();
   }
 
@@ -387,6 +401,11 @@ export class EventHub {
     const outcome = await this.send(before, delivery, now);
     const attempts = delivery.attempts + 1;
     const after = this.ports.now();
+    if (!(await this.storage.get(subKey(delivery.subscriptionId)))) {
+      // Revoked while the request was in flight: keep no retry or dead letter for it.
+      await this.storage.delete([key]);
+      return;
+    }
     if (outcome.kind === "delivered") {
       await this.storage.delete([key]);
       await this.updateSubscription(delivery.subscriptionId, (sub) => {
@@ -543,13 +562,17 @@ export class EventHub {
         drop.push(subKey(sub.id));
       }
     }
-    for (const [key, at] of await this.storage.list<number>({ prefix: "seen:" })) {
-      if (now - at > SEEN_RETENTION_MS) drop.push(key);
+    let start: string | undefined;
+    for (;;) {
+      const page = await this.storage.list<number>({ prefix: "seen:", start, limit: SCAN_PAGE });
+      for (const [key, at] of page) if (now - at > SEEN_RETENTION_MS) drop.push(key);
+      const last = [...page.keys()].at(-1);
+      if (page.size < SCAN_PAGE || last === undefined) break;
+      start = `${last}\0`;
     }
     drop.push(...(await this.overflow("dead:", MAX_DEAD_LETTERS, now)));
     drop.push(...(await this.overflow("audit:", MAX_AUDIT_ENTRIES, now)));
-    // DurableObjectStorage.delete takes at most 128 keys per call.
-    for (let i = 0; i < drop.length; i += 128) await this.storage.delete(drop.slice(i, i + 128));
+    await this.deleteKeys(drop);
     await this.storage.put({ "meta:housekept": now });
   }
 
@@ -585,6 +608,13 @@ export class EventHub {
 
   private isLive(sub: Subscription, now: number): boolean {
     return sub.status === "active" && sub.expiresAt > now;
+  }
+
+  /** DurableObjectStorage.delete takes at most 128 keys per call. */
+  private async deleteKeys(keys: string[]): Promise<void> {
+    for (let i = 0; i < keys.length; i += MAX_KEYS_PER_CALL) {
+      await this.storage.delete(keys.slice(i, i + MAX_KEYS_PER_CALL));
+    }
   }
 
   private async subscriptions(): Promise<Subscription[]> {

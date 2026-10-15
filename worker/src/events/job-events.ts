@@ -5,7 +5,12 @@
  * again for the same job gives the same ids and receivers dedupe them.
  */
 
-import { type JobTerminalStatus, type JobView, isTerminal } from "../jobs/job-protocol.js";
+import {
+  type JobTerminalStatus,
+  type JobView,
+  SERVER_AT_CAPACITY_ERROR,
+  isTerminal,
+} from "../jobs/job-protocol.js";
 import {
   ASSET_READY_EVENT,
   EVENT_SCHEMA_VERSION,
@@ -36,6 +41,9 @@ function iso(ms: number): string {
 /** Events for a job's final view; empty while the job is still running. */
 export function jobEvents(source: JobEventSource, view: JobView): MultixEvent[] {
   if (!isTerminal(view.status)) return [];
+  // The caller gets a capacity error instead of a job id and retries, so this
+  // job is never seen: reporting it would only send webhooks for unknown jobs.
+  if (view.status === "failed" && view.error === SERVER_AT_CAPACITY_ERROR) return [];
   const finishedAt = view.finishedAt ?? view.createdAt;
   const provider = source.command.split(" ")[0] ?? "";
   const outputs = (view.result?.outputs ?? []).map((o) => ({

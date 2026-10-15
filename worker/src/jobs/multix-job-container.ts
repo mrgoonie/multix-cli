@@ -144,7 +144,6 @@ export class MultixJobContainer extends Container<JobContainerEnv> {
 
   /** Scheduled: hand the job's stored events to the owner's AccountEvents object. */
   async relayEvents(attempt = 1): Promise<void> {
-    const slot = await this.ctx.storage.get<SlotRecord>(SLOT_KEY);
     const events = this.env.MULTIX_EVENTS;
     await relayOutbox(
       {
@@ -152,7 +151,12 @@ export class MultixJobContainer extends Container<JobContainerEnv> {
         delete: async (keys) => {
           await this.ctx.storage.delete(keys);
         },
-        publish: slot && events ? (list) => events.getByName(slot.userId).publish(list) : undefined,
+        publish: events
+          ? async (list) => {
+              const slot = await this.ctx.storage.get<SlotRecord>(SLOT_KEY);
+              if (slot) await events.getByName(slot.userId).publish(list);
+            }
+          : undefined,
         scheduleRelay: (next, seconds) => this.scheduleRelay(next, seconds),
       },
       attempt,

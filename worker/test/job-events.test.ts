@@ -9,7 +9,11 @@ import {
   relayOutbox,
 } from "../src/events/event-outbox.js";
 import { MAX_ASSET_EVENTS, jobEvents } from "../src/events/job-events.js";
-import type { JobView } from "../src/jobs/job-protocol.js";
+import {
+  JOB_RETENTION_SECONDS,
+  type JobView,
+  SERVER_AT_CAPACITY_ERROR,
+} from "../src/jobs/job-protocol.js";
 
 const SOURCE = { jobId: "00000000-0000-4000-8000-000000000001", command: "gemini generate" };
 const T = Date.UTC(2026, 9, 15, 10, 0, 0);
@@ -55,6 +59,11 @@ describe("jobEvents", () => {
       });
       expect(jobEvents(SOURCE, view(status as JobView["status"]))).toEqual(events);
     }
+  });
+
+  it("produces nothing for a job refused for capacity, whose id the caller never got", () => {
+    const refused = { ...view("failed"), error: SERVER_AT_CAPACITY_ERROR };
+    expect(jobEvents(SOURCE, refused)).toEqual([]);
   });
 
   it("produces nothing while the job runs", () => {
@@ -157,6 +166,21 @@ describe("relayOutbox", () => {
     expect(relayDelaySeconds(2)).toBe(10);
     expect(relayDelaySeconds(3)).toBe(20);
     expect(relayDelaySeconds(30)).toBe(3600);
+  });
+
+  it("keeps retrying hourly for as long as the job's data is kept", () => {
+    let total = 0;
+    for (let attempt = 2; attempt <= RELAY_ATTEMPTS; attempt++) total += relayDelaySeconds(attempt);
+    expect(total).toBeGreaterThanOrEqual(JOB_RETENTION_SECONDS);
+  });
+
+  it("schedules another attempt when reading the outbox fails", async () => {
+    const box = outbox(events, async () => undefined);
+    box.port.list = async () => {
+      throw new Error("storage reset");
+    };
+    await relayOutbox(box.port, 3);
+    expect(box.retries).toEqual([{ attempt: 4, seconds: relayDelaySeconds(4) }]);
   });
 
   it("does nothing when events are not configured or the outbox is empty", async () => {

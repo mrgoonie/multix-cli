@@ -12,9 +12,11 @@ export function fakeDoStorage() {
   const storage: HubStorage = {
     get: async <T>(key: string) => structuredClone(data.get(key)) as T | undefined,
     put: async (entries) => {
+      if (Object.keys(entries).length > 128) throw new RangeError("more than 128 keys");
       for (const [key, value] of Object.entries(entries)) data.set(key, structuredClone(value));
     },
     delete: async (keys) => {
+      if (keys.length > 128) throw new RangeError("more than 128 keys");
       let n = 0;
       for (const key of keys) if (data.delete(key)) n++;
       return n;

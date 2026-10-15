@@ -112,6 +112,42 @@ describe("EventHub subscriptions", () => {
   });
 });
 
+describe("EventHub publishing", () => {
+  it("keeps nothing for an event no subscription wants", async () => {
+    const { hub, fake } = harness();
+    expect(await hub.publish([event()])).toEqual({ accepted: 1, duplicates: 0 });
+    expect(fake.data.size).toBe(0);
+    expect(fake.alarm()).toBeNull();
+  });
+
+  it("schedules housekeeping when only dead letters were written", async () => {
+    const { hub, fake, clock } = harness();
+    await subscribe(hub);
+    const huge = {
+      ...event(),
+      data: { ...event().data, command: "é".repeat(9000) },
+    } as MultixEvent;
+    await hub.publish([huge]);
+    expect((await hub.deadLetters())[0]).toMatchObject({ reason: "event too large" });
+    expect(fake.alarm()).toBe(clock.t + HOUSEKEEPING_INTERVAL_MS);
+  });
+
+  it("revokes a subscription with more queued deliveries than one storage call takes", async () => {
+    const { hub, fake } = harness(() => new Response("down", { status: 503 }));
+    const { subscription } = await subscribe(hub);
+    await hub.publish(
+      Array.from({ length: 300 }, (_, i) =>
+        event("succeeded", `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`),
+      ),
+    );
+    expect(await hub.unsubscribe(subscription.id, "api_key:k1")).toBe(true);
+    expect([...fake.data.keys()].some((k) => k.startsWith("q:") || k.startsWith("sub:"))).toBe(
+      false,
+    );
+    expect((await hub.auditLog())[0]).toMatchObject({ detail: "300 queued deliveries dropped" });
+  });
+});
+
 describe("EventHub delivery", () => {
   it("delivers a signed event that the receiver can verify, without following redirects", async () => {
     const { hub, sent, runAlarm, clock } = harness();
@@ -286,6 +322,25 @@ describe("EventHub delivery", () => {
     expect(fake.data.has(`sub:${subscription.id}`)).toBe(false);
   });
 
+  it("keeps no retry or dead letter for a subscription revoked while its delivery failed", async () => {
+    for (const status of [503, 400]) {
+      let revoke: () => Promise<unknown> = async () => undefined;
+      const { hub, runAlarm, fake } = harness(async () => {
+        await revoke();
+        return new Response("no", { status });
+      });
+      const { subscription } = await subscribe(hub);
+      revoke = () => hub.unsubscribe(subscription.id, "api_key:k1");
+      await hub.publish([event()]);
+      await runAlarm();
+      const keys = [...fake.data.keys()];
+      expect(
+        keys.filter((k) => k.startsWith("q:") || k.startsWith("dead:")),
+        String(status),
+      ).toEqual([]);
+    }
+  });
+
   it("sends a bounded batch per alarm and continues right away", async () => {
     const { hub, sent, fake, clock } = harness();
     await subscribe(hub);
@@ -296,6 +351,8 @@ describe("EventHub delivery", () => {
     await hub.alarm();
     expect(sent).toHaveLength(DELIVERY_BATCH);
     expect(fake.alarm()).toBe(clock.t);
+    // A backlog does not hold housekeeping back.
+    expect(fake.data.get("meta:housekept")).toBe(clock.t);
     await hub.alarm();
     expect(sent).toHaveLength(DELIVERY_BATCH + 3);
   });

@@ -4,17 +4,20 @@
  * reached a final state always has its events stored, even if the object is
  * reset right after. A scheduled relay then hands them to the owner's
  * AccountEvents object and deletes them only once it has accepted them;
- * a failed hand-over is retried with a growing delay. AccountEvents dedupes
+ * a failed hand-over is retried with a growing delay, up to hourly, for as
+ * long as the job's data is kept. AccountEvents dedupes
  * by event id, so a relay repeated after a crash is harmless.
  */
 
+import { JOB_RETENTION_SECONDS } from "../jobs/job-protocol.js";
 import { logEvent } from "../redaction.js";
 import type { MultixEvent } from "./event-catalog.js";
 
 export const OUTBOX_PREFIX = "outbox:";
-export const RELAY_ATTEMPTS = 10;
 const RELAY_BASE_SECONDS = 10;
 const RELAY_MAX_SECONDS = 3600;
+/** Hourly retries after the first few cover the job's whole retention period. */
+export const RELAY_ATTEMPTS = Math.ceil(JOB_RETENTION_SECONDS / RELAY_MAX_SECONDS) + 10;
 
 export function outboxKey(eventId: string): string {
   return `${OUTBOX_PREFIX}${eventId}`;
@@ -34,16 +37,16 @@ export interface OutboxPort {
 }
 
 export async function relayOutbox(port: OutboxPort, attempt = 1): Promise<void> {
-  const entries = await port.list();
-  if (entries.size === 0 || !port.publish) return;
   try {
+    const entries = await port.list();
+    if (entries.size === 0 || !port.publish) return;
     await port.publish([...entries.values()]);
     await port.delete([...entries.keys()]);
   } catch (error) {
     const name = error instanceof Error ? error.name : "unknown";
     if (attempt >= RELAY_ATTEMPTS) {
       // The entries stay until the job's data expires; nothing else retries them.
-      logEvent("error", "event_relay_gave_up", { attempt, events: entries.size, error: name });
+      logEvent("error", "event_relay_gave_up", { attempt, error: name });
       return;
     }
     logEvent("warn", "event_relay_failed", { attempt, error: name });
