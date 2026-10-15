@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.10.0](https://github.com/mrgoonie/multix-cli/compare/v1.9.0...v1.10.0) (2026-10-15)
+
+
+### Added
+
+* **runway:** add native Runway provider for video, image and async tasks ([#231](https://github.com/mrgoonie/multix-cli/issues/231)) ([14cf24a](https://github.com/mrgoonie/multix-cli/commit/14cf24ad039a72c39dfd790bd62b07f729c1af62)), closes [#229](https://github.com/mrgoonie/multix-cli/issues/229)
+
 ## [1.9.0](https://github.com/mrgoonie/multix-cli/compare/v1.8.0...v1.9.0) (2026-10-15)
 
 
