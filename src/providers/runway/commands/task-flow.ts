@@ -5,6 +5,7 @@
  */
 
 import { type Command, InvalidArgumentError } from "commander";
+import { PollTimeoutError } from "../../../core/async-poll.js";
 import { ValidationError } from "../../../core/errors.js";
 import type { Logger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
@@ -100,6 +101,11 @@ export interface ReportOptions {
   output?: string;
   json?: boolean;
   logger: Logger;
+  /**
+   * With download off: true prints the raw signed URLs (an explicit
+   * --no-download); false prints the redacted summary and a download hint.
+   */
+  showSignedUrls?: boolean;
   /** Post-process saved files (e.g. WebP conversion) before they are listed. */
   finalize?: (files: string[]) => string[];
 }
@@ -108,6 +114,11 @@ export interface ReportOptions {
 export async function reportSucceeded(task: RunwayTask, opts: ReportOptions): Promise<string[]> {
   const urls = task.output ?? [];
   if (!opts.download) {
+    if (!opts.showSignedUrls) {
+      console.log(JSON.stringify(summarizeTask(task), null, 2));
+      if (!opts.json) opts.logger.info(`Download with: multix runway status ${task.id} --download`);
+      return [];
+    }
     if (opts.json) {
       // Signed URLs are requested explicitly here; they are the only way to reach the files.
       console.log(JSON.stringify({ ...summarizeTask(task), output: urls }, null, 2));
@@ -134,6 +145,26 @@ export async function reportSucceeded(task: RunwayTask, opts: ReportOptions): Pr
   return finals;
 }
 
+/**
+ * waitForTask, but any failure other than a timeout (which already carries the
+ * resume hint) names the task and how to resume it, so a caller never
+ * resubmits — and pays for — a task that may still be running.
+ */
+async function waitWithHandle(
+  client: RunwayClient,
+  id: string,
+  opts: Parameters<RunwayClient["waitForTask"]>[1],
+): Promise<RunwayTask> {
+  try {
+    return await client.waitForTask(id, opts);
+  } catch (error) {
+    if (error instanceof Error && !(error instanceof PollTimeoutError)) {
+      error.message = `${error.message}. Task ${id} may still be running; resume with: ${resumeCommand(id)}`;
+    }
+    throw error;
+  }
+}
+
 /** Wait for a terminal status, fail loudly unless it succeeded, then report outputs. */
 export async function completeTask(
   client: RunwayClient,
@@ -142,7 +173,7 @@ export async function completeTask(
 ): Promise<string[]> {
   opts.logger.info(`Waiting for task ${id}...`);
   let lastStatus = "";
-  const final = await client.waitForTask(id, {
+  const final = await waitWithHandle(client, id, {
     timeoutMs: opts.waitTimeoutMs,
     resumeHint: `Resume with: ${resumeCommand(id)}`,
     onPoll: (t, attempt) => {

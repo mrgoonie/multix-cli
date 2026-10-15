@@ -25,7 +25,7 @@ export const UPLOAD_MAX_BYTES = 200 * 1024 * 1024;
 export const URL_MAX_CHARS = 2048;
 
 const MIME_BY_KIND = { png: "image/png", jpeg: "image/jpeg", webp: "image/webp" } as const;
-const DATA_URI_RE = /^data:(image\/(?:png|jpe?g|webp));base64,/i;
+const DATA_URI_RE = /^data:(image\/(?:png|jpeg|webp));base64,/i;
 
 function formatMb(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;

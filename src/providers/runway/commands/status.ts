@@ -39,6 +39,7 @@ export function registerRunwayStatusCommand(parent: Command): void {
         waitTimeoutMs,
         logger,
         download,
+        showSignedUrls: opts.download === false,
         output: opts.output,
         json: opts.json,
       });
@@ -47,7 +48,13 @@ export function registerRunwayStatusCommand(parent: Command): void {
 
     const task = await client.getTask(taskId);
     if (task.status === "SUCCEEDED" && opts.download !== undefined) {
-      await reportSucceeded(task, { download, output: opts.output, json: opts.json, logger });
+      await reportSucceeded(task, {
+        download,
+        showSignedUrls: opts.download === false,
+        output: opts.output,
+        json: opts.json,
+        logger,
+      });
       return;
     }
     console.log(JSON.stringify(summarizeTask(task), null, 2));

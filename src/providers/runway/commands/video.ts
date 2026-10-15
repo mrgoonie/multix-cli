@@ -85,7 +85,7 @@ export function registerRunwayVideoCommand(parent: Command): void {
   const cmd = parent
     .command("video [prompt]")
     .description(
-      `Generate video with Runway (default model: ${runwayVideoModel()}); submits and prints the task id unless --wait`,
+      "Generate video with Runway (default model: gen4.5, or RUNWAY_VIDEO_MODEL); submits and prints the task id unless --wait",
     )
     .option(
       "-m, --model <id>",
@@ -94,6 +94,7 @@ export function registerRunwayVideoCommand(parent: Command): void {
     .option(
       "--image <path|url>",
       "First-frame image: JPEG/PNG/WebP file, https URL or runway:// URI",
+      nonEmpty,
     )
     .option("--duration <seconds>", "Length in seconds (2-10)", String(DEFAULT_RUNWAY_DURATION))
     .option(
@@ -146,6 +147,7 @@ export function registerRunwayVideoCommand(parent: Command): void {
       waitTimeoutMs,
       logger,
       download: opts.download !== false,
+      showSignedUrls: opts.download === false,
       output: opts.output,
       json: opts.json,
     });

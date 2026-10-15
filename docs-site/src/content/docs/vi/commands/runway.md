@@ -100,7 +100,11 @@ multix runway cancel <id> --delete             # xóa luôn task đã xong và o
 - Task `FAILED` và `CANCELLED` thoát với mã khác 0 kèm lý do lỗi từ Runway.
   Lệnh `status` xem một lần với task đang chạy thoát với mã 0.
 - `cancel` từ chối task đã kết thúc trừ khi bạn truyền `--delete`, vì cùng một
-  endpoint của Runway sẽ xóa task đã kết thúc và output của nó.
+  endpoint của Runway sẽ xóa task đã kết thúc và output của nó. Runway không có
+  endpoint chỉ để hủy, nên task nào kết thúc đúng vào khoảng giữa lúc kiểm tra
+  trạng thái và lúc gửi lệnh hủy cũng sẽ bị xóa.
+- Nếu việc chờ thất bại vì bất kỳ lý do gì sau khi task đã được tạo, thông báo
+  lỗi nêu ID task và lệnh tiếp tục, nên bạn không cần gửi lại task.
 - Request tạo task chỉ được thử lại khi gặp 429. Nếu việc gửi task gặp lỗi
   mạng, hết thời gian chờ, lỗi 5xx hoặc response không đọc được, task vẫn có
   thể đã được tạo và bị tính phí (Runway không có idempotency key), nên hãy
@@ -118,8 +122,10 @@ multix runway cancel <id> --delete             # xóa luôn task đã xong và o
   không tới địa chỉ cục bộ hay private (kiểm tra ở mọi redirect), tối đa
   `MULTIX_MAX_DOWNLOAD_MB` mỗi file, và ghi qua file `.part`. Nội dung dạng
   text, HTML và JSON bị từ chối vì là trang lỗi.
-- `--json` in bản tóm tắt ra stdout. JSON của `status` loại bỏ query string đã
-  ký khỏi URL output; secret không bao giờ được ghi log.
+- `--json` in bản tóm tắt ra stdout (thông báo tiến trình ra stderr). URL output
+  trong bản tóm tắt bị loại bỏ query string đã ký, kể cả `status --wait` không
+  có `--download`; chỉ khi truyền rõ `--no-download` thì URL đã ký mới được in.
+  Secret không bao giờ được ghi log.
 
 ## MCP server từ xa
 

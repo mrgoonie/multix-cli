@@ -103,7 +103,11 @@ multix runway cancel <id> --delete             # also delete a finished task and
 - `FAILED` and `CANCELLED` tasks exit non-zero with Runway's failure reason.
   A one-shot `status` on a running task exits 0.
 - `cancel` refuses a finished task unless you pass `--delete`, because the
-  same Runway endpoint deletes finished tasks and their outputs.
+  same Runway endpoint deletes finished tasks and their outputs. Runway has no
+  cancel-only endpoint, so a task that finishes in the moment between the
+  status check and the cancel request is deleted as well.
+- If waiting fails for any reason after the task was created, the error names
+  the task id and the resume command, so you never need to submit it again.
 - Creates are retried only on 429. If submitting fails with a network error,
   timeout, 5xx, or an unreadable response, the task may still have been created
   and billed (Runway has no idempotency key), so check the
@@ -121,8 +125,10 @@ multix runway cancel <id> --delete             # also delete a finished task and
   local or private addresses (checked on every redirect), at most
   `MULTIX_MAX_DOWNLOAD_MB` per file, and written through a `.part` file. Text,
   HTML, and JSON bodies are refused as error pages.
-- `--json` prints a summary on stdout. Status JSON strips the signed query
-  strings from output URLs; the secret is never logged.
+- `--json` prints a summary on stdout (progress messages go to stderr). Output
+  URLs in summaries have their signed query strings stripped, including
+  `status --wait` without `--download`; only an explicit `--no-download`
+  prints the signed URLs. The secret is never logged.
 
 ## Remote MCP server
 

@@ -347,6 +347,44 @@ describe("runway status", () => {
   });
 });
 
+describe("review hardening", () => {
+  it("status --wait without --download keeps signed URLs out of stdout", async () => {
+    stub({ [`GET /v1/tasks/${TASK_ID}`]: [succeeded()] });
+    await run("status", TASK_ID, "--wait");
+    expect(text()).toContain("SUCCEEDED");
+    expect(text()).not.toContain("SIGNEDsecret");
+    expect(text()).toContain(`multix runway status ${TASK_ID} --download`);
+
+    output = [];
+    await run("status", TASK_ID, "--wait", "--no-download");
+    expect(text()).toContain(OUTPUT_URL);
+  });
+
+  it("names the task and the resume command when waiting fails after create", async () => {
+    stub({
+      "POST /v1/text_to_video": [created],
+      [`GET /v1/tasks/${TASK_ID}`]: [{ status: 401, json: { error: "revoked" } }],
+    });
+    await expect(run("video", "a cat", "--wait")).rejects.toThrow(
+      new RegExp(
+        `Task ${TASK_ID} may still be running; resume with: multix runway status ${TASK_ID} --wait --download`,
+      ),
+    );
+  });
+
+  it("rejects an empty --image instead of falling back to text-to-video", async () => {
+    const fake = stub({});
+    await expect(run("video", "a cat", "--image", "")).rejects.toThrow(/must not be empty/);
+    expect(fake.calls).toHaveLength(0);
+  });
+
+  it("help text does not depend on the model env", async () => {
+    vi.stubEnv("RUNWAY_VIDEO_MODEL", "gen4_turbo");
+    await expect(run("video", "--help")).rejects.toThrow();
+    expect(text()).toContain("default model: gen4.5, or RUNWAY_VIDEO_MODEL");
+  });
+});
+
 describe("runway cancel", () => {
   it("cancels a running task", async () => {
     const fake = stub({
@@ -355,7 +393,7 @@ describe("runway cancel", () => {
     });
     await run("cancel", TASK_ID);
     expect(fake.calls.map((c) => c.method)).toEqual(["GET", "DELETE"]);
-    expect(text()).toMatch(/cancelled/);
+    expect(text()).toMatch(/Cancel sent for task .*if it finished meanwhile, Runway deleted it/);
   });
 
   it("does not delete a finished task without --delete", async () => {

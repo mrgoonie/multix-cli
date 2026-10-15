@@ -100,7 +100,7 @@ export function registerRunwayImageCommand(parent: Command): void {
   const cmd = parent
     .command("image <prompt>")
     .description(
-      `Generate an image with Runway (default model: ${runwayImageModel()}); waits and downloads unless --async`,
+      "Generate an image with Runway (default model: gen4_image, or RUNWAY_IMAGE_MODEL); waits and downloads unless --async",
     )
     .option("-m, --model <id>", "Model: gen4_image | gen4_image_turbo (needs --ref)")
     .option(
@@ -152,6 +152,7 @@ export function registerRunwayImageCommand(parent: Command): void {
       waitTimeoutMs,
       logger,
       download: opts.download !== false,
+      showSignedUrls: opts.download === false,
       output: opts.output,
       json: opts.json,
       finalize: (files) =>

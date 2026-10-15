@@ -1,7 +1,9 @@
 /**
  * multix runway cancel <taskId> — cancel a pending or running task
  * (DELETE /v1/tasks/{id}). The same endpoint deletes a finished task and its
- * outputs, so that only happens with --delete.
+ * outputs, so a task that is already finished is only deleted with --delete.
+ * Runway has no cancel-only endpoint: a task that finishes in the moment
+ * between the status check and the request is deleted too.
  */
 
 import type { Command } from "commander";
@@ -20,7 +22,9 @@ export function registerRunwayCancelCommand(parent: Command): void {
       const result = await client.cancelTask(taskId, { allowDelete: Boolean(opts.delete) });
       const { task } = result;
       if (result.action === "cancelled") {
-        logger.success(`Task ${task.id} cancelled (was ${task.status})`);
+        logger.success(
+          `Cancel sent for task ${task.id} (was ${task.status}); if it finished meanwhile, Runway deleted it`,
+        );
       } else if (result.action === "deleted") {
         logger.success(`Task ${task.id} deleted (was ${task.status})`);
       } else {

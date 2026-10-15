@@ -7681,7 +7681,7 @@
       "commands": [
         {
           "command": "runway video",
-          "description": "Generate video with Runway (default model: gen4.5); submits and prints the task id unless --wait",
+          "description": "Generate video with Runway (default model: gen4.5, or RUNWAY_VIDEO_MODEL); submits and prints the task id unless --wait",
           "positionals": [
             {
               "name": "prompt",
@@ -7830,7 +7830,7 @@
         },
         {
           "command": "runway image",
-          "description": "Generate an image with Runway (default model: gen4_image); waits and downloads unless --async",
+          "description": "Generate an image with Runway (default model: gen4_image, or RUNWAY_IMAGE_MODEL); waits and downloads unless --async",
           "positionals": [
             {
               "name": "prompt",
