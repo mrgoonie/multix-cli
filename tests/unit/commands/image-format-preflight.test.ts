@@ -63,7 +63,7 @@ describe("image format preflight", () => {
         "runway image",
       ]),
     );
-    expect(targets.length).toBeGreaterThanOrEqual(17);
+    expect(targets).toHaveLength(20);
   });
 
   it.each(targets.map((t) => [t.path.join(" "), t] as const))(
@@ -93,5 +93,25 @@ describe("image format preflight", () => {
     // Passes the preflight and stops later on the missing key, still before any request.
     await expect(buildProgram().parseAsync(argv)).rejects.toThrow(/RUNWAYML_API_SECRET/);
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["--image-format original", ["--image-format", "original"], ""],
+    ["--image-format WEBP", ["--image-format", "WEBP"], ""],
+    ["an empty env value", [], ""],
+    ["MULTIX_IMAGE_FORMAT=original", [], "original"],
+  ])("accepts %s and goes on to the action", async (_name, flags, env) => {
+    vi.stubEnv("MULTIX_IMAGE_FORMAT", env);
+    vi.stubEnv("RUNWAYML_API_SECRET", "");
+    const argv = ["node", "multix", "runway", "image", "a cat", ...flags];
+    await expect(buildProgram().parseAsync(argv)).rejects.toThrow(/RUNWAYML_API_SECRET/);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("ignores a bad env value on commands without --image-format", async () => {
+    vi.stubEnv("MULTIX_IMAGE_FORMAT", "png");
+    vi.stubEnv("RUNWAYML_API_SECRET", "");
+    const argv = ["node", "multix", "runway", "video", "a cat"];
+    await expect(buildProgram().parseAsync(argv)).rejects.toThrow(/RUNWAYML_API_SECRET/);
   });
 });
