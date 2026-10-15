@@ -770,7 +770,14 @@ Create an account API key (`mxk_…`, shown once) in the **API keys** card at
 curl -s https://multix.zuey.me/api/v1/me -H "Authorization: Bearer $MULTIX_API_KEY"
 ```
 
-Guide: [REST API](https://multix.zuey.me/guides/rest-api/). Reference:
+To be told when a job ends instead of polling, subscribe an https endpoint at
+`POST /api/v1/events/subscriptions`: the server sends signed
+[Standard Webhooks](https://www.standardwebhooks.com) events
+(`multix.job.completed`, `multix.job.failed`, …) carrying ids and final state
+only; polling stays the fallback.
+
+Guide: [REST API](https://multix.zuey.me/guides/rest-api/), including
+[job event webhooks](https://multix.zuey.me/guides/rest-api/#job-event-webhooks). Reference:
 [`/api/docs`](https://multix.zuey.me/api/docs) (OpenAPI at `/api/v1/openapi.json`).
 
 ## Troubleshooting

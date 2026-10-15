@@ -1,6 +1,6 @@
 ---
 title: REST API and account API keys
-description: Use the multix MCP server's REST API from scripts and CI with an account API key to manage provider keys and R2 storage, read the CLI catalog, and run, poll and cancel CLI jobs.
+description: Use the multix MCP server's REST API from scripts and CI with an account API key to manage provider keys and R2 storage, read the CLI catalog, run, poll and cancel CLI jobs, and receive signed webhooks when jobs end.
 ---
 
 The [remote MCP server](/guides/mcp-server/) also serves a JSON REST API at
@@ -73,6 +73,13 @@ All paths are relative to `/api/v1`.
 | `POST` | `/jobs/{id}/cancel` | Stop a running job. |
 | `GET` | `/api-keys` | The account's API keys (`id`, `name`, `prefix`, `created_at`), never the keys. |
 | `DELETE` | `/api-keys/{id}` | Revoke an API key. A key may revoke itself. |
+| `GET` | `/events` | Event catalog: each event name with its description and the JSON Schema of its `data`. |
+| `GET` | `/events/subscriptions` | The account's webhook subscriptions, active and inactive. Secrets are never listed. |
+| `POST` | `/events/subscriptions` | Subscribe a callback URL to job events; returns the signing secret once. |
+| `GET` | `/events/subscriptions/{id}` | One subscription. |
+| `DELETE` | `/events/subscriptions/{id}` | Revoke a subscription. |
+| `GET` | `/events/dead-letters` | Deliveries that were given up (ids, reason, attempts; no payload). |
+| `GET` | `/events/audit` | Subscription audit log: created, revoked, disabled, expired. |
 
 Provider key names are the env names the CLI reads (for example
 `GEMINI_API_KEY`), plus the Cloudflare Workers AI names; `GET /provider-keys`
@@ -220,6 +227,146 @@ cat job.json   # outputs[].url holds the files in your R2 bucket
 Stop a running job with `POST /jobs/{id}/cancel`. Only the account that
 started a job can read or cancel it; anyone else gets `404`.
 
+## Job event webhooks
+
+Instead of polling, subscribe an https endpoint to job events. When a job
+ends, the server POSTs a signed JSON event to every matching subscription of
+the account that started it. Polling `GET /jobs/{id}` (or `multix_job_status`
+over MCP) keeps working and is the fallback when a delivery is late or lost.
+
+### Events
+
+| Event | When |
+|---|---|
+| `multix.job.completed` | A job finished and the CLI exited successfully. |
+| `multix.job.failed` | A job ended with an error (CLI failure, container lost, start failure). |
+| `multix.job.canceled` | A job was canceled by its owner. |
+| `multix.job.timed_out` | A job did not finish within the server's time limit. |
+| `multix.asset.ready` | An output file of a successful job was stored in the account's R2 bucket (one event per stored file, at most 20 per job). |
+
+`GET /events` returns the same list with the JSON Schema of each event's
+`data`; it and `worker/src/events/event-catalog.ts` are the authority for the
+payload fields.
+
+Every event has the same envelope:
+
+```json
+{
+  "id": "evt_<job_id>_succeeded",
+  "name": "multix.job.completed",
+  "schema_version": 1,
+  "occurred_at": "2026-01-01T12:00:00.000Z",
+  "resource": { "type": "job", "id": "<job_id>" },
+  "data": {
+    "job_id": "<job_id>",
+    "status": "succeeded",
+    "command": "gemini generate",
+    "provider": "gemini",
+    "created_at": "2026-01-01T11:59:20.000Z",
+    "finished_at": "2026-01-01T12:00:00.000Z",
+    "exit_code": 0,
+    "outputs": [{ "name": "image-1.png", "bytes": 482113, "stored": true }]
+  }
+}
+```
+
+`multix.asset.ready` carries `job_id`, `command`, `provider`, the file's
+`index` in `outputs`, its `name` and `bytes`. Payloads hold identifiers and
+final state only: never prompts, CLI output, error text, keys or URLs (output
+URLs are often presigned). Read those with `GET /jobs/{id}` or
+`multix_job_status` when the event arrives.
+
+### Subscribe
+
+`POST /events/subscriptions` takes:
+
+- `callback_url` (required): a public `https://` URL by host name, on the
+  default port, not pointing at the multix server itself.
+- `events` (optional): the event names to receive; all of them by default.
+- `ttl_seconds` (optional): how long the subscription lives, from 3600 (1 hour)
+  to 7776000 (90 days); default 2592000 (30 days). It cannot be extended:
+  create a new subscription before the old one expires.
+- `description` (optional): up to 200 characters.
+
+```bash
+curl -s -X POST https://multix.zuey.me/api/v1/events/subscriptions \
+  -H "Authorization: Bearer $MULTIX_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "callback_url": "https://hooks.example.com/multix",
+    "events": ["multix.job.completed", "multix.job.failed"],
+    "description": "CI notifier"
+  }'
+```
+
+The `201` response holds `subscription` (its `id`, `status`, `expires_at` and
+delivery counters), `secret` (`whsec_…`) and `signing`, a summary of the scheme
+below. The secret is shown **once**: store it in your secret store right away.
+If it is lost, revoke the subscription with
+`DELETE /events/subscriptions/{id}` and create another. An account can have at
+most **10** active subscriptions; one more returns `409 limit_reached`.
+
+### Verify signatures
+
+Deliveries follow [Standard Webhooks](https://www.standardwebhooks.com). Each
+request carries:
+
+- `webhook-id`: the event `id`;
+- `webhook-timestamp`: Unix seconds when this attempt was sent;
+- `webhook-signature`: `v1,<base64 HMAC-SHA256 of "<webhook-id>.<webhook-timestamp>.<raw body>">`.
+
+The HMAC key is the base64-decoded part of the secret after `whsec_`. Reject a
+delivery whose signature does not match or whose timestamp is more than
+5 minutes from your clock, and compute the HMAC over the raw body exactly as
+received, before parsing it. Any Standard Webhooks library works; in plain
+Node.js:
+
+```js
+import { createHmac, timingSafeEqual } from "node:crypto";
+
+const TOLERANCE_SECONDS = 5 * 60;
+
+// headers: the request's headers (lower-case names); rawBody: the body as received, before JSON.parse.
+export function verifyMultixWebhook(secret, headers, rawBody) {
+  const id = headers["webhook-id"];
+  const timestamp = headers["webhook-timestamp"];
+  if (!id || !/^\d+$/.test(timestamp ?? "")) return false;
+  if (Math.abs(Date.now() / 1000 - Number(timestamp)) > TOLERANCE_SECONDS) return false;
+  const key = Buffer.from(secret.slice("whsec_".length), "base64");
+  const mac = createHmac("sha256", key).update(`${id}.${timestamp}.${rawBody}`).digest("base64");
+  const expected = Buffer.from(`v1,${mac}`);
+  return (headers["webhook-signature"] ?? "").split(" ").some((candidate) => {
+    const given = Buffer.from(candidate);
+    return given.length === expected.length && timingSafeEqual(given, expected);
+  });
+}
+```
+
+### Delivery
+
+- **At least once.** The same event can arrive more than once, for example
+  when your answer was lost and the delivery is retried. Dedupe on
+  `webhook-id`: it is the event `id`, the same on every attempt.
+- **Success** is any `2xx` answer within 10 seconds. Answer quickly and do the
+  work afterwards.
+- **Retries.** A timeout, a network error, `408`, `429` or a `5xx` is retried
+  with growing delays of 30 s, 2 min, 10 min, 30 min, 1 h, 3 h, 6 h and 12 h
+  (about a day in all; the schedule is `RETRY_DELAYS_SECONDS` in
+  `worker/src/events/event-hub.ts`). A `Retry-After` header in seconds can
+  lengthen a wait, up to 1 hour. After the last retry the event is
+  dead-lettered.
+- **No retry** for any other answer: a redirect (`3xx`, never followed) or
+  another `4xx` dead-letters the event at once.
+- **Disabling.** A `410 Gone` answer disables the subscription, and so do
+  5 dead letters in a row. A disabled or expired subscription stays listed
+  with its `status` and `status_reason`, but receives nothing; create a new
+  one.
+
+`GET /events/dead-letters` lists the events that were given up, and
+`GET /events/audit` shows when subscriptions were created, revoked, disabled
+or expired. To catch up after an outage, read the jobs named there with
+`GET /jobs/{id}`.
+
 ## Errors
 
 Errors are JSON with a stable `code` and a message that never contains
@@ -234,14 +381,15 @@ submitted values:
 | `400` | `bad_request` | Invalid JSON, field or value, unknown provider key name, or a command, option or input `multix_run` would reject. |
 | `401` | `unauthorized` | Missing, malformed, unknown or revoked API key. |
 | `403` | `forbidden` | The account is no longer in the sign-in allowlist. |
-| `404` | `not_found` | Unknown path, job or API key, or a job of another account. |
+| `404` | `not_found` | Unknown path, job, API key or event subscription, or one of another account. |
 | `405` | `method_not_allowed` | Wrong method; the `Allow` header lists the accepted ones. |
 | `413` | `payload_too_large` | Body over 64 KiB. |
 | `415` | `unsupported_media_type` | Body not sent as `application/json`. |
+| `409` | `limit_reached` | The account already has 10 active event subscriptions. |
 | `422` | `storage_check_failed` | The R2 access check failed; nothing was saved. |
 | `429` | `rate_limited` | Too many requests; retry after the `Retry-After` seconds. |
 | `429` | `busy` | Job caps reached: the account's running-job limit or the server's total. Wait for a job to end (or cancel one) instead of retrying at once. |
-| `503` | `unavailable` | The server has no job container, so jobs cannot run. |
+| `503` | `unavailable` | The server has no job container, so jobs cannot run, or no events binding, so event routes are off. |
 | `500` | `internal` | Unexpected server error. |
 
 The set of codes is defined in `worker/src/api/api-http.ts`.
@@ -257,4 +405,6 @@ The set of codes is defined in `worker/src/api/api-http.ts`.
   (default 10), `wait_seconds` 0–40 (default 25), one 30-minute limit per job,
   and the server's output, video length and resolution caps.
 - **API keys:** at most 10 per account; created only in the dashboard.
+- **Event subscriptions:** at most 10 active per account; lifetime 1 hour to
+  90 days (default 30 days).
 - **Bodies:** JSON objects up to 64 KiB.

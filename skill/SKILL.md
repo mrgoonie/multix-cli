@@ -500,6 +500,10 @@ server has its job container:
 Without an MCP client, the same server has a REST API at `/api/v1`
 (`Authorization: Bearer <mxk_… key>` from the user's `/dashboard`; `POST /jobs`
 takes the `multix_run` input and returns `202` while running, poll `next.path`).
+A service that should be told when jobs end can subscribe an https endpoint with
+`POST /events/subscriptions` (signed Standard Webhooks events with ids and
+final state only; the secret is shown once); it still reads outputs with
+`GET /jobs/{id}` or `multix_job_status`, and polling stays the fallback.
 Guide: https://multix.zuey.me/guides/rest-api/, reference: https://multix.zuey.me/api/docs.
 
 ## Security & scope

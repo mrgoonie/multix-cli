@@ -78,6 +78,14 @@ job: downloading inputs, running the CLI and uploading outputs. The job's
 record is kept for 7 days. Only the account that started a job can read or
 cancel it.
 
+**Webhooks instead of polling.** A script or service can also be told when a
+job ends: subscribe an https endpoint with an [account API key](#api-keys-for-the-rest-api)
+and the server POSTs a signed event (`multix.job.completed`, `failed`,
+`canceled`, `timed_out`, plus `multix.asset.ready` per stored output). Events
+carry ids and final state only, so read the outputs with `multix_job_status`
+when one arrives; polling stays the fallback. See
+[Job event webhooks](/guides/rest-api/#job-event-webhooks).
+
 **Concurrency.** Each account can have at most **2** jobs running at once
 (`MULTIX_MAX_JOBS_PER_ACCOUNT`). One more `multix_run` fails with
 `busy: you already have 2 running jobs; wait for one to finish or cancel it`
@@ -211,7 +219,9 @@ image to Cloudflare.
    `durable_objects` and `exports`; only `multix_catalog` is then listed. The
    `MULTIX_JOB_QUOTA` binding (class `AccountJobQuota`) holds the running-job
    counts per account and server-wide, and is required together with
-   `MULTIX_JOBS`.
+   `MULTIX_JOBS`. The `MULTIX_EVENTS` binding (class `AccountEvents`) holds
+   each account's [webhook subscriptions](/guides/rest-api/#job-event-webhooks)
+   and deliveries; without it the `/api/v1/events` routes answer `503`.
 4. **Set the secrets** and deploy:
 
    ```bash

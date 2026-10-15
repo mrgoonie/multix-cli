@@ -76,6 +76,14 @@ mỗi 10–30 giây. Một giới hạn 30 phút áp dụng cho toàn bộ job: 
 CLI và tải output lên. Bản ghi của job được giữ 7 ngày. Chỉ tài khoản đã khởi
 chạy job mới đọc hoặc hủy được job đó.
 
+**Webhook thay cho polling.** Script hoặc dịch vụ cũng có thể được báo khi job
+kết thúc: đăng ký một endpoint https bằng [API key của tài khoản](#api-key-cho-rest-api)
+và server sẽ POST một sự kiện có chữ ký (`multix.job.completed`, `failed`,
+`canceled`, `timed_out`, cùng `multix.asset.ready` cho mỗi output đã lưu). Sự
+kiện chỉ mang ID và trạng thái cuối, nên hãy đọc output bằng
+`multix_job_status` khi nhận được sự kiện; polling vẫn là phương án dự phòng.
+Xem [Webhook sự kiện job](/vi/guides/rest-api/#webhook-sự-kiện-job).
+
 **Số job đồng thời.** Mỗi tài khoản chạy tối đa **2** job cùng lúc
 (`MULTIX_MAX_JOBS_PER_ACCOUNT`). Lệnh `multix_run` tiếp theo báo lỗi
 `busy: you already have 2 running jobs; wait for one to finish or cancel it`
@@ -207,6 +215,10 @@ Cloudflare.
    `durable_objects` và `exports`; khi đó chỉ `multix_catalog` được liệt kê.
    Binding `MULTIX_JOB_QUOTA` (class `AccountJobQuota`) giữ số job đang chạy
    theo từng tài khoản và trên toàn server, và phải đi cùng `MULTIX_JOBS`.
+   Binding `MULTIX_EVENTS` (class `AccountEvents`) giữ
+   [subscription webhook](/vi/guides/rest-api/#webhook-sự-kiện-job) và các lần
+   gửi của từng tài khoản; thiếu binding này, các route `/api/v1/events` trả về
+   `503`.
 4. **Đặt secret** và triển khai:
 
    ```bash
