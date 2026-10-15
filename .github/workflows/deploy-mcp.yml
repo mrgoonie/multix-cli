@@ -20,7 +20,7 @@ on:
   workflow_dispatch:
     inputs:
       apply_container_settings:
-        description: Also apply container settings from wrangler.jsonc (instance type, max_instances). Starts a second rollout of the same image after the Worker.
+        description: Apply container settings from wrangler.jsonc (instance type, max_instances) even if they look unchanged. Starts a second rollout of the same image after the Worker.
         type: boolean
         default: false
 
@@ -39,6 +39,13 @@ jobs:
     timeout-minutes: 60
 
     steps:
+      # Manual runs can be started from any branch; production only takes main.
+      - name: Require main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::Deploys run only from main (this run is on ${GITHUB_REF})."
+          exit 1
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -69,6 +76,7 @@ jobs:
       # This builds and pushes the image, rolls it out to every instance and waits;
       # if the rollout fails, the Worker is not deployed.
       - name: Roll out the job container
+        id: container
         run: node worker/scripts/roll-out-job-container.mjs
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -76,11 +84,12 @@ jobs:
 
       # --containers-rollout=none: the image is already live, and wrangler would
       # otherwise roll the same image out a second time. The Worker version only
-      # records the container's name and class, not its image. Changes to the
-      # containers block of wrangler.jsonc (instance type, max_instances) need a
-      # manual run with apply_container_settings.
+      # records the container's name and class, not its image. When the rollout
+      # step finds that wrangler.jsonc's container settings (instance type,
+      # max_instances) differ from the live application, wrangler applies them
+      # with a gradual rollout of the same image instead.
       - name: Deploy the Worker
-        run: npm run deploy --prefix worker -- --containers-rollout=${{ inputs.apply_container_settings && 'gradual' || 'none' }}
+        run: npm run deploy --prefix worker -- --containers-rollout=${{ (inputs.apply_container_settings || steps.container.outputs.settings_changed == 'true') && 'gradual' || 'none' }}
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

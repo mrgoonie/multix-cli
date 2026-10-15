@@ -53,8 +53,8 @@
       "image_build_context": "..",
       "instance_type": "basic",
       // Platform ceiling on job containers. MULTIX_MAX_JOBS_TOTAL (below) is the cap the
-      // Worker enforces; keep it at or under this value. Push deploys only roll out the
-      // image: after changing this block, run the deploy workflow with apply_container_settings.
+      // Worker enforces; keep it at or under this value. The deploy workflow applies
+      // changes to instance_type and max_instances on its own.
       "max_instances": 10
     }
   ],

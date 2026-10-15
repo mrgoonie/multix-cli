@@ -15,7 +15,10 @@
  *   2. PATCH the container application's configuration to the new image digest
  *      and start a rolling rollout;
  *   3. wait until the rollout completes; any other end state fails the job, so
- *      the Worker deploy step never runs.
+ *      the Worker deploy step never runs;
+ *   4. report whether wrangler.jsonc's other container settings (max_instances,
+ *      instance_type) differ from the live application, as the step output
+ *      settings_changed, so the Worker deploy applies them in the same run.
  *
  * Usage (from worker/): node scripts/roll-out-job-container.mjs
  * Env: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID; optional IMAGE_TAG (default: git HEAD).
@@ -23,7 +26,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { appendFileSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -158,23 +161,62 @@ async function latestRollout(appId) {
   return Array.isArray(rollouts) ? rollouts[0] : undefined;
 }
 
+/** wrangler's instance types (instanceTypes in wrangler's container config), by resources. */
+const INSTANCE_TYPES = {
+  lite: { vcpu: 0.0625, memory_mib: 256, disk_mb: 2000 },
+  dev: { vcpu: 0.0625, memory_mib: 256, disk_mb: 2000 },
+  basic: { vcpu: 0.25, memory_mib: 1024, disk_mb: 4000 },
+  standard: { vcpu: 0.5, memory_mib: 4096, disk_mb: 8000 },
+  "standard-1": { vcpu: 0.5, memory_mib: 4096, disk_mb: 8000 },
+  "standard-2": { vcpu: 1, memory_mib: 6144, disk_mb: 12000 },
+  "standard-3": { vcpu: 2, memory_mib: 8192, disk_mb: 16000 },
+  "standard-4": { vcpu: 4, memory_mib: 12288, disk_mb: 20000 },
+};
+
 /**
- * The push deploy changes only the image; other container settings need a manual
- * run with apply_container_settings. Flag a max_instances mismatch so it is not missed.
+ * Container settings in wrangler.jsonc that differ from the live application.
+ * The rollout above changes only the image; when this returns anything, the
+ * workflow's Worker deploy applies the settings with a gradual rollout.
  */
-function warnOnSettingsDrift(app) {
+function settingsDrift(app) {
   const jsonc = readFileSync(resolve(WORKER_DIR, "wrangler.jsonc"), "utf8");
-  const wanted = Number(/"max_instances"\s*:\s*(\d+)/.exec(jsonc)?.[1]);
-  if (Number.isFinite(wanted) && app.max_instances !== undefined && wanted !== app.max_instances) {
+  const drift = [];
+  const maxInstances = Number(/"max_instances"\s*:\s*(\d+)/.exec(jsonc)?.[1]);
+  if (Number.isFinite(maxInstances) && maxInstances !== app.max_instances) {
+    drift.push(`max_instances ${app.max_instances} -> ${maxInstances}`);
+  }
+  const typeName = /"instance_type"\s*:\s*"([^"]+)"/.exec(jsonc)?.[1];
+  const wanted = typeName === undefined ? undefined : INSTANCE_TYPES[typeName];
+  const live = app.configuration ?? {};
+  if (typeName !== undefined && !wanted) {
+    drift.push(`instance_type ${typeName} is not a known type`);
+  } else if (
+    wanted &&
+    (wanted.vcpu !== live.vcpu ||
+      wanted.memory_mib !== live.memory_mib ||
+      wanted.disk_mb !== live.disk?.size_mb)
+  ) {
+    drift.push(`instance_type -> ${typeName}`);
+  }
+  return drift;
+}
+
+/** Tells the workflow (via GITHUB_OUTPUT) whether the Worker deploy must apply container settings. */
+function reportSettingsDrift(app) {
+  const drift = settingsDrift(app);
+  if (drift.length > 0) {
     console.log(
-      `::warning::wrangler.jsonc max_instances is ${wanted} but the container application has ${app.max_instances}. Run "Deploy MCP server" manually with apply_container_settings.`,
+      `::notice::Container settings differ from wrangler.jsonc (${drift.join(", ")}); the Worker deploy will apply them.`,
     );
+  }
+  if (process.env.GITHUB_OUTPUT) {
+    appendFileSync(process.env.GITHUB_OUTPUT, `settings_changed=${drift.length > 0}\n`);
   }
 }
 
 const image = buildAndPush();
 const app = await findApplication();
-warnOnSettingsDrift(app);
+reportSettingsDrift(app);
 const configuration = { ...app.configuration, image };
 if (app.configuration?.image === image) {
   // Already the configured image, for example on a re-run: finish only if a
