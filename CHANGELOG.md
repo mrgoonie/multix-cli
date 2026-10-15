@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0](https://github.com/mrgoonie/multix-cli/compare/v1.8.0...v1.9.0) (2026-10-15)
+
+
+### Added
+
+* **mcp:** serve MCP 2026-07-28 and MCP Events subscriptions ([#227](https://github.com/mrgoonie/multix-cli/issues/227)) ([daf12fd](https://github.com/mrgoonie/multix-cli/commit/daf12fd3cd00fbbe789ab33894bb9fbfe9fe68f9)), closes [#222](https://github.com/mrgoonie/multix-cli/issues/222)
+
 ## [1.8.0](https://github.com/mrgoonie/multix-cli/compare/v1.7.0...v1.8.0) (2026-10-15)
 
 
