@@ -27,9 +27,11 @@ on:
 permissions:
   contents: read
 
-# Never run two deploys at once; a newer push supersedes a queued one.
+# Never run two deploys at once; a newer push supersedes a queued one. Runs
+# from other refs get their own group so they cannot cancel a queued main
+# deploy (they fail at "Require main" anyway).
 concurrency:
-  group: deploy-mcp
+  group: ${{ github.ref == 'refs/heads/main' && 'deploy-mcp' || format('deploy-mcp-{0}', github.run_id) }}
   cancel-in-progress: false
 
 jobs:

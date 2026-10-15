@@ -125,8 +125,10 @@ npm run check:mcp    # when worker/ or a client it imports changed
   the same or a later change. Rolling back the Worker does not roll back the
   container, so the same rule covers a rollback. When `instance_type` or
   `max_instances` in `worker/wrangler.jsonc` differ from the live container
-  application, the workflow applies them after the Worker deploy. The workflow
-  deploys only from `main`.
+  application, the workflow applies them after the Worker deploy. Other fields
+  of the `containers` block are not compared: after changing one, run the
+  workflow manually with `apply_container_settings`. The workflow deploys only
+  from `main`.
 
 ## Documentation
 

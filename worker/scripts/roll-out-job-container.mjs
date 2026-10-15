@@ -179,7 +179,11 @@ const INSTANCE_TYPES = {
  * workflow's Worker deploy applies the settings with a gradual rollout.
  */
 function settingsDrift(app) {
-  const jsonc = readFileSync(resolve(WORKER_DIR, "wrangler.jsonc"), "utf8");
+  // Drop whole-line comments so a key mentioned in one is not read as the setting.
+  const jsonc = readFileSync(resolve(WORKER_DIR, "wrangler.jsonc"), "utf8").replace(
+    /^\s*\/\/.*$/gm,
+    "",
+  );
   const drift = [];
   const maxInstances = Number(/"max_instances"\s*:\s*(\d+)/.exec(jsonc)?.[1]);
   if (Number.isFinite(maxInstances) && maxInstances !== app.max_instances) {
