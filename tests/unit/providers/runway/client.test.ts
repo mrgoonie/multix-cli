@@ -276,6 +276,38 @@ describe("RunwayClient tasks", () => {
     await expect(c.getTask(TASK_ID)).rejects.toThrow(/could not find task .* \(404\)/);
   });
 
+  it("scrubs the API secret from an error body that echoes it, cause included", async () => {
+    // A secret that straddles the 300-character detail cut must not leak a prefix either.
+    for (const text of [`bad header: Bearer ${SECRET}`, `${"x".repeat(280)} Bearer ${SECRET}`]) {
+      const { client: c } = client({ "POST /v1/text_to_video": [{ status: 400, text }] });
+      const err = await c.textToVideo(t2v).catch((e) => e);
+      expect(err).toBeInstanceOf(RunwayApiError);
+      expect(err.message).not.toContain(SECRET.slice(0, 8));
+      expect(err.cause.message).toContain("[redacted]");
+      expect(err.cause.message).not.toContain(SECRET);
+      expect(err.cause.cause).toBeUndefined();
+    }
+  });
+
+  it("scrubs the API secret from a poll timeout's last error", async () => {
+    let clock = 0;
+    const { client: c } = client({
+      [`GET /v1/tasks/${TASK_ID}`]: [{ status: 502, text: `gateway: Bearer ${SECRET}` }],
+    });
+    const err = await c
+      .waitForTask(TASK_ID, {
+        timeoutMs: 12_000,
+        now: () => clock,
+        sleep: async (ms) => {
+          clock += ms;
+        },
+      })
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(PollTimeoutError);
+    expect(err.message).toContain("[redacted]");
+    expect(err.message).not.toContain(SECRET);
+  });
+
   it("deletes with DELETE /v1/tasks/{id} (204)", async () => {
     const { client: c, calls } = client({
       [`DELETE /v1/tasks/${TASK_ID}`]: [{ status: 204, text: "" }],

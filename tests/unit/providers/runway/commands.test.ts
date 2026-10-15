@@ -212,6 +212,17 @@ describe("runway video", () => {
     }
   });
 
+  it("rejects an image URL carrying a username or password before any request", async () => {
+    for (const bad of [
+      "https://user:pass@images.example.com/a.png",
+      "https://user@images.example.com/a.png",
+    ]) {
+      const f = stub({});
+      await expect(run("video", "x", "--image", bad)).rejects.toThrow(/username or password/);
+      expect(f.calls).toHaveLength(0);
+    }
+  });
+
   it("rejects unsupported image files (GIF, missing) before creating a task", async () => {
     const gif = path.join(tmp, "a.gif");
     fs.writeFileSync(gif, "GIF89a");
@@ -353,6 +364,23 @@ describe("downloads", () => {
     expect(text()).toMatch(/exceeds the/);
     const outDir = path.join(tmp, "out");
     expect(fs.existsSync(outDir) ? fs.readdirSync(outDir) : []).toEqual([]);
+  });
+
+  it("refuses an HTML or JSON body served from a media URL and saves nothing", async () => {
+    for (const type of ["text/html; charset=utf-8", "application/json"]) {
+      stub({
+        [TASK_PATH]: [{ json: task("SUCCEEDED", { output: [OUTPUT_URL] }) }],
+        [`GET ${OUTPUT_URL}`]: [
+          { text: "<html>expired</html>", headers: { "content-type": type } },
+        ],
+      });
+      await expect(run("status", TASK_ID, "--download")).rejects.toThrow(
+        /none of 1 output file\(s\) could be downloaded/,
+      );
+      expect(text()).toMatch(/not media/);
+      const outDir = path.join(tmp, "out");
+      expect(fs.existsSync(outDir) ? fs.readdirSync(outDir) : []).toEqual([]);
+    }
   });
 
   it("explains an expired output URL", async () => {

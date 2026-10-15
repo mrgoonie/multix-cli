@@ -125,6 +125,17 @@ export function mapRunwayError(error: unknown, subject: string): unknown {
   return new RunwayApiError(message, status, retryAfterMs, { cause: error });
 }
 
+/**
+ * A proxy or gateway may echo the Authorization header in its error body.
+ * Rebuild such an HttpError without the secret (and without the original as
+ * its cause) before anything maps, stores or prints it.
+ */
+export function scrubSecret(error: unknown, secret: string): unknown {
+  if (!(error instanceof HttpError) || !secret || !error.snippet.includes(secret)) return error;
+  const snippet = error.snippet.split(secret).join("[redacted]");
+  return new HttpError(error.status, snippet, error.rawUrl, error.retryAfterMs);
+}
+
 export const ORPHAN_HINT = `The task may have been created (and billed) anyway; check your tasks and usage at ${RUNWAY_DASHBOARD_LINK} before retrying to avoid paying twice`;
 
 /**
@@ -286,6 +297,8 @@ export class RunwayClient {
       body,
       timeoutMs,
       fetch: this.doFetch,
+    }).catch((error: unknown) => {
+      throw scrubSecret(error, this.apiKey);
     });
   }
 

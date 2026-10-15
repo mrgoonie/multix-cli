@@ -49,6 +49,9 @@ function checkRemoteUrl(value: string, flag: string): string {
   if (url.protocol !== "https:") {
     throw new ValidationError(`${flag} URL must use https:// (Runway rejects other schemes)`);
   }
+  if (url.username || url.password) {
+    throw new ValidationError(`${flag} URL must not contain a username or password`);
+  }
   if (IPV4_RE.test(host) || host.startsWith("[") || host.includes(":") || isNonPublicHost(host)) {
     throw new ValidationError(
       `${flag} URL must use a public domain name, not an IP address or local host (${host})`,

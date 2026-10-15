@@ -23,6 +23,9 @@ import { extFromContentType, extFromUrl } from "../replicate/output.js";
 
 const DOWNLOAD_TIMEOUT_MS = 300_000;
 
+/** Bodies that are never a generated output: error pages, JSON errors, XML documents. */
+const NON_MEDIA_TYPE_RE = /^(text\/|application\/(json|xml|xhtml\+xml|problem\+json)$)/;
+
 export interface SaveOutputsOptions {
   outDir: string;
   output?: string;
@@ -83,6 +86,13 @@ export async function saveTaskOutputs(
     try {
       const { dest } = await downloadToFile(url, {
         dest: (response) => {
+          const type = response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase();
+          if (type && NON_MEDIA_TYPE_RE.test(type)) {
+            throw new ProviderError(
+              `output is ${type}, not media (the output URL may have expired)`,
+              "runway",
+            );
+          }
           const ext =
             extFromUrl(url) ?? extFromContentType(response.headers.get("content-type")) ?? ".bin";
           return resolveDestination(taskId, i, urls.length, ext, opts);
