@@ -15,6 +15,13 @@
  *   POST   /api/v1/jobs                        run a CLI command (same input as multix_run)
  *   GET    /api/v1/jobs/{id}                   job status and outputs
  *   POST   /api/v1/jobs/{id}/cancel            stop a job
+ *   GET    /api/v1/events                      job events the server publishes
+ *   GET    /api/v1/events/subscriptions        the account's webhook subscriptions (no secrets)
+ *   POST   /api/v1/events/subscriptions        subscribe a callback URL (secret shown once)
+ *   GET    /api/v1/events/subscriptions/{id}   one subscription
+ *   DELETE /api/v1/events/subscriptions/{id}   revoke a subscription
+ *   GET    /api/v1/events/dead-letters         deliveries that were given up
+ *   GET    /api/v1/events/audit                subscription audit log
  *   GET    /api/v1/api-keys                    the account's API keys (no values)
  *   DELETE /api/v1/api-keys/{id}               revoke an API key
  *
@@ -45,6 +52,16 @@ import {
   revokeApiKey,
 } from "./account-api-handlers.js";
 import { ApiError, apiError, errorResponse } from "./api-http.js";
+import {
+  createSubscription,
+  deleteSubscription,
+  eventsHub,
+  getEventCatalog,
+  getSubscription,
+  listAudit,
+  listDeadLetters,
+  listSubscriptions,
+} from "./event-api-handlers.js";
 import { cancelJob, getCatalog, getJob, postJob } from "./job-api-handlers.js";
 import { openApiDocument } from "./openapi-document.js";
 
@@ -167,6 +184,41 @@ async function route(
     }
   }
 
+  if (resource === "events") {
+    return routeEvents(app, deps, caller, request, parts.slice(1));
+  }
+
+  throw new ApiError(404, "not_found", "Not found");
+}
+
+async function routeEvents(
+  app: AppContext,
+  deps: AppDeps,
+  caller: ApiCaller,
+  request: Request,
+  parts: string[],
+): Promise<Response> {
+  const method = request.method;
+  const [collection, id, extra] = parts;
+  if (!collection) {
+    if (method !== "GET") methodNotAllowed("GET");
+    return getEventCatalog();
+  }
+  const hub = () => eventsHub(app, deps, caller.account.id);
+  if (collection === "subscriptions" && !extra) {
+    if (!id) {
+      if (method === "GET") return listSubscriptions(hub());
+      if (method === "POST") return createSubscription(app, hub(), caller, request);
+      methodNotAllowed("GET, POST");
+    }
+    if (method === "GET") return getSubscription(hub(), id);
+    if (method === "DELETE") return deleteSubscription(hub(), caller, id);
+    methodNotAllowed("GET, DELETE");
+  }
+  if ((collection === "dead-letters" || collection === "audit") && !id) {
+    if (method !== "GET") methodNotAllowed("GET");
+    return collection === "audit" ? listAudit(hub()) : listDeadLetters(hub());
+  }
   throw new ApiError(404, "not_found", "Not found");
 }
 

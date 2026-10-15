@@ -6,6 +6,13 @@
  */
 
 import { MAX_API_KEYS_PER_ACCOUNT } from "../accounts/api-key-store.js";
+import { EVENT_NAMES } from "../events/event-catalog.js";
+import {
+  DEFAULT_SUBSCRIPTION_TTL_SECONDS,
+  MAX_ACTIVE_SUBSCRIPTIONS,
+  MAX_SUBSCRIPTION_TTL_SECONDS,
+  MIN_SUBSCRIPTION_TTL_SECONDS,
+} from "../events/event-hub.js";
 import { MAX_WAIT_SECONDS } from "../jobs/job-runner.js";
 
 type Json = Record<string, unknown>;
@@ -37,6 +44,17 @@ const BODY_ERRORS: Json = {
 
 /** Extra error of the job operations when the server has no job containers. */
 const JOB_ERRORS: Json = { "503": { $ref: "#/components/responses/Unavailable" } };
+
+/** Extra error of the event operations when the server has no event hub. */
+const EVENT_ERRORS: Json = { "503": { $ref: "#/components/responses/Unavailable" } };
+
+const SUBSCRIPTION_ID = {
+  name: "id",
+  in: "path",
+  required: true,
+  schema: { type: "string" },
+  description: "Subscription id returned by POST /api/v1/events/subscriptions",
+};
 
 const JOB_ID = {
   name: "id",
@@ -247,6 +265,111 @@ export function openApiDocument(origin: string): Json {
           },
         },
       },
+      "/events": {
+        get: {
+          summary: "Event catalog",
+          description:
+            "Every event a subscription can receive, with the JSON Schema of its `data`. Payloads carry ids, status, command, provider, timestamps and output names and sizes: never prompts, CLI output, error text, keys or URLs. Fetch the job with GET /api/v1/jobs/{id} for the rest.",
+          operationId: "getEventCatalog",
+          responses: { ...ok("Catalog", ref("EventCatalog")), ...ERRORS },
+        },
+      },
+      "/events/subscriptions": {
+        get: {
+          summary: "List event subscriptions",
+          description:
+            "The calling account's webhook subscriptions, active and inactive. Secrets are never listed.",
+          operationId: "listEventSubscriptions",
+          responses: {
+            ...ok("Subscriptions", {
+              type: "object",
+              properties: { subscriptions: { type: "array", items: ref("EventSubscription") } },
+            }),
+            ...ERRORS,
+            ...EVENT_ERRORS,
+          },
+        },
+        post: {
+          summary: "Subscribe a webhook to job events",
+          description: `Deliveries are POSTed to \`callback_url\` (public https, default port, not this server) and signed with Standard Webhooks headers (\`webhook-id\`, \`webhook-timestamp\`, \`webhook-signature\`). Delivery is at least once: dedupe on \`webhook-id\`. Failed deliveries are retried with backoff for about a day, then dead-lettered. At most ${MAX_ACTIVE_SUBSCRIPTIONS} active subscriptions per account. The signing secret is returned only in this response.`,
+          operationId: "createEventSubscription",
+          requestBody: jsonBody(ref("EventSubscriptionInput"), {
+            callback_url: "https://hooks.example.com/multix",
+            events: ["multix.job.completed", "multix.job.failed"],
+            ttl_seconds: DEFAULT_SUBSCRIPTION_TTL_SECONDS,
+            description: "CI pipeline",
+          }),
+          responses: {
+            ...ok("Created", ref("EventSubscriptionCreated"), "201"),
+            "409": {
+              description: `Already ${MAX_ACTIVE_SUBSCRIPTIONS} active subscriptions (code limit_reached)`,
+              content: { "application/json": { schema: ref("Error") } },
+            },
+            ...ERRORS,
+            ...BODY_ERRORS,
+            ...EVENT_ERRORS,
+          },
+        },
+      },
+      "/events/subscriptions/{id}": {
+        parameters: [SUBSCRIPTION_ID],
+        get: {
+          summary: "Get an event subscription",
+          description: "Status, expiry and delivery counters of one subscription.",
+          operationId: "getEventSubscription",
+          responses: {
+            ...ok("Subscription", {
+              type: "object",
+              properties: { subscription: ref("EventSubscription") },
+            }),
+            "404": { $ref: "#/components/responses/NotFound" },
+            ...ERRORS,
+            ...EVENT_ERRORS,
+          },
+        },
+        delete: {
+          summary: "Revoke an event subscription",
+          description: "Stops deliveries at once and drops the ones still queued for it.",
+          operationId: "revokeEventSubscription",
+          responses: {
+            ...ok("Revoked", { type: "object", properties: { revoked: { type: "string" } } }),
+            "404": { $ref: "#/components/responses/NotFound" },
+            ...ERRORS,
+            ...EVENT_ERRORS,
+          },
+        },
+      },
+      "/events/dead-letters": {
+        get: {
+          summary: "List undelivered events",
+          description:
+            "Deliveries that ran out of retries, were refused permanently or were dropped, newest first.",
+          operationId: "listEventDeadLetters",
+          responses: {
+            ...ok("Dead letters", {
+              type: "object",
+              properties: { dead_letters: { type: "array", items: ref("EventDeadLetter") } },
+            }),
+            ...ERRORS,
+            ...EVENT_ERRORS,
+          },
+        },
+      },
+      "/events/audit": {
+        get: {
+          summary: "Event subscription audit log",
+          description: "Who created, revoked, disabled or expired each subscription, newest first.",
+          operationId: "listEventAudit",
+          responses: {
+            ...ok("Audit log", {
+              type: "object",
+              properties: { audit: { type: "array", items: ref("EventAuditEntry") } },
+            }),
+            ...ERRORS,
+            ...EVENT_ERRORS,
+          },
+        },
+      },
     },
     components: {
       securitySchemes: {
@@ -278,7 +401,7 @@ export function openApiDocument(origin: string): Json {
           content: { "application/json": { schema: ref("Error") } },
         },
         Unavailable: {
-          description: "This server does not run jobs",
+          description: "This server does not run jobs or deliver events",
           content: { "application/json": { schema: ref("Error") } },
         },
         NotFound: {
@@ -449,6 +572,94 @@ export function openApiDocument(origin: string): Json {
                 },
               },
             },
+          },
+        },
+        EventCatalog: {
+          type: "object",
+          properties: {
+            events: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  name: { type: "string", enum: [...EVENT_NAMES] },
+                  description: { type: "string" },
+                  data_schema: { type: "object" },
+                },
+              },
+            },
+          },
+        },
+        EventSubscriptionInput: {
+          type: "object",
+          required: ["callback_url"],
+          properties: {
+            callback_url: {
+              type: "string",
+              format: "uri",
+              description: "Public https URL on the default port",
+            },
+            events: {
+              type: "array",
+              items: { type: "string", enum: [...EVENT_NAMES] },
+              description: "Defaults to every event",
+            },
+            ttl_seconds: {
+              type: "integer",
+              minimum: MIN_SUBSCRIPTION_TTL_SECONDS,
+              maximum: MAX_SUBSCRIPTION_TTL_SECONDS,
+              default: DEFAULT_SUBSCRIPTION_TTL_SECONDS,
+              description: "The subscription expires after this; create a new one to renew",
+            },
+            description: { type: "string", maxLength: 200 },
+          },
+        },
+        EventSubscription: {
+          type: "object",
+          properties: {
+            id: { type: "string" },
+            callback_url: { type: "string", description: "Query string redacted" },
+            events: { type: "array", items: { type: "string" } },
+            description: { type: "string" },
+            status: { type: "string", enum: ["active", "disabled", "expired"] },
+            status_reason: { type: "string" },
+            created_at: { type: "string", format: "date-time" },
+            expires_at: { type: "string", format: "date-time" },
+            delivered_count: { type: "integer" },
+            consecutive_dead_letters: { type: "integer" },
+            last_success_at: { type: "string", format: "date-time" },
+            last_failure_at: { type: "string", format: "date-time" },
+          },
+        },
+        EventSubscriptionCreated: {
+          type: "object",
+          properties: {
+            subscription: ref("EventSubscription"),
+            secret: { type: "string", description: "Signing secret (`whsec_…`). Shown only once." },
+            signing: { type: "object", description: "How to verify a delivery" },
+          },
+        },
+        EventDeadLetter: {
+          type: "object",
+          properties: {
+            id: { type: "string" },
+            subscription_id: { type: "string" },
+            event_id: { type: "string" },
+            event: { type: "string" },
+            attempts: { type: "integer" },
+            reason: { type: "string" },
+            last_status: { type: ["integer", "null"] },
+            at: { type: "string", format: "date-time" },
+          },
+        },
+        EventAuditEntry: {
+          type: "object",
+          properties: {
+            at: { type: "string", format: "date-time" },
+            action: { type: "string" },
+            actor: { type: "string" },
+            subscription_id: { type: ["string", "null"] },
+            detail: { type: ["string", "null"] },
           },
         },
       },

@@ -153,7 +153,7 @@ export class JobRunner {
         command: prepared.command,
         createdAt: this.now(),
       });
-      view = await this.ctx.backend.start(jobId, spec, userId);
+      view = await this.ctx.backend.start(jobId, spec, userId, prepared.command);
     } catch (error) {
       // The job Durable Object normally gives the slot back; here it may never have run.
       await this.ctx.quota.release(userId, jobId).catch(() => undefined);
