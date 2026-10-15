@@ -38,6 +38,9 @@ jobs:
   deploy:
     name: Deploy to Cloudflare (multix.zuey.me/mcp)
     runs-on: ubuntu-latest
+    # The Cloudflare secrets live in the production environment, which only
+    # main may use; runs from other refs get no token.
+    environment: production
     timeout-minutes: 60
 
     steps:

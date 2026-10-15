@@ -20,6 +20,9 @@ jobs:
   deploy:
     name: Deploy to Cloudflare (multix.zuey.me)
     runs-on: ubuntu-latest
+    # The Cloudflare secrets live in the production environment, which only
+    # main may use; runs from other refs get no token.
+    environment: production
 
     steps:
       - name: Checkout

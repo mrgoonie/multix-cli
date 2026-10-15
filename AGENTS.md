@@ -129,6 +129,10 @@ npm run check:mcp    # when worker/ or a client it imports changed
   of the `containers` block are not compared: after changing one, run the
   workflow manually with `apply_container_settings`. The workflow deploys only
   from `main`.
+- The Cloudflare deploy secrets (`CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`)
+  live in the `production` GitHub Environment, which only `main` may use. A
+  workflow job that deploys to Cloudflare must set `environment: production`;
+  do not add the secrets back at repository level.
 
 ## Documentation
 
