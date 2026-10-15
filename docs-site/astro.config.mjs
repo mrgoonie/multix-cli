@@ -90,6 +90,7 @@ export default defineConfig({
             { label: "fal.ai", slug: "commands/fal" },
             { label: "Atlas Cloud", slug: "commands/atlascloud" },
             { label: "Replicate", slug: "commands/replicate" },
+            { label: "Runway", slug: "commands/runway" },
             { label: "HeyGen", slug: "commands/heygen" },
             {
               label: "Provider directory",

@@ -17,6 +17,7 @@ const documentationRoutes = [
   "commands/cloudflare",
   "commands/elevenlabs",
   "commands/replicate",
+  "commands/runway",
   "commands/heygen",
   "commands/providers",
   "commands/media-and-documents",

@@ -113,6 +113,13 @@ nhận chữ cái, chữ số, `_` và `-`, các lệnh ảnh OpenAI luôn dùng
 giá trị `@file` bị từ chối. Lệnh thay đổi chính tài khoản provider của bạn (ví
 dụ xóa một giọng ElevenLabs) chạy như mọi lệnh khác, bằng key của bạn.
 
+**Runway.** `runway video` và `runway image` chạy được từ xa; truyền `--image`
+và từng `--reference` dưới dạng URL `https://` trong `inputs`, còn `--duration`
+bị giới hạn bởi `MULTIX_MCP_MAX_VIDEO_SECONDS`. Prompt không được bắt đầu bằng
+`@`, nên hãy đặt chữ trước `@tag` (`"a portrait of @hero"`). `runway video`
+mặc định không chờ, nên job kết thúc chỉ với task ID: đặt `"wait": true` trong
+`options` để nhận video, hoặc chạy `runway status <id> --wait --download` sau.
+
 ### Không hỗ trợ từ xa
 
 - File cục bộ: thay bằng URL `https://` công khai trong `inputs`.
@@ -145,7 +152,8 @@ bị bỏ qua.
   mà CLI đọc, nhóm theo provider kèm liên kết đến trang tạo key (Gemini,
   OpenRouter, OpenAI, MiniMax, Leonardo.Ai, BytePlus với `ARK_API_KEY` làm tên
   dự phòng, ElevenLabs, fal.ai, Atlas Cloud, Replicate với `REPLICATE_API_KEY`
-  làm tên dự phòng, HeyGen), cùng account ID, API token và AI Gateway ID (tùy
+  làm tên dự phòng, Runway với `RUNWAYML_API_SECRET` mang nhãn "API secret",
+  HeyGen), cùng account ID, API token và AI Gateway ID (tùy
   chọn) của Cloudflare Workers AI.
 
 ### API key cho REST API

@@ -116,6 +116,14 @@ always use the API driver, and `@file` values are rejected. Commands that
 change your own provider account (for example deleting an ElevenLabs voice)
 run like any other, with your key.
 
+**Runway.** `runway video` and `runway image` can run remotely; give
+`--image` and each `--reference` as `https://` URLs in `inputs`, and
+`--duration` is capped by `MULTIX_MCP_MAX_VIDEO_SECONDS`. A prompt must not
+start with `@`, so put text before an `@tag` (`"a portrait of @hero"`).
+`runway video` does not wait by default, so the job ends with only a task ID:
+set `"wait": true` in `options` to get the video, or run
+`runway status <id> --wait --download` later.
+
 ### Not available remotely
 
 - Local files: give a public `https://` URL in `inputs` instead.
@@ -149,7 +157,8 @@ Worker, and keys set there are ignored.
   reads, grouped by provider with a link to where you create the key
   (Gemini, OpenRouter, OpenAI, MiniMax, Leonardo.Ai, BytePlus with
   `ARK_API_KEY` as fallback, ElevenLabs, fal.ai, Atlas Cloud, Replicate with
-  `REPLICATE_API_KEY` as fallback, HeyGen), plus the Cloudflare Workers AI
+  `REPLICATE_API_KEY` as fallback, Runway's `RUNWAYML_API_SECRET` as
+  "API secret", HeyGen), plus the Cloudflare Workers AI
   account ID, API token and optional AI Gateway ID.
 
 ### API keys for the REST API

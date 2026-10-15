@@ -1,6 +1,6 @@
 ---
 name: multix
-description: AI multimodal CLI — generate and edit images (OpenAI, Codex driver, Gemini Nano Banana, Imagen, MiniMax, OpenRouter, Leonardo, BytePlus Seedream, Cloudflare Workers AI FLUX.1 Schnell, fal.ai FLUX, Replicate FLUX), generate video (Gemini Veo, MiniMax Hailuo, OpenRouter via Veo/Seedance/Kling, Leonardo via Motion/Veo/Kling/Hailuo/Seedance/LTX, BytePlus Seedance, Cloudflare AI Gateway via Replicate, fal.ai queue models, Replicate direct API models incl. P-Video, HeyGen Video Agent and scripted avatar videos), video translation and lipsync (HeyGen), TTS/STT/music (OpenAI, Gemini Flash TTS incl. Gemini 3.8 with delivery-style control, MiniMax, Cloudflare Workers AI MeloTTS, ElevenLabs), 3D models (BytePlus Hyper3D/Hitem3d), analyze/transcribe media, convert documents to Markdown, optimize media via ffmpeg/ImageMagick, and self-update the CLI. Use whenever the user wants to create, edit, or transform images/video/audio/3D/documents from a CLI, mentions any of: OpenAI, Codex image driver, image-to-image, i2i, image edit, watercolor/cyberpunk style transfer, reference image, OpenRouter, Nano Banana, Flux, Seedream, Veo, Hailuo, Seedance, Kling, Cloudflare Workers AI, AI Gateway, fal.ai, Atlas Cloud, Replicate, replicate.com models, Replicate predictions, HeyGen, avatar video, talking head, Video Agent, video translation, dubbing, lipsync, video generation, text-to-video, image-to-video, i2v, ElevenLabs voice cloning, updating/upgrading multix, or asks for batch media optimization.
+description: AI multimodal CLI — generate and edit images (OpenAI, Codex driver, Gemini Nano Banana, Imagen, MiniMax, OpenRouter, Leonardo, BytePlus Seedream, Cloudflare Workers AI FLUX.1 Schnell, fal.ai FLUX, Replicate FLUX, Runway Gen-4 Image), generate video (Gemini Veo, MiniMax Hailuo, OpenRouter via Veo/Seedance/Kling, Leonardo via Motion/Veo/Kling/Hailuo/Seedance/LTX, BytePlus Seedance, Cloudflare AI Gateway via Replicate, fal.ai queue models, Replicate direct API models incl. P-Video, Runway Gen-4.5 and Gen-4 Turbo, HeyGen Video Agent and scripted avatar videos), video translation and lipsync (HeyGen), TTS/STT/music (OpenAI, Gemini Flash TTS incl. Gemini 3.8 with delivery-style control, MiniMax, Cloudflare Workers AI MeloTTS, ElevenLabs), 3D models (BytePlus Hyper3D/Hitem3d), analyze/transcribe media, convert documents to Markdown, optimize media via ffmpeg/ImageMagick, and self-update the CLI. Use whenever the user wants to create, edit, or transform images/video/audio/3D/documents from a CLI, mentions any of: OpenAI, Codex image driver, image-to-image, i2i, image edit, watercolor/cyberpunk style transfer, reference image, OpenRouter, Nano Banana, Flux, Seedream, Veo, Hailuo, Seedance, Kling, Cloudflare Workers AI, AI Gateway, fal.ai, Atlas Cloud, Replicate, replicate.com models, Replicate predictions, Runway, Gen-4.5, Gen-4 Turbo, Gen-4 Image, HeyGen, avatar video, talking head, Video Agent, video translation, dubbing, lipsync, video generation, text-to-video, image-to-video, i2v, ElevenLabs voice cloning, updating/upgrading multix, or asks for batch media optimization.
 version: 1.9.0 # x-release-please-version
 ---
 
@@ -24,6 +24,7 @@ Activate this skill when the user asks to:
 - Run any fal.ai model (generic queue-API runner), or fal.ai's default image/video models
 - Run any Atlas Cloud model (image, image edit, video, TTS/STT, 3D) with schema-validated inputs and resumable async predictions
 - Run any Replicate model (official or versioned) via the direct API, generate Replicate images/video, or resume/cancel a Replicate prediction by id
+- Generate Runway Gen-4.5 / Gen-4 Turbo video or Gen-4 images (with tagged reference images), or check/resume/cancel a Runway task by id
 - Make HeyGen avatar videos from a prompt (Video Agent) or an exact script, translate/lipsync videos, HeyGen TTS
 - Update multix itself to the latest (or a given dist-tag) npm version
 
@@ -48,6 +49,7 @@ ELEVENLABS_API_KEY    # ElevenLabs (TTS, cloning, STT, music, dubbing)
 FAL_KEY                # fal.ai (generic queue-API model runner, image/video)
 ATLASCLOUD_API_KEY    # Atlas Cloud (any model: image, edit, video, audio, 3D)
 REPLICATE_API_TOKEN   # Replicate direct API (REPLICATE_API_KEY accepted as fallback)
+RUNWAYML_API_SECRET   # Runway API (Gen-4.5 / Gen-4 Turbo video, Gen-4 images)
 HEYGEN_API_KEY        # HeyGen v3 (avatar video, Video Agent, translation); API billed separately from web plans
 CLOUDFLARE_ACCOUNT_ID # Cloudflare Workers AI / AI Gateway account
 CLOUDFLARE_API_TOKEN  # Cloudflare Workers AI / AI Gateway token
@@ -87,6 +89,7 @@ multix check [--verbose]
 | fal.ai | `multix fal image "<text>" [-m <model>] [--image-size square_hd] [-n N] [--seed <n>]` | Default `fal-ai/flux/schnell`; also `multix fal run <model> --input <json\|@file>` for any fal model |
 | Atlas Cloud | `multix atlas image "<text>" [-m <model>] [--size <size>] [--aspect-ratio 1:1] [-n N] [--seed <n>]` | Default `black-forest-labs/flux-schnell`; flags are validated against the model's schema |
 | Replicate | `multix replicate image "<text>" [-m <owner/name>] [--aspect-ratio 16:9] [-n N] [--seed <n>]` | Default `black-forest-labs/flux-schnell`; also `multix replicate run <model> --input <json\|@file>` for any model |
+| Runway | `multix runway image "<text>" [-m gen4_image\|gen4_image_turbo] [--ratio 1920:1080] [--reference <path\|url> --reference-tag <tag>]` | Default `gen4_image`; up to 3 references cited as `@tag`; Turbo needs one |
 
 Aspect ratios (most providers): `1:1 2:3 3:2 3:4 4:3 4:5 5:4 9:16 16:9 21:9`.
 
@@ -181,6 +184,29 @@ multix replicate cancel <prediction-id>
 Shared flags: `--async`, `--wait`, `--prefer-wait [seconds]` (integer 1-60, bare flag = 60; sends `Prefer: wait=N`, still polls if unfinished; put the prompt before a bare flag), `--wait-timeout <ms>`, `--no-download` (print URLs), `--output <path|dir/>`. `failed`/`canceled`/`aborted` predictions exit non-zero. Local files up to 256 KB are inlined as data URIs; larger files (< 100 MB) go through the Replicate Files API.
 
 Output downloads are `https://` only; `localhost` and loopback/private/link-local/special-purpose IP literals (including redirects; hostnames are not resolved) are refused, non-`replicate.delivery` hosts are downloaded with a warning, and each file is capped at `MULTIX_MAX_DOWNLOAD_MB` (default 2048). If submitting fails with a network error, timeout, 5xx, or an unreadable 2xx response, the prediction may still exist and bill: check https://replicate.com/predictions before retrying instead of resubmitting blindly.
+
+## Runway
+
+Runway API (`Authorization: Bearer $RUNWAYML_API_SECRET`), Runway's own Gen-4 family only; unknown models are rejected (no fallback). Video models: `gen4.5` (default; text-to-video, or image-to-video with `--image`) and `gen4_turbo` (image-to-video only, prompt optional). Image models: `gen4_image` (default) and `gen4_image_turbo` (needs at least one `--reference`).
+
+```bash
+# Video does NOT wait by default: it prints the task id plus status/resume/cancel commands
+multix runway video "a lighthouse in a storm" [--ratio 1280:720|720:1280] [--duration 2-10] [--seed <n>]
+multix runway video "the camera orbits the statue" --image ./statue.png --wait   # wait + download MP4
+multix runway video -m gen4_turbo --image https://cdn.example.com/still.jpg --ratio 960:960
+
+# Image waits and downloads by default; --async returns the id
+multix runway image "@hero on a rooftop at night" --reference ./hero.png --reference-tag hero [--ratio 1920:1080]
+
+multix runway status <task-id> [--wait] [--download] [--output <path>]
+multix runway cancel <task-id> [--delete]   # --delete also removes a finished task and its outputs
+```
+
+- `--output` and `--download`/`--no-download` on `video` need `--wait`; otherwise resume later with `status <id> --wait --download`. `FAILED`/`CANCELLED` exit non-zero.
+- Image-to-video ratios: `1280:720`, `720:1280`, `1104:832`, `832:1104`, `960:960`, `1584:672`. Prompts at most 1000 characters. `--reference-tag` (3-16 letters/digits/`_`, letter first) pairs with the `--reference` at the same position.
+- Inputs: public `https://` URLs (domain names, no redirects followed), `data:image/jpeg|png|webp` URIs, `runway://` URIs, or local jpg/png/webp (inlined up to 5 MB, else uploaded for 24 h, < 200 MB). No GIF.
+- Outputs: `runway-<id8>-NN.<ext>`; URLs expire in 24-48 h. WebP conversion for images as elsewhere.
+- Cost: logs an indicative list-price estimate before submitting (Gen-4.5 12 credits/s, Gen-4 Turbo 5 credits/s, Gen-4 Image from 5, Image Turbo 2; 1 credit = $0.01; prices change), then Runway's `estimatedCost` and billed `cost`. Create retries only on 429; after a network error, timeout, 5xx or unreadable response, check https://dev.runwayml.com/ before retrying to avoid paying twice.
 
 ## HeyGen
 
@@ -387,7 +413,7 @@ Requires `cwebp` (libwebp: `brew install webp`, `apt install webp`) on `PATH`.
 | Variable | Purpose |
 |---|---|
 | `MULTIX_OUTPUT_DIR` | Override default output dir |
-| `MULTIX_MAX_DOWNLOAD_MB` | Size limit per downloaded Replicate or Atlas Cloud output file (default 2048) |
+| `MULTIX_MAX_DOWNLOAD_MB` | Size limit per downloaded Replicate, Runway or Atlas Cloud output file (default 2048) |
 | `MULTIX_UPLOAD_MIN_KBPS` | Slowest Gemini Files API upload speed to allow for, in KB/s (default 1000); lower it on slow links |
 | `OPENAI_IMAGE_MODEL` / `OPENAI_TTS_MODEL` / `OPENAI_STT_MODEL` | OpenAI model defaults |
 | `OPENROUTER_IMAGE_MODEL` | Default OpenRouter image model |
@@ -412,6 +438,8 @@ Requires `cwebp` (libwebp: `brew install webp`, `apt install webp`) on `PATH`.
 | `REPLICATE_API_KEY` | Fallback for `REPLICATE_API_TOKEN` (direct `multix replicate` only) |
 | `REPLICATE_BASE_URL` | Override Replicate API root (default `https://api.replicate.com/v1`) |
 | `REPLICATE_IMAGE_MODEL` / `REPLICATE_VIDEO_MODEL` | Replicate default models (default `black-forest-labs/flux-schnell`, `prunaai/p-video`) |
+| `RUNWAY_BASE_URL` | Override Runway API root (default `https://api.dev.runwayml.com`) |
+| `RUNWAY_VIDEO_MODEL` / `RUNWAY_IMAGE_MODEL` | Runway default models (default `gen4.5`, `gen4_image`) |
 | `CLOUDFLARE_AI_IMAGE_MODEL` / `CLOUDFLARE_AI_TTS_MODEL` | Fixed-model settings: only `@cf/black-forest-labs/flux-1-schnell` and `@cf/myshell-ai/melotts` respectively are accepted |
 | `MULTIX_DISABLE_HOME_ENV` | `1` to skip every home-directory env file (`~/.multix/.env`, `~/.claude/...`) |
 | `MULTIX_LEGACY_CLAUDE_ENV` | `1` to also read legacy `.claude` env files (credential names only); shell or `~/.multix/.env` only, ignored in a project `.env` |
@@ -463,6 +491,10 @@ multix atlas status "$(multix atlas video "Ocean waves" --async)" --wait --downl
 # Replicate
 multix replicate image "A sunset over mountains"
 multix replicate video "A sunset timelapse" --async   # then: multix replicate status <id> --wait --download
+
+# Runway
+multix runway image "A sunset over mountains"
+multix runway video "A sunset timelapse"   # prints the id; then: multix runway status <id> --wait --download
 
 # Self-update
 multix update --check
