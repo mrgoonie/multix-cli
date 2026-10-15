@@ -15,7 +15,7 @@
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { Option } from "commander";
+import { type Command, Option } from "commander";
 import { ValidationError } from "./errors.js";
 import { readImageHeaderFromFile } from "./image-header.js";
 import type { Logger } from "./logger.js";
@@ -63,6 +63,18 @@ export function resolveImageFormatMode(
   const ext = opts.output ? path.extname(opts.output).toLowerCase() : "";
   if (ext && ext !== ".webp" && IMAGE_EXTS.has(ext)) return "original";
   return "webp";
+}
+
+/**
+ * Reject an invalid --image-format or MULTIX_IMAGE_FORMAT before any command
+ * that offers the flag runs its action, so a typo never costs a paid request.
+ */
+export function checkImageFormatBeforeAction(program: Command): void {
+  program.hook("preAction", (_root, action) => {
+    if (action.options.some((o) => o.long === "--image-format")) {
+      resolveImageFormatMode(action.opts());
+    }
+  });
 }
 
 export function hasCwebp(): boolean {

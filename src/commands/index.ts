@@ -4,6 +4,7 @@
  */
 
 import type { Command } from "commander";
+import { checkImageFormatBeforeAction } from "../core/image-webp-finalize.js";
 import { registerAtlasCloudCommands } from "../providers/atlascloud/commands/index.js";
 import { registerBytePlusCommands } from "../providers/byteplus/commands/index.js";
 import { registerCloudflareCommands } from "../providers/cloudflare/commands/index.js";
@@ -23,6 +24,7 @@ import { registerMediaCommands } from "./media/index.js";
 import { registerUpdateCommand } from "./update.js";
 
 export function registerCommands(program: Command): void {
+  checkImageFormatBeforeAction(program);
   registerCheckCommand(program);
   registerUpdateCommand(program);
   registerGeminiCommands(program);
