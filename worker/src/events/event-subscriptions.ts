@@ -49,6 +49,8 @@ export interface EventSubscriptionsStub {
   get(id: string, now: number): Promise<StoredSubscription | null>;
   remove(id: string): Promise<boolean>;
   list(now: number): Promise<StoredSubscription[]>;
+  /** Remove every subscription created or last refreshed by `clientId`; returns how many. */
+  removeByClient(clientId: string): Promise<number>;
   verifiedUntil(key: string): Promise<number>;
   /** Remember a passed verification until `until`; drops lapsed entries. */
   markVerified(key: string, until: number, now: number): Promise<void>;
@@ -90,6 +92,14 @@ export function subscriptionStore(storage: SubscriptionStorage): EventSubscripti
     async list(now) {
       return [...(await live(now)).values()];
     },
+    async removeByClient(clientId) {
+      const all = await storage.list<StoredSubscription>({ prefix: SUB_PREFIX });
+      let removed = 0;
+      for (const [key, sub] of all) {
+        if (sub.clientId === clientId && (await storage.delete(key))) removed++;
+      }
+      return removed;
+    },
     async verifiedUntil(key) {
       return (await storage.get<number>(`${VERIFIED_PREFIX}${key}`)) ?? 0;
     },
@@ -120,6 +130,10 @@ export class EventSubscriptions extends DurableObject {
 
   list(now: number): Promise<StoredSubscription[]> {
     return this.store().list(now);
+  }
+
+  removeByClient(clientId: string): Promise<number> {
+    return this.store().removeByClient(clientId);
   }
 
   verifiedUntil(key: string): Promise<number> {

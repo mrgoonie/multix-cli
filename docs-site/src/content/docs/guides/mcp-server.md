@@ -297,8 +297,8 @@ every 10–30 seconds until `status` is `succeeded`, `failed`, `timed_out` or
 
 The server speaks two MCP protocol revisions on the same `/mcp` endpoint:
 
-- **2025 clients** (the `initialize` handshake, protocol `2025-06-18` and
-  earlier) get the tools exactly as before. Nothing changes for them.
+- **2025 clients** (the `initialize` handshake, any 2025 protocol revision)
+  get the tools exactly as before. Nothing changes for them.
 - **2026-07-28 clients** negotiate through `server/discover` and send the
   protocol version on every request. `server/discover` lists `2026-07-28`
   and, when the Worker has the `MULTIX_EVENT_SUBSCRIPTIONS` binding, the
@@ -333,7 +333,8 @@ Subscriptions use **webhook** delivery only:
   ([Standard Webhooks](https://www.standardwebhooks.com) headers) and expects
   a 2xx answer echoing the challenge within 10 seconds. Redirects are not
   followed. A failure answers `-32015` with `data.reason` (`challenge_failed`,
-  `timeout`, `connection_refused`, `http_4xx` or `http_5xx`) and stores
+  `timeout`, `connection_refused`, `http_4xx` or `http_5xx`; a callback host
+  that cannot be resolved also reports `connection_refused`) and stores
   nothing. A passed verification is reused for 24 hours for the same URL and
   secret.
 - Subscribing again with the same event, arguments and callback refreshes the
@@ -450,10 +451,11 @@ within your Cloudflare account. If another Worker already uses `1001` or
   values and then cut to 16 KB, and only the job ID and status are logged. The `job:<id>` record in `ACCOUNTS_KV` holds the
   owner, command and start time, never keys.
 - **Event callbacks:** subscribe-time checks refuse non-public callbacks by
-  name and by every resolved address (DNS over HTTPS), the Worker's
-  `global_fetch_strictly_public` flag refuses private addresses again at
-  connection time (DNS rebinding), callback requests never follow redirects,
-  and only the failure category of a verification is returned or logged.
+  name and by every resolved address (DNS over HTTPS), callback requests never
+  follow redirects, and only the failure category of a verification is
+  returned or logged. A host re-pointed to a private address right after the
+  check (DNS rebinding) is not caught at subscribe time, so event delivery
+  repeats the address check before every request.
 - **Stateless MCP:** no MCP sessions. Each request builds a fresh server with
   the caller's keys. OAuth state and accounts live in KV; event subscriptions
   live in a Durable Object per account.

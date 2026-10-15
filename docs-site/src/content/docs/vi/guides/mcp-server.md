@@ -293,8 +293,8 @@ group (như `replicate`) → `multix_run` → gọi lại `multix_job_status` m�
 
 Server hỗ trợ hai phiên bản giao thức MCP trên cùng endpoint `/mcp`:
 
-- **Client đời 2025** (handshake `initialize`, giao thức `2025-06-18` trở về
-  trước) vẫn nhận các tool y như trước. Không có gì thay đổi với các client này.
+- **Client đời 2025** (handshake `initialize`, mọi phiên bản giao thức 2025)
+  vẫn nhận các tool y như trước. Không có gì thay đổi với các client này.
 - **Client 2026-07-28** thương lượng qua `server/discover` và gửi phiên bản
   giao thức trong mỗi request. `server/discover` liệt kê `2026-07-28` và, khi
   Worker có binding `MULTIX_EVENT_SUBSCRIPTIONS`, capability `events`, để
@@ -329,7 +329,8 @@ Subscription chỉ dùng kiểu gửi **webhook**:
   [Standard Webhooks](https://www.standardwebhooks.com)) và chờ phản hồi 2xx
   trả lại đúng challenge trong 10 giây. Redirect không được đi theo. Nếu thất
   bại, server trả `-32015` kèm `data.reason` (`challenge_failed`, `timeout`,
-  `connection_refused`, `http_4xx` hoặc `http_5xx`) và không lưu gì. Một lần
+  `connection_refused`, `http_4xx` hoặc `http_5xx`; host callback
+  không phân giải được cũng báo `connection_refused`) và không lưu gì. Một lần
   xác minh thành công được dùng lại trong 24 giờ cho cùng URL và secret.
 - Đăng ký lại với cùng sự kiện, tham số và callback sẽ gia hạn subscription
   hiện có (cùng `id`). Khi đổi secret, server vẫn ký thêm bằng secret cũ trong
@@ -447,10 +448,11 @@ chung bộ đếm.
   `job:<id>` trong `ACCOUNTS_KV` chứa chủ sở hữu, lệnh và thời điểm bắt đầu,
   không bao giờ chứa key.
 - **Callback sự kiện:** khi đăng ký, server từ chối callback không công khai
-  theo tên và theo mọi địa chỉ phân giải được (DNS over HTTPS); cờ
-  `global_fetch_strictly_public` của Worker từ chối địa chỉ private thêm lần
-  nữa lúc kết nối (DNS rebinding); request tới callback không bao giờ đi theo
-  redirect, và chỉ loại lỗi xác minh được trả về hoặc ghi log.
+  theo tên và theo mọi địa chỉ phân giải được (DNS over HTTPS); request tới
+  callback không bao giờ đi theo redirect, và chỉ loại lỗi xác minh được trả
+  về hoặc ghi log. Host bị trỏ sang địa chỉ private ngay sau bước kiểm tra
+  (DNS rebinding) không bị phát hiện lúc đăng ký, nên việc gửi sự kiện kiểm
+  tra lại địa chỉ trước mỗi request.
 - **MCP stateless:** không có MCP session. Mỗi request tạo một server mới với
   key của caller. Trạng thái OAuth và tài khoản nằm trong KV; subscription sự
   kiện nằm trong một Durable Object riêng cho từng tài khoản.

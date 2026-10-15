@@ -1,0 +1,107 @@
+{
+  "multix_catalog": {
+    "type": "object",
+    "properties": {
+      "group": {
+        "type": "string",
+        "pattern": "^[a-z0-9-]{1,40}$",
+        "description": "Command group, e.g. gemini, replicate, media"
+      }
+    },
+    "additionalProperties": false,
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "multix_run": {
+    "type": "object",
+    "properties": {
+      "command": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 100,
+        "description": "Command path from multix_catalog"
+      },
+      "args": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 20
+      },
+      "options": {
+        "type": "object",
+        "additionalProperties": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      "inputs": {
+        "type": "object",
+        "additionalProperties": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 2048
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 2048
+              },
+              "maxItems": 10
+            }
+          ]
+        }
+      },
+      "wait_seconds": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 40
+      }
+    },
+    "required": ["command"],
+    "additionalProperties": false,
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "multix_job_status": {
+    "type": "object",
+    "properties": {
+      "job_id": {
+        "type": "string",
+        "maxLength": 64,
+        "description": "Job id returned by multix_run"
+      }
+    },
+    "required": ["job_id"],
+    "additionalProperties": false,
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "multix_job_cancel": {
+    "type": "object",
+    "properties": {
+      "job_id": {
+        "type": "string",
+        "maxLength": 64,
+        "description": "Job id returned by multix_run"
+      }
+    },
+    "required": ["job_id"],
+    "additionalProperties": false,
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  }
+}

@@ -1,6 +1,9 @@
-import { describe, expect, it } from "vitest";
-import { importEncryptionKey } from "../src/accounts/provider-secret-crypto.js";
-import { MAX_SUBSCRIPTIONS_PER_ACCOUNT } from "../src/events/event-subscriptions.js";
+import { describe, expect, it, vi } from "vitest";
+import { decryptSecret, importEncryptionKey } from "../src/accounts/provider-secret-crypto.js";
+import {
+  MAX_SUBSCRIPTIONS_PER_ACCOUNT,
+  type StoredSubscription,
+} from "../src/events/event-subscriptions.js";
 import {
   CALLBACK_ENDPOINT_ERROR,
   DEFAULT_TTL_MS,
@@ -239,6 +242,19 @@ describe("events/subscribe", () => {
     expect(verifications(remote.calls)).toBe(2);
     const [sub] = await namespace.getByName("u1").list(NOW);
     expect(sub?.previousSecret?.until).toBeGreaterThan(NOW);
+    const key = await importEncryptionKey(ENCRYPTION_KEY);
+    const aad = `event-subscription:${sub?.id}`;
+    expect(await decryptSecret(key, "u1", aad, sub?.secret as StoredSubscription["secret"])).toBe(
+      rotated,
+    );
+    expect(
+      await decryptSecret(
+        key,
+        "u1",
+        aad,
+        sub?.previousSecret?.secret as StoredSubscription["secret"],
+      ),
+    ).toBe(SECRET);
   });
 
   it("clamps the requested lifetime and never grants an unlimited one", async () => {
@@ -352,6 +368,42 @@ describe("events/subscribe", () => {
     expect(body.error.code).toBe(-32602);
     expect(body.error.message).toContain("limit");
   });
+
+  it("logs the subscribed event without replacing the log event name", async () => {
+    const { contextFor } = setup();
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      await modernRpc(fullEnv(), "events/subscribe", subscribeParams(), {
+        events: contextFor("u1"),
+      });
+      const lines = log.mock.calls.map(([line]) => JSON.parse(String(line)));
+      expect(lines).toContainEqual(
+        expect.objectContaining({ event: "event_subscribe", eventName: "multix.job.completed" }),
+      );
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it("refuses a subscription that loses the race for the last slot", async () => {
+    const { contextFor } = setup();
+    const events = contextFor("u1");
+    // The count check passes, but the store is full by the time the write lands.
+    events.subscriptions.upsert = async () => "limit";
+    const body = await modernRpc(fullEnv(), "events/subscribe", subscribeParams(), { events });
+    expect(body.error.code).toBe(-32602);
+    expect(body.error.message).toContain("limit");
+  });
+
+  it("answers an unexpected failure with a generic internal error", async () => {
+    const { contextFor } = setup();
+    const events = contextFor("u1");
+    events.subscriptions.get = async () => {
+      throw new Error("storage failed at /internal/path for sub:abc");
+    };
+    const body = await modernRpc(fullEnv(), "events/subscribe", subscribeParams(), { events });
+    expect(body.error).toEqual({ code: -32603, message: "Internal error" });
+  });
 });
 
 describe("events/unsubscribe", () => {
@@ -369,6 +421,26 @@ describe("events/unsubscribe", () => {
     });
     expect(await namespace.getByName("u1").list(NOW)).toEqual([]);
     expect((await modernRpc(fullEnv(), "events/unsubscribe", target, deps)).error).toBeUndefined();
+  });
+
+  it.each([
+    { name: "multix.job.unknown" },
+    { delivery: { mode: "sse", url: CALLBACK } },
+    { arguments: { job_id: 5 } },
+    { delivery: { mode: "webhook", url: "http://127.0.0.1/cb" } },
+  ])("answers an unsubscribe for a target that cannot exist with success: %j", async (change) => {
+    const { contextFor } = setup();
+    const target = {
+      name: "multix.job.completed",
+      arguments: {},
+      delivery: { mode: "webhook", url: CALLBACK },
+      ...change,
+    };
+    const body = await modernRpc(fullEnv(), "events/unsubscribe", target, {
+      events: contextFor("u1"),
+    });
+    expect(body.error).toBeUndefined();
+    expect(body.result).toMatchObject({ resultType: "complete" });
   });
 
   it("cannot remove or see another account's subscription", async () => {

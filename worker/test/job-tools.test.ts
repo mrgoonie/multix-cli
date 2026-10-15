@@ -13,6 +13,7 @@ import { type JobSpec, type JobView, SERVER_AT_CAPACITY_ERROR } from "../src/job
 import { type JobToolsContext, NO_STORAGE_NOTE, outputKeyPrefix } from "../src/jobs/job-runner.js";
 import { type JobBackend, JobStore } from "../src/jobs/job-store.js";
 import { fakeKv } from "./fake-kv.js";
+import legacySchemas from "./fixtures/legacy-tool-input-schemas.json";
 import { callTool, fullEnv, rpc } from "./helpers.js";
 
 const GEMINI_KEY = "AIza-gemini-secret-value-1234";
@@ -121,6 +122,19 @@ function jobsContext(
 const env = fullEnv({ GEMINI_API_KEY: GEMINI_KEY });
 
 describe("CLI runner tools", () => {
+  it("keeps the tool input schemas 2025 clients already know", async () => {
+    const list = await rpc(
+      env,
+      "tools/list",
+      {},
+      { jobs: jobsContext(new FakeBackend(succeeded)) },
+    );
+    const schemas = Object.fromEntries(
+      list.result.tools.map((t: { name: string; inputSchema: unknown }) => [t.name, t.inputSchema]),
+    );
+    expect(schemas).toEqual(legacySchemas);
+  });
+
   it("lists the job tools only when the job backend is available", async () => {
     const withJobs = await rpc(
       env,

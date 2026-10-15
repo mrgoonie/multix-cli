@@ -50,6 +50,21 @@ const NOTICES: Record<string, Notice> = {
   ...R2_NOTICES,
 };
 
+/**
+ * A disconnected client's MCP Events subscriptions go with it, unless the
+ * account still has another grant for the same client.
+ */
+async function removeClientSubscriptions(
+  ctx: AppContext,
+  userId: string,
+  clientId: string,
+): Promise<number> {
+  if (!ctx.env.MULTIX_EVENT_SUBSCRIPTIONS) return 0;
+  const remaining = await oauthHelpers(ctx.env).listUserGrants(userId);
+  if (remaining.items.some((g) => g.clientId === clientId)) return 0;
+  return ctx.env.MULTIX_EVENT_SUBSCRIPTIONS.getByName(userId).removeByClient(clientId);
+}
+
 async function connectedClients(ctx: AppContext, account: Account): Promise<ConnectedClient[]> {
   const oauth = oauthHelpers(ctx.env);
   const grants = await oauth.listUserGrants(account.id);
@@ -158,9 +173,12 @@ async function handlePost(ctx: AppContext, request: Request, pathname: string): 
   if (pathname === "/dashboard/connections/revoke") {
     const grantId = String(form.get("grant_id") ?? "");
     if (!/^[A-Za-z0-9_-]{1,128}$/.test(grantId)) return text(400, "Invalid connection");
+    const oauth = oauthHelpers(ctx.env);
+    const grant = (await oauth.listUserGrants(account.id)).items.find((g) => g.id === grantId);
     // revokeGrant is scoped to the account id, so another user's grant id does nothing.
-    await oauthHelpers(ctx.env).revokeGrant(grantId, account.id);
-    logEvent("info", "mcp_client_disconnected", { user: account.id });
+    await oauth.revokeGrant(grantId, account.id);
+    const removed = grant ? await removeClientSubscriptions(ctx, account.id, grant.clientId) : 0;
+    logEvent("info", "mcp_client_disconnected", { user: account.id, subscriptions: removed });
     return redirect("/dashboard?notice=disconnected");
   }
 

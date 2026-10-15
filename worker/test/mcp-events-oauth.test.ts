@@ -86,6 +86,23 @@ describe("MCP Events over OAuth", () => {
     }
   });
 
+  it("removes the client's subscriptions when its connection is revoked", async () => {
+    const { env, subscriptions } = eventsEnv();
+    const browser = newBrowser(env, githubFetch(OCTOCAT, ...remote()).fetch);
+    const token = await authorizeAndGetToken(browser, await registerClient(browser));
+    const created = await json(await modernMcpCall(browser, token, "events/subscribe", SUBSCRIBE));
+    expect(created.result.id).toMatch(/^sub_/);
+    const [name] = subscriptions.names();
+    expect(await subscriptions.getByName(name as string).list(Date.now())).toHaveLength(1);
+
+    const page = await (await browser.request("/dashboard")).text();
+    await browser.post("/dashboard/connections/revoke", {
+      csrf: hiddenField(page, "csrf"),
+      grant_id: hiddenField(page, "grant_id"),
+    });
+    expect(await subscriptions.getByName(name as string).list(Date.now())).toEqual([]);
+  });
+
   it("keeps each account's subscriptions apart", async () => {
     const { env, subscriptions } = eventsEnv();
     const owner = newBrowser(env, githubFetch(OCTOCAT, ...remote()).fetch);

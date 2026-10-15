@@ -27,7 +27,7 @@ Status: implemented, in review
 | Era routing | `isLegacyRequest` → existing `WebStandardStreamableHTTPServerTransport` (JSON); else `createMcpHandler(..., { legacy: "reject", responseMode: "json" })` |
 | Media type | 415 on the modern leg (SDK leaves it to hand-wired compositions) |
 | Identity | `sub_` + 24 hex of SHA-256 over canonical `[account, url, name, arguments]` |
-| SSRF | `assertPublicHttpsUrl` + DoH A/AAAA public-address check + `redirect: "manual"` + `global_fetch_strictly_public` |
+| SSRF | `assertPublicHttpsUrl` + DoH A/AAAA public-address check + `redirect: "manual"`; delivery (#223) must re-check addresses per request (DNS rebinding) |
 | Verification | Standard Webhooks signed challenge, 10 s, 4 KiB answer cap, cached 24 h per (url, secret) |
 | Lifetime | default 24 h, clamp 5 min–7 d, `null` → 7 d; secret rotation window 1 h; 20 per account |
 

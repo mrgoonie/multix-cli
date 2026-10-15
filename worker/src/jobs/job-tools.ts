@@ -18,6 +18,7 @@ import {
 } from "./job-runner.js";
 import { prepareRun } from "./run-argv-builder.js";
 import { MAX_INPUT_FILES } from "./run-input-files.js";
+import { toolInput } from "./tool-input-schema.js";
 
 export type RunToolFn = (
   tool: string,
@@ -45,13 +46,13 @@ export function registerJobTools(
       title: "multix CLI catalog",
       description:
         "List the multix CLI commands this server can run with multix_run. Without group: every group, its commands and whether you saved keys for it. With group: each command's positionals and options, which ones take files (pass https URLs in inputs) and the server's caps. Never returns key values.",
-      inputSchema: {
+      inputSchema: toolInput({
         group: z
           .string()
           .regex(/^[a-z0-9-]{1,40}$/)
           .optional()
           .describe("Command group, e.g. gemini, replicate, media"),
-      },
+      }),
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async (args) =>
@@ -68,13 +69,13 @@ export function registerJobTools(
     {
       title: "Run a multix CLI command",
       description: `Run one multix CLI command in an isolated container with your saved keys. command: e.g. "gemini generate". options: by long name without dashes ({"prompt": "...", "num-images": 2, "no-webp": true}). args: positionals in order. inputs: https URLs for file options or positionals (downloaded for the CLI). Output files go to your R2 bucket (configure it in /dashboard) and come back as URLs. Waits up to wait_seconds (max ${MAX_WAIT_SECONDS}, container start included); if still running, poll multix_job_status. At most ${jobs.caps.perAccount} running jobs per account. Caps: ${limits.maxOutputs} outputs, ${limits.maxVideoSeconds} s video, resolutions ${limits.allowedResolutions.join("/")}.`,
-      inputSchema: {
+      inputSchema: toolInput({
         command: z.string().min(1).max(100).describe("Command path from multix_catalog"),
         args: z.array(z.string()).max(20).optional(),
         options: z.record(z.string(), optionValueSchema).optional(),
         inputs: z.record(z.string(), urlListSchema).optional(),
         wait_seconds: z.number().int().min(0).max(MAX_WAIT_SECONDS).optional(),
-      },
+      }),
       annotations: { readOnlyHint: false, openWorldHint: true },
     },
     async (args) => {
@@ -92,7 +93,7 @@ export function registerJobTools(
       title: "multix job status",
       description:
         "Read a multix_run job: status, output URLs, stdout and the tail of stderr. Poll until status is succeeded, failed, timed_out or canceled.",
-      inputSchema: { job_id: jobIdSchema },
+      inputSchema: toolInput({ job_id: jobIdSchema }),
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async (args) => runTool("multix_job_status", {}, async () => runner.status(args.job_id)),
@@ -104,7 +105,7 @@ export function registerJobTools(
       title: "Cancel a multix job",
       description:
         "Stop a running multix_run job and its container. Files not yet uploaded are lost.",
-      inputSchema: { job_id: jobIdSchema },
+      inputSchema: toolInput({ job_id: jobIdSchema }),
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
     },
     async (args) => runTool("multix_job_cancel", {}, async () => runner.cancel(args.job_id)),

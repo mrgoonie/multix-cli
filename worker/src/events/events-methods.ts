@@ -16,7 +16,7 @@ import type { FetchLike } from "../../../src/core/fetch-json.js";
 import { decryptSecret, encryptSecret } from "../accounts/provider-secret-crypto.js";
 import { MAX_URL_CHARS } from "../config.js";
 import type { JobStore } from "../jobs/job-store.js";
-import { logEvent } from "../redaction.js";
+import { logEvent, sanitizeText } from "../redaction.js";
 import { assertPublicHttpsUrl } from "../url-guard.js";
 import { CallbackDnsError, CallbackUrlError, assertPublicCallbackUrl } from "./callback-guard.js";
 import { type VerificationFailure, verifyCallback } from "./callback-verification.js";
@@ -53,7 +53,7 @@ export interface EventsContext {
   subscriptions: EventSubscriptionsStub;
   /** AES-GCM key for signing secrets at rest (SECRETS_ENCRYPTION_KEY). */
   encryptionKey: Promise<CryptoKey>;
-  /** Outbound fetch for DNS checks and verification (the Worker's strictly-public fetch). */
+  /** Outbound fetch for DNS checks and verification. */
   fetch: FetchLike;
   /** Ownership records, to check a `job_id` filter belongs to the caller. */
   jobs?: JobStore;
@@ -117,6 +117,26 @@ function parseArguments(raw: Record<string, unknown> | undefined): JobEventArgum
   return parsed.data;
 }
 
+/**
+ * Run a handler so that only protocol errors reach the client: anything else
+ * (storage, crypto, RPC) is logged and answered with a generic internal error.
+ */
+function guarded<P, R>(method: string, handler: (params: P) => Promise<R>) {
+  return async (params: P): Promise<R> => {
+    try {
+      return await handler(params);
+    } catch (error) {
+      if (error instanceof ProtocolError) throw error;
+      logEvent("error", "event_method_failed", {
+        method,
+        error: error instanceof Error ? error.name : typeof error,
+        detail: sanitizeText(error instanceof Error ? error.message : String(error), []),
+      });
+      throw new ProtocolError(ProtocolErrorCode.InternalError, "Internal error");
+    }
+  };
+}
+
 function secretAad(id: string): string {
   return `event-subscription:${id}`;
 }
@@ -124,11 +144,13 @@ function secretAad(id: string): string {
 export function registerEventMethods(server: McpServer, ctx: EventsContext): void {
   const now = ctx.now ?? Date.now;
 
-  server.server.setRequestHandler("events/list", { params: listParams }, async () => ({
-    events: eventCatalog(),
-  }));
+  server.server.setRequestHandler(
+    "events/list",
+    { params: listParams },
+    guarded("events/list", async () => ({ events: eventCatalog() })),
+  );
 
-  server.server.setRequestHandler("events/subscribe", { params: subscribeParams }, async (p) => {
+  const subscribe = guarded("events/subscribe", async (p: z.infer<typeof subscribeParams>) => {
     checkEvent(p.name, p.delivery.mode);
     const args = parseArguments(p.arguments);
     if (args.job_id !== undefined && !(await ctx.jobs?.ownedBy(args.job_id, ctx.userId))) {
@@ -165,7 +187,7 @@ export function registerEventMethods(server: McpServer, ctx: EventsContext): voi
     if ((await ctx.subscriptions.verifiedUntil(verificationKey)) <= started) {
       const failure = await verifyCallback(ctx.fetch, url, p.delivery.secret, id, now);
       if (failure) {
-        logEvent("warn", "event_subscribe", { event: p.name, ok: false, reason: failure });
+        logEvent("warn", "event_subscribe", { eventName: p.name, ok: false, reason: failure });
         throw callbackError(failure);
       }
       await ctx.subscriptions.markVerified(verificationKey, now() + VERIFICATION_CACHE_MS, now());
@@ -200,7 +222,7 @@ export function registerEventMethods(server: McpServer, ctx: EventsContext): voi
     if (result === "limit") {
       throw invalidParams(`Subscription limit reached (${MAX_SUBSCRIPTIONS_PER_ACCOUNT})`);
     }
-    logEvent("info", "event_subscribe", { event: p.name, id, ok: true, result });
+    logEvent("info", "event_subscribe", { eventName: p.name, id, ok: true, result });
     return {
       id,
       refreshBefore: new Date(expiresAt).toISOString(),
@@ -209,29 +231,38 @@ export function registerEventMethods(server: McpServer, ctx: EventsContext): voi
       truncated: p.cursor !== undefined && p.cursor !== null,
     };
   });
+  server.server.setRequestHandler("events/subscribe", { params: subscribeParams }, subscribe);
 
-  server.server.setRequestHandler(
+  // Unsubscribe is idempotent: a target subscribe would have refused (unknown
+  // event, mode, arguments or URL) cannot exist, so it answers like any other
+  // subscription that is already gone.
+  const unsubscribe = guarded(
     "events/unsubscribe",
-    { params: unsubscribeParams },
-    async (p) => {
-      checkEvent(p.name, p.delivery.mode);
-      const args = parseArguments(p.arguments);
+    async (p: z.infer<typeof unsubscribeParams>) => {
+      if (
+        !isKnownEvent(p.name) ||
+        !(DELIVERY_MODES as readonly string[]).includes(p.delivery.mode)
+      ) {
+        return {};
+      }
+      const args = jobEventArguments.safeParse(p.arguments ?? {});
+      if (!args.success) return {};
       let url: string;
       try {
         url = assertPublicHttpsUrl(p.delivery.url, "delivery.url");
       } catch {
-        // No subscription can exist for a URL subscribe would have refused.
         return {};
       }
       const id = await subscriptionId({
         principal: ctx.userId,
         url,
         name: p.name,
-        arguments: args,
+        arguments: args.data,
       });
       const removed = await ctx.subscriptions.remove(id);
-      logEvent("info", "event_unsubscribe", { event: p.name, id, removed });
+      logEvent("info", "event_unsubscribe", { eventName: p.name, id, removed });
       return {};
     },
   );
+  server.server.setRequestHandler("events/unsubscribe", { params: unsubscribeParams }, unsubscribe);
 }

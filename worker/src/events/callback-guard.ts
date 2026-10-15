@@ -7,11 +7,12 @@
  * - every A/AAAA record of the host, resolved over DNS-over-HTTPS, must be a
  *   public unicast address.
  *
- * The Worker cannot pin the connection to the address it checked, so the
- * `global_fetch_strictly_public` compatibility flag (wrangler.jsonc) is the
- * connection-time boundary: Cloudflare refuses to fetch private addresses even
- * when a name is re-pointed after this check (DNS rebinding). Callback fetches
- * never follow redirects.
+ * The Worker cannot pin the connection to the address it checked, so a name
+ * re-pointed between this check and the connection (DNS rebinding) is not
+ * caught here; `global_fetch_strictly_public` only routes fetches to the
+ * Worker's own zone over the internet and is not an address filter. Every later
+ * request to the callback (verification, deliveries) must therefore repeat this
+ * check right before it connects. Callback fetches never follow redirects.
  */
 
 import type { FetchLike } from "../../../src/core/fetch-json.js";
@@ -59,7 +60,10 @@ export function isNonPublicIpv4(address: string): boolean {
     (a === 169 && b === 254) ||
     (a === 172 && b >= 16 && b <= 31) ||
     (a === 192 && b === 0 && (c === 0 || c === 2)) ||
+    (a === 192 && b === 31 && c === 196) ||
+    (a === 192 && b === 52 && c === 193) ||
     (a === 192 && b === 88 && c === 99) ||
+    (a === 192 && b === 175 && c === 48) ||
     (a === 192 && b === 168) ||
     (a === 198 && (b === 18 || b === 19)) ||
     (a === 198 && b === 51 && c === 100) ||
@@ -110,6 +114,9 @@ export function isNonPublicIpv6(address: string): boolean {
   if ((g0 & 0xe000) !== 0x2000) return true; // only 2000::/3 is global unicast
   if (g0 === 0x2001 && g1 === 0x0db8) return true; // documentation
   if (g0 === 0x2001 && g1 === 0) return true; // Teredo
+  if (g0 === 0x2001 && g1 === 2 && g2 === 0) return true; // benchmarking 2001:2::/48
+  if (g0 === 0x2001 && g1 >= 0x10 && g1 <= 0x2f) return true; // ORCHID 2001:10::/28, 2001:20::/28
+  if (g0 === 0x3fff && g1 <= 0x0fff) return true; // documentation 3fff::/20
   if (g0 === 0x2002) return true; // 6to4 embeds an arbitrary IPv4
   return false;
 }
