@@ -588,7 +588,7 @@ multix runway image "@hero on a rooftop at night" [-m gen4_image|gen4_image_turb
   [--reference ./hero.png --reference-tag hero] [--seed <n>] [--async] [--output <path>]
 
 # Check, resume, cancel, or delete a task by id
-multix runway status <task-id> [--wait] [--download] [--output <path>] [--wait-timeout <ms>]
+multix runway status <task-id> [--wait] [--download] [--output <path>] [--wait-timeout <ms>] [--json]
 multix runway cancel <task-id> [--delete]
 
 # Supported models, ratios, durations and reference limits (offline, no key needed)

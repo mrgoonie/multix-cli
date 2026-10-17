@@ -5,7 +5,7 @@
  * Signed output URLs are never printed here: `--no-download` on video/image
  * is the explicit way to get them. Progress and hints go to stderr so stdout
  * stays parseable JSON; --json keeps it JSON after --download as well.
- * FAILED/CANCELLED tasks exit non-zero.
+ * FAILED/CANCELLED tasks print the summary, then exit non-zero.
  */
 
 import type { Command } from "commander";
@@ -47,13 +47,21 @@ export function registerRunwayStatusCommand(parent: Command): void {
       const client = createRunwayClient();
 
       if (opts.wait) {
-        await completeTask(client, id, {
-          waitTimeoutMs,
-          logger,
-          download: Boolean(opts.download),
-          output: opts.output,
-          json: opts.json,
-        });
+        try {
+          await completeTask(client, id, {
+            waitTimeoutMs,
+            logger,
+            download: Boolean(opts.download),
+            output: opts.output,
+            json: opts.json,
+          });
+        } catch (error) {
+          // Same contract as the one-shot path: the JSON summary, then a non-zero exit.
+          if (error instanceof RunwayTaskError) {
+            console.log(JSON.stringify(summarizeTask(error.task), null, 2));
+          }
+          throw error;
+        }
         return;
       }
 

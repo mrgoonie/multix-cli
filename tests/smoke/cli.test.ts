@@ -101,7 +101,7 @@ describe("multix --help (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "multix-smoke-runway-"));
     try {
       const env = isolatedEnv(tmp);
-      // An unreachable base URL proves no request is made.
+      // No key and an unreachable base URL: listing must not depend on either.
       const result = await run(["runway", "models", "--json"], {
         env: {
           ...env,

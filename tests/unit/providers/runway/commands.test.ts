@@ -461,6 +461,18 @@ describe("runway status", () => {
     expect(text()).not.toContain(SECRET);
   });
 
+  it("--wait on a FAILED task prints the summary to stdout, then exits non-zero", async () => {
+    stub({
+      [TASK_PATH]: [{ json: task("FAILED", { failure: "bad input", failureCode: "INPUT" }) }],
+    });
+    await expect(run("status", TASK_ID, "--wait")).rejects.toThrow(RunwayTaskError);
+    expect(JSON.parse(stdout())).toMatchObject({
+      id: TASK_ID,
+      status: "FAILED",
+      failureCode: "INPUT",
+    });
+  });
+
   it("--download --json prints the summary and saved files as JSON only", async () => {
     stub({
       [TASK_PATH]: [{ json: task("SUCCEEDED", { output: [OUTPUT_URL] }) }],
@@ -509,6 +521,17 @@ describe("runway models", () => {
     const list = JSON.parse(stdout());
     expect(list.video.find((m: { default: boolean }) => m.default).id).toBe("gen4_turbo");
     expect(list.image.find((m: { default: boolean }) => m.default).id).toBe("gen4_image_turbo");
+  });
+
+  it("warns on stderr when the env selects an unsupported model", async () => {
+    vi.stubEnv("RUNWAY_VIDEO_MODEL", "gen5");
+    stub({});
+    await run("models", "--json");
+    const list = JSON.parse(stdout());
+    expect(list.video.some((m: { default: boolean }) => m.default)).toBe(false);
+    expect(vi.mocked(console.warn).mock.calls.flat().join("\n")).toContain(
+      'RUNWAY_VIDEO_MODEL="gen5" is not a supported video model',
+    );
   });
 
   it("prints capabilities, ratios, durations and reference limits", async () => {

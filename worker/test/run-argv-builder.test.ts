@@ -179,10 +179,10 @@ describe("prepareRun: argv", () => {
     );
   }, 120_000);
 
-  it("runs the offline runway models listing and JSON-only runway status", async () => {
-    const models = run({ command: "runway models", options: { json: true } });
-    expect(models.group).toBe("runway");
-    expect((await parseWithCli(models.argv, "runway models")).opts.json).toBe(true);
+  it("keeps the offline runway models listing local and runs JSON-only runway status", async () => {
+    expect(() => run({ command: "runway models", options: { json: true } })).toThrow(
+      ValidationError,
+    );
 
     const taskId = "3f2a9c1e-5b7d-4e8f-9a0b-1c2d3e4f5a6b";
     const status = run({ command: "runway status", args: [taskId], options: { json: true } });

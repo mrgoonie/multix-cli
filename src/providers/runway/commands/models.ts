@@ -6,6 +6,7 @@
  */
 
 import type { Command } from "commander";
+import { createLogger } from "../../../core/logger.js";
 import {
   IMAGE_MODELS,
   type ImageModelSpec,
@@ -69,7 +70,15 @@ export function registerRunwayModelsCommand(parent: Command): void {
     .description("List supported Runway models, ratios, durations and reference limits (offline)")
     .option("--json", "Print JSON")
     .action((opts: { json?: boolean }) => {
-      const list = listRunwayModels({ video: runwayVideoModel(), image: runwayImageModel() });
+      const defaults = { video: runwayVideoModel(), image: runwayImageModel() };
+      const logger = createLogger({ verbose: false, stderr: true });
+      if (!VIDEO_MODELS[defaults.video]) {
+        logger.warn(`RUNWAY_VIDEO_MODEL="${defaults.video}" is not a supported video model`);
+      }
+      if (!IMAGE_MODELS[defaults.image]) {
+        logger.warn(`RUNWAY_IMAGE_MODEL="${defaults.image}" is not a supported image model`);
+      }
+      const list = listRunwayModels(defaults);
       if (opts.json) console.log(JSON.stringify(list, null, 2));
       else printModels(list);
     });

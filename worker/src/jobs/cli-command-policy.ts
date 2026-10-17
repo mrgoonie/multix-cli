@@ -50,8 +50,12 @@ export interface CommandPolicy {
   caps?: CapRules;
 }
 
-/** Commands that act on the local machine or need an interactive login. */
-export const EXCLUDED_COMMANDS: ReadonlySet<string> = new Set(["check", "update"]);
+/**
+ * Commands that act on the local machine or need an interactive login, and
+ * offline listings of the CLI's own static data (a container job would only
+ * bill for what the docs already state).
+ */
+export const EXCLUDED_COMMANDS: ReadonlySet<string> = new Set(["check", "update", "runway models"]);
 
 /** Options no remote command may use: stdin is not available in the container. */
 export const GLOBALLY_UNSUPPORTED_OPTIONS: ReadonlySet<string> = new Set(["stdin-ext"]);

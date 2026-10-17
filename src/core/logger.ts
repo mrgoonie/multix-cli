@@ -53,10 +53,10 @@ export function createLogger(opts: LoggerOptions): Logger {
       out(c(ANSI.green, `✓ ${msg}`, stream));
     },
     warn(msg) {
-      console.warn(c(ANSI.yellow, `⚠ ${msg}`));
+      console.warn(c(ANSI.yellow, `⚠ ${msg}`, process.stderr));
     },
     error(msg) {
-      console.error(c(ANSI.red, `✗ ${msg}`));
+      console.error(c(ANSI.red, `✗ ${msg}`, process.stderr));
     },
     debug(msg) {
       if (verbose) out(c(ANSI.dim, `  [debug] ${msg}`, stream));

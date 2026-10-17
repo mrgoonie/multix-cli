@@ -113,7 +113,9 @@ multix runway cancel <id> --delete             # xóa task đã xong cùng outpu
 - `status` chỉ ghi JSON ra stdout; tiến độ, chi phí và gợi ý tiếp tục đi ra
   stderr, nên `multix runway status <id> | jq .status` dùng được cả với task
   đang chạy. Khi có `--download`, stdout liệt kê file đã lưu, trừ khi thêm
-  `--json` để in bản tóm tắt kèm mảng `files`.
+  `--json` để in bản tóm tắt kèm mảng `files`. Task `FAILED` hoặc `CANCELLED`
+  in bản tóm tắt rồi mới thoát với mã khác 0, dù có `--wait` hay không; khi
+  `--wait` hết giờ hoặc tải xuống lỗi, CLI chỉ ghi ra stderr.
 - Trạng thái kết thúc gồm `SUCCEEDED`, `FAILED` và `CANCELLED`. `FAILED` và
   `CANCELLED` thoát với mã khác 0; lệnh `status` xem một lần với task đang chạy
   thoát với mã 0 và in lệnh để tiếp tục.
