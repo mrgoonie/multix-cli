@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.10.5](https://github.com/mrgoonie/multix-cli/compare/v1.10.4...v1.10.5) (2026-10-17)
+
+
+### Fixed
+
+* **worker:** re-check webhook callback addresses at subscribe and before each delivery ([#246](https://github.com/mrgoonie/multix-cli/issues/246)) ([0725be1](https://github.com/mrgoonie/multix-cli/commit/0725be1a69a9082a082845ba82ffa7cd0d3d8df4)), closes [#226](https://github.com/mrgoonie/multix-cli/issues/226)
+
 ## [1.10.4](https://github.com/mrgoonie/multix-cli/compare/v1.10.3...v1.10.4) (2026-10-17)
 
 
