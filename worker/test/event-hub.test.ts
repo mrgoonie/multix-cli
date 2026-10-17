@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { CallbackDnsError, CallbackUrlError } from "../src/events/callback-guard.js";
 import type { MultixEvent } from "../src/events/event-catalog.js";
 import {
   DELIVERY_BATCH,
@@ -48,9 +49,16 @@ function harness(respond: (sent: Sent) => Response | Promise<Response> = () => n
   const fake = fakeDoStorage();
   const sent: Sent[] = [];
   const clock = { t: T0 };
+  /** What the callback address check does next; it passes by default. */
+  const dns: { check: (url: string) => Promise<unknown> } = { check: async () => undefined };
+  const checked: string[] = [];
   const ports = {
     storage: fake.storage,
     now: () => clock.t,
+    checkCallback: (url: string) => {
+      checked.push(url);
+      return dns.check(url);
+    },
     fetch: async (url: string, init: RequestInit) => {
       const entry = {
         url,
@@ -72,7 +80,7 @@ function harness(respond: (sent: Sent) => Response | Promise<Response> = () => n
     await hub.alarm();
     return true;
   };
-  return { hub, fake, sent, clock, ports, runAlarm };
+  return { hub, fake, sent, clock, ports, runAlarm, dns, checked };
 }
 
 async function subscribe(hub: EventHub, input: SubscriptionInput = INPUT) {
@@ -238,6 +246,62 @@ describe("EventHub delivery", () => {
     }
     expect(sent).toHaveLength(3);
     expect(await hub.deadLetters()).toEqual([]);
+  });
+
+  it("re-checks the callback address before every attempt and never sends to a re-pointed host", async () => {
+    const { hub, sent, runAlarm, fake, dns, checked } = harness();
+    await subscribe(hub);
+    await hub.publish([event()]);
+    const queued = () =>
+      [...fake.data]
+        .filter(([k]) => k.startsWith("q:"))
+        .map(([, v]) => v as { lastError?: string });
+
+    // DNS rebinding: the host now resolves to a private address.
+    dns.check = async () => {
+      throw new CallbackUrlError(
+        "callback_url resolves to a private or reserved address",
+        "not_public",
+      );
+    };
+    await runAlarm();
+    expect(sent).toHaveLength(0);
+    expect(queued()).toMatchObject([{ attempts: 1, lastError: "endpoint address not public" }]);
+
+    dns.check = async () => {
+      throw new CallbackDnsError();
+    };
+    await runAlarm();
+    expect(sent).toHaveLength(0);
+    expect(queued()).toMatchObject([
+      { attempts: 2, lastError: "endpoint host could not be resolved" },
+    ]);
+
+    dns.check = async () => undefined;
+    await runAlarm();
+    expect(sent).toHaveLength(1);
+    expect(queued()).toEqual([]);
+    expect(checked).toEqual(Array(3).fill(INPUT.callbackUrl));
+  });
+
+  it("dead-letters a delivery whose host stays non-public, without sending it", async () => {
+    const { hub, sent, runAlarm, dns } = harness();
+    const { subscription } = await subscribe(hub);
+    await hub.publish([event()]);
+    dns.check = async () => {
+      throw new CallbackUrlError(
+        "callback_url resolves to a private or reserved address",
+        "not_public",
+      );
+    };
+    for (let i = 0; i < MAX_DELIVERY_ATTEMPTS; i++) await runAlarm();
+    expect(sent).toHaveLength(0);
+    const [dead] = await hub.deadLetters();
+    expect(dead).toMatchObject({
+      subscriptionId: subscription.id,
+      attempts: MAX_DELIVERY_ATTEMPTS,
+      reason: `gave up after ${MAX_DELIVERY_ATTEMPTS} attempts: endpoint address not public`,
+    });
   });
 
   it("dead-letters after the last attempt, keeping ids but no payload", async () => {

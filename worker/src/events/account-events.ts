@@ -2,11 +2,12 @@
  * Durable Object holding one account's event subscriptions and deliveries
  * (`MULTIX_EVENTS.getByName(userId)`), so an event published for an account
  * can only ever reach that account's subscriptions. The logic lives in
- * EventHub; this class binds it to Durable Object storage, the alarm and the
- * Worker's fetch.
+ * EventHub; this class binds it to Durable Object storage, the alarm, the
+ * Worker's fetch and the callback address check.
  */
 
 import { DurableObject } from "cloudflare:workers";
+import { assertPublicCallbackUrl } from "./callback-guard.js";
 import type { MultixEvent } from "./event-catalog.js";
 import {
   type AuditEntry,
@@ -25,6 +26,7 @@ export class AccountEvents extends DurableObject {
   private readonly hub = new EventHub({
     storage: this.ctx.storage as unknown as HubStorage,
     fetch: (url, init) => fetch(url, init),
+    checkCallback: (url) => assertPublicCallbackUrl(url, (input, init) => fetch(input, init)),
     now: () => Date.now(),
   });
 

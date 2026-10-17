@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { assertPublicCallbackUrl } from "../src/events/callback-guard.js";
 import type { MultixEvent } from "../src/events/event-catalog.js";
 import { EventHub, MAX_ACTIVE_SUBSCRIPTIONS, type Subscription } from "../src/events/event-hub.js";
 import {
@@ -46,7 +47,12 @@ function setup(options: { callbackStatus?: number } = {}) {
     if (!entry) {
       const { storage, data } = fakeDoStorage();
       entry = {
-        hub: new EventHub({ storage, fetch: remote.fetch, now: () => clock.now }),
+        hub: new EventHub({
+          storage,
+          fetch: remote.fetch,
+          checkCallback: (url) => assertPublicCallbackUrl(url, remote.fetch),
+          now: () => clock.now,
+        }),
         data,
       };
       hubs.set(userId, entry);

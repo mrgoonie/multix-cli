@@ -74,6 +74,7 @@ export function fakeEventsNamespace(respond: () => Response = () => new Response
         hub = new EventHub({
           storage: fakeDoStorage().storage,
           now: () => Date.now(),
+          checkCallback: async () => undefined,
           fetch: async (url, init) => {
             sent.push({ account: name, url, body: String(init.body) });
             return respond();

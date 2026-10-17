@@ -281,7 +281,11 @@ URLs are often presigned). Read those with `GET /jobs/{id}` or
 `POST /events/subscriptions` takes:
 
 - `callback_url` (required): a public `https://` URL by host name, on the
-  default port, not pointing at the multix server itself.
+  default port, not pointing at the multix server itself. Every address the
+  name resolves to (checked over DNS over HTTPS) must be public: a name that
+  resolves to a private, loopback, link-local, CGNAT or other reserved address,
+  or to nothing, returns `400`. If the name cannot be checked right now, the
+  answer is `503 unavailable` with `Retry-After`.
 - `events` (optional): the event names to receive; all of them by default.
 - `ttl_seconds` (optional): how long the subscription lives, from 3600 (1 hour)
   to 7776000 (90 days); default 2592000 (30 days). It cannot be extended:
@@ -359,6 +363,11 @@ export function verifyMultixWebhook(secret, headers, rawBody) {
   `worker/src/events/event-hub.ts`). A `Retry-After` header in seconds can
   lengthen a wait, up to 1 hour. After the last retry the event is
   dead-lettered.
+- **Address re-check.** Right before every attempt the callback host is
+  resolved again. If it now resolves to a non-public address (for example
+  after DNS rebinding) or cannot be resolved, nothing is sent and the attempt
+  is retried like a network error, with the reason
+  `endpoint address not public` or `endpoint host could not be resolved`.
 - **No retry** for any other answer: a redirect (`3xx`, never followed) or
   another `4xx` dead-letters the event at once.
 - **Disabling.** A `410 Gone` answer disables the subscription, and so do
@@ -393,7 +402,7 @@ submitted values:
 | `422` | `storage_check_failed` | The R2 access check failed; nothing was saved. |
 | `429` | `rate_limited` | Too many requests; retry after the `Retry-After` seconds. |
 | `429` | `busy` | Job caps reached: the account's running-job limit or the server's total. Wait for a job to end (or cancel one) instead of retrying at once. |
-| `503` | `unavailable` | The server has no job container, so jobs cannot run, or no events binding, so event routes are off. |
+| `503` | `unavailable` | The server has no job container, so jobs cannot run, or no events binding, so event routes are off; or a new subscription's `callback_url` host could not be resolved (retry after `Retry-After`). |
 | `500` | `internal` | Unexpected server error. |
 
 The set of codes is defined in `worker/src/api/api-http.ts`.

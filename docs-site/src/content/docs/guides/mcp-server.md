@@ -483,13 +483,14 @@ within your Cloudflare account. If another Worker already uses `1001` or
   directory is deleted when the job ends, stdout and stderr are scrubbed of key
   values and then cut to 16 KB, and only the job ID and status are logged. The `job:<id>` record in `ACCOUNTS_KV` holds the
   owner, command and start time, never keys.
-- **Event callbacks:** subscribe-time checks refuse non-public callbacks by
-  name and by every resolved address (DNS over HTTPS), callback requests never
-  follow redirects, and only the failure category of a verification is
-  returned or logged. A host re-pointed to a private address after the check
-  (DNS rebinding) is not caught at subscribe time; re-checking the address
-  before each delivery is tracked in
-  [#226](https://github.com/mrgoonie/multix-cli/issues/226).
+- **Event callbacks:** subscribe-time checks (MCP Events and the REST API)
+  refuse non-public callbacks by name and by every resolved address (DNS over
+  HTTPS), and the address check runs again right before every delivery, so a
+  host re-pointed to a private address later (DNS rebinding) gets nothing: the
+  attempt is retried and finally dead-lettered. Callback requests never follow
+  redirects, and only the failure category of a verification is returned or
+  logged. The Worker cannot pin a connection to the address it checked, so a
+  name that flips between the check and the connection is not caught.
 - **Stateless MCP:** no MCP sessions. Each request builds a fresh server with
   the caller's keys. OAuth state and accounts live in KV; event subscriptions
   live in a Durable Object per account.

@@ -1,11 +1,13 @@
 /**
  * One account's event subscriptions and webhook deliveries, kept free of the
  * Durable Object runtime so it can be unit-tested: AccountEvents
- * (account-events.ts) supplies the storage, fetch and clock.
+ * (account-events.ts) supplies the storage, fetch, callback check and clock.
  *
  * publish -> dedupe by event id -> one queued delivery per matching active
  * subscription -> the alarm sends due deliveries (signed, bounded batch) ->
- * success, retry with backoff, or a dead letter. A subscription whose
+ * success, retry with backoff, or a dead letter. Right before each attempt
+ * the callback host is resolved again and must still be public (DNS
+ * rebinding); a host that is not is retried like an unreachable endpoint. A subscription whose
  * deliveries keep dead-lettering, or whose endpoint answers 410, is disabled.
  *
  * Storage keys (Durable Object storage, SQLite-backed):
@@ -32,6 +34,7 @@
 import { redactUrl } from "../../../src/core/redact.js";
 import { randomBase64Url } from "../accounts/base64.js";
 import { logEvent } from "../redaction.js";
+import { CallbackUrlError } from "./callback-guard.js";
 import { type EventName, type MultixEvent, isEventName } from "./event-catalog.js";
 import { generateWebhookSecret, signWebhook } from "./webhook-signing.js";
 
@@ -214,6 +217,11 @@ export interface HubStorage {
 export interface HubPorts {
   storage: HubStorage;
   fetch: (url: string, init: RequestInit) => Promise<Response>;
+  /**
+   * Resolve the callback host and throw unless every address is public
+   * (callback-guard.ts `assertPublicCallbackUrl`). Runs before every attempt.
+   */
+  checkCallback(url: string): Promise<unknown>;
   now(): number;
 }
 
@@ -645,6 +653,18 @@ export class EventHub {
   }
 
   private async send(sub: Subscription, delivery: QueuedDelivery, now: number): Promise<Outcome> {
+    try {
+      await this.ports.checkCallback(sub.callbackUrl);
+    } catch (error) {
+      const reason = error instanceof CallbackUrlError ? error.reason : "unresolved";
+      return {
+        kind: "retry",
+        error:
+          reason === "unresolved"
+            ? "endpoint host could not be resolved"
+            : "endpoint address not public",
+      };
+    }
     const body = JSON.stringify(sub.mcp ? mcpDeliveryBody(delivery.event) : delivery.event);
     const timestamp = Math.floor(now / 1000);
     const previous = sub.mcp?.previousSecret;

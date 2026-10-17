@@ -478,13 +478,14 @@ chung bộ đếm.
   và log chỉ ghi job ID và trạng thái. Bản ghi
   `job:<id>` trong `ACCOUNTS_KV` chứa chủ sở hữu, lệnh và thời điểm bắt đầu,
   không bao giờ chứa key.
-- **Callback sự kiện:** khi đăng ký, server từ chối callback không công khai
-  theo tên và theo mọi địa chỉ phân giải được (DNS over HTTPS); request tới
-  callback không bao giờ đi theo redirect, và chỉ loại lỗi xác minh được trả
-  về hoặc ghi log. Host bị trỏ sang địa chỉ private sau bước kiểm tra (DNS
-  rebinding) không bị phát hiện lúc đăng ký; việc kiểm tra lại địa chỉ trước
-  mỗi lần gửi được theo dõi ở
-  [#226](https://github.com/mrgoonie/multix-cli/issues/226).
+- **Callback sự kiện:** khi đăng ký (MCP Events và REST API), server từ chối
+  callback không công khai theo tên và theo mọi địa chỉ phân giải được (DNS
+  over HTTPS), và kiểm tra địa chỉ lại ngay trước mỗi lần gửi, nên host bị trỏ
+  sang địa chỉ private về sau (DNS rebinding) không nhận được gì: lần gửi được
+  thử lại rồi cuối cùng chuyển vào dead letter. Request tới callback không bao
+  giờ đi theo redirect, và chỉ loại lỗi xác minh được trả về hoặc ghi log.
+  Worker không thể ghim kết nối vào đúng địa chỉ đã kiểm tra, nên tên đổi địa
+  chỉ đúng giữa lúc kiểm tra và lúc kết nối thì không bị phát hiện.
 - **MCP stateless:** không có MCP session. Mỗi request tạo một server mới với
   key của caller. Trạng thái OAuth và tài khoản nằm trong KV; subscription sự
   kiện nằm trong một Durable Object riêng cho từng tài khoản.

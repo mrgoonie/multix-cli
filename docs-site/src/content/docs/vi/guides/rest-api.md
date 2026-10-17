@@ -284,7 +284,11 @@ thái cuối: không bao giờ có prompt, output của CLI, nội dung lỗi, k
 `POST /events/subscriptions` nhận:
 
 - `callback_url` (bắt buộc): URL `https://` công khai theo tên host, dùng cổng
-  mặc định, không trỏ về chính server multix.
+  mặc định, không trỏ về chính server multix. Mọi địa chỉ mà tên đó phân giải
+  ra (kiểm tra qua DNS over HTTPS) phải là địa chỉ công khai: tên phân giải ra
+  địa chỉ private, loopback, link-local, CGNAT hay địa chỉ dành riêng khác,
+  hoặc không phân giải được, sẽ nhận `400`. Nếu lúc đó không kiểm tra được tên,
+  server trả `503 unavailable` kèm `Retry-After`.
 - `events` (tùy chọn): tên các sự kiện muốn nhận; mặc định là tất cả.
 - `ttl_seconds` (tùy chọn): thời gian sống của subscription, từ 3600 (1 giờ)
   đến 7776000 (90 ngày); mặc định 2592000 (30 ngày). Không gia hạn được: hãy
@@ -360,6 +364,11 @@ export function verifyMultixWebhook(secret, headers, rawBody) {
   `RETRY_DELAYS_SECONDS` trong `worker/src/events/event-hub.ts`). Header
   `Retry-After` tính bằng giây có thể kéo dài một lần chờ, tối đa 1 giờ. Sau
   lần thử cuối, sự kiện được chuyển vào dead letter.
+- **Kiểm tra lại địa chỉ.** Ngay trước mỗi lần thử, host của callback được
+  phân giải lại. Nếu giờ nó phân giải ra địa chỉ không công khai (ví dụ sau DNS
+  rebinding) hoặc không phân giải được, server không gửi gì và lần thử được
+  thử lại như lỗi mạng, với lý do `endpoint address not public` hoặc
+  `endpoint host could not be resolved`.
 - **Không thử lại** với mọi câu trả lời khác: redirect (`3xx`, không bao giờ
   được theo) hoặc `4xx` khác đưa sự kiện vào dead letter ngay.
 - **Vô hiệu hóa.** Câu trả lời `410 Gone` vô hiệu hóa subscription, 5 dead
@@ -393,7 +402,7 @@ Lỗi là JSON có `code` cố định và thông báo không bao giờ chứa g
 | `422` | `storage_check_failed` | Kiểm tra quyền truy cập R2 thất bại; không có gì được lưu. |
 | `429` | `rate_limited` | Quá nhiều request; thử lại sau số giây trong `Retry-After`. |
 | `429` | `busy` | Đã chạm giới hạn job: số job đang chạy của tài khoản hoặc tổng số job của server. Chờ một job kết thúc (hoặc hủy một job) thay vì thử lại ngay. |
-| `503` | `unavailable` | Server không có job container, nên không chạy được job, hoặc không có binding sự kiện, nên các route sự kiện bị tắt. |
+| `503` | `unavailable` | Server không có job container, nên không chạy được job, hoặc không có binding sự kiện, nên các route sự kiện bị tắt; hoặc không phân giải được host `callback_url` của subscription mới (thử lại sau `Retry-After`). |
 | `500` | `internal` | Lỗi server không lường trước. |
 
 Tập mã lỗi được định nghĩa trong `worker/src/api/api-http.ts`.

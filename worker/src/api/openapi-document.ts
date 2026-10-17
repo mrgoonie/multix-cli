@@ -291,7 +291,7 @@ export function openApiDocument(origin: string): Json {
         },
         post: {
           summary: "Subscribe a webhook to job events",
-          description: `Deliveries are POSTed to \`callback_url\` (public https, default port, not this server) and signed with Standard Webhooks headers (\`webhook-id\`, \`webhook-timestamp\`, \`webhook-signature\`). Delivery is at least once: dedupe on \`webhook-id\`. Failed deliveries are retried with backoff for about a day, then dead-lettered. At most ${MAX_ACTIVE_SUBSCRIPTIONS} active subscriptions per account, counting those an MCP client made over MCP Events. The signing secret is returned only in this response.`,
+          description: `Deliveries are POSTed to \`callback_url\` (public https, default port, not this server; every address its host resolves to must be public, checked here and again before each delivery) and signed with Standard Webhooks headers (\`webhook-id\`, \`webhook-timestamp\`, \`webhook-signature\`). Delivery is at least once: dedupe on \`webhook-id\`. Failed deliveries are retried with backoff for about a day, then dead-lettered. At most ${MAX_ACTIVE_SUBSCRIPTIONS} active subscriptions per account, counting those an MCP client made over MCP Events. The signing secret is returned only in this response.`,
           operationId: "createEventSubscription",
           requestBody: jsonBody(ref("EventSubscriptionInput"), {
             callback_url: "https://hooks.example.com/multix",
@@ -401,7 +401,8 @@ export function openApiDocument(origin: string): Json {
           content: { "application/json": { schema: ref("Error") } },
         },
         Unavailable: {
-          description: "This server does not run jobs or deliver events",
+          description:
+            "This server does not run jobs or deliver events, or a callback host could not be resolved (retry later)",
           content: { "application/json": { schema: ref("Error") } },
         },
         NotFound: {
@@ -597,7 +598,8 @@ export function openApiDocument(origin: string): Json {
             callback_url: {
               type: "string",
               format: "uri",
-              description: "Public https URL on the default port",
+              description:
+                "Public https URL on the default port whose host resolves only to public addresses",
             },
             events: {
               type: "array",

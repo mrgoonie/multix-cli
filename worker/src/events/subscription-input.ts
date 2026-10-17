@@ -1,10 +1,11 @@
 /**
- * Validation of a new subscription, shared by every surface that creates one
- * (REST API today, MCP `events/subscribe` later). The callback must be a
+ * Validation of a new REST subscription's fields. The callback must be a
  * public https URL by host name (url-guard.ts) and may not point back at this
- * server. At delivery time the Worker's `global_fetch_strictly_public` flag
- * also refuses names that resolve to private addresses, and redirects are not
- * followed, so a callback cannot be bounced to an internal host.
+ * server. Its resolved addresses are checked separately, since that needs
+ * DNS: by the REST handler at subscribe time and by EventHub before every
+ * delivery (callback-guard.ts). `global_fetch_strictly_public` is not an
+ * address filter and does not cover this. Redirects are never followed, so a
+ * callback cannot be bounced to an internal host.
  */
 
 import { ValidationError } from "../../../src/core/errors.js";
