@@ -368,7 +368,9 @@ export function verifyMultixWebhook(secret, headers, rawBody) {
   phân giải lại. Nếu giờ nó phân giải ra địa chỉ không công khai (ví dụ sau DNS
   rebinding) hoặc không phân giải được, server không gửi gì và lần thử được
   thử lại như lỗi mạng, với lý do `endpoint address not public` hoặc
-  `endpoint host could not be resolved`.
+  `endpoint host could not be resolved`. Nếu chính bước tra DNS của server bị
+  lỗi, lần thử được thử lại sau mà không tính vào giới hạn số lần thử
+  (`callback address check unavailable`).
 - **Không thử lại** với mọi câu trả lời khác: redirect (`3xx`, không bao giờ
   được theo) hoặc `4xx` khác đưa sự kiện vào dead letter ngay.
 - **Vô hiệu hóa.** Câu trả lời `410 Gone` vô hiệu hóa subscription, 5 dead

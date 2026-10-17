@@ -269,7 +269,7 @@ describe("EventHub delivery", () => {
     expect(queued()).toMatchObject([{ attempts: 1, lastError: "endpoint address not public" }]);
 
     dns.check = async () => {
-      throw new CallbackDnsError();
+      throw new CallbackUrlError("callback_url host does not resolve", "unresolved");
     };
     await runAlarm();
     expect(sent).toHaveLength(0);
@@ -277,11 +277,49 @@ describe("EventHub delivery", () => {
       { attempts: 2, lastError: "endpoint host could not be resolved" },
     ]);
 
+    // DNS-over-HTTPS itself failing is not the endpoint's fault: no attempt is spent.
+    dns.check = async () => {
+      throw new CallbackDnsError();
+    };
+    await runAlarm();
+    expect(sent).toHaveLength(0);
+    expect(queued()).toMatchObject([
+      { attempts: 2, lastError: "callback address check unavailable" },
+    ]);
+
     dns.check = async () => undefined;
     await runAlarm();
     expect(sent).toHaveLength(1);
     expect(queued()).toEqual([]);
-    expect(checked).toEqual(Array(3).fill(INPUT.callbackUrl));
+    expect(checked).toEqual(Array(4).fill(INPUT.callbackUrl));
+  });
+
+  it("never spends attempts while the address check itself keeps failing", async () => {
+    const { hub, sent, runAlarm, fake, dns } = harness();
+    await subscribe(hub);
+    await hub.publish([event()]);
+    dns.check = async () => {
+      throw new TypeError("broken check");
+    };
+    for (let i = 0; i < MAX_DELIVERY_ATTEMPTS + 2; i++) await runAlarm();
+    expect(sent).toHaveLength(0);
+    expect(await hub.deadLetters()).toEqual([]);
+    const [queued] = [...fake.data].filter(([k]) => k.startsWith("q:")).map(([, v]) => v);
+    expect(queued).toMatchObject({ attempts: 0, lastError: "callback address check unavailable" });
+  });
+
+  it("dead-letters at once a callback URL the guard now refuses by name", async () => {
+    const { hub, sent, runAlarm, dns } = harness();
+    await subscribe(hub);
+    await hub.publish([event()]);
+    dns.check = async () => {
+      throw new CallbackUrlError("callback_url must be public", "invalid");
+    };
+    await runAlarm();
+    expect(sent).toHaveLength(0);
+    expect(await hub.deadLetters()).toMatchObject([
+      { attempts: 1, reason: "endpoint URL is no longer allowed" },
+    ]);
   });
 
   it("dead-letters a delivery whose host stays non-public, without sending it", async () => {

@@ -36,8 +36,10 @@ function setup(options: { callbackStatus?: number } = {}) {
   const clock = { now: NOW };
   const kv = fakeKv();
   const jobs = new JobStore(kv);
+  /** HOST's A records; change them in place to re-point the name. */
+  const hostA = ["93.184.216.34"];
   const remote = mockFetch(
-    dohRoute(HOST, ["93.184.216.34"]),
+    dohRoute(HOST, hostA),
     dohRoute("internal.example.com", ["10.0.0.7"]),
     callbackRoute(HOST, "/cb", options.callbackStatus),
   );
@@ -73,7 +75,7 @@ function setup(options: { callbackStatus?: number } = {}) {
     jobs,
     now: () => clock.now,
   });
-  return { clock, hubFor, stored, jobs, remote, contextFor };
+  return { clock, hubFor, stored, jobs, remote, contextFor, hostA };
 }
 
 function subscribeParams(overrides: Record<string, unknown> = {}) {
@@ -532,6 +534,23 @@ describe("event delivery to MCP subscribers", () => {
     calls.filter(
       (c) => c.method === "POST" && c.url === CALLBACK && !(c.body as { type?: string }).type,
     );
+
+  it("sends nothing to a callback re-pointed at a private address after subscribing", async () => {
+    const { contextFor, hubFor, remote, hostA } = setup();
+    const sub = await modernRpc(fullEnv(), "events/subscribe", subscribeParams(), {
+      events: contextFor("u1"),
+    });
+    expect(sub.error).toBeUndefined();
+    hostA.splice(0, hostA.length, "10.0.0.1");
+    const { hub } = hubFor("u1");
+    await hub.publish([jobEvent("multix.job.completed", JOB_ID)]);
+    await hub.alarm();
+    expect(deliveries(remote.calls)).toEqual([]);
+    const [[, retry]] = [...hubFor("u1").data].filter(([k]) => k.startsWith("q:")) as [
+      [string, { lastError?: string }],
+    ];
+    expect(retry.lastError).toBe("endpoint address not public");
+  });
 
   it("sends the MCP Events body, signed, with the subscription id header", async () => {
     const { contextFor, hubFor, remote } = setup();

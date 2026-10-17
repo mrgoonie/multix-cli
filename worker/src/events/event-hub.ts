@@ -34,7 +34,7 @@
 import { redactUrl } from "../../../src/core/redact.js";
 import { randomBase64Url } from "../accounts/base64.js";
 import { logEvent } from "../redaction.js";
-import { CallbackUrlError } from "./callback-guard.js";
+import { CallbackDnsError, CallbackUrlError } from "./callback-guard.js";
 import { type EventName, type MultixEvent, isEventName } from "./event-catalog.js";
 import { generateWebhookSecret, signWebhook } from "./webhook-signing.js";
 
@@ -59,7 +59,10 @@ export const MAX_DELIVERY_ATTEMPTS = RETRY_DELAYS_SECONDS.length + 1;
 /** A `Retry-After` longer than this is capped. */
 export const MAX_RETRY_AFTER_SECONDS = 3600;
 export const DELIVERY_TIMEOUT_MS = 10_000;
-/** Deliveries sent per alarm run; more due ones run on an immediate next alarm. */
+/**
+ * Deliveries sent per alarm run; more due ones run on an immediate next alarm.
+ * Each costs three subrequests (DNS A, DNS AAAA, POST): mind the per-invocation limit.
+ */
 export const DELIVERY_BATCH = 10;
 /** Queued deliveries per account; past this, new deliveries go straight to dead letters. */
 export const MAX_QUEUED_DELIVERIES = 500;
@@ -283,7 +286,14 @@ export function subscriptionView(sub: Subscription): SubscriptionView {
 
 type Outcome =
   | { kind: "delivered"; status: number }
-  | { kind: "retry"; status?: number; error: string; retryAfterSeconds?: number }
+  | {
+      kind: "retry";
+      status?: number;
+      error: string;
+      retryAfterSeconds?: number;
+      /** Our own address check failed, not the endpoint: the attempt is not counted. */
+      uncounted?: boolean;
+    }
   | { kind: "permanent"; status?: number; error: string; gone?: boolean };
 
 function retryAfterSeconds(header: string | null): number | undefined {
@@ -594,7 +604,7 @@ export class EventHub {
       return;
     }
     const outcome = await this.send(before, delivery, now);
-    const attempts = delivery.attempts + 1;
+    const attempts = delivery.attempts + (outcome.kind === "retry" && outcome.uncounted ? 0 : 1);
     const after = this.ports.now();
     if (!(await this.storage.get(subKey(delivery.subscriptionId)))) {
       // Revoked while the request was in flight: keep no retry or dead letter for it.
@@ -618,7 +628,7 @@ export class EventHub {
     }
     const failed = { ...delivery, attempts, lastStatus: outcome.status, lastError: outcome.error };
     if (outcome.kind === "retry" && attempts < MAX_DELIVERY_ATTEMPTS) {
-      const backoff = RETRY_DELAYS_SECONDS[attempts - 1] ?? 0;
+      const backoff = RETRY_DELAYS_SECONDS[Math.max(attempts, 1) - 1] ?? 0;
       const wait = Math.max(
         backoff,
         Math.min(outcome.retryAfterSeconds ?? 0, MAX_RETRY_AFTER_SECONDS),
@@ -656,14 +666,26 @@ export class EventHub {
     try {
       await this.ports.checkCallback(sub.callbackUrl);
     } catch (error) {
-      const reason = error instanceof CallbackUrlError ? error.reason : "unresolved";
-      return {
-        kind: "retry",
-        error:
-          reason === "unresolved"
-            ? "endpoint host could not be resolved"
-            : "endpoint address not public",
-      };
+      if (error instanceof CallbackUrlError) {
+        if (error.reason === "invalid") {
+          return { kind: "permanent", error: "endpoint URL is no longer allowed" };
+        }
+        return {
+          kind: "retry",
+          error:
+            error.reason === "unresolved"
+              ? "endpoint host could not be resolved"
+              : "endpoint address not public",
+        };
+      }
+      // DNS-over-HTTPS failed (or the check broke): our fault, so it costs no attempt.
+      if (!(error instanceof CallbackDnsError)) {
+        logEvent("error", "event_callback_check_failed", {
+          subscription: sub.id,
+          error: error instanceof Error ? error.name : "unknown",
+        });
+      }
+      return { kind: "retry", error: "callback address check unavailable", uncounted: true };
     }
     const body = JSON.stringify(sub.mcp ? mcpDeliveryBody(delivery.event) : delivery.event);
     const timestamp = Math.floor(now / 1000);

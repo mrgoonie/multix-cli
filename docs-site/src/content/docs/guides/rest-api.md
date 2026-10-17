@@ -367,7 +367,9 @@ export function verifyMultixWebhook(secret, headers, rawBody) {
   resolved again. If it now resolves to a non-public address (for example
   after DNS rebinding) or cannot be resolved, nothing is sent and the attempt
   is retried like a network error, with the reason
-  `endpoint address not public` or `endpoint host could not be resolved`.
+  `endpoint address not public` or `endpoint host could not be resolved`. If
+  the server's own DNS lookup fails, the attempt is retried later without
+  counting toward the retry limit (`callback address check unavailable`).
 - **No retry** for any other answer: a redirect (`3xx`, never followed) or
   another `4xx` dead-letters the event at once.
 - **Disabling.** A `410 Gone` answer disables the subscription, and so do
