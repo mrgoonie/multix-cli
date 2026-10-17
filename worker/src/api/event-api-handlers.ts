@@ -7,6 +7,11 @@
 
 import type { AppContext, AppDeps } from "../app-context.js";
 import type { AccountEventsStub } from "../events/account-events.js";
+import {
+  CallbackDnsError,
+  CallbackUrlError,
+  assertPublicCallbackUrl,
+} from "../events/callback-guard.js";
 import { EVENT_CATALOG } from "../events/event-catalog.js";
 import type { AuditEntry, DeadLetter } from "../events/event-hub.js";
 import { parseSubscriptionInput } from "../events/subscription-input.js";
@@ -39,6 +44,22 @@ export async function createSubscription(
   request: Request,
 ): Promise<Response> {
   const input = parseSubscriptionInput(await readJsonObject(request), app.origin);
+  try {
+    await assertPublicCallbackUrl(input.callbackUrl, app.fetch, "callback_url");
+  } catch (error) {
+    if (error instanceof CallbackUrlError) throw new ApiError(400, "bad_request", error.message);
+    if (error instanceof CallbackDnsError) {
+      throw new ApiError(
+        503,
+        "unavailable",
+        "Could not resolve the callback_url host; retry later",
+        {
+          "retry-after": "30",
+        },
+      );
+    }
+    throw error;
+  }
   const result = await hub.subscribe(input, `api_key:${caller.keyId}`);
   if (!result.ok) throw new ApiError(409, "limit_reached", result.message);
   logEvent("info", "event_subscription_created", { user: caller.account.id });

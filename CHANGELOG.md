@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.10.5](https://github.com/mrgoonie/multix-cli/compare/v1.10.4...v1.10.5) (2026-10-17)
+
+
+### Fixed
+
+* **worker:** re-check webhook callback addresses at subscribe and before each delivery ([#246](https://github.com/mrgoonie/multix-cli/issues/246)) ([0725be1](https://github.com/mrgoonie/multix-cli/commit/0725be1a69a9082a082845ba82ffa7cd0d3d8df4)), closes [#226](https://github.com/mrgoonie/multix-cli/issues/226)
+
+## [1.10.4](https://github.com/mrgoonie/multix-cli/compare/v1.10.3...v1.10.4) (2026-10-17)
+
+
+### Documentation
+
+* **site:** list the MCP, REST API and troubleshooting pages in llms.txt ([#244](https://github.com/mrgoonie/multix-cli/issues/244)) ([69ae416](https://github.com/mrgoonie/multix-cli/commit/69ae41656f96d4d2199acf23d1f6e432d2b69444)), closes [#241](https://github.com/mrgoonie/multix-cli/issues/241)
+
+## [1.10.3](https://github.com/mrgoonie/multix-cli/compare/v1.10.2...v1.10.3) (2026-10-17)
+
+
+### Documentation
+
+* **site:** list fal.ai, Atlas Cloud, Replicate and Runway in llms.txt ([#240](https://github.com/mrgoonie/multix-cli/issues/240)) ([68ec0ae](https://github.com/mrgoonie/multix-cli/commit/68ec0ae4382298693dcce834d0ffe5d12b939afa)), closes [#230](https://github.com/mrgoonie/multix-cli/issues/230)
+
 ## [1.10.2](https://github.com/mrgoonie/multix-cli/compare/v1.10.1...v1.10.2) (2026-10-15)
 
 

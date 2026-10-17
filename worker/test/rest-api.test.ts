@@ -5,6 +5,7 @@ import type { EventHub } from "../src/events/event-hub.js";
 import { jobEvents } from "../src/events/job-events.js";
 import { fakeEventsNamespace, fakeNamespace, fakeQuotaNamespace } from "./fake-job-bindings.js";
 import { fakeKv } from "./fake-kv.js";
+import { jsonResponse, route } from "./helpers.js";
 import {
   type Browser,
   ORIGIN,
@@ -16,6 +17,20 @@ import {
 } from "./oauth-harness.js";
 
 const OCTOCAT = { id: 1, login: "octocat" };
+
+/**
+ * DNS-over-HTTPS answers for callback checks: `private.example.com` resolves
+ * to 10.0.0.1, `dnsfail.example.com` fails (SERVFAIL), any other name to a
+ * public address.
+ */
+const dns = route("GET", /^https:\/\/cloudflare-dns\.com\/dns-query\?/, (call) => {
+  const url = new URL(call.url);
+  const name = url.searchParams.get("name");
+  if (name === "dnsfail.example.com") return jsonResponse({ Status: 2 });
+  if (url.searchParams.get("type") !== "A") return jsonResponse({ Status: 0, Answer: [] });
+  const data = name === "private.example.com" ? "10.0.0.1" : "93.184.216.34";
+  return jsonResponse({ Status: 0, Answer: [{ type: 1, data }] });
+});
 
 // biome-ignore lint/suspicious/noExplicitAny: JSON response bodies are untyped in tests
 type Json = any;
@@ -49,7 +64,7 @@ function api(browser: Browser, key: string | undefined, path: string, init: Requ
 
 async function signedInBrowser(overrides = {}) {
   const env = oauthEnv(overrides);
-  const browser = newBrowser(env, githubFetch(OCTOCAT).fetch);
+  const browser = newBrowser(env, githubFetch(OCTOCAT, dns).fetch);
   await signIn(browser);
   return { env, browser };
 }
@@ -261,7 +276,7 @@ describe("REST API jobs", () => {
       MULTIX_JOBS: namespace,
       MULTIX_JOB_QUOTA: fakeQuotaNamespace(),
     });
-    const owner = newBrowser(env, githubFetch(OCTOCAT).fetch);
+    const owner = newBrowser(env, githubFetch(OCTOCAT, dns).fetch);
     await signIn(owner);
     const ownerKey = await createApiKey(owner);
     const job = await body(
@@ -271,7 +286,7 @@ describe("REST API jobs", () => {
       }),
     );
 
-    const other = newBrowser(env, githubFetch({ id: 2, login: "hubot" }).fetch);
+    const other = newBrowser(env, githubFetch({ id: 2, login: "hubot" }, dns).fetch);
     await signIn(other);
     const otherKey = await createApiKey(other);
     expect((await api(other, otherKey, `/jobs/${job.job_id}`)).status).toBe(404);
@@ -344,7 +359,7 @@ describe("REST API events", () => {
       MULTIX_ALLOWED_USERS: "octocat,hubot",
       MULTIX_EVENTS: events.namespace,
     });
-    const owner = newBrowser(env, githubFetch(OCTOCAT).fetch);
+    const owner = newBrowser(env, githubFetch(OCTOCAT, dns).fetch);
     await signIn(owner);
     const ownerKey = await createApiKey(owner);
     const { subscription } = await body(
@@ -354,7 +369,7 @@ describe("REST API events", () => {
       }),
     );
 
-    const other = newBrowser(env, githubFetch({ id: 2, login: "hubot" }).fetch);
+    const other = newBrowser(env, githubFetch({ id: 2, login: "hubot" }, dns).fetch);
     await signIn(other);
     const otherKey = await createApiKey(other);
     const path = `/events/subscriptions/${subscription.id}`;
@@ -387,6 +402,7 @@ describe("REST API events", () => {
       "http://hooks.example.com/in",
       "https://10.0.0.1/in",
       `${ORIGIN}/x`,
+      "https://private.example.com/in",
     ]) {
       const bad = await api(browser, key, "/events/subscriptions", {
         method: "POST",
@@ -394,6 +410,26 @@ describe("REST API events", () => {
       });
       expect(bad.status, callback_url).toBe(400);
     }
+    const rebound = await api(browser, key, "/events/subscriptions", {
+      method: "POST",
+      body: JSON.stringify({ callback_url: "https://private.example.com/in" }),
+    });
+    expect(await body(rebound)).toEqual({
+      error: {
+        code: "bad_request",
+        message: "callback_url resolves to a private or reserved address",
+      },
+    });
+    const unresolved = await api(browser, key, "/events/subscriptions", {
+      method: "POST",
+      body: JSON.stringify({ callback_url: "https://dnsfail.example.com/in" }),
+    });
+    expect(unresolved.status).toBe(503);
+    expect(unresolved.headers.get("retry-after")).toBe("30");
+    expect(await body(unresolved)).toMatchObject({ error: { code: "unavailable" } });
+    expect(await body(await api(browser, key, "/events/subscriptions"))).toEqual({
+      subscriptions: [],
+    });
 
     const bare = await signedInBrowser();
     const bareKey = await createApiKey(bare.browser);

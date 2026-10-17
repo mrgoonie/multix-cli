@@ -1,6 +1,6 @@
 /**
- * SSRF checks for MCP Events callback URLs, applied at subscribe time before
- * any request is sent to the callback:
+ * SSRF checks for event callback URLs (REST subscriptions and MCP Events),
+ * applied at subscribe time and again by EventHub before every delivery:
  *
  * - the URL must be a public https URL by host name (url-guard.ts: no IP
  *   literals, credentials, custom ports or internal names);
@@ -33,7 +33,11 @@ export class CallbackDnsError extends Error {
 
 /** The callback URL or its addresses are not allowed; the caller sent invalid params. */
 export class CallbackUrlError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    /** `invalid`: refused by name; `unresolved`: no A/AAAA record; `not_public`: a non-public address. */
+    readonly reason: "invalid" | "unresolved" | "not_public" = "invalid",
+  ) {
     super(message);
     this.name = "CallbackUrlError";
   }
@@ -153,20 +157,24 @@ async function resolve(fetchFn: FetchLike, host: string, type: "A" | "AAAA"): Pr
  * resolves only to public addresses. Throws CallbackUrlError (invalid params)
  * or CallbackDnsError (could not check).
  */
-export async function assertPublicCallbackUrl(raw: string, fetchFn: FetchLike): Promise<string> {
+export async function assertPublicCallbackUrl(
+  raw: string,
+  fetchFn: FetchLike,
+  field = "delivery.url",
+): Promise<string> {
   let normalized: string;
   try {
-    normalized = assertPublicHttpsUrl(raw, "delivery.url");
+    normalized = assertPublicHttpsUrl(raw, field);
   } catch (error) {
-    throw new CallbackUrlError(error instanceof Error ? error.message : "Invalid delivery.url");
+    throw new CallbackUrlError(error instanceof Error ? error.message : `Invalid ${field}`);
   }
   const host = new URL(normalized).hostname.replace(/\.$/, "");
   const [v4, v6] = await Promise.all([resolve(fetchFn, host, "A"), resolve(fetchFn, host, "AAAA")]);
   if (v4.length === 0 && v6.length === 0) {
-    throw new CallbackUrlError("delivery.url host does not resolve");
+    throw new CallbackUrlError(`${field} host does not resolve`, "unresolved");
   }
   if (v4.some(isNonPublicIpv4) || v6.some(isNonPublicIpv6)) {
-    throw new CallbackUrlError("delivery.url resolves to a private or reserved address");
+    throw new CallbackUrlError(`${field} resolves to a private or reserved address`, "not_public");
   }
   return normalized;
 }

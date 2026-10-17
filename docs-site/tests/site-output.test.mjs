@@ -1,31 +1,17 @@
 import assert from "node:assert/strict";
-import { readFile, stat } from "node:fs/promises";
+import { readFile, readdir, stat } from "node:fs/promises";
 import test from "node:test";
 
 const readDist = (path) => readFile(new URL(`../dist/${path}`, import.meta.url), "utf8");
 
-const documentationRoutes = [
-  "index",
-  "getting-started",
-  "commands",
-  "commands/gemini",
-  "commands/openai",
-  "commands/minimax",
-  "commands/openrouter",
-  "commands/leonardo",
-  "commands/byteplus",
-  "commands/cloudflare",
-  "commands/elevenlabs",
-  "commands/replicate",
-  "commands/runway",
-  "commands/heygen",
-  "commands/providers",
-  "commands/media-and-documents",
-  "guides/mcp-server",
-  "reference/environment",
-  "reference/output-and-troubleshooting",
-  "reference/for-ai-agents",
-];
+const contentDir = new URL("../src/content/docs/", import.meta.url);
+
+// Every English page in the content tree; the Vietnamese tree under vi/ mirrors it.
+const documentationRoutes = (await readdir(contentDir, { recursive: true }))
+  .map((path) => path.replaceAll("\\", "/"))
+  .filter((path) => path.endsWith(".md") && !path.startsWith("vi/"))
+  .map((path) => path.slice(0, -".md".length))
+  .sort();
 
 test("build emits canonical Markdown routes and AI discovery files", async () => {
   const [page, markdown, llms, robots] = await Promise.all([
@@ -125,11 +111,29 @@ test("provider pages retain command caveats and asynchronous workflows", async (
     "byteplus",
     "cloudflare",
     "elevenlabs",
+    "fal",
+    "atlascloud",
+    "replicate",
+    "runway",
     "heygen",
   ]) {
     assert.match(agentGuide, new RegExp(`/commands/${provider}/`));
     assert.match(vietnameseAgentGuide, new RegExp(`/vi/commands/${provider}/`));
     assert.match(llms, new RegExp(`commands/${provider}\\.md`));
+  }
+});
+
+test("llms.txt links every English page", async () => {
+  assert.ok(documentationRoutes.includes("commands/gemini"));
+  const llms = await readDist("llms.txt");
+  for (const route of documentationRoutes) {
+    assert.ok(
+      llms.includes(`(https://multix.zuey.me/${route}.md)`),
+      `llms.txt is missing ${route}.md`,
+    );
+  }
+  for (const [, route] of llms.matchAll(/\(https:\/\/multix\.zuey\.me\/(.+?)\.md\)/g)) {
+    assert.ok(documentationRoutes.includes(route), `llms.txt links a missing page: ${route}.md`);
   }
 });
 

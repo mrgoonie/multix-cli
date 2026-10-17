@@ -1,9 +1,10 @@
 /**
  * SSRF guard for user-supplied media URLs. Providers fetch these URLs, so
  * only public https hosts by name are accepted: no IP literals, no internal
- * names, no credentials, no non-default ports. (Workers cannot resolve DNS
- * up front, so a public name pointing at a private address is the
- * provider's network boundary, not ours.)
+ * names, no credentials, no non-default ports. (This guard does not resolve
+ * DNS, so a public name pointing at a private address is the provider's
+ * network boundary, not ours. Event callbacks, which the Worker fetches
+ * itself, are also checked by address in events/callback-guard.ts.)
  */
 
 import { ValidationError } from "../../src/core/errors.js";
