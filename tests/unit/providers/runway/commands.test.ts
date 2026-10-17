@@ -466,9 +466,10 @@ describe("runway status", () => {
       [TASK_PATH]: [{ json: task("SUCCEEDED", { output: [OUTPUT_URL] }) }],
       [`GET ${OUTPUT_URL}`]: [{ bytes: MP4, headers: { "content-type": "video/mp4" } }],
     });
-    await run("status", TASK_ID, "--download", "--output", `${tmp}/clip.mp4`);
-    expect(stdout.join("\n")).toBe(`\nSaved 1 file(s) from task ${TASK_ID}:\n  ${tmp}/clip.mp4`);
-    expect(text()).toContain(`Saved ${tmp}/clip.mp4`);
+    const dest = path.resolve(tmp, "clip.mp4");
+    await run("status", TASK_ID, "--download", "--output", dest);
+    expect(stdout.join("\n")).toBe(`\nSaved 1 file(s) from task ${TASK_ID}:\n  ${dest}`);
+    expect(text()).toContain(`Saved ${dest}`);
     expect(text()).not.toContain("SIGNED_TOKEN");
   });
 
