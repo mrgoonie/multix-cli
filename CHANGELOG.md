@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.0](https://github.com/mrgoonie/multix-cli/compare/v1.10.5...v1.11.0) (2026-10-17)
+
+
+### Added
+
+* **runway:** offline models listing and JSON-only status stdout ([#248](https://github.com/mrgoonie/multix-cli/issues/248)) ([67e4915](https://github.com/mrgoonie/multix-cli/commit/67e49159650ee068af7e1fefd2deb7fe8c7560d8)), closes [#242](https://github.com/mrgoonie/multix-cli/issues/242)
+
 ## [1.10.5](https://github.com/mrgoonie/multix-cli/compare/v1.10.4...v1.10.5) (2026-10-17)
 
 
