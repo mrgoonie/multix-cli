@@ -116,7 +116,9 @@ multix runway cancel <id> --delete             # delete a finished task and its 
   `--no-download` on `video --wait` or `image` prints the signed URLs.
 - `status` writes only its result to stdout: the JSON summary, or the list of
   saved files with `--download`. Progress, cost and the resume hint go to
-  stderr, so `multix runway status <id> | jq` parses for a running task too.
+  stderr, so without `--download`, `multix runway status <id> | jq` parses
+  for a running task too, and `--wait` prints the summary of a `FAILED` or
+  `CANCELLED` task before exiting non-zero.
 - Terminal statuses are `SUCCEEDED`, `FAILED` and `CANCELLED`. `FAILED` and
   `CANCELLED` exit non-zero; a one-shot `status` on a running task exits 0 and
   prints the resume command.

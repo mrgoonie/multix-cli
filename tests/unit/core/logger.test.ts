@@ -45,4 +45,25 @@ describe("createLogger", () => {
     ]);
     expect(warn).toHaveBeenCalledWith("⚠ w");
   });
+
+  it("colours stderr lines by whether stderr, not stdout, is a terminal", () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.stubEnv("NO_COLOR", "");
+    const saved = [process.stdout, process.stderr].map((s) =>
+      Object.getOwnPropertyDescriptor(s, "isTTY"),
+    );
+    Object.defineProperty(process.stdout, "isTTY", { value: true, configurable: true });
+    Object.defineProperty(process.stderr, "isTTY", { value: false, configurable: true });
+    try {
+      createLogger({ verbose: false, stderr: true }).info("plain");
+      createLogger({ verbose: false }).error("plain");
+    } finally {
+      [process.stdout, process.stderr].forEach((s, i) => {
+        const d = saved[i];
+        if (d) Object.defineProperty(s, "isTTY", d);
+        else Reflect.deleteProperty(s, "isTTY");
+      });
+    }
+    expect(err.mock.calls.map((c) => c[0])).toEqual(["  plain", "✗ plain"]);
+  });
 });

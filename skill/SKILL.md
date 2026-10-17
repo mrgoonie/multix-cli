@@ -204,7 +204,7 @@ multix runway models [--json]               # offline (no key, no request): mode
 ```
 
 - `--output` and `--download`/`--no-download` on `video` need `--wait`; otherwise resume later with `status <id> --wait --download`. `FAILED`/`CANCELLED` exit non-zero.
-- `status` stdout is only the JSON summary (or the saved file list with `--download`); progress and resume hints go to stderr, so `multix runway status <id> | jq` always parses.
+- `status` stdout is only the JSON summary (or the saved file list with `--download`); progress and resume hints go to stderr, so without `--download`, `multix runway status <id> | jq` parses for a running, finished or (with `--wait`) failed task.
 - Image-to-video ratios: `1280:720`, `720:1280`, `1104:832`, `832:1104`, `960:960`, `1584:672`. Prompts at most 1000 characters. `--reference-tag` (3-16 letters/digits/`_`, letter first) pairs with the `--reference` at the same position.
 - Inputs: public `https://` URLs (domain names, no redirects followed), `data:image/jpeg|png|webp` URIs, `runway://` URIs, or local jpg/png/webp (inlined up to 5 MB, else uploaded for 24 h, < 200 MB). No GIF.
 - Outputs: `runway-<id8>-NN.<ext>`; URLs expire in 24-48 h. WebP conversion for images as elsewhere.

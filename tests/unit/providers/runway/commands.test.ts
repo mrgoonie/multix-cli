@@ -447,6 +447,31 @@ describe("runway status", () => {
     expect(text()).toContain(`Resume with: multix runway status ${TASK_ID} --wait --download`);
   });
 
+  it("--wait still prints the JSON summary of a FAILED task before exiting non-zero", async () => {
+    stub({
+      [TASK_PATH]: [
+        { json: task("FAILED", { failureCode: "INTERNAL.BAD_OUTPUT", cost: { credits: 10 } }) },
+      ],
+    });
+    await expect(run("status", TASK_ID, "--wait")).rejects.toThrow(RunwayTaskError);
+    expect(stdoutJson()).toMatchObject({
+      id: TASK_ID,
+      status: "FAILED",
+      failureCode: "INTERNAL.BAD_OUTPUT",
+    });
+  });
+
+  it("--download keeps stdout to the saved file list; download progress goes to stderr", async () => {
+    stub({
+      [TASK_PATH]: [{ json: task("SUCCEEDED", { output: [OUTPUT_URL] }) }],
+      [`GET ${OUTPUT_URL}`]: [{ bytes: MP4, headers: { "content-type": "video/mp4" } }],
+    });
+    await run("status", TASK_ID, "--download", "--output", `${tmp}/clip.mp4`);
+    expect(stdout.join("\n")).toBe(`\nSaved 1 file(s) from task ${TASK_ID}:\n  ${tmp}/clip.mp4`);
+    expect(text()).toContain(`Saved ${tmp}/clip.mp4`);
+    expect(text()).not.toContain("SIGNED_TOKEN");
+  });
+
   it("exits non-zero for a CANCELLED task", async () => {
     stub({ [TASK_PATH]: [{ json: task("CANCELLED") }] });
     await expect(run("status", TASK_ID)).rejects.toThrow(RunwayTaskError);

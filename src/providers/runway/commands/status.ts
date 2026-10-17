@@ -47,12 +47,20 @@ export function registerRunwayStatusCommand(parent: Command): void {
       const client = createRunwayClient();
 
       if (opts.wait) {
-        await completeTask(client, id, {
-          waitTimeoutMs,
-          logger,
-          download: Boolean(opts.download),
-          output: opts.output,
-        });
+        try {
+          await completeTask(client, id, {
+            waitTimeoutMs,
+            logger,
+            download: Boolean(opts.download),
+            output: opts.output,
+          });
+        } catch (error) {
+          // A FAILED/CANCELLED task still gets its JSON summary (failureCode, cost).
+          if (!opts.download && error instanceof RunwayTaskError) {
+            console.log(JSON.stringify(summarizeTask(error.task), null, 2));
+          }
+          throw error;
+        }
         return;
       }
 

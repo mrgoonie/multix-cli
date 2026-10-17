@@ -46,10 +46,10 @@ export function createLogger(opts: { verbose: boolean; stderr?: boolean }): Logg
       print(paint(ANSI.green, `✓ ${msg}`));
     },
     warn(msg) {
-      console.warn(c(ANSI.yellow, `⚠ ${msg}`));
+      console.warn(c(ANSI.yellow, `⚠ ${msg}`, process.stderr));
     },
     error(msg) {
-      console.error(c(ANSI.red, `✗ ${msg}`));
+      console.error(c(ANSI.red, `✗ ${msg}`, process.stderr));
     },
     debug(msg) {
       if (verbose) print(paint(ANSI.dim, `  [debug] ${msg}`));
