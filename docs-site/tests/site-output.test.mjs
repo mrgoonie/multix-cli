@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile, stat } from "node:fs/promises";
+import { readFile, readdir, stat } from "node:fs/promises";
 import test from "node:test";
 
 const readDist = (path) => readFile(new URL(`../dist/${path}`, import.meta.url), "utf8");
@@ -130,6 +130,20 @@ test("provider pages retain command caveats and asynchronous workflows", async (
     assert.match(agentGuide, new RegExp(`/commands/${provider}/`));
     assert.match(vietnameseAgentGuide, new RegExp(`/vi/commands/${provider}/`));
     assert.match(llms, new RegExp(`commands/${provider}\\.md`));
+  }
+});
+
+test("llms.txt links every command page", async () => {
+  const commandsDir = new URL("../src/content/docs/commands/", import.meta.url);
+  const pages = (await readdir(commandsDir)).filter((name) => /\.mdx?$/.test(name));
+  assert.ok(pages.length > 0);
+  const llms = await readDist("llms.txt");
+  for (const page of pages) {
+    const slug = page.replace(/\.mdx?$/, "");
+    assert.ok(
+      llms.includes(`(https://multix.zuey.me/commands/${slug}.md)`),
+      `llms.txt is missing commands/${slug}.md`,
+    );
   }
 });
 
