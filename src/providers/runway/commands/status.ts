@@ -2,6 +2,9 @@
  * multix runway status <taskId> — inspect or resume a task without creating a
  * new one. Prints a JSON summary (output URLs without their signed query
  * strings); --wait polls to a terminal status; --download saves the outputs.
+ * stdout carries only the result (that JSON, or the saved file list): progress,
+ * cost and resume hints go to stderr, so `multix runway status <id> | jq`
+ * parses whether or not the task has finished.
  * Signed output URLs are never printed here: `--no-download` on video/image
  * is the explicit way to get them.
  * FAILED/CANCELLED tasks exit non-zero.
@@ -38,7 +41,7 @@ export function registerRunwayStatusCommand(parent: Command): void {
     .option("--wait-timeout <ms>", "Polling timeout in milliseconds", "900000")
     .option("-v, --verbose", "Verbose logging")
     .action(async (taskId: string, opts: StatusOpts) => {
-      const logger = createLogger({ verbose: opts.verbose ?? false });
+      const logger = createLogger({ verbose: opts.verbose ?? false, stderr: true });
       const id = assertTaskId(taskId);
       const waitTimeoutMs = parsePositiveInt(opts.waitTimeout, "--wait-timeout");
       const client = createRunwayClient();

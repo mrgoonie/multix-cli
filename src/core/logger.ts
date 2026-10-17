@@ -2,6 +2,8 @@
  * Simple ANSI-coloured logger for multix CLI.
  * Uses no external deps — raw ANSI escape codes only.
  * debug() is a no-op unless verbose mode is enabled.
+ * With `stderr: true` every line goes to stderr, so a command whose stdout is
+ * machine-readable (JSON) keeps it parseable.
  */
 
 const ANSI = {
@@ -15,9 +17,9 @@ const ANSI = {
   dim: "\x1b[2m",
 } as const;
 
-function c(color: string, text: string): string {
+function c(color: string, text: string, stream: NodeJS.WriteStream = process.stdout): string {
   // Skip ANSI if NO_COLOR is set or not a TTY
-  if (process.env.NO_COLOR || !process.stdout.isTTY) return text;
+  if (process.env.NO_COLOR || !stream.isTTY) return text;
   return `${color}${text}${ANSI.reset}`;
 }
 
@@ -31,14 +33,17 @@ export interface Logger {
   header(msg: string): void;
 }
 
-export function createLogger(opts: { verbose: boolean }): Logger {
+export function createLogger(opts: { verbose: boolean; stderr?: boolean }): Logger {
   const { verbose } = opts;
+  const out = opts.stderr ? process.stderr : process.stdout;
+  const print = (text: string) => (opts.stderr ? console.error(text) : console.log(text));
+  const paint = (color: string, text: string) => c(color, text, out);
   return {
     info(msg) {
-      console.log(c(ANSI.blue, `  ${msg}`));
+      print(paint(ANSI.blue, `  ${msg}`));
     },
     success(msg) {
-      console.log(c(ANSI.green, `✓ ${msg}`));
+      print(paint(ANSI.green, `✓ ${msg}`));
     },
     warn(msg) {
       console.warn(c(ANSI.yellow, `⚠ ${msg}`));
@@ -47,11 +52,11 @@ export function createLogger(opts: { verbose: boolean }): Logger {
       console.error(c(ANSI.red, `✗ ${msg}`));
     },
     debug(msg) {
-      if (verbose) console.log(c(ANSI.dim, `  [debug] ${msg}`));
+      if (verbose) print(paint(ANSI.dim, `  [debug] ${msg}`));
     },
     header(msg) {
       const line = "=".repeat(60);
-      console.log(c(ANSI.bold + ANSI.cyan, `\n${line}\n${msg}\n${line}\n`));
+      print(paint(ANSI.bold + ANSI.cyan, `\n${line}\n${msg}\n${line}\n`));
     },
   };
 }

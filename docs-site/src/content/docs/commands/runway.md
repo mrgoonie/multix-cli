@@ -1,6 +1,6 @@
 ---
 title: Runway commands
-description: Generate Gen-4.5 and Gen-4 Turbo video and Gen-4 images through the Runway API, and check, resume or cancel tasks by ID.
+description: Generate Gen-4.5 and Gen-4 Turbo video and Gen-4 images through the Runway API, list the supported models, and check, resume or cancel tasks by ID.
 ---
 
 Runway commands call the Runway API (`https://api.dev.runwayml.com`, API
@@ -9,6 +9,20 @@ version `2024-11-06`) and require `RUNWAYML_API_SECRET`, created in the
 family is supported. Other models served by the Runway API, video-to-video,
 upscaling and audio are not covered, and an unknown model is rejected before
 anything is sent; there is no model fallback.
+
+## Models
+
+```bash
+multix runway models           # supported models, modes, ratios and limits
+multix runway models --json    # the same, as JSON
+```
+
+`runway models` reads the CLI's built-in model list. It needs no
+`RUNWAYML_API_SECRET` and sends no request, so it costs nothing. For each video
+model it shows the default flag, text-to-video and image-to-video support, the
+ratios for each mode, the duration range, whether a prompt is required and the
+list price per second; for each image model, the ratios, the reference image
+range and the list price.
 
 ## Video
 
@@ -100,6 +114,9 @@ multix runway cancel <id> --delete             # delete a finished task and its 
   signed query strings. It never prints the prompt or inputs. `status --wait`
   without `--download` prints the same summary once the task finishes; only
   `--no-download` on `video --wait` or `image` prints the signed URLs.
+- `status` writes only its result to stdout: the JSON summary, or the list of
+  saved files with `--download`. Progress, cost and the resume hint go to
+  stderr, so `multix runway status <id> | jq` parses for a running task too.
 - Terminal statuses are `SUCCEEDED`, `FAILED` and `CANCELLED`. `FAILED` and
   `CANCELLED` exit non-zero; a one-shot `status` on a running task exits 0 and
   prints the resume command.

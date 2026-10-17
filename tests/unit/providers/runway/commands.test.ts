@@ -2,7 +2,8 @@
  * Runway commands driven through commander with the real env-based client
  * (global fetch stubbed with the fake Runway API): validation before any paid
  * request, create → status → download for video and image, status/cancel,
- * input resolution and safe downloads. No network or paid calls.
+ * input resolution, safe downloads, the offline model list and JSON-only
+ * stdout for status. No network or paid calls.
  */
 
 import fs from "node:fs";
@@ -13,6 +14,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { _resetOutputDir } from "../../../../src/core/output-dir.js";
 import { RunwayTaskError } from "../../../../src/providers/runway/client.js";
 import { registerRunwayCommands } from "../../../../src/providers/runway/commands/index.js";
+import {
+  IMAGE_MODELS,
+  VIDEO_MODELS,
+  listRunwayModels,
+} from "../../../../src/providers/runway/models.js";
 import { BASE, OUTPUT_URL, SECRET, TASK_ID, createFakeRunway, task } from "./fake-runway.js";
 
 const MP4 = new Uint8Array([0, 0, 0, 0x18, 0x66, 0x74, 0x79, 0x70]);
@@ -23,6 +29,8 @@ const TASK_PATH = `GET /v1/tasks/${TASK_ID}`;
 
 let tmp: string;
 let output: string[];
+/** console.log only: what a pipe (`| jq`) would read. */
+let stdout: string[];
 
 beforeEach(() => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), "multix-runway-cmd-"));
@@ -35,10 +43,14 @@ beforeEach(() => {
   vi.stubEnv("NO_COLOR", "1");
   _resetOutputDir();
   output = [];
+  stdout = [];
   const capture = (...args: unknown[]) => {
     output.push(args.map(String).join(" "));
   };
-  vi.spyOn(console, "log").mockImplementation(capture);
+  vi.spyOn(console, "log").mockImplementation((...args: unknown[]) => {
+    capture(...args);
+    stdout.push(args.map(String).join(" "));
+  });
   vi.spyOn(console, "warn").mockImplementation(capture);
   vi.spyOn(console, "error").mockImplementation(capture);
 });
@@ -396,30 +408,42 @@ describe("downloads", () => {
 });
 
 describe("runway status", () => {
+  /** stdout must be exactly one JSON document, whatever the task state. */
+  const stdoutJson = () => JSON.parse(stdout.join("\n"));
+
   it("prints a JSON summary without signed query strings", async () => {
     stub({
       [TASK_PATH]: [{ json: task("SUCCEEDED", { output: [OUTPUT_URL], cost: { credits: 60 } }) }],
     });
     await run("status", TASK_ID);
-    const json = JSON.parse(output[0] as string);
-    expect(json).toMatchObject({ id: TASK_ID, status: "SUCCEEDED", cost: { credits: 60 } });
+    expect(stdoutJson()).toMatchObject({
+      id: TASK_ID,
+      status: "SUCCEEDED",
+      cost: { credits: 60 },
+      output: ["https://cdn.runway.test/out/video.mp4?[redacted]"],
+    });
     expect(text()).not.toContain("SIGNED_TOKEN");
+    expect(text()).not.toContain(SECRET);
   });
 
-  it("--wait without --download prints the summary, never the signed URLs", async () => {
+  it("--wait without --download keeps stdout to the JSON summary, never the signed URLs", async () => {
     stub({
-      [TASK_PATH]: [{ json: task("SUCCEEDED", { output: [OUTPUT_URL] }) }],
+      [TASK_PATH]: [{ json: task("SUCCEEDED", { output: [OUTPUT_URL], cost: { credits: 60 } }) }],
     });
     await run("status", TASK_ID, "--wait");
-    const json = JSON.parse(output.find((line) => line.startsWith("{")) as string);
-    expect(json).toMatchObject({ id: TASK_ID, status: "SUCCEEDED" });
+    expect(stdoutJson()).toMatchObject({ id: TASK_ID, status: "SUCCEEDED" });
+    // Progress and cost still reach the user, on stderr.
+    expect(text()).toContain(`Waiting for task ${TASK_ID}`);
+    expect(text()).toContain("Billed: 60 credits");
     expect(text()).not.toContain("SIGNED_TOKEN");
+    expect(text()).not.toContain(SECRET);
   });
 
-  it("shows progress for a running task and hints how to resume", async () => {
+  it("keeps stdout parseable for a running task and hints how to resume on stderr", async () => {
     stub({ [TASK_PATH]: [{ json: task("RUNNING", { progress: 0.4 }) }] });
     await run("status", TASK_ID);
-    expect(JSON.parse(output[0] as string).progress).toBe(0.4);
+    expect(stdoutJson()).toMatchObject({ id: TASK_ID, status: "RUNNING", progress: 0.4 });
+    expect(stdout.join("\n")).not.toContain("Resume with");
     expect(text()).toContain(`Resume with: multix runway status ${TASK_ID} --wait --download`);
   });
 
@@ -454,5 +478,49 @@ describe("runway cancel", () => {
     await run("cancel", TASK_ID, "--delete");
     expect(fake.calls.map((c) => c.method)).toEqual(["GET", "DELETE"]);
     expect(text()).toContain("deleted (was SUCCEEDED)");
+  });
+});
+
+describe("runway models", () => {
+  it("--json lists the active registry offline, without a credential or request", async () => {
+    vi.stubEnv("RUNWAYML_API_SECRET", "");
+    const fake = stub({});
+    await run("models", "--json");
+    expect(fake.calls).toHaveLength(0);
+    const json = JSON.parse(stdout.join("\n"));
+    expect(json).toEqual(listRunwayModels());
+    expect(json.video.map((m: { id: string }) => m.id)).toEqual(Object.keys(VIDEO_MODELS));
+    expect(json.image.map((m: { id: string }) => m.id)).toEqual(Object.keys(IMAGE_MODELS));
+    expect(json.video).toContainEqual(
+      expect.objectContaining({
+        id: "gen4.5",
+        default: true,
+        textToVideo: true,
+        imageToVideo: true,
+        textRatios: ["1280:720", "720:1280"],
+        minDuration: 2,
+        maxDuration: 10,
+      }),
+    );
+    expect(json.video).toContainEqual(
+      expect.objectContaining({ id: "gen4_turbo", default: false, textToVideo: false }),
+    );
+    expect(json.image).toContainEqual(
+      expect.objectContaining({ id: "gen4_image_turbo", minReferences: 1, maxReferences: 3 }),
+    );
+  });
+
+  it("prints a readable list by default", async () => {
+    vi.stubEnv("RUNWAYML_API_SECRET", "");
+    const fake = stub({});
+    await run("models");
+    expect(fake.calls).toHaveLength(0);
+    const out = text();
+    expect(out).toContain("gen4.5 (default)");
+    expect(out).toContain("modes: text-to-video, image-to-video");
+    expect(out).toContain("modes: image-to-video");
+    expect(out).toContain("duration: 2-10s");
+    expect(out).toContain("gen4_image_turbo");
+    expect(out).toContain("references: 1-3");
   });
 });

@@ -1,6 +1,6 @@
 ---
 title: Lệnh Runway
-description: Tạo video Gen-4.5, Gen-4 Turbo và ảnh Gen-4 qua Runway API, đồng thời xem, tiếp tục hoặc hủy task theo ID.
+description: Tạo video Gen-4.5, Gen-4 Turbo và ảnh Gen-4 qua Runway API, liệt kê model được hỗ trợ, đồng thời xem, tiếp tục hoặc hủy task theo ID.
 ---
 
 Lệnh Runway gọi Runway API (`https://api.dev.runwayml.com`, phiên bản API
@@ -9,6 +9,20 @@ Lệnh Runway gọi Runway API (`https://api.dev.runwayml.com`, phiên bản API
 chính Runway được hỗ trợ. Các model khác mà Runway API cung cấp, video-to-video,
 upscale và âm thanh không nằm trong phạm vi; model không xác định bị từ chối
 trước khi gửi bất cứ thứ gì, và không có cơ chế chuyển sang model dự phòng.
+
+## Model
+
+```bash
+multix runway models           # model được hỗ trợ, chế độ, tỉ lệ khung hình và giới hạn
+multix runway models --json    # như trên, dạng JSON
+```
+
+`runway models` đọc danh sách model có sẵn trong CLI. Lệnh không cần
+`RUNWAYML_API_SECRET` và không gửi request nào, nên không tốn phí. Với mỗi
+model video, lệnh cho biết model có phải mặc định không, có hỗ trợ
+text-to-video và image-to-video không, các tỉ lệ khung hình của từng chế độ,
+khoảng thời lượng, prompt có bắt buộc không và giá niêm yết mỗi giây; với mỗi
+model ảnh, các tỉ lệ khung hình, số ảnh tham chiếu cho phép và giá niêm yết.
 
 ## Video
 
@@ -98,6 +112,9 @@ multix runway cancel <id> --delete             # xóa task đã xong cùng outpu
   bao giờ in prompt hay input. `status --wait` không kèm `--download` in cùng
   bản tóm tắt đó khi task kết thúc; chỉ `--no-download` trên `video --wait`
   hoặc `image` mới in URL đã ký.
+- `status` chỉ ghi kết quả ra stdout: bản tóm tắt JSON, hoặc danh sách file đã
+  lưu khi có `--download`. Tiến độ, chi phí và gợi ý tiếp tục đi ra stderr, nên
+  `multix runway status <id> | jq` vẫn đọc được kể cả khi task đang chạy.
 - Trạng thái kết thúc gồm `SUCCEEDED`, `FAILED` và `CANCELLED`. `FAILED` và
   `CANCELLED` thoát với mã khác 0; lệnh `status` xem một lần với task đang chạy
   thoát với mã 0 và in lệnh để tiếp tục.

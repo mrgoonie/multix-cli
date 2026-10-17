@@ -47,6 +47,12 @@ describe("CLI catalog", () => {
     for (const path of EXCLUDED_COMMANDS) expect(index.find(path), path).toBeDefined();
   });
 
+  it("lists the offline `runway models` command with its --json flag", () => {
+    const entry = new CatalogIndex().find("runway models");
+    expect(entry?.group).toBe("runway");
+    expect(entry?.command.options.map(optionName)).toContain("json");
+  });
+
   it("maps provider groups to stored key names only", () => {
     const groups = new Set(CLI_CATALOG.groups.map((g) => g.group));
     for (const [group, names] of Object.entries(GROUP_KEYS)) {

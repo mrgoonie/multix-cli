@@ -121,6 +121,31 @@ export const IMAGE_MODELS: Readonly<Record<string, ImageModelSpec>> = {
   },
 };
 
+export interface RunwayModelList {
+  video: Array<
+    { id: string; default: boolean; textToVideo: boolean; imageToVideo: true } & VideoModelSpec
+  >;
+  image: Array<{ id: string; default: boolean } & ImageModelSpec>;
+}
+
+/** The supported models straight from the registry above (offline; no request). */
+export function listRunwayModels(): RunwayModelList {
+  return {
+    video: Object.entries(VIDEO_MODELS).map(([id, spec]) => ({
+      id,
+      default: id === DEFAULT_RUNWAY_VIDEO_MODEL,
+      textToVideo: Boolean(spec.textRatios),
+      imageToVideo: true,
+      ...spec,
+    })),
+    image: Object.entries(IMAGE_MODELS).map(([id, spec]) => ({
+      id,
+      default: id === DEFAULT_RUNWAY_IMAGE_MODEL,
+      ...spec,
+    })),
+  };
+}
+
 function unknownModel(kind: string, model: string, known: Record<string, unknown>): never {
   throw new ValidationError(
     `Unsupported Runway ${kind} model "${model}". Supported: ${Object.keys(known).join(", ")}`,
