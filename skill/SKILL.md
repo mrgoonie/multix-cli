@@ -198,8 +198,9 @@ multix runway video -m gen4_turbo --image https://cdn.example.com/still.jpg --ra
 # Image waits and downloads by default; --async returns the id
 multix runway image "@hero on a rooftop at night" --reference ./hero.png --reference-tag hero [--ratio 1920:1080]
 
-multix runway status <task-id> [--wait] [--download] [--output <path>]
+multix runway status <task-id> [--wait] [--download] [--output <path>] [--json]   # stdout is JSON only
 multix runway cancel <task-id> [--delete]   # --delete also removes a finished task and its outputs
+multix runway models [--json]               # offline: models, ratios, durations, reference limits
 ```
 
 - `--output` and `--download`/`--no-download` on `video` need `--wait`; otherwise resume later with `status <id> --wait --download`. `FAILED`/`CANCELLED` exit non-zero.

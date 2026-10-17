@@ -179,6 +179,17 @@ describe("prepareRun: argv", () => {
     );
   }, 120_000);
 
+  it("runs the offline runway models listing and JSON-only runway status", async () => {
+    const models = run({ command: "runway models", options: { json: true } });
+    expect(models.group).toBe("runway");
+    expect((await parseWithCli(models.argv, "runway models")).opts.json).toBe(true);
+
+    const taskId = "3f2a9c1e-5b7d-4e8f-9a0b-1c2d3e4f5a6b";
+    const status = run({ command: "runway status", args: [taskId], options: { json: true } });
+    expect(status.argv.slice(-2)).toEqual(["--", taskId]);
+    expect((await parseWithCli(status.argv, "runway status")).opts.json).toBe(true);
+  }, 120_000);
+
   it("accepts plain file-name parts such as a language code or prefix", () => {
     const prepared = run({
       command: "elevenlabs voices design",

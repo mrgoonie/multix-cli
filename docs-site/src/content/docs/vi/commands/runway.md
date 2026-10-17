@@ -10,6 +10,17 @@ chính Runway được hỗ trợ. Các model khác mà Runway API cung cấp, v
 upscale và âm thanh không nằm trong phạm vi; model không xác định bị từ chối
 trước khi gửi bất cứ thứ gì, và không có cơ chế chuyển sang model dự phòng.
 
+## Model
+
+```bash
+multix runway models          # model được hỗ trợ, tỉ lệ khung, thời lượng, giới hạn ảnh tham chiếu
+multix runway models --json   # cùng nội dung dưới dạng JSON
+```
+
+`runway models` đọc danh sách model có sẵn trong CLI, nên chạy được khi không
+có mạng và không cần `RUNWAYML_API_SECRET`. `default` đánh dấu model được dùng
+khi không truyền `-m` (`RUNWAY_VIDEO_MODEL` / `RUNWAY_IMAGE_MODEL` nếu có đặt).
+
 ## Video
 
 ```bash
@@ -89,6 +100,7 @@ multix runway image "@subject as a watercolor" -m gen4_image_turbo \
 ```bash
 multix runway status <id>                      # tóm tắt JSON một lần
 multix runway status <id> --wait --download    # tiếp tục mà không tạo task mới
+multix runway status <id> --download --json    # tóm tắt JSON kèm đường dẫn file đã lưu
 multix runway cancel <id>                      # hủy task đang chờ hoặc đang chạy
 multix runway cancel <id> --delete             # xóa task đã xong cùng output của nó
 ```
@@ -98,6 +110,10 @@ multix runway cancel <id> --delete             # xóa task đã xong cùng outpu
   bao giờ in prompt hay input. `status --wait` không kèm `--download` in cùng
   bản tóm tắt đó khi task kết thúc; chỉ `--no-download` trên `video --wait`
   hoặc `image` mới in URL đã ký.
+- `status` chỉ ghi JSON ra stdout; tiến độ, chi phí và gợi ý tiếp tục đi ra
+  stderr, nên `multix runway status <id> | jq .status` dùng được cả với task
+  đang chạy. Khi có `--download`, stdout liệt kê file đã lưu, trừ khi thêm
+  `--json` để in bản tóm tắt kèm mảng `files`.
 - Trạng thái kết thúc gồm `SUCCEEDED`, `FAILED` và `CANCELLED`. `FAILED` và
   `CANCELLED` thoát với mã khác 0; lệnh `status` xem một lần với task đang chạy
   thoát với mã 0 và in lệnh để tiếp tục.

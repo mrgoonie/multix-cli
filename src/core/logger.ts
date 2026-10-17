@@ -15,9 +15,9 @@ const ANSI = {
   dim: "\x1b[2m",
 } as const;
 
-function c(color: string, text: string): string {
+function c(color: string, text: string, stream: NodeJS.WriteStream = process.stdout): string {
   // Skip ANSI if NO_COLOR is set or not a TTY
-  if (process.env.NO_COLOR || !process.stdout.isTTY) return text;
+  if (process.env.NO_COLOR || !stream.isTTY) return text;
   return `${color}${text}${ANSI.reset}`;
 }
 
@@ -31,14 +31,26 @@ export interface Logger {
   header(msg: string): void;
 }
 
-export function createLogger(opts: { verbose: boolean }): Logger {
+export interface LoggerOptions {
+  verbose: boolean;
+  /**
+   * Send info/success/debug/header to stderr too, for commands whose stdout
+   * is a machine-readable result (JSON) that must stay parseable.
+   */
+  stderr?: boolean;
+}
+
+export function createLogger(opts: LoggerOptions): Logger {
   const { verbose } = opts;
+  // Looked up per call so console spies installed after creation still see the output.
+  const out = (line: string) => (opts.stderr ? console.error(line) : console.log(line));
+  const stream = opts.stderr ? process.stderr : process.stdout;
   return {
     info(msg) {
-      console.log(c(ANSI.blue, `  ${msg}`));
+      out(c(ANSI.blue, `  ${msg}`, stream));
     },
     success(msg) {
-      console.log(c(ANSI.green, `✓ ${msg}`));
+      out(c(ANSI.green, `✓ ${msg}`, stream));
     },
     warn(msg) {
       console.warn(c(ANSI.yellow, `⚠ ${msg}`));
@@ -47,11 +59,11 @@ export function createLogger(opts: { verbose: boolean }): Logger {
       console.error(c(ANSI.red, `✗ ${msg}`));
     },
     debug(msg) {
-      if (verbose) console.log(c(ANSI.dim, `  [debug] ${msg}`));
+      if (verbose) out(c(ANSI.dim, `  [debug] ${msg}`, stream));
     },
     header(msg) {
       const line = "=".repeat(60);
-      console.log(c(ANSI.bold + ANSI.cyan, `\n${line}\n${msg}\n${line}\n`));
+      out(c(ANSI.bold + ANSI.cyan, `\n${line}\n${msg}\n${line}\n`, stream));
     },
   };
 }

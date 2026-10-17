@@ -87,6 +87,8 @@ export interface ReportOptions {
    */
   rawUrls?: boolean;
   output?: string;
+  /** After a download, print the summary plus saved file paths as JSON. */
+  json?: boolean;
   logger: Logger;
   /** Post-process saved files (e.g. WebP conversion) before they are listed. */
   finalize?: (files: string[]) => string[];
@@ -108,6 +110,10 @@ export async function reportOutputs(task: RunwayTask, opts: ReportOptions): Prom
     retryHint: `Retry while the output URLs are live (24-48h): multix runway status ${task.id} --download`,
   });
   const finals = opts.finalize ? opts.finalize(saved) : saved;
+  if (opts.json) {
+    console.log(JSON.stringify({ ...summarizeTask(task), files: finals }, null, 2));
+    return finals;
+  }
   console.log(`\nSaved ${finals.length} file(s) from task ${task.id}:`);
   for (const f of finals) console.log(`  ${f}`);
   return finals;

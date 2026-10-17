@@ -10,6 +10,17 @@ family is supported. Other models served by the Runway API, video-to-video,
 upscaling and audio are not covered, and an unknown model is rejected before
 anything is sent; there is no model fallback.
 
+## Models
+
+```bash
+multix runway models          # supported models, ratios, durations, reference limits
+multix runway models --json   # the same as JSON
+```
+
+`runway models` reads the CLI's built-in model list, so it works offline and
+needs no `RUNWAYML_API_SECRET`. `default` marks the model used without `-m`
+(`RUNWAY_VIDEO_MODEL` / `RUNWAY_IMAGE_MODEL` when set).
+
 ## Video
 
 ```bash
@@ -91,6 +102,7 @@ multix runway image "@subject as a watercolor" -m gen4_image_turbo \
 ```bash
 multix runway status <id>                      # one-shot JSON summary
 multix runway status <id> --wait --download    # resume without creating a new task
+multix runway status <id> --download --json    # JSON summary plus saved file paths
 multix runway cancel <id>                      # cancel a pending or running task
 multix runway cancel <id> --delete             # delete a finished task and its outputs
 ```
@@ -100,6 +112,10 @@ multix runway cancel <id> --delete             # delete a finished task and its 
   signed query strings. It never prints the prompt or inputs. `status --wait`
   without `--download` prints the same summary once the task finishes; only
   `--no-download` on `video --wait` or `image` prints the signed URLs.
+- `status` writes only JSON to stdout; progress, cost and resume hints go to
+  stderr, so `multix runway status <id> | jq .status` works for a running task
+  too. With `--download`, stdout lists the saved files instead, unless you add
+  `--json`, which prints the summary with a `files` array.
 - Terminal statuses are `SUCCEEDED`, `FAILED` and `CANCELLED`. `FAILED` and
   `CANCELLED` exit non-zero; a one-shot `status` on a running task exits 0 and
   prints the resume command.

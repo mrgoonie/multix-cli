@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { _resetOutputDir } from "../../../../src/core/output-dir.js";
 import { RunwayTaskError } from "../../../../src/providers/runway/client.js";
 import { registerRunwayCommands } from "../../../../src/providers/runway/commands/index.js";
+import { IMAGE_MODELS, VIDEO_MODELS } from "../../../../src/providers/runway/models.js";
 import { BASE, OUTPUT_URL, SECRET, TASK_ID, createFakeRunway, task } from "./fake-runway.js";
 
 const MP4 = new Uint8Array([0, 0, 0, 0x18, 0x66, 0x74, 0x79, 0x70]);
@@ -66,6 +67,12 @@ async function run(...args: string[]): Promise<void> {
 }
 
 const text = () => output.join("\n");
+/** What went to stdout only (console.log), joined. */
+const stdout = () =>
+  vi
+    .mocked(console.log)
+    .mock.calls.map((args) => args.map(String).join(" "))
+    .join("\n");
 
 describe("validation before any request", () => {
   it.each([
@@ -426,6 +433,96 @@ describe("runway status", () => {
   it("exits non-zero for a CANCELLED task", async () => {
     stub({ [TASK_PATH]: [{ json: task("CANCELLED") }] });
     await expect(run("status", TASK_ID)).rejects.toThrow(RunwayTaskError);
+  });
+
+  it("keeps stdout parseable JSON for a running task; the resume hint goes to stderr", async () => {
+    stub({ [TASK_PATH]: [{ json: task("RUNNING", { progress: 0.4 }) }] });
+    await run("status", TASK_ID, "-v");
+    expect(JSON.parse(stdout())).toEqual({
+      id: TASK_ID,
+      status: "RUNNING",
+      createdAt: expect.any(String),
+      progress: 0.4,
+    });
+    expect(vi.mocked(console.error).mock.calls.flat().join("\n")).toContain("Resume with:");
+  });
+
+  it("--wait keeps stdout to the JSON summary; progress and billing go to stderr", async () => {
+    stub({
+      [TASK_PATH]: [{ json: task("SUCCEEDED", { output: [OUTPUT_URL], cost: { credits: 60 } }) }],
+    });
+    await run("status", TASK_ID, "--wait", "-v");
+    expect(JSON.parse(stdout())).toMatchObject({ id: TASK_ID, status: "SUCCEEDED" });
+    const stderr = vi.mocked(console.error).mock.calls.flat().join("\n");
+    expect(stderr).toContain("Billed: 60 credits");
+    expect(stderr).toContain(`Task ${TASK_ID} succeeded`);
+    expect(stderr).toContain("[debug] attempt 1: SUCCEEDED");
+    expect(text()).not.toContain("SIGNED_TOKEN");
+    expect(text()).not.toContain(SECRET);
+  });
+
+  it("--download --json prints the summary and saved files as JSON only", async () => {
+    stub({
+      [TASK_PATH]: [{ json: task("SUCCEEDED", { output: [OUTPUT_URL] }) }],
+      [`GET ${OUTPUT_URL}`]: [{ bytes: MP4, headers: { "content-type": "video/mp4" } }],
+    });
+    await run("status", TASK_ID, "--download", "--json", "--output", `${tmp}/dir/`);
+    const json = JSON.parse(stdout());
+    expect(json).toMatchObject({ id: TASK_ID, status: "SUCCEEDED" });
+    expect(json.files).toEqual([path.join(tmp, "dir", `runway-${TASK_ID.slice(0, 8)}-01.mp4`)]);
+    expect(fs.existsSync(json.files[0])).toBe(true);
+    expect(text()).not.toContain("SIGNED_TOKEN");
+    expect(text()).not.toContain(SECRET);
+  });
+});
+
+describe("runway models", () => {
+  it("--json lists the registry without a credential or any request", async () => {
+    vi.stubEnv("RUNWAYML_API_SECRET", "");
+    const fake = stub({});
+    await run("models", "--json");
+    expect(fake.calls).toHaveLength(0);
+    const list = JSON.parse(stdout());
+    expect(list.video).toEqual(
+      Object.entries(VIDEO_MODELS).map(([id, spec]) => ({
+        id,
+        default: id === "gen4.5",
+        textToVideo: Boolean(spec.textRatios),
+        imageToVideo: true,
+        ...spec,
+      })),
+    );
+    expect(list.image).toEqual(
+      Object.entries(IMAGE_MODELS).map(([id, spec]) => ({
+        id,
+        default: id === "gen4_image",
+        ...spec,
+      })),
+    );
+  });
+
+  it("marks the env-selected models as default", async () => {
+    vi.stubEnv("RUNWAY_VIDEO_MODEL", "gen4_turbo");
+    vi.stubEnv("RUNWAY_IMAGE_MODEL", "gen4_image_turbo");
+    stub({});
+    await run("models", "--json");
+    const list = JSON.parse(stdout());
+    expect(list.video.find((m: { default: boolean }) => m.default).id).toBe("gen4_turbo");
+    expect(list.image.find((m: { default: boolean }) => m.default).id).toBe("gen4_image_turbo");
+  });
+
+  it("prints capabilities, ratios, durations and reference limits", async () => {
+    vi.stubEnv("RUNWAYML_API_SECRET", "");
+    stub({});
+    await run("models");
+    const out = stdout();
+    expect(out).toContain("gen4.5 (default)");
+    expect(out).toContain("text-to-video:  1280:720, 720:1280");
+    expect(out).toContain("text-to-video:  no (needs --image)");
+    expect(out).toContain("duration: 2-10s; prompt required");
+    expect(out).toContain("gen4_image_turbo");
+    expect(out).toContain("references: 1-3");
+    expect(out).toContain("list price: from 5 credits (~$0.05) per image");
   });
 });
 

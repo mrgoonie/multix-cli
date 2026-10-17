@@ -590,6 +590,9 @@ multix runway image "@hero on a rooftop at night" [-m gen4_image|gen4_image_turb
 # Check, resume, cancel, or delete a task by id
 multix runway status <task-id> [--wait] [--download] [--output <path>] [--wait-timeout <ms>]
 multix runway cancel <task-id> [--delete]
+
+# Supported models, ratios, durations and reference limits (offline, no key needed)
+multix runway models [--json]
 ```
 
 **Notes:**
@@ -598,7 +601,7 @@ multix runway cancel <task-id> [--delete]
 - gen4.5 text-to-video ratios are `1280:720` and `720:1280`; image-to-video adds `1104:832`, `832:1104`, `960:960`, `1584:672`. `--duration` is 2-10 seconds, `--seed` 0-4294967295, prompts at most 1000 characters (required for gen4.5, optional for gen4_turbo). Image ratios: see the [Runway page](https://multix.zuey.me/commands/runway/).
 - `--reference-tag` pairs with the `--reference` at the same position (3-16 letters, digits or `_`, starting with a letter). `image` converts to WebP like the other image commands.
 - Inputs: public `https://` URLs (domain names only, at most 2048 characters; Runway does not follow redirects), `data:image/jpeg|png|webp` URIs up to 5 MB, `runway://` URIs, or local `.jpg`/`.jpeg`/`.png`/`.webp` files (inlined up to 5 MB encoded, otherwise uploaded for 24 hours, under 200 MB).
-- `status` prints JSON without the prompt or inputs, and output URLs without signed query strings. `FAILED` and `CANCELLED` exit non-zero. `cancel` stops a pending or running task; a finished task is only deleted (with its outputs) with `--delete`.
+- `status` prints JSON without the prompt or inputs, and output URLs without signed query strings, on stdout only (progress and hints go to stderr); `--download --json` adds the saved `files`. `FAILED` and `CANCELLED` exit non-zero. `cancel` stops a pending or running task; a finished task is only deleted (with its outputs) with `--delete`.
 - Outputs are saved as `runway-<id8>-NN.<ext>`; their URLs expire in 24-48 hours. Downloads follow the same https-only, no-private-host, `MULTIX_MAX_DOWNLOAD_MB` and `.part` rules as Replicate. A partial download failure exits non-zero and prints `multix runway status <id> --download`.
 - Cost: before submitting, the CLI logs an indicative list-price estimate (Gen-4.5 12 credits/s, Gen-4 Turbo 5 credits/s, Gen-4 Image from 5 credits, Gen-4 Image Turbo 2 credits; 1 credit = $0.01; prices change, see [Runway pricing](https://docs.dev.runwayml.com/guides/pricing/)), then Runway's `estimatedCost` after create and the billed `cost` at the end.
 - Create is retried only on 429. After a network error, timeout, 5xx, or unreadable response the task may still have been created and billed: check https://dev.runwayml.com/ before retrying. Tasks are polled every 5 seconds or more.

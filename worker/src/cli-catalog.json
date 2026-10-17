@@ -7677,7 +7677,7 @@
     },
     {
       "group": "runway",
-      "description": "Runway: Gen-4.5/Gen-4 Turbo video, Gen-4 images, task status and cancel",
+      "description": "Runway: Gen-4.5/Gen-4 Turbo video, Gen-4 images, task status and cancel, models",
       "commands": [
         {
           "command": "runway video",
@@ -8007,6 +8007,16 @@
               "default": "900000"
             },
             {
+              "long": "--json",
+              "flags": "--json",
+              "description": "Print JSON only, also after --download (summary plus saved files)",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
               "long": "--verbose",
               "flags": "-v, --verbose",
               "description": "Verbose logging",
@@ -8051,6 +8061,23 @@
               "variadic": false,
               "negatable": false,
               "short": "-v"
+            }
+          ]
+        },
+        {
+          "command": "runway models",
+          "description": "List supported Runway models, ratios, durations and reference limits (offline)",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--json",
+              "flags": "--json",
+              "description": "Print JSON",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
             }
           ]
         }

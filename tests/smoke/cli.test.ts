@@ -87,13 +87,40 @@ describe("multix --help (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     const result = await run(["runway", "--help"]);
     expect(result.exitCode).toBe(0);
     const out = result.stdout + result.stderr;
-    for (const sub of ["video", "image", "status", "cancel"]) {
+    for (const sub of ["video", "image", "status", "cancel", "models"]) {
       expect(out).toContain(sub);
     }
     const video = await run(["runway", "video", "--help"]);
     const videoOut = video.stdout + video.stderr;
     for (const flag of ["--model", "--image", "--ratio", "--duration", "--wait", "--no-download"]) {
       expect(videoOut).toContain(flag);
+    }
+  });
+
+  it("runway models --json works offline without a Runway credential", async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "multix-smoke-runway-"));
+    try {
+      const env = isolatedEnv(tmp);
+      // An unreachable base URL proves no request is made.
+      const result = await run(["runway", "models", "--json"], {
+        env: {
+          ...env,
+          RUNWAYML_API_SECRET: "",
+          RUNWAY_VIDEO_MODEL: "",
+          RUNWAY_IMAGE_MODEL: "",
+          RUNWAY_BASE_URL: "http://127.0.0.1:9",
+        },
+        extendEnv: false,
+      });
+      expect(result.exitCode).toBe(0);
+      const list = JSON.parse(result.stdout);
+      expect(list.video.map((m: { id: string }) => m.id)).toEqual(["gen4.5", "gen4_turbo"]);
+      expect(list.image.map((m: { id: string }) => m.id)).toEqual([
+        "gen4_image",
+        "gen4_image_turbo",
+      ]);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
     }
   });
 
