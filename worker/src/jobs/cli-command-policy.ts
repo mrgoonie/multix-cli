@@ -102,10 +102,12 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   // stored interaction's length (Google stops a chain at 40 s), and every call
   // runs on the caller's own key.
   "gemini edit-video": {
+    forced: OMNI_MODEL,
     fileOptions: { video: "file", "reference-images": "file" },
     caps: { resolution: ["resolution"], fillResolution: true },
   },
   "gemini extend-video": {
+    forced: OMNI_MODEL,
     fileOptions: { video: "file", "reference-images": "file" },
     caps: OMNI_VIDEO_CAPS,
   },
