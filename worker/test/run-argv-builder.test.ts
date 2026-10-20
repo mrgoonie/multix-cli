@@ -334,6 +334,34 @@ describe("prepareRun: rejections", () => {
   ])("rejects %s", (_label, request, message) => rejects(request, message));
 });
 
+describe("prepareRun: implicit video resolution", () => {
+  const only720 = limitsFrom({ MULTIX_MCP_ALLOWED_RESOLUTIONS: "720p" });
+
+  it("checks the CLI's model-dependent default when --resolution is omitted", () => {
+    const request = { command: "gemini generate-video", options: { prompt: "p" } };
+    expect(() => prepareRun(request, only720)).toThrow(/resolution must be one of 720p/);
+    expect(() => prepareRun(request, limits)).not.toThrow();
+    expect(() =>
+      prepareRun({ ...request, options: { prompt: "p", resolution: "720p" } }, only720),
+    ).not.toThrow();
+  });
+
+  it("checks Omni follow-ups against their 720p default", () => {
+    expect(() =>
+      prepareRun(
+        { command: "gemini video-status", args: ["v1_abc"], options: { wait: true } },
+        only720,
+      ),
+    ).not.toThrow();
+    expect(() =>
+      prepareRun(
+        { command: "gemini edit-video", options: { prompt: "p", "interaction-id": "v1_abc" } },
+        only720,
+      ),
+    ).not.toThrow();
+  });
+});
+
 describe("helpers", () => {
   it("normalises provider resolution spellings", () => {
     expect(normaliseResolution("1080P")).toBe("1080p");

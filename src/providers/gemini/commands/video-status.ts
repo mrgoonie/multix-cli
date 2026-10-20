@@ -90,13 +90,20 @@ export function registerGeminiVideoStatusCommand(parent: Command): void {
         copyToOutput(base, opts.output, logger);
         summary.output_path = base;
         if (record && opts.session) {
-          writeSessionRecord(opts.session, {
-            ...record,
-            status: interaction.status ?? record.status,
-            output_path: path.resolve(base),
-            updated_at: new Date().toISOString(),
-            ...(interaction.usage !== undefined ? { usage: interaction.usage } : {}),
-          });
+          try {
+            writeSessionRecord(opts.session, {
+              ...record,
+              status: interaction.status ?? record.status,
+              output_path: path.resolve(base),
+              updated_at: new Date().toISOString(),
+              ...(interaction.usage !== undefined ? { usage: interaction.usage } : {}),
+            });
+          } catch (err) {
+            // The video is saved; a read-only session file is not a failure.
+            logger.warn(
+              `Could not update ${opts.session}: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
         }
       }
       console.log(JSON.stringify(summary, null, 2));

@@ -80,7 +80,7 @@ multix gemini i2v ./first-frame.png --prompt "camera pans left" --last-frame ./l
 | `--delivery` | `uri` (default), `inline` | Videos over about 4 MB need `uri`. |
 | `--task` | `text_to_video`, `image_to_video`, `reference_to_video`, `edit`, `extend` | The model normally infers the task; use only when prompting is not enough. |
 | `--no-store` | | The interaction is not stored, so it cannot be edited, extended or resumed later. Cannot be combined with `--background`. |
-| `--background` | | The server runs the request asynchronously and the CLI polls it by interaction id. |
+| `--background` | on unless `--no-store` | The server runs the request asynchronously and the CLI polls it by interaction id, so the id is saved before the video is ready. |
 | `--timeout` | 30–7200 seconds (default 900) | Overall wait for the run. |
 
 `--delivery`, `--task`, `--no-store`, `--background` and `--timeout` are
@@ -137,9 +137,12 @@ multix gemini video-status --session ./multix-output/omni_generated_176000000000
 
 ### Paid-request safety
 
-- When a create request fails with a network error or timeout after it was
-  sent, the CLI does not send it again, because it may still finish and be
-  billed. It suggests `--background` and `video-status` instead.
+- Stored runs use `--background` by default, so the interaction id is saved
+  in the session file right away and a dropped connection does not lose a
+  billed video; resume with `video-status`.
+- When a create request fails with a network error, a 5xx or an unreadable
+  answer after it was sent, the CLI does not send it again, because it may
+  still finish and be billed.
 - Keys rotate only on a 429 or `RESOURCE_EXHAUSTED` before the request is
   accepted. Polling, download and follow-ups stay on the key that created the
   interaction; see [Gemini key rotation](/reference/environment/#gemini-key-rotation).

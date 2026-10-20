@@ -25,6 +25,11 @@ export interface CapRules {
   count?: string[];
   /** Video resolution: must normalise to one of `allowedResolutions`. */
   resolution?: string[];
+  /**
+   * Resolution the CLI uses when the caller gives none and the catalog has no
+   * default (it depends on the model), checked like a caller value.
+   */
+  implicitResolution?: string;
 }
 
 export interface CommandPolicy {
@@ -70,23 +75,24 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   "gemini extract": { fileOptions: { files: "file" } },
   "gemini generate": { caps: IMAGE_COUNT },
   "gemini image-to-image": { fileOptions: { ref: "file" } },
+  // Omni defaults to 720p, Veo to 1080p: check the larger when none is given.
   "gemini generate-video": {
     fileOptions: { "reference-images": "file" },
-    caps: { resolution: ["resolution"] },
+    caps: { resolution: ["resolution"], implicitResolution: "1080p" },
   },
   "gemini image-to-video": {
     filePositionals: ["imagePath"],
     fileOptions: { "last-frame": "file" },
-    caps: { resolution: ["resolution"] },
+    caps: { resolution: ["resolution"], implicitResolution: "1080p" },
   },
   // Omni follow-ups: --session is the *.interaction.json written by an earlier run.
   "gemini edit-video": {
     fileOptions: { video: "file", session: "file", "reference-images": "file" },
-    caps: { resolution: ["resolution"] },
+    caps: { resolution: ["resolution"], implicitResolution: "720p" },
   },
   "gemini extend-video": {
     fileOptions: { video: "file", session: "file", "reference-images": "file" },
-    caps: { resolution: ["resolution"] },
+    caps: { resolution: ["resolution"], implicitResolution: "720p" },
   },
   "gemini video-status": { fileOptions: { session: "file" } },
   "gemini omni-video": { fileOptions: { image: "file", video: "file" } },

@@ -25,7 +25,10 @@ export function addOmniOptions(cmd: Command): Command {
       "--no-store",
       "Omni: do not store the interaction (it cannot be edited or fetched later)",
     )
-    .option("--background", "Omni: run in the background and poll by interaction id")
+    .option(
+      "--background",
+      "Omni: run in the background and poll by interaction id (default unless --no-store)",
+    )
     .option(
       "--timeout <seconds>",
       `Omni: overall wait in seconds (default ${OMNI_DEFAULT_TIMEOUT_SECONDS})`,

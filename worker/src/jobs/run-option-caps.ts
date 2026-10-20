@@ -71,7 +71,8 @@ export function applyCaps(
     }
   }
   for (const name of rules?.resolution ?? []) {
-    const raw = single(values, name) ?? defaultString(options.get(name));
+    const raw =
+      single(values, name) ?? defaultString(options.get(name)) ?? rules?.implicitResolution;
     if (raw !== undefined && !limits.allowedResolutions.includes(normaliseResolution(raw))) {
       throw new ValidationError(
         `--${name} must be one of ${limits.allowedResolutions.join(", ")} on this server`,

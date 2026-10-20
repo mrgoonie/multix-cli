@@ -21,6 +21,7 @@ import type { Logger } from "../../core/logger.js";
 import { withGeminiKey, withNamedGeminiKey } from "./key-pool.js";
 import { INLINE_MAX_BYTES, uploadLocalFile } from "./local-files.js";
 import {
+  OMNI_API_HOST,
   type OmniDelivery,
   type OmniInteraction,
   type OmniMedia,
@@ -99,7 +100,9 @@ export function omniSettings(opts: OmniCommonOptions): OmniSettings {
     delivery: (opts.delivery ?? "uri") as OmniDelivery,
     task: opts.task,
     store: opts.store !== false,
-    background: opts.background === true,
+    // Stored runs go to the background so the id comes back at once and a
+    // dropped connection never loses a billed video. --no-store must be sync.
+    background: opts.background ?? opts.store !== false,
     timeoutMs: parseTimeoutSeconds(opts.timeout),
   };
   validateOmniOptions(settings);
@@ -146,6 +149,12 @@ export function readSessionRecord(file: string): OmniSessionRecord {
   const r = parsed as Partial<OmniSessionRecord> | null;
   if (!r || r.kind !== "gemini-omni-video" || typeof r.interaction_id !== "string") {
     throw new ValidationError(`${file} is not a Gemini Omni session file`);
+  }
+  if (typeof r.key_env !== "string" || r.key_env === "" || typeof r.model !== "string") {
+    throw new ValidationError(`${file} has no valid key_env or model`);
+  }
+  if (typeof r.store !== "boolean") {
+    throw new ValidationError(`${file} has no valid store flag`);
   }
   return r as OmniSessionRecord;
 }
@@ -214,6 +223,14 @@ export async function saveOmniVideo(
   if (parsed?.protocol !== "https:") {
     throw new ProviderError("Gemini Omni returned an invalid video URI", "gemini");
   }
+  if (parsed.hostname === OMNI_API_HOST) {
+    // A Gemini URI we cannot map to a Files API name: fetching it without the
+    // key would fail, and sending the key to an unknown path is not allowed.
+    throw new ProviderError(
+      "Gemini Omni returned a Gemini video URI in an unexpected form, so it was not downloaded (the API key is only sent to Files API paths). The interaction id is in the session file.",
+      "gemini",
+    );
+  }
   // Not a Gemini Files API URI: fetch it without credentials.
   await downloadToFile(uri, { dest, maxBytes, timeoutMs: DOWNLOAD_TIMEOUT_MS });
   return undefined;
@@ -247,8 +264,11 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
+/** The request may have been accepted (and billed) even though no usable answer came back. */
 function ambiguousFailure(err: unknown): boolean {
-  return err instanceof HttpError && err.status === 0;
+  if (!(err instanceof HttpError)) return false;
+  if (err.status === 0 || err.status >= 500) return true;
+  return err.status < 300 && err.snippet.startsWith("Invalid JSON response");
 }
 
 /**
@@ -293,6 +313,9 @@ export async function runOmni(opts: RunOmniOptions): Promise<RunOmniResult> {
           apiKey,
           timeoutMs: settings.timeoutMs,
         });
+        if (!created || typeof created !== "object") {
+          throw new HttpError(200, "Invalid JSON response: empty body", "interactions");
+        }
         return { apiKey, keyName, created };
       } catch (err) {
         if (!ambiguousFailure(err)) throw err;

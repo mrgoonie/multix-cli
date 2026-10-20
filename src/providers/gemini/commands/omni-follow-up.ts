@@ -16,7 +16,7 @@ import { ValidationError } from "../../../core/errors.js";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import { assertInteractionId } from "../client.js";
-import { getDefaultModel, videoModelFamily } from "../models.js";
+import { GEMINI_OMNI_MODEL_DEFAULT, getDefaultModel, videoModelFamily } from "../models.js";
 import { type OmniCommonOptions, omniSettings, readSessionRecord, runOmni } from "../omni-run.js";
 import { copyToOutput } from "./generate-video.js";
 import {
@@ -42,6 +42,8 @@ export interface FollowUpSource {
   previousInteractionId?: string;
   videoPath?: string;
   keyEnv?: string;
+  /** Model recorded in the session file, if any. */
+  model?: string;
 }
 
 /** Resolve the single source of a follow-up and the key it must use. */
@@ -66,6 +68,7 @@ export function resolveFollowUpSource(opts: {
     return {
       previousInteractionId: assertInteractionId(record.interaction_id),
       keyEnv: opts.keyEnv ?? record.key_env,
+      model: record.model,
     };
   }
   return {
@@ -100,13 +103,24 @@ function registerFollowUp(
     .option("-v, --verbose", "Verbose logging");
   addOmniOptions(cmd).action(async (opts: FollowUpOptions) => {
     const logger = createLogger({ verbose: opts.verbose ?? false });
-    const model = opts.model ?? getDefaultModel("generate-video");
+    const source = resolveFollowUpSource(opts);
+    // A Veo VIDEO_GEN_MODEL must not leak into a follow-up: use the session's
+    // model, else an Omni env default, else the GA Omni model.
+    const envDefault = getDefaultModel("generate-video");
+    const model =
+      opts.model ??
+      source.model ??
+      (videoModelFamily(envDefault) === "omni" ? envDefault : GEMINI_OMNI_MODEL_DEFAULT);
     if (videoModelFamily(model) !== "omni") {
       throw new ValidationError(`${spec.name} needs a Gemini Omni model (got '${model}')`);
     }
     warnIfDeprecated(model, logger);
     const settings = omniSettings(opts);
-    const source = resolveFollowUpSource(opts);
+    if (opts.interactionId !== undefined && opts.keyEnv === undefined) {
+      logger.info(
+        "Interactions belong to the Google Cloud project of the key that created them; pass --key-env (or --session) if this one was made with another key.",
+      );
+    }
     if (source.videoPath) {
       logger.info(
         "Uploaded videos must be 10 s or shorter; editing or extending them is unavailable in the EEA, Switzerland and the UK.",

@@ -651,7 +651,7 @@
             {
               "long": "--background",
               "flags": "--background",
-              "description": "Omni: run in the background and poll by interaction id",
+              "description": "Omni: run in the background and poll by interaction id (default unless --no-store)",
               "required": false,
               "takesValue": false,
               "valueOptional": false,
@@ -796,7 +796,7 @@
             {
               "long": "--background",
               "flags": "--background",
-              "description": "Omni: run in the background and poll by interaction id",
+              "description": "Omni: run in the background and poll by interaction id (default unless --no-store)",
               "required": false,
               "takesValue": false,
               "valueOptional": false,
@@ -964,7 +964,7 @@
             {
               "long": "--background",
               "flags": "--background",
-              "description": "Omni: run in the background and poll by interaction id",
+              "description": "Omni: run in the background and poll by interaction id (default unless --no-store)",
               "required": false,
               "takesValue": false,
               "valueOptional": false,
@@ -1132,7 +1132,7 @@
             {
               "long": "--background",
               "flags": "--background",
-              "description": "Omni: run in the background and poll by interaction id",
+              "description": "Omni: run in the background and poll by interaction id (default unless --no-store)",
               "required": false,
               "takesValue": false,
               "valueOptional": false,

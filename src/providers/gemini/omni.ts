@@ -23,7 +23,8 @@ import { ProviderError, ValidationError } from "../../core/errors.js";
 import { type FetchLike, fetchJson } from "../../core/fetch-json.js";
 import { createInteraction, getInteraction } from "./client.js";
 
-const API_HOST = "generativelanguage.googleapis.com";
+export const OMNI_API_HOST = "generativelanguage.googleapis.com";
+const API_HOST = OMNI_API_HOST;
 const BASE = `https://${API_HOST}/v1beta`;
 
 export const OMNI_ASPECT_RATIOS = ["16:9", "9:16"] as const;

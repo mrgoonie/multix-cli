@@ -18,6 +18,7 @@ import {
 import {
   type OmniSessionRecord,
   omniSettings,
+  readSessionRecord,
   runOmni,
   sessionPathFor,
   writeSessionRecord,
@@ -253,6 +254,7 @@ describe("runOmni", () => {
       model: GEMINI_OMNI_MODEL_DEFAULT,
       input: "a boat",
       response_format: { type: "video", resolution: "720p", delivery: "uri" },
+      background: true,
     });
     for (const call of calls) expect(call.headers["x-goog-api-key"]).toBe(KEY);
     expect(fileGets).toBe(2);
@@ -320,6 +322,51 @@ describe("runOmni", () => {
         command: "test",
       }),
     ).rejects.toThrow(/may still finish and be billed/);
+    expect(calls).toHaveLength(1);
+  });
+
+  it.each([
+    ["a 503", () => json({ error: { message: "unavailable" } }, 503)],
+    ["a 200 with a body that is not JSON", () => new Response("<html>proxy</html>")],
+  ])("treats %s on create as possibly billed and does not resend it", async (_label, reply) => {
+    process.env.GEMINI_API_KEY_2 = KEY2;
+    stubFetch(reply);
+    await expect(
+      runOmni({
+        model: GEMINI_OMNI_MODEL_DEFAULT,
+        prompt: "x",
+        settings: settings(),
+        dest: path.join(tmp, "maybe.mp4"),
+        logger,
+        command: "test",
+      }),
+    ).rejects.toThrow(/may still finish and be billed/);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("runs stored interactions in the background by default, never with --no-store", () => {
+    expect(omniSettings({}).background).toBe(true);
+    expect(omniSettings({ store: false }).background).toBe(false);
+    expect(() => omniSettings({ store: false, background: true })).toThrow(ValidationError);
+  });
+
+  it("refuses a Gemini-host video URI it cannot map to a Files API name", async () => {
+    stubFetch((call) => {
+      if (call.method === "POST") {
+        return json(completed({ uri: `${API}/somewhere/else?alt=media` }));
+      }
+      throw new Error(`unexpected ${call.url}`);
+    });
+    await expect(
+      runOmni({
+        model: GEMINI_OMNI_MODEL_DEFAULT,
+        prompt: "x",
+        settings: settings(),
+        dest: path.join(tmp, "odd.mp4"),
+        logger,
+        command: "test",
+      }),
+    ).rejects.toThrow(/unexpected form/);
     expect(calls).toHaveLength(1);
   });
 
@@ -443,10 +490,18 @@ describe("follow-up sources and key pinning", () => {
     expect(resolveFollowUpSource({ session: record() })).toEqual({
       previousInteractionId: "v1_prev",
       keyEnv: "GEMINI_API_KEY_2",
+      model: GEMINI_OMNI_MODEL_DEFAULT,
     });
     expect(() => resolveFollowUpSource({ session: record({ store: false }) })).toThrow(
       /--no-store/,
     );
+  });
+
+  it("rejects session files with mistyped fields", () => {
+    const bad = (extra: Record<string, unknown>) => record(extra as Partial<OmniSessionRecord>);
+    expect(() => readSessionRecord(bad({ key_env: 123 }))).toThrow(/key_env/);
+    expect(() => readSessionRecord(bad({ key_env: "" }))).toThrow(/key_env/);
+    expect(() => readSessionRecord(bad({ store: "yes" }))).toThrow(/store/);
   });
 
   it("pins a named key without rotation", async () => {

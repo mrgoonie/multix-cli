@@ -80,7 +80,7 @@ multix gemini i2v ./first-frame.png --prompt "camera pans left" --last-frame ./l
 | `--delivery` | `uri` (mặc định), `inline` | Video lớn hơn khoảng 4 MB cần `uri`. |
 | `--task` | `text_to_video`, `image_to_video`, `reference_to_video`, `edit`, `extend` | Model thường tự suy ra tác vụ; chỉ dùng khi prompt chưa đủ. |
 | `--no-store` | | Interaction không được lưu, nên không thể chỉnh sửa, kéo dài hay tiếp tục lấy kết quả sau này. Không dùng chung được với `--background`. |
-| `--background` | | Server chạy request bất đồng bộ và CLI poll theo interaction id. |
+| `--background` | bật, trừ khi có `--no-store` | Server chạy request bất đồng bộ và CLI poll theo interaction id, nên id được lưu trước khi video xong. |
 | `--timeout` | 30–7200 giây (mặc định 900) | Tổng thời gian chờ cho lượt chạy. |
 
 `--delivery`, `--task`, `--no-store`, `--background` và `--timeout` bị từ chối
@@ -137,9 +137,12 @@ multix gemini video-status --session ./multix-output/omni_generated_176000000000
 
 ### An toàn cho request tính phí
 
-- Khi request tạo video gặp lỗi mạng hoặc timeout sau khi đã được gửi đi, CLI
-  không gửi lại, vì request đó vẫn có thể hoàn tất và bị tính phí. Thay vào đó
-  CLI gợi ý dùng `--background` và `video-status`.
+- Các lần chạy có lưu interaction mặc định dùng `--background`, nên interaction
+  id được ghi vào session file ngay và mất kết nối cũng không làm mất video đã
+  tính phí; lấy lại bằng `video-status`.
+- Khi request tạo video gặp lỗi mạng, lỗi 5xx hoặc phản hồi không đọc được sau
+  khi đã được gửi đi, CLI không gửi lại, vì request đó vẫn có thể hoàn tất và
+  bị tính phí.
 - Key chỉ xoay vòng khi gặp 429 hoặc `RESOURCE_EXHAUSTED` trước khi request
   được nhận. Polling, download và các lệnh tiếp nối dùng đúng key đã tạo
   interaction; xem [Xoay vòng Gemini key](/vi/reference/environment/#xoay-vòng-gemini-key).
