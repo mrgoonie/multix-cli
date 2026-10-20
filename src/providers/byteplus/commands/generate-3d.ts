@@ -9,6 +9,7 @@ import type { Command } from "commander";
 import { resolveImageInput } from "../../../core/image-input.js";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
+import { outputStamp } from "../../../core/output-name.js";
 import { PollFailedError, PollTimeoutError } from "../../leonardo/poll.js";
 import { createBytePlusClient } from "../client.js";
 import {
@@ -104,7 +105,7 @@ export function registerBytePlusGenerate3DCommand(parent: Command): void {
           const ext = inferModelFileExt(url);
           const outPath =
             opts.output ??
-            path.join(getOutputDir(), `byteplus-3d-${taskId.slice(0, 8)}-${Date.now()}.${ext}`);
+            path.join(getOutputDir(), `byteplus-3d-${taskId.slice(0, 8)}-${outputStamp()}.${ext}`);
           await downloadModelFile(url, outPath, logger);
           console.log(`\nTask: ${taskId}`);
           console.log(`Saved: ${outPath}`);

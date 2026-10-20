@@ -5,6 +5,7 @@ import { execa } from "execa";
 import { resolveKey } from "../../core/env-loader.js";
 import { ConfigError, ProviderError } from "../../core/errors.js";
 import { getOutputDir } from "../../core/output-dir.js";
+import { outputStamp } from "../../core/output-name.js";
 import {
   type OpenAIImageDriver,
   type OpenAIImageOutputFormat,
@@ -80,7 +81,7 @@ export async function runCodexImageGeneration(opts: {
   const ext = extFromImageFormat(opts.outputFormat);
   const dest = opts.output
     ? path.resolve(opts.output)
-    : path.join(getOutputDir(), `codex-image-${Date.now()}.${ext}`);
+    : path.join(getOutputDir(), `codex-image-${outputStamp()}.${ext}`);
   fs.mkdirSync(path.dirname(dest), { recursive: true });
 
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "multix-codex-image-"));

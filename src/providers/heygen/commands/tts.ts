@@ -7,6 +7,7 @@ import path from "node:path";
 import type { Command } from "commander";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
+import { outputStamp } from "../../../core/output-name.js";
 import { redactUrl } from "../../../core/redact.js";
 import { createHeygenClientFromEnv, downloadOutput, inferExtension } from "../node-helpers.js";
 import { buildSpeechRequest } from "../request-builders.js";
@@ -66,7 +67,7 @@ export function registerHeygenTtsCommand(parent: Command): void {
         return;
       }
       const ext = inferExtension(res.audio_url, "mp3");
-      const name = `heygen-tts-${res.request_id ?? Date.now()}.${ext}`.replace(/[^\w.-]+/g, "-");
+      const name = `heygen-tts-${res.request_id ?? outputStamp()}.${ext}`.replace(/[^\w.-]+/g, "-");
       const dest = opts.output ? path.resolve(opts.output) : path.join(getOutputDir(), name);
       await downloadOutput(res.audio_url, dest, "Re-run the command to generate a fresh URL.");
       if (opts.json) console.log(JSON.stringify({ ...summary, file: dest }, null, 2));

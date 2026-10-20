@@ -7,8 +7,8 @@
  *   js-genai SDK sends to this endpoint.
  *   GET  /v1beta/{operation.name} until done
  *   video URI at response.generateVideoResponse.generatedSamples[0].video.uri,
- *   downloaded with the same x-goog-api-key header (never forwarded to the
- *   storage host it redirects to).
+ *   downloaded with the same x-goog-api-key header when it is a Files API URI
+ *   (never forwarded to the storage host it redirects to).
  */
 
 import fs from "node:fs";
@@ -16,6 +16,7 @@ import { pollUntil } from "../../core/async-poll.js";
 import { HttpError, ProviderError, ValidationError } from "../../core/errors.js";
 import { downloadFile, httpJson } from "../../core/http-client.js";
 import type { Logger } from "../../core/logger.js";
+import { geminiFileNameFromUri } from "./client.js";
 import { withGeminiKey } from "./key-pool.js";
 import { getMimeType } from "./task-resolver.js";
 
@@ -158,18 +159,14 @@ function checkVeoResult(op: VeoOperation): VeoOperation {
 
 /**
  * Download the generated video. Gemini file URIs require the API key header;
- * it is only attached for https:// URIs on the Gemini API host, and
- * downloadFile drops it when the API redirects to storage on another origin,
- * so the key never goes elsewhere or over plain http.
+ * it is only attached for https:// Files API URIs on the Gemini API host
+ * (`/v1beta/files/<id>[:download]`), and downloadFile drops it when the API
+ * redirects to storage on another origin, so the key never goes to another
+ * host or over plain http. Any other URI is fetched without the key.
  */
 export async function downloadVeoVideo(apiKey: string, uri: string, dest: string): Promise<void> {
-  let parsed: URL;
-  try {
-    parsed = new URL(uri);
-  } catch {
-    throw new ProviderError("Veo returned an invalid video URI", "gemini");
-  }
-  const keyed = parsed.protocol === "https:" && parsed.hostname === API_HOST;
+  if (!URL.canParse(uri)) throw new ProviderError("Veo returned an invalid video URI", "gemini");
+  const keyed = geminiFileNameFromUri(uri) !== null;
   await downloadFile(uri, dest, 300_000, keyed ? headers(apiKey) : undefined);
 }
 

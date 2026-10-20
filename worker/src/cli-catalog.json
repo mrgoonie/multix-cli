@@ -985,7 +985,7 @@
             {
               "long": "--duration",
               "flags": "--duration <seconds>",
-              "description": "Omni only: video length, 3-10 seconds (model default when omitted)",
+              "description": "Omni only: length of the new continuation, 3-10 seconds (model default when omitted)",
               "required": false,
               "takesValue": true,
               "valueOptional": false,

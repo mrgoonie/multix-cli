@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.12.3](https://github.com/mrgoonie/multix-cli/compare/v1.12.2...v1.12.3) (2026-10-20)
+
+
+### Fixed
+
+* **gemini:** send the API key only to Files API paths in Veo downloads ([#263](https://github.com/mrgoonie/multix-cli/issues/263)) ([4aa1d31](https://github.com/mrgoonie/multix-cli/commit/4aa1d310b2e3dc084a9f7a09448f7690cc21f93d)), closes [#259](https://github.com/mrgoonie/multix-cli/issues/259) [#268](https://github.com/mrgoonie/multix-cli/issues/268)
+
+## [1.12.2](https://github.com/mrgoonie/multix-cli/compare/v1.12.1...v1.12.2) (2026-10-20)
+
+
+### Documentation
+
+* **worker:** state that the video cap bounds each Gemini extend, not a chain ([#266](https://github.com/mrgoonie/multix-cli/issues/266)) ([45088cb](https://github.com/mrgoonie/multix-cli/commit/45088cb8f0e645568a2db9420045ef9c1d63bbd9))
+
+## [1.12.1](https://github.com/mrgoonie/multix-cli/compare/v1.12.0...v1.12.1) (2026-10-20)
+
+
+### Fixed
+
+* **core:** add a random suffix to timestamp-based output file names ([#265](https://github.com/mrgoonie/multix-cli/issues/265)) ([a662f3a](https://github.com/mrgoonie/multix-cli/commit/a662f3a33d655974ce0362d513076931d5a79e8d)), closes [#260](https://github.com/mrgoonie/multix-cli/issues/260)
+
 ## [1.12.0](https://github.com/mrgoonie/multix-cli/compare/v1.11.0...v1.12.0) (2026-10-20)
 
 

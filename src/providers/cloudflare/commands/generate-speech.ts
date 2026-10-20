@@ -1,6 +1,7 @@
 import type { Command } from "commander";
 import { ValidationError } from "../../../core/errors.js";
 import { createLogger } from "../../../core/logger.js";
+import { outputStamp } from "../../../core/output-name.js";
 import { runCloudflareBytes } from "../client.js";
 import { saveBytes } from "../media-output.js";
 import { getCloudflareModel } from "../models.js";
@@ -33,7 +34,7 @@ export function registerCloudflareSpeechCommand(parent: Command): void {
 
         logger.debug(`Cloudflare speech model=${model}`);
         const bytes = await runCloudflareBytes(model, input);
-        const destination = saveBytes(bytes, `cloudflare_speech_${Date.now()}.mp3`, opts.output);
+        const destination = saveBytes(bytes, `cloudflare_speech_${outputStamp()}.mp3`, opts.output);
         logger.success(`Saved ${destination}`);
         console.log(destination);
       },

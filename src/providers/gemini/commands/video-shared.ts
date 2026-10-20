@@ -72,7 +72,7 @@ export function addVideoFormatOptions(
   if (opts.duration) {
     cmd.option(
       "--duration <seconds>",
-      `Omni only: video length, ${OMNI_MIN_DURATION_SECONDS}-${OMNI_MAX_DURATION_SECONDS} seconds (model default when omitted)`,
+      `Omni only: ${opts.followUp ? "length of the new continuation" : "video length"}, ${OMNI_MIN_DURATION_SECONDS}-${OMNI_MAX_DURATION_SECONDS} seconds (model default when omitted)`,
     );
   }
   return cmd;

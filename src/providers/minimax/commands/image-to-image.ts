@@ -24,6 +24,7 @@ import {
 } from "../../../core/image-webp-finalize.js";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
+import { outputStamp } from "../../../core/output-name.js";
 import { apiPost, requireMinimaxKey } from "../client.js";
 import { TASK_DEFAULTS } from "../models.js";
 
@@ -111,7 +112,7 @@ export function registerMinimaxImageToImageCommand(parent: Command): void {
         }
 
         const outDir = getOutputDir();
-        const ts = Date.now();
+        const ts = outputStamp();
         const saved: string[] = [];
         for (let i = 0; i < imageUrls.length; i++) {
           const url = imageUrls[i];

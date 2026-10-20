@@ -65,7 +65,7 @@ multix gemini i2v ./first-frame.png --prompt "camera pans left" --last-frame ./l
 - `--reference-images` với một hoặc hai ảnh sẽ đặt khung hình đầu và cuối;
   nhiều ảnh hơn được dùng làm ảnh tham chiếu chủ thể.
 - Mỗi request được lưu trữ và chạy nền. Interaction id được ghi vào
-  `gemini_omni_<timestamp>.json` trong thư mục output trước khi bắt đầu
+  `gemini_omni_<timestamp>-<random>.json` trong thư mục output trước khi bắt đầu
   polling. Khi thành công, stdout in `Generated video: <path>` và
   `Interaction ID: <id>`.
 - `--no-wait` gửi request, in JSON `{interaction_id, status, session}` rồi
