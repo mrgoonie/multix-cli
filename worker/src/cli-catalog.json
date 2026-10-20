@@ -459,6 +459,27 @@
               "short": "-m"
             },
             {
+              "long": "--aspect-ratio",
+              "flags": "--aspect-ratio <ratio>",
+              "description": "Aspect ratio (1:1|2:3|3:2|3:4|4:3|4:5|5:4|9:16|16:9|21:9)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "1:1"
+            },
+            {
+              "long": "--size",
+              "flags": "--size <sz>",
+              "description": "Image size (1K|2K|4K)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
               "long": "--output",
               "flags": "--output <path>",
               "description": "Save first generated image to this path",
@@ -1127,6 +1148,84 @@
               "valueOptional": false,
               "variadic": false,
               "negatable": false
+            }
+          ]
+        },
+        {
+          "command": "gemini omni-video",
+          "description": "Generate or edit video with Gemini Omni Flash (beta alias; prefer generate-video / edit-video)",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--prompt",
+              "flags": "--prompt <text>",
+              "description": "Video prompt or concise edit instruction",
+              "required": true,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--image",
+              "flags": "--image <paths...>",
+              "description": "Local image guidance files",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": true,
+              "negatable": false
+            },
+            {
+              "long": "--video",
+              "flags": "--video <path>",
+              "description": "One local video to edit (not available in EEA/CH/UK)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--previous-interaction-id",
+              "flags": "--previous-interaction-id <id>",
+              "description": "Continue a prior Gemini-stored interaction",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--upload-timeout",
+              "flags": "--upload-timeout <ms>",
+              "description": "Ignored; kept for compatibility",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--output",
+              "flags": "--output <path>",
+              "description": "Copy generated video to this path",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
             }
           ]
         },

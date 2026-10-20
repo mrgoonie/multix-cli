@@ -184,6 +184,9 @@ multix gemini edit-video --video ./clip.mp4 --prompt "turn it into a watercolor"
 # Check, wait for, or download an interaction (recover a run that timed out locally)
 multix gemini video-status --session ./omni_generated_<ts>.interaction.json --wait --download
 
+# Beta alias kept from 0.1.0-beta: omni-video (--image, --video, --previous-interaction-id) runs the same Omni pipeline
+multix gemini omni-video --prompt "make it night" --previous-interaction-id <id>
+
 # Veo (legacy): pass a veo-* model; Omni-only flags are rejected
 multix gemini generate-video --prompt "Ocean waves" --model veo-3.1-generate-preview [--resolution 720p|1080p]
 
@@ -197,7 +200,7 @@ multix gemini generate-speech --text "Joe: How's it going? Jane: Not too bad!" \
 
 **Gemini models:**
 - Text output (analyze, transcribe, extract, doc convert): `gemini-3.6-flash` (default), `gemini-3.5-flash` (manual override)
-- Image gen: `gemini-3.1-flash-image-preview` (Nano Banana 2, fastest), `gemini-3-pro-image-preview` (4K text), `imagen-4.0-generate-001` (production)
+- Image gen: `gemini-3.1-flash-image-preview` (Nano Banana 2, fastest), `gemini-3-pro-image-preview` (4K text), `imagen-4.0-generate-001` (production), `gemini-3.1-flash-lite-image` (Nano Banana 2 Lite, 1K only; `image-to-image` also takes `--aspect-ratio` and `--size`)
 - Video: `gemini-omni-1.1-flash` (default, about $0.10 per second of 720p output), Veo via `--model veo-*` (requires billing)
 
 **Gemini Omni video:** `--resolution` 1080p and 4k are upscales (default 720p). Results are fetched by URI by default (`--delivery inline` returns base64; videos over about 4 MB need `uri`); the CLI waits for the file to become `ACTIVE` and sends the API key only to `generativelanguage.googleapis.com`. Each stored run writes `<video>.interaction.json` next to the video (mode 0600) with the interaction id, model, the key's env var name (never its value), status and usage. `edit-video`/`extend-video --session` reuse that key, since interactions belong to one Google Cloud project; override with `--key-env GEMINI_API_KEY_2`. `--no-store` skips server storage, so the run cannot be edited, extended or resumed. Editing or extending uploaded videos is unavailable in the EEA, Switzerland and the UK.

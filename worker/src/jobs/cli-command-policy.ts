@@ -89,6 +89,7 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
     caps: { resolution: ["resolution"] },
   },
   "gemini video-status": { fileOptions: { session: "file" } },
+  "gemini omni-video": { fileOptions: { image: "file", video: "file" } },
   "minimax generate": { caps: IMAGE_COUNT },
   "minimax image-to-image": { fileOptions: { ref: "file" }, caps: IMAGE_COUNT },
   "minimax generate-video": { urlOptions: ["first-frame"], caps: VIDEO_CAPS },

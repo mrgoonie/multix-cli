@@ -181,7 +181,13 @@ describe("multix --help (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     const result = await run(["gemini", "--help"]);
     expect(result.exitCode).toBe(0);
     const out = result.stdout + result.stderr;
-    for (const sub of ["image-to-video", "edit-video", "extend-video", "video-status"]) {
+    for (const sub of [
+      "image-to-video",
+      "edit-video",
+      "extend-video",
+      "video-status",
+      "omni-video",
+    ]) {
       expect(out).toContain(sub);
     }
   });

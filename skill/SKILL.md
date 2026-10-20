@@ -318,6 +318,7 @@ multix gemini extend-video --session ./omni_generated_<ts>.interaction.json --pr
 # Recover a run that timed out locally (no second generation is billed)
 multix gemini video-status --session ./omni_generated_<ts>.interaction.json --wait --download
 # Veo (legacy, preview models shut down 2026-10-22): --model veo-3.1-generate-preview
+# `gemini omni-video` remains as a beta alias of the Omni pipeline; prefer the commands above
 
 # MiniMax Hailuo — async with auto-poll
 multix minimax generate-video --prompt "A dancer" --duration 6 --resolution 1080P [--first-frame <url>]
