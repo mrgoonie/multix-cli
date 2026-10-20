@@ -379,17 +379,27 @@ describe("downloadVeoVideo", () => {
     ["a nested Files path", "https://generativelanguage.googleapis.com/v1beta/files/abc/x"],
     ["a non-default port", "https://generativelanguage.googleapis.com:8443/v1beta/files/abc"],
     ["plain http", "http://generativelanguage.googleapis.com/v1beta/files/abc:download"],
+    ["a dot-segment path", "https://generativelanguage.googleapis.com/v1beta/files/../models/x"],
+    ["an encoded slash", "https://generativelanguage.googleapis.com/v1beta/files/abc%2F..%2Fx"],
   ])("does not send the API key to %s on the Gemini API host", async (_, uri) => {
     stubFetch(() => new Response("X", { status: 200 }));
     await downloadVeoVideo(KEY, uri, path.join(tmp, "d.mp4"));
     expect(calls[0]?.headers["x-goog-api-key"]).toBeUndefined();
   });
 
-  it("sends the API key to a Files API resource URI without :download", async () => {
+  it.each([
+    ["without :download", "https://generativelanguage.googleapis.com/v1beta/files/abc"],
+    ["with the default port", "https://generativelanguage.googleapis.com:443/v1beta/files/abc"],
+  ])("sends the API key to a Files API resource URI %s", async (_, uri) => {
     stubFetch(() => new Response("X", { status: 200 }));
-    const uri = "https://generativelanguage.googleapis.com/v1beta/files/abc";
     await downloadVeoVideo(KEY, uri, path.join(tmp, "e.mp4"));
     expect(calls[0]?.headers["x-goog-api-key"]).toBe(KEY);
+  });
+
+  it("rejects an invalid video URI", async () => {
+    await expect(downloadVeoVideo(KEY, "not a url", path.join(tmp, "f.mp4"))).rejects.toThrow(
+      "invalid video URI",
+    );
   });
 
   it("surfaces failed downloads", async () => {
