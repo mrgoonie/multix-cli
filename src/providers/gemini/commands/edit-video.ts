@@ -63,6 +63,12 @@ function registerFollowUp(
       if (!isOmniVideoModel(model)) {
         throw new ValidationError(`${spec.name} needs a Gemini Omni model (got '${model}')`);
       }
+      // The API answers HTTP 400 to an aspect ratio beside task "extend"; fail before the upload.
+      if (spec.task === "extend" && opts.video && opts.aspectRatio) {
+        throw new ValidationError(
+          "extend-video --video keeps the source aspect ratio; drop --aspect-ratio",
+        );
+      }
       // Without explicit flags the follow-up keeps the source's own format.
       const format = omniFormat(opts, false);
 

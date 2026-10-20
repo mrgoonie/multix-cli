@@ -581,6 +581,7 @@ describe("runOmniVideo: follow-up turns", () => {
     expect(submit?.body?.previous_interaction_id).toBe(parent);
     // The API rejects a video task beside previous_interaction_id.
     expect(submit?.body).not.toHaveProperty("generation_config");
+    expect(submit?.body?.input).toBe("Edit this video: a cat");
     expect(
       calls.filter((c) => c.url.endsWith(`/interactions/${ID}`)).every((c) => c.key === KEY2),
     ).toBe(true);

@@ -6,6 +6,7 @@ import {
   estimateOmniCost,
   extractOmniText,
   extractOmniVideo,
+  followUpPrompt,
   interactionFailureMessage,
   isTerminalInteraction,
   parseOmniDuration,
@@ -84,6 +85,33 @@ describe("buildOmniRequest", () => {
     expect(body.previous_interaction_id).toBe("v1_parent");
     expect(body).not.toHaveProperty("generation_config");
     expect(body.response_format).toMatchObject({ duration: "3s" });
+  });
+
+  it("puts the edit or extend intent in a follow-up prompt, since the task cannot be sent", () => {
+    const extend = buildOmniRequest({
+      model: MODEL,
+      prompt: "the ball turns blue",
+      previousInteractionId: "v1_parent",
+      task: "extend",
+    });
+    expect(extend.input).toBe("Extend this video: the ball turns blue");
+    const edit = buildOmniRequest({
+      model: MODEL,
+      prompt: "the ball falls off the table",
+      previousInteractionId: "v1_parent",
+      task: "edit",
+      media: [{ type: "image", data: "AAAA", mime_type: "image/png" }],
+    });
+    expect(edit.input).toEqual([
+      { type: "image", data: "AAAA", mime_type: "image/png" },
+      { type: "text", text: "Edit this video: the ball falls off the table" },
+    ]);
+  });
+
+  it("keeps a first-turn prompt as given, since the task travels in generation_config", () => {
+    const body = buildOmniRequest({ model: MODEL, prompt: "continue", task: "extend" });
+    expect(body.input).toBe("continue");
+    expect(body.generation_config).toEqual({ video_config: { task: "extend" } });
   });
 
   it("strips a models/ prefix from the model id", () => {
@@ -437,5 +465,27 @@ describe("interactionFailureMessage", () => {
         steps: [{ type: "model_output", content: [{ type: "text", text: "Blocked by policy." }] }],
       }),
     ).toBe("Gemini Omni interaction v1_y incomplete: Blocked by policy.");
+  });
+});
+
+describe("followUpPrompt", () => {
+  it("prefixes edit and extend prompts", () => {
+    expect(followUpPrompt("  make it night", "edit")).toBe("Edit this video: make it night");
+    expect(followUpPrompt("pan out", "extend")).toBe("Extend this video: pan out");
+  });
+
+  it("does not repeat an intent the prompt already states", () => {
+    expect(followUpPrompt("Extend this video: pan out", "extend")).toBe(
+      "Extend this video: pan out",
+    );
+    expect(followUpPrompt("extend this video by panning out", "extend")).toBe(
+      "extend this video by panning out",
+    );
+    expect(followUpPrompt("EDIT THIS VIDEO: night", "edit")).toBe("EDIT THIS VIDEO: night");
+  });
+
+  it("leaves the prompt alone without an edit or extend task", () => {
+    expect(followUpPrompt("pan out", undefined)).toBe("pan out");
+    expect(followUpPrompt("pan out", "text_to_video")).toBe("pan out");
   });
 });

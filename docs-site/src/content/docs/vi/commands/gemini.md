@@ -63,7 +63,9 @@ multix gemini i2v ./first-frame.png --prompt "camera pans left" --last-frame ./l
   `--aspect-ratio` nhận `16:9` (mặc định) hoặc `9:16`; `--duration` nhận 3–10
   giây, nếu bỏ trống thì model tự chọn độ dài.
 - `--reference-images` với một hoặc hai ảnh sẽ đặt khung hình đầu và cuối;
-  nhiều ảnh hơn được dùng làm ảnh tham chiếu chủ thể.
+  nhiều ảnh hơn được dùng làm ảnh tham chiếu chủ thể. `i2v --last-frame` gửi
+  ảnh mở đầu trước và ảnh kết thúc sau, nên video bắt đầu ở ảnh thứ nhất và
+  kết thúc ở ảnh thứ hai.
 - Mỗi request được lưu trữ và chạy nền. Interaction id được ghi vào
   `gemini_omni_<timestamp>.json` trong thư mục output trước khi bắt đầu
   polling. Khi thành công, stdout in `Generated video: <path>` và
@@ -91,11 +93,19 @@ multix gemini extend-video --prompt "the camera follows the ball out the door" \
 ```
 
 Nếu không truyền `--resolution` hoặc `--aspect-ratio`, kết quả giữ nguyên định
-dạng của video nguồn. Chỉ interaction đã hoàn tất mới được chỉnh sửa hoặc nối
+dạng của video nguồn. `extend-video --video` không nhận `--aspect-ratio` (API
+từ chối tham số này khi nối dài); đoạn tiếp theo giữ khung hình của video
+nguồn. Chỉ interaction đã hoàn tất mới được chỉnh sửa hoặc nối
 dài. Chỉnh sửa hoặc nối dài video upload không khả dụng ở EEA, Thụy Sĩ và Vương
 quốc Anh; chỉnh sửa video đã tạo bằng `--interaction-id` vẫn dùng được ở đó.
 Interaction đã lưu và file đã upload sẽ hết hạn (file trên Files API sau khoảng
 48 giờ).
+
+Với `--video`, request ghi rõ tác vụ (`edit` hoặc `extend`). Với
+`--interaction-id`, API không nhận tác vụ, nên multix thêm `Edit this video:`
+hoặc `Extend this video:` vào đầu prompt, trừ khi prompt đã có sẵn. Nếu không,
+model tự đoán theo câu chữ: "the ball turns blue" gửi để nối dài lại bị hiểu
+thành chỉnh sửa.
 
 ### Trạng thái, tiếp tục và hủy
 

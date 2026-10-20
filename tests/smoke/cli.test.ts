@@ -192,6 +192,21 @@ describe("multix --help (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     }
   });
 
+  it("refuses --aspect-ratio when extending an uploaded video, before any upload", async () => {
+    const result = await run([
+      "gemini",
+      "extend-video",
+      "--video",
+      "missing.mp4",
+      "--aspect-ratio",
+      "16:9",
+      "--prompt",
+      "pan out",
+    ]);
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stdout + result.stderr).toContain("drop --aspect-ratio");
+  });
+
   it("documents Omni duration and --no-wait on gemini generate-video", async () => {
     const result = await run(["gemini", "generate-video", "--help"]);
     expect(result.exitCode).toBe(0);
