@@ -90,7 +90,7 @@ export function addOmniFlowOptions(cmd: Command): Command {
     )
     .option(
       "--wait-timeout <ms>",
-      "Omni: how long to wait for the video",
+      "Omni: deadline for uploads, submit and polling (saving the video has its own budget)",
       String(OMNI_DEFAULT_WAIT_MS),
     );
 }

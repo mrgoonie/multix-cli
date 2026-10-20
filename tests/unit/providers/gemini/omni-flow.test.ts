@@ -17,6 +17,7 @@ import {
   checkOmniMedia,
   copyToOutput,
   findInteractionKey,
+  interactionMaxBytes,
   runOmniVideo,
   saveOmniVideo,
 } from "../../../../src/providers/gemini/omni-flow.js";
@@ -396,6 +397,103 @@ describe("runOmniVideo: generate, poll and save", () => {
     expect(error).toBeInstanceOf(PollTimeoutError);
     expect((error as Error).message).toContain("gemini video-status v1_abc123 --download");
     expect(readRecord()).toMatchObject({ interaction_id: ID, status: "in_progress" });
+  });
+
+  it("stops at once, without polling again, when the final GET is over the size cap", async () => {
+    let polls = 0;
+    stubFetch((c) => {
+      if (isSubmit(c)) return json({ id: ID, status: "in_progress" });
+      if (isPoll(ID)(c)) {
+        polls++;
+        // An inline video larger than the base64 size of MULTIX_MAX_DOWNLOAD_MB.
+        return new Response("{}", {
+          status: 200,
+          headers: { "content-length": String(interactionMaxBytes() + 1) },
+        });
+      }
+      throw new Error(`unexpected ${c.method} ${c.url}`);
+    });
+
+    const error = errorOf(await settle(runOmniVideo(runOpts())));
+    expect(error).toBeInstanceOf(ProviderError);
+    expect((error as Error).message).toContain("MULTIX_MAX_DOWNLOAD_MB");
+    expect((error as Error).message).toContain("gemini video-status v1_abc123 --download");
+    expect(polls).toBe(1);
+    expect(readRecord()).toMatchObject({ interaction_id: ID });
+  });
+
+  it("caps an Interaction read at the base64 size of MULTIX_MAX_DOWNLOAD_MB plus JSON room", () => {
+    process.env.MULTIX_MAX_DOWNLOAD_MB = "3";
+    try {
+      expect(interactionMaxBytes()).toBe(4 * 1024 * 1024 + 64 * 1024 * 1024);
+    } finally {
+      Reflect.deleteProperty(process.env, "MULTIX_MAX_DOWNLOAD_MB");
+    }
+  });
+
+  it("polls only for the part of --wait-timeout the submit left over", async () => {
+    stubFetch((c) => {
+      if (isSubmit(c)) {
+        vi.setSystemTime(Date.now() + 50_000);
+        return json({ id: ID, status: "in_progress" });
+      }
+      if (isPoll(ID)(c)) return json({ id: ID, status: "in_progress" });
+      throw new Error(`unexpected ${c.method} ${c.url}`);
+    });
+
+    const started = Date.now();
+    const error = errorOf(await settle(runOmniVideo(runOpts({ waitTimeoutMs: 60_000 }))));
+    expect(error).toBeInstanceOf(PollTimeoutError);
+    expect(Date.now() - started).toBeLessThanOrEqual(62_000);
+  });
+
+  it("submits nothing when --wait-timeout runs out during the upload", async () => {
+    const clip = path.join(tmp, "clip.mp4");
+    fs.writeFileSync(clip, "video-bytes");
+    stubFetch((c) => {
+      if (c.url === "https://generativelanguage.googleapis.com/upload/v1beta/files") {
+        return new Response("", {
+          status: 200,
+          headers: {
+            "x-goog-upload-url": "https://generativelanguage.googleapis.com/upload/session/1",
+          },
+        });
+      }
+      if (c.url.startsWith("https://generativelanguage.googleapis.com/upload/session")) {
+        vi.setSystemTime(Date.now() + 61_000);
+        return new Response(
+          JSON.stringify({
+            file: {
+              name: "files/src1",
+              uri: `${API}/files/src1`,
+              state: "ACTIVE",
+              mimeType: "video/mp4",
+            },
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json", "x-goog-upload-status": "final" },
+          },
+        );
+      }
+      throw new Error(`unexpected ${c.method} ${c.url}`);
+    });
+
+    const error = errorOf(
+      await settle(
+        runOmniVideo(
+          runOpts({
+            request: { ...baseRequest, task: "edit" },
+            videoPath: clip,
+            waitTimeoutMs: 60_000,
+          }),
+        ),
+      ),
+    );
+    expect(error).toBeInstanceOf(ProviderError);
+    expect((error as Error).message).toContain("nothing was submitted");
+    expect(calls.filter(isSubmit)).toHaveLength(0);
+    expect(fs.existsSync(outDir)).toBe(false);
   });
 
   it("keeps polling through a transient 503 from the status endpoint", async () => {

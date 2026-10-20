@@ -75,3 +75,24 @@ export class HttpError extends MultixError {
     this.name = "HttpError";
   }
 }
+
+/**
+ * A response body exceeded the caller's byte cap; reading stopped there.
+ * Not an HttpError, so polling and retry helpers never fetch it again.
+ */
+export class ResponseTooLargeError extends MultixError {
+  /** Request URL with query string and fragment redacted. */
+  public readonly url: string;
+
+  constructor(
+    public readonly limitBytes: number,
+    url: string,
+  ) {
+    super(
+      `Response from ${redactUrl(url)} is larger than ${limitBytes} bytes`,
+      "RESPONSE_TOO_LARGE",
+    );
+    this.url = redactUrl(url);
+    this.name = "ResponseTooLargeError";
+  }
+}

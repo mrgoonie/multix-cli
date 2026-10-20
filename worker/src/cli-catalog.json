@@ -590,7 +590,7 @@
             {
               "long": "--wait-timeout",
               "flags": "--wait-timeout <ms>",
-              "description": "Omni: how long to wait for the video",
+              "description": "Omni: deadline for uploads, submit and polling (saving the video has its own budget)",
               "required": false,
               "takesValue": true,
               "valueOptional": false,
@@ -737,7 +737,7 @@
             {
               "long": "--wait-timeout",
               "flags": "--wait-timeout <ms>",
-              "description": "Omni: how long to wait for the video",
+              "description": "Omni: deadline for uploads, submit and polling (saving the video has its own budget)",
               "required": false,
               "takesValue": true,
               "valueOptional": false,
@@ -876,7 +876,7 @@
             {
               "long": "--wait-timeout",
               "flags": "--wait-timeout <ms>",
-              "description": "Omni: how long to wait for the video",
+              "description": "Omni: deadline for uploads, submit and polling (saving the video has its own budget)",
               "required": false,
               "takesValue": true,
               "valueOptional": false,
@@ -1015,7 +1015,7 @@
             {
               "long": "--wait-timeout",
               "flags": "--wait-timeout <ms>",
-              "description": "Omni: how long to wait for the video",
+              "description": "Omni: deadline for uploads, submit and polling (saving the video has its own budget)",
               "required": false,
               "takesValue": true,
               "valueOptional": false,

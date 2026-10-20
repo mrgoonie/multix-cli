@@ -10,16 +10,33 @@
  *   created the interaction (it belongs to that key's project).
  * - The interaction id is written to a session record before polling starts,
  *   so a timeout or crash can be resumed with `gemini video-status`.
+ *
+ * Time and memory:
+ * - `--wait-timeout` is one deadline from the start of the command to the
+ *   finished interaction: uploads, the submit and polling all spend it. Once
+ *   the video is ready, waiting for its file and downloading it have their
+ *   own budget (FILE_ACTIVE_TIMEOUT_MS + DOWNLOAD_TIMEOUT_MS).
+ * - An Interaction can carry the video inline as base64 (always with
+ *   --no-store, sometimes on the final GET of a stored one), so every read of
+ *   it is capped at the base64 size of MULTIX_MAX_DOWNLOAD_MB plus some JSON,
+ *   and only the wait for response headers has a short per-request limit.
  */
 
 import fs from "node:fs";
 import path from "node:path";
 import { PollTimeoutError, pollUntil } from "../../core/async-poll.js";
-import { ConfigError, HttpError, ProviderError, ValidationError } from "../../core/errors.js";
+import {
+  ConfigError,
+  HttpError,
+  ProviderError,
+  ResponseTooLargeError,
+  ValidationError,
+} from "../../core/errors.js";
 import { downloadToFile, maxDownloadBytes } from "../../core/http-client.js";
 import type { Logger } from "../../core/logger.js";
 import { getOutputDir } from "../../core/output-dir.js";
 import {
+  type InteractionReadOptions,
   assertInteractionId,
   createInteraction,
   fileDownloadUrl,
@@ -44,11 +61,48 @@ import {
 import { getMimeType } from "./task-resolver.js";
 
 const SUBMIT_TIMEOUT_MS = 120_000;
-/** A synchronous (unstored) request holds the connection until the video is done. */
-const SYNC_SUBMIT_TIMEOUT_MS = 15 * 60 * 1000;
 export const OMNI_DEFAULT_WAIT_MS = 15 * 60 * 1000;
 const FILE_ACTIVE_TIMEOUT_MS = 5 * 60 * 1000;
 const DOWNLOAD_TIMEOUT_MS = 10 * 60 * 1000;
+/** How long one status request may wait for its response headers before it is retried. */
+const RESPONSE_HEADERS_TIMEOUT_MS = 60_000;
+/** Room for the JSON around an inline video (ids, text, usage, echoed input steps). */
+const INTERACTION_JSON_OVERHEAD_BYTES = 64 * 1024 * 1024;
+
+/**
+ * Largest Interaction body read into memory: the base64 form of a video at
+ * the MULTIX_MAX_DOWNLOAD_MB cap, plus the JSON around it.
+ */
+export function interactionMaxBytes(): number {
+  return Math.ceil(maxDownloadBytes() / 3) * 4 + INTERACTION_JSON_OVERHEAD_BYTES;
+}
+
+/**
+ * Limits for reading an Interaction that may hold the video inline: the body
+ * gets all of `timeoutMs`, while a request that gets no answer at all is
+ * dropped after a minute so polling can retry it.
+ */
+function interactionReadLimits(timeoutMs: number): InteractionReadOptions {
+  return {
+    timeoutMs,
+    responseTimeoutMs: Math.min(timeoutMs, RESPONSE_HEADERS_TIMEOUT_MS),
+    maxBytes: interactionMaxBytes(),
+  };
+}
+
+/** Explain an Interaction body over the cap; other errors pass through. */
+function oversizedInteraction(error: unknown, interactionId?: string): unknown {
+  if (!(error instanceof ResponseTooLargeError)) return error;
+  const what = interactionId ? `interaction ${interactionId}` : "response";
+  const next = interactionId
+    ? `Raise MULTIX_MAX_DOWNLOAD_MB and resume with: ${resumeCommand(interactionId)}`
+    : "The video was not saved but may be billed; raise MULTIX_MAX_DOWNLOAD_MB before trying again.";
+  return new ProviderError(
+    `Gemini Omni ${what} is larger than ${error.limitBytes} bytes because the video came back inline. ${next}`,
+    "gemini",
+    { cause: error },
+  );
+}
 
 export interface GeminiKeyChoice {
   apiKey: string;
@@ -156,8 +210,9 @@ async function buildMediaParts(
 export async function findInteractionKey(
   interactionId: string,
   logger: Logger,
-  env: NodeJS.ProcessEnv = process.env,
+  opts: { timeoutMs?: number; env?: NodeJS.ProcessEnv } = {},
 ): Promise<GeminiKeyChoice & { interaction: Interaction }> {
+  const { timeoutMs = DOWNLOAD_TIMEOUT_MS, env = process.env } = opts;
   const id = assertInteractionId(interactionId);
   const keys = listGeminiKeys(env);
   if (keys.length === 0) {
@@ -168,10 +223,15 @@ export async function findInteractionKey(
   let lastError: unknown;
   for (const key of keys) {
     try {
-      const interaction = (await getInteraction(id, { apiKey: key.value })) as Interaction;
+      const interaction = (await getInteraction(id, {
+        apiKey: key.value,
+        ...interactionReadLimits(timeoutMs),
+      })) as Interaction;
       return { apiKey: key.value, keyName: key.name, interaction };
     } catch (error) {
-      if (!(error instanceof HttpError) || ![403, 404, 429].includes(error.status)) throw error;
+      if (!(error instanceof HttpError) || ![403, 404, 429].includes(error.status)) {
+        throw oversizedInteraction(error, id);
+      }
       lastError = error;
       if (keys.length > 1) logger.debug(`${key.name} cannot read ${id} (HTTP ${error.status})`);
     }
@@ -247,13 +307,23 @@ export async function runOmniVideo(
   if (!store && !opts.wait) {
     throw new ValidationError("--no-wait needs a stored interaction; drop --no-store");
   }
+  const deadline = Date.now() + opts.waitTimeoutMs;
 
   const submit = async (key: GeminiKeyChoice) => {
     const media = await buildMediaParts(opts, key.apiKey, logger);
     const body = buildOmniRequest({ ...request, media });
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) {
+      throw new ProviderError(
+        `--wait-timeout (${opts.waitTimeoutMs} ms) ran out before the request was sent; nothing was submitted`,
+        "gemini",
+      );
+    }
+    // An unstored request holds the connection until the video is done.
     const resp = (await createInteraction(body, {
       apiKey: key.apiKey,
-      timeoutMs: store ? SUBMIT_TIMEOUT_MS : SYNC_SUBMIT_TIMEOUT_MS,
+      timeoutMs: store ? Math.min(SUBMIT_TIMEOUT_MS, remainingMs) : remainingMs,
+      maxBytes: interactionMaxBytes(),
     })) as Interaction;
     return { ...key, resp };
   };
@@ -262,7 +332,9 @@ export async function runOmniVideo(
   try {
     if (request.previousInteractionId) {
       // A follow-up must run in the project that stored its parent.
-      const parent = await findInteractionKey(request.previousInteractionId, logger);
+      const parent = await findInteractionKey(request.previousInteractionId, logger, {
+        timeoutMs: Math.max(1, deadline - Date.now()),
+      });
       if (parent.interaction.status !== "completed") {
         throw new ValidationError(
           `Interaction ${request.previousInteractionId} is ${parent.interaction.status ?? "not completed"}; only a completed interaction can be edited or extended`,
@@ -275,7 +347,7 @@ export async function runOmniVideo(
       });
     }
   } catch (error) {
-    throw submitError(error);
+    throw submitError(oversizedInteraction(error));
   }
 
   const { apiKey, keyName } = accepted;
@@ -325,7 +397,12 @@ export async function runOmniVideo(
   if (interactionId && !isTerminalInteraction(interaction.status)) {
     logger.info("Generating video with Gemini Omni (usually under a few minutes)...");
     try {
-      interaction = await waitForInteraction(interactionId, apiKey, opts.waitTimeoutMs, logger);
+      interaction = await waitForInteraction(
+        interactionId,
+        apiKey,
+        Math.max(1, deadline - Date.now()),
+        logger,
+      );
     } catch (error) {
       if (error instanceof PollTimeoutError) writeRecord(recordPath, record);
       throw error;
@@ -362,10 +439,15 @@ export async function waitForInteraction(
   sleep?: (ms: number) => Promise<void>,
 ): Promise<Interaction> {
   return pollUntil<Interaction>({
+    // The final GET may carry the video inline, so its body gets the rest of
+    // the wait instead of a per-request limit that would cut it off and
+    // download it again on every poll.
     fetchStatus: ({ remainingMs }) =>
       getInteraction(interactionId, {
         apiKey,
-        timeoutMs: Math.min(remainingMs, 60_000),
+        ...interactionReadLimits(remainingMs),
+      }).catch((error: unknown) => {
+        throw oversizedInteraction(error, interactionId);
       }) as Promise<Interaction>,
     isTerminal: (it) => isTerminalInteraction(it.status),
     timeoutMs,

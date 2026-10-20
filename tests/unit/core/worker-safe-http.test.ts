@@ -12,6 +12,7 @@ import {
   ConfigError,
   HttpError,
   ProviderError,
+  ResponseTooLargeError,
   ValidationError,
 } from "../../../src/core/errors.js";
 import { isNetworkFetchFailure, toFetchError } from "../../../src/core/fetch-error.js";
@@ -172,6 +173,98 @@ describe("fetchJson", () => {
   it("falls back to globalThis.fetch", async () => {
     vi.stubGlobal("fetch", async () => new Response("{}", { status: 200 }));
     await expect(fetchJson({ url: "https://api.test/x" })).resolves.toEqual({});
+  });
+
+  it("refuses a body whose Content-Length is over maxBytes without reading it", async () => {
+    let cancelled = false;
+    const body = new ReadableStream({
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const error = await fetchJson({
+      url: "https://api.test/x?key=secret",
+      maxBytes: 10,
+      fetch: async () => new Response(body, { status: 200, headers: { "content-length": "11" } }),
+    }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ResponseTooLargeError);
+    expect(error).not.toBeInstanceOf(HttpError);
+    expect((error as Error).message).not.toContain("secret");
+    expect(cancelled).toBe(true);
+  });
+
+  it("stops reading once a body without Content-Length passes maxBytes", async () => {
+    let pulls = 0;
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulls++;
+        controller.enqueue(new Uint8Array(4));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    await expect(
+      fetchJson({
+        url: "https://api.test/x",
+        maxBytes: 10,
+        fetch: async () => new Response(body, { status: 200 }),
+      }),
+    ).rejects.toBeInstanceOf(ResponseTooLargeError);
+    expect(cancelled).toBe(true);
+    expect(pulls).toBeLessThan(10);
+  });
+
+  it("reads a body within maxBytes, keeping characters split across chunks", async () => {
+    const bytes = new TextEncoder().encode(JSON.stringify({ text: "Xin chào – ok" }));
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const byte of bytes) controller.enqueue(Uint8Array.of(byte));
+        controller.close();
+      },
+    });
+    await expect(
+      fetchJson({
+        url: "https://api.test/x",
+        maxBytes: bytes.length,
+        fetch: async () => new Response(body, { status: 200 }),
+      }),
+    ).resolves.toEqual({ text: "Xin chào – ok" });
+  });
+
+  it("gives up on a request whose response never starts after responseTimeoutMs", async () => {
+    const started = Date.now();
+    const error = await fetchJson({
+      url: "https://api.test/x",
+      timeoutMs: 10_000,
+      responseTimeoutMs: 30,
+      fetch: (_url, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+        }),
+    }).catch((e: unknown) => e);
+    expect(error).toMatchObject({ status: 0 });
+    expect(Date.now() - started).toBeLessThan(5_000);
+  });
+
+  it("lets the body take the rest of timeoutMs once the response has started", async () => {
+    const body = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        controller.enqueue(new TextEncoder().encode('{"done":true}'));
+        controller.close();
+      },
+    });
+    await expect(
+      fetchJson({
+        url: "https://api.test/x",
+        timeoutMs: 5_000,
+        responseTimeoutMs: 20,
+        maxBytes: 1_000,
+        fetch: async () => new Response(body, { status: 200 }),
+      }),
+    ).resolves.toEqual({ done: true });
   });
 });
 

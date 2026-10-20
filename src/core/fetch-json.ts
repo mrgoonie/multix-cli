@@ -4,7 +4,7 @@
  * use this with an injected `fetch`; the CLI's `httpJson` delegates here.
  */
 
-import { HttpError } from "./errors.js";
+import { HttpError, ResponseTooLargeError } from "./errors.js";
 import { type FetchLike, fetchFollowingRedirects } from "./redirect-fetch.js";
 
 export type { FetchLike };
@@ -18,7 +18,19 @@ export interface FetchJsonOptions {
   headers?: Record<string, string>;
   // biome-ignore lint/suspicious/noExplicitAny: generic JSON body
   body?: Record<string, unknown> | unknown[] | any;
+  /** Whole request, response body included. Default 120 s. */
   timeoutMs?: number;
+  /**
+   * Time allowed until the response headers arrive (default: `timeoutMs`).
+   * The body may then take the rest of `timeoutMs`, so a large body is not
+   * cut off by a limit meant to catch a request that never gets an answer.
+   */
+  responseTimeoutMs?: number;
+  /**
+   * Stop reading and throw ResponseTooLargeError once the body is larger than
+   * this (checked against Content-Length first, then while streaming).
+   */
+  maxBytes?: number;
   /** Defaults to globalThis.fetch, resolved at call time so tests can stub it. */
   fetch?: FetchLike;
 }
@@ -79,13 +91,14 @@ export async function fetchJson<T>(opts: FetchJsonOptions): Promise<T> {
   const { url, method = "GET", headers = {}, body, timeoutMs = DEFAULT_TIMEOUT_MS } = opts;
   const doFetch: FetchLike = opts.fetch ?? ((input, init) => globalThis.fetch(input, init));
 
+  const { signal, responseReceived } = requestSignal(timeoutMs, opts.responseTimeoutMs);
   const init: RequestInit = {
     method,
     headers: {
       "Content-Type": "application/json",
       ...headers,
     },
-    signal: AbortSignal.timeout(timeoutMs),
+    signal,
   };
 
   if (body !== undefined) {
@@ -94,11 +107,16 @@ export async function fetchJson<T>(opts: FetchJsonOptions): Promise<T> {
 
   // A request with a header that may be a credential follows same-origin
   // redirects only; an unkeyed one (public catalogs, registries) follows any.
-  const { response } = await fetchFollowingRedirects(url, init, {
-    fetch: doFetch,
-    crossOrigin: carriesCredentialHeaders(headers) ? "error" : "drop-headers",
-    wrapNetworkErrors: true,
-  });
+  let response: Response;
+  try {
+    ({ response } = await fetchFollowingRedirects(url, init, {
+      fetch: doFetch,
+      crossOrigin: carriesCredentialHeaders(headers) ? "error" : "drop-headers",
+      wrapNetworkErrors: true,
+    }));
+  } finally {
+    responseReceived();
+  }
 
   if (!response.ok) {
     throw await httpErrorFromResponse(response, url);
@@ -106,8 +124,9 @@ export async function fetchJson<T>(opts: FetchJsonOptions): Promise<T> {
 
   let text: string;
   try {
-    text = await response.text();
+    text = await readText(response, opts.maxBytes, url);
   } catch (cause) {
+    if (cause instanceof ResponseTooLargeError) throw cause;
     const msg = cause instanceof Error ? cause.message : String(cause);
     throw new HttpError(0, `Failed to read response body: ${msg}`, url);
   }
@@ -121,4 +140,58 @@ export async function fetchJson<T>(opts: FetchJsonOptions): Promise<T> {
       url,
     );
   }
+}
+
+/**
+ * Abort signal for the whole request (`timeoutMs`), also aborted when the
+ * response headers take longer than `responseTimeoutMs`. Call
+ * `responseReceived` once they arrive (or the request failed).
+ */
+function requestSignal(
+  timeoutMs: number,
+  responseTimeoutMs: number | undefined,
+): { signal: AbortSignal; responseReceived: () => void } {
+  const overall = AbortSignal.timeout(timeoutMs);
+  if (responseTimeoutMs === undefined || responseTimeoutMs >= timeoutMs) {
+    return { signal: overall, responseReceived: () => {} };
+  }
+  const controller = new AbortController();
+  const onOverall = () => controller.abort(overall.reason);
+  overall.addEventListener("abort", onOverall, { once: true });
+  const timer = setTimeout(
+    () => controller.abort(new DOMException("The response took too long to start", "TimeoutError")),
+    responseTimeoutMs,
+  );
+  return { signal: controller.signal, responseReceived: () => clearTimeout(timer) };
+}
+
+/** The body as text, read in chunks and abandoned once it passes `maxBytes`. */
+async function readText(
+  response: Response,
+  maxBytes: number | undefined,
+  url: string,
+): Promise<string> {
+  if (maxBytes === undefined || !response.body) return response.text();
+  const declared = Number(response.headers.get("content-length") ?? Number.NaN);
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    await response.body.cancel().catch(() => {});
+    throw new ResponseTooLargeError(maxBytes, url);
+  }
+  // Content-Length can be absent or wrong, so count the bytes actually received.
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  const parts: string[] = [];
+  let bytes = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    bytes += value.byteLength;
+    if (bytes > maxBytes) {
+      await reader.cancel().catch(() => {});
+      throw new ResponseTooLargeError(maxBytes, url);
+    }
+    parts.push(decoder.decode(value, { stream: true }));
+  }
+  parts.push(decoder.decode());
+  return parts.join("");
 }
