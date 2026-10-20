@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.12.4](https://github.com/mrgoonie/multix-cli/compare/v1.12.3...v1.12.4) (2026-10-20)
+
+
+### Fixed
+
+* **gemini:** bound Omni inline video bodies and make --wait-timeout an overall deadline ([#274](https://github.com/mrgoonie/multix-cli/issues/274)) ([5d3910f](https://github.com/mrgoonie/multix-cli/commit/5d3910fe87818cbba7e17a927ae5b65b2390a9ea)), closes [#256](https://github.com/mrgoonie/multix-cli/issues/256)
+* **worker:** force Gemini Omni Flash for remote edit-video and extend-video ([#273](https://github.com/mrgoonie/multix-cli/issues/273)) ([10ddfea](https://github.com/mrgoonie/multix-cli/commit/10ddfead2a7735c56fa058895b3139f128b84362))
+
 ## [1.12.3](https://github.com/mrgoonie/multix-cli/compare/v1.12.2...v1.12.3) (2026-10-20)
 
 
