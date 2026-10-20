@@ -11,6 +11,7 @@ import { toFetchError } from "../../core/fetch-error.js";
 import { httpJson } from "../../core/http-client.js";
 import type { Logger } from "../../core/logger.js";
 import { getOutputDir } from "../../core/output-dir.js";
+import { outputStamp } from "../../core/output-name.js";
 import { fetchSameOrigin } from "../../core/redirect-fetch.js";
 import { ELEVENLABS_BASE_URL } from "./models.js";
 
@@ -211,7 +212,7 @@ export function saveBytes(opts: {
 }): string {
   const { bytes, task, ext, outputCopy, logger } = opts;
   const dir = getOutputDir();
-  const dest = path.join(dir, `elevenlabs_${task}_${Date.now()}.${ext}`);
+  const dest = path.join(dir, `elevenlabs_${task}_${outputStamp()}.${ext}`);
   fs.writeFileSync(dest, bytes);
   logger?.success(`Saved: ${dest} (${(bytes.length / 1024).toFixed(1)} KB)`);
   if (outputCopy) {

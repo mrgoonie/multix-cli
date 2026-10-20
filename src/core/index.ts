@@ -9,6 +9,7 @@ export { loadEnv, resolveKey, _resetEnvLoader } from "./env-loader.js";
 export type { LoadEnvOptions } from "./env-loader.js";
 export { redact, redactUrl } from "./redact.js";
 export { getOutputDir, _resetOutputDir } from "./output-dir.js";
+export { outputStamp } from "./output-name.js";
 export { parseJsonInput } from "./json-input.js";
 export { httpJson, downloadFile, fetchBytes } from "./http-client.js";
 export type { HttpJsonOptions } from "./http-client.js";

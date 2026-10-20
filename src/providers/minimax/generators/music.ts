@@ -9,6 +9,7 @@ import path from "node:path";
 import { fetchBytes } from "../../../core/http-client.js";
 import type { Logger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
+import { outputStamp } from "../../../core/output-name.js";
 import { apiPost } from "../client.js";
 
 interface MusicResponse {
@@ -84,7 +85,7 @@ export async function generateMinimaxMusic(opts: {
 
   const durationMs = resp.extra_info?.music_duration ?? 0;
   const outDir = getOutputDir();
-  const dest = path.join(outDir, `minimax_music_${Date.now()}.${outputFormat}`);
+  const dest = path.join(outDir, `minimax_music_${outputStamp()}.${outputFormat}`);
 
   try {
     if (audioData.startsWith("http")) {

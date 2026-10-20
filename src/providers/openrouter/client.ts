@@ -11,6 +11,7 @@ import { ConfigError, ProviderError } from "../../core/errors.js";
 import { fetchBytes, httpJson } from "../../core/http-client.js";
 import type { Logger } from "../../core/logger.js";
 import { getOutputDir } from "../../core/output-dir.js";
+import { outputStamp } from "../../core/output-name.js";
 import {
   buildOpenRouterHeaders,
   extractImagesFromResponse,
@@ -135,7 +136,7 @@ export async function generateOpenRouterImage(opts: {
     if (!url) continue;
     try {
       const bytes = await fetchBytes(url);
-      const dest = path.join(outDir, `openrouter_image_${Date.now()}_${i}.png`);
+      const dest = path.join(outDir, `openrouter_image_${outputStamp()}_${i}.png`);
       fs.writeFileSync(dest, bytes);
       savedFiles.push(dest);
       logger?.success(`Saved: ${dest}`);

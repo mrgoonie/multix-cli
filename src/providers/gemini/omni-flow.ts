@@ -19,6 +19,7 @@ import { ConfigError, HttpError, ProviderError, ValidationError } from "../../co
 import { downloadToFile, maxDownloadBytes } from "../../core/http-client.js";
 import type { Logger } from "../../core/logger.js";
 import { getOutputDir } from "../../core/output-dir.js";
+import { outputStamp } from "../../core/output-name.js";
 import {
   assertInteractionId,
   createInteraction,
@@ -291,7 +292,7 @@ export async function runOmniVideo(
   }
 
   const outDir = getOutputDir();
-  const base = `gemini_omni_${Date.now()}`;
+  const base = `gemini_omni_${outputStamp()}`;
   const recordPath = path.join(outDir, `${base}.json`);
   const record: OmniSessionRecord = {
     provider: "gemini",

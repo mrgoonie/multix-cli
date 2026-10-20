@@ -212,7 +212,7 @@ multix gemini generate-video --prompt "Ocean waves" --resolution 1080p --duratio
 ```
 
 - An explicit `--model veo-*` (or `VIDEO_GEN_MODEL=veo-*`) still uses the Veo path, with a shutdown warning for `*-preview` models. Omni-only flags (`--duration`, `--no-store`, `--no-wait`) fail with Veo; `--no-thumb` applies to Veo only. Any other model id is rejected.
-- Omni runs as a stored background interaction. Its id is written to `gemini_omni_<timestamp>.json` in the output directory before polling starts, so a timeout or crash can be resumed with `multix gemini video-status <id> --download`. On success stdout prints `Generated video: <path>` and `Interaction ID: <id>`.
+- Omni runs as a stored background interaction. Its id is written to `gemini_omni_<timestamp>-<random>.json` in the output directory before polling starts, so a timeout or crash can be resumed with `multix gemini video-status <id> --download`. On success stdout prints `Generated video: <path>` and `Interaction ID: <id>`.
 - `--no-store` sends one synchronous request that Google does not keep: it cannot be edited, extended or resumed, and it cannot be combined with `--no-wait`.
 - `edit-video` and `extend-video` keep the source video's format unless `--resolution`/`--aspect-ratio` is given; only a completed interaction can be continued. `extend-video` returns the source clip followed by the continuation. Editing or extending an uploaded `--video` is unavailable in the EEA, Switzerland and the UK; editing a generated video with `--interaction-id` works there.
 - Stored interactions and uploaded files expire (Files API uploads after about 48 hours). `--upload-timeout` is deprecated and ignored.

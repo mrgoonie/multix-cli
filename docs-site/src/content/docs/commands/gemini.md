@@ -65,7 +65,7 @@ multix gemini i2v ./first-frame.png --prompt "camera pans left" --last-frame ./l
 - `--reference-images` with one or two images sets the first and last frame;
   more images are used as subject references.
 - Each request is stored and runs in the background. The interaction id is
-  written to `gemini_omni_<timestamp>.json` in the output directory before
+  written to `gemini_omni_<timestamp>-<random>.json` in the output directory before
   polling starts. On success stdout prints `Generated video: <path>` and
   `Interaction ID: <id>`.
 - `--no-wait` submits, prints `{interaction_id, status, session}` as JSON and

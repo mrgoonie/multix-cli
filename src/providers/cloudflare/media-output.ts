@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { ProviderError } from "../../core/errors.js";
 import { getOutputDir } from "../../core/output-dir.js";
+import { outputStamp } from "../../core/output-name.js";
 
 function destination(filename: string, output?: string): string {
   return output ? path.resolve(output) : path.join(getOutputDir(), filename);
@@ -26,5 +27,5 @@ export function saveBase64Image(image: string, output?: string): string {
   }
   if (bytes.length === 0)
     throw new ProviderError("Cloudflare returned an empty image result", "Cloudflare");
-  return saveBytes(bytes, `cloudflare_image_${Date.now()}.jpg`, output);
+  return saveBytes(bytes, `cloudflare_image_${outputStamp()}.jpg`, output);
 }
