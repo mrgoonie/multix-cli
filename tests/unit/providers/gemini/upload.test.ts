@@ -270,6 +270,30 @@ describe("gemini uploadFile (resumable, streamed)", () => {
     expect((blob as Error).message).toBe(`${text}: clip.mp4`);
   });
 
+  it("polls files.get, which returns the bare File, until the video is ACTIVE", async () => {
+    const polls: string[] = [];
+    vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
+      if (url.includes("upload_id=")) {
+        return finalized("final", {
+          file: { ...FILE_REF, state: "PROCESSING", mimeType: "video/mp4" },
+        });
+      }
+      if (url === `${GOOGLE}/v1beta/${FILE_REF.name}`) {
+        polls.push(headerOf(init, "x-goog-api-key") ?? "");
+        // files.get is not wrapped in { file }, unlike the upload response.
+        return Response.json({ ...FILE_REF, state: "ACTIVE", mimeType: "video/mp4" });
+      }
+      return started();
+    });
+
+    const ref = await uploadFile(
+      { blob: new Blob(["x"]), displayName: "clip.mp4", mimeType: "video/mp4" },
+      { apiKey: "test-key-0000" },
+    );
+    expect(ref.state).toBe("ACTIVE");
+    expect(polls).toEqual(["test-key-0000"]);
+  });
+
   it("rotates to the next key when the upload is rate-limited", async () => {
     vi.stubEnv("GEMINI_API_KEY", "key-a");
     vi.stubEnv("GEMINI_API_KEY_2", "key-b");

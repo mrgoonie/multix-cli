@@ -221,6 +221,14 @@ async function readFinalizedFile(resp: Response): Promise<FileRef> {
   return file as FileRef;
 }
 
+function unwrapFile(resp: FileRef | { file: FileRef }): FileRef {
+  const file = "file" in resp && resp.file ? resp.file : (resp as FileRef);
+  if (typeof file?.state !== "string") {
+    throw new ProviderError("File processing check returned no file state", "gemini");
+  }
+  return file;
+}
+
 async function uploadFileWithKey(
   source: UploadSource,
   apiKey: string,
@@ -282,10 +290,13 @@ async function uploadFileWithKey(
     const deadline = Date.now() + timeoutMs;
     while (fileRef.state === "PROCESSING" && Date.now() < deadline) {
       await sleep(2000);
-      fileRef = await fetchJson<{ file: FileRef }>({
-        url: `${BASE}/v1beta/${fileRef.name}`,
-        headers: authHeaders(apiKey),
-      }).then((r) => r.file);
+      // files.get returns the File itself; only the upload response wraps it in `file`.
+      fileRef = unwrapFile(
+        await fetchJson<FileRef | { file: FileRef }>({
+          url: `${BASE}/v1beta/${fileRef.name}`,
+          headers: authHeaders(apiKey),
+        }),
+      );
       logger?.debug(`Processing... state=${fileRef.state}`);
     }
     if (fileRef.state === "FAILED")
