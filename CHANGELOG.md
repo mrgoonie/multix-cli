@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.12.0](https://github.com/mrgoonie/multix-cli/compare/v1.11.0...v1.12.0) (2026-10-20)
+
+
+### Added
+
+* **gemini:** default video to Gemini Omni Flash and add edit, extend, status and cancel ([#261](https://github.com/mrgoonie/multix-cli/issues/261)) ([7459bda](https://github.com/mrgoonie/multix-cli/commit/7459bda232ebff675e1bd5acf375d6887614f6e9)), closes [#254](https://github.com/mrgoonie/multix-cli/issues/254) [#255](https://github.com/mrgoonie/multix-cli/issues/255)
+
 ## [1.11.0](https://github.com/mrgoonie/multix-cli/compare/v1.10.5...v1.11.0) (2026-10-17)
 
 
