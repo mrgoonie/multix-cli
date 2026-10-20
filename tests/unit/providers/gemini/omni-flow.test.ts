@@ -122,11 +122,16 @@ function runOpts(over: Partial<OmniRunOptions> = {}): OmniRunOptions {
   return { request: baseRequest, wait: true, waitTimeoutMs: 60_000, logger, ...over };
 }
 
+/** Real-time budget for settle(), under vitest's default 5 s test timeout. */
+const SETTLE_BUDGET_MS = 4_000;
+
 type Outcome<T> = { ok: true; value: T } | { ok: false; error: unknown };
 
 /**
  * Drive a promise that waits on fake-timer sleeps. Each step advances the fake
- * clock and yields to real I/O, so stream downloads can finish too.
+ * clock and yields to real I/O, so stream downloads can finish too. The bound
+ * is real time (performance.now is not faked), not a step count: steps take
+ * microseconds, and slow file I/O (Windows runners) can outlast thousands.
  */
 async function settle<T>(p: Promise<T>): Promise<Outcome<T>> {
   let outcome: Outcome<T> | undefined;
@@ -138,8 +143,9 @@ async function settle<T>(p: Promise<T>): Promise<Outcome<T>> {
       outcome = { ok: false, error };
     },
   );
-  for (let i = 0; outcome === undefined; i++) {
-    if (i > 5000) throw new Error("flow did not settle");
+  const deadline = performance.now() + SETTLE_BUDGET_MS;
+  while (outcome === undefined) {
+    if (performance.now() > deadline) throw new Error("flow did not settle");
     await vi.advanceTimersByTimeAsync(1_000);
     await new Promise((resolve) => setImmediate(resolve));
   }
