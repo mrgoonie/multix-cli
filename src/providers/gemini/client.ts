@@ -336,6 +336,7 @@ export async function generateContent(
 export interface InteractionReadOptions {
   timeoutMs?: number;
   responseTimeoutMs?: number;
+  idleTimeoutMs?: number;
   maxBytes?: number;
   fetch?: FetchLike;
 }
@@ -355,6 +356,7 @@ export async function createInteraction(
     body,
     timeoutMs: opts.timeoutMs,
     responseTimeoutMs: opts.responseTimeoutMs,
+    idleTimeoutMs: opts.idleTimeoutMs,
     maxBytes: opts.maxBytes,
     fetch: opts.fetch,
   });
@@ -381,6 +383,7 @@ export async function getInteraction(
     headers: authHeaders(opts.apiKey),
     timeoutMs: opts.timeoutMs,
     responseTimeoutMs: opts.responseTimeoutMs,
+    idleTimeoutMs: opts.idleTimeoutMs,
     maxBytes: opts.maxBytes,
     fetch: opts.fetch,
   });

@@ -71,12 +71,14 @@ multix gemini i2v ./first-frame.png --prompt "camera pans left" --last-frame ./l
 - `--no-wait` gửi request, in JSON `{interaction_id, status, session}` rồi
   thoát. `--wait-timeout <ms>` (mặc định 15 phút) là một deadline chung cho
   cả lần chạy đến khi video hoàn tất: upload, gửi request và polling đều trừ
-  vào đó, và khi hết hạn thì không gửi request nào. Việc lưu video đã hoàn tất
-  có ngân sách riêng (tối đa 5 phút chờ file sẵn sàng, rồi tối đa 10 phút để
-  tải về).
+  vào đó, và khi hết hạn thì không gửi request nào. Một request đã bắt đầu gửi
+  vẫn có tối đa 2 phút, để job đã được chấp nhận (đã tính phí) không bao giờ
+  mất id. Việc lưu video đã hoàn tất có ngân sách riêng (tối đa 5 phút chờ
+  file sẵn sàng, rồi tối đa 10 phút để tải về).
 - Video trả về inline chỉ được đọc tối đa bằng kích thước base64 của
-  `MULTIX_MAX_DOWNLOAD_MB` (cộng 64 MB cho JSON); video lớn hơn sẽ báo lỗi ngay
-  kèm lệnh `video-status` để tiếp tục, thay vì bị tải lại ở mỗi lần polling.
+  `MULTIX_MAX_DOWNLOAD_MB` cộng 64 MB cho JSON, và không quá 384 MB; video lớn
+  hơn sẽ báo lỗi ngay kèm lệnh `video-status` để tiếp tục, thay vì bị tải lại
+  ở mỗi lần polling.
 - `--no-store` gửi một request đồng bộ mà Google không lưu lại: kết quả không
   thể chỉnh sửa, nối dài hay tiếp tục, và không dùng chung được với `--no-wait`.
 - `--upload-timeout` đã ngừng hỗ trợ và bị bỏ qua; `--no-thumb` chỉ áp dụng

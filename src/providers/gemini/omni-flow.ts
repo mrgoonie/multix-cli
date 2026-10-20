@@ -13,13 +13,14 @@
  *
  * Time and memory:
  * - `--wait-timeout` is one deadline from the start of the command to the
- *   finished interaction: uploads, the submit and polling all spend it. Once
- *   the video is ready, waiting for its file and downloading it have their
- *   own budget (FILE_ACTIVE_TIMEOUT_MS + DOWNLOAD_TIMEOUT_MS).
+ *   finished interaction: uploads, the submit and polling all spend it. It
+ *   decides whether a stored submit is sent, not how long that submit may
+ *   take. Once the video is ready, waiting for its file and downloading it
+ *   have their own budget (FILE_ACTIVE_TIMEOUT_MS + DOWNLOAD_TIMEOUT_MS).
  * - An Interaction can carry the video inline as base64 (always with
  *   --no-store, sometimes on the final GET of a stored one), so every read of
- *   it is capped at the base64 size of MULTIX_MAX_DOWNLOAD_MB plus some JSON,
- *   and only the wait for response headers has a short per-request limit.
+ *   it is capped (interactionMaxBytes) and only a stall, not a slow body, ends
+ *   a status request early.
  */
 
 import fs from "node:fs";
@@ -64,28 +65,41 @@ const SUBMIT_TIMEOUT_MS = 120_000;
 export const OMNI_DEFAULT_WAIT_MS = 15 * 60 * 1000;
 const FILE_ACTIVE_TIMEOUT_MS = 5 * 60 * 1000;
 const DOWNLOAD_TIMEOUT_MS = 10 * 60 * 1000;
-/** How long one status request may wait for its response headers before it is retried. */
-const RESPONSE_HEADERS_TIMEOUT_MS = 60_000;
+/**
+ * How long one status request may wait for its response headers, or between
+ * two chunks of its body, before it is dropped and retried.
+ */
+const STALL_TIMEOUT_MS = 60_000;
 /** Room for the JSON around an inline video (ids, text, usage, echoed input steps). */
 const INTERACTION_JSON_OVERHEAD_BYTES = 64 * 1024 * 1024;
+/**
+ * Hard ceiling on an Interaction body, well under the longest JavaScript
+ * string (about 512 MiB in V8), so JSON.parse and the base64 decode still fit.
+ */
+export const INTERACTION_MAX_BYTES_CEILING = 384 * 1024 * 1024;
 
 /**
  * Largest Interaction body read into memory: the base64 form of a video at
- * the MULTIX_MAX_DOWNLOAD_MB cap, plus the JSON around it.
+ * the MULTIX_MAX_DOWNLOAD_MB cap plus the JSON around it, and never more
+ * than INTERACTION_MAX_BYTES_CEILING.
  */
 export function interactionMaxBytes(): number {
-  return Math.ceil(maxDownloadBytes() / 3) * 4 + INTERACTION_JSON_OVERHEAD_BYTES;
+  return Math.min(
+    Math.ceil(maxDownloadBytes() / 3) * 4 + INTERACTION_JSON_OVERHEAD_BYTES,
+    INTERACTION_MAX_BYTES_CEILING,
+  );
 }
 
 /**
- * Limits for reading an Interaction that may hold the video inline: the body
- * gets all of `timeoutMs`, while a request that gets no answer at all is
- * dropped after a minute so polling can retry it.
+ * Limits for reading an Interaction that may hold the video inline: a body
+ * that keeps arriving gets all of `timeoutMs`, while a request that stalls
+ * (no headers, or no data, for a minute) is dropped so polling can retry it.
  */
 function interactionReadLimits(timeoutMs: number): InteractionReadOptions {
   return {
     timeoutMs,
-    responseTimeoutMs: Math.min(timeoutMs, RESPONSE_HEADERS_TIMEOUT_MS),
+    responseTimeoutMs: Math.min(timeoutMs, STALL_TIMEOUT_MS),
+    idleTimeoutMs: STALL_TIMEOUT_MS,
     maxBytes: interactionMaxBytes(),
   };
 }
@@ -319,27 +333,35 @@ export async function runOmniVideo(
         "gemini",
       );
     }
-    // An unstored request holds the connection until the video is done.
+    // The deadline decides whether a stored request is sent, never how long it
+    // may take: cutting off an accepted submit would lose the id of a billed
+    // job. An unstored request holds the connection until the video is done.
     const resp = (await createInteraction(body, {
       apiKey: key.apiKey,
-      timeoutMs: store ? Math.min(SUBMIT_TIMEOUT_MS, remainingMs) : remainingMs,
+      timeoutMs: store ? SUBMIT_TIMEOUT_MS : remainingMs,
       maxBytes: interactionMaxBytes(),
     })) as Interaction;
     return { ...key, resp };
   };
 
+  // A follow-up must run in the project that stored its parent. The lookup is
+  // read-only, so its failures are not reported as a possibly billed submit.
+  let parent: GeminiKeyChoice | undefined;
+  if (request.previousInteractionId) {
+    const found = await findInteractionKey(request.previousInteractionId, logger, {
+      timeoutMs: Math.max(1, deadline - Date.now()),
+    });
+    if (found.interaction.status !== "completed") {
+      throw new ValidationError(
+        `Interaction ${request.previousInteractionId} is ${found.interaction.status ?? "not completed"}; only a completed interaction can be edited or extended`,
+      );
+    }
+    parent = { apiKey: found.apiKey, keyName: found.keyName };
+  }
+
   let accepted: GeminiKeyChoice & { resp: Interaction };
   try {
-    if (request.previousInteractionId) {
-      // A follow-up must run in the project that stored its parent.
-      const parent = await findInteractionKey(request.previousInteractionId, logger, {
-        timeoutMs: Math.max(1, deadline - Date.now()),
-      });
-      if (parent.interaction.status !== "completed") {
-        throw new ValidationError(
-          `Interaction ${request.previousInteractionId} is ${parent.interaction.status ?? "not completed"}; only a completed interaction can be edited or extended`,
-        );
-      }
+    if (parent) {
       accepted = await submit(parent);
     } else {
       accepted = await withGeminiKey((apiKey, keyName) => submit({ apiKey, keyName }), {

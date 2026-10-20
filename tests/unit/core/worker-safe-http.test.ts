@@ -248,6 +248,47 @@ describe("fetchJson", () => {
     expect(Date.now() - started).toBeLessThan(5_000);
   });
 
+  it("drops a body that stops arriving for idleTimeoutMs as a retryable network failure", async () => {
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"a":'));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const error = await fetchJson({
+      url: "https://api.test/x",
+      timeoutMs: 10_000,
+      idleTimeoutMs: 30,
+      fetch: async () => new Response(body, { status: 200 }),
+    }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(HttpError);
+    expect(error).toMatchObject({ status: 0 });
+    expect(cancelled).toBe(true);
+  });
+
+  it("reports a body cut off by the overall timeout as a retryable network failure", async () => {
+    const error = await fetchJson({
+      url: "https://api.test/x",
+      timeoutMs: 50,
+      responseTimeoutMs: 10,
+      maxBytes: 1_000,
+      fetch: async (_url, init) =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              init?.signal?.addEventListener("abort", () => controller.error(init.signal?.reason));
+            },
+          }),
+          { status: 200 },
+        ),
+    }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(HttpError);
+    expect(error).toMatchObject({ status: 0 });
+  });
+
   it("lets the body take the rest of timeoutMs once the response has started", async () => {
     const body = new ReadableStream<Uint8Array>({
       async start(controller) {

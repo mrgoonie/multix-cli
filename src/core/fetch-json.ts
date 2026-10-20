@@ -31,6 +31,12 @@ export interface FetchJsonOptions {
    * this (checked against Content-Length first, then while streaming).
    */
   maxBytes?: number;
+  /**
+   * Once the response has started, give up when no body bytes arrive for this
+   * long (HttpError 0, worth retrying). A body that keeps moving may take the
+   * rest of `timeoutMs`.
+   */
+  idleTimeoutMs?: number;
   /** Defaults to globalThis.fetch, resolved at call time so tests can stub it. */
   fetch?: FetchLike;
 }
@@ -91,7 +97,7 @@ export async function fetchJson<T>(opts: FetchJsonOptions): Promise<T> {
   const { url, method = "GET", headers = {}, body, timeoutMs = DEFAULT_TIMEOUT_MS } = opts;
   const doFetch: FetchLike = opts.fetch ?? ((input, init) => globalThis.fetch(input, init));
 
-  const { signal, responseReceived } = requestSignal(timeoutMs, opts.responseTimeoutMs);
+  const { signal, responseReceived, done } = requestSignal(timeoutMs, opts.responseTimeoutMs);
   const init: RequestInit = {
     method,
     headers: {
@@ -118,17 +124,22 @@ export async function fetchJson<T>(opts: FetchJsonOptions): Promise<T> {
     responseReceived();
   }
 
-  if (!response.ok) {
-    throw await httpErrorFromResponse(response, url);
-  }
-
   let text: string;
   try {
-    text = await readText(response, opts.maxBytes, url);
+    if (!response.ok) {
+      throw await httpErrorFromResponse(response, url);
+    }
+    text = await readText(response, opts, url);
   } catch (cause) {
-    if (cause instanceof ResponseTooLargeError) throw cause;
+    if (cause instanceof ResponseTooLargeError || cause instanceof HttpError) throw cause;
+    // A body too long for one JavaScript string is too large, not a network failure.
+    if (cause instanceof RangeError && opts.maxBytes !== undefined) {
+      throw new ResponseTooLargeError(opts.maxBytes, url);
+    }
     const msg = cause instanceof Error ? cause.message : String(cause);
     throw new HttpError(0, `Failed to read response body: ${msg}`, url);
+  } finally {
+    done();
   }
   if (text.trim() === "") return undefined as T;
   try {
@@ -145,15 +156,16 @@ export async function fetchJson<T>(opts: FetchJsonOptions): Promise<T> {
 /**
  * Abort signal for the whole request (`timeoutMs`), also aborted when the
  * response headers take longer than `responseTimeoutMs`. Call
- * `responseReceived` once they arrive (or the request failed).
+ * `responseReceived` once they arrive (or the request failed), and `done`
+ * once the body has been read.
  */
 function requestSignal(
   timeoutMs: number,
   responseTimeoutMs: number | undefined,
-): { signal: AbortSignal; responseReceived: () => void } {
+): { signal: AbortSignal; responseReceived: () => void; done: () => void } {
   const overall = AbortSignal.timeout(timeoutMs);
   if (responseTimeoutMs === undefined || responseTimeoutMs >= timeoutMs) {
-    return { signal: overall, responseReceived: () => {} };
+    return { signal: overall, responseReceived: () => {}, done: () => {} };
   }
   const controller = new AbortController();
   const onOverall = () => controller.abort(overall.reason);
@@ -162,16 +174,29 @@ function requestSignal(
     () => controller.abort(new DOMException("The response took too long to start", "TimeoutError")),
     responseTimeoutMs,
   );
-  return { signal: controller.signal, responseReceived: () => clearTimeout(timer) };
+  return {
+    signal: controller.signal,
+    responseReceived: () => clearTimeout(timer),
+    done: () => {
+      clearTimeout(timer);
+      overall.removeEventListener("abort", onOverall);
+    },
+  };
 }
 
-/** The body as text, read in chunks and abandoned once it passes `maxBytes`. */
+/**
+ * The body as text, read in chunks: abandoned once it passes `maxBytes`, or
+ * when no chunk arrives for `idleTimeoutMs`.
+ */
 async function readText(
   response: Response,
-  maxBytes: number | undefined,
+  opts: Pick<FetchJsonOptions, "maxBytes" | "idleTimeoutMs">,
   url: string,
 ): Promise<string> {
-  if (maxBytes === undefined || !response.body) return response.text();
+  const { maxBytes = Number.POSITIVE_INFINITY, idleTimeoutMs } = opts;
+  if ((opts.maxBytes === undefined && idleTimeoutMs === undefined) || !response.body) {
+    return response.text();
+  }
   const declared = Number(response.headers.get("content-length") ?? Number.NaN);
   if (Number.isFinite(declared) && declared > maxBytes) {
     await response.body.cancel().catch(() => {});
@@ -183,7 +208,7 @@ async function readText(
   const parts: string[] = [];
   let bytes = 0;
   for (;;) {
-    const { done, value } = await reader.read();
+    const { done, value } = await readChunk(reader, idleTimeoutMs, url);
     if (done) break;
     bytes += value.byteLength;
     if (bytes > maxBytes) {
@@ -194,4 +219,32 @@ async function readText(
   }
   parts.push(decoder.decode());
   return parts.join("");
+}
+
+/** One `reader.read()`, cancelling the stream if it takes longer than `idleTimeoutMs`. */
+async function readChunk(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  idleTimeoutMs: number | undefined,
+  url: string,
+): ReturnType<ReadableStreamDefaultReader<Uint8Array>["read"]> {
+  if (idleTimeoutMs === undefined) return reader.read();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const idle = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => {
+      // Reject before cancelling: a cancel settles the pending read as done.
+      reject(
+        new HttpError(
+          0,
+          `Failed to read response body: no data for ${Math.round(idleTimeoutMs / 1000)} s`,
+          url,
+        ),
+      );
+      reader.cancel().catch(() => {});
+    }, idleTimeoutMs);
+  });
+  try {
+    return await Promise.race([reader.read(), idle]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
 }

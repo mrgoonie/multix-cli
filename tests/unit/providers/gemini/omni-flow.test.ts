@@ -13,6 +13,7 @@ import type { Logger } from "../../../../src/core/logger.js";
 import { _resetOutputDir } from "../../../../src/core/output-dir.js";
 import { _resetGeminiKeyCooldowns } from "../../../../src/providers/gemini/key-pool.js";
 import {
+  INTERACTION_MAX_BYTES_CEILING,
   type OmniRunOptions,
   checkOmniMedia,
   copyToOutput,
@@ -35,6 +36,7 @@ interface Call {
   url: string;
   key?: string;
   body?: Record<string, unknown>;
+  signal?: AbortSignal;
 }
 
 let tmp: string;
@@ -61,6 +63,7 @@ function stubFetch(route: (call: Call) => Response | Promise<Response>): void {
       url,
       key: new Headers(init.headers ?? {}).get("x-goog-api-key") ?? undefined,
       body: typeof init.body === "string" ? JSON.parse(init.body) : undefined,
+      signal: init.signal ?? undefined,
     };
     calls.push(call);
     return route(call);
@@ -429,6 +432,71 @@ describe("runOmniVideo: generate, poll and save", () => {
     } finally {
       Reflect.deleteProperty(process.env, "MULTIX_MAX_DOWNLOAD_MB");
     }
+  });
+
+  it("keeps the interaction cap under the longest JavaScript string at the default download limit", () => {
+    expect(interactionMaxBytes()).toBe(INTERACTION_MAX_BYTES_CEILING);
+    expect(INTERACTION_MAX_BYTES_CEILING).toBeLessThan(512 * 1024 * 1024);
+  });
+
+  it("gives a stored submit its full time even when little of --wait-timeout is left", async () => {
+    const clip = path.join(tmp, "clip.mp4");
+    fs.writeFileSync(clip, "video-bytes");
+    let submitSignalAborted: boolean | undefined;
+    stubFetch(async (c) => {
+      if (c.url === "https://generativelanguage.googleapis.com/upload/v1beta/files") {
+        return new Response("", {
+          status: 200,
+          headers: {
+            "x-goog-upload-url": "https://generativelanguage.googleapis.com/upload/session/1",
+          },
+        });
+      }
+      if (c.url.startsWith("https://generativelanguage.googleapis.com/upload/session")) {
+        // The upload leaves 5 ms of the 60 s wait.
+        vi.setSystemTime(Date.now() + 59_995);
+        return new Response(
+          JSON.stringify({
+            file: {
+              name: "files/src1",
+              uri: `${API}/files/src1`,
+              state: "ACTIVE",
+              mimeType: "video/mp4",
+            },
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json", "x-goog-upload-status": "final" },
+          },
+        );
+      }
+      if (isSubmit(c)) {
+        // Google answers after the deadline: an accepted submit must not be cut off.
+        // Let real time pass (AbortSignal.timeout runs on the real clock).
+        const t0 = performance.now();
+        while (performance.now() - t0 < 30) await new Promise((resolve) => setImmediate(resolve));
+        submitSignalAborted = c.signal?.aborted;
+        return json({ id: ID, status: "in_progress" });
+      }
+      if (isPoll(ID)(c)) return json({ id: ID, status: "in_progress" });
+      throw new Error(`unexpected ${c.method} ${c.url}`);
+    });
+
+    const error = errorOf(
+      await settle(
+        runOmniVideo(
+          runOpts({
+            request: { ...baseRequest, task: "edit" },
+            videoPath: clip,
+            waitTimeoutMs: 60_000,
+          }),
+        ),
+      ),
+    );
+    expect(submitSignalAborted).toBe(false);
+    expect(error).toBeInstanceOf(PollTimeoutError);
+    expect((error as Error).message).toContain("gemini video-status v1_abc123 --download");
+    expect(readRecord()).toMatchObject({ interaction_id: ID });
   });
 
   it("polls only for the part of --wait-timeout the submit left over", async () => {
