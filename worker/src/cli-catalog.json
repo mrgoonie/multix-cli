@@ -80,7 +80,7 @@
     },
     {
       "group": "gemini",
-      "description": "Gemini: analyze, transcribe, extract data, generate images (Imagen/Nano Banana), video (Veo), and speech (Flash TTS)",
+      "description": "Gemini: analyze, transcribe, extract data, generate images (Imagen/Nano Banana), video (Omni Flash, Veo), and speech (Flash TTS)",
       "commands": [
         {
           "command": "gemini analyze",
@@ -503,7 +503,7 @@
         },
         {
           "command": "gemini generate-video",
-          "description": "Generate video with Veo via Gemini API [EXPERIMENTAL]",
+          "description": "Generate video with Gemini Omni Flash (default) or a Veo model",
           "positionals": [],
           "options": [
             {
@@ -519,7 +519,7 @@
             {
               "long": "--model",
               "flags": "--model <id>",
-              "description": "Veo model to use",
+              "description": "Video model (default gemini-omni-1.1-flash; veo-* uses Veo)",
               "required": false,
               "takesValue": true,
               "valueOptional": false,
@@ -529,29 +529,27 @@
             {
               "long": "--resolution",
               "flags": "--resolution <res>",
-              "description": "Video resolution: 720p|1080p",
+              "description": "Resolution. Omni: 360p|720p|1080p|4k (default 720p; 1080p and 4k are upscaled). Veo: 720p|1080p (default 1080p)",
               "required": false,
               "takesValue": true,
               "valueOptional": false,
               "variadic": false,
-              "negatable": false,
-              "default": "1080p"
+              "negatable": false
             },
             {
               "long": "--aspect-ratio",
               "flags": "--aspect-ratio <ratio>",
-              "description": "Aspect ratio",
+              "description": "Aspect ratio. Omni: 16:9|9:16 (default 16:9). Veo: default 16:9",
               "required": false,
               "takesValue": true,
               "valueOptional": false,
               "variadic": false,
-              "negatable": false,
-              "default": "16:9"
+              "negatable": false
             },
             {
               "long": "--reference-images",
               "flags": "--reference-images <paths...>",
-              "description": "Reference images (first=opening frame, second=closing)",
+              "description": "Images. Omni: subject/style references. Veo: first=opening frame, second=closing",
               "required": false,
               "takesValue": true,
               "valueOptional": false,
@@ -581,7 +579,7 @@
             {
               "long": "--no-thumb",
               "flags": "--no-thumb",
-              "description": "Skip downloading the thumbnail if the API returns one",
+              "description": "Skip downloading the thumbnail if the API returns one (Veo)",
               "required": false,
               "takesValue": false,
               "valueOptional": false,
@@ -598,12 +596,62 @@
               "variadic": false,
               "negatable": false,
               "short": "-v"
+            },
+            {
+              "long": "--delivery",
+              "flags": "--delivery <mode>",
+              "description": "Omni: how the video is returned: uri|inline (default uri)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--task",
+              "flags": "--task <task>",
+              "description": "Omni: task hint, only if prompting is not enough: text_to_video|image_to_video|reference_to_video|edit|extend",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--no-store",
+              "flags": "--no-store",
+              "description": "Omni: do not store the interaction (it cannot be edited or fetched later)",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": true
+            },
+            {
+              "long": "--background",
+              "flags": "--background",
+              "description": "Omni: run in the background and poll by interaction id",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--timeout",
+              "flags": "--timeout <seconds>",
+              "description": "Omni: overall wait in seconds (default 900)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
             }
           ]
         },
         {
           "command": "gemini image-to-video",
-          "description": "Generate video from a starting image with Veo (image-to-video) [EXPERIMENTAL]",
+          "description": "Generate video from a starting image with Gemini Omni Flash (default) or Veo",
           "positionals": [
             {
               "name": "imagePath",
@@ -626,7 +674,7 @@
             {
               "long": "--last-frame",
               "flags": "--last-frame <path>",
-              "description": "Optional closing frame image (Veo 3.1)",
+              "description": "Optional closing frame image (first/last-frame interpolation)",
               "required": false,
               "takesValue": true,
               "valueOptional": false,
@@ -636,7 +684,7 @@
             {
               "long": "--model",
               "flags": "--model <id>",
-              "description": "Veo model id",
+              "description": "Video model (default gemini-omni-1.1-flash; veo-* uses Veo)",
               "required": false,
               "takesValue": true,
               "valueOptional": false,
@@ -646,24 +694,22 @@
             {
               "long": "--resolution",
               "flags": "--resolution <res>",
-              "description": "720p|1080p",
+              "description": "Resolution. Omni: 360p|720p|1080p|4k (default 720p; 1080p and 4k are upscaled). Veo: 720p|1080p (default 1080p)",
               "required": false,
               "takesValue": true,
               "valueOptional": false,
               "variadic": false,
-              "negatable": false,
-              "default": "1080p"
+              "negatable": false
             },
             {
               "long": "--aspect-ratio",
               "flags": "--aspect-ratio <ratio>",
-              "description": "Aspect ratio",
+              "description": "Aspect ratio. Omni: 16:9|9:16 (default 16:9). Veo: default 16:9",
               "required": false,
               "takesValue": true,
               "valueOptional": false,
               "variadic": false,
-              "negatable": false,
-              "default": "16:9"
+              "negatable": false
             },
             {
               "long": "--output",
@@ -678,12 +724,483 @@
             {
               "long": "--no-thumb",
               "flags": "--no-thumb",
-              "description": "Skip downloading the thumbnail if the API returns one",
+              "description": "Skip downloading the thumbnail if the API returns one (Veo)",
               "required": false,
               "takesValue": false,
               "valueOptional": false,
               "variadic": false,
               "negatable": true
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            },
+            {
+              "long": "--delivery",
+              "flags": "--delivery <mode>",
+              "description": "Omni: how the video is returned: uri|inline (default uri)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--task",
+              "flags": "--task <task>",
+              "description": "Omni: task hint, only if prompting is not enough: text_to_video|image_to_video|reference_to_video|edit|extend",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--no-store",
+              "flags": "--no-store",
+              "description": "Omni: do not store the interaction (it cannot be edited or fetched later)",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": true
+            },
+            {
+              "long": "--background",
+              "flags": "--background",
+              "description": "Omni: run in the background and poll by interaction id",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--timeout",
+              "flags": "--timeout <seconds>",
+              "description": "Omni: overall wait in seconds (default 900)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            }
+          ]
+        },
+        {
+          "command": "gemini edit-video",
+          "description": "Edit a Gemini Omni video (stored interaction or uploaded clip) with a text instruction",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--prompt",
+              "flags": "--prompt <text>",
+              "description": "What to change or how the video continues",
+              "required": true,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--interaction-id",
+              "flags": "--interaction-id <id>",
+              "description": "Continue a stored Omni interaction",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--session",
+              "flags": "--session <file>",
+              "description": "Session file (*.interaction.json) from an earlier Omni command",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--video",
+              "flags": "--video <path>",
+              "description": "Local video to upload (10 s or shorter)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--reference-images",
+              "flags": "--reference-images <paths...>",
+              "description": "Reference images; refer to them in the prompt as <IMAGE_REF_0>, <IMAGE_REF_1>, ...",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": true,
+              "negatable": false
+            },
+            {
+              "long": "--key-env",
+              "flags": "--key-env <name>",
+              "description": "Pin the key env var, e.g. GEMINI_API_KEY_2 (default: the session's key, else rotation)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--model",
+              "flags": "--model <id>",
+              "description": "Gemini Omni model (default gemini-omni-1.1-flash)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--resolution",
+              "flags": "--resolution <res>",
+              "description": "Resolution. Omni: 360p|720p|1080p|4k (default 720p; 1080p and 4k are upscaled). Veo: 720p|1080p (default 1080p)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--aspect-ratio",
+              "flags": "--aspect-ratio <ratio>",
+              "description": "Aspect ratio. Omni: 16:9|9:16 (default 16:9). Veo: default 16:9",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--output",
+              "flags": "--output <path>",
+              "description": "Copy the resulting video to this path",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            },
+            {
+              "long": "--delivery",
+              "flags": "--delivery <mode>",
+              "description": "Omni: how the video is returned: uri|inline (default uri)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--task",
+              "flags": "--task <task>",
+              "description": "Omni: task hint, only if prompting is not enough: text_to_video|image_to_video|reference_to_video|edit|extend",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--no-store",
+              "flags": "--no-store",
+              "description": "Omni: do not store the interaction (it cannot be edited or fetched later)",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": true
+            },
+            {
+              "long": "--background",
+              "flags": "--background",
+              "description": "Omni: run in the background and poll by interaction id",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--timeout",
+              "flags": "--timeout <seconds>",
+              "description": "Omni: overall wait in seconds (default 900)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            }
+          ]
+        },
+        {
+          "command": "gemini extend-video",
+          "description": "Extend a Gemini Omni video by 3–10 s (stored interaction or uploaded clip of 10 s or less)",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--prompt",
+              "flags": "--prompt <text>",
+              "description": "What to change or how the video continues",
+              "required": true,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--interaction-id",
+              "flags": "--interaction-id <id>",
+              "description": "Continue a stored Omni interaction",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--session",
+              "flags": "--session <file>",
+              "description": "Session file (*.interaction.json) from an earlier Omni command",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--video",
+              "flags": "--video <path>",
+              "description": "Local video to upload (10 s or shorter)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--reference-images",
+              "flags": "--reference-images <paths...>",
+              "description": "Reference images; refer to them in the prompt as <IMAGE_REF_0>, <IMAGE_REF_1>, ...",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": true,
+              "negatable": false
+            },
+            {
+              "long": "--key-env",
+              "flags": "--key-env <name>",
+              "description": "Pin the key env var, e.g. GEMINI_API_KEY_2 (default: the session's key, else rotation)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--model",
+              "flags": "--model <id>",
+              "description": "Gemini Omni model (default gemini-omni-1.1-flash)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--resolution",
+              "flags": "--resolution <res>",
+              "description": "Resolution. Omni: 360p|720p|1080p|4k (default 720p; 1080p and 4k are upscaled). Veo: 720p|1080p (default 1080p)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--aspect-ratio",
+              "flags": "--aspect-ratio <ratio>",
+              "description": "Aspect ratio. Omni: 16:9|9:16 (default 16:9). Veo: default 16:9",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--output",
+              "flags": "--output <path>",
+              "description": "Copy the resulting video to this path",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            },
+            {
+              "long": "--delivery",
+              "flags": "--delivery <mode>",
+              "description": "Omni: how the video is returned: uri|inline (default uri)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--task",
+              "flags": "--task <task>",
+              "description": "Omni: task hint, only if prompting is not enough: text_to_video|image_to_video|reference_to_video|edit|extend",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--no-store",
+              "flags": "--no-store",
+              "description": "Omni: do not store the interaction (it cannot be edited or fetched later)",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": true
+            },
+            {
+              "long": "--background",
+              "flags": "--background",
+              "description": "Omni: run in the background and poll by interaction id",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--timeout",
+              "flags": "--timeout <seconds>",
+              "description": "Omni: overall wait in seconds (default 900)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            }
+          ]
+        },
+        {
+          "command": "gemini video-status",
+          "description": "Check (and optionally download) a stored Gemini Omni video interaction",
+          "positionals": [
+            {
+              "name": "interactionId",
+              "description": "",
+              "required": false,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--session",
+              "flags": "--session <file>",
+              "description": "Session file (*.interaction.json) from an Omni command",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--key-env",
+              "flags": "--key-env <name>",
+              "description": "Env var of the key that created it (default: the session's)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--wait",
+              "flags": "--wait",
+              "description": "Poll until the interaction finishes",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--download",
+              "flags": "--download",
+              "description": "Save the video once the interaction is completed",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--output",
+              "flags": "--output <path>",
+              "description": "Copy the downloaded video to this path",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--timeout",
+              "flags": "--timeout <seconds>",
+              "description": "Overall wait in seconds with --wait (default 900)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
             },
             {
               "long": "--verbose",

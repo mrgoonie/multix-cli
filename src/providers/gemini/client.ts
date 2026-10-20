@@ -14,7 +14,7 @@
 
 import { HttpError, ProviderError, ValidationError } from "../../core/errors.js";
 import { isNetworkFetchFailure, toFetchError } from "../../core/fetch-error.js";
-import { fetchJson } from "../../core/fetch-json.js";
+import { type FetchLike, fetchJson } from "../../core/fetch-json.js";
 import { FILES_API_MAX_BYTES } from "../../core/limits.js";
 import type { Logger } from "../../core/logger.js";
 import { requiresProcessingWait } from "./media-types.js";
@@ -322,13 +322,43 @@ export async function generateContent(
  */
 export async function createInteraction(
   body: Record<string, unknown>,
-  opts: GeminiCallOptions,
+  opts: GeminiCallOptions & { timeoutMs?: number; fetch?: FetchLike },
 ): Promise<unknown> {
   return fetchJson<unknown>({
     url: `${BASE}/v1beta/interactions`,
     method: "POST",
     headers: authHeaders(opts.apiKey),
     body,
+    timeoutMs: opts.timeoutMs,
+    fetch: opts.fetch,
+  });
+}
+
+/** Interaction ids are opaque tokens such as "v1_abc"; anything else could change the request path. */
+const INTERACTION_ID_RE = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,255}$/;
+
+export function assertInteractionId(id: string): string {
+  const trimmed = id.trim();
+  if (!INTERACTION_ID_RE.test(trimmed)) {
+    throw new ValidationError(`Invalid interaction id: ${JSON.stringify(id.slice(0, 80))}`);
+  }
+  return trimmed;
+}
+
+/**
+ * Fetch a stored Interaction (GET /v1beta/interactions/{id}). Only works for
+ * interactions created with `store` left on, and only with a key from the
+ * Google Cloud project that created it.
+ */
+export async function getInteraction(
+  id: string,
+  opts: GeminiCallOptions & { timeoutMs?: number; fetch?: FetchLike },
+): Promise<unknown> {
+  return fetchJson<unknown>({
+    url: `${BASE}/v1beta/interactions/${encodeURIComponent(assertInteractionId(id))}`,
+    headers: authHeaders(opts.apiKey),
+    timeoutMs: opts.timeoutMs,
+    fetch: opts.fetch,
   });
 }
 

@@ -79,6 +79,16 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
     fileOptions: { "last-frame": "file" },
     caps: { resolution: ["resolution"] },
   },
+  // Omni follow-ups: --session is the *.interaction.json written by an earlier run.
+  "gemini edit-video": {
+    fileOptions: { video: "file", session: "file", "reference-images": "file" },
+    caps: { resolution: ["resolution"] },
+  },
+  "gemini extend-video": {
+    fileOptions: { video: "file", session: "file", "reference-images": "file" },
+    caps: { resolution: ["resolution"] },
+  },
+  "gemini video-status": { fileOptions: { session: "file" } },
   "minimax generate": { caps: IMAGE_COUNT },
   "minimax image-to-image": { fileOptions: { ref: "file" }, caps: IMAGE_COUNT },
   "minimax generate-video": { urlOptions: ["first-frame"], caps: VIDEO_CAPS },

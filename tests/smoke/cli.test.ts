@@ -177,10 +177,30 @@ describe("multix --help (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     }
   });
 
-  it("lists gemini i2v subcommand", async () => {
+  it("lists gemini video subcommands", async () => {
     const result = await run(["gemini", "--help"]);
     expect(result.exitCode).toBe(0);
-    expect(result.stdout + result.stderr).toContain("image-to-video");
+    const out = result.stdout + result.stderr;
+    for (const sub of ["image-to-video", "edit-video", "extend-video", "video-status"]) {
+      expect(out).toContain(sub);
+    }
+  });
+
+  it("rejects Omni-only flags on a Veo model before any request", async () => {
+    const result = await run(
+      [
+        "gemini",
+        "generate-video",
+        "--prompt",
+        "x",
+        "--model",
+        "veo-3.1-generate-preview",
+        "--background",
+      ],
+      { env: { GEMINI_API_KEY: "test-key-not-used", MULTIX_DISABLE_HOME_ENV: "1" } },
+    );
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stdout + result.stderr).toMatch(/--background/);
   });
 
   it("lists openrouter video subcommands", async () => {

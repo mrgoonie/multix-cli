@@ -4,7 +4,7 @@ AI multimodal CLI — generate images/video/speech/music, analyze and transcribe
 
 ![Isometric technical illustration of multix media workflows](docs-site/public/images/multix-isometric-banner.png)
 
-Supports **OpenAI** (image, image edits, TTS, STT, optional Codex image driver), **Gemini** (analyze, transcribe, generate, Veo video, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), **Cloudflare** (Workers AI image and speech; AI Gateway-routed Replicate video), **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment), **fal.ai** (generic model runner, image, video via the fal queue API), and **Atlas Cloud** (any model: image, image edit, video, audio, 3D, with resumable async predictions), **Replicate** (generic model runner, image, video, async prediction status/cancel via the direct Replicate API), **Runway** (Gen-4.5 and Gen-4 Turbo video, Gen-4 images, resumable task status/cancel), **HeyGen** (v3 Video Agent prompt-to-video, scripted avatar videos, video translation, lipsync, TTS).
+Supports **OpenAI** (image, image edits, TTS, STT, optional Codex image driver), **Gemini** (analyze, transcribe, generate, Omni Flash video with edit/extend, Veo, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), **Cloudflare** (Workers AI image and speech; AI Gateway-routed Replicate video), **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment), **fal.ai** (generic model runner, image, video via the fal queue API), and **Atlas Cloud** (any model: image, image edit, video, audio, 3D, with resumable async predictions), **Replicate** (generic model runner, image, video, async prediction status/cancel via the direct Replicate API), **Runway** (Gen-4.5 and Gen-4 Turbo video, Gen-4 images, resumable task status/cancel), **HeyGen** (v3 Video Agent prompt-to-video, scripted avatar videos, video translation, lipsync, TTS).
 
 ## Documentation
 
@@ -111,13 +111,13 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `OPENAI_TTS_MODEL` | No | Default OpenAI TTS model (default `gpt-4o-mini-tts`) |
 | `OPENAI_STT_MODEL` | No | Default OpenAI STT model (default `gpt-4o-transcribe`) |
 | `IMAGE_GEN_MODEL` | No | Override Gemini image generation model |
-| `VIDEO_GEN_MODEL` | No | Override Gemini video generation model |
+| `VIDEO_GEN_MODEL` | No | Override Gemini video generation model (default `gemini-omni-1.1-flash`; a `veo-*` id uses Veo) |
 | `GEMINI_MODEL` / `MULTIMODAL_MODEL` | No | Override Gemini analyze/transcribe/extract model (doc convert uses `--model`; default `gemini-3.6-flash`) |
 | `GEMINI_TTS_MODEL` / `TTS_MODEL` | No | Override Gemini TTS model (default `gemini-3.8-flash-lite-tts`) |
 
 ### Gemini key rotation
 
-Set extra keys as `GEMINI_API_KEY_2`, `GEMINI_API_KEY_3`, … (any numeric suffix; numbered keys alone are enough). `multix` tries `GEMINI_API_KEY` first, then the numbered keys in ascending order, skipping duplicates. When a key returns HTTP 429 (or 400/403 with `RESOURCE_EXHAUSTED`), it cools down for the server's `Retry-After`/`retryDelay` (default 60s) and the same request is retried with the next ready key; other errors are not rotated. A Files API upload is repeated on the new key if the following generate call is rate-limited. Veo rotates on submit only, so a rate limit while polling or downloading never starts a second billed job. `doc convert` stops its own retries on a rate limit. Cooldowns last for the current process only, and logs name the env var, never the key. `multix check` lists the keys in rotation and pings each one. Quotas are per Google Cloud project: keys from the same project share one quota, so rotation only helps across projects.
+Set extra keys as `GEMINI_API_KEY_2`, `GEMINI_API_KEY_3`, … (any numeric suffix; numbered keys alone are enough). `multix` tries `GEMINI_API_KEY` first, then the numbered keys in ascending order, skipping duplicates. When a key returns HTTP 429 (or 400/403 with `RESOURCE_EXHAUSTED`), it cools down for the server's `Retry-After`/`retryDelay` (default 60s) and the same request is retried with the next ready key; other errors are not rotated. A Files API upload is repeated on the new key if the following generate call is rate-limited. Veo and Omni video rotate on submit only, so a rate limit while polling or downloading never starts a second billed job; an Omni request that fails with a network error or timeout after it was sent is never resent. `doc convert` stops its own retries on a rate limit. Cooldowns last for the current process only, and logs name the env var, never the key. `multix check` lists the keys in rotation and pings each one. Quotas are per Google Cloud project: keys from the same project share one quota, so rotation only helps across projects.
 
 Priority: `process.env` > `cwd/.env` > `~/.multix/.env`. A blank or whitespace-only value in a `.env` file does not count as set, so a project `.env` copied from `.env.example` does not hide `~/.multix/.env`; a shell variable wins even when blank. Set `MULTIX_LEGACY_CLAUDE_ENV=1` (shell or `~/.multix/.env`) to also read legacy AgentKit files (`.claude/skills/{ai-multimodal,ak-ai-multimodal}/.env`, `.claude/skills/.env`, `.claude/.env`, project first, then home) with the lowest priority (credential names only, never endpoint/proxy settings); `multix check -v` lists the env files that were loaded.
 
@@ -170,11 +170,22 @@ multix gemini generate --prompt "A mountain lake" [--model <id>] [--aspect-ratio
 # Image-to-image (Nano Banana — edit/compose from refs, alias: i2i)
 multix gemini image-to-image --prompt "make it watercolor" --ref ./photo.jpg [--ref ./style.png] [--model gemini-2.5-flash-image] [--output <path>] [-v]
 
-# Generate video [EXPERIMENTAL — requires billing]
-multix gemini generate-video --prompt "Ocean waves" [--model veo-3.1-generate-preview] [--resolution 720p|1080p] [--aspect-ratio 16:9] [--reference-images first.png last.png] [-v]
+# Generate video with Gemini Omni Flash (default gemini-omni-1.1-flash; requires billing)
+multix gemini generate-video --prompt "Ocean waves" [--resolution 360p|720p|1080p|4k] [--aspect-ratio 16:9|9:16] [--reference-images a.png b.png] [--background] [--timeout 900] [--output <path>] [-v]
 
-# Image-to-video with Veo (alias: i2v) [EXPERIMENTAL]
-multix gemini image-to-video <imagePath> --prompt "camera pans left" [--last-frame <path>] [--model veo-3.1-generate-preview] [--resolution 1080p] [--aspect-ratio 16:9] [--output <path>] [-v]
+# Image-to-video (alias: i2v): start frame, optional closing frame
+multix gemini image-to-video <imagePath> --prompt "camera pans left" [--last-frame <path>] [--resolution 720p] [--aspect-ratio 16:9] [--output <path>] [-v]
+
+# Edit or extend (3–10 s) a stored Omni video, or an uploaded clip of 10 s or less
+multix gemini edit-video --session ./omni_generated_<ts>.interaction.json --prompt "make the boat red"
+multix gemini extend-video --interaction-id <id> --prompt "the camera follows the boat downstream"
+multix gemini edit-video --video ./clip.mp4 --prompt "turn it into a watercolor"
+
+# Check, wait for, or download an interaction (recover a run that timed out locally)
+multix gemini video-status --session ./omni_generated_<ts>.interaction.json --wait --download
+
+# Veo (legacy): pass a veo-* model; Omni-only flags are rejected
+multix gemini generate-video --prompt "Ocean waves" --model veo-3.1-generate-preview [--resolution 720p|1080p]
 
 # Text-to-speech (Gemini 3.1 Flash TTS — single & multi-speaker)
 multix gemini generate-speech (--text|--prompt) "Have a wonderful day!" [--model gemini-3.8-flash-lite-tts] [--voice Kore] [--style "cheerful and friendly"] [--output-format wav|pcm] [--output <path>] [-v]
@@ -187,10 +198,14 @@ multix gemini generate-speech --text "Joe: How's it going? Jane: Not too bad!" \
 **Gemini models:**
 - Text output (analyze, transcribe, extract, doc convert): `gemini-3.6-flash` (default), `gemini-3.5-flash` (manual override)
 - Image gen: `gemini-3.1-flash-image-preview` (Nano Banana 2, fastest), `gemini-3-pro-image-preview` (4K text), `imagen-4.0-generate-001` (production)
-- Video: `veo-3.1-generate-preview` (requires billing)
+- Video: `gemini-omni-1.1-flash` (default, about $0.10 per second of 720p output), Veo via `--model veo-*` (requires billing)
+
+**Gemini Omni video:** `--resolution` 1080p and 4k are upscales (default 720p). Results are fetched by URI by default (`--delivery inline` returns base64; videos over about 4 MB need `uri`); the CLI waits for the file to become `ACTIVE` and sends the API key only to `generativelanguage.googleapis.com`. Each stored run writes `<video>.interaction.json` next to the video (mode 0600) with the interaction id, model, the key's env var name (never its value), status and usage. `edit-video`/`extend-video --session` reuse that key, since interactions belong to one Google Cloud project; override with `--key-env GEMINI_API_KEY_2`. `--no-store` skips server storage, so the run cannot be edited, extended or resumed. Editing or extending uploaded videos is unavailable in the EEA, Switzerland and the UK.
+
+**Veo shutdown dates** (the CLI warns): `veo-3.1-*-preview`, `veo-3.1-lite-generate-preview` and `gemini-omni-flash-preview` shut down on 2026-10-22; `veo-3.0-generate-001`, `veo-3.0-fast-generate-001` and `veo-2.0-generate-001` on 2026-06-30. To migrate, drop `--model veo-…`: `--resolution 1080p --aspect-ratio 9:16` work unchanged on Omni.
 - TTS: `gemini-3.8-flash-lite-tts` (default, fast/cheap, 101 languages), `gemini-3.8-flash-tts` (highest fidelity, 130 languages), legacy `gemini-3.1-flash-tts-preview`, `gemini-2.5-flash-preview-tts`, `gemini-2.5-pro-preview-tts`. Gemini 3.8 models use the Interactions API, read the text verbatim, take delivery direction via `--style`, and also accept custom `voice_…`/`voicekey_…` voice ids.
 
-`gemini-3.6-flash` is a text-output model. Use Nano Banana/Imagen for images, Veo for video, and Gemini Flash TTS for speech.
+`gemini-3.6-flash` is a text-output model. Use Nano Banana/Imagen for images, Gemini Omni Flash for video, and Gemini Flash TTS for speech.
 
 **Aspect ratios:** `1:1 2:3 3:2 3:4 4:3 4:5 5:4 9:16 16:9 21:9`
 

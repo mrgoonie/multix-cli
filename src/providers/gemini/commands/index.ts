@@ -10,13 +10,15 @@ import { registerGenerateVideoCommand } from "./generate-video.js";
 import { registerGenerateCommand } from "./generate.js";
 import { registerGeminiImageToImageCommand } from "./image-to-image.js";
 import { registerGeminiImageToVideoCommand } from "./image-to-video.js";
+import { registerGeminiOmniFollowUpCommands } from "./omni-follow-up.js";
 import { registerTranscribeCommand } from "./transcribe.js";
+import { registerGeminiVideoStatusCommand } from "./video-status.js";
 
 export function registerGeminiCommands(program: Command): void {
   const gemini = program
     .command("gemini")
     .description(
-      "Gemini: analyze, transcribe, extract data, generate images (Imagen/Nano Banana), video (Veo), and speech (Flash TTS)",
+      "Gemini: analyze, transcribe, extract data, generate images (Imagen/Nano Banana), video (Omni Flash, Veo), and speech (Flash TTS)",
     );
 
   registerAnalyzeCommand(gemini);
@@ -26,5 +28,7 @@ export function registerGeminiCommands(program: Command): void {
   registerGeminiImageToImageCommand(gemini);
   registerGenerateVideoCommand(gemini);
   registerGeminiImageToVideoCommand(gemini);
+  registerGeminiOmniFollowUpCommands(gemini);
+  registerGeminiVideoStatusCommand(gemini);
   registerGeminiGenerateSpeechCommand(gemini);
 }

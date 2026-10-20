@@ -112,6 +112,28 @@ export async function withGeminiKey<T>(
   throw lastError;
 }
 
+/**
+ * Run `fn` with the key from one named env var (GEMINI_API_KEY or
+ * GEMINI_API_KEY_<n>), without rotation. Follow-up calls on a stored
+ * interaction must use the Google Cloud project that created it.
+ */
+export async function withNamedGeminiKey<T>(
+  keyName: string,
+  fn: (apiKey: string, keyName: string) => Promise<T>,
+  opts: { env?: NodeJS.ProcessEnv } = {},
+): Promise<T> {
+  if (!/^GEMINI_API_KEY(_\d+)?$/.test(keyName)) {
+    throw new ConfigError(`Not a Gemini key variable: ${keyName.slice(0, 40)}`);
+  }
+  const key = listGeminiKeys(opts.env).find((k) => k.name === keyName);
+  if (!key) {
+    throw new ConfigError(
+      `${keyName} is not set (or repeats another key); the interaction belongs to that key's project`,
+    );
+  }
+  return fn(key.value, key.name);
+}
+
 /** Reset cooldown state — for testing only. */
 export function _resetGeminiKeyCooldowns(): void {
   cooldownUntil.clear();
