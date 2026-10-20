@@ -56,6 +56,7 @@ function registerFollowUp(
     .action(async (opts: FollowUpOpts) => {
       // With --no-wait, stdout carries only the JSON result.
       const logger = createLogger({ verbose: opts.verbose ?? false, stderr: opts.wait === false });
+      if (!opts.prompt.trim()) throw new ValidationError("--prompt must not be empty");
       if (Boolean(opts.interactionId) === Boolean(opts.video)) {
         throw new ValidationError("Pass exactly one of --interaction-id or --video");
       }

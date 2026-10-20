@@ -103,6 +103,7 @@ With `--video` the request names the task (`edit` or `extend`). With
 with `Edit this video:` or `Extend this video:` unless it already says so.
 Without it the model guesses from the wording: "the ball turns blue" sent as an
 extension came back as an edit.
+
 Only a completed interaction can be continued. Editing or extending an uploaded
 video is unavailable in the EEA, Switzerland and the UK; editing a generated
 video with `--interaction-id` works there. Stored interactions and uploaded

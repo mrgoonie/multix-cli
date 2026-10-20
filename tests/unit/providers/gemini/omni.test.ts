@@ -482,6 +482,11 @@ describe("followUpPrompt", () => {
       "extend this video by panning out",
     );
     expect(followUpPrompt("EDIT THIS VIDEO: night", "edit")).toBe("EDIT THIS VIDEO: night");
+    // An explicit intent is the user's call, even on the other command.
+    expect(followUpPrompt("Extend this video: x", "edit")).toBe("Extend this video: x");
+    expect(followUpPrompt("Edit this videogame scene", "edit")).toBe(
+      "Edit this video: Edit this videogame scene",
+    );
   });
 
   it("leaves the prompt alone without an edit or extend task", () => {
