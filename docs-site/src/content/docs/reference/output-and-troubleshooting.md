@@ -17,9 +17,10 @@ need `ffmpeg`; commands that use ImageMagick need `magick` on your `PATH`.
 
 Generated files default to `./multix-output`. Set `MULTIX_OUTPUT_DIR` to change
 the default, or use the command's `--output` option when available.
-Default file names end in a millisecond timestamp plus a random suffix (for
-example `veo_generated_1760955000000-3f9a1c07.mp4`), so parallel runs that share
-an output directory do not overwrite each other's files.
+Timestamp-based default file names include a millisecond timestamp and a random
+suffix (for example `veo_generated_1760955000000-3f9a1c07.mp4`), so parallel runs
+that share an output directory do not overwrite each other's files. Job-based
+names use the provider's job or request ID instead.
 
 ```bash
 multix media optimize --input source.mp4 --output optimized.mp4 --target-size 100

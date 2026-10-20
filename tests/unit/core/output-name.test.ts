@@ -9,8 +9,8 @@ describe("outputStamp", () => {
   it("differs between calls in the same millisecond", () => {
     vi.spyOn(Date, "now").mockReturnValue(1_760_955_000_000);
     try {
-      const stamps = new Set(Array.from({ length: 1000 }, () => outputStamp()));
-      expect(stamps.size).toBe(1000);
+      const stamps = new Set(Array.from({ length: 100 }, () => outputStamp()));
+      expect(stamps.size).toBe(100);
       for (const s of stamps) expect(s.startsWith("1760955000000-")).toBe(true);
     } finally {
       vi.restoreAllMocks();

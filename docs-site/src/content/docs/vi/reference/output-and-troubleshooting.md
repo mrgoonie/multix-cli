@@ -17,9 +17,10 @@ multix check --verbose
 
 File sinh ra mặc định trong `./multix-output`. Đặt `MULTIX_OUTPUT_DIR` để đổi
 mặc định, hoặc dùng `--output` tại lệnh hỗ trợ option này.
-Tên file mặc định kết thúc bằng timestamp mili giây kèm hậu tố ngẫu nhiên (ví dụ
-`veo_generated_1760955000000-3f9a1c07.mp4`), nên các lần chạy song song dùng chung
-thư mục output không ghi đè file của nhau.
+Tên file mặc định dựa trên thời gian chứa timestamp mili giây kèm hậu tố ngẫu
+nhiên (ví dụ `veo_generated_1760955000000-3f9a1c07.mp4`), nên các lần chạy song
+song dùng chung thư mục output không ghi đè file của nhau. Tên file theo job dùng
+ID job hoặc request của provider.
 
 ```bash
 multix media optimize --input source.mp4 --output optimized.mp4 --target-size 100
