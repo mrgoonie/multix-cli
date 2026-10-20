@@ -118,10 +118,11 @@ dụ xóa một giọng ElevenLabs) chạy như mọi lệnh khác, bằng key c
 **Gemini edit và extend.** `gemini extend-video --duration` là độ dài của đoạn
 nối tiếp mới và bị giới hạn như mọi thời lượng khác, nhưng video trả về còn chứa
 cả clip nguồn. Vì vậy giới hạn áp dụng cho từng lần gọi, không phải cho cả clip:
-mỗi lần extend tiếp một interaction đã lưu (`--interaction-id`) clip lại dài
+mỗi lần extend tiếp một interaction đã lưu (`--interaction-id`), clip lại dài
 thêm, và `gemini edit-video` giữ nguyên độ dài của nguồn. Server không biết độ
-dài của interaction đã lưu nên không giới hạn một chuỗi extend; mọi lần gọi đều
-tính phí vào key Gemini của chính bạn.
+dài của interaction đã lưu nên không giới hạn một chuỗi extend ngoài giới hạn
+40 giây tổng cộng của Google; mọi lần gọi đều được tính phí trên key Gemini của
+chính bạn.
 
 **Runway.** `runway video` và `runway image` chạy được từ xa; truyền `--image`
 và từng `--reference` dưới dạng URL `https://` trong `inputs`, còn `--duration`
@@ -408,7 +409,7 @@ closed). `http://localhost` được chấp nhận khi phát triển cục bộ.
 |---|---|---|
 | `MULTIX_PUBLIC_URL` | — (bắt buộc) | Origin công khai, ví dụ `https://mcp.example.com`. Dùng cho metadata OAuth, redirect và callback GitHub. |
 | `MULTIX_MCP_MAX_OUTPUTS` | `4` (tối đa 10) | Số output tối đa (ví dụ `--num-images`) mỗi lần gọi `multix_run`. |
-| `MULTIX_MCP_MAX_VIDEO_SECONDS` | `10` (tối đa 15) | Thời lượng video tối đa. Khi caller bỏ qua thời lượng và mặc định của lệnh không rõ hoặc dài hơn, server gửi `min(5, giới hạn)` giây. |
+| `MULTIX_MCP_MAX_VIDEO_SECONDS` | `10` (tối đa 15) | Thời lượng video tối đa cho mỗi lần gọi (với `gemini extend-video` là đoạn nối tiếp mới). Khi caller bỏ qua thời lượng và mặc định của lệnh không rõ hoặc dài hơn, server gửi `min(5, giới hạn)` giây. |
 | `MULTIX_MCP_ALLOWED_RESOLUTIONS` | `480p,720p,768p,1080p` | Độ phân giải video caller được yêu cầu (`768p` là kích thước của HeyGen Video). Giá trị khác (ví dụ `4k`), do caller truyền hay là mặc định của lệnh, bị từ chối trước khi job bắt đầu. |
 | `MULTIX_MCP_ALLOWED_ORIGINS` | không có | Origin trình duyệt chính xác (ví dụ `https://app.example.com`) được phép gọi `/mcp`. Không hỗ trợ `*` hay wildcard khác: `*` chỉ khớp origin `*` theo nghĩa đen, thứ trình duyệt không bao giờ gửi. Sau khi access token được kiểm tra, request có header `Origin` khác nhận `403`; request không có `Origin` (client phía server) được chấp nhận. Origin trong danh sách nhận header CORS. Preflight `OPTIONS` được lớp OAuth trả lời cho mọi origin. |
 | `MULTIX_MAX_JOBS_PER_ACCOUNT` | `2` (tối đa 50) | Số job `multix_run` một tài khoản được chạy cùng lúc. |
