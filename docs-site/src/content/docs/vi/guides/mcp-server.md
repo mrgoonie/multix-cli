@@ -109,8 +109,10 @@ Giới hạn của server cũng áp dụng cho `multix_run`: số output
 (`MULTIX_MCP_ALLOWED_RESOLUTIONS`). Server tự chọn thư mục đầu ra, `--output`
 phải là tên file thuần, option mà CLI ghép vào tên file (như
 `elevenlabs voices design --output-prefix` hoặc mã ngôn ngữ khi lồng tiếng) chỉ
-nhận chữ cái, chữ số, `_` và `-`, các lệnh ảnh OpenAI luôn dùng API driver, và
-giá trị `@file` bị từ chối. Lệnh thay đổi chính tài khoản provider của bạn (ví
+nhận chữ cái, chữ số, `_` và `-`, các lệnh ảnh OpenAI luôn dùng API driver,
+các lệnh video Gemini luôn dùng Gemini Omni Flash (khi người gọi bỏ trống độ
+phân giải, server gửi một giá trị được phép, ưu tiên 720p), và giá trị `@file`
+bị từ chối. Lệnh thay đổi chính tài khoản provider của bạn (ví
 dụ xóa một giọng ElevenLabs) chạy như mọi lệnh khác, bằng key của bạn.
 
 **Runway.** `runway video` và `runway image` chạy được từ xa; truyền `--image`

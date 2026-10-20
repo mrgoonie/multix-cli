@@ -223,7 +223,8 @@ async function readFinalizedFile(resp: Response): Promise<FileRef> {
 }
 
 function unwrapFile(resp: FileRef | { file: FileRef }): FileRef {
-  const file = "file" in resp && resp.file ? resp.file : (resp as FileRef);
+  const file =
+    resp && typeof resp === "object" && "file" in resp && resp.file ? resp.file : (resp as FileRef);
   if (typeof file?.state !== "string") {
     throw new ProviderError("File processing check returned no file state", "gemini");
   }

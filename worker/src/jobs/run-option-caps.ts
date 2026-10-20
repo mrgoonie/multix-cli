@@ -71,6 +71,17 @@ export function applyCaps(
     }
   }
   for (const name of rules?.resolution ?? []) {
+    if (
+      rules?.fillResolution &&
+      single(values, name) === undefined &&
+      !defaultString(options.get(name))
+    ) {
+      // No value the CLI would check: send an allowed one (720p when the operator allows it).
+      const fill = limits.allowedResolutions.includes("720p")
+        ? "720p"
+        : limits.allowedResolutions[0];
+      if (fill) values.set(name, [fill]);
+    }
     const raw = single(values, name) ?? defaultString(options.get(name));
     if (raw !== undefined && !limits.allowedResolutions.includes(normaliseResolution(raw))) {
       throw new ValidationError(

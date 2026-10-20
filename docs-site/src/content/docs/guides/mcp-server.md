@@ -112,7 +112,9 @@ sent when a video command's default is unknown or longer) and resolution
 `--output` must be a plain file name, options the CLI turns into part of a
 file name (such as `elevenlabs voices design --output-prefix` or a dub
 language) accept only letters, digits, `_` and `-`, the OpenAI image commands
-always use the API driver, and `@file` values are rejected. Commands that
+always use the API driver, the Gemini video commands always use Gemini Omni
+Flash (an allowed resolution, 720p when permitted, is sent when the caller
+omits it), and `@file` values are rejected. Commands that
 change your own provider account (for example deleting an ElevenLabs voice)
 run like any other, with your key.
 

@@ -182,6 +182,16 @@ describe("prepareRun: argv", () => {
   it("runs the Gemini Omni video commands with downloaded inputs and capped duration", async () => {
     const generate = run({ command: "gemini generate-video", options: { prompt: "a fox" } });
     expect(generate.argv).toContain("--duration=5");
+    // Omni only, and an allowed resolution is sent when the caller omits it.
+    expect(generate.argv).toContain("--model=gemini-omni-1.1-flash");
+    expect(generate.argv).toContain("--resolution=720p");
+    rejects(
+      {
+        command: "gemini generate-video",
+        options: { prompt: "p", model: "veo-3.1-generate-preview" },
+      },
+      /model must be gemini-omni-1.1-flash/,
+    );
     const i2v = run({
       command: "gemini image-to-video",
       args: [],
@@ -204,6 +214,8 @@ describe("prepareRun: argv", () => {
     expect(parsedEdit.opts.referenceImages).toEqual(["in/1-1.png", "in/2-2.png"]);
     // An edit keeps the source length: no duration is added.
     expect(edit.argv.some((a) => a.startsWith("--duration"))).toBe(false);
+    // The source's resolution is not checked, so an allowed one is sent.
+    expect(parsedEdit.opts.resolution).toBe("720p");
 
     const extend = run({
       command: "gemini extend-video",

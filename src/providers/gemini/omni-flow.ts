@@ -183,7 +183,7 @@ export async function findInteractionKey(
   );
 }
 
-/** Turn a submit failure into an actionable message; quota errors stay HttpErrors. */
+/** Turn a submit failure into an actionable message (rotation on 429 has already run). */
 function submitError(error: unknown): unknown {
   if (!(error instanceof HttpError)) return error;
   if (error.status === 0) {
@@ -199,8 +199,13 @@ function submitError(error: unknown): unknown {
   )
     ? " Editing or extending an uploaded video is unavailable in the EEA, Switzerland and the UK; edit a generated video with --interaction-id instead."
     : "";
+  // A 5xx may come after Google accepted the job, so it gets the same warning as a lost response.
+  const maybeBilled =
+    error.status >= 500
+      ? " The video may already be generating and billed; check https://aistudio.google.com before submitting again."
+      : "";
   return new ProviderError(
-    `Gemini Omni request rejected (HTTP ${error.status}): ${message}${regional}`,
+    `Gemini Omni request failed (HTTP ${error.status}): ${message}${regional}${maybeBilled}`,
     "gemini",
     { cause: error },
   );
@@ -302,8 +307,14 @@ export async function runOmniVideo(
     updated_at: nowIso(),
     request: requestSummary(opts),
   };
-  writeRecord(recordPath, record);
-  if (interactionId) logger.info(`Interaction ID: ${interactionId} (session: ${recordPath})`);
+  // The job is accepted and billed: show its id even if the record cannot be written.
+  if (interactionId) logger.info(`Interaction ID: ${interactionId}`);
+  try {
+    writeRecord(recordPath, record);
+    logger.info(`Session record: ${recordPath}`);
+  } catch (error) {
+    logger.warn(`Could not write the session record ${recordPath}: ${(error as Error).message}`);
+  }
   if (!store) logger.warn("--no-store: this video cannot be edited, extended or resumed later");
 
   if (!opts.wait && interactionId) {

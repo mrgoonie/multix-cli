@@ -25,6 +25,11 @@ export interface CapRules {
   count?: string[];
   /** Video resolution: must normalise to one of `allowedResolutions`. */
   resolution?: string[];
+  /**
+   * When the resolution is omitted and the CLI has no default (the provider
+   * picks one, or an edit keeps the source's), send an allowed one instead.
+   */
+  fillResolution?: boolean;
 }
 
 export interface CommandPolicy {
@@ -62,6 +67,9 @@ export const OUTPUT_FILE_OPTION = "output";
 export const OUTPUT_DIR_OPTION = "output-dir";
 
 const VIDEO_CAPS: CapRules = { duration: ["duration"], resolution: ["resolution"] };
+const OMNI_VIDEO_CAPS: CapRules = { ...VIDEO_CAPS, fillResolution: true };
+/** Veo leaves the Gemini API on 2026-10-22 and rejects --duration, which the caps always send. */
+const OMNI_MODEL = { model: "gemini-omni-1.1-flash" };
 const IMAGE_COUNT: CapRules = { count: ["num-images"] };
 
 export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
@@ -70,27 +78,31 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   "gemini extract": { fileOptions: { files: "file" } },
   "gemini generate": { caps: IMAGE_COUNT },
   "gemini image-to-image": { fileOptions: { ref: "file" } },
-  // Gemini Omni video: --duration is Omni-only (3-10 s); when omitted the server
-  // default is sent so a lowered MULTIX_MCP_MAX_VIDEO_SECONDS still holds.
+  // Gemini Omni video only (Veo is forced out): when --duration or --resolution
+  // is omitted an allowed server value is sent, so the operator caps hold.
   // --no-wait and `video-status`/`video-cancel` run as-is, like runway/replicate.
   "gemini generate-video": {
+    forced: OMNI_MODEL,
     fileOptions: { "reference-images": "file" },
-    caps: VIDEO_CAPS,
+    caps: OMNI_VIDEO_CAPS,
   },
   "gemini image-to-video": {
+    forced: OMNI_MODEL,
     filePositionals: ["imagePath"],
     fileOptions: { "last-frame": "file" },
-    caps: VIDEO_CAPS,
+    caps: OMNI_VIDEO_CAPS,
   },
-  // The source video comes from `inputs` (or --interaction-id of a stored video);
-  // an edit keeps the source length, so only the resolution is capped.
+  // The source video comes from `inputs` (or --interaction-id of a stored video).
+  // An edit has no --duration: its length is the source's (Google limits an
+  // uploaded clip to 10 s). An extend is billed for the new continuation only,
+  // which --duration caps; the returned video also contains the source.
   "gemini edit-video": {
     fileOptions: { video: "file", "reference-images": "file" },
-    caps: { resolution: ["resolution"] },
+    caps: { resolution: ["resolution"], fillResolution: true },
   },
   "gemini extend-video": {
     fileOptions: { video: "file", "reference-images": "file" },
-    caps: VIDEO_CAPS,
+    caps: OMNI_VIDEO_CAPS,
   },
   "minimax generate": { caps: IMAGE_COUNT },
   "minimax image-to-image": { fileOptions: { ref: "file" }, caps: IMAGE_COUNT },
