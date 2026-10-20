@@ -92,8 +92,11 @@ project đó và được thử trước tiên.
 - Request nhiều bước giữ nguyên một key. Nếu lệnh generate sau khi upload qua
   Files API bị giới hạn, key kế tiếp sẽ upload lại file, vì file đã upload thuộc
   về key tạo ra nó.
-- Veo chỉ xoay vòng ở bước submit. Khi job đã được nhận, polling và download dùng
-  đúng key đó, nên giới hạn về sau không bao giờ tạo job thứ hai bị tính phí riêng.
+- Model video (Gemini Omni và Veo) chỉ xoay vòng ở bước submit. Khi job đã được
+  nhận, polling, download và các lệnh chỉnh sửa hoặc kéo dài video Omni dùng
+  đúng key đó, nên giới hạn về sau không bao giờ tạo job thứ hai bị tính phí
+  riêng. File session của Omni ghi tên biến môi trường của key để các lệnh tiếp
+  nối dùng lại; xem [Video Gemini](/vi/commands/gemini/#video).
 - `multix doc convert` chỉ thử lại một file sau lỗi mạng, timeout, 408 và 5xx
   (trừ 501 và 505). Lệnh dừng khi gặp giới hạn, vì xoay vòng đã thử mọi key sẵn
   sàng, và báo lỗi ngay khi thiếu key hoặc gặp mã 4xx khác. Lượt upload qua Files
@@ -143,7 +146,8 @@ Chỉ đặt override khi cần thay default. Các biến gồm `IMAGE_GEN_MODEL
 `BYTEPLUS_IMAGE_MODEL`, `BYTEPLUS_VIDEO_MODEL`, `BYTEPLUS_3D_MODEL`,
 `FAL_BASE_URL`, `FAL_IMAGE_MODEL`, `FAL_VIDEO_MODEL` và
 `FAL_VIDEO_IMAGE_MODEL` (default image-to-video của fal, dùng khi truyền
-`multix fal video --image-url` mà không có `-m`). Replicate nhận
+`multix fal video --image-url` mà không có `-m`). `VIDEO_GEN_MODEL` mặc định là
+`gemini-omni-1.1-flash`; giá trị `veo-*` sẽ chọn pipeline Veo. Replicate nhận
 `REPLICATE_BASE_URL` (API root cho mock hoặc proxy), `REPLICATE_IMAGE_MODEL`
 (mặc định `black-forest-labs/flux-schnell`) và `REPLICATE_VIDEO_MODEL`
 (mặc định `prunaai/p-video`). Video qua Cloudflare AI Gateway chỉ đọc

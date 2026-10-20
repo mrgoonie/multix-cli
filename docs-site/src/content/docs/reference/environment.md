@@ -94,8 +94,11 @@ tried first.
 - Multi-step requests stay on one key. If the generate call that follows a Files
   API upload is rate-limited, the next key uploads the file again, because an
   uploaded file belongs to the key that created it.
-- Veo rotates only on submit. Once a job is accepted, polling and download use
-  that key, so a later rate limit never starts a second, separately billed job.
+- Video models (Gemini Omni and Veo) rotate only on submit. Once a job is
+  accepted, polling, download and Omni edits or extensions use that key, so a
+  later rate limit never starts a second, separately billed job. An Omni
+  session file records the key's env var name so follow-ups reuse it; see
+  [Gemini video](/commands/gemini/#video).
 - `multix doc convert` retries a file only after network errors, timeouts, 408
   and 5xx responses other than 501 and 505. It stops on a rate limit, because
   rotation already tried every ready key, and fails at once on a missing key or
@@ -145,7 +148,8 @@ settings include `IMAGE_GEN_MODEL`, `VIDEO_GEN_MODEL`, `MULTIMODAL_MODEL`,
 `BYTEPLUS_BASE_URL`, `BYTEPLUS_IMAGE_MODEL`, `BYTEPLUS_VIDEO_MODEL`,
 `BYTEPLUS_3D_MODEL`, `FAL_BASE_URL`, `FAL_IMAGE_MODEL`, `FAL_VIDEO_MODEL`, and
 `FAL_VIDEO_IMAGE_MODEL` (fal's image-to-video default, used when
-`multix fal video --image-url` is passed without `-m`). Replicate accepts
+`multix fal video --image-url` is passed without `-m`). `VIDEO_GEN_MODEL`
+defaults to `gemini-omni-1.1-flash`; a `veo-*` value selects the Veo pipeline. Replicate accepts
 `REPLICATE_BASE_URL` (API root for mocks or proxies), `REPLICATE_IMAGE_MODEL`
 (default `black-forest-labs/flux-schnell`), and `REPLICATE_VIDEO_MODEL`
 (default `prunaai/p-video`). Cloudflare AI Gateway video reads only

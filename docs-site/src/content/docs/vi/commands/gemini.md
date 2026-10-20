@@ -37,7 +37,7 @@ cat screenshot.png | multix gemini analyze --files - --prompt "What is shown?"
 curl -s https://example.com/talk.mp3 | multix gemini transcribe --files - --stdin-ext mp3
 ```
 
-## Ảnh và video
+## Ảnh
 
 `generate` hỗ trợ `--model`, `--aspect-ratio`, `--num-images`, `--size` và
 `--output`. `image-to-image` (alias `i2i`) nhận nhiều input `--ref`.
@@ -45,12 +45,137 @@ curl -s https://example.com/talk.mp3 | multix gemini transcribe --files - --stdi
 ```bash
 multix gemini generate --prompt "A mountain lake" --aspect-ratio 16:9 --size 2K
 multix gemini i2i --prompt "make it watercolor" --ref ./photo.jpg --ref ./style.png
-multix gemini generate-video --prompt "Ocean waves" --resolution 1080p --aspect-ratio 16:9
+```
+
+## Video
+
+Model video mặc định là `gemini-omni-1.1-flash` (Gemini Omni Flash), chạy qua
+Gemini Interactions API. `VIDEO_GEN_MODEL` hoặc `--model` ghi đè model này.
+Model id dạng `veo-*` vẫn dùng pipeline Veo; mọi họ model khác bị từ chối thay
+vì bị đoán. Video Omni có giá khoảng $0,10 cho mỗi giây video 720p; xem
+[trang giá của Google](https://ai.google.dev/gemini-api/docs/pricing) trước khi
+chạy số lượng lớn. Veo cần bật Google billing.
+
+```bash
+multix gemini generate-video --prompt "Ocean waves at sunset"
+multix gemini generate-video --prompt "The cat walks through the garden" \
+  --reference-images ./cat.png ./garden.png --aspect-ratio 9:16
 multix gemini i2v ./first-frame.png --prompt "camera pans left" --last-frame ./last-frame.png
 ```
 
-Tạo video là experimental và có thể cần bật Google billing. Dùng
-`--wait-timeout`, `--download`, `--output` hoặc `--no-thumb` khi phù hợp.
+- `generate-video`: với Omni, `--reference-images` là ảnh tham chiếu chủ thể
+  hoặc phong cách (reference-to-video). Với Veo, ảnh đầu tiên là khung hình mở
+  đầu và ảnh thứ hai là khung hình kết thúc.
+- `image-to-video` (alias `i2v`): ảnh truyền vào là khung hình bắt đầu;
+  `--last-frame` thêm khung hình kết thúc để nội suy tới.
+- `--output` chép video tới đường dẫn bạn chọn; bản gốc vẫn nằm trong thư mục
+  output.
+
+### Tùy chọn Omni
+
+| Cờ | Giá trị | Ghi chú |
+|---|---|---|
+| `--resolution` | `360p`, `720p` (mặc định), `1080p`, `4k` | `1080p` và `4k` là bản upscale. |
+| `--aspect-ratio` | `16:9` (mặc định), `9:16` | |
+| `--delivery` | `uri` (mặc định), `inline` | Video lớn hơn khoảng 4 MB cần `uri`. |
+| `--task` | `text_to_video`, `image_to_video`, `reference_to_video`, `edit`, `extend` | Model thường tự suy ra tác vụ; chỉ dùng khi prompt chưa đủ. |
+| `--no-store` | | Interaction không được lưu, nên không thể chỉnh sửa, kéo dài hay tiếp tục lấy kết quả sau này. Không dùng chung được với `--background`. |
+| `--background` | | Server chạy request bất đồng bộ và CLI poll theo interaction id. |
+| `--timeout` | 30–7200 giây (mặc định 900) | Tổng thời gian chờ cho lượt chạy. |
+
+`--delivery`, `--task`, `--no-store`, `--background` và `--timeout` bị từ chối
+với model `veo-*`. Veo nhận `--resolution 720p|1080p` (mặc định `1080p`) và mặc
+định `16:9`; `--no-thumb` chỉ áp dụng cho Veo.
+
+### File session
+
+Mỗi lượt chạy Omni được lưu sẽ ghi file `<video>.interaction.json` cạnh video,
+với quyền file 0600. File ghi interaction id, interaction id cha (khi chỉnh sửa
+hoặc kéo dài), model, tên biến môi trường của key (không bao giờ ghi giá trị
+key), trạng thái, usage và đường dẫn output. Truyền file này cho `edit-video`,
+`extend-video` hoặc `video-status` bằng `--session`.
+
+### Chỉnh sửa và kéo dài
+
+`edit-video` thay đổi video theo một chỉ dẫn bằng văn bản; `extend-video` thêm
+3–10 giây (kéo dài nhiều lần đạt tổng cộng khoảng 40 giây). Cả hai lệnh nhận
+`--prompt` và đúng một nguồn:
+
+- `--session <file>`: file session từ một lệnh Omni trước đó. File này cố định
+  key (và do đó cả Google Cloud project) đã tạo interaction; ghi đè bằng
+  `--key-env GEMINI_API_KEY_2`.
+- `--interaction-id <id>`: một interaction đã được lưu.
+- `--video <path>`: một clip local dài tối đa 10 giây, được upload trước. Chỉnh
+  sửa hoặc kéo dài video upload không khả dụng ở EEA, Thụy Sĩ và Vương quốc
+  Anh.
+
+`--reference-images` thêm ảnh mà bạn có thể gọi trong prompt là
+`<IMAGE_REF_0>`, `<IMAGE_REF_1>`, v.v. Interaction tạo bằng `--no-store` không
+thể tiếp tục.
+
+```bash
+multix gemini edit-video --session ./multix-output/omni_generated_1760000000000.interaction.json \
+  --prompt "Make it night time"
+multix gemini extend-video --session ./multix-output/omni_generated_1760000000000.interaction.json \
+  --prompt "The camera rises above the clouds"
+multix gemini edit-video --video ./clip.mp4 --reference-images ./hat.png \
+  --prompt "Put the hat in <IMAGE_REF_0> on the person"
+```
+
+### Kiểm tra hoặc khôi phục lượt chạy
+
+`video-status` nhận một interaction id hoặc `--session <file>` và in một object
+JSON ra stdout (trạng thái, model, usage; không có URL và không có dữ liệu
+video). `--wait` poll tới khi interaction kết thúc, `--download` lưu video đã
+hoàn tất vào thư mục output và cập nhật file session, còn `--output` chép video
+tới nơi khác. Dùng lệnh này để khôi phục một lượt chạy bị timeout ở máy local mà
+không phải trả tiền cho lần tạo thứ hai:
+
+```bash
+multix gemini video-status --session ./multix-output/omni_generated_1760000000000.interaction.json --wait --download
+```
+
+### An toàn cho request tính phí
+
+- Khi request tạo video gặp lỗi mạng hoặc timeout sau khi đã được gửi đi, CLI
+  không gửi lại, vì request đó vẫn có thể hoàn tất và bị tính phí. Thay vào đó
+  CLI gợi ý dùng `--background` và `video-status`.
+- Key chỉ xoay vòng khi gặp 429 hoặc `RESOURCE_EXHAUSTED` trước khi request
+  được nhận. Polling, download và các lệnh tiếp nối dùng đúng key đã tạo
+  interaction; xem [Xoay vòng Gemini key](/vi/reference/environment/#xoay-vòng-gemini-key).
+- Bước download chờ tới khi Files API báo video ở trạng thái `ACTIVE`. API key
+  chỉ được gửi tới `generativelanguage.googleapis.com`; URL video khác được tải
+  mà không kèm credential.
+
+### Remote MCP server
+
+Qua [remote MCP server](/vi/guides/mcp-server/), `multix_run` cũng nhận
+`gemini edit-video`, `gemini extend-video` và `gemini video-status`.
+`--session`, `--video` và `--reference-images` được truyền dưới dạng file input.
+`--resolution` phải nằm trong danh sách cho phép của người vận hành, mặc định từ
+chối `360p` và `4k`.
+
+### Model video bị ngừng hỗ trợ
+
+Dùng một trong các model này sẽ in cảnh báo; request vẫn được gửi đúng như yêu
+cầu, không bao giờ bị chuyển sang model khác.
+
+| Model | Ngày ngừng hoạt động |
+|---|---|
+| `veo-3.1-generate-preview`, `veo-3.1-fast-generate-preview`, `veo-3.1-lite-generate-preview`, `gemini-omni-flash-preview` | 2026-10-22 |
+| `veo-3.0-generate-001`, `veo-3.0-fast-generate-001`, `veo-2.0-generate-001` | 2026-06-30 |
+| `veo-3.0-generate-preview`, `veo-3.0-fast-generate-preview` | 2025-11-12 |
+
+Để chuyển đổi, bỏ `--model` (và mọi `VIDEO_GEN_MODEL` đang trỏ tới model Veo)
+để dùng model Omni mặc định. Omni mặc định 720p, nên hãy truyền `--resolution`
+rõ ràng nếu muốn giữ độ phân giải cao hơn:
+
+```bash
+# Trước
+multix gemini generate-video --model veo-3.1-generate-preview --prompt "Ocean waves" --resolution 1080p
+# Sau
+multix gemini generate-video --prompt "Ocean waves" --resolution 1080p
+```
 
 ## Speech
 
