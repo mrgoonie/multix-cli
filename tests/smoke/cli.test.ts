@@ -183,6 +183,23 @@ describe("multix --help (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     expect(result.stdout + result.stderr).toContain("image-to-video");
   });
 
+  it("lists gemini Omni video subcommands", async () => {
+    const result = await run(["gemini", "--help"]);
+    expect(result.exitCode).toBe(0);
+    const out = result.stdout + result.stderr;
+    for (const sub of ["edit-video", "extend-video", "video-status", "video-cancel"]) {
+      expect(out).toContain(sub);
+    }
+  });
+
+  it("documents Omni duration and --no-wait on gemini generate-video", async () => {
+    const result = await run(["gemini", "generate-video", "--help"]);
+    expect(result.exitCode).toBe(0);
+    const out = result.stdout + result.stderr;
+    expect(out).toContain("--duration");
+    expect(out).toContain("--no-wait");
+  });
+
   it("lists openrouter video subcommands", async () => {
     const result = await run(["openrouter", "--help"]);
     expect(result.exitCode).toBe(0);
