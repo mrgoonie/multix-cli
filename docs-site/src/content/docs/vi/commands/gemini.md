@@ -37,7 +37,7 @@ cat screenshot.png | multix gemini analyze --files - --prompt "What is shown?"
 curl -s https://example.com/talk.mp3 | multix gemini transcribe --files - --stdin-ext mp3
 ```
 
-## Ảnh và video
+## Ảnh
 
 `generate` hỗ trợ `--model`, `--aspect-ratio`, `--num-images`, `--size` và
 `--output`. `image-to-image` (alias `i2i`) nhận nhiều input `--ref`.
@@ -45,12 +45,103 @@ curl -s https://example.com/talk.mp3 | multix gemini transcribe --files - --stdi
 ```bash
 multix gemini generate --prompt "A mountain lake" --aspect-ratio 16:9 --size 2K
 multix gemini i2i --prompt "make it watercolor" --ref ./photo.jpg --ref ./style.png
-multix gemini generate-video --prompt "Ocean waves" --resolution 1080p --aspect-ratio 16:9
+```
+
+## Video
+
+`generate-video` và `image-to-video` (alias `i2v`) mặc định dùng Gemini Omni
+Flash (`gemini-omni-1.1-flash`) qua Interactions API. Tạo video cần key đã bật
+billing.
+
+```bash
+multix gemini generate-video --prompt "Ocean waves" --resolution 1080p --duration 8
+multix gemini generate-video --prompt "A cat walks in" --reference-images ./first.png ./last.png
 multix gemini i2v ./first-frame.png --prompt "camera pans left" --last-frame ./last-frame.png
 ```
 
-Tạo video là experimental và có thể cần bật Google billing. Dùng
-`--wait-timeout`, `--download`, `--output` hoặc `--no-thumb` khi phù hợp.
+- `--resolution` nhận `360p`, `720p` (mặc định), `1080p` hoặc `4k`;
+  `--aspect-ratio` nhận `16:9` (mặc định) hoặc `9:16`; `--duration` nhận 3–10
+  giây, nếu bỏ trống thì model tự chọn độ dài.
+- `--reference-images` với một hoặc hai ảnh sẽ đặt khung hình đầu và cuối;
+  nhiều ảnh hơn được dùng làm ảnh tham chiếu chủ thể.
+- Mỗi request được lưu trữ và chạy nền. Interaction id được ghi vào
+  `gemini_omni_<timestamp>.json` trong thư mục output trước khi bắt đầu
+  polling. Khi thành công, stdout in `Generated video: <path>` và
+  `Interaction ID: <id>`.
+- `--no-wait` gửi request, in JSON `{interaction_id, status, session}` rồi
+  thoát. `--wait-timeout <ms>` đặt thời gian chờ (mặc định 15 phút).
+- `--no-store` gửi một request đồng bộ mà Google không lưu lại: kết quả không
+  thể chỉnh sửa, nối dài hay tiếp tục, và không dùng chung được với `--no-wait`.
+- `--upload-timeout` đã ngừng hỗ trợ và bị bỏ qua; `--no-thumb` chỉ áp dụng
+  cho Veo.
+
+### Chỉnh sửa và nối dài
+
+`edit-video` thay đổi một video có sẵn theo prompt; `extend-video` nối thêm
+một đoạn tiếp theo dài 3–10 giây vào cuối video (tổng cộng tối đa 40 giây).
+Nguồn là một interaction đã lưu (`--interaction-id`) hoặc một clip local dài
+tối đa 10 giây (`--video`), được upload lên Files API. Video nối dài gồm clip
+gốc và đoạn tiếp theo (clip 3 giây nối thêm 3 giây sẽ trả về video 6 giây).
+
+```bash
+multix gemini edit-video --prompt "make it night time" --interaction-id <id>
+multix gemini edit-video --prompt "add falling snow" --video ./clip.mp4 --reference-images ./snow.png
+multix gemini extend-video --prompt "the camera follows the ball out the door" \
+  --interaction-id <id> --duration 6
+```
+
+Nếu không truyền `--resolution` hoặc `--aspect-ratio`, kết quả giữ nguyên định
+dạng của video nguồn. Chỉ interaction đã hoàn tất mới được chỉnh sửa hoặc nối
+dài. Chỉnh sửa hoặc nối dài video upload không khả dụng ở EEA, Thụy Sĩ và Vương
+quốc Anh; chỉnh sửa video đã tạo bằng `--interaction-id` vẫn dùng được ở đó.
+Interaction đã lưu và file đã upload sẽ hết hạn (file trên Files API sau khoảng
+48 giờ).
+
+### Trạng thái, tiếp tục và hủy
+
+```bash
+multix gemini video-status <id>                      # bản tóm tắt JSON
+multix gemini video-status <id> --download --output ./clip.mp4
+multix gemini video-cancel <id>
+```
+
+`video-status` chỉ in JSON (hoặc đường dẫn đã lưu khi có `--download`) ra
+stdout, không bao giờ in URI file hay dữ liệu media; tiến trình được ghi ra
+stderr, nên có thể pipe kết quả sang `jq`. Lệnh trả mã thoát khác 0 khi
+interaction thất bại, bị hủy hoặc chưa hoàn chỉnh. `--wait` poll cho đến khi
+xong; `--download` lưu video đã hoàn tất. `video-cancel` đọc interaction trước
+và để nguyên interaction đã kết thúc.
+
+### Key và chi phí
+
+Khi có nhiều key trong [nhóm xoay vòng](/vi/reference/environment/#xoay-vòng-gemini-key),
+chỉ bước submit được xoay vòng, và chỉ khi bị giới hạn tốc độ. Key đã nhận
+request được dùng cho polling và download, còn các lệnh tiếp nối dùng key thuộc
+project đang giữ interaction. Lỗi mạng khi submit không được thử lại, vì video
+có thể đã bắt đầu tạo và bị tính phí.
+
+Omni chỉ dùng được ở gói trả phí. Session record chứa ước tính chi phí dựa trên
+lượng token được báo cáo (video output $17,50, input $1,50, text và thought
+output $9 cho mỗi 1M token; khoảng $0,10 mỗi giây ở 720p). Số tiền thực tế là
+số Google tính.
+
+### Chuyển từ Veo
+
+Google ngừng các model Veo 3.1 preview trên Gemini API vào ngày 2026-10-22;
+các model Veo 3.0 đã ngừng từ ngày 2026-06-30. `gemini-omni-flash-preview`
+cũng ngừng vào ngày 2026-10-22, vì vậy hãy dùng `gemini-omni-1.1-flash`.
+
+```bash
+# Trước: Veo, mặc định 1080p
+multix gemini generate-video --prompt "Ocean waves" --model veo-3.1-generate-preview
+# Sau: Omni Flash, mặc định 720p
+multix gemini generate-video --prompt "Ocean waves" --resolution 1080p
+```
+
+Truyền rõ `--model veo-*` (hoặc `VIDEO_GEN_MODEL=veo-*`) vẫn chạy luồng Veo,
+kèm cảnh báo ngừng hoạt động với các model preview. Veo hỗ trợ `720p` và
+`1080p` (mặc định `1080p`); `--duration`, `--no-store` và `--no-wait` báo lỗi
+khi dùng với Veo. Model không phải Omni hay Veo sẽ bị từ chối.
 
 ## Speech
 

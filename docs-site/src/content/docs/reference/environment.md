@@ -94,8 +94,11 @@ tried first.
 - Multi-step requests stay on one key. If the generate call that follows a Files
   API upload is rate-limited, the next key uploads the file again, because an
   uploaded file belongs to the key that created it.
-- Veo rotates only on submit. Once a job is accepted, polling and download use
-  that key, so a later rate limit never starts a second, separately billed job.
+- Video generation (Gemini Omni and Veo) rotates only on submit. Once a job is
+  accepted, polling and download use that key, so a later rate limit never
+  starts a second, separately billed job. Omni edit, extend and status commands
+  use the key whose project holds the interaction. A network failure on submit
+  is not retried, because the request may already be running and billed.
 - `multix doc convert` retries a file only after network errors, timeouts, 408
   and 5xx responses other than 501 and 505. It stops on a rate limit, because
   rotation already tried every ready key, and fails at once on a missing key or

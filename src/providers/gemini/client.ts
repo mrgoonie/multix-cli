@@ -14,12 +14,13 @@
 
 import { HttpError, ProviderError, ValidationError } from "../../core/errors.js";
 import { isNetworkFetchFailure, toFetchError } from "../../core/fetch-error.js";
-import { fetchJson } from "../../core/fetch-json.js";
+import { type FetchLike, fetchJson } from "../../core/fetch-json.js";
 import { FILES_API_MAX_BYTES } from "../../core/limits.js";
 import type { Logger } from "../../core/logger.js";
 import { requiresProcessingWait } from "./media-types.js";
 
-const BASE = "https://generativelanguage.googleapis.com";
+const API_HOST = "generativelanguage.googleapis.com";
+const BASE = `https://${API_HOST}`;
 const FILES_BASE = `${BASE}/upload/v1beta/files`;
 const GENERATE_BASE = `${BASE}/v1beta/models`;
 
@@ -333,14 +334,94 @@ export async function generateContent(
  */
 export async function createInteraction(
   body: Record<string, unknown>,
-  opts: GeminiCallOptions,
+  opts: GeminiCallOptions & { timeoutMs?: number; fetch?: FetchLike },
 ): Promise<unknown> {
   return fetchJson<unknown>({
     url: `${BASE}/v1beta/interactions`,
     method: "POST",
     headers: authHeaders(opts.apiKey),
     body,
+    timeoutMs: opts.timeoutMs,
+    fetch: opts.fetch,
   });
+}
+
+/** Interaction ids are opaque URL-safe tokens (e.g. `v1_Chdl…`); anything else never reaches a URL. */
+const INTERACTION_ID_RE = /^[A-Za-z0-9_-]{1,512}$/;
+
+export function assertInteractionId(id: string): string {
+  const trimmed = id.trim();
+  if (!INTERACTION_ID_RE.test(trimmed)) {
+    throw new ValidationError(`Invalid interaction id: ${trimmed.slice(0, 80)}`);
+  }
+  return trimmed;
+}
+
+/** GET /v1beta/interactions/{id}: the stored Interaction resource (status, steps, usage). */
+export async function getInteraction(
+  id: string,
+  opts: GeminiCallOptions & { timeoutMs?: number; fetch?: FetchLike },
+): Promise<unknown> {
+  return fetchJson<unknown>({
+    url: `${BASE}/v1beta/interactions/${assertInteractionId(id)}`,
+    headers: authHeaders(opts.apiKey),
+    timeoutMs: opts.timeoutMs,
+    fetch: opts.fetch,
+  });
+}
+
+/** POST /v1beta/interactions/{id}/cancel: stops a background interaction that is still running. */
+export async function cancelInteraction(
+  id: string,
+  opts: GeminiCallOptions & { fetch?: FetchLike },
+): Promise<unknown> {
+  return fetchJson<unknown>({
+    url: `${BASE}/v1beta/interactions/${assertInteractionId(id)}/cancel`,
+    method: "POST",
+    headers: authHeaders(opts.apiKey),
+    body: {},
+    fetch: opts.fetch,
+  });
+}
+
+/** Files API resource name (`files/<id>`) accepted by getFile and fileDownloadUrl. */
+const FILE_NAME_RE = /^files\/[A-Za-z0-9_-]{1,256}$/;
+
+/** GET /v1beta/files/{id}: metadata including `state` (PROCESSING, ACTIVE, FAILED). */
+export async function getFile(
+  name: string,
+  opts: GeminiCallOptions & { timeoutMs?: number; fetch?: FetchLike },
+): Promise<FileRef & { sizeBytes?: string }> {
+  if (!FILE_NAME_RE.test(name)) throw new ValidationError(`Invalid Gemini file name: ${name}`);
+  return fetchJson<FileRef & { sizeBytes?: string }>({
+    url: `${BASE}/v1beta/${name}`,
+    headers: authHeaders(opts.apiKey),
+    timeoutMs: opts.timeoutMs,
+    fetch: opts.fetch,
+  });
+}
+
+/** Media download URL for a Files API resource; it needs the x-goog-api-key header. */
+export function fileDownloadUrl(name: string): string {
+  if (!FILE_NAME_RE.test(name)) throw new ValidationError(`Invalid Gemini file name: ${name}`);
+  return `${BASE}/v1beta/${name}:download?alt=media`;
+}
+
+/**
+ * The Files API resource name behind a Gemini API file URI, or null when the
+ * URI points anywhere else (another host, plain http, an unexpected path).
+ * Only such URIs may receive the API key.
+ */
+export function geminiFileNameFromUri(uri: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(uri);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== "https:" || parsed.host !== API_HOST) return null;
+  const match = /^\/v1beta\/(files\/[A-Za-z0-9_-]{1,256})(?::download)?$/.exec(parsed.pathname);
+  return match?.[1] ?? null;
 }
 
 /**

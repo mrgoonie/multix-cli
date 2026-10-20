@@ -1,6 +1,6 @@
 ---
 name: multix
-description: AI multimodal CLI — generate and edit images (OpenAI, Codex driver, Gemini Nano Banana, Imagen, MiniMax, OpenRouter, Leonardo, BytePlus Seedream, Cloudflare Workers AI FLUX.1 Schnell, fal.ai FLUX, Replicate FLUX, Runway Gen-4 Image), generate video (Gemini Veo, MiniMax Hailuo, OpenRouter via Veo/Seedance/Kling, Leonardo via Motion/Veo/Kling/Hailuo/Seedance/LTX, BytePlus Seedance, Cloudflare AI Gateway via Replicate, fal.ai queue models, Replicate direct API models incl. P-Video, Runway Gen-4.5 and Gen-4 Turbo, HeyGen Video Agent and scripted avatar videos), video translation and lipsync (HeyGen), TTS/STT/music (OpenAI, Gemini Flash TTS incl. Gemini 3.8 with delivery-style control, MiniMax, Cloudflare Workers AI MeloTTS, ElevenLabs), 3D models (BytePlus Hyper3D/Hitem3d), analyze/transcribe media, convert documents to Markdown, optimize media via ffmpeg/ImageMagick, and self-update the CLI. Use whenever the user wants to create, edit, or transform images/video/audio/3D/documents from a CLI, mentions any of: OpenAI, Codex image driver, image-to-image, i2i, image edit, watercolor/cyberpunk style transfer, reference image, OpenRouter, Nano Banana, Flux, Seedream, Veo, Hailuo, Seedance, Kling, Cloudflare Workers AI, AI Gateway, fal.ai, Atlas Cloud, Replicate, replicate.com models, Replicate predictions, Runway, Gen-4.5, Gen-4 Turbo, Gen-4 Image, HeyGen, avatar video, talking head, Video Agent, video translation, dubbing, lipsync, video generation, text-to-video, image-to-video, i2v, ElevenLabs voice cloning, updating/upgrading multix, or asks for batch media optimization.
+description: AI multimodal CLI — generate and edit images (OpenAI, Codex driver, Gemini Nano Banana, Imagen, MiniMax, OpenRouter, Leonardo, BytePlus Seedream, Cloudflare Workers AI FLUX.1 Schnell, fal.ai FLUX, Replicate FLUX, Runway Gen-4 Image), generate, edit and extend video (Gemini Omni Flash, plus legacy Gemini Veo), generate video (MiniMax Hailuo, OpenRouter via Veo/Seedance/Kling, Leonardo via Motion/Veo/Kling/Hailuo/Seedance/LTX, BytePlus Seedance, Cloudflare AI Gateway via Replicate, fal.ai queue models, Replicate direct API models incl. P-Video, Runway Gen-4.5 and Gen-4 Turbo, HeyGen Video Agent and scripted avatar videos), video translation and lipsync (HeyGen), TTS/STT/music (OpenAI, Gemini Flash TTS incl. Gemini 3.8 with delivery-style control, MiniMax, Cloudflare Workers AI MeloTTS, ElevenLabs), 3D models (BytePlus Hyper3D/Hitem3d), analyze/transcribe media, convert documents to Markdown, optimize media via ffmpeg/ImageMagick, and self-update the CLI. Use whenever the user wants to create, edit, or transform images/video/audio/3D/documents from a CLI, mentions any of: OpenAI, Codex image driver, image-to-image, i2i, image edit, watercolor/cyberpunk style transfer, reference image, OpenRouter, Nano Banana, Flux, Seedream, Gemini Omni, Omni Flash, Veo, Hailuo, Seedance, Kling, Cloudflare Workers AI, AI Gateway, fal.ai, Atlas Cloud, Replicate, replicate.com models, Replicate predictions, Runway, Gen-4.5, Gen-4 Turbo, Gen-4 Image, HeyGen, avatar video, talking head, Video Agent, video translation, dubbing, lipsync, video generation, text-to-video, image-to-video, i2v, ElevenLabs voice cloning, updating/upgrading multix, or asks for batch media optimization.
 version: 1.11.0 # x-release-please-version
 ---
 
@@ -12,6 +12,7 @@ Activate this skill when the user asks to:
 - Generate images from a text prompt (any provider)
 - **Edit/transform an existing image with a prompt** (image-to-image, alias `i2i`)
 - Generate video from text or from a reference image (image-to-video, alias `i2v`)
+- **Edit or extend a Gemini Omni video** (`gemini edit-video`, `gemini extend-video`) and check/resume/cancel it (`gemini video-status`, `gemini video-cancel`)
 - **Generate video via OpenRouter routed models** (Veo, Seedance, Kling — use `multix openrouter video-models` to list)
 - **Generate video via BytePlus Seedance** directly (text-to-video, image-to-video, reference-to-video)
 - **Generate video via Leonardo** (Motion, Veo, Kling, Hailuo, Seedance, LTX models)
@@ -60,7 +61,7 @@ Priority: `process.env` > `cwd/.env` > `~/.multix/.env`; a blank value in a `.en
 
 ## Gemini text-output tasks
 
-`gemini-3.6-flash` is the default for Gemini analyze, transcribe, extract, and doc conversion. It is text-output only; use Nano Banana/Imagen for images, Veo for video, and Gemini Flash TTS for speech. Override analyze/transcribe/extract with `GEMINI_MODEL` or `MULTIMODAL_MODEL`; override doc conversion with `--model`.
+`gemini-3.6-flash` is the default for Gemini analyze, transcribe, extract, and doc conversion. It is text-output only; use Nano Banana/Imagen for images, Gemini Omni Flash for video, and Gemini Flash TTS for speech. Override analyze/transcribe/extract with `GEMINI_MODEL` or `MULTIMODAL_MODEL`; override doc conversion with `--model`.
 
 Codex CLI can be used as an experimental OpenAI image driver after manual `codex login`:
 
@@ -309,9 +310,14 @@ User wants to edit/transform an existing image?
 ## Image-to-video (i2v) and video generation
 
 ```bash
-# Gemini Veo (experimental, billing required) — text-to-video + i2v
-multix gemini generate-video --prompt "Ocean waves" --resolution 1080p --aspect-ratio 16:9
-multix gemini i2v ./photo.jpg --prompt "camera pans left" [--last-frame <path>]
+# Gemini Omni Flash (default gemini-omni-1.1-flash; billing-enabled key) — text/image-to-video, edit, extend
+multix gemini generate-video --prompt "Ocean waves" [--resolution 360p|720p|1080p|4k] [--aspect-ratio 16:9|9:16] [--duration 3-10] [--reference-images first.png [last.png]]
+multix gemini i2v ./photo.jpg --prompt "camera pans left" [--last-frame <path>] [--duration 3-10]
+multix gemini edit-video --prompt "make it night time" (--interaction-id <id> | --video ./clip.mp4)
+multix gemini extend-video --prompt "the camera follows the ball" --interaction-id <id> [--duration 3-10]
+multix gemini generate-video --prompt "<text>" --no-wait          # prints JSON {interaction_id,status,session}
+multix gemini video-status <id> [--wait] [--download] [--output <path>]   # JSON on stdout; non-zero on failed/cancelled/incomplete
+multix gemini video-cancel <id>                                   # finished interactions are left as is
 
 # MiniMax Hailuo — async with auto-poll
 multix minimax generate-video --prompt "A dancer" --duration 6 --resolution 1080P [--first-frame <url>]
@@ -331,22 +337,29 @@ multix byteplus i2v ./photo.jpg --prompt "<text>"
 multix byteplus reference-to-video --prompt "<text>" --ref-image ./hero.jpg:subject ...
 ```
 
-Most video commands accept `--wait`, `--wait-timeout <ms>`, `--download`, `--output <path>`, `--no-thumb`. Cloudflare video has no thumbnail flags; see [Cloudflare media](#cloudflare-media) for its distinct `--wait` and `--download` behavior.
+Gemini Omni notes:
+- Default resolution 720p (Omni) vs 1080p (Veo). `--model veo-*` still runs legacy Veo (the Veo 3.1 previews and `gemini-omni-flash-preview` shut down on the Gemini API on 2026-10-22); Omni-only flags (`--duration`, `--no-store`, `--no-wait`) fail with Veo, and other model ids are rejected.
+- The interaction id is saved in `gemini_omni_<ts>.json` in the output dir before polling; resume a timeout with `multix gemini video-status <id> --download`. Success prints `Generated video: <path>` and `Interaction ID: <id>`.
+- `--no-store` = one synchronous unstored request (cannot be edited, extended or resumed; not with `--no-wait`). Edit/extend keep the source format unless flags are given; extend appends 3-10 s (total up to 40 s). Uploaded `--video` clips must be at most 10 s, and editing/extending them is unavailable in the EEA, Switzerland and the UK (use `--interaction-id` there). Stored interactions and files expire (Files about 48 h).
+- Cost is roughly $0.10 per second at 720p (paid tier); the session record holds an estimate. Do not resubmit after a network failure on submit: the request may already be billed.
+
+Most other video commands accept `--wait`, `--wait-timeout <ms>`, `--download`, `--output <path>`, `--no-thumb`. Cloudflare video has no thumbnail flags; see [Cloudflare media](#cloudflare-media) for its distinct `--wait` and `--download` behavior.
 
 ### Decision tree — which provider to pick for video generation
 
 ```
 User wants to generate a video?
   ├── Text-to-video?
-  │   ├── Gemini Veo (experimental, Google billing)        → multix gemini generate-video
+  │   ├── Gemini Omni Flash (Google billing)               → multix gemini generate-video
   │   ├── MiniMax Hailuo (async, auto-poll)                → multix minimax generate-video
   │   ├── Leonardo (Motion/Veo/Kling/Hailuo/Seedance/LTX) → multix leonardo video
   │   └── BytePlus Seedance 2.0 (direct)                  → multix byteplus video
   ├── Image-to-video?
-  │   ├── Gemini Veo (experimental)                        → multix gemini i2v
+  │   ├── Gemini Omni Flash (local file, first/last frame) → multix gemini i2v
   │   ├── OpenRouter (Veo, Seedance, Kling — URL input)   → multix openrouter i2v --image-url <url>
   │   ├── Leonardo (needs imageId from Leonardo upload)    → multix leonardo i2v
   │   └── BytePlus Seedance 2.0 (local file or URL)       → multix byteplus i2v
+  ├── Edit or extend an existing video?                   → multix gemini edit-video / extend-video
   └── Multi-reference video (images + videos + audio)?     → multix byteplus reference-to-video
 ```
 
@@ -423,7 +436,7 @@ Requires `cwebp` (libwebp: `brew install webp`, `apt install webp`) on `PATH`.
 | `OPENROUTER_VIDEO_MODEL` | Default OpenRouter video model (default `google/veo-3.1`) |
 | `OPENROUTER_SITE_URL` / `OPENROUTER_APP_NAME` | HTTP-Referer / X-Title headers |
 | `GEMINI_MODEL` / `MULTIMODAL_MODEL` | Override Gemini analyze/transcribe/extract defaults (doc convert uses `--model`; default `gemini-3.6-flash`) |
-| `IMAGE_GEN_MODEL` / `VIDEO_GEN_MODEL` | Override Gemini media-generation defaults |
+| `IMAGE_GEN_MODEL` / `VIDEO_GEN_MODEL` | Override Gemini media-generation defaults (video default `gemini-omni-1.1-flash`; `veo-*` = legacy Veo) |
 | `LEONARDO_DEFAULT_MODEL` / `LEONARDO_VIDEO_MODEL` | Leonardo model defaults |
 | `BYTEPLUS_IMAGE_MODEL` / `BYTEPLUS_VIDEO_MODEL` / `BYTEPLUS_3D_MODEL` | BytePlus model defaults |
 | `BYTEPLUS_VIDEO_PARAMS_MODE` | `flags` (default) or `structured` |

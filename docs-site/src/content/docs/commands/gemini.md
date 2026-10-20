@@ -37,7 +37,7 @@ cat screenshot.png | multix gemini analyze --files - --prompt "What is shown?"
 curl -s https://example.com/talk.mp3 | multix gemini transcribe --files - --stdin-ext mp3
 ```
 
-## Images and video
+## Images
 
 `generate` supports `--model`, `--aspect-ratio`, `--num-images`, `--size`, and
 `--output`. `image-to-image` (alias `i2i`) accepts repeated `--ref` inputs.
@@ -45,12 +45,104 @@ curl -s https://example.com/talk.mp3 | multix gemini transcribe --files - --stdi
 ```bash
 multix gemini generate --prompt "A mountain lake" --aspect-ratio 16:9 --size 2K
 multix gemini i2i --prompt "make it watercolor" --ref ./photo.jpg --ref ./style.png
-multix gemini generate-video --prompt "Ocean waves" --resolution 1080p --aspect-ratio 16:9
+```
+
+## Video
+
+`generate-video` and `image-to-video` (alias `i2v`) use Gemini Omni Flash
+(`gemini-omni-1.1-flash`) by default through the Interactions API. Video
+generation needs a billing-enabled key.
+
+```bash
+multix gemini generate-video --prompt "Ocean waves" --resolution 1080p --duration 8
+multix gemini generate-video --prompt "A cat walks in" --reference-images ./first.png ./last.png
 multix gemini i2v ./first-frame.png --prompt "camera pans left" --last-frame ./last-frame.png
 ```
 
-Video generation is experimental and can require enabled Google billing. Use
-`--wait-timeout`, `--download`, `--output`, or `--no-thumb` when applicable.
+- `--resolution` accepts `360p`, `720p` (default), `1080p` or `4k`;
+  `--aspect-ratio` accepts `16:9` (default) or `9:16`; `--duration` takes 3–10
+  seconds and the model picks a length when it is omitted.
+- `--reference-images` with one or two images sets the first and last frame;
+  more images are used as subject references.
+- Each request is stored and runs in the background. The interaction id is
+  written to `gemini_omni_<timestamp>.json` in the output directory before
+  polling starts. On success stdout prints `Generated video: <path>` and
+  `Interaction ID: <id>`.
+- `--no-wait` submits, prints `{interaction_id, status, session}` as JSON and
+  exits. `--wait-timeout <ms>` sets how long to wait (default 15 minutes).
+- `--no-store` sends one synchronous request that Google does not keep: the
+  result cannot be edited, extended or resumed, and `--no-wait` cannot be
+  combined with it.
+- `--upload-timeout` is deprecated and ignored; `--no-thumb` applies to Veo
+  only.
+
+### Edit and extend
+
+`edit-video` changes an existing video with a prompt; `extend-video` appends
+a 3–10 second continuation to its end (up to 40 seconds in total). The source is
+a stored interaction (`--interaction-id`) or a local clip of at most 10 seconds
+(`--video`), which is uploaded to the Files API. The extended video contains
+the source clip followed by the continuation (a 3 s clip extended by 3 s comes
+back 6 s long).
+
+```bash
+multix gemini edit-video --prompt "make it night time" --interaction-id <id>
+multix gemini edit-video --prompt "add falling snow" --video ./clip.mp4 --reference-images ./snow.png
+multix gemini extend-video --prompt "the camera follows the ball out the door" \
+  --interaction-id <id> --duration 6
+```
+
+Without `--resolution` or `--aspect-ratio` the result keeps the source format.
+Only a completed interaction can be continued. Editing or extending an uploaded
+video is unavailable in the EEA, Switzerland and the UK; editing a generated
+video with `--interaction-id` works there. Stored interactions and uploaded
+files expire (Files API uploads after about 48 hours).
+
+### Status, resume and cancel
+
+```bash
+multix gemini video-status <id>                      # JSON summary
+multix gemini video-status <id> --download --output ./clip.mp4
+multix gemini video-cancel <id>
+```
+
+`video-status` prints only JSON (or the saved path with `--download`) on
+stdout, never file URIs or media bytes; progress goes to stderr, so the output
+can be piped to `jq`. It exits non-zero when the interaction failed, was
+cancelled or is incomplete. `--wait` polls until it finishes; `--download`
+saves a completed video. `video-cancel` reads the interaction first and leaves
+a finished one as is.
+
+### Keys and cost
+
+With several keys in the [rotation pool](/reference/environment/#gemini-key-rotation),
+only the submit rotates, and only on a rate limit. The key that accepted the
+request is used for polling and download, and follow-ups use the key whose
+project holds the interaction. A network failure on submit is not retried,
+because the video may already be generating and billed.
+
+Omni is paid-tier only. The session record holds a cost estimate from the
+reported token usage (video output $17.50, input $1.50, text and thought output
+$9 per 1M tokens; roughly $0.10 per second at 720p). The bill is what Google
+reports.
+
+### Migrating from Veo
+
+Google shuts the Veo 3.1 preview models down on the Gemini API on 2026-10-22;
+the Veo 3.0 models already shut down on 2026-06-30. `gemini-omni-flash-preview`
+also shuts down on 2026-10-22, so use `gemini-omni-1.1-flash`.
+
+```bash
+# Before: Veo, 1080p by default
+multix gemini generate-video --prompt "Ocean waves" --model veo-3.1-generate-preview
+# After: Omni Flash, 720p by default
+multix gemini generate-video --prompt "Ocean waves" --resolution 1080p
+```
+
+An explicit `--model veo-*` (or `VIDEO_GEN_MODEL=veo-*`) still runs the Veo
+path, with a shutdown warning for preview models. Veo supports `720p` and
+`1080p` (default `1080p`); `--duration`, `--no-store` and `--no-wait` fail with
+Veo. Any model that is neither Omni nor Veo is rejected.
 
 ## Speech
 

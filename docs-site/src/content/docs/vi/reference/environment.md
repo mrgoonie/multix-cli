@@ -92,8 +92,11 @@ project đó và được thử trước tiên.
 - Request nhiều bước giữ nguyên một key. Nếu lệnh generate sau khi upload qua
   Files API bị giới hạn, key kế tiếp sẽ upload lại file, vì file đã upload thuộc
   về key tạo ra nó.
-- Veo chỉ xoay vòng ở bước submit. Khi job đã được nhận, polling và download dùng
-  đúng key đó, nên giới hạn về sau không bao giờ tạo job thứ hai bị tính phí riêng.
+- Tạo video (Gemini Omni và Veo) chỉ xoay vòng ở bước submit. Khi job đã được
+  nhận, polling và download dùng đúng key đó, nên giới hạn về sau không bao giờ
+  tạo job thứ hai bị tính phí riêng. Các lệnh edit, extend và status của Omni
+  dùng key thuộc project đang giữ interaction. Lỗi mạng khi submit không được
+  thử lại, vì request có thể đã chạy và bị tính phí.
 - `multix doc convert` chỉ thử lại một file sau lỗi mạng, timeout, 408 và 5xx
   (trừ 501 và 505). Lệnh dừng khi gặp giới hạn, vì xoay vòng đã thử mọi key sẵn
   sàng, và báo lỗi ngay khi thiếu key hoặc gặp mã 4xx khác. Lượt upload qua Files

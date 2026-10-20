@@ -11,8 +11,24 @@ export const IMAGE_MODEL_DEFAULT = "gemini-3.1-flash-image-preview";
 /** Fallback if default image model fails. */
 export const IMAGE_MODEL_FALLBACK = "gemini-2.5-flash-image";
 
-/** Default video generation model (Veo). */
-export const VIDEO_MODEL_DEFAULT = "veo-3.1-generate-preview";
+/** GA Gemini Omni Flash video model (Interactions API), the replacement for the Veo 3.1 previews. */
+export const GEMINI_OMNI_MODEL_DEFAULT = "gemini-omni-1.1-flash";
+
+/** Default video generation model. */
+export const VIDEO_MODEL_DEFAULT = GEMINI_OMNI_MODEL_DEFAULT;
+
+/** Google shuts the Veo 3.1 preview models down on the Gemini API on this date. */
+export const VEO_PREVIEW_SHUTDOWN_DATE = "2026-10-22";
+
+/** Gemini Omni video models go through the Interactions API (`omni.ts`). */
+export function isOmniVideoModel(model: string): boolean {
+  return /^(models\/)?gemini-omni-/.test(model);
+}
+
+/** Veo models go through predictLongRunning (`veo.ts`). */
+export function isVeoVideoModel(model: string): boolean {
+  return /^(models\/)?veo-/.test(model);
+}
 
 /** Default text-output model for multimodal analysis, transcription, extraction, and docs. */
 export const TEXT_MODEL_DEFAULT = "gemini-3.6-flash";
@@ -42,7 +58,7 @@ export const GEMINI_IMAGE_MODELS = new Set([
   ...IMAGEN_MODELS,
 ]);
 
-/** Supported aspect ratios for image/video generation. */
+/** Supported aspect ratios for image generation (video models have their own lists). */
 export const ASPECT_RATIOS = [
   "1:1",
   "2:3",

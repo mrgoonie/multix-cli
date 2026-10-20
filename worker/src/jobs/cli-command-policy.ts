@@ -70,14 +70,27 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   "gemini extract": { fileOptions: { files: "file" } },
   "gemini generate": { caps: IMAGE_COUNT },
   "gemini image-to-image": { fileOptions: { ref: "file" } },
+  // Gemini Omni video: --duration is Omni-only (3-10 s); when omitted the server
+  // default is sent so a lowered MULTIX_MCP_MAX_VIDEO_SECONDS still holds.
+  // --no-wait and `video-status`/`video-cancel` run as-is, like runway/replicate.
   "gemini generate-video": {
     fileOptions: { "reference-images": "file" },
-    caps: { resolution: ["resolution"] },
+    caps: VIDEO_CAPS,
   },
   "gemini image-to-video": {
     filePositionals: ["imagePath"],
     fileOptions: { "last-frame": "file" },
+    caps: VIDEO_CAPS,
+  },
+  // The source video comes from `inputs` (or --interaction-id of a stored video);
+  // an edit keeps the source length, so only the resolution is capped.
+  "gemini edit-video": {
+    fileOptions: { video: "file", "reference-images": "file" },
     caps: { resolution: ["resolution"] },
+  },
+  "gemini extend-video": {
+    fileOptions: { video: "file", "reference-images": "file" },
+    caps: VIDEO_CAPS,
   },
   "minimax generate": { caps: IMAGE_COUNT },
   "minimax image-to-image": { fileOptions: { ref: "file" }, caps: IMAGE_COUNT },

@@ -7,7 +7,7 @@ description: Chọn tài liệu lệnh có đối chiếu source cho từng AI p
 
 | Provider | Bắt đầu | Dùng cho | Ràng buộc cần nhớ |
 | --- | --- | --- | --- |
-| Gemini | [Lệnh](/vi/commands/gemini/) | Analysis, ảnh/video và TTS | Video là experimental. |
+| Gemini | [Lệnh](/vi/commands/gemini/) | Analysis, ảnh/video và TTS | Video dùng Gemini Omni Flash và cần key đã bật billing. |
 | OpenAI | [Lệnh](/vi/commands/openai/) | Ảnh, TTS và STT | Codex là driver ảnh experimental. |
 | MiniMax | [Lệnh](/vi/commands/minimax/) | Ảnh, video, TTS và music | `i2i` giữ chủ thể cho scene mới, không chỉnh trực tiếp ảnh input. |
 | OpenRouter | [Lệnh](/vi/commands/openrouter/) | Model ảnh và image-to-video qua routing | Khung hình i2v là HTTPS URL; job có thể poll. |

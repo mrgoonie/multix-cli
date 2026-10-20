@@ -179,6 +179,54 @@ describe("prepareRun: argv", () => {
     );
   }, 120_000);
 
+  it("runs the Gemini Omni video commands with downloaded inputs and capped duration", async () => {
+    const generate = run({ command: "gemini generate-video", options: { prompt: "a fox" } });
+    expect(generate.argv).toContain("--duration=5");
+    const i2v = run({
+      command: "gemini image-to-video",
+      args: [],
+      options: { prompt: "p", duration: 8, resolution: "1080p" },
+      inputs: { imagePath: "https://cdn.example.com/still.png" },
+    });
+    expect(i2v.argv).toContain("--duration=8");
+    expect(i2v.argv.slice(-2)).toEqual(["--", "in/0-still.png"]);
+
+    const edit = run({
+      command: "gemini edit-video",
+      options: { prompt: "make it night" },
+      inputs: {
+        video: "https://cdn.example.com/clip.mp4",
+        "reference-images": ["https://cdn.example.com/1.png", "https://cdn.example.com/2.png"],
+      },
+    });
+    const parsedEdit = await parseWithCli(edit.argv, "gemini edit-video");
+    expect(parsedEdit.opts.video).toBe("in/0-clip.mp4");
+    expect(parsedEdit.opts.referenceImages).toEqual(["in/1-1.png", "in/2-2.png"]);
+    // An edit keeps the source length: no duration is added.
+    expect(edit.argv.some((a) => a.startsWith("--duration"))).toBe(false);
+
+    const extend = run({
+      command: "gemini extend-video",
+      options: { prompt: "keep going", "interaction-id": "int_123", "no-wait": true },
+    });
+    const parsedExtend = await parseWithCli(extend.argv, "gemini extend-video");
+    expect(parsedExtend.opts.interactionId).toBe("int_123");
+    expect(parsedExtend.opts.wait).toBe(false);
+    expect(parsedExtend.opts.duration).toBe("5");
+
+    const status = run({
+      command: "gemini video-status",
+      args: ["int_123"],
+      options: { wait: true, download: true, output: "clip.mp4" },
+    });
+    expect(status.argv).toContain("--download");
+    expect(status.argv.find((a) => a.startsWith("--output="))).toMatch(/clip\.mp4$/);
+    expect(run({ command: "gemini video-cancel", args: ["int_123"] }).argv.slice(0, 2)).toEqual([
+      "gemini",
+      "video-cancel",
+    ]);
+  }, 120_000);
+
   it("accepts plain file-name parts such as a language code or prefix", () => {
     const prepared = run({
       command: "elevenlabs voices design",
@@ -330,6 +378,31 @@ describe("prepareRun: rejections", () => {
       "resolution not allowed",
       { command: "byteplus video", options: { prompt: "p", resolution: "4k" } },
       /resolution must be one of/,
+    ],
+    [
+      "Gemini video too long",
+      { command: "gemini generate-video", options: { prompt: "p", duration: 60 } },
+      /at most 10 seconds/,
+    ],
+    [
+      "Gemini 4k video",
+      { command: "gemini generate-video", options: { prompt: "p", resolution: "4k" } },
+      /resolution must be one of/,
+    ],
+    [
+      "Gemini 4k edit",
+      { command: "gemini edit-video", options: { prompt: "p", resolution: "4K" } },
+      /resolution must be one of/,
+    ],
+    [
+      "Gemini extension too long",
+      { command: "gemini extend-video", options: { prompt: "p", duration: 30 } },
+      /at most 10 seconds/,
+    ],
+    [
+      "caller path for a Gemini source video",
+      { command: "gemini edit-video", options: { prompt: "p", video: "/etc/passwd" } },
+      /video/,
     ],
   ])("rejects %s", (_label, request, message) => rejects(request, message));
 });
