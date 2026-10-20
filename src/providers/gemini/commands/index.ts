@@ -11,6 +11,7 @@ import { registerGenerateCommand } from "./generate.js";
 import { registerGeminiImageToImageCommand } from "./image-to-image.js";
 import { registerGeminiImageToVideoCommand } from "./image-to-video.js";
 import { registerGeminiOmniFollowUpCommands } from "./omni-follow-up.js";
+import { registerOmniVideoCommand } from "./omni-video.js";
 import { registerTranscribeCommand } from "./transcribe.js";
 import { registerGeminiVideoStatusCommand } from "./video-status.js";
 
@@ -29,6 +30,7 @@ export function registerGeminiCommands(program: Command): void {
   registerGenerateVideoCommand(gemini);
   registerGeminiImageToVideoCommand(gemini);
   registerGeminiOmniFollowUpCommands(gemini);
+  registerOmniVideoCommand(gemini);
   registerGeminiVideoStatusCommand(gemini);
   registerGeminiGenerateSpeechCommand(gemini);
 }
