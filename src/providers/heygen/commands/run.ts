@@ -10,6 +10,7 @@ import { ValidationError } from "../../../core/errors.js";
 import { parseJsonInput } from "../../../core/json-input.js";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
+import { outputStamp } from "../../../core/output-name.js";
 import { unwrapData } from "../client.js";
 import { HEYGEN_OPERATIONS } from "../models.js";
 import {
@@ -73,7 +74,7 @@ export function registerHeygenRunCommand(parent: Command): void {
       const ext = inferExtension(audioUrl, "mp3");
       const dest = opts.output
         ? path.resolve(opts.output)
-        : path.join(getOutputDir(), `heygen-speech-${Date.now()}.${ext}`);
+        : path.join(getOutputDir(), `heygen-speech-${outputStamp()}.${ext}`);
       await downloadOutput(audioUrl, dest, "Re-run the command to generate a fresh URL.");
       console.log(`Saved: ${dest}`);
       return;

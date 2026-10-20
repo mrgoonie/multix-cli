@@ -16,6 +16,7 @@ import type { Command } from "commander";
 import { ProviderError } from "../../../core/errors.js";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
+import { outputStamp } from "../../../core/output-name.js";
 import { cancelInteraction } from "../client.js";
 import {
   copyToOutput,
@@ -61,7 +62,7 @@ export function registerGeminiVideoStatusCommands(parent: Command): void {
       }
 
       if (interaction.status === "completed" && opts.download) {
-        const dest = path.join(getOutputDir(), `gemini_omni_${Date.now()}.mp4`);
+        const dest = path.join(getOutputDir(), `gemini_omni_${outputStamp()}.mp4`);
         await saveOmniVideo(interaction, found.apiKey, dest, logger);
         logger.success(`Saved video: ${dest}`);
         copyToOutput(dest, opts.output, logger);

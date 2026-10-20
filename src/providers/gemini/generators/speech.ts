@@ -17,6 +17,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Logger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
+import { outputStamp } from "../../../core/output-name.js";
 import {
   createInteraction,
   extractAudio,
@@ -208,7 +209,7 @@ function saveSpeech(
   logger: Logger | undefined,
 ): string {
   const outDir = getOutputDir();
-  const dest = path.join(outDir, `gemini_speech_${Date.now()}.${outputFormat}`);
+  const dest = path.join(outDir, `gemini_speech_${outputStamp()}.${outputFormat}`);
   fs.writeFileSync(dest, outBytes);
   logger?.success(`Saved: ${dest} (${(outBytes.length / 1024).toFixed(1)} KB)`);
 

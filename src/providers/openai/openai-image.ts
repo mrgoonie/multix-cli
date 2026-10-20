@@ -5,6 +5,7 @@ import { fetchBytes } from "../../core/http-client.js";
 import { isHttpUrl } from "../../core/image-input.js";
 import type { Logger } from "../../core/logger.js";
 import { getOutputDir } from "../../core/output-dir.js";
+import { outputStamp } from "../../core/output-name.js";
 import { fileFromPath, postOpenAIForm, postOpenAIJson, requireOpenAIKey } from "./client.js";
 import {
   DEFAULT_OPENAI_IMAGE_MODEL,
@@ -77,7 +78,7 @@ export function saveOpenAIImages(opts: {
   if (items.length === 0) throw new ProviderError("No images in OpenAI response", "openai");
   const outDir = getOutputDir();
   const ext = extFromImageFormat(opts.format);
-  const ts = Date.now();
+  const ts = outputStamp();
   const saved: string[] = [];
   for (let i = 0; i < items.length; i++) {
     const b64 = items[i]?.b64_json;

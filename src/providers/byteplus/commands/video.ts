@@ -6,6 +6,7 @@ import path from "node:path";
 import type { Command } from "commander";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
+import { outputStamp } from "../../../core/output-name.js";
 import { maybeDownloadThumb } from "../../../core/video-thumb.js";
 import { PollFailedError, PollTimeoutError } from "../../leonardo/poll.js";
 import { createBytePlusClient } from "../client.js";
@@ -97,7 +98,7 @@ export function registerBytePlusVideoCommand(parent: Command): void {
           }
           const outPath =
             opts.output ??
-            path.join(getOutputDir(), `byteplus-video-${taskId.slice(0, 8)}-${Date.now()}.mp4`);
+            path.join(getOutputDir(), `byteplus-video-${taskId.slice(0, 8)}-${outputStamp()}.mp4`);
           await downloadVideo(url, outPath, logger);
           await maybeDownloadThumb(final, outPath, {
             skip: opts.thumb === false,

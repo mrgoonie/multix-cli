@@ -4,6 +4,7 @@ import { fetchBytes } from "../../core/http-client.js";
 import { resolveAudioInput } from "../../core/image-input.js";
 import type { Logger } from "../../core/logger.js";
 import { getOutputDir } from "../../core/output-dir.js";
+import { outputStamp } from "../../core/output-name.js";
 import { fileFromPath, postOpenAIBinary, postOpenAIForm, requireOpenAIKey } from "./client.js";
 import {
   DEFAULT_OPENAI_STT_MODEL,
@@ -96,7 +97,7 @@ export async function generateOpenAISpeech(opts: {
 }): Promise<string> {
   const bytes = await postOpenAIBinary("/audio/speech", buildSpeechBody(opts), requireOpenAIKey());
   const ext = extFromAudioFormat(opts.outputFormat);
-  const dest = path.join(getOutputDir(), `openai-speech-${Date.now()}.${ext}`);
+  const dest = path.join(getOutputDir(), `openai-speech-${outputStamp()}.${ext}`);
   fs.writeFileSync(dest, bytes);
   opts.logger?.success(`Saved: ${dest} (${(bytes.length / 1024).toFixed(1)} KB)`);
   if (opts.output) {
@@ -140,7 +141,7 @@ export async function transcribeOpenAIAudio(opts: {
   const ext = opts.format === "text" ? "txt" : "json";
   const dest = opts.output
     ? path.resolve(opts.output)
-    : path.join(getOutputDir(), `openai-transcribe-${Date.now()}.${ext}`);
+    : path.join(getOutputDir(), `openai-transcribe-${outputStamp()}.${ext}`);
   fs.mkdirSync(path.dirname(dest), { recursive: true });
   fs.writeFileSync(dest, opts.format === "text" ? (text ?? "") : JSON.stringify(data, null, 2));
   opts.logger?.success(`Saved transcript: ${dest}`);

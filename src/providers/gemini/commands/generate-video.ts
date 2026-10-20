@@ -11,6 +11,7 @@ import path from "node:path";
 import type { Command } from "commander";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
+import { outputStamp } from "../../../core/output-name.js";
 import { maybeDownloadThumb } from "../../../core/video-thumb.js";
 import { runOmniVideo } from "../omni-flow.js";
 import { runVeo, veoFramesFromPaths } from "../veo.js";
@@ -79,7 +80,7 @@ export function registerGenerateVideoCommand(parent: Command): void {
 
       // First reference image = opening frame, second = closing frame.
       const frames = veoFramesFromPaths(opts.referenceImages);
-      const dest = path.join(getOutputDir(), `veo_generated_${Date.now()}.mp4`);
+      const dest = path.join(getOutputDir(), `veo_generated_${outputStamp()}.mp4`);
       const finalOp = await runVeo(
         model,
         { prompt: opts.prompt, ...frames, ...format },

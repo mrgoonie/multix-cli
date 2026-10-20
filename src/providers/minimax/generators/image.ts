@@ -9,6 +9,7 @@ import { ProviderError } from "../../../core/errors.js";
 import { fetchBytes } from "../../../core/http-client.js";
 import type { Logger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
+import { outputStamp } from "../../../core/output-name.js";
 import { apiPost } from "../client.js";
 
 interface ImageGenerationResponse {
@@ -73,7 +74,7 @@ export async function generateMinimaxImage(opts: {
     if (!url) continue;
     try {
       const bytes = await fetchBytes(url);
-      const fname = `minimax_image_${Date.now()}_${i}.png`;
+      const fname = `minimax_image_${outputStamp()}_${i}.png`;
       const dest = path.join(outDir, fname);
       fs.writeFileSync(dest, bytes);
       savedFiles.push(dest);
