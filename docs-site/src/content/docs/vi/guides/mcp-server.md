@@ -115,6 +115,14 @@ phân giải, server gửi một giá trị được phép, ưu tiên 720p), và
 bị từ chối. Lệnh thay đổi chính tài khoản provider của bạn (ví
 dụ xóa một giọng ElevenLabs) chạy như mọi lệnh khác, bằng key của bạn.
 
+**Gemini edit và extend.** `gemini extend-video --duration` là độ dài của đoạn
+nối tiếp mới và bị giới hạn như mọi thời lượng khác, nhưng video trả về còn chứa
+cả clip nguồn. Vì vậy giới hạn áp dụng cho từng lần gọi, không phải cho cả clip:
+mỗi lần extend tiếp một interaction đã lưu (`--interaction-id`) clip lại dài
+thêm, và `gemini edit-video` giữ nguyên độ dài của nguồn. Server không biết độ
+dài của interaction đã lưu nên không giới hạn một chuỗi extend; mọi lần gọi đều
+tính phí vào key Gemini của chính bạn.
+
 **Runway.** `runway video` và `runway image` chạy được từ xa; truyền `--image`
 và từng `--reference` dưới dạng URL `https://` trong `inputs`, còn `--duration`
 bị giới hạn bởi `MULTIX_MCP_MAX_VIDEO_SECONDS`. Prompt không được bắt đầu bằng

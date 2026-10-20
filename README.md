@@ -784,7 +784,9 @@ instance runs at `https://multix.zuey.me/mcp` (invited GitHub accounts only).
   URL, optional directory path, default `multix`; checked with a list, upload and delete of an empty `.multix-probe-*`
   object before it is saved). It also lists and disconnects MCP clients. Limit exposure further with
   `MULTIX_MCP_MAX_OUTPUTS`, `MULTIX_MCP_MAX_VIDEO_SECONDS` (also sent as
-  `min(5, cap)` when a command's default duration is unknown or longer),
+  `min(5, cap)` when a command's default duration is unknown or longer; it
+  bounds each `gemini extend-video` continuation, not a chain of extends of
+  one stored clip),
   `MULTIX_MCP_ALLOWED_RESOLUTIONS` (default `480p,720p,768p,1080p`),
   `MULTIX_MCP_ALLOWED_ORIGINS` (exact browser origins, with CORS), and the
   approximate per-account rate limiter. JSON-RPC batches are rejected.

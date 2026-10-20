@@ -118,6 +118,14 @@ omits it), and `@file` values are rejected. Commands that
 change your own provider account (for example deleting an ElevenLabs voice)
 run like any other, with your key.
 
+**Gemini edit and extend.** `gemini extend-video --duration` is the length of
+the new continuation and is capped like any other duration, but the returned
+video also contains the source. The cap therefore bounds each call, not the
+clip: extending a stored interaction again (`--interaction-id`) makes it longer
+each time, and `gemini edit-video` keeps the source's length. The server cannot
+see a stored interaction's length, so it does not bound a chain; every call is
+billed to your own Gemini key.
+
 **Runway.** `runway video` and `runway image` can run remotely; give
 `--image` and each `--reference` as `https://` URLs in `inputs`, and
 `--duration` is capped by `MULTIX_MCP_MAX_VIDEO_SECONDS`. A prompt must not
