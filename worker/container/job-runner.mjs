@@ -143,6 +143,8 @@ export async function runJob(spec, options = {}) {
         PATH: options.basePath ?? process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin",
         HOME: dir,
         MULTIX_DISABLE_HOME_ENV: "1",
+        // The job directory is thrown away: no local run ledger.
+        MULTIX_HISTORY: "0",
         MULTIX_OUTPUT_DIR: outDir,
         NO_COLOR: "1",
         ...spec.env,

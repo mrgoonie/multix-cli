@@ -9,6 +9,7 @@
 
 import { type CallToolResult, McpServer } from "@modelcontextprotocol/server";
 import { CfWorkerJsonSchemaValidator } from "@modelcontextprotocol/server/validators/cf-worker";
+import { type ErrorInfo, classifyMessage } from "../../src/core/error-classify.js";
 import { MultixError } from "../../src/core/errors.js";
 import { type Env, limitsFrom, secretValues } from "./config.js";
 import { type EventsContext, registerEventMethods } from "./events/events-methods.js";
@@ -38,8 +39,34 @@ function ok(payload: Record<string, unknown>): CallToolResult {
   };
 }
 
+/** Server-side refusals the CLI classifier does not know: both clear on their own. */
+function classifyToolError(message: string): ErrorInfo {
+  if (/^(busy|server at capacity):/.test(message)) {
+    return { ...classifyMessage(message), code: "RATE_LIMITED", retryable: true, hint: message };
+  }
+  return classifyMessage(message);
+}
+
+/**
+ * Tool error: the message stays the text content; structuredContent adds the
+ * same classification the CLI's --json envelope uses (code, retryable, hint),
+ * so agents branch on a code instead of parsing prose.
+ */
 function toolError(message: string): CallToolResult {
-  return { isError: true, content: [{ type: "text", text: message }] };
+  const info = classifyToolError(message);
+  return {
+    isError: true,
+    content: [{ type: "text", text: message }],
+    structuredContent: {
+      error: {
+        code: info.code,
+        message,
+        retryable: info.retryable,
+        hint: info.hint,
+        ...(info.retry_after_s !== undefined ? { retry_after_s: info.retry_after_s } : {}),
+      },
+    },
+  };
 }
 
 /**

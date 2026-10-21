@@ -56,7 +56,17 @@ export interface CommandPolicy {
 }
 
 /** Commands that act on the local machine or need an interactive login. */
-export const EXCLUDED_COMMANDS: ReadonlySet<string> = new Set(["check", "update"]);
+export const EXCLUDED_COMMANDS: ReadonlySet<string> = new Set([
+  "check",
+  "update",
+  // Agent tooling that reads the local run ledger or key setup; remote callers use multix_catalog.
+  "models",
+  "guide",
+  "history list",
+  "history show",
+  "history stats",
+  "rerun",
+]);
 
 /** Options no remote command may use: stdin is not available in the container. */
 export const GLOBALLY_UNSUPPORTED_OPTIONS: ReadonlySet<string> = new Set(["stdin-ext"]);

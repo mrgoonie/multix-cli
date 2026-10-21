@@ -10831,6 +10831,228 @@
           ]
         }
       ]
+    },
+    {
+      "group": "models",
+      "description": "Find the command and model for a task: default models, key readiness, async support (agents: start here)",
+      "commands": [
+        {
+          "command": "models",
+          "description": "Find the command and model for a task: default models, key readiness, async support (agents: start here)",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--task",
+              "flags": "-t, --task <task>",
+              "description": "Filter by task: image, image-edit, video, image-to-video, video-edit, speech, transcription, music, sfx, voice, 3d, analysis, document, avatar-video, any",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-t"
+            },
+            {
+              "long": "--provider",
+              "flags": "-p, --provider <group>",
+              "description": "Filter by provider group (gemini, fal, runway, ...)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-p"
+            },
+            {
+              "long": "--ready",
+              "flags": "--ready",
+              "description": "Only providers whose API key is set",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "group": "guide",
+      "description": "Agent protocol in one screen: discover, dry-run, --json envelope, errors, history",
+      "commands": [
+        {
+          "command": "guide",
+          "description": "Agent protocol in one screen: discover, dry-run, --json envelope, errors, history",
+          "positionals": [],
+          "options": []
+        }
+      ]
+    },
+    {
+      "group": "history",
+      "description": "Review past runs: outcome, outputs, provider usage (tokens, cost, credits), duration. Ledger: ~/.multix/history.jsonl",
+      "commands": [
+        {
+          "command": "history list",
+          "description": "List recent runs, newest first",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--last",
+              "flags": "-n, --last <n>",
+              "description": "How many runs",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-n",
+              "default": "20"
+            },
+            {
+              "long": "--failed",
+              "flags": "--failed",
+              "description": "Only failed runs",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--provider",
+              "flags": "-p, --provider <group>",
+              "description": "Only this provider group",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-p"
+            },
+            {
+              "long": "--command",
+              "flags": "-c, --command <text>",
+              "description": "Only commands containing this text",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-c"
+            },
+            {
+              "long": "--since",
+              "flags": "--since <age>",
+              "description": "Only runs newer than 30m, 12h, 7d or an ISO date",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            }
+          ]
+        },
+        {
+          "command": "history show",
+          "description": "Show one run in full (id, id prefix, last or last-N)",
+          "positionals": [
+            {
+              "name": "ref",
+              "description": "",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": []
+        },
+        {
+          "command": "history stats",
+          "description": "Aggregate runs: success rate, p50/p90 duration, cost, credits, tokens",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--by",
+              "flags": "--by <field>",
+              "description": "Group by provider, model or command",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "provider"
+            },
+            {
+              "long": "--failed",
+              "flags": "--failed",
+              "description": "Only failed runs",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--provider",
+              "flags": "-p, --provider <group>",
+              "description": "Only this provider group",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-p"
+            },
+            {
+              "long": "--command",
+              "flags": "-c, --command <text>",
+              "description": "Only commands containing this text",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-c"
+            },
+            {
+              "long": "--since",
+              "flags": "--since <age>",
+              "description": "Only runs newer than 30m, 12h, 7d or an ISO date",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "group": "rerun",
+      "description": "Run a recorded command again (id, id prefix, last or last-N); extra args are appended",
+      "commands": [
+        {
+          "command": "rerun",
+          "description": "Run a recorded command again (id, id prefix, last or last-N); extra args are appended",
+          "positionals": [
+            {
+              "name": "ref",
+              "description": "",
+              "required": true,
+              "variadic": false
+            },
+            {
+              "name": "extra",
+              "description": "Extra args appended after the recorded ones (later flags win)",
+              "required": false,
+              "variadic": true
+            }
+          ],
+          "options": []
+        }
+      ]
     }
   ]
 }
