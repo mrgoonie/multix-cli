@@ -107,9 +107,16 @@ multix replicate cancel <id>
 - Chỉ tải qua `https://`. URL có host là `localhost` hoặc IP literal loopback,
   private, link-local, unspecified hay thuộc dải dùng cho mục đích đặc biệt
   khác đều bị từ chối, và mọi redirect cũng được kiểm tra như vậy. CLI chỉ
-  kiểm tra host dạng literal; tên miền không được phân giải. Host khác `replicate.delivery` (ví dụ
-  proxy sau `REPLICATE_BASE_URL`) vẫn được tải nhưng kèm cảnh báo chỉ nêu tên
-  host.
+  kiểm tra host dạng literal; tên miền không được phân giải. Host khác
+  `replicate.delivery` và bucket R2 chứa output của Replicate
+  (`ai-gateway-outputs.0d37909e38d3e99c29fa2cd343ac421a.r2.cloudflarestorage.com`)
+  vẫn được tải nhưng kèm cảnh báo chỉ nêu tên host, như khi dùng proxy sau
+  `REPLICATE_BASE_URL`.
+- Lượt tải lỗi mạng, mất kết nối giữa chừng, 408, 429 hoặc 5xx được thử lại hai lần (sau 1 giây và 3
+  giây, hoặc theo `Retry-After` của server, tối đa 30 giây). Nếu vẫn lỗi, lệnh
+  thoát với mã khác 0 và nêu lệnh để thử lại
+  (`multix replicate status <id> --download`) hoặc để in URL output
+  (`multix replicate status <id>`) rồi tải bằng cách khác.
 - Mỗi file bị giới hạn bởi `MULTIX_MAX_DOWNLOAD_MB` (mặc định 2048 MB); lượt
   tải vượt giới hạn bị dừng và file dở dang bị xóa.
 - Mỗi file được ghi vào `<path>.part` rồi mới đổi tên khi tải xong, nên lượt

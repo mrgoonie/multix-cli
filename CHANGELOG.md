@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.12.5](https://github.com/mrgoonie/multix-cli/compare/v1.12.4...v1.12.5) (2026-10-21)
+
+
+### Fixed
+
+* **replicate:** trust Replicate's R2 output host and retry transient download errors ([#279](https://github.com/mrgoonie/multix-cli/issues/279)) ([b68a769](https://github.com/mrgoonie/multix-cli/commit/b68a7699181b51d316be84cdccabd4bb82705f45))
+
 ## [1.12.4](https://github.com/mrgoonie/multix-cli/compare/v1.12.3...v1.12.4) (2026-10-20)
 
 

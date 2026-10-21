@@ -26,7 +26,10 @@ import {
   parseFileAssignments,
   resolveFileInput,
 } from "../../../../src/providers/replicate/node-input-files.js";
-import { resolveDestination } from "../../../../src/providers/replicate/node-outputs.js";
+import {
+  resolveDestination,
+  saveMediaOutputs,
+} from "../../../../src/providers/replicate/node-outputs.js";
 import { BASE, TOKEN, createFakeReplicate, noSleep, prediction } from "./fake-replicate.js";
 
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
@@ -243,6 +246,9 @@ describe("partial download failure", () => {
     expect(err).toBeInstanceOf(Error);
     expect((err as Error).message).toContain("1 of 2 output file(s) failed to download ([1])");
     expect((err as Error).message).toContain(`multix replicate status ${ID} --download`);
+    expect((err as Error).message).toContain(
+      `print the URLs to fetch elsewhere: multix replicate status ${ID})`,
+    );
     expect(fs.readdirSync(path.join(tmp, "out"))).toEqual(["replicate-pred0001-01.png"]);
   });
 });
@@ -278,7 +284,7 @@ describe("output download policy", () => {
     const { client } = succeededWith(signed, { [`GET ${signed}`]: [{ bytes: PNG }] });
     await resume(client);
     const text = output.join("\n");
-    expect(text).toContain("served from cdn.example.com, not replicate.delivery");
+    expect(text).toContain("served from cdn.example.com, not one of Replicate's output hosts");
     expect(text).not.toContain("SIGSECRET");
     expect(fs.readdirSync(path.join(tmp, "out"))).toEqual(["replicate-pred0001-01.png"]);
   });
@@ -349,6 +355,124 @@ describe("output download policy", () => {
     const { client, fake } = succeededWith(url, { [`GET ${url}`]: [{ bytes: PNG }] });
     await expect(resume(client)).rejects.toThrow(ConfigError);
     expect(fake.calls.filter((c) => c.url === url)).toHaveLength(0);
+  });
+});
+
+describe("download retries", () => {
+  const url = "https://replicate.delivery/a/out.png";
+  const networkError = () =>
+    new TypeError("fetch failed", { cause: new Error("Connect Timeout Error") });
+
+  function save(responses: Parameters<typeof createFakeReplicate>[0][string]) {
+    const fake = createFakeReplicate({ [`GET ${url}`]: responses });
+    const waits: number[] = [];
+    const run = saveMediaOutputs(ID, [{ url, path: "output" }], {
+      outDir: path.join(tmp, "out"),
+      logger: createLogger({ verbose: false }),
+      fetch: fake.fetch,
+      sleep: async (ms) => {
+        waits.push(ms);
+      },
+    });
+    return { fake, waits, run };
+  }
+
+  it("retries a network error and a 5xx, then saves the file", async () => {
+    const { fake, waits, run } = save([
+      { throws: networkError() },
+      { status: 503, text: "busy" },
+      { bytes: PNG },
+    ]);
+    expect(await run).toEqual([path.join(tmp, "out", "replicate-pred0001-01.png")]);
+    expect(fake.calls).toHaveLength(3);
+    expect(waits).toEqual([1_000, 3_000]);
+    expect(output.join("\n")).toContain(
+      "Retrying output in 1s (network error reaching replicate.delivery",
+    );
+  });
+
+  it("gives up after three attempts and names the network error, not HTTP 0", async () => {
+    const { fake, run } = save([{ throws: networkError() }]);
+    await expect(run).rejects.toThrow(/none of 1 output file\(s\) could be downloaded/);
+    expect(fake.calls).toHaveLength(3);
+    const failure = output.find((line) => line.includes("Download failed for output"));
+    expect(failure).toContain("network error reaching replicate.delivery: ");
+    expect(failure).not.toContain("HTTP 0");
+  });
+
+  it("honours Retry-After on 429, capped at 30s", async () => {
+    const { waits, run } = save([
+      { status: 429, text: "slow down", headers: { "retry-after": "5" } },
+      { status: 429, text: "slow down", headers: { "retry-after": "600" } },
+      { bytes: PNG },
+    ]);
+    await run;
+    expect(waits).toEqual([5_000, 30_000]);
+  });
+
+  it("retries a connection dropped mid-body without leaving a partial file", async () => {
+    const dropped = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(PNG);
+        controller.error(new TypeError("terminated"));
+      },
+    });
+    const responses = [new Response(dropped), new Response(PNG)];
+    const waits: number[] = [];
+    const saved = await saveMediaOutputs(ID, [{ url, path: "output" }], {
+      outDir: path.join(tmp, "out"),
+      logger: createLogger({ verbose: false }),
+      fetch: async () => responses.shift() as Response,
+      sleep: async (ms) => {
+        waits.push(ms);
+      },
+    });
+    expect(saved).toHaveLength(1);
+    expect(fs.readdirSync(path.join(tmp, "out"))).toEqual(["replicate-pred0001-01.png"]);
+    expect(waits).toEqual([1_000]);
+    expect(output.join("\n")).toContain(
+      "connection to replicate.delivery dropped mid-download: terminated",
+    );
+  });
+
+  it("names only the host in retry lines, never the path or signed query", async () => {
+    const signed = "https://replicate.delivery/secretpath/o.png?X-Amz-Signature=SIGSECRET";
+    const fake = createFakeReplicate({
+      [`GET ${signed}`]: [{ status: 502, text: "bad gateway" }, { bytes: PNG }],
+    });
+    await saveMediaOutputs(ID, [{ url: signed, path: "output" }], {
+      outDir: path.join(tmp, "out"),
+      logger: createLogger({ verbose: false }),
+      fetch: fake.fetch,
+      sleep: async () => {},
+    });
+    const text = output.join("\n");
+    expect(text).toContain("Retrying output in 1s (HTTP 502 from replicate.delivery)");
+    expect(text).not.toContain("SIGSECRET");
+    expect(text).not.toContain("secretpath");
+  });
+
+  it("does not retry a file-system error", async () => {
+    const blocker = path.join(tmp, "blocker");
+    fs.writeFileSync(blocker, "");
+    const fake = createFakeReplicate({ [`GET ${url}`]: [{ bytes: PNG }] });
+    await expect(
+      saveMediaOutputs(ID, [{ url, path: "output" }], {
+        outDir: "",
+        output: path.join(blocker, "sub", "o.png"),
+        logger: createLogger({ verbose: false }),
+        fetch: fake.fetch,
+        sleep: async () => {},
+      }),
+    ).rejects.toThrow(/none of 1/);
+    expect(fake.calls).toHaveLength(1);
+  });
+
+  it("does not retry an expired (404) output", async () => {
+    const { fake, waits, run } = save([{ status: 404, text: "gone" }]);
+    await expect(run).rejects.toThrow(/none of 1/);
+    expect(fake.calls).toHaveLength(1);
+    expect(waits).toEqual([]);
   });
 });
 

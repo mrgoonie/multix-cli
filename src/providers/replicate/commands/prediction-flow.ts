@@ -114,7 +114,7 @@ export async function reportOutputs(
     outDir: opts.output ? "" : getOutputDir(),
     output: opts.output,
     logger: opts.logger,
-    retryHint: `Retry while the output URLs are live: multix replicate status ${prediction.id} --download`,
+    retryHint: `Retry while the output URLs are live: multix replicate status ${prediction.id} --download (or print the URLs to fetch elsewhere: multix replicate status ${prediction.id})`,
   });
   const finals = opts.finalize ? opts.finalize(saved) : saved;
   console.log(`\nSaved ${finals.length} file(s) from prediction ${prediction.id}:`);
