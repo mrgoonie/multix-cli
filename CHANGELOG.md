@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.13.0](https://github.com/mrgoonie/multix-cli/compare/v1.12.5...v1.13.0) (2026-10-21)
+
+
+### Added
+
+* **cli:** agent mode with JSON envelope, error classes, dry run, run history and model discovery ([#282](https://github.com/mrgoonie/multix-cli/issues/282)) ([bfd7e60](https://github.com/mrgoonie/multix-cli/commit/bfd7e6024a546967f41dd4416d4853e061048eb2)), closes [#277](https://github.com/mrgoonie/multix-cli/issues/277)
+
 ## [1.12.5](https://github.com/mrgoonie/multix-cli/compare/v1.12.4...v1.12.5) (2026-10-21)
 
 
