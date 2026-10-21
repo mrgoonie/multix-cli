@@ -95,6 +95,14 @@ lost. When the server already runs `MULTIX_MAX_JOBS_TOTAL` jobs (default 10)
 across all accounts, the call fails with `server at capacity` instead; retry
 after a few minutes.
 
+**Error codes.** A failed tool call keeps its message as text and adds
+`structuredContent.error` with `code`, `retryable` and `hint`, the same codes as
+the CLI's `--json` envelope (see [For AI agents](/reference/for-ai-agents/#exit-codes-and-error-codes)).
+`busy` and `server at capacity` come back as `RATE_LIMITED` with
+`retryable: true`. A job that ran and failed reports `exit_code` with the CLI's
+exit classes (2 input, 3 key, 4 temporary, 5 rejected, 6 timeout), and its
+`stderr_tail` ends with the CLI's `code:`, `hint:` and `next:` lines.
+
 **Output files need R2.** The files the CLI writes are uploaded to your own R2
 bucket under `<directory>/<account hash>/<job id>/<name>` (the directory is
 `multix` unless you choose another one), and `outputs` lists their

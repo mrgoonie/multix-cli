@@ -15,15 +15,106 @@ https://multix.zuey.me/reference/environment.md
 https://multix.zuey.me/llms.txt
 ```
 
+## Agent protocol
+
+`multix guide` prints this protocol in one screen for the installed version.
+
+1. **Discover.** `multix models --task <task> --ready` lists the commands that
+   serve a task, their default model, whether the key is set, and whether they
+   run async. Tasks: `image`, `image-edit`, `video`, `image-to-video`,
+   `video-edit`, `speech`, `transcription`, `music`, `sfx`, `voice`, `3d`,
+   `analysis`, `document`, `avatar-video`, `any`. Add `--provider <group>` to
+   narrow, `--json` for an array.
+2. **Validate for free.** Add `--dry-run` to any command: local checks run
+   (flags, input files, keys), then the first provider request is shown
+   (method, URL without query string, body with long values shortened, header
+   names only) instead of being sent. Local `media` commands stop before
+   running.
+3. **Run with `--json`** (or `MULTIX_OUTPUT=json`). stdout is exactly one line,
+   a `multix.result/v1` envelope; human output is captured.
+4. **Check the result.** Success means `ok: true`, a non-empty `outputs` list
+   and no `warnings` (`EMPTY_OUTPUT`, `CONTENT_MISMATCH`, `UNREADABLE_MEDIA`).
+5. **On failure** follow `error.hint` and `next[]`; do not resubmit a paid job
+   blindly.
+6. **Long jobs.** Pass `--async` where offered, keep the job id, and run the
+   status command from `next[]`.
+7. **History.** Every run is recorded locally; see [Run history](#run-history).
+
+## The result envelope
+
+```json
+{
+  "schema": "multix.result/v1",
+  "ok": true,
+  "command": "gemini generate",
+  "provider": "gemini",
+  "model": "gemini-2.5-flash-image",
+  "duration_ms": 8120,
+  "outputs": [
+    { "path": "gemini-image-1.webp", "bytes": 184220, "mime": "image/webp",
+      "sha256": "…", "width": 1024, "height": 1024 }
+  ],
+  "usage": { "tokens": { "input": 12, "output": 1290, "total": 1302 } },
+  "http": { "requests": 1, "errors": 0, "ms": 7900 },
+  "history_id": "h_mfz3k2ab1c9d",
+  "exit_code": 0,
+  "next": []
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `outputs[]` | Files the run wrote: relative path, size, MIME type sniffed from the content, SHA-256, image `width`/`height`, media `duration_s` (with ffprobe). |
+| `warnings[]` | Problems found in the outputs, such as an empty file or content that does not match its extension. |
+| `data` / `text` | The command's stdout: parsed JSON, or text capped at 32 KB. |
+| `error` | `code`, `message`, `retryable`, `retry_after_s`, `hint`, `http_status`, `env` (the key name when one is missing). |
+| `usage` | What the provider reported: `tokens` (`input`, `output`, `total`, `thinking`), `cost_usd`, `credits`, and other numeric `metrics` by key path. Nothing is estimated. |
+| `http` | Provider request count, failed requests and total time. |
+| `provider_ids` | Request, job or prediction ids the provider returned. |
+| `request` | With `--dry-run`: the request that would have been sent. |
+| `next[]` | Commands to run next: a status command for an async job, `multix check` for a key problem, `multix rerun <id>` for a temporary failure. |
+
+## Exit codes and error codes
+
+| Exit | Class | Error codes | What to do |
+| --- | --- | --- | --- |
+| 0 | success | | |
+| 2 | usage or invalid input | `USAGE`, `INVALID_INPUT` | Fix the flags; nothing was billed. |
+| 3 | key or setup | `MISSING_KEY`, `INVALID_KEY`, `CONFIG_ERROR`, `BINARY_MISSING` | `multix check`, set the key named in `error.env`. |
+| 4 | temporary | `RATE_LIMITED`, `PROVIDER_UNAVAILABLE`, `NETWORK_ERROR` | Wait `retry_after_s`, then `multix rerun <id>`. |
+| 5 | rejected | `QUOTA_EXCEEDED`, `CONTENT_BLOCKED`, `MODEL_NOT_FOUND`, `NOT_FOUND`, `PROVIDER_REJECTED`, `JOB_FAILED`, `RESPONSE_TOO_LARGE` | Change the input, model or provider. |
+| 6 | timed out | `TIMEOUT` | The job may still run: use the status command in `next[]`. |
+| 1 | unknown | `UNKNOWN` | Read `log[]` (last stderr lines). |
+
+The classes apply with and without `--json`. Without it, a failed command
+prints `code:`, `hint:` and `next:` lines on stderr.
+
+## Run history
+
+Each provider command appends one line to `~/.multix/history.jsonl` (file mode
+0600, rotated at 20 MB): id, time, duration, command, provider, model, argv
+(values of options named like key, token, secret or password are redacted),
+outcome and error code, outputs with size and hash, provider usage (tokens,
+cost, credits, metrics), HTTP counts and provider ids. Keys and signed URLs are
+never written.
+
+```bash
+multix history                      # last 20 runs
+multix history --failed --since 1d  # failures today
+multix history show last            # one run in full (id, id prefix, last, last-N)
+multix history stats --by model     # runs, success rate, p50/p90 time, cost, credits, tokens
+multix rerun h_mfz3k2ab1c9d         # run it again (extra args are appended)
+```
+
+`MULTIX_HISTORY=0` turns the ledger off. `MULTIX_HISTORY_FILE` moves it (shell
+or `~/.multix/.env` only, not a project `.env`).
+
 ## Safe command workflow
 
-1. Read the relevant command page, then use `multix <group> <command> --help`
-   for the installed version.
-2. Run `multix check` before a provider operation; do not print or request
-   secret values.
-3. Use explicit `--input`, `--output`, and provider flags when reproducibility
-   matters.
-4. State whether a provider operation is asynchronous and retain any job ID.
+- Do not print or request secret values; `multix check` reports which keys are
+  set.
+- Use explicit `--input`, `--output`, and provider flags when reproducibility
+  matters.
 
 ## Capability map
 

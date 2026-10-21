@@ -26,11 +26,12 @@ may only set variables that `multix` itself reads:
   `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_AI_GATEWAY_ID` and the model overrides;
 - the documented `MULTIX_*` settings `MULTIX_OUTPUT_DIR` (so a project can
   choose where generated files are written), `MULTIX_IMAGE_FORMAT`,
-  `MULTIX_MAX_DOWNLOAD_MB`, `MULTIX_UPLOAD_MIN_KBPS` and `MULTIX_DISABLE_HOME_ENV`
-  (which has no effect there), plus `NO_COLOR`.
+  `MULTIX_MAX_DOWNLOAD_MB`, `MULTIX_UPLOAD_MIN_KBPS`, `MULTIX_OUTPUT` (`json`
+  for the agent envelope), `MULTIX_HISTORY` (`0` turns the run ledger off) and
+  `MULTIX_DISABLE_HOME_ENV` (which has no effect there), plus `NO_COLOR`.
 
-The opt-ins `MULTIX_ALLOW_PROJECT_BASE_URL` and `MULTIX_LEGACY_CLAUDE_ENV` are
-refused: a repository must not widen what it can do with your keys or pull in
+The opt-ins `MULTIX_ALLOW_PROJECT_BASE_URL` and `MULTIX_LEGACY_CLAUDE_ENV`, and
+`MULTIX_HISTORY_FILE` (where the run ledger is written), are refused: a repository must not widen what it can do with your keys or pull in
 the `.claude` credentials from your home folder.
 
 [`.env.example`](https://github.com/mrgoonie/multix-cli/blob/main/.env.example)
