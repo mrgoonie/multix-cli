@@ -86,8 +86,9 @@ https://multix.zuey.me/llms.txt
 | 6 | hết thời gian | `TIMEOUT` | Job có thể vẫn đang chạy: dùng lệnh status trong `next[]`. |
 | 1 | không rõ | `UNKNOWN` | Đọc `log[]` (các dòng stderr cuối). |
 
-Các nhóm exit code áp dụng cả khi có và không có `--json`. Không có `--json`,
-lệnh lỗi in thêm các dòng `code:`, `hint:` và `next:` ra stderr.
+Các nhóm exit code này áp dụng ở agent mode (`--json` hoặc `MULTIX_OUTPUT=json`).
+Không có chế độ đó, lệnh lỗi vẫn exit 1 như các phiên bản trước và in thêm các
+dòng `code:`, `hint:` và `next:` ra stderr. Ledger lịch sử luôn ghi mã lỗi.
 
 ## Lịch sử chạy
 

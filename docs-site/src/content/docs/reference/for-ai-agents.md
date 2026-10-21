@@ -86,8 +86,10 @@ https://multix.zuey.me/llms.txt
 | 6 | timed out | `TIMEOUT` | The job may still run: use the status command in `next[]`. |
 | 1 | unknown | `UNKNOWN` | Read `log[]` (last stderr lines). |
 
-The classes apply with and without `--json`. Without it, a failed command
-prints `code:`, `hint:` and `next:` lines on stderr.
+These exit classes apply in agent mode (`--json` or `MULTIX_OUTPUT=json`).
+Without it a failed command still exits 1, as in earlier versions, and prints
+`code:`, `hint:` and `next:` lines on stderr. The history ledger records the
+error code either way.
 
 ## Run history
 

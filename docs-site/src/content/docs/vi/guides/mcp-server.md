@@ -97,9 +97,9 @@ phút.
 `structuredContent.error` gồm `code`, `retryable` và `hint`, cùng bộ mã với
 envelope `--json` của CLI (xem [Dành cho AI agent](/vi/reference/for-ai-agents/#exit-code-và-mã-lỗi)).
 `busy` và `server at capacity` được trả về là `RATE_LIMITED` với
-`retryable: true`. Job đã chạy nhưng lỗi báo `exit_code` theo các nhóm exit
-code của CLI (2 input, 3 key, 4 tạm thời, 5 bị từ chối, 6 hết thời gian), và
-`stderr_tail` kết thúc bằng các dòng `code:`, `hint:` và `next:` của CLI.
+`retryable: true`. Job đã chạy nhưng lỗi báo `exit_code` khác 0, và
+`stderr_tail` kết thúc bằng các dòng `code:`, `hint:` và `next:` của CLI, cho
+biết nhóm lỗi.
 
 **File đầu ra cần R2.** Các file CLI ghi ra được tải lên bucket R2 của bạn dưới
 `<thư mục>/<hash tài khoản>/<job id>/<tên>` (thư mục là `multix` trừ khi bạn

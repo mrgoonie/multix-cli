@@ -67,9 +67,10 @@ multix rerun last                             # repeat a recorded run
 The envelope lists `outputs` (path, bytes, MIME, SHA-256, dimensions, duration),
 `warnings`, `usage` as the provider reports it (tokens, `cost_usd`, `credits`,
 metrics), `error` (`code`, `retryable`, `retry_after_s`, `hint`) and `next`
-commands. Exit codes: `2` usage or input, `3` key or setup, `4` temporary (retry),
-`5` rejected (quota, safety, model), `6` timed out (job may still run), `1`
-unknown. Each run is recorded in `~/.multix/history.jsonl` without keys or signed
+commands. With `--json`, exit codes are `2` usage or input, `3` key or setup,
+`4` temporary (retry), `5` rejected (quota, safety, model), `6` timed out (job may
+still run), `1` unknown; plain runs keep exit 1 and print the code and hint on
+stderr. Each run is recorded in `~/.multix/history.jsonl` without keys or signed
 URLs (`MULTIX_HISTORY=0` turns it off). Details:
 [For AI agents](https://multix.zuey.me/reference/for-ai-agents/).
 

@@ -99,9 +99,9 @@ after a few minutes.
 `structuredContent.error` with `code`, `retryable` and `hint`, the same codes as
 the CLI's `--json` envelope (see [For AI agents](/reference/for-ai-agents/#exit-codes-and-error-codes)).
 `busy` and `server at capacity` come back as `RATE_LIMITED` with
-`retryable: true`. A job that ran and failed reports `exit_code` with the CLI's
-exit classes (2 input, 3 key, 4 temporary, 5 rejected, 6 timeout), and its
-`stderr_tail` ends with the CLI's `code:`, `hint:` and `next:` lines.
+`retryable: true`. A job that ran and failed reports a non-zero `exit_code`, and
+its `stderr_tail` ends with the CLI's `code:`, `hint:` and `next:` lines, which
+name the error class.
 
 **Output files need R2.** The files the CLI writes are uploaded to your own R2
 bucket under `<directory>/<account hash>/<job id>/<name>` (the directory is
