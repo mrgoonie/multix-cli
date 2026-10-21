@@ -23,7 +23,7 @@ export const GUIDE_TEXT = `multix agent protocol
    exit ${EXIT_CODES.usage} usage/invalid input -> fix flags       exit ${EXIT_CODES.config} key/config -> multix check
    exit ${EXIT_CODES.retryable} temporary -> wait, multix rerun <id>   exit ${EXIT_CODES.rejected} rejected (quota, safety, model) -> change input/provider
    exit ${EXIT_CODES.timeout} timed out, job may still run -> use the status command in next[], do not resubmit
-6. Long jobs: pass --async where offered, keep the id, poll the status command it prints (next[]).
+6. Long jobs: pass --async (or --no-wait) where offered, keep the job id, run the status command in next[].
 7. History: multix history [--failed] | history show last | history stats --by model | rerun <id>
    Ledger ~/.multix/history.jsonl records outputs, tokens, cost, credits, duration (MULTIX_HISTORY=0 disables).`;
 

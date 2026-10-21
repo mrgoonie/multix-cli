@@ -154,8 +154,11 @@ export function extractUsage(body: unknown, headers?: Headers | null): ResponseU
       const raw = headers.get(name);
       if (raw === null) continue;
       const n = Number(raw);
-      if (Number.isFinite(n) && raw.trim() !== "") out.metrics[`header.${name}`] = n;
-      else if (/request-?id/i.test(name) && raw.length <= 128 && out.ids.length < 5)
+      if (Number.isFinite(n) && raw.trim() !== "") {
+        out.metrics[`header.${name}`] = n;
+        // ElevenLabs bills in characters (its credit unit) and reports them here.
+        if (name === "character-cost" && out.credits === undefined) out.credits = n;
+      } else if (/request-?id/i.test(name) && raw.length <= 128 && out.ids.length < 5)
         out.ids.push(raw);
     }
   }

@@ -33,6 +33,8 @@ const UNRECORDED = /^(history|models|guide|rerun|check|update)\b/;
 const LOCAL_GROUPS = new Set(["media"]);
 
 let version = "0.0.0";
+/** Top-level command names, so printed prose is not mistaken for a command. */
+let knownGroups = new Set<string>();
 const realExit = process.exit.bind(process);
 const realStdoutWrite = process.stdout.write.bind(process.stdout);
 const realStderrWrite = process.stderr.write.bind(process.stderr);
@@ -84,13 +86,23 @@ function setCommand(names: string[]): void {
   run.group = names[0] && !NON_PROVIDER_GROUPS.has(names[0]) ? names[0] : "";
 }
 
-/** Add --json and --dry-run to every command that lacks them. */
-function addGlobalFlags(cmd: Command): void {
+/** Groups where a dry run means nothing (no provider request, or their own flag). */
+const NO_DRY_RUN_GROUPS = new Set(["check", "models", "guide", "history", "rerun"]);
+
+/** Add --json to every command, and --dry-run to every command that can send a request. */
+function addGlobalFlags(cmd: Command, group = ""): void {
   const has = (flag: string) => cmd.options.some((o) => o.long === flag);
   if (!has("--json")) cmd.option("--json", "Print one multix.result/v1 JSON envelope on stdout");
   if (has("--dry-run")) ownDryRun.add(cmd);
-  else cmd.option("--dry-run", "Validate and show the first provider request without sending it");
-  for (const sub of cmd.commands) addGlobalFlags(sub);
+  else if (group && !NO_DRY_RUN_GROUPS.has(group)) {
+    cmd.option("--dry-run", "Validate and show the first provider request without sending it");
+  }
+  for (const sub of cmd.commands) addGlobalFlags(sub, group || sub.name());
+}
+
+/** Quote one argument for a POSIX shell when it needs it. */
+export function shellQuote(arg: string): string {
+  return /^[\w@%+=:,./-]+$/.test(arg) ? arg : `'${arg.replace(/'/g, "'\\''")}'`;
 }
 
 function captureStreams(): void {
@@ -183,7 +195,9 @@ export function finalizeRun(input: FinalizeInput): number {
         }
       });
 
-  const recorded = Boolean(run.command) && !UNRECORDED.test(run.command);
+  // Help output and --version never reach an action; parse errors are kept (they measure misuse).
+  const recorded =
+    Boolean(run.command) && !UNRECORDED.test(run.command) && (run.actionStarted || failed);
   const historyId = recorded ? newHistoryId(run.startedAt) : undefined;
   const optionModel = typeof run.options.model === "string" ? run.options.model : undefined;
   const model = run.requestModel ?? optionModel;
@@ -200,10 +214,12 @@ export function finalizeRun(input: FinalizeInput): number {
 
   const next = [
     ...(info ? nextForError(info, run.command, run.group, historyId) : []),
-    ...suggestedCommands([...run.stdout, ...run.stderr], run.command),
+    ...suggestedCommands([...run.stdout, ...run.stderr], run.command, knownGroups),
   ];
-  if (dryRun)
-    next.unshift(`multix ${redactArgv(run.argv.filter((a) => a !== "--dry-run")).join(" ")}`);
+  if (dryRun) {
+    const args = redactArgv(run.argv.filter((a) => a !== "--dry-run"));
+    next.unshift(`multix ${args.map(shellQuote).join(" ")}`);
+  }
 
   if (recorded && historyId) {
     appendHistory({
@@ -226,6 +242,7 @@ export function finalizeRun(input: FinalizeInput): number {
             outputs: outputs.map((o) => ({
               path: o.path,
               bytes: o.bytes,
+              mime: o.mime,
               ...(o.sha256 ? { sha256: o.sha256 } : {}),
               ...(o.duration_s !== undefined ? { duration_s: o.duration_s } : {}),
             })),
@@ -295,7 +312,8 @@ export function installAgentRuntime(program: Command, cliVersion: string): void 
   run.json = flagInArgv(run.argv, "--json") || process.env.MULTIX_OUTPUT?.toLowerCase() === "json";
   run.verbose = flagInArgv(run.argv, "--verbose") || flagInArgv(run.argv, "-v");
 
-  addGlobalFlags(program);
+  for (const cmd of program.commands) addGlobalFlags(cmd, cmd.name());
+  knownGroups = new Set(program.commands.flatMap((c) => [c.name(), ...c.aliases()]));
   setCommand(commandFromArgv(program, run.argv));
   captureStreams();
   installOutputFileTracker();
@@ -311,6 +329,7 @@ export function installAgentRuntime(program: Command, cliVersion: string): void 
   program.hook("preAction", (_root, action) => {
     const names = commandPath(action);
     setCommand(names);
+    run.actionStarted = true;
     run.options = action.opts();
     run.dryRun = Boolean(run.options.dryRun) && !ownDryRun.has(action);
     if (run.dryRun && LOCAL_GROUPS.has(names[0] ?? "")) {

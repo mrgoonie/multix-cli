@@ -76,10 +76,11 @@ describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     expect(out.request.method).toBe("POST");
     expect(out.request.url).toMatch(/^https:\/\/[^?]+$/);
     expect(result.stdout).not.toContain("test-key-not-real");
-    expect(out.next[0]).toBe("multix fal image a cat --json");
+    expect(out.next[0]).toBe("multix fal image 'a cat' --json");
   });
 
   it("records runs in the ledger and shows them with history", async () => {
+    await run(["fal", "image", "--help"]); // help is not a run
     await run(["fal", "image", "a cat"], { FAL_KEY: "" });
     const list = await run(["history", "--json"]);
     expect(list.exitCode).toBe(0);
@@ -93,6 +94,13 @@ describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     });
     const show = await run(["history", "show", "last"]);
     expect(JSON.parse(show.stdout).id).toBe(rows[0].id);
+    // rerun forwards --dry-run to the recorded command instead of spending again.
+    const again = await run(["rerun", "last", "--dry-run", "--json"], {
+      FAL_KEY: "test-key-not-real",
+      HTTPS_PROXY: "http://127.0.0.1:9",
+    });
+    expect(again.exitCode).toBe(0);
+    expect(envelope(again.stdout)).toMatchObject({ dry_run: true, command: "fal image" });
   });
 
   it("lists models by task as JSON and in the guide", async () => {

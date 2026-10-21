@@ -27,7 +27,13 @@ export interface HistoryEntry {
   exit_code: number;
   dry_run?: boolean;
   error?: { code: string; message: string };
-  outputs?: Array<{ path: string; bytes: number; sha256?: string; duration_s?: number }>;
+  outputs?: Array<{
+    path: string;
+    bytes: number;
+    mime?: string;
+    sha256?: string;
+    duration_s?: number;
+  }>;
   usage?: UsageSummary;
   http?: { requests: number; errors: number; ms: number };
   provider_ids?: string[];

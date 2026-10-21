@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { shellQuote } from "../../../src/agent/agent-runtime.js";
 import { modelFromRequest, safeUrl } from "../../../src/agent/fetch-telemetry.js";
 import {
   nextForError,
@@ -22,6 +23,20 @@ describe("result envelope helpers", () => {
       "fal image",
     );
     expect(found).toEqual(["multix runway status abc123"]);
+  });
+
+  it("ignores prose that only starts with multix", () => {
+    const known = new Set(["check", "runway"]);
+    expect(suggestedCommands(["✓ multix is ready to use\n"], "check", known)).toEqual([]);
+    expect(suggestedCommands(["Run: multix runway status t1\n"], "runway video", known)).toEqual([
+      "multix runway status t1",
+    ]);
+  });
+
+  it("shell-quotes arguments that need it", () => {
+    expect(["fal", "image", "a red fox, snow", "it's"].map(shellQuote).join(" ")).toBe(
+      "fal image 'a red fox, snow' 'it'\\''s'",
+    );
   });
 
   it("suggests next steps by error class", () => {

@@ -130,7 +130,10 @@ export function modelRows(program: Command): ModelRow[] {
     const lister = program.commands
       .find((g) => g.name() === group)
       ?.commands.find(
-        (c) => LIST_COMMANDS.has(c.name()) && (c.name() !== "voices" || task === "speech"),
+        (c) =>
+          LIST_COMMANDS.has(c.name()) &&
+          (c.name() !== "voices" || task === "speech") &&
+          (c.name() !== "video-models" || task.includes("video")),
       );
     const named = modelsFromDescription(modelOpt?.description ?? "");
     const def = typeof modelOpt?.defaultValue === "string" ? modelOpt.defaultValue : named.def;

@@ -40,6 +40,8 @@ export interface RunState {
   stderr: string[];
   /** Last error line a command logged before exiting. */
   lastErrorLine?: string;
+  /** True once a command action started (help and parse errors never get there). */
+  actionStarted: boolean;
   finalized: boolean;
 }
 
@@ -59,6 +61,7 @@ export const run: RunState = {
   ids: [],
   stdout: [],
   stderr: [],
+  actionStarted: false,
   finalized: false,
 };
 

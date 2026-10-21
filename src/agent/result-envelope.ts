@@ -63,14 +63,20 @@ export function stdoutPayload(
 }
 
 /** `multix ...` commands the run printed as follow-ups (status/resume/download hints). */
-export function suggestedCommands(texts: string[], current: string): string[] {
+export function suggestedCommands(
+  texts: string[],
+  current: string,
+  known?: ReadonlySet<string>,
+): string[] {
   const found: string[] = [];
   const re = /\bmultix\s+[a-z0-9][a-z0-9-]*(?:\s+[^\s`'"|;]+)*/g;
   for (const text of texts) {
     for (const line of stripAnsi(text).split("\n")) {
       for (const match of line.matchAll(re)) {
         const cmd = match[0].replace(/[.,:;)\]]+$/, "").trim();
-        if (cmd.split(/\s+/).length < 3 && !/check|models|history/.test(cmd)) continue;
+        const words = cmd.split(/\s+/);
+        if (known && !known.has(words[1] ?? "")) continue;
+        if (words.length < 3 && !/check|models|history/.test(cmd)) continue;
         if (cmd === `multix ${current}` || found.includes(cmd)) continue;
         found.push(cmd);
       }

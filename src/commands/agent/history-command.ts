@@ -187,8 +187,12 @@ export function registerHistoryCommands(program: Command): void {
       "Run a recorded command again (id, id prefix, last or last-N); extra args are appended",
     )
     .argument("[extra...]", "Extra args appended after the recorded ones (later flags win)")
+    .option(
+      "--dry-run",
+      "Validate the recorded command and show its first request without sending it",
+    )
     .allowUnknownOption()
-    .action((ref: string, extra: string[]) => {
+    .action((ref: string, extra: string[], opts: { dryRun?: boolean }) => {
       const entry = findHistory(ref);
       if (!entry) throw new ValidationError(`No run matches ${ref}. List them: multix history`);
       if (entry.argv.includes("[redacted]")) {
@@ -197,6 +201,7 @@ export function registerHistoryCommands(program: Command): void {
       const script = process.argv[1] ?? "";
       const args = [...entry.argv, ...extra];
       if (run.json && !args.includes("--json")) args.push("--json");
+      if (opts.dryRun && !args.includes("--dry-run")) args.push("--dry-run");
       const res = spawnSync(process.execPath, [script, ...args], { stdio: "inherit" });
       // The child prints its own envelope and history entry; this wrapper adds none.
       run.finalized = true;
