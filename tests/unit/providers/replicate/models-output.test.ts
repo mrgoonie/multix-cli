@@ -42,6 +42,22 @@ describe("checkOutputUrl", () => {
     expect(checkOutputUrl("https://pbxt.replicate.delivery/a/out.png").trusted).toBe(true);
   });
 
+  it("trusts only Replicate's own R2 output bucket, not R2 in general", () => {
+    const r2 = "ai-gateway-outputs.0d37909e38d3e99c29fa2cd343ac421a.r2.cloudflarestorage.com";
+    expect(checkOutputUrl(`https://${r2}/provider-outputs/a/b?X-Amz-Signature=x`)).toEqual({
+      host: r2,
+      trusted: true,
+    });
+    expect(checkOutputUrl(`https://cdn.${r2}/o.png`).trusted).toBe(true);
+    for (const host of [
+      "ai-gateway-outputs.ffffffffffffffffffffffffffffffff.r2.cloudflarestorage.com",
+      "evil.r2.cloudflarestorage.com",
+      "r2.cloudflarestorage.com",
+    ]) {
+      expect(checkOutputUrl(`https://${host}/o.png`).trusted).toBe(false);
+    }
+  });
+
   it("allows other public https hosts but flags them as untrusted", () => {
     expect(checkOutputUrl("https://cdn.example.com/o.mp4")).toEqual({
       host: "cdn.example.com",

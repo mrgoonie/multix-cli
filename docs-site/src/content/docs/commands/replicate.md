@@ -106,8 +106,16 @@ multix replicate cancel <id>
   loopback, private, link-local, unspecified, or other special-purpose IP
   literal are refused, and every redirect is checked the same way. Only the
   literal host is checked; hostnames are not resolved. Hosts other than
-  `replicate.delivery` (for example a proxy behind `REPLICATE_BASE_URL`) are
-  downloaded with a warning that names only the host.
+  `replicate.delivery` and Replicate's Cloudflare R2 output bucket
+  (`ai-gateway-outputs.0d37909e38d3e99c29fa2cd343ac421a.r2.cloudflarestorage.com`)
+  are downloaded with a warning that names only the host, as happens with a
+  proxy behind `REPLICATE_BASE_URL`.
+- A download that fails with a network error, a connection dropped
+  mid-download, 408, 429 or 5xx is retried
+  twice (after 1 s and 3 s, or the server's `Retry-After` up to 30 s). If it
+  still fails, the command exits non-zero and names the commands to retry
+  (`multix replicate status <id> --download`) or to print the output URLs
+  (`multix replicate status <id>`) so you can fetch them another way.
 - Each file is capped at `MULTIX_MAX_DOWNLOAD_MB` (default 2048 MB); a larger
   download is stopped and the partial file removed.
 - Each file is written to `<path>.part` and renamed when complete, so a failed
