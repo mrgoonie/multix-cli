@@ -113,6 +113,8 @@ const ENV_NAME = /\b([A-Z][A-Z0-9]*_(?:API_KEY|API_TOKEN|API_SECRET|KEY|TOKEN|SE
 
 // Message patterns, checked in order; the first match wins.
 const TEXT_RULES: Array<[RegExp, ErrorCode]> = [
+  // A rejected flag value ("Invalid --wait-timeout: abc") is input, whatever the flag is named.
+  [/^invalid --[\w-]+/i, "INVALID_INPUT"],
   [
     /(?:^|error: )(unknown option|unknown command|required option|missing required argument|too many arguments|option .* argument missing|option '.*' argument)/i,
     "USAGE",

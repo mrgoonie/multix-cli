@@ -40,6 +40,10 @@ describe("classifyMessage", () => {
     );
   });
 
+  it("treats a rejected flag value as input, even for timeout flags", () => {
+    expect(classifyMessage("Invalid --wait-timeout: abc").code).toBe("INVALID_INPUT");
+  });
+
   it("reads an HTTP status out of a log line", () => {
     const info = classifyMessage("Failed: HTTP 429 rate limit");
     expect(info).toMatchObject({ code: "RATE_LIMITED", http_status: 429, retryable: true });

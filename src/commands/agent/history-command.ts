@@ -5,6 +5,7 @@
  */
 
 import { spawnSync } from "node:child_process";
+import fs from "node:fs";
 import type { Command } from "commander";
 import {
   type HistoryEntry,
@@ -195,14 +196,16 @@ export function registerHistoryCommands(program: Command): void {
     .action((ref: string, extra: string[], opts: { dryRun?: boolean }) => {
       const entry = findHistory(ref);
       if (!entry) throw new ValidationError(`No run matches ${ref}. List them: multix history`);
-      if (entry.argv.includes("[redacted]")) {
+      if (entry.argv.some((a) => a.includes("[redacted]"))) {
         throw new ValidationError(`Run ${entry.id} had a redacted secret option; run it by hand.`);
       }
       const script = process.argv[1] ?? "";
       const args = [...entry.argv, ...extra];
       if (run.json && !args.includes("--json")) args.push("--json");
       if (opts.dryRun && !args.includes("--dry-run")) args.push("--dry-run");
-      const res = spawnSync(process.execPath, [script, ...args], { stdio: "inherit" });
+      // Relative input and output paths resolve where the run was recorded.
+      const cwd = fs.existsSync(entry.cwd) ? entry.cwd : process.cwd();
+      const res = spawnSync(process.execPath, [script, ...args], { stdio: "inherit", cwd });
       // The child prints its own envelope and history entry; this wrapper adds none.
       run.finalized = true;
       process.exitCode = res.status ?? 1;

@@ -90,7 +90,8 @@ describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
       command: "fal image",
       provider: "fal",
       ok: false,
-      exit_code: 3,
+      exit_code: 1, // plain runs keep exit 1; the class is in error.code
+      error: { code: "MISSING_KEY" },
     });
     const show = await run(["history", "show", "last"]);
     expect(JSON.parse(show.stdout).id).toBe(rows[0].id);
@@ -101,6 +102,13 @@ describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     });
     expect(again.exitCode).toBe(0);
     expect(envelope(again.stdout)).toMatchObject({ dry_run: true, command: "fal image" });
+  });
+
+  it("keeps exit 1 without --json but prints the code, hint and next steps", async () => {
+    const result = await run(["fal", "image", "a cat"], { FAL_KEY: "" });
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("code: MISSING_KEY (exit 3 with --json)");
+    expect(result.stderr).toContain("next: multix check");
   });
 
   it("lists models by task as JSON and in the guide", async () => {

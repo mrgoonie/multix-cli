@@ -19,7 +19,7 @@ export const GUIDE_TEXT = `multix agent protocol
    error{code,retryable,retry_after_s,hint}, usage{tokens,cost_usd,credits,metrics}, history_id, next[]
 4. Check the result yourself: ok=true AND outputs non-empty AND no warnings (EMPTY_OUTPUT,
    CONTENT_MISMATCH, UNREADABLE_MEDIA). Look at images/video only when it matters.
-5. On failure follow error.hint and next[]; never resubmit a paid job blindly:
+5. On failure follow error.hint and next[]; never resubmit a paid job blindly (exit codes with --json):
    exit ${EXIT_CODES.usage} usage/invalid input -> fix flags       exit ${EXIT_CODES.config} key/config -> multix check
    exit ${EXIT_CODES.retryable} temporary -> wait, multix rerun <id>   exit ${EXIT_CODES.rejected} rejected (quota, safety, model) -> change input/provider
    exit ${EXIT_CODES.timeout} timed out, job may still run -> use the status command in next[], do not resubmit

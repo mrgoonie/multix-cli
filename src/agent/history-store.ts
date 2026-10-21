@@ -40,7 +40,11 @@ export interface HistoryEntry {
 }
 
 const ROTATE_BYTES = 20 * 1024 * 1024;
-const SECRET_OPTION = /^--?[\w-]*(key|token|secret|password|authorization)[\w-]*$/i;
+// --image-key is an image id (Leonardo), not a credential.
+const SECRET_OPTION =
+  /^(?!--?image-key$)--?[\w-]*(key|token|secret|password|authorization)[\w-]*$/i;
+/** Query parameters that make a URL a bearer credential (presigned storage, tokens). */
+const SIGNED_QUERY = /[?&](x-amz-[\w-]+|signature|sig|se|sp|token|key|expires|x-goog-[\w-]+)=/i;
 
 export function historyEnabled(): boolean {
   const flag = process.env.MULTIX_HISTORY?.trim().toLowerCase();
@@ -71,6 +75,8 @@ export function redactArgv(argv: string[]): string[] {
         out.push(arg, "[redacted]");
         i++;
       }
+    } else if (/^https?:\/\//i.test(arg) && SIGNED_QUERY.test(arg)) {
+      out.push(`${arg.split("?")[0]}?[redacted]`);
     } else out.push(arg);
   }
   return out;

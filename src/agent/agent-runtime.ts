@@ -13,7 +13,8 @@
 import fs from "node:fs";
 import type { Command } from "commander";
 import { type ErrorInfo, classifyError, classifyMessage } from "../core/error-classify.js";
-import { type DryRunRequest, installFetchTelemetry } from "./fetch-telemetry.js";
+import { setExternalRunGuard } from "../core/external-run-guard.js";
+import { type DryRunRequest, installFetchTelemetry, settleTelemetry } from "./fetch-telemetry.js";
 import { appendHistory, newHistoryId, redactArgv } from "./history-store.js";
 import { type OutputFile, type OutputWarning, inspectOutput } from "./output-file-inspect.js";
 import { installOutputFileTracker, producedFiles } from "./output-file-tracker.js";
@@ -177,9 +178,10 @@ export function finalizeRun(input: FinalizeInput): number {
         ? classifyError(input.error)
         : classifyMessage(run.lastErrorLine ?? `Command exited with code ${input.exitCode}`);
   }
+  // Exit classes (2-6) are part of agent mode; plain runs keep the historical exit 1.
   const exitCode = !failed
     ? 0
-    : info?.code === "UNKNOWN"
+    : !run.json || info?.code === "UNKNOWN"
       ? input.exitCode || 1
       : (info?.exit_code ?? 1);
 
@@ -291,7 +293,10 @@ export function finalizeRun(input: FinalizeInput): number {
     const retry = info.retryable
       ? `, retryable${info.retry_after_s ? ` after ${info.retry_after_s}s` : ""}`
       : "";
-    const lines = [`  code: ${info.code} (exit ${exitCode}${retry})`, `  hint: ${info.hint}`];
+    const lines = [
+      `  code: ${info.code} (exit ${info.exit_code} with --json${retry})`,
+      `  hint: ${info.hint}`,
+    ];
     if (input.error !== undefined && !run.lastErrorLine) lines.unshift(`Error: ${info.message}`);
     for (const cmd of [...new Set(next)].slice(0, 3)) lines.push(`  next: ${cmd}`);
     realStderrWrite(`${lines.join("\n")}\n`);
@@ -320,6 +325,12 @@ export function installAgentRuntime(program: Command, cliVersion: string): void 
   installFetchTelemetry((request) =>
     realExit(finalizeRun({ exitCode: 0, dryRunRequest: request })),
   );
+  // Paid work outside fetch (the Codex image driver) stops here in a dry run.
+  setExternalRunGuard(({ program: name, args }) => {
+    if (!run.dryRun) return;
+    const body = args.map((a) => (a.length > 400 ? `<${a.length} chars>` : a));
+    realExit(finalizeRun({ exitCode: 0, dryRunRequest: { method: "EXEC", url: name, body } }));
+  });
 
   process.exit = ((code?: number | string | null) => {
     const numeric = typeof code === "number" ? code : Number(code ?? process.exitCode ?? 0) || 0;
@@ -336,7 +347,8 @@ export function installAgentRuntime(program: Command, cliVersion: string): void 
       realExit(finalizeRun({ exitCode: 0, dryRunLocal: true }));
     }
   });
-  program.hook("postAction", () => {
+  program.hook("postAction", async () => {
+    await settleTelemetry();
     const code = typeof process.exitCode === "number" ? process.exitCode : 0;
     process.exitCode = finalizeRun({ exitCode: code });
   });

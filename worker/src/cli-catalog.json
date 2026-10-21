@@ -11050,7 +11050,18 @@
               "variadic": true
             }
           ],
-          "options": []
+          "options": [
+            {
+              "long": "--dry-run",
+              "flags": "--dry-run",
+              "description": "Validate the recorded command and show its first request without sending it",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            }
+          ]
         }
       ]
     }

@@ -111,11 +111,12 @@ export function installFetchTelemetry(onDryRun: (request: DryRunRequest) => neve
       throw error;
     }
     run.calls.push({ method, host, path, status: response.status, ms: Date.now() - started });
-    try {
-      await recordUsage(response, method, host, path);
-    } catch {
+    // Read in the background: the caller keeps its own size caps and stall detection.
+    const pending = recordUsage(response, method, host, path).catch(() => {
       // Telemetry never breaks a command.
-    }
+    });
+    pendingReads.add(pending);
+    void pending.finally(() => pendingReads.delete(pending));
     return response;
   }) as typeof fetch;
 }
@@ -139,6 +140,36 @@ export function modelFromRequest(path: string, body: unknown): string | undefine
   return undefined;
 }
 
+const pendingReads = new Set<Promise<void>>();
+
+/** Wait (bounded) for background usage reads, so the summary includes them. */
+export async function settleTelemetry(timeoutMs = 2_000): Promise<void> {
+  if (pendingReads.size === 0) return;
+  await Promise.race([
+    Promise.allSettled([...pendingReads]),
+    new Promise((resolve) => setTimeout(resolve, timeoutMs).unref()),
+  ]);
+}
+
+/** Read at most `limit` bytes of a clone; undefined (and the clone cancelled) past it. */
+async function readCapped(response: Response, limit: number): Promise<string | undefined> {
+  const reader = response.clone().body?.getReader();
+  if (!reader) return undefined;
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > limit) {
+      await reader.cancel();
+      return undefined;
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
 async function recordUsage(
   response: Response,
   method: string,
@@ -149,8 +180,8 @@ async function recordUsage(
   const declared = Number(response.headers.get("content-length") ?? Number.NaN);
   let body: unknown;
   if (response.ok && type.includes("json") && !(declared > MAX_JSON_BYTES)) {
-    const text = await response.clone().text();
-    if (text.length <= MAX_JSON_BYTES) {
+    const text = await readCapped(response, MAX_JSON_BYTES);
+    if (text !== undefined) {
       try {
         body = JSON.parse(text);
       } catch {}

@@ -59,7 +59,8 @@ const MIME: Record<string, string> = {
   zip: "application/zip",
 };
 
-const HASH_LIMIT = 512 * 1024 * 1024;
+// Hashing runs at exit; larger files (long videos) skip it to keep the exit fast.
+const HASH_LIMIT = 64 * 1024 * 1024;
 let ffprobeAvailable: boolean | undefined;
 
 function hasFfprobe(): boolean {

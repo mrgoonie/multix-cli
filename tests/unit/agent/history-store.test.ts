@@ -43,6 +43,28 @@ describe("redactArgv", () => {
   });
 });
 
+describe("redactArgv URLs and ids", () => {
+  it("hides signed URL queries but keeps image ids and plain URLs", () => {
+    expect(
+      redactArgv([
+        "--image",
+        "https://bucket.s3.amazonaws.com/a.png?X-Amz-Signature=abc&X-Amz-Expires=60",
+        "--image-key",
+        "img-123",
+        "--ref",
+        "https://example.com/a.png",
+      ]),
+    ).toEqual([
+      "--image",
+      "https://bucket.s3.amazonaws.com/a.png?[redacted]",
+      "--image-key",
+      "img-123",
+      "--ref",
+      "https://example.com/a.png",
+    ]);
+  });
+});
+
 describe("parseSince", () => {
   it("parses relative ages and ISO dates", () => {
     expect(parseSince("2h", 10_000_000)).toBe(10_000_000 - 7_200_000);
