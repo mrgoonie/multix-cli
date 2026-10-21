@@ -16,6 +16,8 @@ export default defineConfig({
     // Disable real home env loading in all tests
     env: {
       MULTIX_DISABLE_HOME_ENV: "1",
+      // Never write the real run ledger (~/.multix/history.jsonl) from tests.
+      MULTIX_HISTORY: "0",
     },
   },
 });

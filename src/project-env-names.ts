@@ -39,12 +39,17 @@ import { RUNWAY_ROUTING } from "./providers/runway/models.js";
 export const PROJECT_ENV_EXCLUDED: ReadonlySet<string> = new Set([
   ALLOW_PROJECT_BASE_URL_ENV,
   "MULTIX_LEGACY_CLAUDE_ENV",
+  // Would let a repository choose where the run ledger (argv, prompts) is written.
+  "MULTIX_HISTORY_FILE",
 ]);
 
 /** The documented MULTIX_* settings a project may choose. */
 const OWN_SETTINGS = [
   "MULTIX_OUTPUT_DIR",
   "MULTIX_IMAGE_FORMAT",
+  // Agent mode: `json` envelope output; `0` turns the run ledger off.
+  "MULTIX_OUTPUT",
+  "MULTIX_HISTORY",
   MAX_DOWNLOAD_ENV,
   UPLOAD_MIN_KBPS_ENV,
   // Read before the project file loads, so setting it there has no effect.

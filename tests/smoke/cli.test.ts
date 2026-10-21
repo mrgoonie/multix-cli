@@ -101,7 +101,7 @@ describe("multix --help (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     const result = await run(["runway", "video", "a city"], {
       env: { RUNWAYML_API_SECRET: "", MULTIX_DISABLE_HOME_ENV: "1" },
     });
-    expect(result.exitCode).toBe(1);
+    expect(result.exitCode).toBe(3); // config error class;
     expect(result.stderr).toContain("RUNWAYML_API_SECRET is not set");
     expect(result.stderr).not.toMatch(/\n\s+at /);
   });
@@ -129,7 +129,7 @@ describe("multix --help (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     const result = await run(["heygen", "me"], {
       env: { HEYGEN_API_KEY: "", MULTIX_DISABLE_HOME_ENV: "1" },
     });
-    expect(result.exitCode).toBe(1);
+    expect(result.exitCode).toBe(3);
     expect(result.stderr).toContain("HEYGEN_API_KEY is not set");
     expect(result.stderr).not.toMatch(/\n\s+at /);
   });
@@ -141,7 +141,7 @@ describe("multix --help (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
         env: { REPLICATE_API_TOKEN: "", REPLICATE_API_KEY: "", MULTIX_DISABLE_HOME_ENV: "1" },
       },
     );
-    expect(result.exitCode).toBe(1);
+    expect(result.exitCode).toBe(3);
     expect(result.stderr).toContain("REPLICATE_API_TOKEN is not set");
   });
 
@@ -258,7 +258,7 @@ describe("multix --help (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
 
   it("rejects openai image-to-image without refs before auth or network work", async () => {
     const result = await run(["openai", "image-to-image", "--prompt", "test", "--driver", "api"]);
-    expect(result.exitCode).toBe(1);
+    expect(result.exitCode).toBe(2); // invalid input class;
     expect(result.stderr).toContain("At least one --ref is required for image-to-image.");
   });
 
@@ -281,7 +281,7 @@ describe("gemini --files - (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
       });
       const out = result.stdout + result.stderr;
       // No key is configured, so the request fails after stdin was materialized.
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(3);
       expect(out).toContain("Failed: <stdin>");
       expect(out).toContain("GEMINI_API_KEY is not set");
       expect(out).not.toContain("piped notes");
@@ -331,7 +331,7 @@ describe("doc convert --input - (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
       });
       const out = result.stdout + result.stderr;
       // No key is configured: the run fails on the first attempt, with no retry backoff.
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(3);
       expect(out).toContain("Failed: <stdin>");
       expect(out).toContain("GEMINI_API_KEY is not set");
       expect(out).not.toContain("piped notes");
