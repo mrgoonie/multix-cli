@@ -6020,7 +6020,7 @@
     },
     {
       "group": "fal",
-      "description": "fal.ai: generic model runner, image, video, and queue status/result",
+      "description": "fal.ai: generic model runner, image, video, media upload, and queue status/result",
       "commands": [
         {
           "command": "fal run",
@@ -6038,7 +6038,38 @@
               "long": "--input",
               "flags": "--input <json>",
               "description": "JSON input, or @path/to/file.json",
-              "required": true,
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--file",
+              "flags": "--file <field=path>",
+              "description": "Upload a local media file to fal storage and set its URL at this input field (repeatable; field[]=path appends)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--detach",
+              "flags": "--detach",
+              "description": "Return after fal queues the job; print a receipt instead of waiting",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--receipt",
+              "flags": "--receipt <path>",
+              "description": "Save the request receipt to this file (--detach saves to ~/.multix/fal/requests/ by default)",
+              "required": false,
               "takesValue": true,
               "valueOptional": false,
               "variadic": false,
@@ -6053,6 +6084,16 @@
               "valueOptional": false,
               "variadic": false,
               "negatable": true
+            },
+            {
+              "long": "--output-dir",
+              "flags": "--output-dir <dir>",
+              "description": "Download media here (default MULTIX_OUTPUT_DIR or ./multix-output)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
             },
             {
               "long": "--wait-timeout",
@@ -6364,6 +6405,41 @@
               "variadic": false,
               "negatable": false
             },
+            {
+              "long": "--output-dir",
+              "flags": "--output-dir <dir>",
+              "description": "Download media here (default MULTIX_OUTPUT_DIR or ./multix-output)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        },
+        {
+          "command": "fal upload",
+          "description": "Upload a local media file to fal storage and print its URL as JSON",
+          "positionals": [
+            {
+              "name": "file",
+              "description": "",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
             {
               "long": "--verbose",
               "flags": "-v, --verbose",

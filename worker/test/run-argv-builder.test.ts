@@ -348,6 +348,17 @@ describe("prepareRun: rejections", () => {
       { command: "replicate run", args: ["a/b"], options: { input: "{}", file: "image=x.png" } },
       /not available/,
     ],
+    [
+      "fal run local file",
+      { command: "fal run", args: ["a/b"], options: { file: "video_url=/etc/passwd" } },
+      /not available/,
+    ],
+    [
+      "fal run receipt path",
+      { command: "fal run", args: ["a/b"], options: { input: "{}", receipt: "/tmp/r.json" } },
+      /not available/,
+    ],
+    ["fal upload path as an arg", { command: "fal upload", args: ["/etc/hosts"] }, /inputs\.file/],
     ["missing required option", { command: "gemini generate" }, /options\.prompt is required/],
     ["missing required file", { command: "openai transcribe" }, /inputs\.input is required/],
     ["too many args", { command: "leonardo generate", args: ["a", "b"] }, /Too many args/],
