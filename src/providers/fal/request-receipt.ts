@@ -78,6 +78,19 @@ function receiptFileName(requestId: string): string {
   return `${requestId.replace(/[^A-Za-z0-9_.-]/g, "_")}.json`;
 }
 
+/** Persist a rename by syncing its directory; best effort (not supported on Windows). */
+function syncDir(dir: string): void {
+  let fd: number | undefined;
+  try {
+    fd = fs.openSync(dir, "r");
+    fs.fsyncSync(fd);
+  } catch {
+    // The receipt is written; only the crash guarantee is weaker here.
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
+}
+
 /**
  * Write `receipt` to `target` (a file path) or into `dir`, atomically and with
  * mode 0600. Returns the final path. Never overwrites an existing file with a
@@ -94,11 +107,19 @@ export function saveReceipt(
   const tmp = `${file}.${process.pid}-${crypto.randomBytes(4).toString("hex")}.tmp`;
   const body = `${JSON.stringify({ ...receipt, receipt_path: file }, null, 2)}\n`;
   try {
-    fs.writeFileSync(tmp, body, { mode: 0o600, flag: "wx" });
+    // fsync before the rename, so a crash cannot leave a renamed but empty receipt.
+    const fd = fs.openSync(tmp, "wx", 0o600);
+    try {
+      fs.writeFileSync(fd, body);
+      fs.fsyncSync(fd);
+    } finally {
+      fs.closeSync(fd);
+    }
     fs.renameSync(tmp, file);
   } catch (e) {
     fs.rmSync(tmp, { force: true });
     throw e;
   }
+  syncDir(path.dirname(file));
   return file;
 }

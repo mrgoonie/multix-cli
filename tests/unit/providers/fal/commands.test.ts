@@ -197,6 +197,32 @@ describe("fal run --file --detach", () => {
     expect(fake.calls).toHaveLength(0);
   });
 
+  it.each([
+    [["--input", '{"image_url":"x"}', "--file", "image_url.url=SHOT"]],
+    [["--file", "a=SHOT", "--file", "a[]=SHOT"]],
+    [["--file", "a=SHOT", "--file", "a.b=SHOT"]],
+  ])("rejects conflicting --file targets before uploading anything (%j)", async (args) => {
+    const fake = stub({ ...uploadRoutes, ...submitRoute });
+    const shot = path.join(tmp, "shot.mp4");
+    await expect(
+      cli("run", MODEL, ...args.map((a) => a.replace("SHOT", shot)), "--detach"),
+    ).rejects.toBeInstanceOf(ValidationError);
+    expect(fake.calls).toHaveLength(0);
+  });
+
+  it("refuses a media-named symlink that points at a non-media file", async () => {
+    const fake = stub({ ...uploadRoutes, ...submitRoute });
+    fs.writeFileSync(path.join(tmp, ".env"), "SECRET=1");
+    fs.symlinkSync(path.join(tmp, ".env"), path.join(tmp, "logo.png"));
+    await expect(cli("upload", path.join(tmp, "logo.png"))).rejects.toThrow(
+      /not a supported media/,
+    );
+    await expect(
+      cli("run", MODEL, "--file", `image_url=${path.join(tmp, "logo.png")}`, "--detach"),
+    ).rejects.toBeInstanceOf(ValidationError);
+    expect(fake.calls).toHaveLength(0);
+  });
+
   it("rejects malformed --file values and prototype keys", async () => {
     const fake = stub(submitRoute);
     for (const bad of [
@@ -266,7 +292,7 @@ describe("resume after the submitting process is gone", () => {
     await cli("result", receipt.model, receipt.request_id, "--download", "--output-dir", outDir);
     expect(fake.calls.every((c) => c.method === "GET")).toBe(true);
     const saved = fs.readdirSync(outDir);
-    expect(saved).toEqual([`fal-${REQUEST_ID.slice(0, 8)}-01.mp4`]);
+    expect(saved).toEqual([`fal-${REQUEST_ID}-01.mp4`]);
     // Downloads from the CDN never carry the key.
     const cdn = fake.calls.find((c) => c.url.startsWith("https://v3.fal.media/"));
     expect(cdn?.headers.authorization).toBeUndefined();
@@ -287,7 +313,34 @@ describe("submit cut off before fal answered", () => {
     expect(fs.existsSync(receiptFile())).toBe(false);
   });
 
-  it("refuses an untrusted status_url before saving a receipt or polling", async () => {
+  it.each([502, 503, 504])(
+    "treats a %i answer to submit as UNKNOWN_REMOTE_STATE, not a retryable error",
+    async (status) => {
+      const fake = stub({ [`POST ${SUBMIT}`]: [{ status, json: { detail: "gateway" } }] });
+      const err = await cli("run", MODEL, "--input", "{}", "--detach").catch((e) => e);
+      const info = classifyError(err);
+      expect(info.code).toBe("UNKNOWN_REMOTE_STATE");
+      expect(info.retryable).toBe(false);
+      expect(fake.calls).toHaveLength(1);
+    },
+  );
+
+  it("treats a 200 submit with an unreadable body or no request_id as UNKNOWN_REMOTE_STATE", async () => {
+    for (const json of ["not json {", { status: "IN_QUEUE" }]) {
+      const fake = stub({ [`POST ${SUBMIT}`]: [{ json }] });
+      const err = await cli("run", MODEL, "--input", "{}", "--detach").catch((e) => e);
+      expect(classifyError(err).code).toBe("UNKNOWN_REMOTE_STATE");
+      expect(fake.calls).toHaveLength(1);
+    }
+  });
+
+  it("keeps a 4xx rejection as a plain provider error", async () => {
+    stub({ [`POST ${SUBMIT}`]: [{ status: 422, json: { detail: "bad input" } }] });
+    const err = await cli("run", MODEL, "--input", "{}", "--detach").catch((e) => e);
+    expect(classifyError(err).code).not.toBe("UNKNOWN_REMOTE_STATE");
+  });
+
+  it("saves the receipt but refuses to poll an untrusted status_url", async () => {
     const fake = stub({
       [`POST ${SUBMIT}`]: [
         {
@@ -301,11 +354,30 @@ describe("submit cut off before fal answered", () => {
     });
     await expect(cli("run", MODEL, "--input", "{}", "--detach")).rejects.toThrow(/evil\.example/);
     expect(fake.calls).toHaveLength(1);
+    expect(JSON.parse(fs.readFileSync(receiptFile(), "utf8")).request_id).toBe(REQUEST_ID);
+  });
+});
+
+describe("downloads from jobs submitted close together", () => {
+  it("keep one file per request even when the UUIDv7 ids share a prefix", async () => {
+    const ids = ["01a173ff-f807-7733-87ed-013873a72fb8", "01a173ff-fbe2-7da3-8068-77c512062074"];
+    const routes: Parameters<typeof createFakeFal>[0] = {
+      "GET https://v3.fal.media/files/out/": [{ status: 200, json: "bytes" }],
+    };
+    for (const id of ids) {
+      routes[`GET https://queue.fal.run/fal-ai/mmaudio-v2/requests/${id}`] = [
+        { json: { video: { url: `https://v3.fal.media/files/out/${id}.mp4` } } },
+      ];
+    }
+    stub(routes);
+    const outDir = path.join(tmp, "collected");
+    for (const id of ids) await cli("result", MODEL, id, "--download", "--output-dir", outDir);
+    expect(fs.readdirSync(outDir).sort()).toEqual(ids.map((id) => `fal-${id}-01.mp4`));
   });
 });
 
 describe("fal run without --detach (unchanged default)", () => {
-  it("submits, waits, downloads, and also leaves a receipt", async () => {
+  it("submits, waits and downloads without writing a receipt", async () => {
     const app = "fal-ai/mmaudio-v2";
     const fake = stub({
       ...submitRoute,
@@ -320,7 +392,7 @@ describe("fal run without --detach (unchanged default)", () => {
     await cli("run", MODEL, "--input", '{"prompt":"x"}');
     expect(fake.calls.filter((c) => c.method === "POST")).toHaveLength(1);
     expect(stdout.join("\n")).toMatch(/Downloaded 1 file\(s\)/);
-    expect(fs.existsSync(receiptFile())).toBe(true);
+    expect(fs.existsSync(receiptFile())).toBe(false);
   });
 
   it("--no-download prints only the result JSON on stdout", async () => {

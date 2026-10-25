@@ -54,21 +54,28 @@ export async function inspectLocalMedia(
       `${trimmed} is already a URL: pass it in --input instead of uploading`,
     );
   }
-  const abs = path.resolve(trimmed);
-  const name = path.basename(abs);
-  // Only media leaves the machine: a stray `--file x=.env` must not become a public URL.
-  const mime = uploadMimeTypeFor(name);
-  if (!mime) {
-    throw new ValidationError(
+  // Only media leaves the machine: a stray `--file x=.env` must not become a
+  // public URL. Symlinks are resolved first, so the check applies to the file
+  // that is actually read, not to the link's name.
+  const unsupported = () =>
+    new ValidationError(
       `Refusing to upload ${trimmed}: not a supported media file. Allowed extensions: ${UPLOAD_EXTENSIONS.join(", ")}`,
     );
-  }
+  if (!uploadMimeTypeFor(path.basename(trimmed))) throw unsupported();
+  let abs: string;
   let stat: Awaited<ReturnType<typeof fs.stat>>;
   try {
+    abs = await fs.realpath(path.resolve(trimmed));
     stat = await fs.stat(abs);
-  } catch {
-    throw new ValidationError(`File not found: ${trimmed}`);
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "ENOTDIR")
+      throw new ValidationError(`File not found: ${trimmed}`);
+    throw new ValidationError(`Cannot read ${trimmed} (${code ?? "unknown error"})`);
   }
+  const name = path.basename(abs);
+  const mime = uploadMimeTypeFor(name);
+  if (!mime) throw unsupported();
   if (!stat.isFile()) throw new ValidationError(`Not a file: ${trimmed}`);
   if (stat.size === 0) throw new ValidationError(`File is empty: ${trimmed}`);
   const maxBytes = falMaxUploadBytes();
@@ -181,6 +188,9 @@ export async function applyFileFlags(
 ): Promise<FalUploadedFile[]> {
   if (flags.length === 0) return [];
   for (const flag of flags) await inspectLocalMedia(flag.file);
+  // Place every URL in a copy first, so a conflicting field fails before any upload.
+  const preview = structuredClone(input);
+  for (const flag of flags) setField(preview, flag, "https://placeholder.invalid/");
   logger.info(FAL_UPLOAD_NOTICE);
   const byPath = new Map<string, FalUploadedFile>();
   for (const flag of flags) {

@@ -4,7 +4,7 @@
  * in the result payload. `--file field=path` uploads local media to fal
  * storage first and puts its URL in the input; `--detach` returns as soon as
  * fal has queued the job, printing a receipt for `fal status` / `fal result`.
- * Every accepted submit is saved as a receipt (see request-receipt.ts).
+ * `--detach` and `--receipt` save that receipt to disk (see request-receipt.ts).
  */
 
 import path from "node:path";
@@ -22,6 +22,7 @@ import {
   submitFalRequest,
   waitForFalResult,
 } from "../run-helpers.js";
+import type { FalSubmitResponse } from "../types.js";
 
 interface RunFlags {
   input?: string;
@@ -62,7 +63,10 @@ export function registerFalRunCommand(parent: Command): void {
       [],
     )
     .option("--detach", "Return after fal queues the job; print a receipt instead of waiting")
-    .option("--receipt <path>", "Write the request receipt here (default ~/.multix/fal/requests/)")
+    .option(
+      "--receipt <path>",
+      "Save the request receipt to this file (--detach saves to ~/.multix/fal/requests/ by default)",
+    )
     .option("--no-download", "Skip downloading media; print result JSON only")
     .option(
       "--output-dir <dir>",
@@ -82,14 +86,22 @@ export function registerFalRunCommand(parent: Command): void {
       await applyFileFlags(input, fileFlags, requireFalKey(), logger);
 
       logger.info(`Submitting to ${model}...`);
-      const submit = await submitFalRequest(client, model, input, logger);
-      const receipt = persistReceipt(
-        buildReceipt({ model, requestId: submit.request_id, status: submit.status, input }),
-        opts.receipt,
-        logger,
-      );
+      let receipt: FalReceipt | undefined;
+      // Runs as soon as fal returns a request_id, so a job that is queued (and
+      // billed) stays resumable even if a later check on the response fails.
+      const onAccepted = (accepted: FalSubmitResponse) => {
+        logger.info(`fal accepted request ${accepted.request_id}`);
+        receipt = buildReceipt({
+          model,
+          requestId: accepted.request_id,
+          status: accepted.status,
+          input,
+        });
+        if (opts.detach || opts.receipt) receipt = persistReceipt(receipt, opts.receipt, logger);
+      };
+      const submit = await submitFalRequest(client, model, input, logger, onAccepted);
 
-      if (opts.detach) {
+      if (opts.detach && receipt) {
         logger.success(`Queued fal request ${submit.request_id}`);
         logger.info(`Check: ${receipt.status_command}`);
         logger.info(`Fetch: ${receipt.result_command}`);
