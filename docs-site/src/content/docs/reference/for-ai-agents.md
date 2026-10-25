@@ -84,7 +84,7 @@ https://multix.zuey.me/llms.txt
 | 4 | temporary | `RATE_LIMITED`, `PROVIDER_UNAVAILABLE`, `NETWORK_ERROR` | Wait `retry_after_s`, then `multix rerun <id>`. |
 | 5 | rejected | `QUOTA_EXCEEDED`, `CONTENT_BLOCKED`, `MODEL_NOT_FOUND`, `NOT_FOUND`, `PROVIDER_REJECTED`, `JOB_FAILED`, `RESPONSE_TOO_LARGE` | Change the input, model or provider. |
 | 6 | timed out | `TIMEOUT` | The job may still run: use the status command in `next[]`. |
-| 1 | unknown | `UNKNOWN` | Read `log[]` (last stderr lines). |
+| 1 | unknown | `UNKNOWN`, `UNKNOWN_REMOTE_STATE` | Read `log[]` (last stderr lines). For `UNKNOWN_REMOTE_STATE` the job may exist and be billed: check the provider before submitting again. |
 
 These exit classes apply in agent mode (`--json` or `MULTIX_OUTPUT=json`).
 Without it a failed command still exits 1, as in earlier versions, and prints

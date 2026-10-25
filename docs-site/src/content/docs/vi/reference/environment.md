@@ -29,9 +29,11 @@ chỉ được đặt những biến mà chính `multix` đọc:
   `MULTIX_DISABLE_HOME_ENV` (không có tác dụng ở đó), cùng `NO_COLOR`.
 
 Hai biến opt-in `MULTIX_ALLOW_PROJECT_BASE_URL` và `MULTIX_LEGACY_CLAUDE_ENV`,
-cùng `MULTIX_HISTORY_FILE` (nơi ghi ledger lịch sử chạy), bị từ chối: repository
-không được nới rộng những gì nó có thể làm với key của bạn, chọn nơi ghi lịch sử
-chạy, hay kéo theo credential trong các file `.claude` ở thư mục home.
+cùng `MULTIX_HISTORY_FILE` (nơi ghi ledger lịch sử chạy) và `MULTIX_FAL_JOBS_DIR`
+(nơi `multix fal submit`/`run` lưu receipt của job, mặc định `~/.multix/fal-jobs`),
+bị từ chối: repository không được nới rộng những gì nó có thể làm với key của bạn,
+chọn nơi ghi lịch sử chạy hay receipt, hay kéo theo credential trong các file
+`.claude` ở thư mục home.
 
 [`.env.example`](https://github.com/mrgoonie/multix-cli/blob/main/.env.example)
 liệt kê các biến này, cùng hai biến opt-in. Mọi tên khác, ví dụ `NODE_OPTIONS`, `npm_config_registry`,

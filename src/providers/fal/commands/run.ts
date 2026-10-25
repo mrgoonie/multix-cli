@@ -1,34 +1,32 @@
 /**
  * multix fal run <model> — generic runner for any fal.ai model.
- * Submits, polls to completion, then prints or downloads any media URLs found
- * in the result payload.
+ * Uploads `--file` inputs, submits, saves a receipt (so a killed or timed-out
+ * run can be resumed with `fal status`/`fal result`), polls to completion,
+ * then prints or downloads any media URLs found in the result payload.
  */
 
 import type { Command } from "commander";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
-import {
-  downloadResultMedia,
-  extractMediaUrls,
-  parseInputArg,
-  submitAndWait,
-} from "../run-helpers.js";
+import { buildReceipt, saveReceipt } from "../job-receipts.js";
+import { downloadResultMedia, extractMediaUrls, submitAndWait } from "../run-helpers.js";
+import { type JobInputOptions, addJobInputOptions, prepareJobInput } from "./job-input.js";
 
 export function registerFalRunCommand(parent: Command): void {
-  parent
+  const cmd = parent
     .command("run <model>")
-    .description("Run any fal.ai model by id (e.g. fal-ai/flux/schnell)")
-    .requiredOption("--input <json>", "JSON input, or @path/to/file.json")
+    .description("Run any fal.ai model by id (e.g. fal-ai/flux/schnell)");
+  addJobInputOptions(cmd)
     .option("--no-download", "Skip downloading media; print result JSON only")
     .option("--wait-timeout <ms>", "Polling timeout in milliseconds", "480000")
     .option("-v, --verbose", "Verbose logging")
     .action(
       async (
         model: string,
-        opts: { input: string; download: boolean; waitTimeout: string; verbose?: boolean },
+        opts: JobInputOptions & { download: boolean; waitTimeout: string; verbose?: boolean },
       ) => {
         const logger = createLogger({ verbose: opts.verbose ?? false });
-        const input = parseInputArg(opts.input);
+        const { input, uploadedFields } = await prepareJobInput(opts, logger);
 
         logger.info(`Submitting to ${model}...`);
         const { requestId, result } = await submitAndWait({
@@ -36,6 +34,13 @@ export function registerFalRunCommand(parent: Command): void {
           input,
           logger,
           waitTimeoutMs: Number.parseInt(opts.waitTimeout, 10) || 480_000,
+          onSubmitted: (submitted) => {
+            try {
+              saveReceipt(buildReceipt(model, input, submitted, uploadedFields));
+            } catch (e) {
+              logger.debug(`Could not save the job receipt: ${e instanceof Error ? e.message : e}`);
+            }
+          },
         });
 
         if (opts.download === false) {

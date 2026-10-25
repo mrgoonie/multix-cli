@@ -6,12 +6,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import { isRetryableServerStatus } from "../../core/async-poll.js";
-import { ProviderError } from "../../core/errors.js";
+import { MultixError, ProviderError } from "../../core/errors.js";
 import { downloadFile } from "../../core/http-client.js";
 import { parseJsonInput } from "../../core/json-input.js";
 import type { Logger } from "../../core/logger.js";
 import { redactUrl } from "../../core/redact.js";
-import { HttpError, createFalClient, submitPath } from "./client.js";
+import { type FalClient, HttpError, createFalClient, submitPath } from "./client.js";
 import type { FalResultResponse, FalStatusResponse, FalSubmitResponse } from "./types.js";
 
 /** Parse `--input` as inline JSON or `@path/to/file.json`. */
@@ -26,6 +26,8 @@ export interface SubmitAndWaitOptions {
   waitTimeoutMs?: number;
   /** Poll interval override — mainly for tests. Defaults to 3000ms. */
   pollIntervalMs?: number;
+  /** Called once fal accepted the job, before polling (e.g. to persist a receipt). */
+  onSubmitted?: (submit: FalSubmitResponse) => void;
 }
 
 export interface SubmitAndWaitResult {
@@ -50,6 +52,57 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 }
 
 /**
+ * fal may have accepted a request whose response never arrived. There is no
+ * idempotency key in fal's queue API, so the caller must not resubmit blindly.
+ */
+export class UnknownRemoteStateError extends MultixError {
+  constructor(model: string, cause: unknown) {
+    const msg = cause instanceof Error ? cause.message : String(cause);
+    super(
+      `unknown_remote_state: the submit to ${model} failed before fal answered (${msg}). fal may have queued and billed the job; check https://fal.ai/dashboard/requests before submitting again.`,
+      "UNKNOWN_REMOTE_STATE",
+      { cause },
+    );
+    this.name = "UnknownRemoteStateError";
+  }
+}
+
+/**
+ * POST a job to the queue (never retried: a second POST is a second paid job)
+ * and check the follow-up URLs before anything is sent to them. A network
+ * failure after the request left becomes {@link UnknownRemoteStateError}.
+ */
+export async function submitJob(
+  client: FalClient,
+  model: string,
+  input: Record<string, unknown>,
+  logger: Logger,
+): Promise<FalSubmitResponse> {
+  let submitRes: FalSubmitResponse;
+  try {
+    submitRes = await client.post<FalSubmitResponse>(submitPath(model), input, logger);
+  } catch (e) {
+    // Status 0 is a network failure or timeout: the request may have reached fal.
+    if (e instanceof HttpError && e.status === 0) throw new UnknownRemoteStateError(model, e);
+    throw e;
+  }
+  if (typeof submitRes?.request_id !== "string" || submitRes.request_id === "") {
+    throw new ProviderError("fal submit response is missing request_id", "fal");
+  }
+  logger.debug(`request_id: ${submitRes.request_id}`);
+  // Refuse both follow-up URLs up front (ProviderError, host only) so the key
+  // is never sent to an untrusted host and the error is not wrapped as a poll failure.
+  for (const field of ["status_url", "response_url"] as const) {
+    const url: unknown = submitRes[field];
+    if (typeof url !== "string" || url === "") {
+      throw new ProviderError(`fal submit response is missing ${field}`, "fal");
+    }
+    client.assertTrustedUrl(url);
+  }
+  return submitRes;
+}
+
+/**
  * Submit a job, poll its status_url until COMPLETED (bounded by a real
  * deadline, retrying transient network/5xx errors), then fetch response_url.
  * Uses the URLs fal itself returns from submit rather than reconstructing
@@ -60,18 +113,10 @@ export async function submitAndWait(opts: SubmitAndWaitOptions): Promise<SubmitA
   const { model, input, logger } = opts;
   const client = createFalClient();
 
-  const submitRes = await client.post<FalSubmitResponse>(submitPath(model), input, logger);
+  const submitRes = await submitJob(client, model, input, logger);
   const requestId = submitRes.request_id;
-  logger.debug(`request_id: ${requestId}`);
-  // Refuse both follow-up URLs up front (ProviderError, host only) so the key
-  // is never sent to an untrusted host and the error is not wrapped as a poll failure.
-  for (const field of ["status_url", "response_url"] as const) {
-    const url: unknown = submitRes[field];
-    if (typeof url !== "string" || url === "") {
-      throw new ProviderError(`fal submit response is missing ${field}`, "fal");
-    }
-    client.assertTrustedUrl(url);
-  }
+  logger.info(`Submitted fal request ${requestId}`);
+  opts.onSubmitted?.(submitRes);
   logger.info("Polling for completion...");
 
   const waitTimeoutMs = opts.waitTimeoutMs ?? 480_000;

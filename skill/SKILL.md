@@ -149,10 +149,21 @@ multix fal image "a cyberpunk cat" [-m <model>] [--image-size square_hd] [-n 1] 
 # image-to-video with --image-url (default switches to fal-ai/kling-video/v1.6/standard/image-to-video when -m is omitted)
 multix fal video "a dancer under neon lights" [-m <model>] [--image-url <https-url>] [--duration <n>] [--aspect-ratio 16:9] [--seed <n>] [-v]
 
-# Inspect a request submitted any other way
-multix fal status <model> <requestId>
-multix fal result <model> <requestId> [--download]
+# Local media: upload to fal storage and use the URL in any model input
+multix fal upload ./shot.mp4 [--expires-in 1d]          # prints {"url","file_name","mime_type","size_bytes"}
+multix fal run fal-ai/mmaudio-v2 --input @in.json --file video_url=./shot.mp4
+
+# Queue without waiting: prints a JSON receipt (request_id), saved in ~/.multix/fal-jobs/
+multix fal submit fal-ai/hunyuan-video-foley --input @in.json --file video_url=./shot.mp4
+multix fal jobs                                          # saved receipts, newest first
+
+# Status/result of any submitted request (resume after timeout; never resubmits).
+# The model may be omitted when a receipt was saved.
+multix fal status [<model>] <requestId>
+multix fal result [<model>] <requestId> [--download] [--output-dir <dir>]
 ```
+
+`--file field=path` (repeatable, dotted paths allowed) uploads only the named files; URLs and `data:` URIs pass through. Uploaded URLs are readable by anyone who has them; `--expires-in 1h|1d|7d|30d|1y|<seconds>` asks fal to delete them. `submit` is never retried: `UNKNOWN_REMOTE_STATE` means fal may have queued and billed the job, so check fal before submitting again.
 
 ## Atlas Cloud
 

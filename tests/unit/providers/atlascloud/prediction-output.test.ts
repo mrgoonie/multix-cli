@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { ProviderError } from "../../../../src/core/errors.js";
+import { guessUploadMimeType } from "../../../../src/core/upload-mime.js";
 import {
   checkOutputUrl,
   classifyOutputs,
@@ -17,7 +18,6 @@ import {
   predictionErrorMessage,
   thumbnailSource,
 } from "../../../../src/providers/atlascloud/prediction-output.js";
-import { guessUploadMimeType } from "../../../../src/providers/atlascloud/upload-mime.js";
 
 describe("status helpers", () => {
   it("treats documented and schema-listed statuses correctly", () => {
@@ -179,14 +179,7 @@ describe("extensions and names", () => {
 describe("runtime neutrality", () => {
   // These modules are shared with a Cloudflare Worker: no node:* imports and
   // no Node-only core helpers (env loading, fs downloads, terminal logger).
-  const NEUTRAL = [
-    "client.ts",
-    "types.ts",
-    "models.ts",
-    "model-input.ts",
-    "prediction-output.ts",
-    "upload-mime.ts",
-  ];
+  const NEUTRAL = ["client.ts", "types.ts", "models.ts", "model-input.ts", "prediction-output.ts"];
   const FORBIDDEN =
     /from\s+["'](node:[^"']+|[^"']*\/(env-loader|http-client|logger|output-dir|json-input|image-input)\.js)["']/;
   const WORKER_SAFE_CORE = new Set([

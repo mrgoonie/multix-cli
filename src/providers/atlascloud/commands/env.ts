@@ -10,10 +10,10 @@ import { resolveKey, resolveProviderBaseUrl, resolveRoutedKey } from "../../../c
 import { ConfigError, ValidationError } from "../../../core/errors.js";
 import { type Logger, createLogger } from "../../../core/logger.js";
 import { redactUrl } from "../../../core/redact.js";
+import { UPLOAD_EXTENSIONS, uploadMimeTypeFor } from "../../../core/upload-mime.js";
 import { checkBaseUrl } from "../../../core/url-safety.js";
 import { AtlasCloudClient } from "../client.js";
 import { ATLAS_DEFAULT_MODELS, ATLAS_ROUTING, type AtlasDefaultModelKey } from "../models.js";
-import { UPLOAD_EXTENSIONS, uploadMimeTypeFor } from "../upload-mime.js";
 
 export const ATLAS_KEY_URL = "https://www.atlascloud.ai/console/api-keys";
 

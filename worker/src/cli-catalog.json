@@ -6020,7 +6020,7 @@
     },
     {
       "group": "fal",
-      "description": "fal.ai: generic model runner, image, video, and queue status/result",
+      "description": "fal.ai: generic model runner, file upload, async submit, image, video, and queue status/result",
       "commands": [
         {
           "command": "fal run",
@@ -6038,7 +6038,28 @@
               "long": "--input",
               "flags": "--input <json>",
               "description": "JSON input, or @path/to/file.json",
-              "required": true,
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--file",
+              "flags": "--file <field=path>",
+              "description": "Upload a local file to fal storage and set its URL at <field> (dotted path); repeatable. URLs are used as given",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--expires-in",
+              "flags": "--expires-in <ttl>",
+              "description": "Ask fal to delete the uploads after 1h/1d/7d/30d/1y or N seconds",
+              "required": false,
               "takesValue": true,
               "valueOptional": false,
               "variadic": false,
@@ -6064,6 +6085,107 @@
               "variadic": false,
               "negatable": false,
               "default": "480000"
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        },
+        {
+          "command": "fal submit",
+          "description": "Queue a job on any fal.ai model without waiting; prints a JSON receipt",
+          "positionals": [
+            {
+              "name": "model",
+              "description": "",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--input",
+              "flags": "--input <json>",
+              "description": "JSON input, or @path/to/file.json",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--file",
+              "flags": "--file <field=path>",
+              "description": "Upload a local file to fal storage and set its URL at <field> (dotted path); repeatable. URLs are used as given",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--expires-in",
+              "flags": "--expires-in <ttl>",
+              "description": "Ask fal to delete the uploads after 1h/1d/7d/30d/1y or N seconds",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--receipt",
+              "flags": "--receipt <path>",
+              "description": "Also write the receipt JSON to this file",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        },
+        {
+          "command": "fal upload",
+          "description": "Upload a local file to fal storage and print its URL as JSON",
+          "positionals": [
+            {
+              "name": "file",
+              "description": "",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--expires-in",
+              "flags": "--expires-in <ttl>",
+              "description": "Ask fal to delete the upload after 1h/1d/7d/30d/1y or N seconds",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
             },
             {
               "long": "--verbose",
@@ -6307,10 +6429,10 @@
         },
         {
           "command": "fal status",
-          "description": "Get a fal.ai request's queue status",
+          "description": "Get a fal.ai request's queue status (model optional when a receipt was saved)",
           "positionals": [
             {
-              "name": "model",
+              "name": "modelOrRequestId",
               "description": "",
               "required": true,
               "variadic": false
@@ -6318,7 +6440,7 @@
             {
               "name": "requestId",
               "description": "",
-              "required": true,
+              "required": false,
               "variadic": false
             }
           ],
@@ -6338,10 +6460,10 @@
         },
         {
           "command": "fal result",
-          "description": "Fetch a completed fal.ai request's result",
+          "description": "Fetch a completed fal.ai request's result (model optional when a receipt was saved)",
           "positionals": [
             {
-              "name": "model",
+              "name": "modelOrRequestId",
               "description": "",
               "required": true,
               "variadic": false
@@ -6349,7 +6471,7 @@
             {
               "name": "requestId",
               "description": "",
-              "required": true,
+              "required": false,
               "variadic": false
             }
           ],
@@ -6365,6 +6487,16 @@
               "negatable": false
             },
             {
+              "long": "--output-dir",
+              "flags": "--output-dir <dir>",
+              "description": "Directory for --download (default: MULTIX_OUTPUT_DIR)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
               "long": "--verbose",
               "flags": "-v, --verbose",
               "description": "Verbose logging",
@@ -6374,6 +6506,24 @@
               "variadic": false,
               "negatable": false,
               "short": "-v"
+            }
+          ]
+        },
+        {
+          "command": "fal jobs",
+          "description": "List saved fal.ai job receipts (newest first)",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--limit",
+              "flags": "--limit <n>",
+              "description": "How many receipts to show",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "20"
             }
           ]
         }

@@ -66,6 +66,8 @@ export const EXCLUDED_COMMANDS: ReadonlySet<string> = new Set([
   "history show",
   "history stats",
   "rerun",
+  // Lists receipts saved on the machine that submitted; a job container keeps none.
+  "fal jobs",
 ]);
 
 /** Options no remote command may use: stdin is not available in the container. */
@@ -169,6 +171,11 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   "elevenlabs align": { fileOptions: { input: "file", "text-file": "file" } },
   "fal image": { caps: IMAGE_COUNT },
   "fal video": { urlOptions: ["image-url"], caps: { duration: ["duration"] } },
+  "fal upload": { filePositionals: ["file"] },
+  // `--file field=path` maps a model field to a local file; not expressible remotely.
+  "fal run": { unsupported: ["file"] },
+  // `--receipt` writes to a caller-chosen path.
+  "fal submit": { unsupported: ["file", "receipt"] },
   "atlas image": { caps: IMAGE_COUNT },
   "atlas image-to-image": { fileOptions: { ref: "file" }, caps: IMAGE_COUNT },
   "atlas video": { caps: VIDEO_CAPS },

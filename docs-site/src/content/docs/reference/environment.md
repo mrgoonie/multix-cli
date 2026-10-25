@@ -31,7 +31,8 @@ may only set variables that `multix` itself reads:
   `MULTIX_DISABLE_HOME_ENV` (which has no effect there), plus `NO_COLOR`.
 
 The opt-ins `MULTIX_ALLOW_PROJECT_BASE_URL` and `MULTIX_LEGACY_CLAUDE_ENV`, and
-`MULTIX_HISTORY_FILE` (where the run ledger is written), are refused: a repository must not widen what it can do with your keys or pull in
+`MULTIX_HISTORY_FILE` (where the run ledger is written) and `MULTIX_FAL_JOBS_DIR`
+(where `multix fal submit`/`run` save job receipts, default `~/.multix/fal-jobs`), are refused: a repository must not widen what it can do with your keys or pull in
 the `.claude` credentials from your home folder.
 
 [`.env.example`](https://github.com/mrgoonie/multix-cli/blob/main/.env.example)

@@ -1,8 +1,8 @@
 /**
- * Content types for Atlas Cloud uploads, keyed by file extension.
- * Runtime-neutral. Atlas classifies uploads by name and models check the URL
- * extension, so the original extension is kept and an explicit type is sent
- * instead of application/octet-stream.
+ * Content types for media uploads (Atlas Cloud, fal storage), keyed by file
+ * extension. Runtime-neutral. Providers classify uploads by name and models
+ * check the URL extension, so the original extension is kept and an explicit
+ * type is sent instead of application/octet-stream.
  */
 
 const UPLOAD_MIME_TYPES: Record<string, string> = {

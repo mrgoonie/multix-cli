@@ -41,6 +41,8 @@ export const PROJECT_ENV_EXCLUDED: ReadonlySet<string> = new Set([
   "MULTIX_LEGACY_CLAUDE_ENV",
   // Would let a repository choose where the run ledger (argv, prompts) is written.
   "MULTIX_HISTORY_FILE",
+  // Would let a repository choose where fal job receipts are written.
+  "MULTIX_FAL_JOBS_DIR",
 ]);
 
 /** The documented MULTIX_* settings a project may choose. */
