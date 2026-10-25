@@ -83,7 +83,7 @@ https://multix.zuey.me/llms.txt
 | 3 | key or setup | `MISSING_KEY`, `INVALID_KEY`, `CONFIG_ERROR`, `BINARY_MISSING` | `multix check`, set the key named in `error.env`. |
 | 4 | temporary | `RATE_LIMITED`, `PROVIDER_UNAVAILABLE`, `NETWORK_ERROR` | Wait `retry_after_s`, then `multix rerun <id>`. |
 | 5 | rejected | `QUOTA_EXCEEDED`, `CONTENT_BLOCKED`, `MODEL_NOT_FOUND`, `NOT_FOUND`, `PROVIDER_REJECTED`, `JOB_FAILED`, `RESPONSE_TOO_LARGE` | Change the input, model or provider. |
-| 6 | timed out or pending | `TIMEOUT`, `JOB_PENDING`, `UNKNOWN_REMOTE_STATE` | `TIMEOUT`, `JOB_PENDING`: the job may still run: use the status command in `next[]`; do not resubmit. `UNKNOWN_REMOTE_STATE`: the submit got no response and no request id, so the job may exist: check the provider's request list before submitting again. |
+| 6 | timed out or pending | `TIMEOUT`, `JOB_PENDING`, `UNKNOWN_REMOTE_STATE` | `TIMEOUT`, `JOB_PENDING`: the job may still run: use the status command in `next[]`; do not resubmit. `UNKNOWN_REMOTE_STATE`: the submit got no request id (no response, or a 5xx), so the job may exist: check the provider's request list before submitting again. |
 | 1 | unknown | `UNKNOWN` | Read `log[]` (last stderr lines). |
 
 These exit classes apply in agent mode (`--json` or `MULTIX_OUTPUT=json`).

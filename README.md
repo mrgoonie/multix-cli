@@ -564,7 +564,7 @@ multix fal result <model> <requestId> [--download] [--output-dir <dir>]
 - All fal jobs are async: submit → poll `status` → fetch `result`. `run`/`image`/`video` do this automatically.
 - Media URLs are extracted generically from the result JSON (any `url` field, recursively) and downloaded to `MULTIX_OUTPUT_DIR`.
 - Anyone with a fal storage URL can read the file; `--expires-in` asks fal to delete it later, otherwise fal's default retention applies and multix never deletes it.
-- `result` never resubmits: a job still queued or running fails with `JOB_PENDING`. A submit with no response fails with `UNKNOWN_REMOTE_STATE` (the job may exist and be billed; check your fal request list before retrying). See the [fal command docs](https://multix.zuey.me/commands/fal/).
+- `result` never resubmits: a job still queued or running fails with `JOB_PENDING`. A submit with no response, a 5xx, or no request id fails with `UNKNOWN_REMOTE_STATE` (the job may exist and be billed; check your fal request list before retrying). See the [fal command docs](https://multix.zuey.me/commands/fal/).
 
 ### `multix atlas`
 

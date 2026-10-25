@@ -144,7 +144,8 @@ path segments, e.g. `fal-ai/kling-video`); the full model id used for `run`,
   `multix fal status` or `multix fal result`.
 - fal has no idempotency key, so multix cannot promise a job runs exactly
   once. If a submit gets no HTTP response (other than a DNS failure or a
-  refused connection), the job may exist and be billed: the command fails
+  refused connection), a 5xx, or an answer without a request id, the job may
+  exist and be billed: the command fails
   with `UNKNOWN_REMOTE_STATE`. Check your
   [fal request list](https://fal.ai/dashboard/requests) before submitting
   again.

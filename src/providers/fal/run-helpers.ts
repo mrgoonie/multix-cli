@@ -59,7 +59,7 @@ export class FalUnknownRemoteStateError extends MultixError {
   constructor(model: string, cause: unknown) {
     const msg = cause instanceof Error ? cause.message : String(cause);
     super(
-      `unknown_remote_state: the submit to ${model} got no response (${msg}); fal may have accepted the job. Check https://fal.ai/dashboard/requests before submitting again.`,
+      `unknown_remote_state: the submit to ${model} got no usable answer (${msg}); fal may have accepted the job. Check https://fal.ai/dashboard/requests before submitting again.`,
       "UNKNOWN_REMOTE_STATE",
       { cause },
     );
@@ -96,13 +96,21 @@ export async function submitFalRequest(
   try {
     submitRes = await client.post<FalSubmitResponse>(submitPath(model), input, logger);
   } catch (e) {
-    if (e instanceof HttpError && e.status === 0 && !NOT_SENT.test(causeText(e))) {
+    // No answer, or a 5xx (often a gateway in front of a queue that may have
+    // accepted the job): resubmitting could start a second billed job.
+    if (
+      e instanceof HttpError &&
+      ((e.status === 0 && !NOT_SENT.test(causeText(e))) || e.status >= 500)
+    ) {
       throw new FalUnknownRemoteStateError(model, e);
     }
     throw e;
   }
   if (typeof submitRes?.request_id !== "string" || submitRes.request_id === "") {
-    throw new ProviderError("fal submit response is missing request_id", "fal");
+    throw new FalUnknownRemoteStateError(
+      model,
+      new ProviderError("fal submit response is missing request_id", "fal"),
+    );
   }
   logger.debug(`request_id: ${submitRes.request_id}`);
   // Refuse both follow-up URLs up front (ProviderError, host only) so the key

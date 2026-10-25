@@ -529,22 +529,33 @@ describe("submitFalRequest", () => {
     expect(classifyError(err).code).toBe("NETWORK_ERROR");
   });
 
-  it("reports a 5xx on submit as a provider error, not an unknown state, without resubmitting", async () => {
+  it("reports a 5xx on submit as unknown_remote_state, without resubmitting", async () => {
+    for (const status of [500, 502, 503, 504]) {
+      globalThis.fetch = vi.fn(
+        async () => new Response("upstream unavailable", { status }),
+      ) as unknown as typeof fetch;
+      const err = await submitFalRequest(client(), "fal-ai/x", {}, noopLogger).catch((e) => e);
+      expect(err).toBeInstanceOf(FalUnknownRemoteStateError);
+      expect(classifyError(err)).toMatchObject({ code: "UNKNOWN_REMOTE_STATE", retryable: false });
+      expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it("keeps a 4xx on submit as a definite rejection", async () => {
     globalThis.fetch = vi.fn(
-      async () => new Response("upstream unavailable", { status: 503 }),
+      async () => new Response(JSON.stringify({ detail: "bad input" }), { status: 422 }),
     ) as unknown as typeof fetch;
     const err = await submitFalRequest(client(), "fal-ai/x", {}, noopLogger).catch((e) => e);
     expect(err).not.toBeInstanceOf(FalUnknownRemoteStateError);
-    expect(err).toMatchObject({ status: 503 });
-    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    expect(err).toMatchObject({ status: 422 });
   });
 
   it("rejects a submit response without request_id", async () => {
     globalThis.fetch = vi.fn(
       async () => new Response(JSON.stringify({ status_url: "https://queue.fal.run/s" })),
     ) as unknown as typeof fetch;
-    await expect(submitFalRequest(client(), "fal-ai/x", {}, noopLogger)).rejects.toThrow(
-      /missing request_id/,
-    );
+    const err = await submitFalRequest(client(), "fal-ai/x", {}, noopLogger).catch((e) => e);
+    expect(err).toBeInstanceOf(FalUnknownRemoteStateError);
+    expect(err.message).toMatch(/missing request_id/);
   });
 });

@@ -81,7 +81,7 @@ const HINTS: Record<ErrorCode, string> = {
   JOB_PENDING:
     "The job is still queued or running: check it later with the status command; do not resubmit.",
   UNKNOWN_REMOTE_STATE:
-    "The submit got no response, so the job may exist (and be billed): check the provider's request list before submitting again.",
+    "The submit got no request id (no response or a 5xx), so the job may exist (and be billed): check the provider's request list before submitting again.",
   JOB_FAILED: "The provider reported the job failed; read the message, adjust inputs and retry.",
   RESPONSE_TOO_LARGE: "The response exceeded the size cap; request fewer or smaller outputs.",
   BINARY_MISSING: "Install the missing tool (ffmpeg, ImageMagick or cwebp) and put it on PATH.",

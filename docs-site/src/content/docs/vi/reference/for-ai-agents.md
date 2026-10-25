@@ -83,7 +83,7 @@ https://multix.zuey.me/llms.txt
 | 3 | key hoặc cài đặt | `MISSING_KEY`, `INVALID_KEY`, `CONFIG_ERROR`, `BINARY_MISSING` | `multix check`, đặt key có tên trong `error.env`. |
 | 4 | tạm thời | `RATE_LIMITED`, `PROVIDER_UNAVAILABLE`, `NETWORK_ERROR` | Chờ `retry_after_s`, rồi `multix rerun <id>`. |
 | 5 | bị từ chối | `QUOTA_EXCEEDED`, `CONTENT_BLOCKED`, `MODEL_NOT_FOUND`, `NOT_FOUND`, `PROVIDER_REJECTED`, `JOB_FAILED`, `RESPONSE_TOO_LARGE` | Đổi input, model hoặc provider. |
-| 6 | hết thời gian hoặc đang chờ | `TIMEOUT`, `JOB_PENDING`, `UNKNOWN_REMOTE_STATE` | `TIMEOUT`, `JOB_PENDING`: job có thể vẫn đang chạy: dùng lệnh status trong `next[]`; không submit lại. `UNKNOWN_REMOTE_STATE`: lệnh submit không nhận được phản hồi lẫn request id, nên job có thể đã tồn tại: kiểm tra danh sách request của provider trước khi submit lại. |
+| 6 | hết thời gian hoặc đang chờ | `TIMEOUT`, `JOB_PENDING`, `UNKNOWN_REMOTE_STATE` | `TIMEOUT`, `JOB_PENDING`: job có thể vẫn đang chạy: dùng lệnh status trong `next[]`; không submit lại. `UNKNOWN_REMOTE_STATE`: lệnh submit không nhận được request id (không có phản hồi, hoặc lỗi 5xx), nên job có thể đã tồn tại: kiểm tra danh sách request của provider trước khi submit lại. |
 | 1 | không rõ | `UNKNOWN` | Đọc `log[]` (các dòng stderr cuối). |
 
 Các nhóm exit code này áp dụng ở agent mode (`--json` hoặc `MULTIX_OUTPUT=json`).

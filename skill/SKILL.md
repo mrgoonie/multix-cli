@@ -162,7 +162,7 @@ multix fal status <model> <requestId>
 multix fal result <model> <requestId> [--download] [--output-dir <dir>]
 ```
 
-`result` never resubmits; a job still running fails with `JOB_PENDING` (exit 6): check `status` later. `UNKNOWN_REMOTE_STATE` (exit 6) means the submit got no response and the job may exist and be billed: do not resubmit until the user checks the fal request list.
+`result` never resubmits; a job still running fails with `JOB_PENDING` (exit 6): check `status` later. `UNKNOWN_REMOTE_STATE` (exit 6) means the submit got no request id (no response or a 5xx) and the job may exist and be billed: do not resubmit until the user checks the fal request list.
 
 ## Atlas Cloud
 

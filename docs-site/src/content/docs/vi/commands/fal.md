@@ -143,7 +143,8 @@ cũng dùng được ở đây.
   `multix fal status` hoặc `multix fal result`.
 - fal không có idempotency key, nên multix không thể đảm bảo job chỉ chạy
   đúng một lần. Nếu submit không nhận được phản hồi HTTP (trừ lỗi DNS hoặc bị
-  từ chối kết nối), job có thể đã tồn tại và bị tính phí: lệnh báo lỗi
+  từ chối kết nối), nhận lỗi 5xx, hoặc phản hồi không có request id, job có thể
+  đã tồn tại và bị tính phí: lệnh báo lỗi
   `UNKNOWN_REMOTE_STATE`. Hãy kiểm tra
   [danh sách request trên fal](https://fal.ai/dashboard/requests) trước khi
   submit lại.
