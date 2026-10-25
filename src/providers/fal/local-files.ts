@@ -114,9 +114,14 @@ export function parseFileSpecs(specs: readonly string[]): FileSpec[] {
 
 const UNSAFE_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 
+/** A missing intermediate becomes an array when the next segment is an index. */
+function containerFor(nextSegment: string): Record<string, unknown> | unknown[] {
+  return /^\d+$/.test(nextSegment) ? [] : {};
+}
+
 /**
- * Set `value` at a dotted `field` path inside `input`, creating objects on the
- * way. Numeric segments index existing arrays.
+ * Set `value` at a dotted `field` path inside `input`, creating objects (or
+ * arrays, before a numeric segment) on the way. Numeric segments index arrays.
  */
 export function setInputField(input: Record<string, unknown>, field: string, value: string): void {
   const segments = field.split(".");
@@ -138,7 +143,7 @@ export function setInputField(input: Record<string, unknown>, field: string, val
         node[index] = value;
         return;
       }
-      node[index] ??= {};
+      node[index] ??= containerFor(segments[i + 1] as string);
       const next: unknown = node[index];
       if (typeof next !== "object" || next === null) {
         throw new ValidationError(`Invalid --file field "${field}": "${key}" is not an object`);
@@ -150,7 +155,7 @@ export function setInputField(input: Record<string, unknown>, field: string, val
       node[key] = value;
       return;
     }
-    node[key] ??= {};
+    node[key] ??= containerFor(segments[i + 1] as string);
     const next: unknown = node[key];
     if (typeof next !== "object" || next === null) {
       throw new ValidationError(`Invalid --file field "${field}": "${key}" is not an object`);
@@ -168,8 +173,11 @@ export async function applyFileFields(
   specs: readonly FileSpec[],
   settings: FalUploadSettings,
 ): Promise<Array<{ field: string } & FalUploadedFile>> {
-  // Check every path before uploading anything, so one typo does not leave earlier uploads behind.
+  // Check every path and field before uploading anything, so one typo does not
+  // leave earlier uploads behind.
   for (const spec of specs) if (!isRemoteRef(spec.value)) checkLocalFile(spec.value);
+  const probe = structuredClone(input);
+  for (const spec of specs) setInputField(probe, spec.field, "");
   const uploads: Array<{ field: string } & FalUploadedFile> = [];
   if (specs.some((s) => !isRemoteRef(s.value))) settings.logger.warn(FAL_UPLOAD_NOTICE);
   for (const spec of specs) {

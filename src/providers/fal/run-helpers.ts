@@ -59,7 +59,7 @@ export class UnknownRemoteStateError extends MultixError {
   constructor(model: string, cause: unknown) {
     const msg = cause instanceof Error ? cause.message : String(cause);
     super(
-      `unknown_remote_state: the submit to ${model} failed before fal answered (${msg}). fal may have queued and billed the job; check https://fal.ai/dashboard/requests before submitting again.`,
+      `unknown_remote_state: the submit to ${model} got no usable answer (${msg}). fal may have queued and billed the job; check https://fal.ai/dashboard/requests before submitting again.`,
       "UNKNOWN_REMOTE_STATE",
       { cause },
     );
@@ -68,9 +68,18 @@ export class UnknownRemoteStateError extends MultixError {
 }
 
 /**
+ * Whether a failed submit may still have queued the job: no answer (0), a
+ * timeout (408/504), a gateway or server error after the request arrived
+ * (5xx), or a 2xx whose body could not be read.
+ */
+function submitOutcomeUnknown(status: number): boolean {
+  return status === 0 || status === 408 || status >= 500 || (status >= 200 && status < 300);
+}
+
+/**
  * POST a job to the queue (never retried: a second POST is a second paid job)
- * and check the follow-up URLs before anything is sent to them. A network
- * failure after the request left becomes {@link UnknownRemoteStateError}.
+ * and check the follow-up URLs before anything is sent to them. A failure
+ * that leaves the job's fate unknown becomes {@link UnknownRemoteStateError}.
  */
 export async function submitJob(
   client: FalClient,
@@ -82,22 +91,34 @@ export async function submitJob(
   try {
     submitRes = await client.post<FalSubmitResponse>(submitPath(model), input, logger);
   } catch (e) {
-    // Status 0 is a network failure or timeout: the request may have reached fal.
-    if (e instanceof HttpError && e.status === 0) throw new UnknownRemoteStateError(model, e);
+    if (e instanceof HttpError && submitOutcomeUnknown(e.status)) {
+      throw new UnknownRemoteStateError(model, e);
+    }
     throw e;
   }
+  // A 2xx without a request id: fal accepted something we cannot identify.
   if (typeof submitRes?.request_id !== "string" || submitRes.request_id === "") {
-    throw new ProviderError("fal submit response is missing request_id", "fal");
+    throw new UnknownRemoteStateError(model, "the response has no request_id");
   }
-  logger.debug(`request_id: ${submitRes.request_id}`);
+  const requestId = submitRes.request_id;
+  logger.debug(`request_id: ${requestId}`);
   // Refuse both follow-up URLs up front (ProviderError, host only) so the key
   // is never sent to an untrusted host and the error is not wrapped as a poll failure.
+  // The job is already queued, so the error carries its id for `fal status`.
   for (const field of ["status_url", "response_url"] as const) {
     const url: unknown = submitRes[field];
-    if (typeof url !== "string" || url === "") {
-      throw new ProviderError(`fal submit response is missing ${field}`, "fal");
+    try {
+      if (typeof url !== "string" || url === "") {
+        throw new ProviderError(`fal submit response is missing ${field}`, "fal");
+      }
+      client.assertTrustedUrl(url);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new ProviderError(
+        `fal queued request ${requestId} but ${msg}. Check it with: multix fal status ${model} ${requestId}`,
+        "fal",
+      );
     }
-    client.assertTrustedUrl(url);
   }
   return submitRes;
 }

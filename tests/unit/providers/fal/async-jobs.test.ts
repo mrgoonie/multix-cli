@@ -36,7 +36,7 @@ interface Call {
 let dir: string;
 let calls: Call[];
 let stdout: string[];
-let submitBehavior: "ok" | "network-error";
+let submitBehavior: "ok" | "network-error" | "502" | "bad-json" | "untrusted-url";
 let jobStatus: string;
 const env = { ...process.env };
 
@@ -59,6 +59,15 @@ function installFetch(): void {
     if (url.startsWith("https://upload.fal.test/")) return new Response("", { status: 200 });
     if (url === `https://queue.fal.run/${MODEL}` && method === "POST") {
       if (submitBehavior === "network-error") throw new TypeError("fetch failed");
+      if (submitBehavior === "502") return new Response("Bad Gateway", { status: 502 });
+      if (submitBehavior === "bad-json") return new Response("<html>ok</html>", { status: 200 });
+      if (submitBehavior === "untrusted-url") {
+        return Response.json({
+          request_id: REQ,
+          status_url: "https://evil.test/status",
+          response_url: RESPONSE_URL,
+        });
+      }
       return Response.json({ request_id: REQ, status_url: STATUS_URL, response_url: RESPONSE_URL });
     }
     if (url === STATUS_URL) return Response.json({ status: jobStatus, request_id: REQ });
@@ -216,6 +225,33 @@ describe("fal submit → status/result after restart", () => {
     expect(listReceipts()).toEqual([]);
   });
 
+  for (const behavior of ["502", "bad-json"] as const) {
+    it(`treats a ${behavior} submit answer as unknown_remote_state, not retryable`, async () => {
+      submitBehavior = behavior;
+      const err = await cli("submit", MODEL, "--input", "{}").catch((e: unknown) => e);
+      expect(classifyError(err).code).toBe("UNKNOWN_REMOTE_STATE");
+      expect(classifyError(err).retryable).toBe(false);
+      expect(submits()).toHaveLength(1);
+    });
+  }
+
+  it("keeps the request id when fal returns an untrusted status_url", async () => {
+    submitBehavior = "untrusted-url";
+    await expect(cli("submit", MODEL, "--input", "{}")).rejects.toThrow(
+      new RegExp(`${REQ}.*multix fal status`),
+    );
+    expect(calls.some((c) => c.url.startsWith("https://evil.test"))).toBe(false);
+  });
+
+  it("refuses a bad --file field before uploading anything", async () => {
+    const shot = path.join(dir, "shot.mp4");
+    fs.writeFileSync(shot, Buffer.alloc(5));
+    await expect(
+      cli("submit", MODEL, "--input", '{"prompt":"x"}', "--file", `prompt.video_url=${shot}`),
+    ).rejects.toThrow(/not an object/);
+    expect(calls).toHaveLength(0);
+  });
+
   it("needs --input or --file", async () => {
     await expect(cli("submit", MODEL)).rejects.toThrow(/--input/);
     expect(calls).toHaveLength(0);
@@ -234,6 +270,7 @@ describe("fal run (unchanged default flow)", () => {
     const out = await cli("run", MODEL, "--input", '{"prompt":"x"}', "--no-download");
     expect(out).toContain('"url": "https://v3.fal.media/files/out.mp4"');
     expect(readReceipt(REQ)?.model).toBe(MODEL);
+    expect(readReceipt(REQ)?.status).toBe("COMPLETED");
     expect(submits()).toHaveLength(1);
   });
 });

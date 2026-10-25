@@ -92,6 +92,13 @@ describe("setInputField", () => {
     });
   });
 
+  it("creates arrays for missing parents of numeric segments", () => {
+    const input: Record<string, unknown> = {};
+    setInputField(input, "refs.0.image_url", "u1");
+    setInputField(input, "grid.0.0", "u2");
+    expect(input).toEqual({ refs: [{ image_url: "u1" }], grid: [["u2"]] });
+  });
+
   it("refuses prototype keys and paths through scalars", () => {
     expect(() => setInputField({}, "__proto__.x", "u")).toThrow(ValidationError);
     expect(() => setInputField({ prompt: "p" }, "prompt.x", "u")).toThrow(/not an object/);

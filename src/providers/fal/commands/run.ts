@@ -8,7 +8,7 @@
 import type { Command } from "commander";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
-import { buildReceipt, saveReceipt } from "../job-receipts.js";
+import { buildReceipt, saveReceipt, updateReceiptStatus } from "../job-receipts.js";
 import { downloadResultMedia, extractMediaUrls, submitAndWait } from "../run-helpers.js";
 import { type JobInputOptions, addJobInputOptions, prepareJobInput } from "./job-input.js";
 
@@ -38,10 +38,11 @@ export function registerFalRunCommand(parent: Command): void {
             try {
               saveReceipt(buildReceipt(model, input, submitted, uploadedFields));
             } catch (e) {
-              logger.debug(`Could not save the job receipt: ${e instanceof Error ? e.message : e}`);
+              logger.warn(`Could not save the job receipt: ${e instanceof Error ? e.message : e}`);
             }
           },
         });
+        updateReceiptStatus(requestId, "COMPLETED");
 
         if (opts.download === false) {
           console.log(JSON.stringify(result, null, 2));

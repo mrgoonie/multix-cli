@@ -48,8 +48,9 @@ multix fal upload ./shot.mp4 [--expires-in 1d]
 - Key chỉ được gửi tới `https://rest.fal.ai` để khởi tạo upload; dữ liệu được
   gửi tới signed upload URL do fal trả về, không kèm key. Signed URL không bao
   giờ được in ra. Lỗi mạng và phản hồi 5xx/429 được thử lại tối đa 3 lần.
-- Mọi đường dẫn được kiểm tra trước lần upload đầu tiên, nên gõ sai sẽ báo lỗi
-  trước khi có file nào rời khỏi máy.
+- Mọi đường dẫn và field được kiểm tra trước lần upload đầu tiên, nên gõ sai sẽ
+  báo lỗi trước khi có file nào rời khỏi máy. Segment là số dưới một field chưa
+  có sẽ tạo list (`refs.0.image_url` cho ra `{"refs":[{"image_url":…}]}`).
 
 ## Gửi job không chờ
 
@@ -83,9 +84,11 @@ có hash của input. `run` cũng lưu receipt ngay sau khi submit, nên một l
 bị dừng hoặc timeout vẫn lấy kết quả được về sau.
 `multix fal jobs [--limit 20]` liệt kê các receipt đã lưu, mới nhất trước.
 
-Việc submit không bao giờ được thử lại. Nếu kết nối hỏng sau khi request đã
-gửi đi, lệnh báo `unknown_remote_state` (mã lỗi `UNKNOWN_REMOTE_STATE`): fal có
-thể đã nhận và tính phí job, nên hãy kiểm tra
+Việc submit không bao giờ được thử lại. Khi submit không nhận được câu trả lời
+dùng được (kết nối hỏng, timeout, lỗi 5xx từ fal hoặc gateway, hoặc phản hồi
+thành công nhưng thiếu request id), lệnh báo `unknown_remote_state` (mã lỗi
+`UNKNOWN_REMOTE_STATE`, không thử lại): fal có thể đã nhận và tính phí job, nên
+hãy kiểm tra
 [danh sách request trên fal](https://fal.ai/dashboard/requests) trước khi gửi lại.
 
 ## Ảnh
@@ -123,7 +126,8 @@ multix fal status [<model>] <requestId>
 multix fal result [<model>] <requestId> [--download] [--output-dir <dir>]
 ```
 
-Có thể bỏ model khi receipt của request đã được lưu. `status` báo trạng thái
+Có thể bỏ model khi receipt của request đã được lưu trên máy này (trong remote
+MCP runner mỗi job bắt đầu trống, nên hãy truyền model). `status` báo trạng thái
 queue của fal (`IN_QUEUE`, `IN_PROGRESS`, `COMPLETED`); `result` báo lỗi khi
 job vẫn đang chạy. Cả hai cập nhật receipt đã lưu.
 

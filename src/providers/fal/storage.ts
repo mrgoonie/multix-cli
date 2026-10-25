@@ -225,13 +225,12 @@ export async function uploadToFalStorage(opts: FalUploadOptions): Promise<string
     };
     parts.push({ partNumber: part.partNumber ?? partNumber, etag: part.etag });
   }
-  await withRetries(attempts, "upload complete", logger, () =>
-    sendUnkeyed(
-      doFetch,
-      `${partBase}/complete${parsed.search}`,
-      { method: "POST", body: JSON.stringify({ parts }), contentType: "application/json" },
-      timeoutMs,
-    ),
+  // Not retried (as in fal-js): a lost answer to a completed upload would make a retry fail.
+  await sendUnkeyed(
+    doFetch,
+    `${partBase}/complete${parsed.search}`,
+    { method: "POST", body: JSON.stringify({ parts }), contentType: "application/json" },
+    timeoutMs,
   );
   return fileUrl;
 }

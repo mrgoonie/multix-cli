@@ -363,7 +363,9 @@ describe("submitAndWait", () => {
       globalThis.fetch = fetchMock as unknown as typeof fetch;
       const err = await run().catch((e: unknown) => e);
       expect(err).toBeInstanceOf(ProviderError);
-      expect((err as Error).message).toBe(`fal submit response is missing ${field}`);
+      expect((err as Error).message).toContain(`fal submit response is missing ${field}`);
+      // The job was queued, so the error keeps its id for `fal status`.
+      expect((err as Error).message).toContain("req-1");
       expect(fetchMock).toHaveBeenCalledTimes(1);
     },
   );

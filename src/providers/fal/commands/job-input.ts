@@ -8,7 +8,7 @@ import type { Command } from "commander";
 import { ValidationError } from "../../../core/errors.js";
 import type { Logger } from "../../../core/logger.js";
 import { requireFalKey } from "../client.js";
-import { applyFileFields, parseFileSpecs } from "../local-files.js";
+import { applyFileFields, isRemoteRef, parseFileSpecs } from "../local-files.js";
 import { parseInputArg } from "../run-helpers.js";
 import { FAL_EXPIRY_PRESETS, parseFalExpiry } from "../storage.js";
 
@@ -49,6 +49,9 @@ export async function prepareJobInput(
   const input = opts.input ? parseInputArg(opts.input) : {};
   const specs = parseFileSpecs(opts.file);
   const expiresInSeconds = opts.expiresIn ? parseFalExpiry(opts.expiresIn) : undefined;
+  if (expiresInSeconds !== undefined && !specs.some((s) => !isRemoteRef(s.value))) {
+    logger.warn("--expires-in has no effect: no local --file is uploaded");
+  }
   if (specs.length === 0) return { input, uploadedFields: [] };
   const uploads = await applyFileFields(input, specs, {
     apiKey: requireFalKey(),

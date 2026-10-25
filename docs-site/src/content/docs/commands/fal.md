@@ -48,8 +48,9 @@ multix fal upload ./shot.mp4 [--expires-in 1d]
 - The key goes only to `https://rest.fal.ai` to start the upload; the bytes go
   to the signed upload URL fal returns, without the key. Signed URLs are never
   printed. Network errors and 5xx/429 responses are retried up to 3 times.
-- Every path is checked before the first upload, so a typo fails before any
-  file leaves the machine.
+- Every path and field is checked before the first upload, so a typo fails
+  before any file leaves the machine. A numeric segment under a missing field
+  creates a list (`refs.0.image_url` gives `{"refs":[{"image_url":…}]}`).
 
 ## Queue without waiting
 
@@ -83,10 +84,12 @@ only a hash of the input. `run` saves the same receipt right after its submit,
 so a run that is killed or times out can also be collected later.
 `multix fal jobs [--limit 20]` lists saved receipts, newest first.
 
-Submitting is never retried. If the connection fails after the request was
-sent, the command fails with `unknown_remote_state` (error code
-`UNKNOWN_REMOTE_STATE`): fal may have queued and billed the job, so check
-[your fal requests](https://fal.ai/dashboard/requests) before submitting again.
+Submitting is never retried. When the submit gets no usable answer (the
+connection fails, a timeout, a 5xx from fal or its gateway, or a success
+response without a request id), the command fails with `unknown_remote_state`
+(error code `UNKNOWN_REMOTE_STATE`, not retryable): fal may have queued and
+billed the job, so check [your fal requests](https://fal.ai/dashboard/requests)
+before submitting again.
 
 ## Images
 
@@ -123,7 +126,9 @@ multix fal status [<model>] <requestId>
 multix fal result [<model>] <requestId> [--download] [--output-dir <dir>]
 ```
 
-The model can be left out when a receipt for the request was saved. `status`
+The model can be left out when a receipt for the request was saved on this
+machine (in the remote MCP runner each job starts empty, so pass the model
+there). `status`
 reports fal's queue status (`IN_QUEUE`, `IN_PROGRESS`, `COMPLETED`); `result`
 fails while the job is still running. Both update the saved receipt.
 
