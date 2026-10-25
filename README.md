@@ -104,6 +104,7 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `ATLASCLOUD_VIDEO_MODEL` / `ATLASCLOUD_IMAGE_TO_VIDEO_MODEL` | No | Atlas video defaults (`bytedance/seedance-v1-pro-fast/text-to-video`, `.../image-to-video`) |
 | `ATLASCLOUD_TTS_MODEL` / `ATLASCLOUD_STT_MODEL` | No | Atlas audio defaults (`xai/tts-v1`, `bytedance/seed-asr-2.0`) |
 | `ATLASCLOUD_TEXT_TO_3D_MODEL` / `ATLASCLOUD_IMAGE_TO_3D_MODEL` | No | Atlas 3D defaults (`tencent/hunyuan3d-rapid/text-to-3d`, `.../image-to-3d`) |
+| `FAL_MAX_UPLOAD_MB` | No | Size limit for local files uploaded by `fal upload` / `fal run --file` (default `1024`) |
 | `ATLASCLOUD_MAX_UPLOAD_MB` | No | Size limit for local files uploaded to Atlas Cloud (default `200`) |
 | `ARK_API_KEY` | No | Fallback for `BYTEPLUS_API_KEY` (Volcengine ARK shared name) |
 | `BYTEPLUS_BASE_URL` | No | Override BytePlus base (default `https://ark.ap-southeast.bytepluses.com/api/v3`) |
@@ -536,6 +537,13 @@ Generic runner plus convenience commands for [fal.ai](https://fal.ai)'s queue RE
 multix fal run fal-ai/flux/schnell --input '{"prompt":"a cyberpunk cat"}' [--no-download] [--wait-timeout 480000] [-v]
 multix fal run fal-ai/flux/schnell --input @input.json
 
+# Local media: upload to fal storage and set the URL at an input field
+multix fal run fal-ai/mmaudio-v2 --input '{"prompt":"soft rain"}' --file video_url=./shot.mp4
+multix fal upload ./shot.mp4                   # prints {"url","mime_type","size_bytes","file_name"}
+
+# Submit without waiting; prints a receipt with status/result commands
+multix fal run fal-ai/hunyuan-video-foley --input '{"text_prompt":"footsteps"}' --file video_url=./shot.mp4 --detach
+
 # Text-to-image (default model: fal-ai/flux/schnell)
 multix fal image "a cyberpunk cat" [-m <model>] [--image-size square_hd] [-n 1] [--seed <n>] [--negative-prompt <text>] [--output <path>] [--no-download] [-v]
 
@@ -546,12 +554,14 @@ multix fal video "a dancer under neon lights" [-m <model>] [--image-url <https-u
 
 # Queue status / result for a request submitted any other way
 multix fal status <model> <requestId>
-multix fal result <model> <requestId> [--download]
+multix fal result <model> <requestId> [--download] [--output-dir <dir>]
 ```
 
 **Notes:**
 - Auth header is `Authorization: Key $FAL_KEY`; base URL is `https://queue.fal.run`.
 - All fal jobs are async: submit → poll `status` → fetch `result`. `run`/`image`/`video` do this automatically.
+- `--detach` saves a receipt (`~/.multix/fal/requests/<request_id>.json`, or `--receipt <path>`, which also works for a blocking run; mode 0600, ids and an input hash only). `status`/`result` only read, so resuming never pays twice. A submit whose outcome is unknown (connection cut off, 5xx gateway error) fails with `UNKNOWN_REMOTE_STATE` and is never retried.
+- `--file` / `fal upload` accept image, video and audio files only (up to `FAL_MAX_UPLOAD_MB`, default 1024). fal storage URLs are public to anyone with the link and fal controls retention; the key goes only to `https://rest.fal.ai`, never to the pre-signed upload URL.
 - Media URLs are extracted generically from the result JSON (any `url` field, recursively) and downloaded to `MULTIX_OUTPUT_DIR`.
 
 ### `multix atlas`
