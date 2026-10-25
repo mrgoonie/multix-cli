@@ -13,7 +13,7 @@ export function registerFalStatusCommand(parent: Command): void {
     .description("Get a fal.ai request's queue status")
     .option("-v, --verbose", "Verbose logging")
     .action(async (model: string, requestId: string, opts: { verbose?: boolean }) => {
-      const logger = createLogger({ verbose: opts.verbose ?? false });
+      const logger = createLogger({ verbose: opts.verbose ?? false, stderr: true });
       const client = createFalClient();
       const res = await client.get<FalStatusResponse>(statusPath(model, requestId), logger);
       console.log(JSON.stringify(res, null, 2));

@@ -6,12 +6,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import { isRetryableServerStatus } from "../../core/async-poll.js";
-import { ProviderError } from "../../core/errors.js";
+import { MultixError, ProviderError } from "../../core/errors.js";
 import { downloadFile } from "../../core/http-client.js";
 import { parseJsonInput } from "../../core/json-input.js";
 import type { Logger } from "../../core/logger.js";
 import { redactUrl } from "../../core/redact.js";
-import { HttpError, createFalClient, submitPath } from "./client.js";
+import { type FalClient, HttpError, createFalClient, submitPath } from "./client.js";
 import type { FalResultResponse, FalStatusResponse, FalSubmitResponse } from "./types.js";
 
 /** Parse `--input` as inline JSON or `@path/to/file.json`. */
@@ -26,6 +26,9 @@ export interface SubmitAndWaitOptions {
   waitTimeoutMs?: number;
   /** Poll interval override — mainly for tests. Defaults to 3000ms. */
   pollIntervalMs?: number;
+  client?: FalClient;
+  /** Called once fal accepted the job, before polling (e.g. to save a receipt). */
+  onSubmitted?: (submit: FalSubmitResponse) => void;
 }
 
 export interface SubmitAndWaitResult {
@@ -49,20 +52,40 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
-/**
- * Submit a job, poll its status_url until COMPLETED (bounded by a real
- * deadline, retrying transient network/5xx errors), then fetch response_url.
- * Uses the URLs fal itself returns from submit rather than reconstructing
- * them, since the queue's status/result URLs are keyed by app id (first two
- * path segments of the model id), not the full endpoint id.
- */
-export async function submitAndWait(opts: SubmitAndWaitOptions): Promise<SubmitAndWaitResult> {
-  const { model, input, logger } = opts;
-  const client = createFalClient();
+/** Error code of a submit whose outcome is unknown (see {@link submitFalRequest}). */
+export const UNKNOWN_REMOTE_STATE = "UNKNOWN_REMOTE_STATE";
 
-  const submitRes = await client.post<FalSubmitResponse>(submitPath(model), input, logger);
-  const requestId = submitRes.request_id;
-  logger.debug(`request_id: ${requestId}`);
+/**
+ * POST a job to the fal queue and return its submit response once fal has
+ * accepted it (both follow-up URLs checked against the trusted hosts first,
+ * so the key is never sent elsewhere). Never retried: a second POST would be
+ * a second paid job. When the connection fails before fal answers, fal may or
+ * may not have queued the job; that is reported as UNKNOWN_REMOTE_STATE
+ * rather than as a plain network error, so callers do not resubmit blindly.
+ */
+export async function submitFalRequest(
+  client: FalClient,
+  model: string,
+  input: Record<string, unknown>,
+  logger: Logger,
+): Promise<FalSubmitResponse> {
+  let submitRes: FalSubmitResponse;
+  try {
+    submitRes = await client.post<FalSubmitResponse>(submitPath(model), input, logger);
+  } catch (e) {
+    if (e instanceof HttpError && e.status === 0) {
+      throw new MultixError(
+        `fal submit to ${model} was cut off before fal answered (${e.snippet}): the request may or may not have been queued. Check https://fal.ai/dashboard/requests before submitting again.`,
+        UNKNOWN_REMOTE_STATE,
+        { cause: e },
+      );
+    }
+    throw e;
+  }
+  if (typeof submitRes?.request_id !== "string" || !/^[\w.-]{1,128}$/.test(submitRes.request_id)) {
+    throw new ProviderError("fal submit response has a missing or malformed request_id", "fal");
+  }
+  logger.debug(`request_id: ${submitRes.request_id}`);
   // Refuse both follow-up URLs up front (ProviderError, host only) so the key
   // is never sent to an untrusted host and the error is not wrapped as a poll failure.
   for (const field of ["status_url", "response_url"] as const) {
@@ -72,6 +95,29 @@ export async function submitAndWait(opts: SubmitAndWaitOptions): Promise<SubmitA
     }
     client.assertTrustedUrl(url);
   }
+  return submitRes;
+}
+
+export interface WaitForResultOptions {
+  client: FalClient;
+  model: string;
+  submit: FalSubmitResponse;
+  logger: Logger;
+  waitTimeoutMs?: number;
+  /** Poll interval override — mainly for tests. Defaults to 3000ms. */
+  pollIntervalMs?: number;
+}
+
+/**
+ * Poll a submitted request's status_url until COMPLETED (bounded by a real
+ * deadline, retrying transient network/5xx errors), then fetch response_url.
+ * Uses the URLs fal itself returned from submit rather than reconstructing
+ * them, since the queue's status/result URLs are keyed by app id (first two
+ * path segments of the model id), not the full endpoint id. Never submits.
+ */
+export async function waitForFalResult(opts: WaitForResultOptions): Promise<FalResultResponse> {
+  const { client, model, submit, logger } = opts;
+  const requestId = submit.request_id;
   logger.info("Polling for completion...");
 
   const waitTimeoutMs = opts.waitTimeoutMs ?? 480_000;
@@ -90,7 +136,7 @@ export async function submitAndWait(opts: SubmitAndWaitOptions): Promise<SubmitA
     attempt++;
     let statusRes: FalStatusResponse;
     try {
-      statusRes = await client.getAbsolute<FalStatusResponse>(submitRes.status_url, logger);
+      statusRes = await client.getAbsolute<FalStatusResponse>(submit.status_url, logger);
     } catch (e) {
       if (isTransientError(e)) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -108,12 +154,20 @@ export async function submitAndWait(opts: SubmitAndWaitOptions): Promise<SubmitA
   }
 
   try {
-    const result = await client.getAbsolute<FalResultResponse>(submitRes.response_url, logger);
-    return { requestId, result };
+    return await client.getAbsolute<FalResultResponse>(submit.response_url, logger);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     throw new Error(`Failed to fetch result for fal request ${requestId}: ${msg}. ${resumeHint}`);
   }
+}
+
+/** Submit a job and wait for its result (see submitFalRequest and waitForFalResult). */
+export async function submitAndWait(opts: SubmitAndWaitOptions): Promise<SubmitAndWaitResult> {
+  const client = opts.client ?? createFalClient();
+  const submit = await submitFalRequest(client, opts.model, opts.input, opts.logger);
+  opts.onSubmitted?.(submit);
+  const result = await waitForFalResult({ ...opts, client, submit });
+  return { requestId: submit.request_id, result };
 }
 
 const MEDIA_URL_RE = /^https?:\/\//i;

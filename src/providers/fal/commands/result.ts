@@ -1,8 +1,10 @@
 /**
  * multix fal result <model> <requestId> — fetch a completed job's result.
- * `--download` saves any media URLs found in the payload to MULTIX_OUTPUT_DIR.
+ * `--download` saves any media URLs found in the payload to MULTIX_OUTPUT_DIR
+ * (or `--output-dir`). Only reads: it never submits the job again.
  */
 
+import path from "node:path";
 import type { Command } from "commander";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
@@ -15,10 +17,19 @@ export function registerFalResultCommand(parent: Command): void {
     .command("result <model> <requestId>")
     .description("Fetch a completed fal.ai request's result")
     .option("--download", "Download media URLs found in the result to the output dir")
+    .option(
+      "--output-dir <dir>",
+      "Download media here (default MULTIX_OUTPUT_DIR or ./multix-output)",
+    )
     .option("-v, --verbose", "Verbose logging")
     .action(
-      async (model: string, requestId: string, opts: { download?: boolean; verbose?: boolean }) => {
-        const logger = createLogger({ verbose: opts.verbose ?? false });
+      async (
+        model: string,
+        requestId: string,
+        opts: { download?: boolean; outputDir?: string; verbose?: boolean },
+      ) => {
+        // Progress goes to stderr so stdout stays the result JSON or the saved paths.
+        const logger = createLogger({ verbose: opts.verbose ?? false, stderr: true });
         const client = createFalClient();
 
         let result: FalResultResponse;
@@ -42,7 +53,7 @@ export function registerFalResultCommand(parent: Command): void {
           return;
         }
 
-        const outDir = getOutputDir();
+        const outDir = opts.outputDir ? path.resolve(opts.outputDir) : getOutputDir();
         const saved = await downloadResultMedia(urls, outDir, requestId, logger);
         if (saved.length === 0) {
           logger.error(`Found ${urls.length} media URL(s) but none downloaded successfully.`);

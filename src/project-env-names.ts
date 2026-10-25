@@ -22,6 +22,7 @@ import {
   CLOUDFLARE_GATEWAY_ID_ENV,
   CLOUDFLARE_VIDEO_CREDENTIALS,
 } from "./providers/cloudflare/models.js";
+import { FAL_MAX_UPLOAD_ENV } from "./providers/fal/local-files.js";
 import { FAL_ROUTING } from "./providers/fal/models.js";
 import { UPLOAD_MIN_KBPS_ENV } from "./providers/gemini/local-files.js";
 import { HEYGEN_ROUTING } from "./providers/heygen/models.js";
@@ -116,6 +117,7 @@ export const PROJECT_ENV_NAMES: ReadonlySet<string> = new Set([
   ...CLOUDFLARE_VIDEO_CREDENTIALS,
   ...Object.values(ATLAS_MODEL_ENV),
   MAX_UPLOAD_ENV,
+  FAL_MAX_UPLOAD_ENV,
   ...OWN_SETTINGS,
   ...INLINE_SETTINGS,
 ]);

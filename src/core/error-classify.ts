@@ -22,6 +22,7 @@ export type ErrorCode =
   | "PROVIDER_UNAVAILABLE"
   | "NETWORK_ERROR"
   | "TIMEOUT"
+  | "UNKNOWN_REMOTE_STATE"
   | "JOB_FAILED"
   | "RESPONSE_TOO_LARGE"
   | "BINARY_MISSING"
@@ -75,6 +76,8 @@ const HINTS: Record<ErrorCode, string> = {
   NETWORK_ERROR: "Network failure: retry; check connectivity if it persists.",
   TIMEOUT:
     "Timed out waiting; the job may still be running: use the status/resume command, do not resubmit.",
+  UNKNOWN_REMOTE_STATE:
+    "The submit was cut off before the provider answered, so it may have been queued: check the provider's request list before resubmitting, or you may pay twice.",
   JOB_FAILED: "The provider reported the job failed; read the message, adjust inputs and retry.",
   RESPONSE_TOO_LARGE: "The response exceeded the size cap; request fewer or smaller outputs.",
   BINARY_MISSING: "Install the missing tool (ffmpeg, ImageMagick or cwebp) and put it on PATH.",
@@ -98,6 +101,7 @@ const EXIT_BY_CODE: Record<ErrorCode, number> = {
   JOB_FAILED: EXIT_CODES.rejected,
   RESPONSE_TOO_LARGE: EXIT_CODES.rejected,
   TIMEOUT: EXIT_CODES.timeout,
+  UNKNOWN_REMOTE_STATE: EXIT_CODES.timeout,
   BINARY_MISSING: EXIT_CODES.config,
   UNKNOWN: EXIT_CODES.unknown,
 };
@@ -234,6 +238,7 @@ export function classifyError(error: unknown): ErrorInfo {
       return build(codeFromText(message) === "NOT_FOUND" ? "NOT_FOUND" : "INVALID_INPUT", message);
     }
     if (error.code === "POLL_TIMEOUT") return build("TIMEOUT", message);
+    if (error.code === "UNKNOWN_REMOTE_STATE") return build("UNKNOWN_REMOTE_STATE", message);
   }
   return classifyMessage(message);
 }
