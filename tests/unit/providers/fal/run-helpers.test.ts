@@ -529,6 +529,16 @@ describe("submitFalRequest", () => {
     expect(classifyError(err).code).toBe("NETWORK_ERROR");
   });
 
+  it("reports a 5xx on submit as a provider error, not an unknown state, without resubmitting", async () => {
+    globalThis.fetch = vi.fn(
+      async () => new Response("upstream unavailable", { status: 503 }),
+    ) as unknown as typeof fetch;
+    const err = await submitFalRequest(client(), "fal-ai/x", {}, noopLogger).catch((e) => e);
+    expect(err).not.toBeInstanceOf(FalUnknownRemoteStateError);
+    expect(err).toMatchObject({ status: 503 });
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+
   it("rejects a submit response without request_id", async () => {
     globalThis.fetch = vi.fn(
       async () => new Response(JSON.stringify({ status_url: "https://queue.fal.run/s" })),

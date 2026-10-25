@@ -21,8 +21,10 @@ result JSON instead.
 `run --file key=path` sets the top-level input field `key` to a file. A local
 path is checked (exists, readable, not empty) and uploaded to fal storage, and
 the field gets the hosted URL; an `http(s)` URL or `data:` URI is passed through
-unchanged. The flag is repeatable, and it overrides the same key in `--input`.
-Nothing is uploaded unless you name it with `--file`.
+unchanged. The flag is repeatable (once per key), and it overrides the same
+key in `--input`. Nothing is uploaded unless you name it with `--file`.
+With `--dry-run`, the request shown is the free upload initiate call, not the
+model submit: nothing is uploaded or queued.
 
 ```bash
 # Add audio to a silent clip with MMAudio
@@ -47,7 +49,8 @@ Uploads one local file and prints JSON on stdout (logs go to stderr):
 `--expires-in` is set. Use the `url` in any fal input field such as
 `video_url` or `image_url`.
 
-- `--content-type` overrides the MIME type guessed from the file extension.
+- `--content-type` overrides the MIME type guessed from the file extension
+  (a MIME type such as `video/mp4`, optionally with parameters).
 - `--expires-in` asks fal to delete the file after `1h`, `1d`, `7d`, `30d`,
   `1y`, or a number of seconds; `never` sends no expiry. Without it, fal's
   default retention applies. multix never deletes uploaded files itself.
@@ -58,8 +61,10 @@ files you are willing to share that way, and treat the URL like the file.
 Uploads (from `upload` and `--file`) always go to `https://rest.fal.ai`, which
 receives `FAL_KEY` to start the upload; the bytes go to the signed upload URL
 it returns, without the key, and redirects there are refused. Files over 90 MB
-are sent in 10 MB parts. Network errors and 5xx responses (other than 501 and
-505) are retried, up to 3 attempts per request.
+are sent in 10 MB parts. Network errors, stalled transfers (each attempt is
+limited to 2 minutes plus 1 second per 64 KB) and 5xx responses (other than
+501 and 505) are retried, up to 3 attempts per request. Uploads do not use
+`FAL_BASE_URL`.
 
 ## Images
 
@@ -92,14 +97,16 @@ multix fal run <model> --input <json> [--file key=path] --detach [--receipt <pat
 
 `--detach` returns as soon as the queue accepts the job. stdout is a JSON
 receipt (schema `multix.fal-receipt/v1`) with the model, `request_id`, status,
-queue position, submit time, an `input_hash` (sha256 of the input, to spot a
-duplicate submission) and the `next` status/result commands. It never holds
+queue position, submit time, an `input_hash` (sha256 of the input as
+submitted; with `--file`, each run uploads afresh, so the hash differs) and
+the `next` status/result commands. It never holds
 the key, the input, or signed URLs.
 
 The receipt is saved to `~/.multix/fal/requests/<request_id>.json` (directory
 0700, file 0600, written atomically), or to `--receipt <path>`. The job is
 already queued and billed at that point, so if saving fails the receipt is
-still printed, with a warning: keep the `request_id`.
+still printed, with a warning: keep the `request_id`. `--receipt` needs
+`--detach`; `--output-dir` and `--no-download` belong to `fal result`.
 
 ## Status and result
 

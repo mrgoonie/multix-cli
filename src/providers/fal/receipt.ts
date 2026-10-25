@@ -6,7 +6,7 @@
  * key, the input itself (it may hold private URLs) or signed URLs.
  *
  * Default location: ~/.multix/fal/requests/<request_id>.json (dir 0700,
- * file 0600, written to a temp file then renamed).
+ * file 0600, written and synced to a temp file, then renamed).
  */
 
 import { createHash } from "node:crypto";
@@ -25,7 +25,10 @@ export interface FalReceipt {
   status: string;
   queue_position?: number;
   submitted_at: string;
-  /** sha256 of the submitted input (keys sorted), to spot duplicate submissions. */
+  /**
+   * sha256 of the input as submitted (keys sorted). With `--file`, local files
+   * are hashed by their fresh upload URLs, so repeated runs differ.
+   */
   input_hash: string;
   /** Where this receipt was saved; absent when saving failed. */
   receipt_path?: string;
@@ -83,6 +86,19 @@ export function buildReceipt(fields: {
   };
 }
 
+/** Best effort: persist the rename (not supported on every platform). */
+function syncDir(dir: string): void {
+  let fd: number | undefined;
+  try {
+    fd = fs.openSync(dir, "r");
+    fs.fsyncSync(fd);
+  } catch {
+    // Windows and some file systems cannot fsync a directory.
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
+}
+
 /** Write the receipt atomically with owner-only permissions; returns its path. */
 export function writeReceipt(receipt: FalReceipt, file: string): string {
   const target = path.resolve(file);
@@ -91,11 +107,18 @@ export function writeReceipt(receipt: FalReceipt, file: string): string {
   const tmp = `${target}.${process.pid}.${Date.now().toString(36)}.tmp`;
   const body = `${JSON.stringify({ ...receipt, receipt_path: target }, null, 2)}\n`;
   try {
-    fs.writeFileSync(tmp, body, { mode: 0o600, flag: "wx" });
+    const fd = fs.openSync(tmp, "wx", 0o600);
+    try {
+      fs.writeFileSync(fd, body);
+      fs.fsyncSync(fd);
+    } finally {
+      fs.closeSync(fd);
+    }
     fs.renameSync(tmp, target);
   } catch (e) {
     fs.rmSync(tmp, { force: true });
     throw e;
   }
+  syncDir(dir);
   return target;
 }

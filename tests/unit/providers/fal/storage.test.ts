@@ -5,6 +5,7 @@
  */
 
 import { describe, expect, it, vi } from "vitest";
+import { classifyError } from "../../../../src/core/error-classify.js";
 import { HttpError, ProviderError, ValidationError } from "../../../../src/core/errors.js";
 import { parseExpiresIn, uploadToFalStorage } from "../../../../src/providers/fal/storage.js";
 
@@ -147,6 +148,81 @@ describe("uploadToFalStorage", () => {
     expect(denied.calls).toHaveLength(1);
   });
 
+  it("classifies a rejected key on initiate as INVALID_KEY, sending no bytes", async () => {
+    for (const status of [401, 403]) {
+      const { fetch, calls } = fakeFetch(() => json({ detail: "Invalid key" }, status));
+      const err = await uploadToFalStorage({
+        file: file(),
+        fileName: "a.mp4",
+        contentType: "video/mp4",
+        apiKey: "revoked",
+        backoffMs: () => 0,
+        fetch,
+      }).catch((e: unknown) => e);
+      expect(classifyError(err)).toMatchObject({ code: "INVALID_KEY", exit_code: 3 });
+      expect(calls.map((c) => c.method)).toEqual(["POST"]);
+    }
+  });
+
+  it("times out a stalled transfer and retries it", async () => {
+    const putSignals: AbortSignal[] = [];
+    const fetch: typeof globalThis.fetch = async (input, init) => {
+      if (init?.method === "POST") return json({ upload_url: UPLOAD, file_url: FILE_URL });
+      const signal = init?.signal as AbortSignal;
+      putSignals.push(signal);
+      if (putSignals.length > 1) return new Response(null, { status: 200 });
+      // The first PUT never answers; only the abort signal ends it.
+      return new Promise<Response>((_, reject) =>
+        signal.addEventListener("abort", () => reject(signal.reason)),
+      );
+    };
+    const warn = vi.fn();
+    const url = await uploadToFalStorage({
+      file: file(),
+      fileName: "a.mp4",
+      contentType: "video/mp4",
+      apiKey: "k",
+      transferTimeoutMs: () => 20,
+      backoffMs: () => 0,
+      logger: { warn, info: vi.fn(), debug: vi.fn(), error: vi.fn(), success: vi.fn() } as never,
+      fetch,
+    });
+    expect(url).toBe(FILE_URL);
+    expect(putSignals).toHaveLength(2);
+    expect(putSignals[0]?.aborted).toBe(true);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringMatching(/fal storage upload failed \(attempt 1\/3\)/),
+    );
+  });
+
+  it("reports a transfer that keeps stalling as a retryable timeout", async () => {
+    const { fetch } = fakeFetch((c) =>
+      c.method === "POST"
+        ? json({ upload_url: UPLOAD, file_url: FILE_URL })
+        : new Response(null, { status: 200 }),
+    );
+    const stalled: typeof globalThis.fetch = (input, init) =>
+      init?.method === "PUT"
+        ? new Promise<Response>((_, reject) =>
+            init.signal?.addEventListener("abort", () => reject(init.signal?.reason)),
+          )
+        : fetch(input, init);
+    const err = await uploadToFalStorage({
+      file: file(),
+      fileName: "a.mp4",
+      contentType: "video/mp4",
+      apiKey: "k",
+      attempts: 2,
+      transferTimeoutMs: () => 10,
+      backoffMs: () => 0,
+      fetch: stalled,
+    }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(HttpError);
+    expect((err as Error).message).toMatch(/Upload failed: timed out/);
+    expect((err as Error).message).not.toContain("SECRET");
+    expect(classifyError(err).retryable).toBe(true);
+  });
+
   it("gives up after the configured attempts", async () => {
     const { fetch, calls } = fakeFetch(() => {
       throw new TypeError("fetch failed");
@@ -201,6 +277,51 @@ describe("uploadToFalStorage", () => {
     expect(calls.slice(1).every((c) => c.headers.authorization === undefined)).toBe(true);
     expect((calls[3]?.body as Blob).size).toBe(1);
   });
+
+  it("takes a part etag from the ETag header when the body has none", async () => {
+    const { fetch, calls } = fakeFetch((c) => {
+      if (c.url.includes("/initiate-multipart")) {
+        return json({ upload_url: UPLOAD, file_url: FILE_URL });
+      }
+      const part = c.url.match(/\/upload\/abc\/(\d+)\?/)?.[1];
+      if (part) return new Response(part === "1" ? "" : "OK", { headers: { etag: `"h-${part}"` } });
+      return json({});
+    });
+    await uploadToFalStorage({
+      file: file(),
+      fileName: "big.mp4",
+      contentType: "video/mp4",
+      apiKey: "k",
+      multipartThresholdBytes: 4,
+      partSizeBytes: 3,
+      fetch,
+    });
+    expect(JSON.parse(String(calls.at(-1)?.body))).toEqual({
+      parts: [
+        { partNumber: 1, etag: '"h-1"' },
+        { partNumber: 2, etag: '"h-2"' },
+      ],
+    });
+  });
+
+  it("fails clearly when a part has no etag at all", async () => {
+    const { fetch } = fakeFetch((c) =>
+      c.url.includes("/initiate-multipart")
+        ? json({ upload_url: UPLOAD, file_url: FILE_URL })
+        : json({ partNumber: 1 }),
+    );
+    await expect(
+      uploadToFalStorage({
+        file: file(),
+        fileName: "big.mp4",
+        contentType: "video/mp4",
+        apiKey: "k",
+        multipartThresholdBytes: 4,
+        partSizeBytes: 3,
+        fetch,
+      }),
+    ).rejects.toThrow(/part 1 response has no etag/);
+  });
 });
 
 describe("parseExpiresIn", () => {
@@ -212,7 +333,7 @@ describe("parseExpiresIn", () => {
   });
 
   it("rejects anything else as invalid input", () => {
-    for (const bad of ["0", "-5", "2w", "", "1.5"]) {
+    for (const bad of ["0", "-5", "2w", "", "1.5", "constructor", "__proto__", "hasOwnProperty"]) {
       expect(() => parseExpiresIn(bad)).toThrow(ValidationError);
     }
   });

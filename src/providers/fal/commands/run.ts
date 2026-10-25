@@ -9,6 +9,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Command } from "commander";
+import { ValidationError } from "../../../core/errors.js";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import { createFalClient } from "../client.js";
@@ -65,6 +66,14 @@ export function registerFalRunCommand(parent: Command): void {
     .action(async (model: string, opts: RunOptions) => {
       // A detached run prints only the receipt JSON on stdout.
       const logger = createLogger({ verbose: opts.verbose ?? false, stderr: opts.detach });
+      if (opts.receipt !== undefined && !opts.detach) {
+        throw new ValidationError("--receipt needs --detach");
+      }
+      if (opts.detach && (opts.outputDir !== undefined || opts.download === false)) {
+        logger.warn(
+          "--detach does not download: --output-dir and --no-download apply to `fal result`.",
+        );
+      }
       const assignments = parseFileAssignments(opts.file);
       const parsed = parseInputArg(opts.input);
       const input = assignments.length

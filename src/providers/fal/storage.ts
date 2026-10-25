@@ -10,7 +10,8 @@
  *    answer is `{upload_url, file_url}`.
  * 2. PUT the bytes to `upload_url` (a signed URL: no key is sent there).
  * Files over 90 MB use `initiate-multipart` instead: 10 MB parts are PUT to
- * `{upload_url path}/{n}{query}` (each answers `{partNumber, etag}`), then
+ * `{upload_url path}/{n}{query}` (each answers `{partNumber, etag}`; the
+ * `ETag` header is used when the body has none), then
  * POST `{upload_url path}/complete{query}` with the part list.
  * An optional `X-Fal-Object-Lifecycle` header asks fal to expire the object.
  */
@@ -42,7 +43,7 @@ const EXPIRATION_SECONDS: Record<string, number | undefined> = {
  */
 export function parseExpiresIn(raw: string): number | undefined {
   const value = raw.trim().toLowerCase();
-  if (value in EXPIRATION_SECONDS) return EXPIRATION_SECONDS[value];
+  if (Object.hasOwn(EXPIRATION_SECONDS, value)) return EXPIRATION_SECONDS[value];
   if (/^\d+$/.test(value) && Number(value) > 0) return Number(value);
   throw new ValidationError(
     `Invalid --expires-in "${raw}": use 1h, 1d, 7d, 30d, 1y, never, or a number of seconds`,
@@ -63,6 +64,12 @@ export interface FalUploadOptions {
   /** Multipart threshold and part size; default to the official client's 90 MB / 10 MB. */
   multipartThresholdBytes?: number;
   partSizeBytes?: number;
+  /**
+   * Time limit for one attempt of a byte transfer (the PUT, a part, or the
+   * completion), in ms. Default: 2 minutes plus 1 s per 64 KiB sent, so a
+   * stalled connection fails (and is retried) instead of hanging.
+   */
+  transferTimeoutMs?: (bytes: number) => number;
   /** Delay before retry n (1-based), default 1s, 2s, 4s... */
   backoffMs?: (attempt: number) => number;
   logger?: Logger;
@@ -111,26 +118,51 @@ function requireHttpsUrl(value: unknown, field: string): URL {
   return url;
 }
 
-/** Send a request without credentials; throws HttpError (status 0 for network failures). */
+const defaultTransferTimeoutMs = (bytes: number) => 120_000 + Math.ceil(bytes / 65_536) * 1000;
+
+/**
+ * Send a request without credentials and read its body as text, within one
+ * time limit. Throws HttpError (status 0 for network failures and timeouts,
+ * which the caller retries).
+ */
 async function sendUnkeyed(
   url: string,
   init: RequestInit,
+  bytes: number,
+  opts: FalUploadOptions,
   doFetch: FetchLike,
   label: string,
-): Promise<Response> {
-  let response: Response;
+): Promise<{ response: Response; text: string }> {
+  const timeoutMs = (opts.transferTimeoutMs ?? defaultTransferTimeoutMs)(bytes);
+  const signal = AbortSignal.timeout(timeoutMs);
   try {
     // Signed upload URLs must not be followed elsewhere: a redirect is an error.
-    response = await doFetch(url, { ...init, redirect: "error" });
+    const response = await doFetch(url, { ...init, redirect: "error", signal });
+    const text = await response.text();
+    if (!response.ok) {
+      throw new HttpError(response.status, text.slice(0, 300) || response.statusText, url);
+    }
+    return { response, text };
   } catch (cause) {
-    const msg = cause instanceof Error ? cause.message : String(cause);
+    if (cause instanceof HttpError) throw cause;
+    const msg = signal.aborted
+      ? `timed out after ${Math.round(timeoutMs / 1000)}s`
+      : cause instanceof Error
+        ? cause.message
+        : String(cause);
     throw new HttpError(0, `${label} failed: ${msg}`, url, undefined, { cause });
   }
-  if (!response.ok) {
-    const text = await response.text().catch(() => "");
-    throw new HttpError(response.status, text.slice(0, 300) || response.statusText, url);
+}
+
+/** A part's etag: from the JSON body (as fal answers), else the ETag header. */
+function partEtag(response: Response, text: string): string | undefined {
+  try {
+    const body = JSON.parse(text) as { etag?: unknown } | null;
+    if (typeof body?.etag === "string") return body.etag;
+  } catch {
+    // Not JSON: fall back to the header.
   }
-  return response;
+  return response.headers.get("etag") ?? undefined;
 }
 
 async function initiate(
@@ -171,29 +203,34 @@ async function uploadMultipart(opts: FalUploadOptions, doFetch: FetchLike): Prom
   for (let i = 0; i < total; i++) {
     const partNumber = i + 1;
     const chunk = opts.file.slice(i * partSize, Math.min((i + 1) * partSize, opts.file.size));
-    const res = await withRetries(`fal storage part ${partNumber}/${total}`, opts, async () => {
-      const response = await sendUnkeyed(
+    const etag = await withRetries(`fal storage part ${partNumber}/${total}`, opts, async () => {
+      const { response, text } = await sendUnkeyed(
         `${prefix}/${partNumber}${uploadUrl.search}`,
         { method: "PUT", body: chunk },
+        chunk.size,
+        opts,
         doFetch,
         `Upload of part ${partNumber}`,
       );
-      return (await response.json()) as { partNumber?: unknown; etag?: unknown };
+      return partEtag(response, text);
     });
-    if (typeof res.etag !== "string") {
+    if (!etag) {
       throw new ProviderError(`fal storage part ${partNumber} response has no etag`, "fal");
     }
-    parts.push({ partNumber: Number(res.partNumber ?? partNumber), etag: res.etag });
+    parts.push({ partNumber, etag });
     opts.logger?.debug(`uploaded part ${partNumber}/${total}`);
   }
+  const completion = JSON.stringify({ parts });
   await withRetries("fal storage complete", opts, () =>
     sendUnkeyed(
       `${prefix}/complete${uploadUrl.search}`,
       {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ parts }),
+        body: completion,
       },
+      completion.length,
+      opts,
       doFetch,
       "Completing the upload",
     ),
@@ -205,7 +242,8 @@ async function uploadMultipart(opts: FalUploadOptions, doFetch: FetchLike): Prom
  * Upload a file to fal storage and return its hosted `file_url`. The key goes
  * only to the REST initiate call; bytes go to the signed upload URL without
  * it, and redirects there are refused. Network failures and retryable 5xx are
- * retried (3 attempts by default); the local file is only read.
+ * retried (3 attempts by default), and each transfer attempt has a time
+ * limit; the local file is only read.
  */
 export async function uploadToFalStorage(opts: FalUploadOptions): Promise<string> {
   const doFetch: FetchLike = opts.fetch ?? ((input, init) => globalThis.fetch(input, init));
@@ -218,6 +256,8 @@ export async function uploadToFalStorage(opts: FalUploadOptions): Promise<string
     sendUnkeyed(
       uploadUrl.toString(),
       { method: "PUT", body: opts.file, headers: { "content-type": opts.contentType } },
+      opts.file.size,
+      opts,
       doFetch,
       "Upload",
     ),

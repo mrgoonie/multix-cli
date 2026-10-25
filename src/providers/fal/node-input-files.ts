@@ -34,12 +34,21 @@ export interface UploadOptions {
   expiresInSeconds?: number;
 }
 
+/** `type/subtype` with optional `; name=value` parameters, no control characters. */
+const MIME_TYPE =
+  /^[\w!#$&^.+-]+\/[\w!#$&^.+-]+(\s*;\s*[\w!#$&^.+-]+=("[ !#-~]*"|[\w!#$&^.+-]+))*$/;
+
 function formatMb(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 /** Check a local path is a readable, non-empty regular file. */
 export function inspectLocalFile(value: string, contentType?: string): LocalFile {
+  if (contentType !== undefined && !MIME_TYPE.test(contentType)) {
+    throw new ValidationError(
+      `Invalid content type "${contentType}": expected a MIME type such as video/mp4`,
+    );
+  }
   const filePath = path.resolve(value);
   let stat: fs.Stats;
   try {
@@ -83,13 +92,19 @@ export async function uploadLocalFile(file: LocalFile, opts: UploadOptions): Pro
 /**
  * Apply `--file key=value` assignments to a model input: URLs and data URIs
  * are set as-is, local paths are uploaded and replaced by their fal URL.
- * Every local path is checked before the first upload starts.
+ * Every local path is checked before the first upload starts. Each key may
+ * be given once; keys name top-level input fields.
  */
 export async function resolveFileAssignments(
   input: Record<string, unknown>,
   assignments: Array<[string, string]>,
   opts: UploadOptions,
 ): Promise<Record<string, unknown>> {
+  const keys = new Set<string>();
+  for (const [key] of assignments) {
+    if (keys.has(key)) throw new ValidationError(`--file ${key} is given more than once`);
+    keys.add(key);
+  }
   const local = new Map<string, LocalFile>();
   for (const [, value] of assignments) {
     if (!isMediaRef(value) && !local.has(value)) local.set(value, inspectLocalFile(value));

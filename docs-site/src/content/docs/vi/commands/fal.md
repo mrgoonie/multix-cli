@@ -21,8 +21,10 @@ JSON thay vì download.
 `run --file key=path` gán file cho field `key` ở cấp cao nhất của input. Đường
 dẫn cục bộ được kiểm tra (tồn tại, đọc được, không rỗng) rồi upload lên fal
 storage, và field nhận URL đã host; URL `http(s)` hoặc `data:` URI được giữ
-nguyên. Flag này lặp lại được và ghi đè key trùng tên trong `--input`. Không
-có file nào được upload nếu bạn không chỉ định bằng `--file`.
+nguyên. Flag này lặp lại được (mỗi key một lần) và ghi đè key trùng tên trong
+`--input`. Không có file nào được upload nếu bạn không chỉ định bằng `--file`.
+Với `--dry-run`, request được hiển thị là lệnh khởi tạo upload (miễn phí), không
+phải lệnh submit model: không có gì được upload hay đưa vào queue.
 
 ```bash
 # Thêm âm thanh cho clip câm bằng MMAudio
@@ -47,7 +49,8 @@ Upload một file cục bộ và in JSON ra stdout (log ra stderr): `url`,
 `--expires-in`. Dùng `url` cho bất kỳ field input nào của fal như `video_url`
 hoặc `image_url`.
 
-- `--content-type` ghi đè MIME type đoán từ phần mở rộng của file.
+- `--content-type` ghi đè MIME type đoán từ phần mở rộng của file (một MIME
+  type như `video/mp4`, có thể kèm tham số).
 - `--expires-in` yêu cầu fal xoá file sau `1h`, `1d`, `7d`, `30d`, `1y`, hoặc
   một số giây; `never` không gửi thời hạn. Nếu không truyền, áp dụng thời gian
   lưu trữ mặc định của fal. multix không bao giờ tự xoá file đã upload.
@@ -58,8 +61,9 @@ bạn chấp nhận chia sẻ theo cách đó, và giữ URL cẩn thận như c
 Mọi upload (từ `upload` và `--file`) luôn đi tới `https://rest.fal.ai`, nơi
 nhận `FAL_KEY` để khởi tạo upload; dữ liệu được gửi tới signed upload URL mà
 nó trả về, không kèm key, và redirect tại đó bị từ chối. File lớn hơn 90 MB
-được gửi theo từng phần 10 MB. Lỗi network và phản hồi 5xx (trừ 501 và 505)
-được retry, tối đa 3 lần mỗi request.
+được gửi theo từng phần 10 MB. Lỗi network, truyền tải bị treo (mỗi lần thử
+giới hạn 2 phút cộng 1 giây cho mỗi 64 KB) và phản hồi 5xx (trừ 501 và 505)
+được retry, tối đa 3 lần mỗi request. Upload không dùng `FAL_BASE_URL`.
 
 ## Ảnh
 
@@ -92,14 +96,16 @@ multix fal run <model> --input <json> [--file key=path] --detach [--receipt <pat
 
 `--detach` trả về ngay khi queue nhận job. stdout là một receipt JSON (schema
 `multix.fal-receipt/v1`) gồm model, `request_id`, trạng thái, vị trí trong
-queue, thời điểm submit, `input_hash` (sha256 của input, để phát hiện submit
-trùng) và các lệnh status/result trong `next`. Receipt không bao giờ chứa key,
+queue, thời điểm submit, `input_hash` (sha256 của input đúng như khi submit;
+với `--file`, mỗi lần chạy đều upload lại nên hash khác nhau) và các lệnh
+status/result trong `next`. Receipt không bao giờ chứa key,
 input hay signed URL.
 
 Receipt được lưu vào `~/.multix/fal/requests/<request_id>.json` (thư mục
 0700, file 0600, ghi nguyên tử), hoặc vào `--receipt <path>`. Lúc đó job đã
 vào queue và đã bị tính phí, nên nếu lưu thất bại receipt vẫn được in ra kèm
-cảnh báo: hãy giữ lại `request_id`.
+cảnh báo: hãy giữ lại `request_id`. `--receipt` chỉ dùng cùng `--detach`;
+`--output-dir` và `--no-download` thuộc về `fal result`.
 
 ## Status và result
 

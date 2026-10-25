@@ -153,6 +153,28 @@ describe("fal upload", () => {
     await expect(fal("upload", tmp)).rejects.toThrow(/not a file/);
     expect(calls).toHaveLength(0);
   });
+
+  it("rejects an invalid --content-type before any request", async () => {
+    stubFal();
+    await expect(
+      fal("upload", path.join(tmp, "shot.mp4"), "--content-type", "video/mp4\r\nx-evil: 1"),
+    ).rejects.toThrow(/Invalid content type/);
+    await expect(
+      fal("upload", path.join(tmp, "shot.mp4"), "--content-type", "mp4"),
+    ).rejects.toThrow(/Invalid content type/);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("accepts a MIME type with parameters", async () => {
+    stubFal();
+    await fal(
+      "upload",
+      path.join(tmp, "shot.mp4"),
+      "--content-type",
+      'text/plain; charset="utf-8"',
+    );
+    expect(JSON.parse(stdout[0] ?? "").mime_type).toBe('text/plain; charset="utf-8"');
+  });
 });
 
 describe("fal run --file --detach, then resume", () => {
@@ -191,6 +213,9 @@ describe("fal run --file --detach, then resume", () => {
     expect(saved).not.toContain(KEY);
     expect(saved).not.toContain(FILE_URL);
     expect(saved).not.toContain("SIGNED");
+    const printed = [...stdout, ...stderr].join("\n");
+    expect(printed).not.toContain(KEY);
+    expect(printed).not.toContain("SIGNED");
 
     // A later process: result --download reads only.
     calls = [];
@@ -236,6 +261,45 @@ describe("fal run --file --detach, then resume", () => {
       ),
     ).rejects.toThrow(/missing\.wav/);
     expect(calls).toHaveLength(0);
+  });
+
+  it("rejects a key given twice, before any request", async () => {
+    stubFal();
+    await expect(
+      fal(
+        "run",
+        MODEL,
+        "--input",
+        "{}",
+        "--file",
+        `video_url=${path.join(tmp, "shot.mp4")}`,
+        "--file",
+        "video_url=https://example.com/b.mp4",
+        "--detach",
+      ),
+    ).rejects.toThrow(/--file video_url is given more than once/);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("rejects --receipt without --detach, before any request", async () => {
+    stubFal();
+    await expect(
+      fal("run", MODEL, "--input", "{}", "--receipt", path.join(tmp, "r.json")),
+    ).rejects.toThrow(/--receipt needs --detach/);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("still prints the receipt and succeeds when it cannot be saved", async () => {
+    stubFal();
+    // A file where the receipt directory should be: the write fails.
+    const blocker = path.join(tmp, "blocker");
+    fs.writeFileSync(blocker, "");
+    await fal("run", MODEL, "--input", "{}", "--detach", "--receipt", path.join(blocker, "r.json"));
+    expect(calls.filter((c) => c.method === "POST")).toHaveLength(1);
+    const receipt = JSON.parse(stdout[0] ?? "");
+    expect(receipt.request_id).toBe(REQ);
+    expect(receipt.receipt_path).toBeUndefined();
+    expect(stderr.join("\n")).toMatch(/Could not save the receipt.*keep request_id req-0001/);
   });
 
   it("rejects a malformed --file", async () => {
