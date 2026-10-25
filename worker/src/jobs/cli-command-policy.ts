@@ -167,6 +167,10 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   "elevenlabs voices design": { nameOptions: ["output-prefix"] },
   "elevenlabs isolate": { fileOptions: { input: "file" } },
   "elevenlabs align": { fileOptions: { input: "file", "text-file": "file" } },
+  // `--file key=path` maps a model field to a local file and `--receipt` writes
+  // to the container's home; neither is expressible remotely (pass URLs in --input).
+  "fal run": { unsupported: ["file", "receipt"] },
+  "fal upload": { filePositionals: ["file"] },
   "fal image": { caps: IMAGE_COUNT },
   "fal video": { urlOptions: ["image-url"], caps: { duration: ["duration"] } },
   "atlas image": { caps: IMAGE_COUNT },

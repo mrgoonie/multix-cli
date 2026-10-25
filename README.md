@@ -534,7 +534,17 @@ Generic runner plus convenience commands for [fal.ai](https://fal.ai)'s queue RE
 ```bash
 # Generic runner — works with any fal model id
 multix fal run fal-ai/flux/schnell --input '{"prompt":"a cyberpunk cat"}' [--no-download] [--wait-timeout 480000] [-v]
-multix fal run fal-ai/flux/schnell --input @input.json
+multix fal run fal-ai/flux/schnell --input @input.json [--output-dir <dir>]
+
+# Local files: --file key=path uploads to fal storage and sets that input field (repeatable)
+multix fal run fal-ai/mmaudio-v2 --input '{"prompt":"rain on a tin roof","duration":2}' --file video_url=./shot.mp4
+multix fal run fal-ai/hunyuan-video-foley --input '{"text_prompt":"footsteps on gravel"}' --file video_url=./shot.mp4
+
+# Upload only: prints {url, file_name, mime_type, size_bytes} JSON on stdout
+multix fal upload ./shot.mp4 [--content-type <mime>] [--expires-in 1h|1d|7d|30d|1y|never|<seconds>]
+
+# Submit and return at once: prints a JSON receipt, saved to ~/.multix/fal/requests/<request_id>.json
+multix fal run <model> --input <json> --detach [--receipt <path>]
 
 # Text-to-image (default model: fal-ai/flux/schnell)
 multix fal image "a cyberpunk cat" [-m <model>] [--image-size square_hd] [-n 1] [--seed <n>] [--negative-prompt <text>] [--output <path>] [--no-download] [-v]
@@ -544,15 +554,17 @@ multix fal image "a cyberpunk cat" [-m <model>] [--image-size square_hd] [-n 1] 
 # Without -m, the default model switches automatically based on whether --image-url is passed.
 multix fal video "a dancer under neon lights" [-m <model>] [--image-url <https-url>] [--duration <n>] [--aspect-ratio 16:9] [--seed <n>] [--no-download] [--wait-timeout 900000] [-v]
 
-# Queue status / result for a request submitted any other way
+# Queue status / result for a detached run or a request submitted any other way
 multix fal status <model> <requestId>
-multix fal result <model> <requestId> [--download]
+multix fal result <model> <requestId> [--download] [--output-dir <dir>]
 ```
 
 **Notes:**
 - Auth header is `Authorization: Key $FAL_KEY`; base URL is `https://queue.fal.run`.
 - All fal jobs are async: submit → poll `status` → fetch `result`. `run`/`image`/`video` do this automatically.
 - Media URLs are extracted generically from the result JSON (any `url` field, recursively) and downloaded to `MULTIX_OUTPUT_DIR`.
+- Anyone with a fal storage URL can read the file; `--expires-in` asks fal to delete it later, otherwise fal's default retention applies and multix never deletes it.
+- `result` never resubmits: a job still queued or running fails with `JOB_PENDING`. A submit with no response fails with `UNKNOWN_REMOTE_STATE` (the job may exist and be billed; check your fal request list before retrying). See the [fal command docs](https://multix.zuey.me/commands/fal/).
 
 ### `multix atlas`
 

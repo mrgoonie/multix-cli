@@ -6,12 +6,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import { isRetryableServerStatus } from "../../core/async-poll.js";
-import { ProviderError } from "../../core/errors.js";
+import { MultixError, ProviderError } from "../../core/errors.js";
 import { downloadFile } from "../../core/http-client.js";
 import { parseJsonInput } from "../../core/json-input.js";
 import type { Logger } from "../../core/logger.js";
 import { redactUrl } from "../../core/redact.js";
-import { HttpError, createFalClient, submitPath } from "./client.js";
+import { type FalClient, HttpError, createFalClient, submitPath } from "./client.js";
 import type { FalResultResponse, FalStatusResponse, FalSubmitResponse } from "./types.js";
 
 /** Parse `--input` as inline JSON or `@path/to/file.json`. */
@@ -50,6 +50,74 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 }
 
 /**
+ * The submit POST failed without an HTTP answer: it may or may not have
+ * reached fal, and fal has no idempotency key, so the job may exist (and be
+ * billed) even though no request id came back. Resubmitting blindly could run
+ * it twice.
+ */
+export class FalUnknownRemoteStateError extends MultixError {
+  constructor(model: string, cause: unknown) {
+    const msg = cause instanceof Error ? cause.message : String(cause);
+    super(
+      `unknown_remote_state: the submit to ${model} got no response (${msg}); fal may have accepted the job. Check https://fal.ai/dashboard/requests before submitting again.`,
+      "UNKNOWN_REMOTE_STATE",
+      { cause },
+    );
+    this.name = "FalUnknownRemoteStateError";
+  }
+}
+
+/** Network errors that fail before any byte is sent (DNS, refused connection). */
+const NOT_SENT = /ENOTFOUND|EAI_AGAIN|ECONNREFUSED|getaddrinfo/i;
+
+function causeText(e: unknown): string {
+  const parts: string[] = [];
+  for (let c: unknown = e, i = 0; c && i < 5; c = (c as { cause?: unknown }).cause, i++) {
+    const err = c as { message?: unknown; code?: unknown };
+    parts.push(String(err.message ?? ""), String(err.code ?? ""));
+  }
+  return parts.join(" ");
+}
+
+/**
+ * Submit a job to the fal queue and return the accepted request, after
+ * checking that its status/response URLs may receive the key. A submit that
+ * fails without an HTTP response (other than DNS or a refused connection)
+ * throws {@link FalUnknownRemoteStateError} instead of a retryable network
+ * error.
+ */
+export async function submitFalRequest(
+  client: FalClient,
+  model: string,
+  input: Record<string, unknown>,
+  logger: Logger,
+): Promise<FalSubmitResponse> {
+  let submitRes: FalSubmitResponse;
+  try {
+    submitRes = await client.post<FalSubmitResponse>(submitPath(model), input, logger);
+  } catch (e) {
+    if (e instanceof HttpError && e.status === 0 && !NOT_SENT.test(causeText(e))) {
+      throw new FalUnknownRemoteStateError(model, e);
+    }
+    throw e;
+  }
+  if (typeof submitRes?.request_id !== "string" || submitRes.request_id === "") {
+    throw new ProviderError("fal submit response is missing request_id", "fal");
+  }
+  logger.debug(`request_id: ${submitRes.request_id}`);
+  // Refuse both follow-up URLs up front (ProviderError, host only) so the key
+  // is never sent to an untrusted host and the error is not wrapped as a poll failure.
+  for (const field of ["status_url", "response_url"] as const) {
+    const url: unknown = submitRes[field];
+    if (typeof url !== "string" || url === "") {
+      throw new ProviderError(`fal submit response is missing ${field}`, "fal");
+    }
+    client.assertTrustedUrl(url);
+  }
+  return submitRes;
+}
+
+/**
  * Submit a job, poll its status_url until COMPLETED (bounded by a real
  * deadline, retrying transient network/5xx errors), then fetch response_url.
  * Uses the URLs fal itself returns from submit rather than reconstructing
@@ -60,18 +128,8 @@ export async function submitAndWait(opts: SubmitAndWaitOptions): Promise<SubmitA
   const { model, input, logger } = opts;
   const client = createFalClient();
 
-  const submitRes = await client.post<FalSubmitResponse>(submitPath(model), input, logger);
+  const submitRes = await submitFalRequest(client, model, input, logger);
   const requestId = submitRes.request_id;
-  logger.debug(`request_id: ${requestId}`);
-  // Refuse both follow-up URLs up front (ProviderError, host only) so the key
-  // is never sent to an untrusted host and the error is not wrapped as a poll failure.
-  for (const field of ["status_url", "response_url"] as const) {
-    const url: unknown = submitRes[field];
-    if (typeof url !== "string" || url === "") {
-      throw new ProviderError(`fal submit response is missing ${field}`, "fal");
-    }
-    client.assertTrustedUrl(url);
-  }
   logger.info("Polling for completion...");
 
   const waitTimeoutMs = opts.waitTimeoutMs ?? 480_000;

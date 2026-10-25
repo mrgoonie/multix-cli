@@ -5,7 +5,7 @@ import {
   classifyMessage,
   codeFromHttp,
 } from "../../../src/core/error-classify.js";
-import { ConfigError, HttpError, ValidationError } from "../../../src/core/errors.js";
+import { ConfigError, HttpError, MultixError, ValidationError } from "../../../src/core/errors.js";
 
 describe("codeFromHttp", () => {
   it("maps statuses to codes, refined by the body", () => {
@@ -72,5 +72,15 @@ describe("classifyError", () => {
     expect(classifyError(new ConfigError("GEMINI_API_KEY is not set")).exit_code).toBe(
       EXIT_CODES.config,
     );
+  });
+});
+
+describe("pending and unknown-remote-state jobs", () => {
+  it("classify as not retryable with the resume exit class", () => {
+    for (const code of ["JOB_PENDING", "UNKNOWN_REMOTE_STATE"] as const) {
+      const info = classifyError(new MultixError("job state", code));
+      expect(info).toMatchObject({ code, retryable: false, exit_code: EXIT_CODES.timeout });
+      expect(info.hint).toMatch(/resubmit|submitting again/);
+    }
   });
 });

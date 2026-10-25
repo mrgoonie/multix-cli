@@ -12,8 +12,54 @@ multix fal run fal-ai/flux/schnell --input @input.json
 ```
 
 `--input` accepts inline JSON or `@path/to/file.json`. By default the command
-polls to completion and downloads any media URLs found in the result;
-`--no-download` prints the result JSON instead.
+polls to completion and downloads any media URLs found in the result to
+`MULTIX_OUTPUT_DIR` (or `--output-dir <dir>`); `--no-download` prints the
+result JSON instead.
+
+## Local files
+
+`run --file key=path` sets the top-level input field `key` to a file. A local
+path is checked (exists, readable, not empty) and uploaded to fal storage, and
+the field gets the hosted URL; an `http(s)` URL or `data:` URI is passed through
+unchanged. The flag is repeatable, and it overrides the same key in `--input`.
+Nothing is uploaded unless you name it with `--file`.
+
+```bash
+# Add audio to a silent clip with MMAudio
+multix fal run fal-ai/mmaudio-v2 \
+  --input '{"prompt":"rain on a tin roof","duration":2}' \
+  --file video_url=./shot.mp4
+
+# Foley for a clip with Hunyuan Video Foley
+multix fal run fal-ai/hunyuan-video-foley \
+  --input '{"text_prompt":"footsteps on gravel"}' \
+  --file video_url=./shot.mp4
+```
+
+## Upload
+
+```bash
+multix fal upload <file> [--content-type <mime>] [--expires-in <ttl>] [-v]
+```
+
+Uploads one local file and prints JSON on stdout (logs go to stderr):
+`url`, `file_name`, `mime_type`, `size_bytes`, plus `expires_in_s` when
+`--expires-in` is set. Use the `url` in any fal input field such as
+`video_url` or `image_url`.
+
+- `--content-type` overrides the MIME type guessed from the file extension.
+- `--expires-in` asks fal to delete the file after `1h`, `1d`, `7d`, `30d`,
+  `1y`, or a number of seconds; `never` sends no expiry. Without it, fal's
+  default retention applies. multix never deletes uploaded files itself.
+
+**Privacy:** a fal storage URL is readable by anyone who has it. Upload only
+files you are willing to share that way, and treat the URL like the file.
+
+Uploads (from `upload` and `--file`) always go to `https://rest.fal.ai`, which
+receives `FAL_KEY` to start the upload; the bytes go to the signed upload URL
+it returns, without the key, and redirects there are refused. Files over 90 MB
+are sent in 10 MB parts. Network errors and 5xx responses (other than 501 and
+505) are retried, up to 3 attempts per request.
 
 ## Images
 
@@ -38,16 +84,37 @@ Without `-m`, the default model depends on `--image-url`:
 - Text-to-video: `fal-ai/kling-video/v1.6/standard/text-to-video` (override with `FAL_VIDEO_MODEL`).
 - Image-to-video (`--image-url` set): `fal-ai/kling-video/v1.6/standard/image-to-video` (override with `FAL_VIDEO_IMAGE_MODEL`).
 
+## Detached runs and receipts
+
+```bash
+multix fal run <model> --input <json> [--file key=path] --detach [--receipt <path>]
+```
+
+`--detach` returns as soon as the queue accepts the job. stdout is a JSON
+receipt (schema `multix.fal-receipt/v1`) with the model, `request_id`, status,
+queue position, submit time, an `input_hash` (sha256 of the input, to spot a
+duplicate submission) and the `next` status/result commands. It never holds
+the key, the input, or signed URLs.
+
+The receipt is saved to `~/.multix/fal/requests/<request_id>.json` (directory
+0700, file 0600, written atomically), or to `--receipt <path>`. The job is
+already queued and billed at that point, so if saving fails the receipt is
+still printed, with a warning: keep the `request_id`.
+
 ## Status and result
 
-Use these to resume a job started elsewhere, or after a `run`/`image`/`video`
-command times out — the timeout error includes the request ID for exactly
-this purpose.
+Use these to resume a detached job, a job started elsewhere, or a
+`run`/`image`/`video` command that timed out — the timeout error includes the
+request ID for exactly this purpose.
 
 ```bash
 multix fal status <model> <requestId>
-multix fal result <model> <requestId> [--download]
+multix fal result <model> <requestId> [--download] [--output-dir <dir>]
 ```
+
+`result` only reads: it never submits the job again. If the job is still
+queued or running, it fails with `JOB_PENDING` and the queue status; check
+again with `status`.
 
 `<model>` only needs to resolve to the correct fal "app id" (its first two
 path segments, e.g. `fal-ai/kling-video`); the full model id used for `run`,
@@ -68,6 +135,12 @@ path segments, e.g. `fal-ai/kling-video`); the full model id used for `run`,
   milliseconds) and retries transient network errors and 5xx responses other than 501 and 505. A timeout or
   unrecoverable error prints the request ID so you can resume with
   `multix fal status` or `multix fal result`.
+- fal has no idempotency key, so multix cannot promise a job runs exactly
+  once. If a submit gets no HTTP response (other than a DNS failure or a
+  refused connection), the job may exist and be billed: the command fails
+  with `UNKNOWN_REMOTE_STATE`. Check your
+  [fal request list](https://fal.ai/dashboard/requests) before submitting
+  again.
 - Media extraction prefers known result fields (`images[].url`, `video.url`,
   `image.url`, `audio.url`) before falling back to a generic scan of the
   result payload.

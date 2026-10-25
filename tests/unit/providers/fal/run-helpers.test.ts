@@ -2,13 +2,17 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { classifyError } from "../../../../src/core/error-classify.js";
 import { ProviderError, ValidationError } from "../../../../src/core/errors.js";
+import { FalClient } from "../../../../src/providers/fal/client.js";
 import {
+  FalUnknownRemoteStateError,
   downloadResultMedia,
   extractMediaUrls,
   extractMediaUrlsGeneric,
   parseInputArg,
   submitAndWait,
+  submitFalRequest,
 } from "../../../../src/providers/fal/run-helpers.js";
 
 const noopLogger = {
@@ -486,5 +490,51 @@ describe("downloadResultMedia", () => {
 
     expect(saved.length).toBe(1);
     expect(fs.readdirSync(tmpDir).length).toBe(1);
+  });
+});
+
+describe("submitFalRequest", () => {
+  const originalFetch = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  const client = () => new FalClient("k", "https://queue.fal.run");
+
+  it("reports unknown_remote_state when the submit gets no response", async () => {
+    globalThis.fetch = vi.fn(async () => {
+      throw new TypeError("fetch failed", { cause: new Error("other side closed") });
+    }) as unknown as typeof fetch;
+    const err = await submitFalRequest(client(), "fal-ai/x", {}, noopLogger).catch((e) => e);
+    expect(err).toBeInstanceOf(FalUnknownRemoteStateError);
+    expect(err.message).toMatch(/^unknown_remote_state:/);
+    expect(classifyError(err)).toMatchObject({
+      code: "UNKNOWN_REMOTE_STATE",
+      retryable: false,
+      exit_code: 6,
+    });
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a DNS failure as a retryable network error (nothing was sent)", async () => {
+    globalThis.fetch = vi.fn(async () => {
+      throw new TypeError("fetch failed", {
+        cause: Object.assign(new Error("getaddrinfo ENOTFOUND queue.fal.run"), {
+          code: "ENOTFOUND",
+        }),
+      });
+    }) as unknown as typeof fetch;
+    const err = await submitFalRequest(client(), "fal-ai/x", {}, noopLogger).catch((e) => e);
+    expect(err).not.toBeInstanceOf(FalUnknownRemoteStateError);
+    expect(classifyError(err).code).toBe("NETWORK_ERROR");
+  });
+
+  it("rejects a submit response without request_id", async () => {
+    globalThis.fetch = vi.fn(
+      async () => new Response(JSON.stringify({ status_url: "https://queue.fal.run/s" })),
+    ) as unknown as typeof fetch;
+    await expect(submitFalRequest(client(), "fal-ai/x", {}, noopLogger)).rejects.toThrow(
+      /missing request_id/,
+    );
   });
 });

@@ -140,7 +140,15 @@ Auth is `Authorization: Key $FAL_KEY`; base URL is `https://queue.fal.run`. All 
 ```bash
 # Generic runner — works with any fal model id
 multix fal run fal-ai/flux/schnell --input '{"prompt":"a cyberpunk cat"}' [--no-download] [--wait-timeout 480000] [-v]
-multix fal run <model> --input @input.json
+multix fal run <model> --input @input.json [--output-dir <dir>]
+
+# Local files: --file key=path uploads to fal storage (URL readable by anyone who has it) and sets that top-level input field
+multix fal run fal-ai/mmaudio-v2 --input '{"prompt":"rain on a tin roof","duration":2}' --file video_url=./shot.mp4
+multix fal run fal-ai/hunyuan-video-foley --input '{"text_prompt":"footsteps on gravel"}' --file video_url=./shot.mp4
+multix fal upload ./shot.mp4 [--content-type <mime>] [--expires-in 1h|1d|7d|30d|1y|never|<seconds>]   # JSON {url,...} on stdout
+
+# Long jobs: submit only, print a JSON receipt (saved to ~/.multix/fal/requests/<request_id>.json), resume with status/result
+multix fal run <model> --input <json> --detach [--receipt <path>]
 
 # Text-to-image (default fal-ai/flux/schnell)
 multix fal image "a cyberpunk cat" [-m <model>] [--image-size square_hd] [-n 1] [--seed <n>] [--negative-prompt <text>] [--output <path>] [-v]
@@ -149,10 +157,12 @@ multix fal image "a cyberpunk cat" [-m <model>] [--image-size square_hd] [-n 1] 
 # image-to-video with --image-url (default switches to fal-ai/kling-video/v1.6/standard/image-to-video when -m is omitted)
 multix fal video "a dancer under neon lights" [-m <model>] [--image-url <https-url>] [--duration <n>] [--aspect-ratio 16:9] [--seed <n>] [-v]
 
-# Inspect a request submitted any other way
+# Inspect a detached run or a request submitted any other way
 multix fal status <model> <requestId>
-multix fal result <model> <requestId> [--download]
+multix fal result <model> <requestId> [--download] [--output-dir <dir>]
 ```
+
+`result` never resubmits; a job still running fails with `JOB_PENDING` (exit 6): check `status` later. `UNKNOWN_REMOTE_STATE` (exit 6) means the submit got no response and the job may exist and be billed: do not resubmit until the user checks the fal request list.
 
 ## Atlas Cloud
 

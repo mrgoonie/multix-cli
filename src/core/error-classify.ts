@@ -22,6 +22,8 @@ export type ErrorCode =
   | "PROVIDER_UNAVAILABLE"
   | "NETWORK_ERROR"
   | "TIMEOUT"
+  | "JOB_PENDING"
+  | "UNKNOWN_REMOTE_STATE"
   | "JOB_FAILED"
   | "RESPONSE_TOO_LARGE"
   | "BINARY_MISSING"
@@ -30,8 +32,9 @@ export type ErrorCode =
 /**
  * Process exit codes by class: 0 ok, 1 unknown, 2 usage or invalid input,
  * 3 missing/invalid key or config, 4 temporary (retry may succeed),
- * 5 rejected by the provider (do not retry unchanged), 6 timed out while the
- * job may still be running (resume it, do not resubmit).
+ * 5 rejected by the provider (do not retry unchanged), 6 timed out, still
+ * pending, or submitted with no answer, while the job may still be running
+ * (resume it, do not resubmit).
  */
 export const EXIT_CODES = {
   ok: 0,
@@ -75,6 +78,10 @@ const HINTS: Record<ErrorCode, string> = {
   NETWORK_ERROR: "Network failure: retry; check connectivity if it persists.",
   TIMEOUT:
     "Timed out waiting; the job may still be running: use the status/resume command, do not resubmit.",
+  JOB_PENDING:
+    "The job is still queued or running: check it later with the status command; do not resubmit.",
+  UNKNOWN_REMOTE_STATE:
+    "The submit got no response, so the job may exist (and be billed): check the provider's request list before submitting again.",
   JOB_FAILED: "The provider reported the job failed; read the message, adjust inputs and retry.",
   RESPONSE_TOO_LARGE: "The response exceeded the size cap; request fewer or smaller outputs.",
   BINARY_MISSING: "Install the missing tool (ffmpeg, ImageMagick or cwebp) and put it on PATH.",
@@ -98,6 +105,8 @@ const EXIT_BY_CODE: Record<ErrorCode, number> = {
   JOB_FAILED: EXIT_CODES.rejected,
   RESPONSE_TOO_LARGE: EXIT_CODES.rejected,
   TIMEOUT: EXIT_CODES.timeout,
+  JOB_PENDING: EXIT_CODES.timeout,
+  UNKNOWN_REMOTE_STATE: EXIT_CODES.timeout,
   BINARY_MISSING: EXIT_CODES.config,
   UNKNOWN: EXIT_CODES.unknown,
 };
@@ -234,6 +243,9 @@ export function classifyError(error: unknown): ErrorInfo {
       return build(codeFromText(message) === "NOT_FOUND" ? "NOT_FOUND" : "INVALID_INPUT", message);
     }
     if (error.code === "POLL_TIMEOUT") return build("TIMEOUT", message);
+    if (error.code === "JOB_PENDING" || error.code === "UNKNOWN_REMOTE_STATE") {
+      return build(error.code, message);
+    }
   }
   return classifyMessage(message);
 }

@@ -6020,7 +6020,7 @@
     },
     {
       "group": "fal",
-      "description": "fal.ai: generic model runner, image, video, and queue status/result",
+      "description": "fal.ai: generic model runner, image, video, file upload, and queue status/result",
       "commands": [
         {
           "command": "fal run",
@@ -6045,6 +6045,36 @@
               "negatable": false
             },
             {
+              "long": "--file",
+              "flags": "--file <key=path>",
+              "description": "Set input <key> to a local file (uploaded to fal storage) or a URL; repeatable",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--detach",
+              "flags": "--detach",
+              "description": "Submit only: print a JSON receipt and return without waiting",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--receipt",
+              "flags": "--receipt <path>",
+              "description": "With --detach: receipt file (default ~/.multix/fal/requests/<id>.json)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
               "long": "--no-download",
               "flags": "--no-download",
               "description": "Skip downloading media; print result JSON only",
@@ -6053,6 +6083,16 @@
               "valueOptional": false,
               "variadic": false,
               "negatable": true
+            },
+            {
+              "long": "--output-dir",
+              "flags": "--output-dir <dir>",
+              "description": "Directory for downloaded media (default: MULTIX_OUTPUT_DIR)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
             },
             {
               "long": "--wait-timeout",
@@ -6360,6 +6400,61 @@
               "description": "Download media URLs found in the result to the output dir",
               "required": false,
               "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--output-dir",
+              "flags": "--output-dir <dir>",
+              "description": "Directory for downloaded media (default: MULTIX_OUTPUT_DIR)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        },
+        {
+          "command": "fal upload",
+          "description": "Upload a local file to fal storage and print its URL as JSON",
+          "positionals": [
+            {
+              "name": "file",
+              "description": "",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--content-type",
+              "flags": "--content-type <mime>",
+              "description": "MIME type to store (default: from the extension)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--expires-in",
+              "flags": "--expires-in <ttl>",
+              "description": "Ask fal to delete the upload after 1h, 1d, 7d, 30d, 1y or N seconds (default: fal's retention)",
+              "required": false,
+              "takesValue": true,
               "valueOptional": false,
               "variadic": false,
               "negatable": false
