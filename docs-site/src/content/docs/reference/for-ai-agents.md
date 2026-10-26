@@ -25,6 +25,21 @@ https://multix.zuey.me/llms.txt
    `video-edit`, `speech`, `transcription`, `music`, `sfx`, `voice`, `3d`,
    `analysis`, `document`, `avatar-video`, `any`. Add `--provider <group>` to
    narrow, `--json` for an array.
+   Generic runners (`fal run`, `replicate run`, OpenRouter, Atlas) pass any
+   provider model id through and are marked `any_model` with a `model_scope`;
+   multix has not verified those ids. A verified model has known inputs:
+   `multix models --model <id>` shows its inputs, voices, output formats and an
+   example (an unknown id reports `verified: null`), and `fal run` warns when
+   `--input` does not match it. Speech through fal is listed as a `fal run` row
+   naming only its verified models.
+   `multix models --task <task> --live` also lists what the fal and OpenRouter
+   catalogs serve now, each marked `verified` or not, with `listed`
+   (`true`/`false`, or `null` when the catalog could not be read) and status
+   `missing` for a verified model the catalog no longer lists (removed or
+   renamed). Catalogs are cached for a day in `~/.multix/cache/models`
+   (`--refresh` refetches; `MULTIX_CACHE_DIR` and `MULTIX_MODELS_TTL` override
+   the directory and TTL in seconds). Offline, a stale copy is used; with no
+   copy the catalog is `unavailable` and nothing is claimed available.
 2. **Validate for free.** Add `--dry-run` to any command: local checks run
    (flags, input files, keys), then the first provider request is shown
    (method, URL without query string, body with long values shortened, header

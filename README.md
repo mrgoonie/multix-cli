@@ -58,6 +58,8 @@ recover without trial and error:
 ```bash
 multix guide                                  # the agent protocol in one screen
 multix models --task video --ready            # which command and model serve a task, key set or not
+multix models --model google/gemini-3.8-flash-tts  # a verified model's inputs, voices, formats, how to run it
+multix models --task speech --live            # plus what fal and OpenRouter catalogs list now (cached)
 multix fal image "a red fox" --dry-run --json # validate; show the request instead of sending it
 multix fal image "a red fox" --json           # one-line multix.result/v1 envelope on stdout
 multix history stats --by model               # runs, success rate, p50/p90 time, cost, credits, tokens
@@ -73,6 +75,18 @@ still run), `1` unknown; plain runs keep exit 1 and print the code and hint on
 stderr. Each run is recorded in `~/.multix/history.jsonl` without keys or signed
 URLs (`MULTIX_HISTORY=0` turns it off). Details:
 [For AI agents](https://multix.zuey.me/reference/for-ai-agents/).
+
+`multix models` reads a capability registry (`multix.capabilities/v1`): each
+command states its tasks and outputs, and generic runners (`fal run`,
+`replicate run`, OpenRouter, Atlas) are marked as passing any provider model id
+through unverified. Only models checked against the provider's own schema are
+*verified* and inspectable with `--model`; `fal run` warns (without failing)
+when its `--input` has fields such a model does not take, misses a required
+one, or uses a value outside its listed choices. `--live` (with `--task`) marks
+each catalog model verified or not, and a verified model the catalog no longer
+lists with status `missing`. Catalogs are cached for a day in `~/.multix/cache/models`
+(`--refresh` refetches); offline, a stale copy is used, or the catalog is
+reported `unavailable` and nothing is claimed available.
 
 ## Environment variables
 
@@ -134,6 +148,8 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `MULTIX_OUTPUT` | No | `json` prints one `multix.result/v1` envelope per run, as `--json` does |
 | `MULTIX_HISTORY` | No | `0` stops recording runs in `~/.multix/history.jsonl` |
 | `MULTIX_HISTORY_FILE` | No | Run ledger path (shell or `~/.multix/.env` only) |
+| `MULTIX_CACHE_DIR` | No | Cache root for `multix models --live` catalogs (default `~/.multix/cache`; shell or `~/.multix/.env` only) |
+| `MULTIX_MODELS_TTL` | No | Seconds a cached catalog stays fresh (default `86400`) |
 | `OPENROUTER_IMAGE_MODEL` | No | Default OpenRouter model |
 | `OPENROUTER_FALLBACK_MODELS` | No | Comma-separated fallback model ids |
 | `OPENAI_IMAGE_MODEL` | No | Default OpenAI image model (default `gpt-image-2`) |
@@ -150,7 +166,7 @@ Set extra keys as `GEMINI_API_KEY_2`, `GEMINI_API_KEY_3`, … (any numeric suffi
 
 Priority: `process.env` > `cwd/.env` > `~/.multix/.env`. A blank or whitespace-only value in a `.env` file does not count as set, so a project `.env` copied from `.env.example` does not hide `~/.multix/.env`; a shell variable wins even when blank. Set `MULTIX_LEGACY_CLAUDE_ENV=1` (shell or `~/.multix/.env`) to also read legacy AgentKit files (`.claude/skills/{ai-multimodal,ak-ai-multimodal}/.env`, `.claude/skills/.env`, `.claude/.env`, project first, then home) with the lowest priority (credential names only, never endpoint/proxy settings); `multix check -v` lists the env files that were loaded.
 
-A project `.env` may only set variables `multix` reads: provider keys, the provider settings in `.env.example` (`*_BASE_URL`, model overrides, Cloudflare IDs), the documented `MULTIX_*` settings (`MULTIX_OUTPUT_DIR`, so a project can choose where outputs go, `MULTIX_IMAGE_FORMAT`, `MULTIX_MAX_DOWNLOAD_MB`, `MULTIX_UPLOAD_MIN_KBPS`, `MULTIX_OUTPUT`, `MULTIX_HISTORY`) and `NO_COLOR`. The opt-ins `MULTIX_ALLOW_PROJECT_BASE_URL` and `MULTIX_LEGACY_CLAUDE_ENV`, and `MULTIX_HISTORY_FILE`, are refused there; set them in the shell or `~/.multix/.env`. Other names, such as `NODE_OPTIONS`, `npm_config_registry`, `LD_PRELOAD` or `HTTPS_PROXY`, are not loaded, so they never reach `multix` or the tools it starts (`npm` in `multix update`, ffmpeg, ImageMagick, cwebp); one warning on stderr lists the ignored names, never their values. The shell and `~/.multix/.env` are not filtered.
+A project `.env` may only set variables `multix` reads: provider keys, the provider settings in `.env.example` (`*_BASE_URL`, model overrides, Cloudflare IDs), the documented `MULTIX_*` settings (`MULTIX_OUTPUT_DIR`, so a project can choose where outputs go, `MULTIX_IMAGE_FORMAT`, `MULTIX_MAX_DOWNLOAD_MB`, `MULTIX_UPLOAD_MIN_KBPS`, `MULTIX_OUTPUT`, `MULTIX_HISTORY`, `MULTIX_MODELS_TTL`) and `NO_COLOR`. The opt-ins `MULTIX_ALLOW_PROJECT_BASE_URL` and `MULTIX_LEGACY_CLAUDE_ENV`, and `MULTIX_HISTORY_FILE` and `MULTIX_CACHE_DIR`, are refused there; set them in the shell or `~/.multix/.env`. Other names, such as `NODE_OPTIONS`, `npm_config_registry`, `LD_PRELOAD` or `HTTPS_PROXY`, are not loaded, so they never reach `multix` or the tools it starts (`npm` in `multix update`, ffmpeg, ImageMagick, cwebp); one warning on stderr lists the ignored names, never their values. The shell and `~/.multix/.env` are not filtered.
 
 `*_BASE_URL`, `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_AI_GATEWAY_ID` decide where your API key is sent. Values from the shell or `~/.multix/.env` are always used. A value from the project `.env` (or a legacy `.claude` file under it) is used only when every key the provider sends with it comes from that same project file (the repository's own key). That protects your key, not your data: a project `.env` that ships its own key and base URL routes that project's requests, including your prompts and any files you upload, to that host, and its key replaces yours from `~/.multix/.env`, so review a cloned repository's `.env` before running `multix` in it. If a key comes from anywhere else, the project value is ignored: the `~/.multix/.env` value is used with a warning (variable, file and key source named, never the value), or, if there is none, the command stops with an error instead of falling back to the vendor default. `multix check` shows whether each such setting is in effect or ignored. To use a project value for one command, run `MULTIX_ALLOW_PROJECT_BASE_URL=1 multix ...`; do not put the opt-in in `~/.multix/.env`, which disables the check for every directory. Non-default base URLs must be `https://` (plain `http://` only for `localhost`, `127.0.0.1`, `[::1]`), and `multix` warns once per variable on stderr with the provider and hostname only.
 ## Commands
@@ -563,6 +579,7 @@ multix fal result <model> <requestId> [--download] [--output-dir <dir>]
 - `--detach` saves a receipt (`~/.multix/fal/requests/<request_id>.json`, or `--receipt <path>`, which also works for a blocking run; mode 0600, ids and an input hash only). `status`/`result` only read, so resuming never pays twice. A submit whose outcome is unknown (connection cut off, 5xx gateway error) fails with `UNKNOWN_REMOTE_STATE` and is never retried.
 - `--file` / `fal upload` accept image, video and audio files only (up to `FAL_MAX_UPLOAD_MB`, default 1024). fal storage URLs are public to anyone with the link and fal controls retention; the key goes only to `https://rest.fal.ai`, never to the pre-signed upload URL.
 - Media URLs are extracted generically from the result JSON (any `url` field, recursively) and downloaded to `MULTIX_OUTPUT_DIR`.
+- For a verified model (`multix models --task speech` lists the fal speech endpoints), `run` warns about unknown, missing or out-of-choice `--input` fields; fal still validates. Other ids run unchecked.
 
 ### `multix atlas`
 

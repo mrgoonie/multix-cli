@@ -7,9 +7,10 @@
 
 import type { CallToolResult, McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
+import { TASKS } from "../../../src/capabilities/capability-types.js";
 import type { Limits } from "../config.js";
 import type { ProviderKeys } from "../provider-secret-names.js";
-import { catalogPayload } from "./catalog-view.js";
+import { MODEL_ID_RE, catalogPayload } from "./catalog-view.js";
 import {
   DEFAULT_WAIT_SECONDS,
   JobRunner,
@@ -45,19 +46,27 @@ export function registerJobTools(
     {
       title: "multix CLI catalog",
       description:
-        "List the multix CLI commands this server can run with multix_run. Without group: every group, its commands and whether you saved keys for it. With group: each command's positionals and options, which ones take files (pass https URLs in inputs) and the server's caps. Never returns key values.",
+        "List the multix CLI commands this server can run with multix_run. Without group: every group, its commands and whether you saved keys for it. With group: each command's positionals and options, which ones take files (pass https URLs in inputs) and the server's caps. With task: only the commands and verified models for that task (e.g. speech). With model: a verified model's inputs, voices and formats. Never returns key values.",
       inputSchema: toolInput({
         group: z
           .string()
           .regex(/^[a-z0-9-]{1,40}$/)
           .optional()
           .describe("Command group, e.g. gemini, replicate, media"),
+        task: z.enum(TASKS).optional().describe("Task filter, e.g. speech, image, image-to-video"),
+        model: z
+          .string()
+          .regex(MODEL_ID_RE)
+          .optional()
+          .describe("Model id to inspect, e.g. elevenlabs/tts/eleven-v4"),
       }),
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async (args) =>
-      runTool("multix_catalog", { group: args.group }, async () =>
-        catalogPayload(keys, args.group),
+      runTool(
+        "multix_catalog",
+        { group: args.group, task: args.task, model: args.model },
+        async () => catalogPayload(keys, args.group, { task: args.task, model: args.model }),
       ),
   );
 

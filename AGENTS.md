@@ -105,6 +105,11 @@ npm run check:mcp    # when worker/ or a client it imports changed
   `src/commands/check-helpers/setup-hints.ts`, `.env.example`, `README.md`,
   the docs site (`docs-site/src/content/docs/**`, English and Vietnamese), and
   `skill/SKILL.md`.
+- A new task-serving command must be added to
+  `src/capabilities/command-capabilities.ts` (or `UTILITY_COMMANDS` there if it
+  serves no task). Only models checked against the provider's own schema go in
+  `src/capabilities/model-registry.ts`, with their `source` URL and `verified_at`.
+  Regenerate the worker catalog with `npm run catalog` in `worker/`.
 - Keep provider HTTP clients free of `node:*` imports (take `fetch`, `apiKey`
   and `baseUrl` as inputs) so they can be reused by non-Node runtimes such as a
   Cloudflare Worker. File-system, env loading and downloads stay in the command

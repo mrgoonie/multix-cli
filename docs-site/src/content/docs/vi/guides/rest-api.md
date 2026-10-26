@@ -67,7 +67,7 @@ Mọi path đều tương đối với `/api/v1`.
 | `GET` | `/storage` | Cấu hình R2 không kèm credential, hoặc `{ "configured": false }`. |
 | `PUT` | `/storage` | Kiểm tra quyền truy cập bucket, rồi lưu cấu hình R2. |
 | `DELETE` | `/storage` | Xóa cấu hình R2. |
-| `GET` | `/catalog[?group=]` | Các lệnh CLI server chạy được; cùng payload với `multix_catalog`. |
+| `GET` | `/catalog[?group=&task=&model=]` | Các lệnh CLI server chạy được; cùng payload và bộ lọc với `multix_catalog`. |
 | `POST` | `/jobs` | Chạy một lệnh CLI; cùng input với `multix_run`. |
 | `GET` | `/jobs/{id}` | Trạng thái job, output, stdout và phần cuối stderr. |
 | `POST` | `/jobs/{id}/cancel` | Dừng một job đang chạy. |
@@ -192,7 +192,8 @@ giá trị này và không bao giờ chứa access key.
 `inputs`, `wait_seconds`; xem
 [Chạy lệnh CLI](/vi/guides/mcp-server/#chạy-lệnh-cli)). Dùng
 `GET /catalog?group=gemini` để xem các option của một lệnh và option nào nhận
-file.
+file, `GET /catalog?task=speech` để tìm các lệnh và model đã xác minh cho một
+task, và `GET /catalog?model=<id>` để xem input của một model đã xác minh.
 
 ```bash
 curl -s -X POST https://multix.zuey.me/api/v1/jobs \

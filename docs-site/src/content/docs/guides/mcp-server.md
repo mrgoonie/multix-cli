@@ -18,7 +18,7 @@ does not change how `multix` behaves on your machine.
 
 | Tool | Purpose |
 |---|---|
-| `multix_catalog` | The CLI commands `multix_run` can run. Without `group`: every group, its commands and whether you saved keys for it (`has_keys`). With `group`: each command's positionals and options, which ones take files, and the values the server forces. |
+| `multix_catalog` | The CLI commands `multix_run` can run. Without `group`: every group, its commands and whether you saved keys for it (`has_keys`). With `group`: each command's positionals and options, which ones take files, and the values the server forces. With `task` (such as `speech`): only the commands and verified models for that task; add `group` to stay in one group. With `model`: a verified model's inputs, voices and output formats and how to pass it to `multix_run`, or `verified: null` when its inputs are unknown. |
 | `multix_run` | Run one CLI command in its own container with your saved keys. Waits up to `wait_seconds` (default 25, max 40, container start included), then returns the result or a job ID to poll. At most 2 running jobs per account by default (`MULTIX_MAX_JOBS_PER_ACCOUNT`). |
 | `multix_job_status` | Read a `multix_run` job: status, output URLs, stdout and the tail of stderr. |
 | `multix_job_cancel` | Stop a running job and its container. |

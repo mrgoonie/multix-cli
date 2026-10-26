@@ -25,6 +25,22 @@ https://multix.zuey.me/llms.txt
    `speech`, `transcription`, `music`, `sfx`, `voice`, `3d`, `analysis`,
    `document`, `avatar-video`, `any`. Thêm `--provider <group>` để lọc,
    `--json` để nhận mảng JSON.
+   Các runner chung (`fal run`, `replicate run`, OpenRouter, Atlas) chuyển
+   thẳng mọi model id của provider và được đánh dấu `any_model` kèm
+   `model_scope`; multix chưa xác minh các id đó. Model đã xác minh có input đã
+   biết: `multix models --model <id>` hiển thị input, voice, định dạng đầu ra
+   và một ví dụ (id không có trong danh sách trả về `verified: null`), và
+   `fal run` cảnh báo khi `--input` không khớp với model. Speech qua fal được
+   liệt kê thành một dòng `fal run` chỉ nêu các model đã xác minh.
+   `multix models --task <task> --live` liệt kê thêm những model mà catalog
+   của fal và OpenRouter đang phục vụ, mỗi model được đánh dấu `verified` hay
+   không, kèm `listed` (`true`/`false`, hoặc `null` khi không đọc được catalog)
+   và trạng thái `missing` cho model đã xác minh mà catalog không còn liệt kê
+   (đã bị gỡ hoặc đổi tên). Catalog được cache một ngày trong
+   `~/.multix/cache/models` (`--refresh` để tải lại; `MULTIX_CACHE_DIR` và
+   `MULTIX_MODELS_TTL` đổi thư mục và TTL tính bằng giây). Khi offline, bản
+   cache cũ được dùng; không có bản nào thì catalog là `unavailable` và không
+   model nào được coi là có sẵn.
 2. **Kiểm tra miễn phí.** Thêm `--dry-run` vào bất kỳ lệnh nào: các bước kiểm
    tra cục bộ vẫn chạy (flag, file đầu vào, key), rồi request đầu tiên tới
    provider được in ra (method, URL không có query string, body với giá trị dài

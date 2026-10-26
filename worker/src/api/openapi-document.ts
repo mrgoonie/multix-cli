@@ -5,6 +5,7 @@
  * method is routed.
  */
 
+import { TASKS } from "../../../src/capabilities/capability-types.js";
 import { MAX_API_KEYS_PER_ACCOUNT } from "../accounts/api-key-store.js";
 import { EVENT_NAMES } from "../events/event-catalog.js";
 import {
@@ -183,7 +184,7 @@ export function openApiDocument(origin: string): Json {
         get: {
           summary: "CLI commands the server can run",
           description:
-            "Without group: every group, its commands and whether your saved keys cover it. With group: positionals, options, file inputs and server caps of each command.",
+            "Without group: every group, its commands and whether your saved keys cover it. With group: positionals, options, file inputs and server caps of each command. With task: only the commands and verified models for that task (combine with group to stay in one group). With model: a verified model's inputs, voices and output formats, or verified null when its inputs are unknown.",
           operationId: "getCatalog",
           parameters: [
             {
@@ -192,6 +193,20 @@ export function openApiDocument(origin: string): Json {
               required: false,
               schema: { type: "string" },
               example: "gemini",
+            },
+            {
+              name: "task",
+              in: "query",
+              required: false,
+              schema: { type: "string", enum: [...TASKS] },
+              example: "speech",
+            },
+            {
+              name: "model",
+              in: "query",
+              required: false,
+              schema: { type: "string" },
+              example: "elevenlabs/tts/eleven-v4",
             },
           ],
           responses: { ...ok("Catalog", { type: "object" }), ...ERRORS },
