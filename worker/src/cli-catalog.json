@@ -2147,7 +2147,7 @@
     },
     {
       "group": "openrouter",
-      "description": "OpenRouter: text-to-image, image-to-image, video generation (image-to-video) and text-to-speech via routed models — Veo, Seedance, Kling, Gemini TTS, ElevenLabs, Fish Audio, and others",
+      "description": "OpenRouter: text-to-image, image-to-image, video generation (image-to-video) text-to-speech and speech-to-text via routed models — Veo, Seedance, Kling, Gemini TTS, ElevenLabs, Fish Audio, Whisper, and others",
       "commands": [
         {
           "command": "openrouter generate",
@@ -2782,6 +2782,134 @@
               "long": "--model",
               "flags": "--model <id>",
               "description": "Show one model with all of its voices",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            }
+          ]
+        },
+        {
+          "command": "openrouter transcribe",
+          "description": "Speech-to-text via OpenRouter /audio/transcriptions (Whisper, GPT transcribe, Gemini 3.5 Transcribe, ElevenLabs Scribe, Voxtral, ...)",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--input",
+              "flags": "--input <file|url>",
+              "description": "Audio file (uploaded, at most 25 MB) or public http(s) URL (downloaded by the provider; not every provider accepts URLs)",
+              "required": true,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--model",
+              "flags": "--model <id>",
+              "description": "Transcription model (env OPENROUTER_STT_MODEL), e.g. openai/whisper-large-v3-turbo, google/gemini-3.5-transcribe, elevenlabs/scribe-v2, mistralai/voxtral-mini-transcribe-3-0",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "openai/whisper-large-v3-turbo"
+            },
+            {
+              "long": "--language",
+              "flags": "--language <code>",
+              "description": "Language of the audio: ISO-639 code (en, ja) or a tag like en-US (auto-detected when omitted)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--audio-format",
+              "flags": "--audio-format <fmt>",
+              "description": "Audio format when the input has no extension (mp3, wav, m4a, ogg, webm, flac, ...)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--no-model-check",
+              "flags": "--no-model-check",
+              "description": "Skip checking the model against OpenRouter's transcription catalog",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": true
+            },
+            {
+              "long": "--no-cost",
+              "flags": "--no-cost",
+              "description": "Skip reading the resolved model and cost from OpenRouter's generation record",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": true
+            },
+            {
+              "long": "--cost-wait",
+              "flags": "--cost-wait <s>",
+              "description": "Seconds to wait for OpenRouter to record the generation",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "20"
+            },
+            {
+              "long": "--timeout",
+              "flags": "--timeout <s>",
+              "description": "Seconds to wait for the transcript (10-3600); a timeout after sending may still be billed",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "300"
+            },
+            {
+              "long": "--output",
+              "flags": "--output <path>",
+              "description": "Copy the transcript to this path",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        },
+        {
+          "command": "openrouter transcription-models",
+          "description": "List OpenRouter speech-to-text models and their prices (live catalog)",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--model",
+              "flags": "--model <id>",
+              "description": "Show one model",
               "required": false,
               "takesValue": true,
               "valueOptional": false,

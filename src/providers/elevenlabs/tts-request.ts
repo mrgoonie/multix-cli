@@ -161,7 +161,7 @@ export function buildTtsRequest(input: TtsInput): TtsRequestPlan {
   }
   if (caps && !caps.ssmlPhoneme && SSML_PHONEME.test(text)) {
     warnings.push(
-      `${model} does not support SSML <phoneme> tags. Models that support them: ${modelsWith((c) => c.ssmlPhoneme)}${model === "eleven_v4" ? "; eleven_v4 reads IPA wrapped in slashes (/.../) instead" : ""}.`,
+      `${model} drops words wrapped in SSML <phoneme> tags from the audio; remove the tags or use a model that speaks them: ${modelsWith((c) => c.ssmlPhoneme)}.`,
     );
   }
 

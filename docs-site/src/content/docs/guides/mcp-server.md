@@ -45,6 +45,15 @@ JSON:
   given as the value instead.
 - `wait_seconds`: how long the call waits for the job, counted from the
   call, so starting the container is included (0–40, default 25).
+- `estimate`: `true` prices the run like the CLI's `--estimate` and returns
+  `{ estimate_only, command, estimate, budget? }` without starting a job.
+- `max_cost_usd`: a number ≥ 0. The job does not start unless the cost fits,
+  under the same rules as the CLI's `--max-cost`; a refusal comes back as a
+  tool error.
+- `cost_policy`: `"strict"` (default, proven ceiling only) or `"estimate"`
+  (accept the estimated high end). See
+  [Cost](/reference/for-ai-agents/#cost-estimate-spend-guard-and-receipt) for
+  which commands are priced.
 
 Call `multix_catalog` with a group to see exactly which options a command
 takes and which of them are files. An example call:
@@ -485,7 +494,8 @@ within your Cloudflare account. If another Worker already uses `1001` or
   resolution on the options the server knows for each command (see
   [Running CLI commands](#running-cli-commands)). Other inputs that may change
   the price, such as the raw JSON `--input` of `replicate run` or
-  `atlas run`, are not capped.
+  `atlas run`, are not capped. A caller can also set `max_cost_usd` to refuse
+  a run that may cost more.
 - **Logging and redaction:** successful calls are logged at `info` with tool
   name, command (or catalog group), outcome, and latency only. Prompts are never logged as
   a field. Failed calls are logged at `warn` (expected errors) or `error`, with

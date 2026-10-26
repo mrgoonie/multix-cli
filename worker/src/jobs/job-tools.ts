@@ -7,6 +7,13 @@
 
 import type { CallToolResult, McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
+import {
+  COST_POLICIES,
+  checkBudget,
+  estimateCommand,
+  parseCostPolicy,
+} from "../../../src/budget/command-cost.js";
+import { BudgetError } from "../../../src/core/errors.js";
 import type { Limits } from "../config.js";
 import type { ProviderKeys } from "../provider-secret-names.js";
 import { catalogPayload } from "./catalog-view.js";
@@ -32,6 +39,43 @@ const urlListSchema = z.union([
   z.string().max(2048),
   z.array(z.string().max(2048)).max(MAX_INPUT_FILES),
 ]);
+
+/**
+ * The CLI's --estimate / --max-cost for multix_run, from the same pricing
+ * code: an estimate-only call returns the price and never starts a job; a
+ * budget the run cannot be proven to fit throws (nothing is started).
+ */
+export function costPreflight(
+  command: string,
+  args: {
+    options?: Record<string, unknown>;
+    estimate?: boolean;
+    max_cost_usd?: number;
+    cost_policy?: string;
+  },
+): Record<string, unknown> | undefined {
+  if (!args.estimate && args.max_cost_usd === undefined) return undefined;
+  const estimate = estimateCommand(command, args.options ?? {});
+  let budget: Record<string, unknown> | undefined;
+  if (args.max_cost_usd !== undefined) {
+    const policy = parseCostPolicy(args.cost_policy);
+    try {
+      checkBudget(estimate, args.max_cost_usd, policy);
+      budget = { ok: true, max_cost_usd: args.max_cost_usd, policy };
+    } catch (error) {
+      if (!args.estimate || !(error instanceof BudgetError)) throw error;
+      budget = {
+        ok: false,
+        max_cost_usd: args.max_cost_usd,
+        policy,
+        code: error.code,
+        message: error.message,
+      };
+    }
+  }
+  if (!args.estimate) return undefined;
+  return { estimate_only: true, command, estimate, ...(budget ? { budget } : {}) };
+}
 
 export function registerJobTools(
   server: McpServer,
@@ -75,6 +119,21 @@ export function registerJobTools(
         options: z.record(z.string(), optionValueSchema).optional(),
         inputs: z.record(z.string(), urlListSchema).optional(),
         wait_seconds: z.number().int().min(0).max(MAX_WAIT_SECONDS).optional(),
+        estimate: z
+          .boolean()
+          .optional()
+          .describe("Price the run (range, units, rate source) and return without starting it"),
+        max_cost_usd: z
+          .number()
+          .min(0)
+          .optional()
+          .describe("Refuse to start unless the cost is at most this many USD"),
+        cost_policy: z
+          .enum(COST_POLICIES as [string, ...string[]])
+          .optional()
+          .describe(
+            "With max_cost_usd: strict (proven ceiling only, default) or estimate (accept the estimated high end)",
+          ),
       }),
       annotations: { readOnlyHint: false, openWorldHint: true },
     },
@@ -82,6 +141,8 @@ export function registerJobTools(
       const fields = { command: args.command.slice(0, 100) };
       return runTool("multix_run", fields, async () => {
         const prepared = prepareRun(args, limits);
+        const preflight = costPreflight(prepared.command, args);
+        if (preflight) return preflight;
         return runner.run(prepared, args.wait_seconds ?? DEFAULT_WAIT_SECONDS);
       });
     },

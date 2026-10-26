@@ -73,6 +73,7 @@ const LIST_COMMANDS = new Set([
   "models",
   "video-models",
   "speech-models",
+  "transcription-models",
   "voices",
   "avatars",
   "styles",
@@ -143,6 +144,7 @@ export function modelRows(program: Command): ModelRow[] {
           LIST_COMMANDS.has(c.name()) &&
           (c.name() !== "voices" || task === "speech") &&
           (c.name() !== "speech-models" || task === "speech") &&
+          (c.name() !== "transcription-models" || task === "transcription") &&
           (c.name() !== "video-models" || task.includes("video")),
       );
     const named = modelsFromDescription(modelOpt?.description ?? "");

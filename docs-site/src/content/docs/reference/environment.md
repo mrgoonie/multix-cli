@@ -34,6 +34,13 @@ The opt-ins `MULTIX_ALLOW_PROJECT_BASE_URL` and `MULTIX_LEGACY_CLAUDE_ENV`, and
 `MULTIX_HISTORY_FILE` (where the run ledger is written), are refused: a repository must not widen what it can do with your keys or pull in
 the `.claude` credentials from your home folder.
 
+`MULTIX_OPERATION_ID` is refused too. It names the logical operation a run's
+[cost receipt](/reference/for-ai-agents/#cost-receipt) belongs to, so several
+runs (submit, status polls, downloads, webhook replays) are counted once; the
+default is `<provider>:<job id>` or `run:<history id>`. It is per run, so set it
+in the shell for that run: one id in a project file would merge the spend of
+every run into one operation.
+
 [`.env.example`](https://github.com/mrgoonie/multix-cli/blob/main/.env.example)
 lists them, along with the two opt-ins. Any other name, for example `NODE_OPTIONS`, `npm_config_registry`,
 `LD_PRELOAD`, `HTTPS_PROXY` or `NODE_TLS_REJECT_UNAUTHORIZED`, is not loaded,
@@ -146,7 +153,8 @@ Use explicit overrides only when you need a different default. Available
 settings include `IMAGE_GEN_MODEL`, `VIDEO_GEN_MODEL`, `MULTIMODAL_MODEL`,
 `GEMINI_TTS_MODEL`, `OPENAI_IMAGE_MODEL`, `OPENAI_TTS_MODEL`,
 `OPENAI_STT_MODEL`, `OPENROUTER_IMAGE_MODEL`, `OPENROUTER_TTS_MODEL` (default
-`google/gemini-3.8-flash-tts`), `LEONARDO_BASE_URL`,
+`google/gemini-3.8-flash-tts`), `OPENROUTER_STT_MODEL` (default
+`openai/whisper-large-v3-turbo`), `LEONARDO_BASE_URL`,
 `BYTEPLUS_BASE_URL`, `BYTEPLUS_IMAGE_MODEL`, `BYTEPLUS_VIDEO_MODEL`,
 `BYTEPLUS_3D_MODEL`, `FAL_BASE_URL`, `FAL_IMAGE_MODEL`, `FAL_VIDEO_MODEL`, and
 `FAL_VIDEO_IMAGE_MODEL` (fal's image-to-video default, used when

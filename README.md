@@ -4,7 +4,7 @@ AI multimodal CLI — generate images/video/speech/music, analyze and transcribe
 
 ![Isometric technical illustration of multix media workflows](docs-site/public/images/multix-isometric-banner.png)
 
-Supports **OpenAI** (image, image edits, TTS, STT, optional Codex image driver), **Gemini** (analyze, transcribe, generate, Omni Flash video generation and editing, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation, image-to-video, TTS), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), **Cloudflare** (Workers AI image and speech; AI Gateway-routed Replicate video), **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment), **fal.ai** (generic model runner, image, video, text-to-speech via the fal queue API), and **Atlas Cloud** (any model: image, image edit, video, audio, 3D, with resumable async predictions), **Replicate** (generic model runner, image, video, async prediction status/cancel via the direct Replicate API), **Runway** (Gen-4.5 and Gen-4 Turbo video, Gen-4 images, resumable task status/cancel), **HeyGen** (v3 Video Agent prompt-to-video, scripted avatar videos, video translation, lipsync, TTS).
+Supports **OpenAI** (image, image edits, TTS, STT, optional Codex image driver), **Gemini** (analyze, transcribe, generate, Omni Flash video generation and editing, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation, image-to-video, TTS, STT), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), **Cloudflare** (Workers AI image and speech; AI Gateway-routed Replicate video), **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment), **fal.ai** (generic model runner, image, video, text-to-speech via the fal queue API), and **Atlas Cloud** (any model: image, image edit, video, audio, 3D, with resumable async predictions), **Replicate** (generic model runner, image, video, async prediction status/cancel via the direct Replicate API), **Runway** (Gen-4.5 and Gen-4 Turbo video, Gen-4 images, resumable task status/cancel), **HeyGen** (v3 Video Agent prompt-to-video, scripted avatar videos, video translation, lipsync, TTS).
 
 ## Documentation
 
@@ -60,6 +60,8 @@ multix guide                                  # the agent protocol in one screen
 multix models --task video --ready            # which command and model serve a task, key set or not
 multix fal image "a red fox" --dry-run --json # validate; show the request instead of sending it
 multix fal image "a red fox" --json           # one-line multix.result/v1 envelope on stdout
+multix elevenlabs tts --text "Hi" --estimate  # price range, units, rate and source; nothing is sent
+multix elevenlabs tts --text "Hi" --max-cost 0.01  # refuse before sending unless the cost fits
 multix history stats --by model               # runs, success rate, p50/p90 time, cost, credits, tokens
 multix rerun last                             # repeat a recorded run
 ```
@@ -68,9 +70,13 @@ The envelope lists `outputs` (path, bytes, MIME, SHA-256, dimensions, duration),
 `warnings`, `usage` as the provider reports it (tokens, `cost_usd`, `credits`,
 metrics, and `sources` naming the header or body field each money number came
 from), `error` (`code`, `retryable`, `retry_after_s`, `hint`) and `next`
-commands. With `--json`, exit codes are `2` usage or input, `3` key or setup,
-`4` temporary (retry), `5` rejected (quota, safety, model), `6` timed out (job may
-still run), `1` unknown; plain runs keep exit 1 and print the code and hint on
+commands, plus a `cost` receipt (`multix.cost/v1`: estimate, provider-reported
+and actual cost, variance; unknown stays `null`, never $0). Only
+`gemini generate-speech` and `elevenlabs tts` are priced so far; `--max-cost`
+refuses anything it cannot price. With `--json`, exit codes are `2` usage or
+input (including a refused `--max-cost`), `3` key or setup, `4` temporary
+(retry), `5` rejected (quota, safety, model), `6` timed out (job may still run),
+`1` unknown; plain runs keep exit 1 and print the code and hint on
 stderr. Each run is recorded in `~/.multix/history.jsonl` without keys or signed
 URLs (`MULTIX_HISTORY=0` turns it off). Details:
 [For AI agents](https://multix.zuey.me/reference/for-ai-agents/).
@@ -139,6 +145,7 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `OPENROUTER_IMAGE_MODEL` | No | Default OpenRouter model |
 | `OPENROUTER_FALLBACK_MODELS` | No | Comma-separated fallback model ids |
 | `OPENROUTER_TTS_MODEL` | No | Default `multix openrouter tts` model (default `google/gemini-3.8-flash-tts`) |
+| `OPENROUTER_STT_MODEL` | No | Default `multix openrouter transcribe` model (default `openai/whisper-large-v3-turbo`) |
 | `OPENAI_IMAGE_MODEL` | No | Default OpenAI image model (default `gpt-image-2`) |
 | `OPENAI_TTS_MODEL` | No | Default OpenAI TTS model (default `gpt-4o-mini-tts`) |
 | `OPENAI_STT_MODEL` | No | Default OpenAI STT model (default `gpt-4o-transcribe`) |
@@ -300,9 +307,17 @@ multix openrouter tts --text "Xin chào" [--model google/gemini-3.8-flash-tts] -
 # List speech models (live catalog) or one model's voices; read a generation's cost later
 multix openrouter speech-models [--model <id>]
 multix openrouter generation <id>
+
+# Speech-to-text (POST /api/v1/audio/transcriptions); --input is a local file (≤ 25 MB) or a public http(s) URL
+multix openrouter transcribe --input meeting.mp3 [--model openai/whisper-large-v3-turbo] [--language en] [--audio-format <fmt>] [--cost-wait 20] [--timeout 300] [--output <path>] [--json] [-v]
+
+# List transcription models and prices (live catalog)
+multix openrouter transcription-models [--model <id>]
 ```
 
 **TTS:** the model and voice are checked against the live speech catalog before the paid request (`--no-model-check` skips it); Gemini and ElevenLabs models need `--voice`. `--format auto` writes WAV (pcm wrapped locally) for pcm-only models (Gemini, HeyGen) and MP3 otherwise; MiniMax returns MP3 only. The request is never retried; the cost is read from OpenRouter for up to `--cost-wait` seconds (max 120) and can be fetched later with `multix openrouter generation <id>`.
+
+**STT:** the model is checked against the live transcription catalog before the paid request (`--no-model-check` skips it); not every provider accepts a URL input. The transcript is saved as `openrouter_transcript_<stamp>.txt` in the output directory (copied to `--output` if given); text mode prints only the path, `--json` includes the text, cost and generation ID. The request is never retried; on `UNKNOWN_REMOTE_STATE` check `multix openrouter generation <id>` before resending.
 
 **Supported i2i model families:** Gemini (default) and OpenAI gpt-image return `text+image` (modalities `["image","text"]`); Recraft accepts `--strength` (init-image strength 0..1); Flux / Sourceful are image-only (`["image"]`). The CLI picks the right `modalities` automatically based on the model id prefix.
 
@@ -543,7 +558,7 @@ multix elevenlabs models   # live: capabilities, languages, text limit, credit m
 - Most generation endpoints (TTS, SFX, Music, Voice Changer, Isolation) return audio bytes synchronously.
 - Dubbing is async: submit → poll → download per-language tracks.
 - Output format strings combine codec + sample rate + bitrate, e.g. `mp3_44100_128`, `pcm_24000`, `ulaw_8000`. TTS also takes `wav_*`, `opus_48000_*`, `alaw_8000`, `mp3_24000_48`, `pcm_32000` and `pcm_48000` (`mp3_44100_192` needs Creator tier; 44.1 kHz PCM/WAV need Pro).
-- TTS options are checked against the model before anything is sent. v4, v4 Turbo, v3 and Flash/Turbo v2.x have no style control, so a non-zero `--style` is rejected rather than silently ignored, and `--style 0` or `--no-speaker-boost` on a model without that control is reported as a warning and not sent. `eleven_v3` rejects `--previous-text`/`--next-text`; text over the model's limit (v3 5,000, v4 and multilingual v2 10,000, Flash/Turbo v2.x 30,000–40,000) is rejected; bracketed audio tags such as `[whispering]` are performed by v3/v4 and trigger a warning on models that would read them aloud. Unsupported `--language-code` values are rejected by the API (nothing is billed); `eleven_multilingual_v2` accepts the codes on its list without enforcing them, so the CLI warns. `--clone-strength` (0–1, Professional Voice Clones fine-tuned for v4) is sent only to v4 and v4 Turbo and rejected on other models. SSML `<break>` on v3/v4 and `<phoneme>` on any model but `eleven_flash_v2` trigger a warning. `--voice` must be a voice ID (letters, digits, `_`, `-`), and text length is counted in Unicode code points, as the API bills it. An unknown `--model` id is passed through unchecked with a warning.
+- TTS options are checked against the model before anything is sent. v4, v4 Turbo, v3 and Flash/Turbo v2.x have no style control, so a non-zero `--style` is rejected rather than silently ignored, and `--style 0` or `--no-speaker-boost` on a model without that control is reported as a warning and not sent. `eleven_v3` rejects `--previous-text`/`--next-text`; text over the model's limit (v3 5,000, v4 and multilingual v2 10,000, Flash/Turbo v2.x 30,000–40,000) is rejected; bracketed audio tags such as `[whispering]` are performed by v3/v4 and trigger a warning on models that would read them aloud. Unsupported `--language-code` values are rejected by the API (nothing is billed); `eleven_multilingual_v2` accepts the codes on its list without enforcing them, so the CLI warns. `--clone-strength` (0–1, Professional Voice Clones fine-tuned for v4) is sent only to v4 and v4 Turbo and rejected on other models. SSML `<break>` on v3/v4 triggers a warning, and so does `<phoneme>` on multilingual v2, Flash v2.5 and Turbo v2.5, which drop the tagged word from the audio (v4, v4 Turbo, v3, v3 conversational, Flash v2 and Turbo v2 speak it). `--voice` must be a voice ID (letters, digits, `_`, `-`), and text length is counted in Unicode code points, as the API bills it. An unknown `--model` id is passed through unchecked with a warning.
 - `--timestamps` calls `/with-timestamps` and saves character timings next to the audio as `<audio>.timestamps.json`. If the response carries no audio, the raw body is saved as `elevenlabs_tts_raw_*` before the command fails, since the request may already be billed.
 - After each TTS run the CLI prints the credits ElevenLabs reports in its `character-cost` header (v4 Turbo bills 0.5 credits per character, see `multix elevenlabs models`). With `--json` the same number is `usage.credits`, attributed in `usage.sources.credits`. multix never prints an estimate as credits charged.
 

@@ -207,7 +207,7 @@ describe("buildTtsRequest: clone strength, length, SSML and language checks", ()
     ).toEqual([]);
   });
 
-  it("warns on SSML <break> for v3/v4, and on <phoneme> for every model but eleven_flash_v2", () => {
+  it("warns on SSML <break> for v3/v4 only", () => {
     const brk = 'Wait <break time="1s" /> now.';
     expect(buildTtsRequest({ text: brk, model: "eleven_v4" }).warnings[0]).toMatch(
       /eleven_v4 does not support SSML <break>/,
@@ -216,16 +216,30 @@ describe("buildTtsRequest: clone strength, length, SSML and language checks", ()
       /eleven_v3 does not support SSML <break>/,
     );
     expect(buildTtsRequest({ text: brk, model: "eleven_flash_v2_5" }).warnings).toEqual([]);
-
-    const ph = '<phoneme alphabet="ipa" ph="ˈæktʃuəli">actually</phoneme>';
-    expect(buildTtsRequest({ text: ph, model: "eleven_flash_v2" }).warnings).toEqual([]);
-    const v4 = buildTtsRequest({ text: ph, model: "eleven_v4" }).warnings;
-    expect(v4).toHaveLength(1);
-    expect(v4[0]).toMatch(/does not support SSML <phoneme>.*eleven_flash_v2.*IPA/);
-    expect(buildTtsRequest({ text: ph, model: "eleven_multilingual_v2" }).warnings[0]).toMatch(
-      /eleven_multilingual_v2 does not support SSML <phoneme>/,
-    );
   });
+
+  const ph = 'Say <phoneme alphabet="ipa" ph="bəˈnɑːnə">banana</phoneme> now.';
+  it.each([
+    "eleven_v4",
+    "eleven_v4_turbo",
+    "eleven_v3",
+    "eleven_v3_conversational",
+    "eleven_flash_v2",
+    "eleven_turbo_v2",
+  ])("%s speaks <phoneme> words, so no warning", (model) => {
+    expect(buildTtsRequest({ text: ph, model }).warnings).toEqual([]);
+  });
+
+  it.each(["eleven_multilingual_v2", "eleven_flash_v2_5", "eleven_turbo_v2_5"])(
+    "%s drops <phoneme> words from the audio, so it warns",
+    (model) => {
+      const { warnings } = buildTtsRequest({ text: ph, model });
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toBe(
+        `${model} drops words wrapped in SSML <phoneme> tags from the audio; remove the tags or use a model that speaks them: eleven_v4, eleven_v4_turbo, eleven_v3, eleven_v3_conversational, eleven_flash_v2, eleven_turbo_v2.`,
+      );
+    },
+  );
 
   it("checkVoiceId accepts voice IDs and rejects path-unsafe input", () => {
     expect(() => checkVoiceId("kdmDKE6EkgrWrrykO9Qt")).not.toThrow();

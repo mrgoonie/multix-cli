@@ -67,6 +67,24 @@ describe("prepareRun: argv", () => {
     expect(parsed.opts.files).toEqual(["in/0-My_Clip.mp4", "in/1-b.png"]);
   }, 120_000);
 
+  it("downloads the openrouter transcribe input and keeps its extension for the audio format", async () => {
+    const prepared = run({
+      command: "openrouter transcribe",
+      options: { model: "openai/whisper-large-v3-turbo", language: "en" },
+      inputs: { input: "https://cdn.example.com/talk.m4a" },
+    });
+    expect(prepared.inputs).toEqual([
+      { url: "https://cdn.example.com/talk.m4a", path: "in/0-talk.m4a" },
+    ]);
+    const parsed = await parseWithCli(prepared.argv, "openrouter transcribe");
+    expect(parsed.opts).toMatchObject({
+      input: "in/0-talk.m4a",
+      model: "openai/whisper-large-v3-turbo",
+      language: "en",
+    });
+    rejects({ command: "openrouter transcribe", options: { input: "/etc/passwd" } }, /input/);
+  }, 120_000);
+
   it("fills a file positional from inputs and keeps it after --", () => {
     const prepared = run({
       command: "byteplus image-to-video",
