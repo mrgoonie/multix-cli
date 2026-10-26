@@ -84,9 +84,7 @@ describe("elevenlabs tts", () => {
     });
     const saved = fs.readdirSync(tmp).filter((f) => f.endsWith(".mp3"));
     expect(saved).toHaveLength(1);
-    expect(stdout.join("\n")).toContain(
-      "Characters billed (provider-reported character-cost): 3",
-    );
+    expect(stdout.join("\n")).toContain("Characters billed (provider-reported character-cost): 3");
   });
 
   it("rejects --style for eleven_v4_turbo before calling the API", async () => {
