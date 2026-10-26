@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from "vitest";
 import { ValidationError } from "../../../../src/core/errors.js";
-import { buildTtsRequest } from "../../../../src/providers/elevenlabs/tts-request.js";
+import { buildTtsRequest, checkVoiceId } from "../../../../src/providers/elevenlabs/tts-request.js";
 
 describe("buildTtsRequest: v4 family", () => {
   for (const model of ["eleven_v4", "eleven_v4_turbo"]) {
@@ -155,4 +155,123 @@ describe("buildTtsRequest: value validation", () => {
       /--seed must be an integer/,
     );
   });
+});
+
+describe("buildTtsRequest: --clone-strength", () => {
+  for (const model of ["eleven_v4", "eleven_v4_turbo"]) {
+    it(`${model}: sends voice_settings.clone_strength`, () => {
+      const { payload } = buildTtsRequest({ text: "Hi", model, cloneStrength: "0.3" });
+      expect(payload.voice_settings).toEqual({
+        stability: 0.5,
+        similarity_boost: 0.75,
+        clone_strength: 0.3,
+      });
+    });
+  }
+
+  it("is left out of the body unless set", () => {
+    const { payload } = buildTtsRequest({ text: "Hi", model: "eleven_v4" });
+    expect(payload.voice_settings).not.toHaveProperty("clone_strength");
+  });
+
+  it.each([
+    "eleven_v3",
+    "eleven_v3_conversational",
+    "eleven_multilingual_v2",
+    "eleven_flash_v2_5",
+    "eleven_flash_v2",
+    "eleven_turbo_v2_5",
+    "eleven_turbo_v2",
+  ])("%s rejects it like the API does (400 unsupported_model)", (model) => {
+    expect(() => buildTtsRequest({ text: "Hi", model, cloneStrength: "0" })).toThrow(
+      new RegExp(`${model} does not accept --clone-strength.*eleven_v4, eleven_v4_turbo`),
+    );
+  });
+
+  it.each(["1.5", "-0.1", "x", ""])("rejects --clone-strength %s", (value) => {
+    expect(() => buildTtsRequest({ text: "Hi", model: "eleven_v4", cloneStrength: value })).toThrow(
+      /--clone-strength must be a number from 0 to 1/,
+    );
+  });
+
+  it("an unknown model gets it unchecked", () => {
+    const { payload } = buildTtsRequest({ text: "Hi", model: "eleven_v9", cloneStrength: "0.2" });
+    expect(payload.voice_settings).toMatchObject({ clone_strength: 0.2 });
+  });
+});
+
+describe("buildTtsRequest: text length in code points", () => {
+  it("counts an astral character once, as ElevenLabs bills it", () => {
+    // U+20000 is two UTF-16 units but one character.
+    const text = "\u{20000}".repeat(5_000);
+    expect(text.length).toBe(10_000);
+    expect(() => buildTtsRequest({ text, model: "eleven_v3" })).not.toThrow();
+    expect(() => buildTtsRequest({ text: `${text}a`, model: "eleven_v3" })).toThrow(
+      /at most 5000 characters per request \(got 5001\)/,
+    );
+  });
+});
+
+describe("buildTtsRequest: SSML warnings", () => {
+  const BREAK = 'Hi. <break time="1.5s" /> Bye.';
+  const PHONEME =
+    'Say <phoneme alphabet="ipa" ph="t\u0259\u02c8me\u026a\u027eo\u028a">tomato</phoneme>.';
+
+  it.each(["eleven_v4", "eleven_v4_turbo", "eleven_v3", "eleven_v3_conversational"])(
+    "%s warns that <break> gives no pause",
+    (model) => {
+      const { warnings } = buildTtsRequest({ text: BREAK, model });
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatch(
+        /skips SSML <break> tags.*eleven_multilingual_v2, eleven_flash_v2_5, eleven_flash_v2, eleven_turbo_v2_5, eleven_turbo_v2/,
+      );
+    },
+  );
+
+  it.each([
+    "eleven_multilingual_v2",
+    "eleven_flash_v2_5",
+    "eleven_flash_v2",
+    "eleven_turbo_v2_5",
+    "eleven_turbo_v2",
+  ])("%s pauses for <break> and does not warn", (model) => {
+    expect(buildTtsRequest({ text: BREAK, model }).warnings).toEqual([]);
+  });
+
+  it.each(["eleven_multilingual_v2", "eleven_flash_v2_5", "eleven_turbo_v2_5"])(
+    "%s warns that a <phoneme> word is dropped",
+    (model) => {
+      const { warnings } = buildTtsRequest({ text: PHONEME, model });
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatch(/drops words wrapped in SSML <phoneme> tags.*eleven_v4/);
+    },
+  );
+
+  it.each([
+    "eleven_v4",
+    "eleven_v4_turbo",
+    "eleven_v3",
+    "eleven_v3_conversational",
+    "eleven_flash_v2",
+    "eleven_turbo_v2",
+  ])("%s speaks <phoneme> and does not warn", (model) => {
+    expect(buildTtsRequest({ text: PHONEME, model }).warnings).toEqual([]);
+  });
+
+  it("plain text with angle brackets is not mistaken for SSML", () => {
+    expect(buildTtsRequest({ text: "a < b > c", model: "eleven_v4" }).warnings).toEqual([]);
+  });
+});
+
+describe("checkVoiceId", () => {
+  it.each(["kdmDKE6EkgrWrrykO9Qt", "voice_1-a"])("accepts %s", (id) => {
+    expect(() => checkVoiceId(id)).not.toThrow();
+  });
+
+  it.each(["..", ".", "a b", "../models", "abc/def", "x".repeat(65), ""])(
+    "rejects %j before it reaches the URL path",
+    (id) => {
+      expect(() => checkVoiceId(id)).toThrow(/--voice must be an ElevenLabs voice ID/);
+    },
+  );
 });

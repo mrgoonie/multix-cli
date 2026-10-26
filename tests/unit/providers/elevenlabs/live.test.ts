@@ -2,11 +2,12 @@
  * Optional live smoke test against the real ElevenLabs API. Skipped unless
  * MULTIX_LIVE_TESTS=1 and ELEVENLABS_API_KEY are set. Synthesizes "Hi." once
  * with eleven_v4 and once with eleven_v4_turbo (about 5 characters of credits
- * in total), checks the capability table against the free GET /v1/models,
- * and never prints the key.
+ * in total), checks the capability table against the free GET /v1/models
+ * and the clone_strength rejection (a free 400), and never prints the key.
  */
 
 import { describe, expect, it } from "vitest";
+import { HttpError } from "../../../../src/core/errors.js";
 import { apiGet, apiPostBinaryWithHeaders } from "../../../../src/providers/elevenlabs/client.js";
 import {
   ELEVENLABS_TTS_MODEL_CAPS,
@@ -41,7 +42,7 @@ describe.skipIf(!enabled)("elevenlabs live smoke", () => {
 
   for (const model of ["eleven_v4", "eleven_v4_turbo"]) {
     it(`${model} returns MP3 audio and a character-cost header`, async () => {
-      const { payload, warnings } = buildTtsRequest({ text: "Hi.", model });
+      const { payload, warnings } = buildTtsRequest({ text: "Hi.", model, cloneStrength: "0" });
       expect(warnings).toEqual([]);
       const res = await apiPostBinaryWithHeaders(
         `text-to-speech/${TASK_DEFAULTS.ttsVoice}`,
@@ -53,4 +54,21 @@ describe.skipIf(!enabled)("elevenlabs live smoke", () => {
       expect(Number(res.headers.get("character-cost"))).toBeGreaterThan(0);
     }, 60_000);
   }
+
+  it("clone_strength is refused by a model the table says lacks it (free 400)", async () => {
+    const err = await apiPostBinaryWithHeaders(
+      `text-to-speech/${TASK_DEFAULTS.ttsVoice}`,
+      {
+        text: "Hi.",
+        model_id: "eleven_v3",
+        voice_settings: { stability: 0.5, similarity_boost: 0.75, clone_strength: 0 },
+      },
+      apiKey ?? "",
+      { query: { output_format: "mp3_22050_32" } },
+    ).catch((e: unknown) => e);
+    expect(ELEVENLABS_TTS_MODEL_CAPS.eleven_v3.cloneStrength).toBe(false);
+    expect(err).toBeInstanceOf(HttpError);
+    expect((err as HttpError).status).toBe(400);
+    expect((err as HttpError).snippet).toMatch(/unsupported_model/);
+  }, 30_000);
 });

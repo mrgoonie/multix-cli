@@ -151,20 +151,53 @@ describe("elevenlabs tts", () => {
     });
   });
 
-  it("--timestamps fails clearly on a response without JSON audio", async () => {
+  it("--timestamps keeps the raw body of a billed response without JSON audio", async () => {
     stubFetch(() => audioResponse());
-    await expect(run("--text", "Hi", "--model", "eleven_v4", "--timestamps")).rejects.toThrow(
-      /with-timestamps response was not JSON/,
+    const notJson = run("--text", "Hi", "--model", "eleven_v4", "--timestamps");
+    await expect(notJson).rejects.toThrow(
+      /with-timestamps response was not JSON; raw response saved to \S+elevenlabs_tts_raw_\S+\.bin/,
     );
+    const noAudio = JSON.stringify({ alignment: {} });
     stubFetch(
-      () =>
-        new Response(JSON.stringify({ alignment: {} }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
+      () => new Response(noAudio, { status: 200, headers: { "content-type": "application/json" } }),
     );
-    await expect(run("--text", "Hi", "--model", "eleven_v4", "--timestamps")).rejects.toThrow(
-      /carried no audio/,
+    const err = await run("--text", "Hi", "--model", "eleven_v4", "--timestamps").catch(
+      (e: Error) => e,
     );
+    expect(String(err)).toMatch(/carried no audio; raw response saved to/);
+    const raw = String(err).match(/saved to (\S+\.bin)/)?.[1] ?? "";
+    expect(fs.readFileSync(raw, "utf8")).toBe(noAudio);
+    const saved = fs.readdirSync(path.join(tmp, "out"));
+    expect(saved.filter((f) => f.endsWith(".bin"))).toHaveLength(2);
+    expect(saved.filter((f) => f.endsWith(".mp3"))).toHaveLength(0);
+  });
+
+  it("--clone-strength reaches the v4 body and is rejected for other models", async () => {
+    stubFetch(() => audioResponse());
+    await run("--text", "Hi", "--model", "eleven_v4", "--clone-strength", "0.2");
+    expect(requests[0]?.body.voice_settings).toEqual({
+      stability: 0.5,
+      similarity_boost: 0.75,
+      clone_strength: 0.2,
+    });
+    await expect(run("--text", "Hi", "--clone-strength", "0.2")).rejects.toThrow(
+      /eleven_multilingual_v2 does not accept --clone-strength/,
+    );
+    expect(requests).toHaveLength(1);
+  });
+
+  it("rejects a malformed voice ID before sending anything", async () => {
+    stubFetch(() => audioResponse());
+    await expect(run("--text", "Hi", "--voice", "..")).rejects.toThrow(
+      /--voice must be an ElevenLabs voice ID/,
+    );
+    expect(requests).toHaveLength(0);
+  });
+
+  it("warns about SSML the model does not perform and still generates", async () => {
+    stubFetch(() => audioResponse());
+    await run("--text", 'Hi <break time="1s"/> there', "--model", "eleven_v4");
+    expect(text()).toMatch(/eleven_v4 skips SSML <break> tags/);
+    expect(requests).toHaveLength(1);
   });
 });

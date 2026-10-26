@@ -15,7 +15,7 @@ import {
   TASK_DEFAULTS,
   extFromFormat,
 } from "../models.js";
-import { TTS_VOICE_DEFAULTS, buildTtsRequest } from "../tts-request.js";
+import { TTS_VOICE_DEFAULTS, buildTtsRequest, checkVoiceId } from "../tts-request.js";
 
 interface TimestampsResp {
   audio_base64?: string;
@@ -56,6 +56,10 @@ export function registerTtsCommand(parent: Command): void {
       "Disable speaker boost (default: enabled on models that have it: eleven_multilingual_v2, eleven_v3_conversational)",
     )
     .option(
+      "--clone-strength <n>",
+      "Professional Voice Clone adherence 0..1 (eleven_v4, eleven_v4_turbo only)",
+    )
+    .option(
       "--language-code <code>",
       "ISO 639-1 language code to enforce (the API rejects codes a model does not support)",
     )
@@ -74,6 +78,7 @@ export function registerTtsCommand(parent: Command): void {
       const text = opts.text ?? opts.prompt;
       if (!text) throw new ValidationError("Either --text or --prompt is required");
       if (!opts.voice) throw new ValidationError("--voice <id> is required");
+      checkVoiceId(opts.voice);
 
       const { payload, warnings } = buildTtsRequest({
         text,
@@ -83,6 +88,7 @@ export function registerTtsCommand(parent: Command): void {
         style: opts.style,
         speakerBoost:
           cmd.getOptionValueSource("speakerBoost") === "cli" ? opts.speakerBoost : undefined,
+        cloneStrength: opts.cloneStrength,
         languageCode: opts.languageCode,
         seed: opts.seed,
         previousText: opts.previousText,
@@ -101,15 +107,20 @@ export function registerTtsCommand(parent: Command): void {
       let bytes = res.bytes;
       let timings: TimestampsResp | undefined;
       if (opts.timestamps) {
+        let parsed: TimestampsResp | null | undefined;
         try {
-          timings = JSON.parse(res.bytes.toString("utf8")) as TimestampsResp;
-        } catch {
-          throw new ProviderError("with-timestamps response was not JSON", "elevenlabs");
+          parsed = JSON.parse(res.bytes.toString("utf8")) as TimestampsResp | null;
+        } catch {}
+        if (!parsed?.audio_base64) {
+          // The request was billed: keep what came back so it can be inspected.
+          const raw = saveBytes({ bytes: res.bytes, task: "tts_raw", ext: "bin", logger });
+          throw new ProviderError(
+            `with-timestamps response ${parsed === undefined ? "was not JSON" : "carried no audio"}; raw response saved to ${raw}`,
+            "elevenlabs",
+          );
         }
-        if (!timings.audio_base64) {
-          throw new ProviderError("with-timestamps response carried no audio", "elevenlabs");
-        }
-        bytes = Buffer.from(timings.audio_base64, "base64");
+        timings = parsed;
+        bytes = Buffer.from(parsed.audio_base64, "base64");
       }
 
       const dest = saveBytes({

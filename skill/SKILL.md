@@ -412,6 +412,8 @@ multix minimax generate-speech --text "..." --voice <id> --emotion neutral
 multix elevenlabs tts --text "Hello world" [--voice <voiceId>] [--model eleven_multilingual_v2]
 # Eleven v4 (quality) / v4 Turbo (low latency, 0.5 credits/char): 90+ languages, [audio tags], 10k chars.
 # No --style on v4/v3/Flash (rejected, not ignored); v3 rejects --previous-text/--next-text.
+# --clone-strength 0..1 (PVC adherence) on v4/v4 Turbo only. SSML <break> is skipped by v4/v3 and
+# <phoneme> drops the word on multilingual_v2/Flash v2.5 (CLI warns); use punctuation for pauses.
 multix elevenlabs tts --model eleven_v4 --text "[warmly] Xin chào!" --language-code vi [--timestamps]
 multix elevenlabs models   # live capabilities per model
 

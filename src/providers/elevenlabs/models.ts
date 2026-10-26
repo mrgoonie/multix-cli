@@ -30,6 +30,12 @@ export interface TtsModelCaps {
   contextText: boolean;
   /** Performs inline audio tags such as [whispering] instead of reading them aloud. */
   audioTags: boolean;
+  /** Accepts voice_settings.clone_strength (others answer 400 unsupported_model). */
+  cloneStrength: boolean;
+  /** Pauses for SSML <break time="..."/> (others skip the tag without a pause). */
+  ssmlBreak: boolean;
+  /** Speaks SSML <phoneme> pronunciations (others drop the tagged word entirely). */
+  ssmlPhoneme: boolean;
 }
 
 /**
@@ -39,7 +45,12 @@ export interface TtsModelCaps {
  * with 400 unsupported_model; v4 accepts them. v4 and v4 Turbo accept style
  * and speaker boost without error but ignore them ("Style and Speed sliders
  * are not available in Eleven v4"). Language support is left to the API,
- * which answers an unsupported language_code with 400 unsupported_language.
+ * which answers an unsupported language_code with 400 unsupported_language
+ * and accepts a supported one. clone_strength (0..1) is accepted by v4 and
+ * v4 Turbo only; every other model answers 400 unsupported_model. SSML, from
+ * the duration and transcript of the generated audio: v4, v4 Turbo, v3 and
+ * v3 conversational skip <break> with no pause; multilingual v2 and
+ * Flash/Turbo v2.5 drop a word wrapped in <phoneme> instead of speaking it.
  */
 export const ELEVENLABS_TTS_MODEL_CAPS: Record<ElevenLabsTtsModel, TtsModelCaps> = {
   eleven_v4: {
@@ -48,6 +59,9 @@ export const ELEVENLABS_TTS_MODEL_CAPS: Record<ElevenLabsTtsModel, TtsModelCaps>
     speakerBoost: false,
     contextText: true,
     audioTags: true,
+    cloneStrength: true,
+    ssmlBreak: false,
+    ssmlPhoneme: true,
   },
   eleven_v4_turbo: {
     maxChars: 10_000,
@@ -55,6 +69,9 @@ export const ELEVENLABS_TTS_MODEL_CAPS: Record<ElevenLabsTtsModel, TtsModelCaps>
     speakerBoost: false,
     contextText: true,
     audioTags: true,
+    cloneStrength: true,
+    ssmlBreak: false,
+    ssmlPhoneme: true,
   },
   eleven_v3: {
     maxChars: 5_000,
@@ -62,6 +79,9 @@ export const ELEVENLABS_TTS_MODEL_CAPS: Record<ElevenLabsTtsModel, TtsModelCaps>
     speakerBoost: false,
     contextText: false,
     audioTags: true,
+    cloneStrength: false,
+    ssmlBreak: false,
+    ssmlPhoneme: true,
   },
   eleven_v3_conversational: {
     maxChars: 5_000,
@@ -69,6 +89,9 @@ export const ELEVENLABS_TTS_MODEL_CAPS: Record<ElevenLabsTtsModel, TtsModelCaps>
     speakerBoost: true,
     contextText: false,
     audioTags: true,
+    cloneStrength: false,
+    ssmlBreak: false,
+    ssmlPhoneme: true,
   },
   eleven_multilingual_v2: {
     maxChars: 10_000,
@@ -76,6 +99,9 @@ export const ELEVENLABS_TTS_MODEL_CAPS: Record<ElevenLabsTtsModel, TtsModelCaps>
     speakerBoost: true,
     contextText: true,
     audioTags: false,
+    cloneStrength: false,
+    ssmlBreak: true,
+    ssmlPhoneme: false,
   },
   eleven_flash_v2_5: {
     maxChars: 40_000,
@@ -83,6 +109,9 @@ export const ELEVENLABS_TTS_MODEL_CAPS: Record<ElevenLabsTtsModel, TtsModelCaps>
     speakerBoost: false,
     contextText: true,
     audioTags: false,
+    cloneStrength: false,
+    ssmlBreak: true,
+    ssmlPhoneme: false,
   },
   eleven_flash_v2: {
     maxChars: 30_000,
@@ -90,6 +119,9 @@ export const ELEVENLABS_TTS_MODEL_CAPS: Record<ElevenLabsTtsModel, TtsModelCaps>
     speakerBoost: false,
     contextText: true,
     audioTags: false,
+    cloneStrength: false,
+    ssmlBreak: true,
+    ssmlPhoneme: true,
   },
   eleven_turbo_v2_5: {
     maxChars: 40_000,
@@ -97,6 +129,9 @@ export const ELEVENLABS_TTS_MODEL_CAPS: Record<ElevenLabsTtsModel, TtsModelCaps>
     speakerBoost: false,
     contextText: true,
     audioTags: false,
+    cloneStrength: false,
+    ssmlBreak: true,
+    ssmlPhoneme: false,
   },
   eleven_turbo_v2: {
     maxChars: 30_000,
@@ -104,6 +139,9 @@ export const ELEVENLABS_TTS_MODEL_CAPS: Record<ElevenLabsTtsModel, TtsModelCaps>
     speakerBoost: false,
     contextText: true,
     audioTags: false,
+    cloneStrength: false,
+    ssmlBreak: true,
+    ssmlPhoneme: true,
   },
 };
 

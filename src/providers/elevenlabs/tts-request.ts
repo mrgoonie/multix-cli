@@ -17,6 +17,8 @@ export interface TtsInput {
   style?: string;
   /** Set only when the user passed --no-speaker-boost (false) explicitly. */
   speakerBoost?: boolean;
+  /** Professional Voice Clone adherence (v4 family only). */
+  cloneStrength?: string;
   languageCode?: string;
   seed?: string;
   previousText?: string;
@@ -31,6 +33,10 @@ export interface TtsRequestPlan {
 export const TTS_VOICE_DEFAULTS = { stability: 0.5, similarityBoost: 0.75, style: 0 } as const;
 
 const AUDIO_TAG = /\[[a-z][a-z ,'-]{0,40}\]/i;
+const SSML_BREAK = /<\s*break\b/i;
+const SSML_PHONEME = /<\s*phoneme\b/i;
+/** ElevenLabs voice IDs are 20 letters and digits; this also keeps `.`/`..` out of the URL path. */
+const VOICE_ID = /^[A-Za-z0-9_-]{1,64}$/;
 const MAX_SEED = 4_294_967_295;
 
 function modelsWith(pick: (caps: TtsModelCaps) => boolean): string {
@@ -49,21 +55,33 @@ function unitInterval(flag: string, raw: string | undefined, fallback: number): 
   return n;
 }
 
+/** Rejects a voice ID that is not one, before it becomes a URL path segment. */
+export function checkVoiceId(voice: string): void {
+  if (!VOICE_ID.test(voice)) {
+    throw new ValidationError(
+      `--voice must be an ElevenLabs voice ID (letters, digits, "_" or "-"; got "${voice}"). List voices with: multix elevenlabs voices list`,
+    );
+  }
+}
+
 export function buildTtsRequest(input: TtsInput): TtsRequestPlan {
   const { text, model } = input;
   const caps = ttsModelCaps(model);
   const warnings: string[] = [];
+  // Code points, as ElevenLabs counts and bills them: an astral character such
+  // as 𠀀 is one character, not two UTF-16 units.
+  const chars = [...text].length;
 
   if (!caps) {
     warnings.push(
       `Model "${model}" is not in multix's ElevenLabs capability table; options are sent as given and not checked. List live models with: multix elevenlabs models`,
     );
-  } else if (text.length > caps.maxChars) {
+  } else if (chars > caps.maxChars) {
     const higher = Object.entries(ELEVENLABS_TTS_MODEL_CAPS)
-      .filter(([, c]) => c.maxChars >= text.length)
+      .filter(([, c]) => c.maxChars >= chars)
       .map(([id, c]) => `${id} (${c.maxChars})`);
     throw new ValidationError(
-      `${model} takes at most ${caps.maxChars} characters per request (got ${text.length}). Split the text${higher.length ? `, or use a model with a higher limit: ${higher.join(", ")}` : ""}.`,
+      `${model} takes at most ${caps.maxChars} characters per request (got ${chars}). Split the text${higher.length ? `, or use a model with a higher limit: ${higher.join(", ")}` : ""}.`,
     );
   }
 
@@ -94,6 +112,16 @@ export function buildTtsRequest(input: TtsInput): TtsRequestPlan {
     warnings.push(`${model} has no speaker boost; --no-speaker-boost has no effect.`);
   }
 
+  if (input.cloneStrength !== undefined) {
+    const strength = unitInterval("--clone-strength", input.cloneStrength, 0);
+    if (caps && !caps.cloneStrength) {
+      throw new ValidationError(
+        `${model} does not accept --clone-strength (the API answers 400 unsupported_model). Drop it, or use: ${modelsWith((c) => c.cloneStrength)}.`,
+      );
+    }
+    voiceSettings.clone_strength = strength;
+  }
+
   const payload: Record<string, unknown> = { text, model_id: model, voice_settings: voiceSettings };
 
   if (input.languageCode) payload.language_code = input.languageCode;
@@ -121,6 +149,16 @@ export function buildTtsRequest(input: TtsInput): TtsRequestPlan {
   if (caps && !caps.audioTags && AUDIO_TAG.test(text)) {
     warnings.push(
       `${model} reads bracketed audio tags such as [whispering] aloud. Models that perform them: ${modelsWith((c) => c.audioTags)}.`,
+    );
+  }
+  if (caps && !caps.ssmlBreak && SSML_BREAK.test(text)) {
+    warnings.push(
+      `${model} skips SSML <break> tags without pausing; use punctuation (an ellipsis or a dash) instead. Models that pause for <break>: ${modelsWith((c) => c.ssmlBreak)}.`,
+    );
+  }
+  if (caps && !caps.ssmlPhoneme && SSML_PHONEME.test(text)) {
+    warnings.push(
+      `${model} drops words wrapped in SSML <phoneme> tags instead of speaking them. Models that speak <phoneme>: ${modelsWith((c) => c.ssmlPhoneme)}.`,
     );
   }
 

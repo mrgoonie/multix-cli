@@ -29,34 +29,52 @@ one to three minutes.
 
 ## TTS models and options
 
-| Model | Use | Max characters | Style | Speaker boost | Previous/next text |
-|---|---|---|---|---|---|
-| `eleven_v4` | Highest quality, 90+ languages, audio tags | 10,000 | no | no | yes |
-| `eleven_v4_turbo` | v4 quality at low latency, 0.5 credits per character | 10,000 | no | no | yes |
-| `eleven_v3` | Expressive, audio tags | 5,000 | no | no | no |
-| `eleven_v3_conversational` | v3 tuned for dialogue | 5,000 | no | yes | no |
-| `eleven_multilingual_v2` (default) | 29 languages | 10,000 | yes | yes | yes |
-| `eleven_flash_v2_5`, `eleven_turbo_v2_5` | Low latency, 32 languages | 40,000 | no | no | yes |
-| `eleven_flash_v2`, `eleven_turbo_v2` | English only | 30,000 | no | no | yes |
+| Model | Use | Max characters | Style | Speaker boost | Clone strength | Previous/next text | SSML `<break>` | SSML `<phoneme>` |
+|---|---|---|---|---|---|---|---|---|
+| `eleven_v4` | Highest quality, 90+ languages, audio tags | 10,000 | no | no | yes | yes | no | yes |
+| `eleven_v4_turbo` | v4 quality at low latency, 0.5 credits per character | 10,000 | no | no | yes | yes | no | yes |
+| `eleven_v3` | Expressive, audio tags | 5,000 | no | no | no | no | no | yes |
+| `eleven_v3_conversational` | v3 tuned for dialogue | 5,000 | no | yes | no | no | no | yes |
+| `eleven_multilingual_v2` (default) | 29 languages | 10,000 | yes | yes | no | yes | yes | no |
+| `eleven_flash_v2_5`, `eleven_turbo_v2_5` | Low latency, 32 languages | 40,000 | no | no | no | yes | yes | no |
+| `eleven_flash_v2`, `eleven_turbo_v2` | English only | 30,000 | no | no | no | yes | yes | yes |
 
 ```bash
 multix elevenlabs tts --model eleven_v4 --text "[warmly] Xin chào!" --language-code vi
 multix elevenlabs tts --model eleven_v4_turbo --text "Hello" --timestamps --format wav_24000
+multix elevenlabs tts --model eleven_v4 --voice <pvc-voice-id> --clone-strength 0.3 --text "Hello"
 multix elevenlabs models   # live capabilities, languages, text limit, credit multiplier
 ```
 
-The CLI checks options against the model before sending anything. A non-zero
-`--style` on a model without style control, `--previous-text`/`--next-text` on
-`eleven_v3`, or text over the model's limit is rejected with the models that do
-support it. `--style 0` or `--no-speaker-boost` on a model without that control
-is reported as a warning and not sent. Audio tags such as `[whispering]` are
-performed by v3 and v4; other models read them aloud, so the CLI warns. The API
-itself rejects a `--language-code` the model does not support; nothing is
-billed. An unknown `--model` id is passed through unchecked with a warning.
+The CLI checks options against the model before sending anything:
+
+- Rejected, with the models that do support it: a non-zero `--style` on a model
+  without style control (Flash/Turbo accept it and bill for audio that ignores
+  it), `--clone-strength` outside v4 and v4 Turbo, `--previous-text`/`--next-text`
+  on `eleven_v3`, and text over the model's limit. The limit counts characters
+  (code points) as ElevenLabs does, so an emoji or other astral character counts
+  once.
+- Rejected before the request: a `--voice` that is not a voice ID (letters,
+  digits, `_` or `-`).
+- Warned and not sent: `--style 0` or `--no-speaker-boost` on a model without
+  that control.
+- Warned, text sent as is: audio tags such as `[whispering]` on models that read
+  them aloud (all but v3 and v4), SSML `<break>` on v4, v4 Turbo, v3 and v3
+  conversational (skipped without a pause), and SSML `<phoneme>` on multilingual
+  v2 and Flash/Turbo v2.5 (the tagged word is dropped instead of spoken).
+- Left to the API: `--language-code`. It rejects a code the model does not
+  support, and nothing is billed.
+- An unknown `--model` id is passed through unchecked with a warning.
+
+`--clone-strength` (0 to 1) sets how closely v4 follows a Professional Voice
+Clone.
 
 `--timestamps` saves character timings next to the audio as
-`<audio>.timestamps.json`. TTS also accepts `wav_*`, `opus_48000_*`,
-`alaw_8000`, `mp3_24000_48`, `pcm_32000` and `pcm_48000` formats.
+`<audio>.timestamps.json`. If a billed response carries no audio, its raw body
+is saved as `elevenlabs_tts_raw_<stamp>.bin` and the error names that file.
+
+TTS also accepts `wav_*`, `opus_48000_*`, `alaw_8000`, `mp3_24000_48`,
+`pcm_32000` and `pcm_48000` formats.
 
 After each run the CLI prints the credits ElevenLabs reports in its
 `character-cost` header. With `--json` the same number is `usage.credits`, and
