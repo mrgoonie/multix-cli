@@ -53,6 +53,12 @@ const USAGE_HEADERS = [
   "x-ratelimit-remaining-requests",
   "x-ratelimit-remaining-tokens",
 ];
+/**
+ * Key paths that name a quote rather than a charge (Runway estimatedCost,
+ * expected_credits, ...). They stay in metrics but never become cost_usd or
+ * credits, which must be what the provider says it charged.
+ */
+const ESTIMATE_PATH = /(estimat|quote|expected)/i;
 const MAX_METRICS = 40;
 const MAX_DEPTH = 5;
 
@@ -139,6 +145,7 @@ export function extractUsage(body: unknown, headers?: Headers | null): ResponseU
   }
   for (const [path, value] of Object.entries(out.metrics)) {
     const leaf = path.split(".").pop() ?? path;
+    if (ESTIMATE_PATH.test(path)) continue;
     if (
       out.cost_usd === undefined &&
       /^(cost|total_cost|cost_usd|usd)$/i.test(leaf) &&
