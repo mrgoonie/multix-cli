@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.15.0](https://github.com/mrgoonie/multix-cli/compare/v1.14.1...v1.15.0) (2026-10-26)
+
+
+### Added
+
+* **elevenlabs:** support v4 and v4 Turbo TTS with model-specific controls ([#308](https://github.com/mrgoonie/multix-cli/issues/308)) ([0e5ca9c](https://github.com/mrgoonie/multix-cli/commit/0e5ca9cee17d29d7e25189ef8d2c758347036fd8)), closes [#292](https://github.com/mrgoonie/multix-cli/issues/292)
+* **fal:** typed text-to-speech with verified audio output ([#305](https://github.com/mrgoonie/multix-cli/issues/305)) ([26c69b0](https://github.com/mrgoonie/multix-cli/commit/26c69b0b5b972a5201e878b0c200a848c0478c9f)), closes [#291](https://github.com/mrgoonie/multix-cli/issues/291)
+
 ## [1.14.1](https://github.com/mrgoonie/multix-cli/compare/v1.14.0...v1.14.1) (2026-10-26)
 
 
