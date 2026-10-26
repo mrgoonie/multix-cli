@@ -10,6 +10,7 @@ import { downloadFile } from "../../../core/http-client.js";
 import { refUrl, resolveImageInput } from "../../../core/image-input.js";
 import type { Logger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
+import { outputStamp } from "../../../core/output-name.js";
 import type { BytePlusClient } from "../client.js";
 import { BYTEPLUS_DEFAULTS } from "../models.js";
 import type { ImageGenerationRequest, ImageGenerationResponse } from "../types.js";
@@ -93,7 +94,7 @@ export async function generateSeedream(
   const res = await client.post<ImageGenerationResponse>("/images/generations", body, logger);
 
   const items = res.data ?? [];
-  const ts = Date.now();
+  const ts = outputStamp();
   const outDir = getOutputDir();
   const saved: SavedFile[] = [];
 

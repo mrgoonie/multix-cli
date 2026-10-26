@@ -16,6 +16,7 @@ import {
   type FetchLike,
   type FetchJsonOptions as HttpJsonOptions,
   fetchJson,
+  parseRetryAfter,
 } from "./fetch-json.js";
 import { redactUrl } from "./redact.js";
 import { fetchWithValidatedRedirects } from "./redirect-fetch.js";
@@ -137,7 +138,12 @@ export async function downloadToFile(url: string, opts: DownloadOptions): Promis
 
   if (!response.ok) {
     await response.body?.cancel().catch(() => {});
-    throw new HttpError(response.status, "(download failed)", finalUrl);
+    throw new HttpError(
+      response.status,
+      "(download failed)",
+      finalUrl,
+      parseRetryAfter(response.headers.get("retry-after")),
+    );
   }
   if (!response.body) {
     throw new HttpError(0, "Response body is null", finalUrl);

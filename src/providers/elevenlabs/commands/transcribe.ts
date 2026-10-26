@@ -8,6 +8,7 @@ import path from "node:path";
 import type { Command } from "commander";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
+import { outputStamp } from "../../../core/output-name.js";
 import { apiPostMultipart, readFileAsBlob, requireElevenLabsKey } from "../client.js";
 import { ELEVENLABS_STT_MODELS, TASK_DEFAULTS } from "../models.js";
 
@@ -65,7 +66,7 @@ export function registerTranscribeCommand(parent: Command): void {
       const dir = getOutputDir();
       const dest = opts.output
         ? path.resolve(opts.output)
-        : path.join(dir, `elevenlabs_transcribe_${Date.now()}.${ext}`);
+        : path.join(dir, `elevenlabs_transcribe_${outputStamp()}.${ext}`);
 
       let body: string;
       switch (opts.format) {

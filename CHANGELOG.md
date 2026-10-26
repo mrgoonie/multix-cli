@@ -5,6 +5,78 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.0](https://github.com/mrgoonie/multix-cli/compare/v1.15.0...v1.16.0) (2026-10-26)
+
+
+### Added
+
+* **openrouter:** add text-to-speech via /audio/speech ([#313](https://github.com/mrgoonie/multix-cli/issues/313)) ([18dd61b](https://github.com/mrgoonie/multix-cli/commit/18dd61b17ccdbb82b481cc53ff6cfa5ed0912ebe)), closes [#290](https://github.com/mrgoonie/multix-cli/issues/290)
+
+## [1.15.0](https://github.com/mrgoonie/multix-cli/compare/v1.14.1...v1.15.0) (2026-10-26)
+
+
+### Added
+
+* **elevenlabs:** support v4 and v4 Turbo TTS with model-specific controls ([#308](https://github.com/mrgoonie/multix-cli/issues/308)) ([0e5ca9c](https://github.com/mrgoonie/multix-cli/commit/0e5ca9cee17d29d7e25189ef8d2c758347036fd8)), closes [#292](https://github.com/mrgoonie/multix-cli/issues/292)
+* **fal:** typed text-to-speech with verified audio output ([#305](https://github.com/mrgoonie/multix-cli/issues/305)) ([26c69b0](https://github.com/mrgoonie/multix-cli/commit/26c69b0b5b972a5201e878b0c200a848c0478c9f)), closes [#291](https://github.com/mrgoonie/multix-cli/issues/291)
+
+## [1.14.1](https://github.com/mrgoonie/multix-cli/compare/v1.14.0...v1.14.1) (2026-10-26)
+
+
+### Fixed
+
+* **agent:** never report a provider's estimated cost as credits or cost spent ([#301](https://github.com/mrgoonie/multix-cli/issues/301)) ([f8b98ef](https://github.com/mrgoonie/multix-cli/commit/f8b98ef6ee5201b5f02f5ded930ce4a87f19ae17)), closes [#298](https://github.com/mrgoonie/multix-cli/issues/298)
+
+## [1.14.0](https://github.com/mrgoonie/multix-cli/compare/v1.13.0...v1.14.0) (2026-10-25)
+
+
+### Added
+
+* **fal:** local media upload and detached queue jobs with durable receipts ([#286](https://github.com/mrgoonie/multix-cli/issues/286)) ([41f7d1b](https://github.com/mrgoonie/multix-cli/commit/41f7d1bc63fb8c6df2ea7482a3b6a6e320e36a02)), closes [#284](https://github.com/mrgoonie/multix-cli/issues/284) [#285](https://github.com/mrgoonie/multix-cli/issues/285)
+
+## [1.13.0](https://github.com/mrgoonie/multix-cli/compare/v1.12.5...v1.13.0) (2026-10-21)
+
+
+### Added
+
+* **cli:** agent mode with JSON envelope, error classes, dry run, run history and model discovery ([#282](https://github.com/mrgoonie/multix-cli/issues/282)) ([bfd7e60](https://github.com/mrgoonie/multix-cli/commit/bfd7e6024a546967f41dd4416d4853e061048eb2)), closes [#277](https://github.com/mrgoonie/multix-cli/issues/277)
+
+## [1.12.5](https://github.com/mrgoonie/multix-cli/compare/v1.12.4...v1.12.5) (2026-10-21)
+
+
+### Fixed
+
+* **replicate:** trust Replicate's R2 output host and retry transient download errors ([#279](https://github.com/mrgoonie/multix-cli/issues/279)) ([b68a769](https://github.com/mrgoonie/multix-cli/commit/b68a7699181b51d316be84cdccabd4bb82705f45))
+
+## [1.12.4](https://github.com/mrgoonie/multix-cli/compare/v1.12.3...v1.12.4) (2026-10-20)
+
+
+### Fixed
+
+* **gemini:** bound Omni inline video bodies and make --wait-timeout an overall deadline ([#274](https://github.com/mrgoonie/multix-cli/issues/274)) ([5d3910f](https://github.com/mrgoonie/multix-cli/commit/5d3910fe87818cbba7e17a927ae5b65b2390a9ea)), closes [#256](https://github.com/mrgoonie/multix-cli/issues/256)
+* **worker:** force Gemini Omni Flash for remote edit-video and extend-video ([#273](https://github.com/mrgoonie/multix-cli/issues/273)) ([10ddfea](https://github.com/mrgoonie/multix-cli/commit/10ddfead2a7735c56fa058895b3139f128b84362))
+
+## [1.12.3](https://github.com/mrgoonie/multix-cli/compare/v1.12.2...v1.12.3) (2026-10-20)
+
+
+### Fixed
+
+* **gemini:** send the API key only to Files API paths in Veo downloads ([#263](https://github.com/mrgoonie/multix-cli/issues/263)) ([4aa1d31](https://github.com/mrgoonie/multix-cli/commit/4aa1d310b2e3dc084a9f7a09448f7690cc21f93d)), closes [#259](https://github.com/mrgoonie/multix-cli/issues/259) [#268](https://github.com/mrgoonie/multix-cli/issues/268)
+
+## [1.12.2](https://github.com/mrgoonie/multix-cli/compare/v1.12.1...v1.12.2) (2026-10-20)
+
+
+### Documentation
+
+* **worker:** state that the video cap bounds each Gemini extend, not a chain ([#266](https://github.com/mrgoonie/multix-cli/issues/266)) ([45088cb](https://github.com/mrgoonie/multix-cli/commit/45088cb8f0e645568a2db9420045ef9c1d63bbd9))
+
+## [1.12.1](https://github.com/mrgoonie/multix-cli/compare/v1.12.0...v1.12.1) (2026-10-20)
+
+
+### Fixed
+
+* **core:** add a random suffix to timestamp-based output file names ([#265](https://github.com/mrgoonie/multix-cli/issues/265)) ([a662f3a](https://github.com/mrgoonie/multix-cli/commit/a662f3a33d655974ce0362d513076931d5a79e8d)), closes [#260](https://github.com/mrgoonie/multix-cli/issues/260)
+
 ## [1.12.0](https://github.com/mrgoonie/multix-cli/compare/v1.11.0...v1.12.0) (2026-10-20)
 
 

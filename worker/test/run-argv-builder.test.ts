@@ -216,6 +216,7 @@ describe("prepareRun: argv", () => {
     expect(edit.argv.some((a) => a.startsWith("--duration"))).toBe(false);
     // The source's resolution is not checked, so an allowed one is sent.
     expect(parsedEdit.opts.resolution).toBe("720p");
+    expect(parsedEdit.opts.model).toBe("gemini-omni-1.1-flash");
 
     const extend = run({
       command: "gemini extend-video",
@@ -225,6 +226,16 @@ describe("prepareRun: argv", () => {
     expect(parsedExtend.opts.interactionId).toBe("int_123");
     expect(parsedExtend.opts.wait).toBe(false);
     expect(parsedExtend.opts.duration).toBe("5");
+    expect(parsedExtend.opts.model).toBe("gemini-omni-1.1-flash");
+    for (const command of ["gemini edit-video", "gemini extend-video"]) {
+      rejects(
+        {
+          command,
+          options: { prompt: "p", "interaction-id": "int_1", model: "gemini-omni-2-pro" },
+        },
+        /model must be gemini-omni-1.1-flash/,
+      );
+    }
 
     const status = run({
       command: "gemini video-status",
@@ -337,6 +348,17 @@ describe("prepareRun: rejections", () => {
       { command: "replicate run", args: ["a/b"], options: { input: "{}", file: "image=x.png" } },
       /not available/,
     ],
+    [
+      "fal run local file",
+      { command: "fal run", args: ["a/b"], options: { file: "video_url=/etc/passwd" } },
+      /not available/,
+    ],
+    [
+      "fal run receipt path",
+      { command: "fal run", args: ["a/b"], options: { input: "{}", receipt: "/tmp/r.json" } },
+      /not available/,
+    ],
+    ["fal upload path as an arg", { command: "fal upload", args: ["/etc/hosts"] }, /inputs\.file/],
     ["missing required option", { command: "gemini generate" }, /options\.prompt is required/],
     ["missing required file", { command: "openai transcribe" }, /inputs\.input is required/],
     ["too many args", { command: "leonardo generate", args: ["a", "b"] }, /Too many args/],

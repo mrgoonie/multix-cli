@@ -8,6 +8,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Logger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
+import { outputStamp } from "../../../core/output-name.js";
 import { apiPost } from "../client.js";
 
 interface SpeechResponse {
@@ -83,7 +84,7 @@ export async function generateMinimaxSpeech(opts: {
   const audioBytes = Buffer.from(audioHex, "hex");
   const ext = ["mp3", "wav", "flac"].includes(outputFormat) ? outputFormat : "mp3";
   const outDir = getOutputDir();
-  const dest = path.join(outDir, `minimax_speech_${Date.now()}.${ext}`);
+  const dest = path.join(outDir, `minimax_speech_${outputStamp()}.${ext}`);
 
   fs.writeFileSync(dest, audioBytes);
   logger?.success(`Saved: ${dest} (${(audioBytes.length / 1024).toFixed(1)} KB)`);

@@ -72,7 +72,7 @@ export function addVideoFormatOptions(
   if (opts.duration) {
     cmd.option(
       "--duration <seconds>",
-      `Omni only: video length, ${OMNI_MIN_DURATION_SECONDS}-${OMNI_MAX_DURATION_SECONDS} seconds (model default when omitted)`,
+      `Omni only: ${opts.followUp ? "length of the new continuation" : "video length"}, ${OMNI_MIN_DURATION_SECONDS}-${OMNI_MAX_DURATION_SECONDS} seconds (model default when omitted)`,
     );
   }
   return cmd;
@@ -90,7 +90,7 @@ export function addOmniFlowOptions(cmd: Command): Command {
     )
     .option(
       "--wait-timeout <ms>",
-      "Omni: how long to wait for the video",
+      "Omni: deadline for uploads, submit and polling (saving the video has its own budget)",
       String(OMNI_DEFAULT_WAIT_MS),
     );
 }

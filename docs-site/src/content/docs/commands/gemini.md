@@ -67,11 +67,20 @@ multix gemini i2v ./first-frame.png --prompt "camera pans left" --last-frame ./l
   start image first and the closing image second, so the video opens on the
   first and ends on the second.
 - Each request is stored and runs in the background. The interaction id is
-  written to `gemini_omni_<timestamp>.json` in the output directory before
+  written to `gemini_omni_<timestamp>-<random>.json` in the output directory before
   polling starts. On success stdout prints `Generated video: <path>` and
   `Interaction ID: <id>`.
 - `--no-wait` submits, prints `{interaction_id, status, session}` as JSON and
-  exits. `--wait-timeout <ms>` sets how long to wait (default 15 minutes).
+  exits. `--wait-timeout <ms>` (default 15 minutes) is one deadline for the
+  whole run up to the finished video: uploads, the submit and polling all
+  count against it, and once it has run out nothing is submitted. A submit
+  that has started may still take up to 2 minutes, so an accepted (billed)
+  job never loses its id. Saving the finished video has its own budget (up to
+  5 minutes for the file to become ready, then up to 10 minutes to download).
+- A video that comes back inline is read only up to the base64 size of
+  `MULTIX_MAX_DOWNLOAD_MB` plus 64 MB of JSON, and never more than 384 MB; a
+  larger one fails at once with a `video-status` resume command instead of
+  being downloaded on every poll.
 - `--no-store` sends one synchronous request that Google does not keep: the
   result cannot be edited, extended or resumed, and `--no-wait` cannot be
   combined with it.

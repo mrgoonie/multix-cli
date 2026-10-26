@@ -7,6 +7,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Logger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
+import { outputStamp } from "../../../core/output-name.js";
 import { maybeDownloadThumb } from "../../../core/video-thumb.js";
 import { apiPost, downloadMinimaxFile, pollAsyncTask } from "../client.js";
 
@@ -87,7 +88,7 @@ export async function generateMinimaxVideo(opts: {
   }
 
   const outDir = getOutputDir();
-  const dest = path.join(outDir, `minimax_video_${Date.now()}.mp4`);
+  const dest = path.join(outDir, `minimax_video_${outputStamp()}.mp4`);
 
   try {
     await downloadMinimaxFile(fileId, apiKey, dest, logger);

@@ -56,7 +56,17 @@ export interface CommandPolicy {
 }
 
 /** Commands that act on the local machine or need an interactive login. */
-export const EXCLUDED_COMMANDS: ReadonlySet<string> = new Set(["check", "update"]);
+export const EXCLUDED_COMMANDS: ReadonlySet<string> = new Set([
+  "check",
+  "update",
+  // Agent tooling that reads the local run ledger or key setup; remote callers use multix_catalog.
+  "models",
+  "guide",
+  "history list",
+  "history show",
+  "history stats",
+  "rerun",
+]);
 
 /** Options no remote command may use: stdin is not available in the container. */
 export const GLOBALLY_UNSUPPORTED_OPTIONS: ReadonlySet<string> = new Set(["stdin-ext"]);
@@ -96,11 +106,18 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   // An edit has no --duration: its length is the source's (Google limits an
   // uploaded clip to 10 s). An extend is billed for the new continuation only,
   // which --duration caps; the returned video also contains the source.
+  // MULTIX_MCP_MAX_VIDEO_SECONDS therefore bounds each call, not a chain:
+  // extending a stored interaction again grows the clip past the cap, and an
+  // edit of that interaction keeps its full length. The runner cannot see a
+  // stored interaction's length (Google stops a chain at 40 s), and every call
+  // runs on the caller's own key.
   "gemini edit-video": {
+    forced: OMNI_MODEL,
     fileOptions: { video: "file", "reference-images": "file" },
     caps: { resolution: ["resolution"], fillResolution: true },
   },
   "gemini extend-video": {
+    forced: OMNI_MODEL,
     fileOptions: { video: "file", "reference-images": "file" },
     caps: OMNI_VIDEO_CAPS,
   },
@@ -119,6 +136,7 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
     urlOptions: ["image-url", "last-frame-url"],
     caps: VIDEO_CAPS,
   },
+  "openrouter tts": { fileOptions: { "text-file": "file", "turns-file": "file" } },
   "leonardo generate": { caps: { count: ["num"] } },
   "leonardo image-to-image": { caps: { count: ["num"] } },
   "leonardo video": { caps: { resolution: ["resolution"] } },
@@ -150,8 +168,15 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   "elevenlabs voices design": { nameOptions: ["output-prefix"] },
   "elevenlabs isolate": { fileOptions: { input: "file" } },
   "elevenlabs align": { fileOptions: { input: "file", "text-file": "file" } },
+  // `--file key=path` maps a model field to a local file and `--receipt` takes
+  // a local path; neither is expressible remotely (pass URLs in --input).
+  "fal run": { unsupported: ["file", "receipt"] },
+  "fal upload": { filePositionals: ["file"] },
   "fal image": { caps: IMAGE_COUNT },
   "fal video": { urlOptions: ["image-url"], caps: { duration: ["duration"] } },
+  // The text file comes from `inputs`; `--receipt` takes a local path (the
+  // detached receipt is still printed, and `fal status` / `fal result` resume it).
+  "fal tts": { fileOptions: { "text-file": "file" }, unsupported: ["receipt"] },
   "atlas image": { caps: IMAGE_COUNT },
   "atlas image-to-image": { fileOptions: { ref: "file" }, caps: IMAGE_COUNT },
   "atlas video": { caps: VIDEO_CAPS },

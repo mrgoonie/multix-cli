@@ -12,6 +12,7 @@ import path from "node:path";
 import type { Command } from "commander";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
+import { outputStamp } from "../../../core/output-name.js";
 import { maybeDownloadThumb } from "../../../core/video-thumb.js";
 import { runOmniVideo } from "../omni-flow.js";
 import { runVeo, veoImageFromFile } from "../veo.js";
@@ -77,7 +78,7 @@ export function registerGeminiImageToVideoCommand(parent: Command): void {
       const format = veoFormat(opts, model, logger);
       logger.info("Submitting image-to-video. This may take 30s–6 minutes. Veo requires billing.");
 
-      const dest = path.join(getOutputDir(), `veo_i2v_${Date.now()}.mp4`);
+      const dest = path.join(getOutputDir(), `veo_i2v_${outputStamp()}.mp4`);
       const finalOp = await runVeo(
         model,
         {

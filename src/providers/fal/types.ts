@@ -9,6 +9,7 @@ export interface FalSubmitResponse {
   response_url: string;
   cancel_url?: string;
   queue_position?: number;
+  status?: string;
 }
 
 export type FalQueueStatus = "IN_QUEUE" | "IN_PROGRESS" | "COMPLETED";

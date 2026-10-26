@@ -13,10 +13,12 @@ import type { Logger } from "../../../../src/core/logger.js";
 import { _resetOutputDir } from "../../../../src/core/output-dir.js";
 import { _resetGeminiKeyCooldowns } from "../../../../src/providers/gemini/key-pool.js";
 import {
+  INTERACTION_MAX_BYTES_CEILING,
   type OmniRunOptions,
   checkOmniMedia,
   copyToOutput,
   findInteractionKey,
+  interactionMaxBytes,
   runOmniVideo,
   saveOmniVideo,
 } from "../../../../src/providers/gemini/omni-flow.js";
@@ -34,6 +36,7 @@ interface Call {
   url: string;
   key?: string;
   body?: Record<string, unknown>;
+  signal?: AbortSignal;
 }
 
 let tmp: string;
@@ -60,6 +63,7 @@ function stubFetch(route: (call: Call) => Response | Promise<Response>): void {
       url,
       key: new Headers(init.headers ?? {}).get("x-goog-api-key") ?? undefined,
       body: typeof init.body === "string" ? JSON.parse(init.body) : undefined,
+      signal: init.signal ?? undefined,
     };
     calls.push(call);
     return route(call);
@@ -122,11 +126,16 @@ function runOpts(over: Partial<OmniRunOptions> = {}): OmniRunOptions {
   return { request: baseRequest, wait: true, waitTimeoutMs: 60_000, logger, ...over };
 }
 
+/** Real-time budget for settle(), under vitest's default 5 s test timeout. */
+const SETTLE_BUDGET_MS = 4_000;
+
 type Outcome<T> = { ok: true; value: T } | { ok: false; error: unknown };
 
 /**
  * Drive a promise that waits on fake-timer sleeps. Each step advances the fake
- * clock and yields to real I/O, so stream downloads can finish too.
+ * clock and yields to real I/O, so stream downloads can finish too. The bound
+ * is real time (performance.now is not faked), not a step count: steps take
+ * microseconds, and slow file I/O (Windows runners) can outlast thousands.
  */
 async function settle<T>(p: Promise<T>): Promise<Outcome<T>> {
   let outcome: Outcome<T> | undefined;
@@ -138,8 +147,9 @@ async function settle<T>(p: Promise<T>): Promise<Outcome<T>> {
       outcome = { ok: false, error };
     },
   );
-  for (let i = 0; outcome === undefined; i++) {
-    if (i > 5000) throw new Error("flow did not settle");
+  const deadline = performance.now() + SETTLE_BUDGET_MS;
+  while (outcome === undefined) {
+    if (performance.now() > deadline) throw new Error("flow did not settle");
     await vi.advanceTimersByTimeAsync(1_000);
     await new Promise((resolve) => setImmediate(resolve));
   }
@@ -396,6 +406,168 @@ describe("runOmniVideo: generate, poll and save", () => {
     expect(error).toBeInstanceOf(PollTimeoutError);
     expect((error as Error).message).toContain("gemini video-status v1_abc123 --download");
     expect(readRecord()).toMatchObject({ interaction_id: ID, status: "in_progress" });
+  });
+
+  it("stops at once, without polling again, when the final GET is over the size cap", async () => {
+    let polls = 0;
+    stubFetch((c) => {
+      if (isSubmit(c)) return json({ id: ID, status: "in_progress" });
+      if (isPoll(ID)(c)) {
+        polls++;
+        // An inline video larger than the base64 size of MULTIX_MAX_DOWNLOAD_MB.
+        return new Response("{}", {
+          status: 200,
+          headers: { "content-length": String(interactionMaxBytes() + 1) },
+        });
+      }
+      throw new Error(`unexpected ${c.method} ${c.url}`);
+    });
+
+    const error = errorOf(await settle(runOmniVideo(runOpts())));
+    expect(error).toBeInstanceOf(ProviderError);
+    expect((error as Error).message).toContain("MULTIX_MAX_DOWNLOAD_MB");
+    expect((error as Error).message).toContain("gemini video-status v1_abc123 --download");
+    expect(polls).toBe(1);
+    expect(readRecord()).toMatchObject({ interaction_id: ID });
+  });
+
+  it("caps an Interaction read at the base64 size of MULTIX_MAX_DOWNLOAD_MB plus JSON room", () => {
+    process.env.MULTIX_MAX_DOWNLOAD_MB = "3";
+    try {
+      expect(interactionMaxBytes()).toBe(4 * 1024 * 1024 + 64 * 1024 * 1024);
+    } finally {
+      Reflect.deleteProperty(process.env, "MULTIX_MAX_DOWNLOAD_MB");
+    }
+  });
+
+  it("keeps the interaction cap under the longest JavaScript string at the default download limit", () => {
+    expect(interactionMaxBytes()).toBe(INTERACTION_MAX_BYTES_CEILING);
+    expect(INTERACTION_MAX_BYTES_CEILING).toBeLessThan(512 * 1024 * 1024);
+  });
+
+  it("gives a stored submit its full time even when little of --wait-timeout is left", async () => {
+    const clip = path.join(tmp, "clip.mp4");
+    fs.writeFileSync(clip, "video-bytes");
+    let submitSignalAborted: boolean | undefined;
+    stubFetch(async (c) => {
+      if (c.url === "https://generativelanguage.googleapis.com/upload/v1beta/files") {
+        return new Response("", {
+          status: 200,
+          headers: {
+            "x-goog-upload-url": "https://generativelanguage.googleapis.com/upload/session/1",
+          },
+        });
+      }
+      if (c.url.startsWith("https://generativelanguage.googleapis.com/upload/session")) {
+        // The upload leaves 5 ms of the 60 s wait.
+        vi.setSystemTime(Date.now() + 59_995);
+        return new Response(
+          JSON.stringify({
+            file: {
+              name: "files/src1",
+              uri: `${API}/files/src1`,
+              state: "ACTIVE",
+              mimeType: "video/mp4",
+            },
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json", "x-goog-upload-status": "final" },
+          },
+        );
+      }
+      if (isSubmit(c)) {
+        // Google answers after the deadline: an accepted submit must not be cut off.
+        // Let real time pass (AbortSignal.timeout runs on the real clock).
+        const t0 = performance.now();
+        while (performance.now() - t0 < 30) await new Promise((resolve) => setImmediate(resolve));
+        submitSignalAborted = c.signal?.aborted;
+        return json({ id: ID, status: "in_progress" });
+      }
+      if (isPoll(ID)(c)) return json({ id: ID, status: "in_progress" });
+      throw new Error(`unexpected ${c.method} ${c.url}`);
+    });
+
+    const error = errorOf(
+      await settle(
+        runOmniVideo(
+          runOpts({
+            request: { ...baseRequest, task: "edit" },
+            videoPath: clip,
+            waitTimeoutMs: 60_000,
+          }),
+        ),
+      ),
+    );
+    expect(submitSignalAborted).toBe(false);
+    expect(error).toBeInstanceOf(PollTimeoutError);
+    expect((error as Error).message).toContain("gemini video-status v1_abc123 --download");
+    expect(readRecord()).toMatchObject({ interaction_id: ID });
+  });
+
+  it("polls only for the part of --wait-timeout the submit left over", async () => {
+    stubFetch((c) => {
+      if (isSubmit(c)) {
+        vi.setSystemTime(Date.now() + 50_000);
+        return json({ id: ID, status: "in_progress" });
+      }
+      if (isPoll(ID)(c)) return json({ id: ID, status: "in_progress" });
+      throw new Error(`unexpected ${c.method} ${c.url}`);
+    });
+
+    const started = Date.now();
+    const error = errorOf(await settle(runOmniVideo(runOpts({ waitTimeoutMs: 60_000 }))));
+    expect(error).toBeInstanceOf(PollTimeoutError);
+    expect(Date.now() - started).toBeLessThanOrEqual(62_000);
+  });
+
+  it("submits nothing when --wait-timeout runs out during the upload", async () => {
+    const clip = path.join(tmp, "clip.mp4");
+    fs.writeFileSync(clip, "video-bytes");
+    stubFetch((c) => {
+      if (c.url === "https://generativelanguage.googleapis.com/upload/v1beta/files") {
+        return new Response("", {
+          status: 200,
+          headers: {
+            "x-goog-upload-url": "https://generativelanguage.googleapis.com/upload/session/1",
+          },
+        });
+      }
+      if (c.url.startsWith("https://generativelanguage.googleapis.com/upload/session")) {
+        vi.setSystemTime(Date.now() + 61_000);
+        return new Response(
+          JSON.stringify({
+            file: {
+              name: "files/src1",
+              uri: `${API}/files/src1`,
+              state: "ACTIVE",
+              mimeType: "video/mp4",
+            },
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json", "x-goog-upload-status": "final" },
+          },
+        );
+      }
+      throw new Error(`unexpected ${c.method} ${c.url}`);
+    });
+
+    const error = errorOf(
+      await settle(
+        runOmniVideo(
+          runOpts({
+            request: { ...baseRequest, task: "edit" },
+            videoPath: clip,
+            waitTimeoutMs: 60_000,
+          }),
+        ),
+      ),
+    );
+    expect(error).toBeInstanceOf(ProviderError);
+    expect((error as Error).message).toContain("nothing was submitted");
+    expect(calls.filter(isSubmit)).toHaveLength(0);
+    expect(fs.existsSync(outDir)).toBe(false);
   });
 
   it("keeps polling through a transient 503 from the status endpoint", async () => {

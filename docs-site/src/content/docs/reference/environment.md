@@ -26,11 +26,12 @@ may only set variables that `multix` itself reads:
   `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_AI_GATEWAY_ID` and the model overrides;
 - the documented `MULTIX_*` settings `MULTIX_OUTPUT_DIR` (so a project can
   choose where generated files are written), `MULTIX_IMAGE_FORMAT`,
-  `MULTIX_MAX_DOWNLOAD_MB`, `MULTIX_UPLOAD_MIN_KBPS` and `MULTIX_DISABLE_HOME_ENV`
-  (which has no effect there), plus `NO_COLOR`.
+  `MULTIX_MAX_DOWNLOAD_MB`, `MULTIX_UPLOAD_MIN_KBPS`, `MULTIX_OUTPUT` (`json`
+  for the agent envelope), `MULTIX_HISTORY` (`0` turns the run ledger off) and
+  `MULTIX_DISABLE_HOME_ENV` (which has no effect there), plus `NO_COLOR`.
 
-The opt-ins `MULTIX_ALLOW_PROJECT_BASE_URL` and `MULTIX_LEGACY_CLAUDE_ENV` are
-refused: a repository must not widen what it can do with your keys or pull in
+The opt-ins `MULTIX_ALLOW_PROJECT_BASE_URL` and `MULTIX_LEGACY_CLAUDE_ENV`, and
+`MULTIX_HISTORY_FILE` (where the run ledger is written), are refused: a repository must not widen what it can do with your keys or pull in
 the `.claude` credentials from your home folder.
 
 [`.env.example`](https://github.com/mrgoonie/multix-cli/blob/main/.env.example)
@@ -144,11 +145,15 @@ values). Moving the keys to `.env` or `~/.multix/.env` is still recommended.
 Use explicit overrides only when you need a different default. Available
 settings include `IMAGE_GEN_MODEL`, `VIDEO_GEN_MODEL`, `MULTIMODAL_MODEL`,
 `GEMINI_TTS_MODEL`, `OPENAI_IMAGE_MODEL`, `OPENAI_TTS_MODEL`,
-`OPENAI_STT_MODEL`, `OPENROUTER_IMAGE_MODEL`, `LEONARDO_BASE_URL`,
+`OPENAI_STT_MODEL`, `OPENROUTER_IMAGE_MODEL`, `OPENROUTER_TTS_MODEL` (default
+`google/gemini-3.8-flash-tts`), `LEONARDO_BASE_URL`,
 `BYTEPLUS_BASE_URL`, `BYTEPLUS_IMAGE_MODEL`, `BYTEPLUS_VIDEO_MODEL`,
 `BYTEPLUS_3D_MODEL`, `FAL_BASE_URL`, `FAL_IMAGE_MODEL`, `FAL_VIDEO_MODEL`, and
 `FAL_VIDEO_IMAGE_MODEL` (fal's image-to-video default, used when
-`multix fal video --image-url` is passed without `-m`). Replicate accepts
+`multix fal video --image-url` is passed without `-m`). `FAL_TTS_MODEL` sets
+the `multix fal tts` default (default `google/gemini-3.8-flash-tts`). `FAL_MAX_UPLOAD_MB`
+sets the size limit for local files uploaded by `multix fal upload` and
+`multix fal run --file` (default 1024). Replicate accepts
 `REPLICATE_BASE_URL` (API root for mocks or proxies), `REPLICATE_IMAGE_MODEL`
 (default `black-forest-labs/flux-schnell`), and `REPLICATE_VIDEO_MODEL`
 (default `prunaai/p-video`). Cloudflare AI Gateway video reads only

@@ -24,12 +24,14 @@ chỉ được đặt những biến mà chính `multix` đọc:
   `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_AI_GATEWAY_ID` và các biến ghi đè model;
 - các thiết lập `MULTIX_*` có trong tài liệu: `MULTIX_OUTPUT_DIR` (nên project
   có thể chọn nơi ghi file được tạo), `MULTIX_IMAGE_FORMAT`,
-  `MULTIX_MAX_DOWNLOAD_MB`, `MULTIX_UPLOAD_MIN_KBPS` và `MULTIX_DISABLE_HOME_ENV`
-  (không có tác dụng ở đó), cùng `NO_COLOR`.
+  `MULTIX_MAX_DOWNLOAD_MB`, `MULTIX_UPLOAD_MIN_KBPS`, `MULTIX_OUTPUT` (`json`
+  cho envelope dành cho agent), `MULTIX_HISTORY` (`0` tắt ledger lịch sử chạy) và
+  `MULTIX_DISABLE_HOME_ENV` (không có tác dụng ở đó), cùng `NO_COLOR`.
 
-Hai biến opt-in `MULTIX_ALLOW_PROJECT_BASE_URL` và `MULTIX_LEGACY_CLAUDE_ENV` bị
-từ chối: repository không được nới rộng những gì nó có thể làm với key của bạn
-hay kéo theo credential trong các file `.claude` ở thư mục home.
+Hai biến opt-in `MULTIX_ALLOW_PROJECT_BASE_URL` và `MULTIX_LEGACY_CLAUDE_ENV`,
+cùng `MULTIX_HISTORY_FILE` (nơi ghi ledger lịch sử chạy), bị từ chối: repository
+không được nới rộng những gì nó có thể làm với key của bạn, chọn nơi ghi lịch sử
+chạy, hay kéo theo credential trong các file `.claude` ở thư mục home.
 
 [`.env.example`](https://github.com/mrgoonie/multix-cli/blob/main/.env.example)
 liệt kê các biến này, cùng hai biến opt-in. Mọi tên khác, ví dụ `NODE_OPTIONS`, `npm_config_registry`,
@@ -142,11 +144,15 @@ chuyển key sang `.env` hoặc `~/.multix/.env`.
 Chỉ đặt override khi cần thay default. Các biến gồm `IMAGE_GEN_MODEL`,
 `VIDEO_GEN_MODEL`, `MULTIMODAL_MODEL`, `GEMINI_TTS_MODEL`,
 `OPENAI_IMAGE_MODEL`, `OPENAI_TTS_MODEL`, `OPENAI_STT_MODEL`,
-`OPENROUTER_IMAGE_MODEL`, `LEONARDO_BASE_URL`, `BYTEPLUS_BASE_URL`,
+`OPENROUTER_IMAGE_MODEL`, `OPENROUTER_TTS_MODEL` (mặc định
+`google/gemini-3.8-flash-tts`), `LEONARDO_BASE_URL`, `BYTEPLUS_BASE_URL`,
 `BYTEPLUS_IMAGE_MODEL`, `BYTEPLUS_VIDEO_MODEL`, `BYTEPLUS_3D_MODEL`,
 `FAL_BASE_URL`, `FAL_IMAGE_MODEL`, `FAL_VIDEO_MODEL` và
 `FAL_VIDEO_IMAGE_MODEL` (default image-to-video của fal, dùng khi truyền
-`multix fal video --image-url` mà không có `-m`). Replicate nhận
+`multix fal video --image-url` mà không có `-m`). `FAL_TTS_MODEL` đặt model
+mặc định của `multix fal tts` (mặc định `google/gemini-3.8-flash-tts`). `FAL_MAX_UPLOAD_MB` đặt giới
+hạn dung lượng cho file cục bộ upload bằng `multix fal upload` và
+`multix fal run --file` (mặc định 1024). Replicate nhận
 `REPLICATE_BASE_URL` (API root cho mock hoặc proxy), `REPLICATE_IMAGE_MODEL`
 (mặc định `black-forest-labs/flux-schnell`) và `REPLICATE_VIDEO_MODEL`
 (mặc định `prunaai/p-video`). Video qua Cloudflare AI Gateway chỉ đọc

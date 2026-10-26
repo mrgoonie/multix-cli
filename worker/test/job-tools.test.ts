@@ -286,6 +286,7 @@ describe("CLI runner tools", () => {
     expect(third.isError).toBe(true);
     expect(third.content[0].text).toBe(accountBusyError(2));
     expect(third.content[0].text).toMatch(/^busy: you already have 2 running jobs/);
+    expect(third.structuredContent?.error).toMatchObject({ code: "RATE_LIMITED", retryable: true });
     expect(backend.specs.size).toBe(2);
     // Another account is not affected.
     const other = jobsContext(backend, { quota, userId: "gh-2" });
@@ -379,6 +380,10 @@ describe("CLI runner tools", () => {
     );
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toBe("--num-images must be at most 4 on this server");
+    expect(result.structuredContent?.error).toMatchObject({
+      code: "INVALID_INPUT",
+      retryable: false,
+    });
     expect(backend.specs.size).toBe(0);
   });
 });

@@ -11,6 +11,7 @@ import { toFetchError } from "../../core/fetch-error.js";
 import { httpJson } from "../../core/http-client.js";
 import type { Logger } from "../../core/logger.js";
 import { getOutputDir } from "../../core/output-dir.js";
+import { outputStamp } from "../../core/output-name.js";
 import { fetchSameOrigin } from "../../core/redirect-fetch.js";
 import { ELEVENLABS_BASE_URL } from "./models.js";
 
@@ -94,6 +95,16 @@ export async function apiPostBinary(
   apiKey: string,
   opts: { timeoutMs?: number; query?: Record<string, string> } = {},
 ): Promise<Buffer> {
+  return (await apiPostBinaryWithHeaders(endpoint, body, apiKey, opts)).bytes;
+}
+
+/** Like apiPostBinary, plus the response headers (e.g. `character-cost`). */
+export async function apiPostBinaryWithHeaders(
+  endpoint: string,
+  body: Record<string, unknown> | FormData,
+  apiKey: string,
+  opts: { timeoutMs?: number; query?: Record<string, string> } = {},
+): Promise<{ bytes: Buffer; headers: Headers }> {
   const url = new URL(`${ELEVENLABS_BASE_URL}/${endpoint.replace(/^\//, "")}`);
   if (opts.query) {
     for (const [k, v] of Object.entries(opts.query)) url.searchParams.set(k, v);
@@ -130,7 +141,7 @@ export async function apiPostBinary(
     throw new HttpError(res.status, text.slice(0, 500), url.toString());
   }
 
-  return Buffer.from(await res.arrayBuffer());
+  return { bytes: Buffer.from(await res.arrayBuffer()), headers: res.headers };
 }
 
 /**
@@ -211,7 +222,7 @@ export function saveBytes(opts: {
 }): string {
   const { bytes, task, ext, outputCopy, logger } = opts;
   const dir = getOutputDir();
-  const dest = path.join(dir, `elevenlabs_${task}_${Date.now()}.${ext}`);
+  const dest = path.join(dir, `elevenlabs_${task}_${outputStamp()}.${ext}`);
   fs.writeFileSync(dest, bytes);
   logger?.success(`Saved: ${dest} (${(bytes.length / 1024).toFixed(1)} KB)`);
   if (outputCopy) {

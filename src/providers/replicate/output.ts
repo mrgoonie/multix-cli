@@ -30,18 +30,29 @@ export function isMediaRef(value: unknown): boolean {
 }
 
 export const REPLICATE_DELIVERY_HOST = "replicate.delivery";
+/**
+ * Cloudflare R2 output storage that api.replicate.com now returns for many
+ * outputs. Pinned to that bucket's account id: any account can
+ * create an `ai-gateway-outputs` bucket, so `*.r2.cloudflarestorage.com` stays
+ * untrusted.
+ */
+export const REPLICATE_R2_OUTPUT_HOST =
+  "ai-gateway-outputs.0d37909e38d3e99c29fa2cd343ac421a.r2.cloudflarestorage.com";
 
 export type OutputUrlCheck = UrlSafetyResult;
 
 /**
  * Policy for downloading a prediction output URL (applied to every redirect
  * hop): https only, never localhost or a private/special-purpose IP literal
- * (hostnames are not resolved). Hosts other than replicate.delivery are
- * allowed but reported as untrusted so the caller can warn. Error messages
- * name the host only, never the signed URL.
+ * (hostnames are not resolved). Hosts other than replicate.delivery and
+ * Replicate's R2 output host are allowed but reported as untrusted so the
+ * caller can warn. Error messages name the host only, never the signed URL.
  */
 export function checkOutputUrl(url: string): OutputUrlCheck {
-  return checkUrlSafety(url, { provider: "replicate", trustedHosts: [REPLICATE_DELIVERY_HOST] });
+  return checkUrlSafety(url, {
+    provider: "replicate",
+    trustedHosts: [REPLICATE_DELIVERY_HOST, REPLICATE_R2_OUTPUT_HOST],
+  });
 }
 
 /** Walk any output shape, collecting media URLs and text values in order. */

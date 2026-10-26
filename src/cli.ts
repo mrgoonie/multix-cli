@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { createRequire } from "node:module";
 import { Command } from "commander";
+import { exitWithError, installAgentRuntime } from "./agent/agent-runtime.js";
 import { registerCommands } from "./commands/index.js";
 import { loadEnv } from "./core/index.js";
 import { isProjectEnvName } from "./project-env-names.js";
@@ -23,9 +24,7 @@ const program = new Command()
   .enablePositionalOptions();
 
 registerCommands(program);
+// --json, --dry-run, classified errors and the run history for every command.
+installAgentRuntime(program, pkg.version as string);
 
-program.parseAsync(process.argv).catch((err: unknown) => {
-  const msg = err instanceof Error ? err.message : String(err);
-  console.error(`Error: ${msg}`);
-  process.exit(1);
-});
+program.parseAsync(process.argv).catch((err: unknown) => exitWithError(err));

@@ -95,6 +95,14 @@ lost. When the server already runs `MULTIX_MAX_JOBS_TOTAL` jobs (default 10)
 across all accounts, the call fails with `server at capacity` instead; retry
 after a few minutes.
 
+**Error codes.** A failed tool call keeps its message as text and adds
+`structuredContent.error` with `code`, `retryable` and `hint`, the same codes as
+the CLI's `--json` envelope (see [For AI agents](/reference/for-ai-agents/#exit-codes-and-error-codes)).
+`busy` and `server at capacity` come back as `RATE_LIMITED` with
+`retryable: true`. A job that ran and failed reports a non-zero `exit_code`, and
+its `stderr_tail` ends with the CLI's `code:`, `hint:` and `next:` lines, which
+name the error class.
+
 **Output files need R2.** The files the CLI writes are uploaded to your own R2
 bucket under `<directory>/<account hash>/<job id>/<name>` (the directory is
 `multix` unless you choose another one), and `outputs` lists their
@@ -117,6 +125,15 @@ Flash (an allowed resolution, 720p when permitted, is sent when the caller
 omits it), and `@file` values are rejected. Commands that
 change your own provider account (for example deleting an ElevenLabs voice)
 run like any other, with your key.
+
+**Gemini edit and extend.** `gemini extend-video --duration` is the length of
+the new continuation and is capped like any other duration, but the returned
+video also contains the source. The cap therefore bounds each call, not the
+clip: extending a stored interaction again (`--interaction-id`) makes it longer
+each time, and `gemini edit-video` keeps the source's length. The server cannot
+see a stored interaction's length, so it does not bound a chain beyond
+Google's own limit of 40 seconds in total; every call is billed to your own
+Gemini key.
 
 **Runway.** `runway video` and `runway image` can run remotely; give
 `--image` and each `--reference` as `https://` URLs in `inputs`, and
@@ -405,7 +422,7 @@ Set these as `vars` in `worker/wrangler.jsonc`:
 |---|---|---|
 | `MULTIX_PUBLIC_URL` | — (required) | Public origin, for example `https://mcp.example.com`. Used for OAuth metadata, redirects and the GitHub callback. |
 | `MULTIX_MCP_MAX_OUTPUTS` | `4` (ceiling 10) | Maximum output count (for example `--num-images`) per `multix_run` call. |
-| `MULTIX_MCP_MAX_VIDEO_SECONDS` | `10` (ceiling 15) | Maximum video duration. When a caller omits it and the command's default is unknown or longer, the server sends `min(5, cap)` seconds. |
+| `MULTIX_MCP_MAX_VIDEO_SECONDS` | `10` (ceiling 15) | Maximum video duration per call (for `gemini extend-video`, the new continuation). When a caller omits it and the command's default is unknown or longer, the server sends `min(5, cap)` seconds. |
 | `MULTIX_MCP_ALLOWED_RESOLUTIONS` | `480p,720p,768p,1080p` | Video resolutions a caller may request (`768p` is a HeyGen Video size). Anything else (for example `4k`), given or the command's default, is rejected before the job starts. |
 | `MULTIX_MCP_ALLOWED_ORIGINS` | none | Exact browser origins (for example `https://app.example.com`) allowed to call `/mcp`. `*` and other wildcards are not supported: `*` only matches a literal `*` origin, which browsers never send. After the access token is checked, requests with any other `Origin` header get `403`; requests without an `Origin` (server-side clients) are allowed. Listed origins get CORS headers. `OPTIONS` preflights are answered for any origin by the OAuth layer. |
 | `MULTIX_MAX_JOBS_PER_ACCOUNT` | `2` (ceiling 50) | `multix_run` jobs one account may run at the same time. |

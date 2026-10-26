@@ -8,6 +8,7 @@ import path from "node:path";
 import type { Command } from "commander";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
+import { outputStamp } from "../../../core/output-name.js";
 import { apiPostMultipart, readFileAsBlob, requireElevenLabsKey } from "../client.js";
 
 interface AlignmentResp {
@@ -43,7 +44,7 @@ export function registerAlignCommand(parent: Command): void {
 
       const dest = opts.output
         ? path.resolve(opts.output)
-        : path.join(getOutputDir(), `elevenlabs_align_${Date.now()}.json`);
+        : path.join(getOutputDir(), `elevenlabs_align_${outputStamp()}.json`);
       fs.mkdirSync(path.dirname(dest), { recursive: true });
       fs.writeFileSync(dest, JSON.stringify(data, null, 2));
       logger.success(`Saved alignment: ${dest}`);

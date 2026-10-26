@@ -26,6 +26,7 @@ import {
 } from "../../../core/image-webp-finalize.js";
 import { type Logger, createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
+import { outputStamp } from "../../../core/output-name.js";
 import { OPENROUTER_API_URL, requireOpenRouterKey } from "../client.js";
 import {
   buildI2IPayload,
@@ -163,7 +164,7 @@ async function runImageToImage(opts: RunOpts): Promise<string[]> {
   }
 
   const outDir = getOutputDir();
-  const ts = Date.now();
+  const ts = outputStamp();
   const saved: string[] = [];
   for (let i = 0; i < parsed.urls.length; i++) {
     const url = parsed.urls[i];

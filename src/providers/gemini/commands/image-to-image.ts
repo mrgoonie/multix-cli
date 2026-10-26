@@ -14,6 +14,7 @@ import {
 } from "../../../core/image-webp-finalize.js";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
+import { outputStamp } from "../../../core/output-name.js";
 import {
   type ContentPart,
   type GenerateContentRequest,
@@ -110,7 +111,7 @@ export function registerGeminiImageToImageCommand(parent: Command): void {
         }
 
         const outDir = getOutputDir();
-        const ts = Date.now();
+        const ts = outputStamp();
         const saved: string[] = [];
         for (let i = 0; i < images.length; i++) {
           const img = images[i];

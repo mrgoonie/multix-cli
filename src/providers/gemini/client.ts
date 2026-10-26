@@ -330,12 +330,24 @@ export async function generateContent(
 }
 
 /**
+ * Limits for a request whose Interaction may carry a generated video inline
+ * as base64 (see FetchJsonOptions).
+ */
+export interface InteractionReadOptions {
+  timeoutMs?: number;
+  responseTimeoutMs?: number;
+  idleTimeoutMs?: number;
+  maxBytes?: number;
+  fetch?: FetchLike;
+}
+
+/**
  * Call the Interactions endpoint (POST /v1beta/interactions) and return the raw
  * Interaction resource. Gemini 3.8 TTS models are served here, not on generateContent.
  */
 export async function createInteraction(
   body: Record<string, unknown>,
-  opts: GeminiCallOptions & { timeoutMs?: number; fetch?: FetchLike },
+  opts: GeminiCallOptions & InteractionReadOptions,
 ): Promise<unknown> {
   return fetchJson<unknown>({
     url: `${BASE}/v1beta/interactions`,
@@ -343,6 +355,9 @@ export async function createInteraction(
     headers: authHeaders(opts.apiKey),
     body,
     timeoutMs: opts.timeoutMs,
+    responseTimeoutMs: opts.responseTimeoutMs,
+    idleTimeoutMs: opts.idleTimeoutMs,
+    maxBytes: opts.maxBytes,
     fetch: opts.fetch,
   });
 }
@@ -361,12 +376,15 @@ export function assertInteractionId(id: string): string {
 /** GET /v1beta/interactions/{id}: the stored Interaction resource (status, steps, usage). */
 export async function getInteraction(
   id: string,
-  opts: GeminiCallOptions & { timeoutMs?: number; fetch?: FetchLike },
+  opts: GeminiCallOptions & InteractionReadOptions,
 ): Promise<unknown> {
   return fetchJson<unknown>({
     url: `${BASE}/v1beta/interactions/${assertInteractionId(id)}`,
     headers: authHeaders(opts.apiKey),
     timeoutMs: opts.timeoutMs,
+    responseTimeoutMs: opts.responseTimeoutMs,
+    idleTimeoutMs: opts.idleTimeoutMs,
+    maxBytes: opts.maxBytes,
     fetch: opts.fetch,
   });
 }

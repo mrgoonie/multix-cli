@@ -4,7 +4,9 @@ import path from "node:path";
 import { execa } from "execa";
 import { resolveKey } from "../../core/env-loader.js";
 import { ConfigError, ProviderError } from "../../core/errors.js";
+import { guardExternalRun } from "../../core/external-run-guard.js";
 import { getOutputDir } from "../../core/output-dir.js";
+import { outputStamp } from "../../core/output-name.js";
 import {
   type OpenAIImageDriver,
   type OpenAIImageOutputFormat,
@@ -80,7 +82,7 @@ export async function runCodexImageGeneration(opts: {
   const ext = extFromImageFormat(opts.outputFormat);
   const dest = opts.output
     ? path.resolve(opts.output)
-    : path.join(getOutputDir(), `codex-image-${Date.now()}.${ext}`);
+    : path.join(getOutputDir(), `codex-image-${outputStamp()}.${ext}`);
   fs.mkdirSync(path.dirname(dest), { recursive: true });
 
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "multix-codex-image-"));
@@ -128,6 +130,7 @@ async function runInTempDir(
   for (const ref of opts.refs ?? []) args.push("--image", ref);
   args.push(buildCodexPrompt(opts.prompt, dest));
 
+  guardExternalRun({ program: "codex", args });
   const res = await runner("codex", args, {
     cwd: tmp,
     env: sanitizeCodexEnv(),

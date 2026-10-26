@@ -4,7 +4,7 @@ AI multimodal CLI — generate images/video/speech/music, analyze and transcribe
 
 ![Isometric technical illustration of multix media workflows](docs-site/public/images/multix-isometric-banner.png)
 
-Supports **OpenAI** (image, image edits, TTS, STT, optional Codex image driver), **Gemini** (analyze, transcribe, generate, Omni Flash video generation and editing, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), **Cloudflare** (Workers AI image and speech; AI Gateway-routed Replicate video), **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment), **fal.ai** (generic model runner, image, video via the fal queue API), and **Atlas Cloud** (any model: image, image edit, video, audio, 3D, with resumable async predictions), **Replicate** (generic model runner, image, video, async prediction status/cancel via the direct Replicate API), **Runway** (Gen-4.5 and Gen-4 Turbo video, Gen-4 images, resumable task status/cancel), **HeyGen** (v3 Video Agent prompt-to-video, scripted avatar videos, video translation, lipsync, TTS).
+Supports **OpenAI** (image, image edits, TTS, STT, optional Codex image driver), **Gemini** (analyze, transcribe, generate, Omni Flash video generation and editing, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation, image-to-video, TTS), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), **Cloudflare** (Workers AI image and speech; AI Gateway-routed Replicate video), **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment), **fal.ai** (generic model runner, image, video, text-to-speech via the fal queue API), and **Atlas Cloud** (any model: image, image edit, video, audio, 3D, with resumable async predictions), **Replicate** (generic model runner, image, video, async prediction status/cancel via the direct Replicate API), **Runway** (Gen-4.5 and Gen-4 Turbo video, Gen-4 images, resumable task status/cancel), **HeyGen** (v3 Video Agent prompt-to-video, scripted avatar videos, video translation, lipsync, TTS).
 
 ## Documentation
 
@@ -49,6 +49,32 @@ multix doc convert --input report.pdf
 multix media optimize --input video.mp4 --output out.mp4 --target-size 100
 ```
 
+## For AI agents
+
+Every command takes `--json` and `--dry-run`, and errors exit with a class code,
+so an agent can find a model, validate a call for free, check its own result and
+recover without trial and error:
+
+```bash
+multix guide                                  # the agent protocol in one screen
+multix models --task video --ready            # which command and model serve a task, key set or not
+multix fal image "a red fox" --dry-run --json # validate; show the request instead of sending it
+multix fal image "a red fox" --json           # one-line multix.result/v1 envelope on stdout
+multix history stats --by model               # runs, success rate, p50/p90 time, cost, credits, tokens
+multix rerun last                             # repeat a recorded run
+```
+
+The envelope lists `outputs` (path, bytes, MIME, SHA-256, dimensions, duration),
+`warnings`, `usage` as the provider reports it (tokens, `cost_usd`, `credits`,
+metrics, and `sources` naming the header or body field each money number came
+from), `error` (`code`, `retryable`, `retry_after_s`, `hint`) and `next`
+commands. With `--json`, exit codes are `2` usage or input, `3` key or setup,
+`4` temporary (retry), `5` rejected (quota, safety, model), `6` timed out (job may
+still run), `1` unknown; plain runs keep exit 1 and print the code and hint on
+stderr. Each run is recorded in `~/.multix/history.jsonl` without keys or signed
+URLs (`MULTIX_HISTORY=0` turns it off). Details:
+[For AI agents](https://multix.zuey.me/reference/for-ai-agents/).
+
 ## Environment variables
 
 Set at least one provider key. Add to `.env` in your project root or `~/.multix/.env`.
@@ -72,6 +98,7 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `FAL_VIDEO_MODEL` | No | Default fal text-to-video model (default `fal-ai/kling-video/v1.6/standard/text-to-video`) |
 | `HEYGEN_API_KEY` | For HeyGen | [HeyGen API settings](https://app.heygen.com/developers/api). API usage is billed separately from HeyGen web plans |
 | `HEYGEN_BASE_URL` | No | Override the HeyGen API base (default `https://api.heygen.com`; proxies/tests). Must be `https://`, except `http://` on `localhost`/`127.0.0.1`/`[::1]` |
+| `FAL_TTS_MODEL` | No | Default fal text-to-speech model (default `google/gemini-3.8-flash-tts`) |
 | `FAL_VIDEO_IMAGE_MODEL` | No | Default fal image-to-video model, used when `--image-url` is passed without `-m` (default `fal-ai/kling-video/v1.6/standard/image-to-video`) |
 | `ATLASCLOUD_API_KEY` | For Atlas Cloud | [Atlas Cloud](https://www.atlascloud.ai/console/api-keys) |
 | `ATLASCLOUD_BASE_URL` | No | Override Atlas Cloud media API base (default `https://api.atlascloud.ai/api/v1`; `https://` required, `http://` only for localhost) |
@@ -79,6 +106,7 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `ATLASCLOUD_VIDEO_MODEL` / `ATLASCLOUD_IMAGE_TO_VIDEO_MODEL` | No | Atlas video defaults (`bytedance/seedance-v1-pro-fast/text-to-video`, `.../image-to-video`) |
 | `ATLASCLOUD_TTS_MODEL` / `ATLASCLOUD_STT_MODEL` | No | Atlas audio defaults (`xai/tts-v1`, `bytedance/seed-asr-2.0`) |
 | `ATLASCLOUD_TEXT_TO_3D_MODEL` / `ATLASCLOUD_IMAGE_TO_3D_MODEL` | No | Atlas 3D defaults (`tencent/hunyuan3d-rapid/text-to-3d`, `.../image-to-3d`) |
+| `FAL_MAX_UPLOAD_MB` | No | Size limit for local files uploaded by `fal upload` / `fal run --file` (default `1024`) |
 | `ATLASCLOUD_MAX_UPLOAD_MB` | No | Size limit for local files uploaded to Atlas Cloud (default `200`) |
 | `ARK_API_KEY` | No | Fallback for `BYTEPLUS_API_KEY` (Volcengine ARK shared name) |
 | `BYTEPLUS_BASE_URL` | No | Override BytePlus base (default `https://ark.ap-southeast.bytepluses.com/api/v3`) |
@@ -105,8 +133,12 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `MULTIX_MAX_DOWNLOAD_MB` | No | Size limit per downloaded Replicate, Runway or Atlas Cloud output file (default `2048`) |
 | `MULTIX_UPLOAD_MIN_KBPS` | No | Slowest upload speed to allow for (Gemini Files API, Runway requests with inline images), in KB/s (default `1000`); lower it on slow links |
 | `MULTIX_IMAGE_FORMAT` | No | `webp` (default) or `original` to keep provider image format/quality |
+| `MULTIX_OUTPUT` | No | `json` prints one `multix.result/v1` envelope per run, as `--json` does |
+| `MULTIX_HISTORY` | No | `0` stops recording runs in `~/.multix/history.jsonl` |
+| `MULTIX_HISTORY_FILE` | No | Run ledger path (shell or `~/.multix/.env` only) |
 | `OPENROUTER_IMAGE_MODEL` | No | Default OpenRouter model |
 | `OPENROUTER_FALLBACK_MODELS` | No | Comma-separated fallback model ids |
+| `OPENROUTER_TTS_MODEL` | No | Default `multix openrouter tts` model (default `google/gemini-3.8-flash-tts`) |
 | `OPENAI_IMAGE_MODEL` | No | Default OpenAI image model (default `gpt-image-2`) |
 | `OPENAI_TTS_MODEL` | No | Default OpenAI TTS model (default `gpt-4o-mini-tts`) |
 | `OPENAI_STT_MODEL` | No | Default OpenAI STT model (default `gpt-4o-transcribe`) |
@@ -121,7 +153,7 @@ Set extra keys as `GEMINI_API_KEY_2`, `GEMINI_API_KEY_3`, … (any numeric suffi
 
 Priority: `process.env` > `cwd/.env` > `~/.multix/.env`. A blank or whitespace-only value in a `.env` file does not count as set, so a project `.env` copied from `.env.example` does not hide `~/.multix/.env`; a shell variable wins even when blank. Set `MULTIX_LEGACY_CLAUDE_ENV=1` (shell or `~/.multix/.env`) to also read legacy AgentKit files (`.claude/skills/{ai-multimodal,ak-ai-multimodal}/.env`, `.claude/skills/.env`, `.claude/.env`, project first, then home) with the lowest priority (credential names only, never endpoint/proxy settings); `multix check -v` lists the env files that were loaded.
 
-A project `.env` may only set variables `multix` reads: provider keys, the provider settings in `.env.example` (`*_BASE_URL`, model overrides, Cloudflare IDs), the documented `MULTIX_*` settings (`MULTIX_OUTPUT_DIR`, so a project can choose where outputs go, `MULTIX_IMAGE_FORMAT`, `MULTIX_MAX_DOWNLOAD_MB`, `MULTIX_UPLOAD_MIN_KBPS`) and `NO_COLOR`. The opt-ins `MULTIX_ALLOW_PROJECT_BASE_URL` and `MULTIX_LEGACY_CLAUDE_ENV` are refused there; set them in the shell or `~/.multix/.env`. Other names, such as `NODE_OPTIONS`, `npm_config_registry`, `LD_PRELOAD` or `HTTPS_PROXY`, are not loaded, so they never reach `multix` or the tools it starts (`npm` in `multix update`, ffmpeg, ImageMagick, cwebp); one warning on stderr lists the ignored names, never their values. The shell and `~/.multix/.env` are not filtered.
+A project `.env` may only set variables `multix` reads: provider keys, the provider settings in `.env.example` (`*_BASE_URL`, model overrides, Cloudflare IDs), the documented `MULTIX_*` settings (`MULTIX_OUTPUT_DIR`, so a project can choose where outputs go, `MULTIX_IMAGE_FORMAT`, `MULTIX_MAX_DOWNLOAD_MB`, `MULTIX_UPLOAD_MIN_KBPS`, `MULTIX_OUTPUT`, `MULTIX_HISTORY`) and `NO_COLOR`. The opt-ins `MULTIX_ALLOW_PROJECT_BASE_URL` and `MULTIX_LEGACY_CLAUDE_ENV`, and `MULTIX_HISTORY_FILE`, are refused there; set them in the shell or `~/.multix/.env`. Other names, such as `NODE_OPTIONS`, `npm_config_registry`, `LD_PRELOAD` or `HTTPS_PROXY`, are not loaded, so they never reach `multix` or the tools it starts (`npm` in `multix update`, ffmpeg, ImageMagick, cwebp); one warning on stderr lists the ignored names, never their values. The shell and `~/.multix/.env` are not filtered.
 
 `*_BASE_URL`, `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_AI_GATEWAY_ID` decide where your API key is sent. Values from the shell or `~/.multix/.env` are always used. A value from the project `.env` (or a legacy `.claude` file under it) is used only when every key the provider sends with it comes from that same project file (the repository's own key). That protects your key, not your data: a project `.env` that ships its own key and base URL routes that project's requests, including your prompts and any files you upload, to that host, and its key replaces yours from `~/.multix/.env`, so review a cloned repository's `.env` before running `multix` in it. If a key comes from anywhere else, the project value is ignored: the `~/.multix/.env` value is used with a warning (variable, file and key source named, never the value), or, if there is none, the command stops with an error instead of falling back to the vendor default. `multix check` shows whether each such setting is in effect or ignored. To use a project value for one command, run `MULTIX_ALLOW_PROJECT_BASE_URL=1 multix ...`; do not put the opt-in in `~/.multix/.env`, which disables the check for every directory. Non-default base URLs must be `https://` (plain `http://` only for `localhost`, `127.0.0.1`, `[::1]`), and `multix` warns once per variable on stderr with the provider and hostname only.
 ## Commands
@@ -212,7 +244,7 @@ multix gemini generate-video --prompt "Ocean waves" --resolution 1080p --duratio
 ```
 
 - An explicit `--model veo-*` (or `VIDEO_GEN_MODEL=veo-*`) still uses the Veo path, with a shutdown warning for `*-preview` models. Omni-only flags (`--duration`, `--no-store`, `--no-wait`) fail with Veo; `--no-thumb` applies to Veo only. Any other model id is rejected.
-- Omni runs as a stored background interaction. Its id is written to `gemini_omni_<timestamp>.json` in the output directory before polling starts, so a timeout or crash can be resumed with `multix gemini video-status <id> --download`. On success stdout prints `Generated video: <path>` and `Interaction ID: <id>`.
+- Omni runs as a stored background interaction. Its id is written to `gemini_omni_<timestamp>-<random>.json` in the output directory before polling starts, so a timeout or crash can be resumed with `multix gemini video-status <id> --download`. On success stdout prints `Generated video: <path>` and `Interaction ID: <id>`.
 - `--no-store` sends one synchronous request that Google does not keep: it cannot be edited, extended or resumed, and it cannot be combined with `--no-wait`.
 - `edit-video` and `extend-video` keep the source video's format unless `--resolution`/`--aspect-ratio` is given; only a completed interaction can be continued. `extend-video` returns the source clip followed by the continuation. With `--interaction-id` the API takes no task field, so the prompt is sent as `Edit this video: …` / `Extend this video: …` (unless it already starts that way); `extend-video --video` rejects `--aspect-ratio`, which the API refuses for an extension. Editing or extending an uploaded `--video` is unavailable in the EEA, Switzerland and the UK; editing a generated video with `--interaction-id` works there.
 - Stored interactions and uploaded files expire (Files API uploads after about 48 hours). `--upload-timeout` is deprecated and ignored.
@@ -261,7 +293,16 @@ multix openrouter video-status <jobId> [--download] [--output <path>] [-v]
 
 # List available video models
 multix openrouter video-models
+
+# Text-to-speech (POST /api/v1/audio/speech); input: --text | --text-file | --turns-file (multi-speaker JSON)
+multix openrouter tts --text "Xin chào" [--model google/gemini-3.8-flash-tts] --voice Kore [--instructions <text>] [--format auto|mp3|pcm|wav] [--speed <n>] [--zdr] [--cost-wait 20] [--output <path>] [-v]
+
+# List speech models (live catalog) or one model's voices; read a generation's cost later
+multix openrouter speech-models [--model <id>]
+multix openrouter generation <id>
 ```
+
+**TTS:** the model and voice are checked against the live speech catalog before the paid request (`--no-model-check` skips it); Gemini and ElevenLabs models need `--voice`. `--format auto` writes WAV (pcm wrapped locally) for pcm-only models (Gemini, HeyGen) and MP3 otherwise; MiniMax returns MP3 only. The request is never retried; the cost is read from OpenRouter for up to `--cost-wait` seconds (max 120) and can be fetched later with `multix openrouter generation <id>`.
 
 **Supported i2i model families:** Gemini (default) and OpenAI gpt-image return `text+image` (modalities `["image","text"]`); Recraft accepts `--strength` (init-image strength 0..1); Flux / Sourceful are image-only (`["image"]`). The CLI picks the right `modalities` automatically based on the model id prefix.
 
@@ -434,7 +475,11 @@ Set `CLOUDFLARE_AI_GATEWAY_COLLECT_LOG_PAYLOAD=true` only to explicitly opt in t
 # Text-to-speech (sync, returns audio bytes)
 multix elevenlabs tts --text "Hello world" [--voice <voiceId>] [--model eleven_multilingual_v2] \
   [--format mp3_44100_128] [--stability 0.5] [--similarity-boost 0.75] [--style 0.0] \
-  [--no-speaker-boost] [--language-code en] [--seed <n>] [--output out.mp3] [-v]
+  [--no-speaker-boost] [--language-code en] [--seed <n>] [--previous-text "..."] [--next-text "..."] \
+  [--timestamps] [--output out.mp3] [-v]
+# Eleven v4 / v4 Turbo: 90+ languages, audio tags, 10,000 characters per request
+multix elevenlabs tts --model eleven_v4 --text "[warmly] Xin chào!" --language-code vi
+multix elevenlabs tts --model eleven_v4_turbo --text "Hello" --timestamps --format wav_24000
 
 # Voices: list / get / search shared / design / persist / delete
 multix elevenlabs voices list [--category cloned|generated|premade|professional]
@@ -481,11 +526,11 @@ multix elevenlabs align --input audio.mp3 --text-file transcript.txt
 
 # Account info / available models
 multix elevenlabs account
-multix elevenlabs models
+multix elevenlabs models   # live: capabilities, languages, text limit, credit multiplier
 ```
 
 **ElevenLabs models:**
-- TTS: `eleven_multilingual_v2` (default), `eleven_flash_v2_5`, `eleven_flash_v2`, `eleven_turbo_v2_5`, `eleven_turbo_v2`, `eleven_v3`
+- TTS: `eleven_multilingual_v2` (default), `eleven_v4`, `eleven_v4_turbo`, `eleven_v3`, `eleven_v3_conversational`, `eleven_flash_v2_5`, `eleven_flash_v2`, `eleven_turbo_v2_5`, `eleven_turbo_v2`
 - STT: `scribe_v1`, `scribe_v1_experimental`
 - Voice changer: `eleven_multilingual_sts_v2` (default)
 - Music: `music_v1`
@@ -497,7 +542,10 @@ multix elevenlabs models
 - Auth header is `xi-api-key`; base URL is `https://api.elevenlabs.io/v1`.
 - Most generation endpoints (TTS, SFX, Music, Voice Changer, Isolation) return audio bytes synchronously.
 - Dubbing is async: submit → poll → download per-language tracks.
-- Output format strings combine codec + sample rate + bitrate, e.g. `mp3_44100_128`, `pcm_24000`, `ulaw_8000`.
+- Output format strings combine codec + sample rate + bitrate, e.g. `mp3_44100_128`, `pcm_24000`, `ulaw_8000`. TTS also takes `wav_*`, `opus_48000_*`, `alaw_8000`, `mp3_24000_48`, `pcm_32000` and `pcm_48000` (`mp3_44100_192` needs Creator tier; 44.1 kHz PCM/WAV need Pro).
+- TTS options are checked against the model before anything is sent. v4, v4 Turbo, v3 and Flash/Turbo v2.x have no style control, so a non-zero `--style` is rejected rather than silently ignored, and `--style 0` or `--no-speaker-boost` on a model without that control is reported as a warning and not sent. `eleven_v3` rejects `--previous-text`/`--next-text`; text over the model's limit (v3 5,000, v4 and multilingual v2 10,000, Flash/Turbo v2.x 30,000–40,000) is rejected; bracketed audio tags such as `[whispering]` are performed by v3/v4 and trigger a warning on models that would read them aloud. Unsupported `--language-code` values are rejected by the API (nothing is billed). An unknown `--model` id is passed through unchecked with a warning.
+- `--timestamps` calls `/with-timestamps` and saves character timings next to the audio as `<audio>.timestamps.json`.
+- After each TTS run the CLI prints the credits ElevenLabs reports in its `character-cost` header (v4 Turbo bills 0.5 credits per character, see `multix elevenlabs models`). With `--json` the same number is `usage.credits`, attributed in `usage.sources.credits`. multix never prints an estimate as credits charged.
 
 ### `multix fal`
 
@@ -508,6 +556,13 @@ Generic runner plus convenience commands for [fal.ai](https://fal.ai)'s queue RE
 multix fal run fal-ai/flux/schnell --input '{"prompt":"a cyberpunk cat"}' [--no-download] [--wait-timeout 480000] [-v]
 multix fal run fal-ai/flux/schnell --input @input.json
 
+# Local media: upload to fal storage and set the URL at an input field
+multix fal run fal-ai/mmaudio-v2 --input '{"prompt":"soft rain"}' --file video_url=./shot.mp4
+multix fal upload ./shot.mp4                   # prints {"url","mime_type","size_bytes","file_name"}
+
+# Submit without waiting; prints a receipt with status/result commands
+multix fal run fal-ai/hunyuan-video-foley --input '{"text_prompt":"footsteps"}' --file video_url=./shot.mp4 --detach
+
 # Text-to-image (default model: fal-ai/flux/schnell)
 multix fal image "a cyberpunk cat" [-m <model>] [--image-size square_hd] [-n 1] [--seed <n>] [--negative-prompt <text>] [--output <path>] [--no-download] [-v]
 
@@ -517,13 +572,20 @@ multix fal image "a cyberpunk cat" [-m <model>] [--image-size square_hd] [-n 1] 
 multix fal video "a dancer under neon lights" [-m <model>] [--image-url <https-url>] [--duration <n>] [--aspect-ratio 16:9] [--seed <n>] [--no-download] [--wait-timeout 900000] [-v]
 
 # Queue status / result for a request submitted any other way
+# Text-to-speech with per-model typed inputs (default model: google/gemini-3.8-flash-tts)
+multix fal tts "Xin chào" [--text-file <path>] [-m <model>] [--voice <name>] [--style <text>] [--format <fmt>] [--language <code>] [--input <json>] [--detach]
+multix fal voices [<model>] [--live]           # models, voices, formats; one model prints typed inputs as JSON
+
 multix fal status <model> <requestId>
-multix fal result <model> <requestId> [--download]
+multix fal result <model> <requestId> [--download] [--output-dir <dir>] [--format <fmt>]   # --format: raw speech formats (pcm_*, ulaw_8000, alaw_8000)
 ```
 
 **Notes:**
 - Auth header is `Authorization: Key $FAL_KEY`; base URL is `https://queue.fal.run`.
 - All fal jobs are async: submit → poll `status` → fetch `result`. `run`/`image`/`video` do this automatically.
+- `--detach` saves a receipt (`~/.multix/fal/requests/<request_id>.json`, or `--receipt <path>`, which also works for a blocking run; mode 0600, ids and an input hash only). `status`/`result` only read, so resuming never pays twice. A submit whose outcome is unknown (connection cut off, 5xx gateway error) fails with `UNKNOWN_REMOTE_STATE` and is never retried.
+- `tts` maps flags to each model's schema (Gemini 3.8 Flash / Flash-Lite TTS: `prompt`, `voice`, `style_instructions`; ElevenLabs v4 / v4 Turbo: `text`, `voice`, `output_format`, `language_code`) and refuses a flag the model has no field for. Other fal TTS ids need `--text-field` (and `--voice-field`). Audio is saved under the extension its bytes have (raw `pcm_*`/`ulaw_8000`/`alaw_8000` from the requested format); empty, error-page or mislabelled downloads are refused.
+- `--file` / `fal upload` accept image, video and audio files only (up to `FAL_MAX_UPLOAD_MB`, default 1024). fal storage URLs are public to anyone with the link and fal controls retention; the key goes only to `https://rest.fal.ai`, never to the pre-signed upload URL.
 - Media URLs are extracted generically from the result JSON (any `url` field, recursively) and downloaded to `MULTIX_OUTPUT_DIR`.
 
 ### `multix atlas`
@@ -596,7 +658,7 @@ multix replicate cancel <prediction-id>
 - Only `succeeded` exits 0; `failed`, `canceled`, and `aborted` exit non-zero with Replicate's error.
 - If submitting fails with a network error, timeout, 5xx, or an unreadable 2xx response, the prediction may still have been created and billed (Replicate has no idempotency key). Check https://replicate.com/predictions before retrying.
 - Every media URL in the output (string, list, or nested object) is downloaded as `replicate-<id8>-NN.<ext>` (`<id8>` = first 8 characters of the prediction id); text outputs are printed. Output URLs expire, so download promptly. If any download fails, the command exits non-zero and prints `multix replicate status <id> --download` to retry.
-- Output downloads use `https://` only and refuse `localhost` and loopback, private, link-local, or other special-purpose IP literals (hostnames are not resolved), including on redirects. Files are written to `<path>.part` and renamed when complete, so a failed download never clobbers an existing file. Hosts other than `replicate.delivery` are downloaded with a warning that names the host. Each file is capped at `MULTIX_MAX_DOWNLOAD_MB` (default 2048).
+- Output downloads use `https://` only and refuse `localhost` and loopback, private, link-local, or other special-purpose IP literals (hostnames are not resolved), including on redirects. Files are written to `<path>.part` and renamed when complete, so a failed download never clobbers an existing file. Hosts other than `replicate.delivery` and Replicate's R2 output bucket are downloaded with a warning that names the host. Network errors, dropped connections, 408, 429 and 5xx are retried twice before the download fails. Each file is capped at `MULTIX_MAX_DOWNLOAD_MB` (default 2048).
 - `replicate image` converts images to WebP by default; `--image-format original`, `--no-webp`, `MULTIX_IMAGE_FORMAT=original`, an explicit `--output-format`, or a non-`.webp` `--output` extension keeps the provider format.
 - Local files (`--image`, `--file key=path`) up to 256 KB are inlined as data URIs; larger files (< 100 MB) are uploaded via the Replicate Files API.
 
@@ -784,7 +846,9 @@ instance runs at `https://multix.zuey.me/mcp` (invited GitHub accounts only).
   URL, optional directory path, default `multix`; checked with a list, upload and delete of an empty `.multix-probe-*`
   object before it is saved). It also lists and disconnects MCP clients. Limit exposure further with
   `MULTIX_MCP_MAX_OUTPUTS`, `MULTIX_MCP_MAX_VIDEO_SECONDS` (also sent as
-  `min(5, cap)` when a command's default duration is unknown or longer),
+  `min(5, cap)` when a command's default duration is unknown or longer; it
+  bounds each `gemini extend-video` continuation, not a stored clip that
+  chained extends grew, nor a `gemini edit-video` of it),
   `MULTIX_MCP_ALLOWED_RESOLUTIONS` (default `480p,720p,768p,1080p`),
   `MULTIX_MCP_ALLOWED_ORIGINS` (exact browser origins, with CORS), and the
   approximate per-account rate limiter. JSON-RPC batches are rejected.

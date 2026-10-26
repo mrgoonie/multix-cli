@@ -22,6 +22,7 @@ import {
   CLOUDFLARE_GATEWAY_ID_ENV,
   CLOUDFLARE_VIDEO_CREDENTIALS,
 } from "./providers/cloudflare/models.js";
+import { FAL_MAX_UPLOAD_ENV } from "./providers/fal/local-files.js";
 import { FAL_ROUTING } from "./providers/fal/models.js";
 import { UPLOAD_MIN_KBPS_ENV } from "./providers/gemini/local-files.js";
 import { HEYGEN_ROUTING } from "./providers/heygen/models.js";
@@ -39,12 +40,17 @@ import { RUNWAY_ROUTING } from "./providers/runway/models.js";
 export const PROJECT_ENV_EXCLUDED: ReadonlySet<string> = new Set([
   ALLOW_PROJECT_BASE_URL_ENV,
   "MULTIX_LEGACY_CLAUDE_ENV",
+  // Would let a repository choose where the run ledger (argv, prompts) is written.
+  "MULTIX_HISTORY_FILE",
 ]);
 
 /** The documented MULTIX_* settings a project may choose. */
 const OWN_SETTINGS = [
   "MULTIX_OUTPUT_DIR",
   "MULTIX_IMAGE_FORMAT",
+  // Agent mode: `json` envelope output; `0` turns the run ledger off.
+  "MULTIX_OUTPUT",
+  "MULTIX_HISTORY",
   MAX_DOWNLOAD_ENV,
   UPLOAD_MIN_KBPS_ENV,
   // Read before the project file loads, so setting it there has no effect.
@@ -65,6 +71,7 @@ const INLINE_SETTINGS = [
   "OPENAI_STT_MODEL",
   "OPENROUTER_IMAGE_MODEL",
   "OPENROUTER_VIDEO_MODEL",
+  "OPENROUTER_TTS_MODEL",
   "OPENROUTER_FALLBACK_MODELS",
   "OPENROUTER_SITE_URL",
   "OPENROUTER_APP_NAME",
@@ -81,6 +88,7 @@ const INLINE_SETTINGS = [
   "FAL_IMAGE_MODEL",
   "FAL_VIDEO_MODEL",
   "FAL_VIDEO_IMAGE_MODEL",
+  "FAL_TTS_MODEL",
   "REPLICATE_IMAGE_MODEL",
   "REPLICATE_VIDEO_MODEL",
   "RUNWAY_IMAGE_MODEL",
@@ -111,6 +119,7 @@ export const PROJECT_ENV_NAMES: ReadonlySet<string> = new Set([
   ...CLOUDFLARE_VIDEO_CREDENTIALS,
   ...Object.values(ATLAS_MODEL_ENV),
   MAX_UPLOAD_ENV,
+  FAL_MAX_UPLOAD_ENV,
   ...OWN_SETTINGS,
   ...INLINE_SETTINGS,
 ]);

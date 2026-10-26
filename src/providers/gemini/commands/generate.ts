@@ -14,6 +14,7 @@ import {
 } from "../../../core/image-webp-finalize.js";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
+import { outputStamp } from "../../../core/output-name.js";
 import { extractImages, generateContent } from "../client.js";
 import { withGeminiKey } from "../key-pool.js";
 import {
@@ -105,7 +106,7 @@ export function registerGenerateCommand(parent: Command): void {
             for (const img of images) {
               const outDir = getOutputDir();
               const ext = img.mimeType.includes("png") ? "png" : "jpg";
-              const fname = `gemini_generated_${Date.now()}_${i}.${ext}`;
+              const fname = `gemini_generated_${outputStamp()}_${i}.${ext}`;
               const dest = path.join(outDir, fname);
               fs.writeFileSync(dest, Buffer.from(img.data, "base64"));
               savedFiles.push(dest);
