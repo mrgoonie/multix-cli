@@ -8,9 +8,9 @@
  *
  * Every receipt names a logical `operation_id`. One operation can span several
  * runs (submit, status polls, result download, a webhook replay); spend is
- * counted once per operation by `settleOperations`, which keeps the best
- * actual figure seen (provider-reported over computed) and adds adjustments
- * (refunds, corrections). The reservation/settlement pair is the contract a
+ * counted once per operation by `settleOperations`: distinct charge runs add
+ * up, verbatim replays do not, a provider-reported figure settles the
+ * operation, and adjustments (refunds, corrections) apply once. The reservation/settlement pair is the contract a
  * budget ledger (the remote dashboard) uses to hold the high estimate before a
  * run and release it once the actual cost is known.
  */
@@ -46,7 +46,13 @@ export interface CostReceipt {
   > & { rate_id?: string; source?: string; last_checked?: string };
   provider_reported: { cost_usd: number | null; credits: number | null };
   actual_usd: number | null;
-  actual_source: "provider_reported" | "computed_from_usage" | "no_request" | null;
+  actual_source:
+    | "provider_reported"
+    | "computed_from_usage"
+    | "no_request"
+    /** Every billable request was refused with a 4xx: the provider did no work. */
+    | "refused"
+    | null;
   /** Units the actual was computed from (measured, not estimated). */
   measured?: Partial<Record<PriceMeter, number>>;
   /** actual - expected estimate, when both are known. */
@@ -88,9 +94,13 @@ export function isBillableMethod(method: string): boolean {
   return !/^(GET|HEAD|OPTIONS)$/i.test(method);
 }
 
+/** ElevenLabs models that spend half a credit per character (priced lower per character). */
+const HALF_CREDIT_MODEL = /flash|turbo/i;
+
 /** Units the provider says it billed, per meter, from the run's usage. */
 export function measuredUnits(
   usage: ReceiptUsage | undefined,
+  model?: string,
 ): Partial<Record<PriceMeter, number>> {
   const out: Partial<Record<PriceMeter, number>> = {};
   if (!usage) return out;
@@ -99,8 +109,12 @@ export function measuredUnits(
   const output = usage.tokens?.output ?? m["usage.total_output_tokens"];
   if (input !== undefined) out.input_text_tokens = input;
   if (output !== undefined) out.output_audio_tokens = output;
-  // ElevenLabs reports billed characters in the character-cost header.
-  const chars = m["header.character-cost"];
+  // ElevenLabs: x-character-count is the character count. character-cost may be
+  // credits, which equal characters only on full-credit models; on Flash/Turbo
+  // it could be half, so it is not read as characters there.
+  const chars =
+    m["header.x-character-count"] ??
+    (model && HALF_CREDIT_MODEL.test(model) ? undefined : m["header.character-cost"]);
   if (chars !== undefined) out.characters = chars;
   return out;
 }
@@ -140,7 +154,7 @@ export function buildCostReceipt(input: ReceiptInput): CostReceipt {
   const role: CostRole = billable.length > 0 ? "charge" : sent.length > 0 ? "observation" : "none";
   const reportedUsd = input.usage?.cost_usd;
   const reportedCredits = input.usage?.credits;
-  const measured = measuredUnits(input.usage);
+  const measured = measuredUnits(input.usage, input.model);
 
   let status: CostStatus;
   let reason: string | undefined;
@@ -162,8 +176,16 @@ export function buildCostReceipt(input: ReceiptInput): CostReceipt {
       const lookup = resolveRate(input.provider, input.model, at);
       if (lookup.ok) computed = computeActual(lookup.rate.components, measured);
     }
-    const partial = billable.some((c) => c.status === 0 || c.status >= 400);
-    if (input.outcome === "failed" && role === "charge") {
+    // Cut off, timed out or a server error: the provider may have done (and
+    // billed) the work. A 4xx refusal (bad input, auth, rate limit) is not billed.
+    const refused = billable.every((c) => c.status >= 400 && c.status < 500 && c.status !== 408);
+    const partial = billable.some((c) => c.status === 0 || c.status === 408 || c.status >= 500);
+    if (role === "charge" && refused) {
+      status = "settled";
+      actual = 0;
+      source = "refused";
+      reason = "The provider refused every billable request (4xx), so it did no paid work.";
+    } else if (input.outcome === "failed" && role === "charge") {
       status = "uncertain";
       reason =
         "The run failed after a billable request was sent; the provider may have charged it. Check its usage page.";
@@ -200,7 +222,7 @@ export function buildCostReceipt(input: ReceiptInput): CostReceipt {
     actual_source: source,
     ...(Object.keys(measured).length ? { measured } : {}),
     variance_usd:
-      actual !== null && expected !== null && source !== "no_request"
+      actual !== null && expected !== null && source !== "no_request" && source !== "refused"
         ? round6(actual - expected)
         : null,
     ...(input.max_cost_usd !== undefined ? { max_cost_usd: input.max_cost_usd } : {}),
@@ -235,7 +257,7 @@ export interface CostAdjustment {
 export interface OperationSpend {
   operation_id: string;
   status: CostStatus;
-  /** Best actual seen (provider-reported over computed), adjustments included. */
+  /** Provider-reported figure, else the sum of the known charges; adjustments included. */
   actual_usd: number | null;
   adjustments_usd: number;
   runs: number;
@@ -243,62 +265,86 @@ export interface OperationSpend {
 
 export interface SpendSummary {
   operations: OperationSpend[];
-  /** Settled and computed spend, each operation counted once. */
+  /** Known spend, each operation counted once; uncertain or unknown charges add nothing. */
   total_usd: number;
   /** Operations whose cost is uncertain or unknown: the total excludes them. */
   uncertain: number;
   unknown: number;
 }
 
+/** Lower is less certain: an operation is only as certain as its least certain charge. */
 const RANK: Record<CostStatus, number> = { settled: 3, computed: 2, uncertain: 1, unknown: 0 };
 
+/** Receipts that say nothing about money spent: nothing was sent, or every request was refused. */
+const isNoSpend = (r: CostReceipt) =>
+  r.actual_source === "no_request" || r.actual_source === "refused";
+
 /**
- * Spend per operation, counted once however many receipts (polls, retries of a
- * status read, replayed webhooks) mention it. A charge's receipt and a later
- * provider-reported observation settle the same operation; receipts with the
- * same operation id and figure never add up twice.
+ * Spend per operation, counted once however many receipts mention it. Each
+ * distinct charge run (a resubmit is billed again) adds its actual; a receipt
+ * replayed verbatim (same run, same instant) counts once. A status read that
+ * carries the provider's own figure settles the whole operation and replaces
+ * the charges' sum. Runs that sent nothing or were refused never lower a
+ * figure. The operation's status is that of its least certain charge.
  */
 export function settleOperations(
   receipts: CostReceipt[],
   adjustments: CostAdjustment[] = [],
 ): SpendSummary {
-  const ops = new Map<string, OperationSpend & { rank: number; charged: boolean }>();
+  type Op = {
+    runs: number;
+    charges: Map<string, CostReceipt>;
+    reported?: CostReceipt;
+    noSpendOnly: boolean;
+  };
+  const ops = new Map<string, Op>();
   for (const r of receipts) {
-    const op = ops.get(r.operation_id) ?? {
-      operation_id: r.operation_id,
-      status: "unknown" as CostStatus,
-      actual_usd: null,
-      adjustments_usd: 0,
-      runs: 0,
-      rank: -1,
-      charged: false,
-    };
+    const op: Op = ops.get(r.operation_id) ?? { runs: 0, charges: new Map(), noSpendOnly: true };
     op.runs++;
-    if (r.role === "charge") op.charged = true;
-    // An observation without a figure says nothing about the charge.
-    const informative = r.role !== "observation" || r.actual_usd !== null;
-    const rank = RANK[r.status];
-    if (informative && rank >= op.rank) {
-      op.rank = rank;
-      op.status = r.status;
-      op.actual_usd = r.actual_usd;
-    }
     ops.set(r.operation_id, op);
+    if (isNoSpend(r)) continue;
+    op.noSpendOnly = false;
+    if (r.role === "charge") {
+      op.charges.set(`${r.at}|${r.status}|${r.actual_usd}`, r);
+    } else if (r.status === "settled" && r.actual_usd !== null) {
+      if (!op.reported || r.at >= op.reported.at) op.reported = r;
+    }
   }
+  const adjusted = new Map<string, number>();
   const seenAdjustment = new Set<string>();
   for (const a of adjustments) {
     const key = `${a.operation_id}|${a.kind}|${a.usd}|${a.at}`;
     if (seenAdjustment.has(key)) continue;
     seenAdjustment.add(key);
-    const op = ops.get(a.operation_id);
-    if (op) op.adjustments_usd = round6(op.adjustments_usd + a.usd);
+    adjusted.set(a.operation_id, round6((adjusted.get(a.operation_id) ?? 0) + a.usd));
   }
-  const operations: OperationSpend[] = [...ops.values()]
-    .filter((op) => op.charged || op.actual_usd !== null)
-    .map(({ rank: _r, charged: _c, ...op }) => ({
-      ...op,
-      actual_usd: op.actual_usd === null ? null : round6(op.actual_usd + op.adjustments_usd),
-    }));
+  const operations: OperationSpend[] = [];
+  for (const [operation_id, op] of ops) {
+    if (op.noSpendOnly) continue;
+    const charges = [...op.charges.values()];
+    if (charges.length === 0 && !op.reported) continue;
+    let status: CostStatus;
+    let actual: number | null;
+    if (op.reported) {
+      status = "settled";
+      actual = op.reported.actual_usd;
+    } else {
+      status = charges.reduce<CostStatus>(
+        (worst, r) => (RANK[r.status] < RANK[worst] ? r.status : worst),
+        "settled",
+      );
+      const known = charges.filter((r) => r.actual_usd !== null);
+      actual = known.length ? known.reduce((sum, r) => sum + (r.actual_usd ?? 0), 0) : null;
+    }
+    const adjustments_usd = adjusted.get(operation_id) ?? 0;
+    operations.push({
+      operation_id,
+      status,
+      actual_usd: actual === null ? null : round6(actual + adjustments_usd),
+      adjustments_usd,
+      runs: op.runs,
+    });
+  }
   return {
     operations,
     total_usd: round6(operations.reduce((s, op) => s + (op.actual_usd ?? 0), 0)),

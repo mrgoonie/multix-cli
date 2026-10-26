@@ -125,6 +125,66 @@ describe("cost receipts", () => {
     expect(r.actual_usd).toBeCloseTo((20 * 0.5 + 250 * 9) / 1e6, 9);
   });
 
+  it("a submit refused with a 4xx did no paid work; a 429 retried to success is not uncertain", () => {
+    const refused = buildCostReceipt({
+      operation_id: "op",
+      outcome: "failed",
+      provider: "elevenlabs",
+      calls: [{ method: "POST", status: 401 }],
+      at: AT,
+    });
+    expect(refused).toMatchObject({ status: "settled", actual_usd: 0, actual_source: "refused" });
+    const retried = buildCostReceipt({
+      operation_id: "op",
+      outcome: "ok",
+      provider: "gemini",
+      model: "gemini-3.8-flash-tts",
+      calls: [{ method: "POST", status: 429 }, POST_OK],
+      usage: { tokens: { input: 20, output: 250 } },
+      at: AT,
+    });
+    expect(retried.status).toBe("computed");
+    const serverError = buildCostReceipt({
+      operation_id: "op",
+      outcome: "ok",
+      provider: "gemini",
+      calls: [{ method: "POST", status: 503 }, POST_OK],
+      at: AT,
+    });
+    expect(serverError.status).toBe("uncertain");
+  });
+
+  it("reads ElevenLabs characters from x-character-count; character-cost only on full-credit models", () => {
+    const flash = (metrics: Record<string, number>) =>
+      buildCostReceipt({
+        operation_id: "op",
+        outcome: "ok",
+        provider: "elevenlabs",
+        model: "eleven_flash_v2_5",
+        calls: [POST_OK],
+        usage: { metrics },
+        at: AT,
+      });
+    expect(flash({ "header.character-cost": 9 })).toMatchObject({
+      status: "unknown",
+      actual_usd: null,
+    });
+    const counted = flash({ "header.character-cost": 9, "header.x-character-count": 17 });
+    expect(counted.measured).toEqual({ characters: 17 });
+    expect(counted.actual_usd).toBeCloseTo(17 * 0.00004, 9);
+  });
+
+  it("a provider CLI run (Codex driver) is a charge with unknown cost, never free", () => {
+    const r = buildCostReceipt({
+      operation_id: "op",
+      outcome: "ok",
+      provider: "openai",
+      calls: [{ method: "EXEC", status: 200 }],
+      at: AT,
+    });
+    expect(r).toMatchObject({ role: "charge", status: "unknown", actual_usd: null });
+  });
+
   it("status-only runs are observations", () => {
     const r = buildCostReceipt({
       operation_id: "fal:req-1",
@@ -178,6 +238,37 @@ describe("settlement", () => {
       actual_usd: 0.12,
       runs: 4,
     });
+  });
+
+  it("a later run that sent nothing never lowers an operation's cost", () => {
+    const notSent = receipt({
+      operation_id: "a",
+      status: "settled",
+      actual_usd: 0,
+      actual_source: "no_request",
+    });
+    const uncertain = settleOperations([
+      receipt({ operation_id: "a", status: "uncertain" }),
+      notSent,
+    ]);
+    expect(uncertain).toMatchObject({ total_usd: 0, uncertain: 1 });
+    const computed = settleOperations([
+      receipt({ operation_id: "a", status: "computed", actual_usd: 0.08 }),
+      { ...notSent, at: "2026-10-26T13:00:00.000Z" },
+    ]);
+    expect(computed.total_usd).toBe(0.08);
+    expect(settleOperations([notSent]).operations).toEqual([]);
+  });
+
+  it("adds distinct paid runs of one operation, but a replayed receipt once", () => {
+    const first = receipt({ operation_id: "a", status: "computed", actual_usd: 0.1 });
+    const resubmit = { ...first, at: "2026-10-26T12:05:00.000Z" };
+    expect(settleOperations([first, first, resubmit]).total_usd).toBe(0.2);
+    const mixed = settleOperations([
+      first,
+      receipt({ operation_id: "a", status: "uncertain", at: "2026-10-26T12:06:00.000Z" }),
+    ]);
+    expect(mixed.operations[0]).toMatchObject({ status: "uncertain", actual_usd: 0.1 });
   });
 
   it("excludes uncertain operations from the total but counts them", () => {

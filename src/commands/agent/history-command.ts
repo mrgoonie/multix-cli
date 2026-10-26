@@ -156,6 +156,7 @@ export function historyStats(entries: HistoryEntry[], by: "provider" | "model" |
         outputs: b.outputs,
         ...(priced ? { cost_usd: Math.round(spend.total_usd * 1e4) / 1e4 } : {}),
         ...(spend.uncertain ? { cost_uncertain_ops: spend.uncertain } : {}),
+        ...(spend.unknown ? { cost_unknown_ops: spend.unknown } : {}),
         ...(b.credits !== undefined ? { credits: Math.round(b.credits * 1e6) / 1e6 } : {}),
         ...(b.tokens !== undefined ? { tokens: b.tokens } : {}),
       };

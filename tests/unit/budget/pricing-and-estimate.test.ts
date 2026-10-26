@@ -132,6 +132,12 @@ describe("estimates", () => {
     const cli = estimateCommand("elevenlabs tts", { text: "hi", previousText: "abc" }, { at: AT });
     expect(mcp.units.characters?.high).toBe(5);
     expect(cli.units).toEqual(mcp.units);
+    const flags = estimateCommand(
+      "elevenlabs tts",
+      { "--text": "hi", "--previous-text": "abc" },
+      { at: AT },
+    );
+    expect(flags.units).toEqual(mcp.units);
   });
 });
 
@@ -164,6 +170,8 @@ describe("spend guard", () => {
   it("rejects malformed limits", () => {
     expect(parseMaxCost("0.25")).toBe(0.25);
     expect(parseMaxCost(0)).toBe(0);
-    for (const bad of ["", "abc", "-1", "Infinity"]) expect(() => parseMaxCost(bad)).toThrow();
+    for (const bad of ["", "abc", "-1", "Infinity", "0x10", "1e3"]) {
+      expect(() => parseMaxCost(bad)).toThrow();
+    }
   });
 });

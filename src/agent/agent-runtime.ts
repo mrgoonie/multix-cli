@@ -106,7 +106,8 @@ function addGlobalFlags(cmd: Command, group = ""): void {
   else if (sendsRequests) {
     cmd.option("--dry-run", "Validate and show the first provider request without sending it");
   }
-  if (sendsRequests && !LOCAL_GROUPS.has(group) && cmd.commands.length === 0) {
+  const billable = sendsRequests && !LOCAL_GROUPS.has(group) && !NON_PROVIDER_GROUPS.has(group);
+  if (billable && cmd.commands.length === 0) {
     if (!has("--estimate")) {
       cmd.option("--estimate", "Price the run (range, units, rate source) without sending it");
     }
@@ -383,7 +384,10 @@ export function installAgentRuntime(program: Command, cliVersion: string): void 
   );
   // Paid work outside fetch (the Codex image driver) stops here in a dry run.
   setExternalRunGuard(({ program: name, args }) => {
-    if (!run.dryRun) return;
+    if (!run.dryRun) {
+      run.externalRuns.push(name);
+      return;
+    }
     const body = args.map((a) => (a.length > 400 ? `<${a.length} chars>` : a));
     realExit(finalizeRun({ exitCode: 0, dryRunRequest: { method: "EXEC", url: name, body } }));
   });

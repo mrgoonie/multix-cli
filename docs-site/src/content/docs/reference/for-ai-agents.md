@@ -169,18 +169,21 @@ a `cost` receipt (`multix.cost/v1`):
 | --- | --- |
 | `operation_id` | The logical operation the run belongs to; see `MULTIX_OPERATION_ID` below. |
 | `role` | `charge` (sent a billable request), `observation` (status reads or downloads only) or `none` (sent nothing). |
-| `status` | `settled` (provider-reported, or $0 because nothing was sent), `computed` (measured usage at the catalog price), `uncertain` (a billable request was sent and the run failed or was cut off), `unknown`. |
+| `status` | `settled` (provider-reported, or $0 because nothing was sent or the provider refused every billable request with a 4xx), `computed` (measured usage at the catalog price), `uncertain` (a billable request was sent and the run failed or was cut off), `unknown`. |
 | `estimate` | The pre-flight range in short form, with rate id, source and `last_checked`. |
 | `provider_reported` | `cost_usd` and `credits` as the provider reported them; `null` when not reported, which is not $0. |
-| `actual_usd`, `actual_source` | The actual cost and where it came from: `provider_reported`, `computed_from_usage` or `no_request`. `null` when unknown or uncertain. |
+| `actual_usd`, `actual_source` | The actual cost and where it came from: `provider_reported`, `computed_from_usage`, `no_request` or `refused`. `null` when unknown or uncertain. |
 | `measured` | Units the actual was computed from. |
 | `variance_usd` | Actual minus expected estimate. |
 | `max_cost_usd`, `policy` | The `--max-cost` limit and policy, when set. |
 
 Text mode prints a one-line `Cost: …` receipt on stderr.
 
-`MULTIX_OPERATION_ID` names the logical operation, so several runs (submit,
-status polls, downloads, webhook replays) are counted once. The default is
+`MULTIX_OPERATION_ID` names the logical operation, so its runs are counted
+once: status polls and downloads add nothing, a replayed receipt counts once,
+a provider-reported figure settles the operation, and only each distinct paid
+submit (a resubmit is billed again) adds its cost. A run that sent nothing never
+lowers the operation's cost. The default is
 `<provider>:<job id>`, or `run:<history id>` when the provider returned no id.
 Set it in the shell for the run; a project `.env` cannot set it.
 
@@ -202,8 +205,9 @@ multix rerun h_mfz3k2ab1c9d         # run it again (extra args are appended)
 ```
 
 `history stats` skips `--dry-run` and `--estimate` runs and counts each
-operation's cost once, from settled and computed receipts only;
-`cost_uncertain_ops` counts the operations whose cost is uncertain.
+operation's cost once, from known figures only; `cost_uncertain_ops` and
+`cost_unknown_ops` count the operations whose cost is uncertain or unknown, so
+`cost_usd` is a lower bound when either is present.
 
 `MULTIX_HISTORY=0` turns the ledger off. `MULTIX_HISTORY_FILE` moves it (shell
 or `~/.multix/.env` only, not a project `.env`).

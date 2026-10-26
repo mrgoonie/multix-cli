@@ -89,7 +89,9 @@ export function costReceiptFor(opts: {
     outcome: opts.notSent ? "not_sent" : opts.failed ? "failed" : "ok",
     provider: run.group,
     model: opts.model,
-    calls: run.calls,
+    // A provider's own CLI spends quota without a fetch call: count it as a
+    // billable request whose cost multix cannot see.
+    calls: [...run.calls, ...run.externalRuns.map(() => ({ method: "EXEC", status: 200 }))],
     usage: opts.usage,
     estimate: run.estimate,
     max_cost_usd: run.maxCost,

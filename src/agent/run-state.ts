@@ -35,6 +35,8 @@ export interface RunState {
   postUsage: ResponseUsage[];
   getUsage: Map<string, ResponseUsage>;
   ids: string[];
+  /** Programs started for paid work outside fetch (the Codex image driver). */
+  externalRuns: string[];
   /** Model named by the first provider request that names one. */
   requestModel?: string;
   /** stdout/stderr text captured in JSON mode. */
@@ -73,6 +75,7 @@ export const run: RunState = {
   postUsage: [],
   getUsage: new Map(),
   ids: [],
+  externalRuns: [],
   stdout: [],
   stderr: [],
   actionStarted: false,

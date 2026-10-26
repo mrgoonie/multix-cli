@@ -168,18 +168,21 @@ nhận `cost` (`multix.cost/v1`):
 | --- | --- |
 | `operation_id` | Thao tác logic mà lần chạy thuộc về; xem `MULTIX_OPERATION_ID` bên dưới. |
 | `role` | `charge` (đã gửi request tính phí), `observation` (chỉ đọc trạng thái hoặc tải file) hoặc `none` (không gửi gì). |
-| `status` | `settled` (provider báo, hoặc $0 vì không gửi gì), `computed` (usage đo được nhân giá trong catalog), `uncertain` (đã gửi request tính phí rồi lần chạy lỗi hoặc bị cắt), `unknown`. |
+| `status` | `settled` (provider báo, hoặc $0 vì không gửi gì hay provider từ chối mọi request tính phí bằng lỗi 4xx), `computed` (usage đo được nhân giá trong catalog), `uncertain` (đã gửi request tính phí rồi lần chạy lỗi hoặc bị cắt), `unknown`. |
 | `estimate` | Khoảng ước tính trước khi chạy ở dạng rút gọn, kèm rate id, nguồn và `last_checked`. |
 | `provider_reported` | `cost_usd` và `credits` đúng như provider báo; `null` khi không báo, và `null` không có nghĩa là $0. |
-| `actual_usd`, `actual_source` | Chi phí thực và nguồn của nó: `provider_reported`, `computed_from_usage` hoặc `no_request`. `null` khi không rõ hoặc không chắc chắn. |
+| `actual_usd`, `actual_source` | Chi phí thực và nguồn của nó: `provider_reported`, `computed_from_usage`, `no_request` hoặc `refused`. `null` khi không rõ hoặc không chắc chắn. |
 | `measured` | Số đơn vị dùng để tính chi phí thực. |
 | `variance_usd` | Chi phí thực trừ chi phí dự kiến. |
 | `max_cost_usd`, `policy` | Giới hạn `--max-cost` và policy, khi có đặt. |
 
 Ở chế độ text, lệnh in một dòng biên nhận `Cost: …` ra stderr.
 
-`MULTIX_OPERATION_ID` đặt tên cho thao tác logic, để nhiều lần chạy (submit,
-poll trạng thái, tải file, webhook gửi lại) chỉ được tính một lần. Mặc định là
+`MULTIX_OPERATION_ID` đặt tên cho thao tác logic, để các lần chạy của nó chỉ
+được tính một lần: poll trạng thái và tải file không cộng thêm gì, biên nhận gửi
+lại chỉ tính một lần, con số provider báo sẽ chốt chi phí của thao tác, và chỉ
+mỗi lần submit tính phí riêng biệt (submit lại thì bị tính phí lại) mới cộng
+thêm chi phí. Lần chạy không gửi gì không bao giờ làm giảm chi phí của thao tác. Mặc định là
 `<provider>:<job id>`, hoặc `run:<history id>` khi provider không trả id. Hãy
 đặt biến này trong shell cho lần chạy đó; `.env` của project không đặt được.
 
@@ -201,8 +204,9 @@ multix rerun h_mfz3k2ab1c9d         # chạy lại (tham số thêm được n�
 ```
 
 `history stats` bỏ qua các lần chạy `--dry-run` và `--estimate`, và tính chi phí
-mỗi thao tác một lần, chỉ từ các biên nhận `settled` và `computed`;
-`cost_uncertain_ops` đếm số thao tác có chi phí không chắc chắn.
+mỗi thao tác một lần, chỉ từ các con số đã biết; `cost_uncertain_ops` và
+`cost_unknown_ops` đếm số thao tác có chi phí không chắc chắn hoặc không rõ, nên
+khi có một trong hai thì `cost_usd` chỉ là cận dưới.
 
 `MULTIX_HISTORY=0` tắt ledger. `MULTIX_HISTORY_FILE` đổi vị trí file (chỉ trong
 shell hoặc `~/.multix/.env`, không nhận từ `.env` của project).

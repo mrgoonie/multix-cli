@@ -72,10 +72,14 @@ export function estimateCommand(
   defaults: { model?: string; at?: Date } = {},
 ): CostEstimate {
   const builder = BUILDERS[command];
-  const req = builder?.(options, defaults);
+  // MCP callers may spell keys as CLI flags ("--text"), like multix_run accepts.
+  const named = Object.fromEntries(
+    Object.entries(options).map(([k, v]) => [k.replace(/^-+/, ""), v]),
+  );
+  const req = builder?.(named, defaults);
   if (req) return estimateCost({ ...req, at: defaults.at });
   const at = (defaults.at ?? new Date()).toISOString();
-  const model = opt(options, "model") ?? defaults.model ?? "";
+  const model = opt(named, "model") ?? defaults.model ?? "";
   return {
     status: "unknown",
     reason: builder ? "missing_input" : "unsupported",
@@ -97,8 +101,8 @@ export function estimateCommand(
 }
 
 export function parseMaxCost(value: unknown): number {
+  if (typeof value === "string" && !/^\s*\d+(\.\d+)?\s*$/.test(value)) throw invalidMaxCost(value);
   const n = typeof value === "number" ? value : Number(String(value).trim());
-  if (typeof value === "string" && value.trim() === "") throw invalidMaxCost(value);
   if (!Number.isFinite(n) || n < 0) throw invalidMaxCost(value);
   return n;
 }
