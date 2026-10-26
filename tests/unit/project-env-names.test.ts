@@ -28,6 +28,8 @@ const HOSTILE = [
   "HTTPS_PROXY",
   "ALL_PROXY",
   "PATH",
+  "MULTIX_REMOTE_URL",
+  "MULTIX_API_KEY",
 ];
 
 function sourceFiles(dir: string): string[] {

@@ -42,6 +42,10 @@ export const PROJECT_ENV_EXCLUDED: ReadonlySet<string> = new Set([
   "MULTIX_LEGACY_CLAUDE_ENV",
   // Would let a repository choose where the run ledger (argv, prompts) is written.
   "MULTIX_HISTORY_FILE",
+  // `history sync`: a repository must not pick the server that receives the
+  // account API key and the run history, nor supply that key.
+  "MULTIX_REMOTE_URL",
+  "MULTIX_API_KEY",
 ]);
 
 /** The documented MULTIX_* settings a project may choose. */
