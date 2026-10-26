@@ -34,15 +34,18 @@ export function redactUrl(url: string): string {
 /**
  * Query strings of http(s) URLs anywhere in a string (pre-signed URLs carry
  * credentials). Also matches JSON-escaped slashes (`https:\/\/`). A query ends
- * at whitespace, `#`, a double quote, `<`, `>` or a backtick, so a URL inside
- * a raw JSON or HTML error body leaves the rest of the body parseable.
+ * at whitespace, `#`, a double quote, `<`, `>`, a backtick or an escaped quote
+ * (`\"`), so a URL inside a raw JSON or HTML error body leaves the rest of the
+ * body parseable. The path part is bounded to keep large inputs linear.
  */
-const URL_QUERY = /(https?:(?:\\?\/){2}[^\s?#"<>`]*)\?[^\s#"<>`]*/gi;
+const URL_QUERY = /(https?:(?:\\?\/){2}[^\s?#"<>`]{0,2048})\?(?:[^\s#"<>`\\]|\\[^\s"])*/gi;
 
 /**
  * Redact the query string of every http(s) URL inside free text, such as a
  * provider error that echoes the pre-signed URL it failed to download.
- * Secrets in a URL path or fragment are not detected.
+ * Not detected: secrets in a URL path or fragment, a query the provider
+ * echoes URL-decoded (it ends at the first space), percent-encoded nested
+ * URLs, and URLs without an http(s) scheme.
  */
 export function redactUrlsInText(text: string): string {
   return text.replace(URL_QUERY, "$1?[redacted]");

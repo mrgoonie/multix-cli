@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { PollTimeoutError } from "../../../../src/core/async-poll.js";
+import { HttpError } from "../../../../src/core/errors.js";
 import {
   ReplicateApiError,
   ReplicateClient,
   ReplicatePredictionError,
   assertSucceeded,
+  mapReplicateError,
 } from "../../../../src/providers/replicate/client.js";
 import { parseModelRef } from "../../../../src/providers/replicate/models.js";
 import type { ReplicatePrediction } from "../../../../src/providers/replicate/types.js";
@@ -356,5 +358,20 @@ describe("uploadFile", () => {
     await expect(
       client(fake).uploadFile({ data: new Blob(["x"]), filename: "a.bin", contentType: "x/y" }),
     ).rejects.toThrow(/less than 100MB/);
+  });
+});
+
+describe("mapReplicateError", () => {
+  it("still reads `detail` from a body that echoes a signed URL, without its query", () => {
+    const body = JSON.stringify({
+      detail: 'could not fetch "https://cdn.test/in.png?X-Amz-Signature=DETAILSECRET"',
+    });
+    const err = mapReplicateError(
+      new HttpError(422, body, `${BASE}/predictions`),
+      "owner/model",
+    ) as Error;
+    expect(err.message).toContain('could not fetch "https://cdn.test/in.png?[redacted]"');
+    expect(err.message).not.toContain("DETAILSECRET");
+    expect(err.message).not.toContain("{");
   });
 });

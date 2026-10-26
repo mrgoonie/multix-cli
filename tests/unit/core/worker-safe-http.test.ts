@@ -121,6 +121,23 @@ describe("redactUrlsInText", () => {
     );
   });
 
+  it("keeps a JSON body parseable when the URL is wrapped in escaped quotes", () => {
+    const json = JSON.stringify({
+      detail: 'failed to download "https://cdn.test/a.mp3?X-Amz-Signature=QUOTEDSECRET"',
+    });
+    const out = redactUrlsInText(json);
+    expect(out).not.toContain("QUOTEDSECRET");
+    expect(JSON.parse(out)).toEqual({
+      detail: 'failed to download "https://cdn.test/a.mp3?[redacted]"',
+    });
+  });
+
+  it("stays fast on large input", () => {
+    const started = Date.now();
+    redactUrlsInText("https://".repeat(25_000));
+    expect(Date.now() - started).toBeLessThan(2_000);
+  });
+
   it("redacts URLs written with JSON-escaped slashes, escaped ampersands included", () => {
     const out = redactUrlsInText('"https:\\/\\/x.test\\/a?a=1\\u0026sig=SECRET","k":1');
     expect(out).toBe('"https:\\/\\/x.test\\/a?[redacted]","k":1');
@@ -157,12 +174,12 @@ describe("HttpError", () => {
 describe("MultixError", () => {
   it("redacts URL queries in every subclass's message", () => {
     for (const e of [
-      new MultixError("cannot read https://cdn.test/a.png?sig=S1", "X"),
-      new ProviderError("provider said https://cdn.test/a.png?sig=S1", "openrouter"),
-      new ValidationError("bad input https://cdn.test/a.png?sig=S1"),
+      new MultixError("cannot read https://cdn.test/a.png?sig=SUBCLASSSECRET", "X"),
+      new ProviderError("provider said https://cdn.test/a.png?sig=SUBCLASSSECRET", "openrouter"),
+      new ValidationError("bad input https://cdn.test/a.png?sig=SUBCLASSSECRET"),
     ]) {
       expect(e.message).toContain("https://cdn.test/a.png?[redacted]");
-      expect(e.message).not.toContain("S1");
+      expect(e.message).not.toContain("SUBCLASSSECRET");
     }
   });
 });

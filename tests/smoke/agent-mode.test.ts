@@ -107,9 +107,11 @@ describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     } as const;
     const json = await execa("node", [...args, "--no-model-check", "--json"], opts);
     expect(json.exitCode).toBe(5);
-    expect(envelope(json.stdout).error.message).toContain(
+    const out = envelope(json.stdout);
+    expect(out.error.message).toContain(
       "failed to download https://bucket.s3.amazonaws.com/talk.m4a?[redacted]",
     );
+    expect(out.log.join("\n")).toContain("provider body:");
     const text = await execa("node", [...args, "--no-model-check"], opts);
     expect(text.stderr).toContain("talk.m4a?[redacted]");
     const history = fs.readFileSync(path.join(tmp, "h.jsonl"), "utf8");

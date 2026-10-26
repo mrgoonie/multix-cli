@@ -6,7 +6,6 @@
  * JSON responses under a size cap, so downloads are never buffered twice.
  */
 
-import { redactUrlsInText } from "../core/redact.js";
 import { extractUsage, hasUsage } from "../core/usage-extract.js";
 import { run } from "./run-state.js";
 
@@ -31,10 +30,13 @@ export function safeUrl(url: string): string {
   }
 }
 
+/** Query strings of http(s) URLs anywhere in a string (pre-signed URLs carry credentials). */
+const URL_QUERY = /(https?:\/\/[^\s?#]*)\?[^\s#]*/gi;
+
 function shorten(value: unknown, depth = 0): unknown {
   if (typeof value === "string") {
     if (value.startsWith("data:") || value.length > 400) return `<${value.length} chars>`;
-    return redactUrlsInText(value);
+    return value.replace(URL_QUERY, "$1?[redacted]");
   }
   if (Array.isArray(value)) {
     const items = value.slice(0, 10).map((v) => shorten(v, depth + 1));

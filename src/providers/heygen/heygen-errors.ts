@@ -4,6 +4,7 @@
  */
 
 import { HttpError, ProviderError } from "../../core/errors.js";
+import { redactUrlsInText } from "../../core/redact.js";
 import { HEYGEN_API_SETTINGS_URL, HEYGEN_USAGE_URL } from "./models.js";
 import type { HeygenApiErrorBody } from "./types.js";
 
@@ -23,7 +24,9 @@ export class HeygenApiError extends HttpError {
   ) {
     super(status, snippet, url, retryAfterMs);
     this.name = "HeygenApiError";
-    this.message = describeHeygenError(status, apiCode, apiMessage, param, retryAfterMs);
+    this.message = redactUrlsInText(
+      describeHeygenError(status, apiCode, apiMessage, param, retryAfterMs),
+    );
   }
 }
 

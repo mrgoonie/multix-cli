@@ -14,6 +14,7 @@ import fs from "node:fs";
 import type { Command } from "commander";
 import { type ErrorInfo, classifyError, classifyMessage } from "../core/error-classify.js";
 import { setExternalRunGuard } from "../core/external-run-guard.js";
+import { redactUrlsInText } from "../core/redact.js";
 import { type DryRunRequest, installFetchTelemetry, settleTelemetry } from "./fetch-telemetry.js";
 import { appendHistory, newHistoryId, redactArgv } from "./history-store.js";
 import { type OutputFile, type OutputWarning, inspectOutput } from "./output-file-inspect.js";
@@ -122,7 +123,10 @@ function captureStreams(): void {
     return (realStdoutWrite as any)(chunk, ...rest);
   }) as typeof process.stdout.write;
   process.stderr.write = ((chunk: unknown, ...rest: unknown[]) => {
-    const text = typeof chunk === "string" ? chunk : Buffer.from(chunk as Uint8Array).toString();
+    const raw = typeof chunk === "string" ? chunk : Buffer.from(chunk as Uint8Array).toString();
+    // Logs never show URL queries (signed URLs), even raw provider JSON a command prints.
+    const text = redactUrlsInText(raw);
+    const out = text === raw ? chunk : text;
     run.stderr.push(text);
     if (run.stderr.length > 400) run.stderr.splice(0, run.stderr.length - 400);
     for (const line of stripAnsi(text).split("\n")) {
@@ -135,7 +139,7 @@ function captureStreams(): void {
       return true;
     }
     // biome-ignore lint/suspicious/noExplicitAny: pass-through of the original signature
-    return (realStderrWrite as any)(chunk, ...rest);
+    return (realStderrWrite as any)(out, ...rest);
   }) as typeof process.stderr.write;
 }
 
