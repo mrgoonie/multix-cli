@@ -35,6 +35,7 @@ một đến ba phút.
 | `eleven_v3` | 5.000 | `--stability`, `--similarity-boost` | Audio tags; không có `--previous-text`/`--next-text` |
 | `eleven_multilingual_v2` (mặc định) | 10.000 | tất cả trừ `--clone-strength` | Bỏ qua `--language-code` |
 | `eleven_flash_v2_5`, `eleven_turbo_v2_5` | 40.000 | `--stability`, `--similarity-boost` | Độ trễ thấp |
+| `eleven_flash_v2`, `eleven_turbo_v2` | 30.000 | `--stability`, `--similarity-boost` | Chỉ tiếng Anh |
 
 ```bash
 multix elevenlabs tts --model eleven_v4 --language-code vi \

@@ -91,9 +91,19 @@ export function registerTtsCommand(parent: Command): void {
       });
       let alignment: string | undefined;
       if (opts.timestamps) {
-        const body = JSON.parse(bytes.toString("utf8")) as TimestampsResponse;
+        let body: TimestampsResponse;
+        try {
+          body = JSON.parse(bytes.toString("utf8")) as TimestampsResponse;
+        } catch {
+          body = {};
+        }
         if (!body.audio_base64) {
-          throw new ProviderError("ElevenLabs returned no audio with timestamps", "elevenlabs");
+          // Billed already: keep what came back so it can be inspected.
+          const raw = saveBytes({ bytes, task: "tts_raw", ext: "bin", logger });
+          throw new ProviderError(
+            `ElevenLabs returned no audio with timestamps; raw response saved to ${raw}`,
+            "elevenlabs",
+          );
         }
         bytes = Buffer.from(body.audio_base64, "base64");
         alignment = JSON.stringify(

@@ -531,7 +531,7 @@ multix elevenlabs models
 - Dubbing is async: submit → poll → download per-language tracks.
 - Output format strings combine codec + sample rate + bitrate, e.g. `mp3_44100_128`, `pcm_24000`, `ulaw_8000`; `tts` also accepts `wav_*`, `opus_48000_*`, `alaw_8000`, `pcm_32000`/`pcm_48000` and `mp3_24000_48`.
 - `tts` checks options against the model before calling the API. Eleven v4 and v4 Turbo use only `--stability`, `--similarity-boost` and `--clone-strength` (Professional Voice Clones fine-tuned for v4); `--style` and `--no-speaker-boost` are rejected for them, as are `--previous-text`/`--next-text` for `eleven_v3` (the API refuses them). For the older models an option the model ignores (e.g. `--style` on Flash, `--language-code` on `eleven_multilingual_v2`) only prints a warning, so existing scripts keep working. Audio tags (`[whispers]`) work on v4, v4 Turbo and v3; SSML `<break>` does not.
-- Text length per request: 10,000 characters for v4, v4 Turbo and multilingual_v2, 5,000 for v3, 40,000 for Flash/Turbo v2.5.
+- Text length per request: 10,000 characters for v4, v4 Turbo and multilingual_v2, 5,000 for v3, 40,000 for Flash/Turbo v2.5, 30,000 for Flash/Turbo v2. Malformed numbers and voice ids always fail; an unknown `--format` or `--language-code` fails for v4 and only warns for the older models.
 - `--timestamps` uses the `/with-timestamps` endpoint and writes character timing to `<audio>.alignment.json` next to the audio (and next to the `--output` copy).
 - The billed characters come from ElevenLabs' `character-cost` response header: `tts` prints them, and `--json` reports them as `usage.credits` with the source in `usage.metrics["header.character-cost"]`. Nothing is estimated.
 

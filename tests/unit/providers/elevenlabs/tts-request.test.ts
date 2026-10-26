@@ -186,15 +186,42 @@ describe("input validation", () => {
     [{ voice: "../voices" }, "--voice must be an ElevenLabs voice ID"],
     [{ voice: "" }, "--voice must be"],
     [{ text: "" }, "--text or --prompt is required"],
-    [{ format: "flac_44100" }, 'Unsupported --format "flac_44100"'],
+    [{ model: "eleven_v4", format: "flac_44100" }, 'Unknown --format "flac_44100"'],
     [{ stability: "1.5" }, "--stability must be a number from 0 to 1"],
     [{ similarityBoost: "abc" }, "--similarity-boost must be"],
     [{ seed: "-1" }, "--seed must be an integer"],
     [{ seed: "1.5" }, "--seed must be an integer"],
     [{ seed: "4294967296" }, "--seed must be an integer"],
-    [{ languageCode: "english" }, "--language-code must be an ISO 639 code"],
+    [{ model: "eleven_v4", languageCode: "english" }, "--language-code should be an ISO 639"],
   ])("rejects %o", (over, message) => {
     expect(fails(over)).toContain(message);
+  });
+
+  it("older models only warn about an unknown format or language code, and still send them", () => {
+    const req = build({
+      model: "eleven_flash_v2_5",
+      format: "flac_44100",
+      languageCode: "english",
+    });
+    expect(req.warnings.join("\n")).toContain('Unknown --format "flac_44100"');
+    expect(req.warnings.join("\n")).toContain("--language-code should be");
+    expect(req.query.output_format).toBe("flac_44100");
+    expect(req.payload.language_code).toBe("english");
+  });
+
+  it("accepts a regional language code", () => {
+    expect(build({ model: "eleven_v4", languageCode: "pt-BR" }).payload.language_code).toBe(
+      "pt-BR",
+    );
+  });
+
+  it("counts characters as code points, so emoji are not overcounted", () => {
+    expect(() => build({ model: "eleven_v3", text: "😀".repeat(5_000) })).not.toThrow();
+    expect(fails({ model: "eleven_v3", text: "😀".repeat(5_001) })).toContain("5001 characters");
+  });
+
+  it("v4 reports an ignored setting before parsing its value", () => {
+    expect(fails({ model: "eleven_v4", style: "abc" })).toContain("--style is not used by");
   });
 
   it("accepts the newer opus and wav formats", () => {

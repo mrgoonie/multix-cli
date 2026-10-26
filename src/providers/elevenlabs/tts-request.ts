@@ -8,6 +8,8 @@
  * - Requests the API would refuse anyway (text too long, previous/next text on
  *   eleven_v3, malformed values) fail before any credits are spent.
  * - Unknown model ids are sent as before, with a warning that nothing was checked.
+ * - Malformed numbers (voice settings, seed) and voice ids always fail: they
+ *   were sent as null or into the URL path before.
  */
 
 import { ValidationError } from "../../core/errors.js";
@@ -64,7 +66,7 @@ const SETTING_OPTION: Record<VoiceSettingKey, keyof TtsOptions> = {
 };
 
 const VOICE_ID = /^[A-Za-z0-9_-]{1,64}$/;
-const LANGUAGE_CODE = /^[a-z]{2,3}$/i;
+const LANGUAGE_CODE = /^[a-z]{2,3}(-[a-z0-9]{2,8})?$/i;
 const AUDIO_TAG = /\[[a-z][a-z ,'-]{0,40}\]/i;
 const SSML_TAG = /<\s*(break|phoneme)\b/i;
 const MAX_SEED = 4_294_967_295;
@@ -96,9 +98,7 @@ export function buildTtsRequest(o: TtsOptions, explicit: ExplicitOptions): TtsRe
     );
   }
   if (!(ELEVENLABS_TTS_OUTPUT_FORMATS as readonly string[]).includes(o.format)) {
-    throw new ValidationError(
-      `Unsupported --format "${o.format}". Valid: ${ELEVENLABS_TTS_OUTPUT_FORMATS.join(", ")}`,
-    );
+    report(`Unknown --format "${o.format}". Valid: ${ELEVENLABS_TTS_OUTPUT_FORMATS.join(", ")}`);
   }
   if (!caps) {
     warnings.push(
@@ -128,7 +128,6 @@ export function buildTtsRequest(o: TtsOptions, explicit: ExplicitOptions): TtsRe
       settings[key] = values[key]();
       continue;
     }
-    const value = values[key]();
     if (caps && !caps.voiceSettings.includes(key)) {
       if (isExplicit) {
         report(
@@ -137,7 +136,7 @@ export function buildTtsRequest(o: TtsOptions, explicit: ExplicitOptions): TtsRe
       }
       if (caps.strict) continue;
     }
-    settings[key] = value;
+    settings[key] = values[key]();
   }
 
   const payload: Record<string, unknown> = {
@@ -146,16 +145,18 @@ export function buildTtsRequest(o: TtsOptions, explicit: ExplicitOptions): TtsRe
     voice_settings: settings,
   };
 
-  if (caps && o.text.length > caps.maxChars) {
+  // Code points, not UTF-16 units: an emoji is one character to the API.
+  const chars = [...o.text].length;
+  if (caps && chars > caps.maxChars) {
     throw new ValidationError(
-      `Text is ${o.text.length} characters; ${o.model} accepts at most ${caps.maxChars} per request. Split the text and pass --previous-text/--next-text for continuity.`,
+      `Text is ${chars} characters; ${o.model} accepts at most ${caps.maxChars} per request. Split the text and pass --previous-text/--next-text for continuity.`,
     );
   }
 
   if (o.languageCode !== undefined) {
     if (!LANGUAGE_CODE.test(o.languageCode)) {
-      throw new ValidationError(
-        `--language-code must be an ISO 639 code such as "en" or "vi", got "${o.languageCode}"`,
+      report(
+        `--language-code should be an ISO 639 code such as "en" or "vi", got "${o.languageCode}"`,
       );
     }
     if (caps && !caps.languageCode) {

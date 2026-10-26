@@ -36,6 +36,7 @@ one to three minutes.
 | `eleven_v3` | 5,000 | `--stability`, `--similarity-boost` | Audio tags; no `--previous-text`/`--next-text` |
 | `eleven_multilingual_v2` (default) | 10,000 | all but `--clone-strength` | Ignores `--language-code` |
 | `eleven_flash_v2_5`, `eleven_turbo_v2_5` | 40,000 | `--stability`, `--similarity-boost` | Low latency |
+| `eleven_flash_v2`, `eleven_turbo_v2` | 30,000 | `--stability`, `--similarity-boost` | English only |
 
 ```bash
 multix elevenlabs tts --model eleven_v4 --language-code en \

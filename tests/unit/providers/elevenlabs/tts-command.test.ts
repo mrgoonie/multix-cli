@@ -151,4 +151,24 @@ describe("elevenlabs tts", () => {
     }
     expect(stdout.join("\n")).toContain("character-cost): 2");
   });
+
+  it("prints warnings for older models on stderr and still calls the API", async () => {
+    stubApi(audio);
+    await run("--text", "Hi", "--model", "eleven_flash_v2_5", "--style", "0.3");
+    expect(calls).toHaveLength(1);
+    expect(stderr.join("\n")).toContain("--style is not used by eleven_flash_v2_5");
+  });
+
+  it.each([
+    ["not JSON", "<html>oops</html>"],
+    ["JSON without audio", JSON.stringify({ alignment: {} })],
+  ])("--timestamps keeps a billed %s response and fails as a provider error", async (_, body) => {
+    stubApi(() => new Response(body, { headers: { "content-type": "application/json" } }));
+    await expect(run("--text", "Hi", "--model", "eleven_v4", "--timestamps")).rejects.toThrow(
+      /no audio with timestamps; raw response saved to/,
+    );
+    const raw = fs.readdirSync(tmp).find((f) => f.endsWith(".bin"));
+    expect(raw).toBeDefined();
+    expect(fs.readFileSync(path.join(tmp, raw as string), "utf8")).toBe(body);
+  });
 });
