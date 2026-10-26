@@ -174,8 +174,6 @@ const openai: SpeechAdapter = {
 
 // ── ElevenLabs ────────────────────────────────────────────────────────────────
 
-/** Character limits per request, from the ElevenLabs model docs. */
-const ELEVENLABS_LANGUAGE_MODELS = new Set(["eleven_v3", "eleven_flash_v2_5", "eleven_turbo_v2_5"]);
 /** mp3 and pcm only: telephony μ-law is not an editing format. */
 const ELEVENLABS_SCENE_FORMATS = ELEVENLABS_OUTPUT_FORMATS.filter((f) => !f.startsWith("ulaw"));
 const ELEVENLABS_SETTINGS = [
@@ -202,9 +200,11 @@ const elevenlabs: SpeechAdapter = {
       maxChars: caps?.maxChars ?? 5_000,
       audioTags: caps?.audioTags ?? false,
       // Tag-driven models (v3, v4) take audio tags instead of SSML breaks.
-      ssmlBreaks: caps ? !caps.audioTags : false,
+      ssmlBreaks: caps?.ssmlBreak ?? false,
       context: caps?.contextText ?? false,
-      language: ELEVENLABS_LANGUAGE_MODELS.has(model),
+      // A model that does not enforce language_code (multilingual_v2) would take
+      // the code without effect, so profileErrors rejects a language for it.
+      language: caps?.languageCode ?? false,
       style: false,
     };
   },
@@ -230,6 +230,12 @@ const elevenlabs: SpeechAdapter = {
     }
     if (p.context && !this.limits(p.model).context) {
       errors.push(`context: ${p.model} takes no previous/next text`);
+    }
+    if (p.language && ttsModelCaps(p.model) && !this.limits(p.model).language) {
+      const enforcing = ELEVENLABS_TTS_MODELS.filter((m) => ttsModelCaps(m)?.languageCode);
+      errors.push(
+        `language: ${p.model} does not enforce language_code, so the text's own language decides; drop language or use ${enforcing.join(", ")}`,
+      );
     }
     const s = p.settings ?? {};
     errors.push(...unknownSettings(s, ELEVENLABS_SETTINGS, "ElevenLabs"));

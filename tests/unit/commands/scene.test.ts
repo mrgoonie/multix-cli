@@ -15,6 +15,7 @@ import {
   cacheKey,
   findLine,
   lockProject,
+  partErrors,
   planScenes,
   readManifest,
   summarize,
@@ -49,7 +50,6 @@ const MAI: VoiceProfile = {
   provider: "elevenlabs",
   model: "eleven_multilingual_v2",
   voice: "kdmDKE6EkgrWrrykO9Qt",
-  language: "vi",
   format: "mp3_44100_128",
   settings: { stability: 0.4 },
 };
@@ -208,7 +208,7 @@ describe("scene render", () => {
       model_id: "eleven_multilingual_v2",
       voice_settings: { stability: 0.4 },
     });
-    expect(eleven.language_code).toBeUndefined(); // multilingual_v2 takes no language code
+    expect(eleven.language_code).toBeUndefined(); // the profile sets no language
     expect(eleven.previous_text).toBeUndefined(); // context is opt-in
   });
 
@@ -456,6 +456,47 @@ describe("scene scripts", () => {
     expect(chunkText("x".repeat(50), 20).map((p) => p.length)).toEqual([20, 20, 10]);
   });
 
+  it("never cuts a tag or a decimal number when splitting", () => {
+    const text =
+      'Wait for it <break time="1.5s" /> and then go. [sighs heavily and slowly, almost to herself] It costs 3.5 dollars now.';
+    for (const max of [20, 30, 40, 60]) {
+      const parts = chunkText(text, max);
+      expect(parts.join(" ")).toBe(text);
+      for (const tag of [
+        '<break time="1.5s" />',
+        "[sighs heavily and slowly, almost to herself]",
+      ]) {
+        expect(parts.filter((p) => p.includes(tag))).toHaveLength(1);
+      }
+      expect(parts.some((p) => p.includes("3.5"))).toBe(true);
+      for (const p of parts) expect(p).not.toMatch(/<[^>]*$|^[^<]*>|\[[^\]]*$|^[^[]*\]/);
+    }
+    expect(chunkText("Version 3.5 is out. Try it.", 22)).toEqual([
+      "Version 3.5 is out.",
+      "Try it.",
+    ]);
+  });
+
+  it("rejects split parts with an unclosed tag or a tag over the limit", () => {
+    expect(partErrors("a", ['Hi <break time="1s"'], 40)).toEqual([
+      expect.stringContaining("unclosed tag <break"),
+    ]);
+    const long = `[${"x".repeat(30)}]`;
+    expect(partErrors(`ok then. ${long}`, chunkText(`ok then. ${long}`, 20), 20)).toEqual([
+      expect.stringContaining("part 2: 32 characters, over the limit of 20"),
+    ]);
+    expect(
+      partErrors('Hi there <break time="1s" />', ["Hi there <break", 'time="1s" />'], 20),
+    ).toContainEqual(expect.stringContaining("would change its tags"));
+  });
+
+  it("keeps a v3 audio tag whole when a line is split in the plan", () => {
+    writeProfile(tmp, { ...MAI, model: "eleven_v3", settings: {}, max_chars: 30 });
+    writeScripts({ "s03.txt": "MAI: [sighs heavily and slowly] Fine. We will go at 3.5 past.\n" });
+    const texts = plan().manifest.scenes[2]?.lines.map((l) => l.text);
+    expect(texts).toEqual(["[sighs heavily and slowly]", "Fine. We will go at 3.5 past."]);
+  });
+
   it("splits an over-long line into numbered parts in the manifest", () => {
     writeProfile(tmp, { ...HIRO, max_chars: 24 });
     writeScripts({ "s03.txt": "HIRO: Một hai ba bốn năm. Sáu bảy tám chín mười.\nMAI: Ừ.\n" });
@@ -492,6 +533,24 @@ describe("voice profiles", () => {
     ]);
     expect(profileErrors({ ...HIRO, language: "Vietnamese" })).toEqual([
       expect.stringContaining("not a BCP 47 tag"),
+    ]);
+  });
+
+  it("sends the profile language to ElevenLabs models that enforce it", async () => {
+    const v4 = { ...MAI, model: "eleven_v4", language: "vi-VN", settings: {} };
+    expect(profileErrors(v4)).toEqual([]);
+    writeProfile(tmp, v4);
+    const manifest = plan().manifest;
+    const line = allLines(manifest).find((l) => l.speaker === "mai");
+    expect(line?.request.params.language_code).toBe("vi");
+    await renderScenes({ projectDir: tmp, manifest, profiles: loadProfiles(tmp), scene: "s01" });
+    const eleven = calls.map((c) => JSON.parse(c.body)).find((b) => b.model_id === "eleven_v4");
+    expect(eleven?.language_code).toBe("vi");
+  });
+
+  it("rejects a language on an ElevenLabs model that does not enforce it", () => {
+    expect(profileErrors({ ...MAI, language: "vi" })).toEqual([
+      expect.stringMatching(/^language: eleven_multilingual_v2 does not enforce language_code/),
     ]);
   });
 });

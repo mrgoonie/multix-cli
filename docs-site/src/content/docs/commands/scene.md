@@ -172,12 +172,11 @@ the model, voice and format lists come from each provider's model files.
 | Other Gemini TTS models | 4,000 | no | no | no | no | no | none |
 | OpenAI `gpt-4o-mini-tts` | 4,096 | yes | no | no | no | no | `speed` (0.25–4) |
 | OpenAI `tts-1`, `tts-1-hd` | 4,096 | no | no | no | no | no | `speed` (0.25–4) |
-| ElevenLabs `eleven_v4`, `eleven_v4_turbo` | 10,000 | no | no | yes | yes | no | see below |
-| ElevenLabs `eleven_v3` | 5,000 | no | no | yes | no | yes | see below |
-| ElevenLabs `eleven_v3_conversational` | 5,000 | no | no | yes | no | no | see below |
-| ElevenLabs `eleven_multilingual_v2` | 10,000 | no | yes | no | yes | no | see below |
+| ElevenLabs `eleven_v4`, `eleven_v4_turbo` | 10,000 | no | no | yes | yes | yes | see below |
+| ElevenLabs `eleven_v3`, `eleven_v3_conversational` | 5,000 | no | no | yes | no | yes | see below |
+| ElevenLabs `eleven_multilingual_v2` | 10,000 | no | yes | no | yes | no (rejected) | see below |
 | ElevenLabs `eleven_flash_v2_5`, `eleven_turbo_v2_5` | 40,000 | no | yes | no | yes | yes | see below |
-| ElevenLabs `eleven_flash_v2`, `eleven_turbo_v2` | 30,000 | no | yes | no | yes | no | see below |
+| ElevenLabs `eleven_flash_v2`, `eleven_turbo_v2` | 30,000 | no | yes | no | yes | yes | see below |
 
 - ElevenLabs settings: `stability`, `similarity_boost`, `style` (0–1),
   `use_speaker_boost` (true/false), `speed` (0.7–1.2) and `seed`. ElevenLabs
@@ -190,9 +189,16 @@ the model, voice and format lists come from each provider's model files.
   `src/providers/elevenlabs/models.ts`.
 - Gemini scene output is `wav` only.
 - Characters are counted as Unicode code points. `--max-chars` (minimum 20)
-  splits lines below the model limit.
+  splits lines below the model limit. A line is split at sentence ends (`.`,
+  `!` or `?` followed by a space, so `3.5` stays whole), then at spaces, and
+  never inside a `<…>` or `[…]` tag. `plan` rejects a part that would carry an
+  unclosed tag or a tag longer than the limit.
 - `--language` is stored in every profile, but it is only sent to models in the
-  "Language sent" column, as the primary subtag (`vi-VN` is sent as `vi`).
+  "Language sent" column, as the primary subtag (`vi-VN` is sent as
+  `language_code: vi`). `eleven_multilingual_v2` does not enforce a language
+  code, so a profile with `--language` on that model is rejected; drop
+  `--language` or pick a model that enforces it. Gemini and OpenAI profiles
+  keep the language for reference only.
 - Raw PCM output is wrapped in a WAV header so editors can open every stem.
 
 ## Cost receipts
@@ -204,8 +210,12 @@ ElevenLabs reports credits and OpenAI TTS reports none. `status` sums spend over
 every take, including rejected variants, and counts takes with unknown cost in
 `unknown_cost_takes`.
 
-`plan` always returns `estimated_cost_usd: null`: multix has no price table for
-these models yet. Use `to_render_chars` to estimate spend yourself.
+`scene` has no pre-flight estimator yet, so `plan` returns
+`estimated_cost_usd: null`. `scene render --estimate` reports the cost as
+unknown and sends nothing, and `--max-cost` refuses to run with
+`BUDGET_UNPROVEN` (exit 2), even with `--cost-policy estimate`. Use
+`to_render_chars` to estimate spend yourself, or price one line with
+`elevenlabs tts --estimate` or `gemini generate-speech --estimate`.
 
 ## JSON and dry runs
 

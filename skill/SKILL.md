@@ -287,7 +287,7 @@ multix scene export --out stems [--approved-only] [--allow-missing]
 - Script lines: `SPEAKER: text` or `SPEAKER (direction): text`; `# scene: <id>`, `# title: ...`; other lines continue the line above. The speaker matches a profile id, `--name` or `--alias`, ignoring case.
 - Run `plan` and then `render --dry-run` before the first paid render. They reject unsupported markup (SSML, `[audio tags]`, `(direction)` on models without style) and missing keys before any request is billed.
 - `render` sends one request per uncached line and never retries. On a failure it records the error and stops (or continues with `--keep-going`), then exits non-zero. Do not re-run it in a loop: read `failed[]`, fix the cause, then re-render; only failed and pending lines are sent again. `--new-take --line <id>` pays for a new variant.
-- Editing one line re-renders only that line, plus its neighbours for profiles with `--context`. Per-take `usage.cost_usd`/`credits` are `null` when the provider reported nothing; `plan.estimated_cost_usd` is always `null`.
+- Editing one line re-renders only that line, plus its neighbours for profiles with `--context`. Per-take `usage.cost_usd`/`credits` are `null` when the provider reported nothing; `plan.estimated_cost_usd` is always `null`, `--estimate` reports unknown and `--max-cost` refuses (`BUDGET_UNPROVEN`): scene has no estimator.
 - Profiles never hold keys. A cloned voice needs `--cloned --consent-by <name>`. Model limits table: <https://multix.zuey.me/commands/scene/>.
 
 ## Image-to-image (edit existing image with a prompt)

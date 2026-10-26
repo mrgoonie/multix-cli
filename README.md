@@ -757,7 +757,7 @@ multix scene export --out stems [--approved-only]
 
 **Notes:**
 - One request per line. A failed request is never retried and never falls back to another provider. The keys of all providers a render needs are checked before the first request.
-- Every take records the `cost_usd`/`credits` the provider reported, or `null` when it reported nothing. `plan` returns `estimated_cost_usd: null` because multix has no price table for these models.
+- Every take records the `cost_usd`/`credits` the provider reported, or `null` when it reported nothing. `scene` has no pre-flight estimator yet: `plan` returns `estimated_cost_usd: null`, `render --estimate` reports unknown, and `--max-cost` refuses with `BUDGET_UNPROVEN`.
 - A cloned voice requires `--cloned --consent-by <name>`. Scene commands are not available through the remote MCP server. Full reference: [Scene commands](https://multix.zuey.me/commands/scene/).
 
 ### `multix media`

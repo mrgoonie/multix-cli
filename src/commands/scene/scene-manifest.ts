@@ -19,6 +19,7 @@ import {
   chunkText,
   markupIn,
   parseScript,
+  unclosedMarkup,
 } from "./script-parser.js";
 import { type SceneProvider, adapterFor } from "./speech-adapters.js";
 import { PROFILE_ID, type VoiceProfile, speakerIndex } from "./voice-profile.js";
@@ -258,6 +259,32 @@ export function lineErrors(
   return errors;
 }
 
+/**
+ * Problems with the parts a line was split into: each part is sent as its own
+ * request, so each must carry only whole tags (the same tags the line was
+ * validated with) and fit the limit.
+ */
+export function partErrors(text: string, parts: string[], limit: number): string[] {
+  const errors: string[] = [];
+  const label = (i: number) => (parts.length > 1 ? `part ${i + 1}: ` : "");
+  parts.forEach((part, i) => {
+    const open = unclosedMarkup(part);
+    if (open.length) errors.push(`${label(i)}unclosed tag ${open.join(" ")} would be read aloud`);
+    const n = charCount(part);
+    if (n > limit) {
+      errors.push(`${label(i)}${n} characters, over the limit of ${limit} (a tag cannot be split)`);
+    }
+  });
+  const tags = (s: string) => {
+    const m = markupIn(s);
+    return [...m.ssml, ...m.audioTags].join("\n");
+  };
+  if (parts.map(tags).filter(Boolean).join("\n") !== tags(text)) {
+    errors.push("splitting the line would change its tags; shorten it or raise max_chars");
+  }
+  return errors;
+}
+
 export interface PlanInput {
   scripts: Array<{ path: string; source: string }>;
   profiles: Map<string, VoiceProfile>;
@@ -336,6 +363,7 @@ export function planScenes(input: PlanInput): PlanResult {
         adapter.limits(profile.model).maxChars,
       );
       const parts = chunkText(l.text, limit);
+      for (const e of partErrors(l.text, parts, limit)) errors.push(`${where}: ${e}`);
       const base = `${script.scene}/${String(i + 1).padStart(3, "0")}`;
       parts.forEach((text, p) => {
         lines.push({

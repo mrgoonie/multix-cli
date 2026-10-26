@@ -171,12 +171,11 @@ danh sách model, giọng và format lấy từ file model của từng provider
 | Các model Gemini TTS khác | 4.000 | không | không | không | không | không | không có |
 | OpenAI `gpt-4o-mini-tts` | 4.096 | có | không | không | không | không | `speed` (0,25–4) |
 | OpenAI `tts-1`, `tts-1-hd` | 4.096 | không | không | không | không | không | `speed` (0,25–4) |
-| ElevenLabs `eleven_v4`, `eleven_v4_turbo` | 10.000 | không | không | có | có | không | xem bên dưới |
-| ElevenLabs `eleven_v3` | 5.000 | không | không | có | không | có | xem bên dưới |
-| ElevenLabs `eleven_v3_conversational` | 5.000 | không | không | có | không | không | xem bên dưới |
-| ElevenLabs `eleven_multilingual_v2` | 10.000 | không | có | không | có | không | xem bên dưới |
+| ElevenLabs `eleven_v4`, `eleven_v4_turbo` | 10.000 | không | không | có | có | có | xem bên dưới |
+| ElevenLabs `eleven_v3`, `eleven_v3_conversational` | 5.000 | không | không | có | không | có | xem bên dưới |
+| ElevenLabs `eleven_multilingual_v2` | 10.000 | không | có | không | có | không (bị từ chối) | xem bên dưới |
 | ElevenLabs `eleven_flash_v2_5`, `eleven_turbo_v2_5` | 40.000 | không | có | không | có | có | xem bên dưới |
-| ElevenLabs `eleven_flash_v2`, `eleven_turbo_v2` | 30.000 | không | có | không | có | không | xem bên dưới |
+| ElevenLabs `eleven_flash_v2`, `eleven_turbo_v2` | 30.000 | không | có | không | có | có | xem bên dưới |
 
 - Setting của ElevenLabs: `stability`, `similarity_boost`, `style` (0–1),
   `use_speaker_boost` (true/false), `speed` (0,7–1,2) và `seed`. ElevenLabs
@@ -188,9 +187,16 @@ danh sách model, giọng và format lấy từ file model của từng provider
   Giới hạn lấy từ bảng capability trong `src/providers/elevenlabs/models.ts`.
 - Output của Gemini trong scene chỉ là `wav`.
 - Ký tự được đếm theo Unicode code point. `--max-chars` (tối thiểu 20) tách câu
-  ở mức thấp hơn giới hạn của model.
+  ở mức thấp hơn giới hạn của model. Một câu thoại được tách ở chỗ hết câu (`.`,
+  `!` hoặc `?` theo sau là khoảng trắng, nên `3.5` được giữ nguyên), sau đó ở
+  khoảng trắng, và không bao giờ tách bên trong tag `<…>` hay `[…]`. `plan` từ
+  chối phần nào chứa tag chưa đóng hoặc tag dài hơn giới hạn.
 - `--language` được lưu trong mọi profile nhưng chỉ được gửi tới các model ở cột
-  "Gửi ngôn ngữ", dưới dạng subtag chính (`vi-VN` được gửi là `vi`).
+  "Gửi ngôn ngữ", dưới dạng subtag chính (`vi-VN` được gửi là
+  `language_code: vi`). `eleven_multilingual_v2` không áp dụng language code,
+  nên profile có `--language` trên model này bị từ chối; hãy bỏ `--language`
+  hoặc chọn model có áp dụng. Với Gemini và OpenAI, ngôn ngữ chỉ được lưu để
+  tham khảo.
 - Output PCM thô được bọc header WAV để mọi phần mềm dựng đều mở được stem.
 
 ## Biên nhận chi phí
@@ -201,8 +207,12 @@ không bao giờ là `0`. Ví dụ, ElevenLabs báo credit còn OpenAI TTS khôn
 `status` cộng chi phí trên mọi take, kể cả biến thể bị loại, và đếm các take
 không rõ chi phí trong `unknown_cost_takes`.
 
-`plan` luôn trả `estimated_cost_usd: null`: multix chưa có bảng giá cho các
-model này. Dùng `to_render_chars` để tự ước tính chi phí.
+`scene` chưa có bộ ước tính chi phí trước khi chạy, nên `plan` trả
+`estimated_cost_usd: null`. `scene render --estimate` báo chi phí là không rõ và
+không gửi gì, còn `--max-cost` từ chối chạy với `BUDGET_UNPROVEN` (exit 2), kể
+cả khi có `--cost-policy estimate`. Dùng `to_render_chars` để tự ước tính chi
+phí, hoặc ước tính giá một câu bằng `elevenlabs tts --estimate` hay
+`gemini generate-speech --estimate`.
 
 ## JSON và dry run
 
