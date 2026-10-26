@@ -60,6 +60,7 @@ const MANAGED = [
   "FAL_IMAGE_MODEL",
   "FAL_VIDEO_MODEL",
   "FAL_VIDEO_IMAGE_MODEL",
+  "FAL_TTS_MODEL",
   "FAL_BASE_URL",
   "BYTEPLUS_API_KEY",
   "ARK_API_KEY",
@@ -228,6 +229,15 @@ describe("model defaults from a .env file", () => {
       "https://example.com/cat.png",
     ]);
     expect(i2v.url).toContain("/fal-ai/file-i2v");
+  });
+
+  it("fal tts uses FAL_TTS_MODEL in the queue URL", async () => {
+    const call = await runWithEnvFile("FAL_TTS_MODEL=elevenlabs/tts/eleven-v4-turbo\n", [
+      "fal",
+      "tts",
+      "hello",
+    ]);
+    expect(call.url).toContain("/elevenlabs/tts/eleven-v4-turbo");
   });
 
   it("byteplus generate uses BYTEPLUS_IMAGE_MODEL", async () => {

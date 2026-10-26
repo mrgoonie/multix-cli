@@ -69,6 +69,39 @@ const TASK_BY_LEAF: Record<string, string> = {
   run: "any",
 };
 const LIST_COMMANDS = new Set(["models", "video-models", "voices", "avatars", "styles", "list"]);
+/** What a task produces, so an agent knows what file type to expect. */
+const OUTPUT_BY_TASK: Record<string, string> = {
+  image: "image",
+  "image-edit": "image",
+  video: "video",
+  "image-to-video": "video",
+  "video-edit": "video",
+  "avatar-video": "video",
+  speech: "audio",
+  music: "audio",
+  sfx: "audio",
+  voice: "audio",
+  transcription: "text",
+  analysis: "text",
+  document: "text",
+  "3d": "3d",
+};
+/** Options every command (or every provider command) has; not task inputs. */
+const NON_INPUT_OPTIONS = new Set([
+  "--json",
+  "--dry-run",
+  "--verbose",
+  "--help",
+  "--model",
+  "--model-id",
+  "--download",
+  "--no-download",
+  "--output-dir",
+  "--wait-timeout",
+  "--receipt",
+  "--detach",
+  "--async",
+]);
 
 export interface ModelRow {
   task: string;
@@ -79,6 +112,10 @@ export interface ModelRow {
   models?: string[];
   /** Takes any model id of the provider (generic runners). */
   any_model?: boolean;
+  /** Arguments and flags the command takes (positionals as <name> or [name]). */
+  inputs?: string[];
+  /** Kind of file the command produces. */
+  output?: string;
   ready: boolean;
   keys?: string[];
   async?: boolean;
@@ -137,6 +174,12 @@ export function modelRows(program: Command): ModelRow[] {
       );
     const named = modelsFromDescription(modelOpt?.description ?? "");
     const def = typeof modelOpt?.defaultValue === "string" ? modelOpt.defaultValue : named.def;
+    const inputs = [
+      ...cmd.registeredArguments.map((a) => (a.required ? `<${a.name()}>` : `[${a.name()}]`)),
+      ...cmd.options
+        .map((o) => o.long)
+        .filter((l): l is string => Boolean(l) && !NON_INPUT_OPTIONS.has(l as string)),
+    ];
     rows.push({
       task,
       command,
@@ -146,9 +189,13 @@ export function modelRows(program: Command): ModelRow[] {
       ...(task === "any" || ["fal", "replicate", "atlas", "openrouter"].includes(group)
         ? { any_model: true }
         : {}),
+      ...(inputs.length ? { inputs } : {}),
+      ...(OUTPUT_BY_TASK[task] ? { output: OUTPUT_BY_TASK[task] } : {}),
       ready: groupReady(group),
       ...(groupKeyNames(group).length ? { keys: groupKeyNames(group) } : {}),
-      ...(cmd.options.some((o) => o.long === "--async") ? { async: true } : {}),
+      ...(cmd.options.some((o) => o.long === "--async" || o.long === "--detach")
+        ? { async: true }
+        : {}),
       ...(lister
         ? { list: `multix ${group} ${lister.name()}${lister.commands.length ? " list" : ""}` }
         : {}),

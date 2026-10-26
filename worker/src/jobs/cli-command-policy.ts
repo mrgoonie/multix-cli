@@ -170,6 +170,7 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   // `--file key=path` maps a model field to a local file and `--receipt` takes
   // a local path; neither is expressible remotely (pass URLs in --input).
   "fal run": { unsupported: ["file", "receipt"] },
+  "fal tts": { fileOptions: { "text-file": "file" }, unsupported: ["receipt"] },
   "fal upload": { filePositionals: ["file"] },
   "fal image": { caps: IMAGE_COUNT },
   "fal video": { urlOptions: ["image-url"], caps: { duration: ["duration"] } },

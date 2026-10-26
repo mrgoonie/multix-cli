@@ -13,7 +13,12 @@ export interface FakeCall {
 }
 
 export type FakeReply =
-  | { status?: number; json?: unknown; headers?: Record<string, string> }
+  | {
+      status?: number;
+      json?: unknown;
+      body?: string | Uint8Array;
+      headers?: Record<string, string>;
+    }
   | { error: Error };
 
 export function createFakeFal(routes: Record<string, FakeReply[]>) {
@@ -36,6 +41,9 @@ export function createFakeFal(routes: Record<string, FakeReply[]>) {
     const queue = routes[key] as FakeReply[];
     const reply = (queue.length > 1 ? queue.shift() : queue[0]) as FakeReply;
     if ("error" in reply) throw reply.error;
+    if (reply.body !== undefined) {
+      return new Response(reply.body, { status: reply.status ?? 200, headers: reply.headers });
+    }
     return new Response(reply.json === undefined ? "" : JSON.stringify(reply.json), {
       status: reply.status ?? 200,
       headers: { "content-type": "application/json", ...(reply.headers ?? {}) },

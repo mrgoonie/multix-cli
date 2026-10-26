@@ -10,6 +10,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import type { Logger } from "../../core/logger.js";
 
 export interface FalReceipt {
   provider: "fal";
@@ -122,4 +123,22 @@ export function saveReceipt(
   }
   syncDir(path.dirname(file));
   return file;
+}
+
+/** Save the receipt; a failure only warns, since the job is already queued and paid for. */
+export function persistReceipt(
+  receipt: FalReceipt,
+  file: string | undefined,
+  logger: Logger,
+): FalReceipt {
+  try {
+    const saved = saveReceipt(receipt, { file });
+    logger.debug(`Receipt saved to ${saved}`);
+    return { ...receipt, receipt_path: saved };
+  } catch (e) {
+    logger.warn(
+      `Could not save the request receipt (${e instanceof Error ? e.message : e}); keep the request_id to resume.`,
+    );
+    return receipt;
+  }
 }

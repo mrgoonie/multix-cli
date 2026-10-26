@@ -7,10 +7,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { isRetryableServerStatus } from "../../core/async-poll.js";
 import { MultixError, ProviderError } from "../../core/errors.js";
-import { downloadFile } from "../../core/http-client.js";
+import { downloadToFile } from "../../core/http-client.js";
 import { parseJsonInput } from "../../core/json-input.js";
 import type { Logger } from "../../core/logger.js";
 import { redactUrl } from "../../core/redact.js";
+import { detectExtension } from "../../core/stdin-file.js";
+import { extFromContentType, extFromUrl } from "../replicate/output.js";
 import { type FalClient, HttpError, createFalClient, submitPath } from "./client.js";
 import type { FalResultResponse, FalStatusResponse, FalSubmitResponse } from "./types.js";
 
@@ -191,107 +193,242 @@ function isHttpUrl(v: unknown): v is string {
   return typeof v === "string" && MEDIA_URL_RE.test(v);
 }
 
-/** Extract "url" from a single media-item-shaped value ({ url } or a bare URL string). */
-function urlOf(item: unknown): string | undefined {
-  if (isHttpUrl(item)) return item;
+/**
+ * A media URL from a fal result, with what the result says about the file:
+ * fal's File objects carry `content_type` and `file_name` next to `url`, and
+ * those name the format even when the URL has no extension.
+ */
+export interface FalMediaRef {
+  url: string;
+  contentType?: string;
+  fileName?: string;
+}
+
+function str(v: unknown): string | undefined {
+  return typeof v === "string" && v !== "" ? v : undefined;
+}
+
+/** A media ref from a single media-item-shaped value ({ url } or a bare URL string). */
+function refOf(item: unknown): FalMediaRef | undefined {
+  if (isHttpUrl(item)) return { url: item };
   if (item !== null && typeof item === "object" && "url" in item) {
-    const u = (item as Record<string, unknown>).url;
-    if (isHttpUrl(u)) return u;
+    const record = item as Record<string, unknown>;
+    if (!isHttpUrl(record.url)) return undefined;
+    const contentType = str(record.content_type);
+    const fileName = str(record.file_name);
+    return {
+      url: record.url,
+      ...(contentType ? { contentType } : {}),
+      ...(fileName ? { fileName } : {}),
+    };
   }
   return undefined;
 }
 
-/** Pull URLs from fal's common result shapes: images[], video, image, audio. */
-function extractKnownMediaUrls(result: FalResultResponse): string[] {
-  const urls: string[] = [];
+/** Pull refs from fal's common result shapes: images[], video, image, audio. */
+function extractKnownMediaRefs(result: FalResultResponse): FalMediaRef[] {
+  const refs: FalMediaRef[] = [];
   const images = result.images;
   if (Array.isArray(images)) {
     for (const img of images) {
-      const u = urlOf(img);
-      if (u) urls.push(u);
+      const r = refOf(img);
+      if (r) refs.push(r);
     }
   }
   for (const key of ["video", "image", "audio"]) {
-    const u = urlOf((result as Record<string, unknown>)[key]);
-    if (u) urls.push(u);
+    const r = refOf((result as Record<string, unknown>)[key]);
+    if (r) refs.push(r);
   }
-  return urls;
+  return refs;
 }
 
-/** Recursively collect every string value keyed "url" (or inside a "url" field) from a result object. */
-export function extractMediaUrlsGeneric(
+/** Recursively collect every object with an http(s) "url" field from a result. */
+function extractMediaRefsGeneric(
   value: unknown,
-  acc: string[] = [],
+  acc: FalMediaRef[] = [],
   seen = new Set<unknown>(),
-): string[] {
+): FalMediaRef[] {
   if (value === null || typeof value !== "object") return acc;
   if (seen.has(value)) return acc;
   seen.add(value);
 
   if (Array.isArray(value)) {
-    for (const item of value) extractMediaUrlsGeneric(item, acc, seen);
+    for (const item of value) extractMediaRefsGeneric(item, acc, seen);
     return acc;
   }
 
+  const ref = refOf(value);
+  if (ref) acc.push(ref);
   for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
-    if (key === "url" && isHttpUrl(val)) {
-      acc.push(val);
-    } else if (typeof val === "object" && val !== null) {
-      extractMediaUrlsGeneric(val, acc, seen);
+    if (key !== "url" && typeof val === "object" && val !== null) {
+      extractMediaRefsGeneric(val, acc, seen);
     }
   }
   return acc;
 }
 
+/** Recursively collect every string value keyed "url" from a result object. */
+export function extractMediaUrlsGeneric(value: unknown): string[] {
+  return extractMediaRefsGeneric(value).map((r) => r.url);
+}
+
 /**
- * Extract media URLs from a fal result. Prefers the well-known
+ * Extract media refs from a fal result. Prefers the well-known
  * `images[].url` / `video.url` / `image.url` / `audio.url` shapes; falls
  * back to a generic recursive scan for any other `url` field only when none
  * of the known fields matched.
  */
-export function extractMediaUrls(result: unknown): string[] {
+export function extractMediaRefs(result: unknown): FalMediaRef[] {
   if (result === null || typeof result !== "object") return [];
-  const known = extractKnownMediaUrls(result as FalResultResponse);
+  const known = extractKnownMediaRefs(result as FalResultResponse);
   if (known.length > 0) return known;
-  return extractMediaUrlsGeneric(result);
+  return extractMediaRefsGeneric(result);
 }
 
-function extFromUrl(url: string, fallback = ".bin"): string {
-  try {
-    const u = new URL(url);
-    const e = path.extname(u.pathname);
-    return e.length > 0 ? e : fallback;
-  } catch {
-    return fallback;
-  }
+/** URLs of {@link extractMediaRefs}. */
+export function extractMediaUrls(result: unknown): string[] {
+  return extractMediaRefs(result).map((r) => r.url);
+}
+
+/** Formats without a header: magic bytes cannot confirm or contradict them. */
+const RAW_AUDIO_EXTS = new Set([".pcm", ".ulaw", ".alaw", ".raw"]);
+const AUDIO_EXTS = new Set([
+  ".mp3",
+  ".wav",
+  ".ogg",
+  ".opus",
+  ".flac",
+  ".aac",
+  ".m4a",
+  ".aiff",
+  ".mp4",
+  ".webm",
+  ...RAW_AUDIO_EXTS,
+]);
+/** Audio MIME types fal returns that the shared table does not name. */
+const EXTRA_MIME_EXT: Record<string, string> = {
+  "audio/opus": ".opus",
+  "audio/pcm": ".pcm",
+  "audio/l16": ".pcm",
+  "audio/basic": ".ulaw",
+  "audio/x-flac": ".flac",
+  "audio/aiff": ".aiff",
+  "audio/x-aiff": ".aiff",
+  "audio/webm": ".webm",
+};
+
+function extFromMime(contentType: string | undefined): string | undefined {
+  if (!contentType) return undefined;
+  const mime = contentType.split(";")[0]?.trim().toLowerCase() ?? "";
+  return EXTRA_MIME_EXT[mime] ?? extFromContentType(mime);
+}
+
+function extFromName(name: string | undefined): string | undefined {
+  const m = name?.match(/\.([A-Za-z0-9]{1,5})$/);
+  return m?.[1] ? `.${m[1].toLowerCase()}` : undefined;
 }
 
 /**
- * Download every extracted media URL into outDir with a `fal-<request_id>-<n>.<ext>`
- * name. Any partially-written file from a failed download is removed.
+ * File extension for downloaded media: the format the bytes themselves show
+ * wins (a WAV served as `audio.mp3` is saved as .wav); otherwise what fal
+ * declared for the file (`content_type`, then `file_name`), the URL path,
+ * then the download's Content-Type header, else `.bin`. A declared raw
+ * format (PCM, u-law) is kept, since its bytes carry no signature to check.
+ */
+export function chooseMediaExt(
+  head: Buffer,
+  ref: FalMediaRef,
+  responseContentType?: string,
+): string {
+  const declared =
+    extFromMime(ref.contentType) ??
+    extFromName(ref.fileName) ??
+    extFromUrl(ref.url) ??
+    extFromMime(responseContentType);
+  const sniffed = head.length > 0 ? detectExtension(head) : undefined;
+  if (sniffed && sniffed !== ".txt" && !(declared && RAW_AUDIO_EXTS.has(declared))) {
+    return sniffed;
+  }
+  return declared ?? ".bin";
+}
+
+/** Why `bytes` are not usable audio, or undefined when they are. */
+export function audioProblem(head: Buffer, bytes: number, ext: string): string | undefined {
+  if (bytes === 0) return "the file is empty";
+  if (head.length > 0 && detectExtension(head) === ".txt") {
+    return "the body is text, not audio (an error page or a JSON message)";
+  }
+  if (!AUDIO_EXTS.has(ext)) return `expected audio but the file is ${ext.slice(1)}`;
+  return undefined;
+}
+
+function readHead(file: string): Buffer {
+  const fd = fs.openSync(file, "r");
+  try {
+    const buf = Buffer.alloc(4096);
+    const n = fs.readSync(fd, buf, 0, buf.length, 0);
+    return buf.subarray(0, n);
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+export interface DownloadMediaOptions {
+  /** Refuse files that are not audio (empty, text, another media type). */
+  expect?: "audio";
+  /** Collects a one-line reason per file that was not saved. */
+  problems?: string[];
+}
+
+/**
+ * Download every media ref (or bare URL) into outDir with a
+ * `fal-<request_id>-<n>.<ext>` name, the extension chosen by
+ * {@link chooseMediaExt} once the bytes are on disk. Any partially-written
+ * file from a failed download is removed, and so is a file that fails the
+ * `expect` check.
  */
 export async function downloadResultMedia(
-  urls: string[],
+  items: Array<string | FalMediaRef>,
   outDir: string,
   requestId: string,
   logger: Logger,
+  opts: DownloadMediaOptions = {},
 ): Promise<string[]> {
   const saved: string[] = [];
-  for (let i = 0; i < urls.length; i++) {
-    const url = urls[i];
-    if (!url) continue;
-    const ext = extFromUrl(url);
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    if (!item) continue;
+    const ref = typeof item === "string" ? { url: item } : item;
     // The full id: fal ids are UUIDv7, whose leading characters are shared by
     // every job submitted within about a minute.
-    const filename = `fal-${requestId.replace(/[^A-Za-z0-9_.-]/g, "_")}-${String(i + 1).padStart(2, "0")}${ext}`;
-    const filepath = path.join(outDir, filename);
+    const base = `fal-${requestId.replace(/[^A-Za-z0-9_.-]/g, "_")}-${String(i + 1).padStart(2, "0")}`;
+    const staging = path.join(outDir, `${base}.download.part`);
     try {
-      await downloadFile(url, filepath);
+      const res = await downloadToFile(ref.url, { dest: staging });
+      const head = readHead(staging);
+      const ext = chooseMediaExt(head, ref, res.contentType);
+      const problem = opts.expect === "audio" ? audioProblem(head, res.bytes, ext) : undefined;
+      if (problem) {
+        fs.rmSync(staging, { force: true });
+        opts.problems?.push(`${redactUrl(ref.url)}: ${problem}`);
+        logger.warn(`Not audio: ${redactUrl(ref.url)} (${problem})`);
+        continue;
+      }
+      const filepath = path.join(outDir, `${base}${ext}`);
+      try {
+        fs.renameSync(staging, filepath);
+      } catch {
+        // Windows refuses to rename over an existing file.
+        fs.rmSync(filepath, { force: true });
+        fs.renameSync(staging, filepath);
+      }
       saved.push(filepath);
       logger.success(`Saved ${filepath}`);
     } catch (e) {
-      fs.rmSync(filepath, { force: true });
-      logger.warn(`Download failed for ${redactUrl(url)}: ${e instanceof Error ? e.message : e}`);
+      fs.rmSync(staging, { force: true });
+      const msg = e instanceof Error ? e.message : String(e);
+      opts.problems?.push(`${redactUrl(ref.url)}: ${msg}`);
+      logger.warn(`Download failed for ${redactUrl(ref.url)}: ${msg}`);
     }
   }
   return saved;

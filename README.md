@@ -4,7 +4,7 @@ AI multimodal CLI — generate images/video/speech/music, analyze and transcribe
 
 ![Isometric technical illustration of multix media workflows](docs-site/public/images/multix-isometric-banner.png)
 
-Supports **OpenAI** (image, image edits, TTS, STT, optional Codex image driver), **Gemini** (analyze, transcribe, generate, Omni Flash video generation and editing, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), **Cloudflare** (Workers AI image and speech; AI Gateway-routed Replicate video), **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment), **fal.ai** (generic model runner, image, video via the fal queue API), and **Atlas Cloud** (any model: image, image edit, video, audio, 3D, with resumable async predictions), **Replicate** (generic model runner, image, video, async prediction status/cancel via the direct Replicate API), **Runway** (Gen-4.5 and Gen-4 Turbo video, Gen-4 images, resumable task status/cancel), **HeyGen** (v3 Video Agent prompt-to-video, scripted avatar videos, video translation, lipsync, TTS).
+Supports **OpenAI** (image, image edits, TTS, STT, optional Codex image driver), **Gemini** (analyze, transcribe, generate, Omni Flash video generation and editing, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), **Cloudflare** (Workers AI image and speech; AI Gateway-routed Replicate video), **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment), **fal.ai** (generic model runner, image, video, typed text-to-speech for Gemini 3.8 Flash TTS and ElevenLabs v4, and a model catalog, via the fal queue API), and **Atlas Cloud** (any model: image, image edit, video, audio, 3D, with resumable async predictions), **Replicate** (generic model runner, image, video, async prediction status/cancel via the direct Replicate API), **Runway** (Gen-4.5 and Gen-4 Turbo video, Gen-4 images, resumable task status/cancel), **HeyGen** (v3 Video Agent prompt-to-video, scripted avatar videos, video translation, lipsync, TTS).
 
 ## Documentation
 
@@ -98,6 +98,7 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `HEYGEN_API_KEY` | For HeyGen | [HeyGen API settings](https://app.heygen.com/developers/api). API usage is billed separately from HeyGen web plans |
 | `HEYGEN_BASE_URL` | No | Override the HeyGen API base (default `https://api.heygen.com`; proxies/tests). Must be `https://`, except `http://` on `localhost`/`127.0.0.1`/`[::1]` |
 | `FAL_VIDEO_IMAGE_MODEL` | No | Default fal image-to-video model, used when `--image-url` is passed without `-m` (default `fal-ai/kling-video/v1.6/standard/image-to-video`) |
+| `FAL_TTS_MODEL` | No | Default model of `multix fal tts` (default `google/gemini-3.8-flash-tts`) |
 | `ATLASCLOUD_API_KEY` | For Atlas Cloud | [Atlas Cloud](https://www.atlascloud.ai/console/api-keys) |
 | `ATLASCLOUD_BASE_URL` | No | Override Atlas Cloud media API base (default `https://api.atlascloud.ai/api/v1`; `https://` required, `http://` only for localhost) |
 | `ATLASCLOUD_IMAGE_MODEL` / `ATLASCLOUD_IMAGE_EDIT_MODEL` | No | Atlas image defaults (`black-forest-labs/flux-schnell`, `openai/gpt-image-1-mini/edit`) |
@@ -530,7 +531,7 @@ multix elevenlabs models
 
 ### `multix fal`
 
-Generic runner plus convenience commands for [fal.ai](https://fal.ai)'s queue REST API. Any model id works with `run`; `image`/`video` set sensible defaults and download media automatically.
+Generic runner plus convenience commands for [fal.ai](https://fal.ai)'s queue REST API. Any model id works with `run`; `image`/`video`/`tts` set sensible defaults and download media automatically; `models` lists fal endpoint ids.
 
 ```bash
 # Generic runner — works with any fal model id
@@ -552,6 +553,15 @@ multix fal image "a cyberpunk cat" [-m <model>] [--image-size square_hd] [-n 1] 
 # Without -m, the default model switches automatically based on whether --image-url is passed.
 multix fal video "a dancer under neon lights" [-m <model>] [--image-url <https-url>] [--duration <n>] [--aspect-ratio 16:9] [--seed <n>] [--no-download] [--wait-timeout 900000] [-v]
 
+# Text-to-speech (default google/gemini-3.8-flash-tts; typed: Gemini 3.8 Flash / Flash-Lite TTS, ElevenLabs v4 / v4 Turbo)
+multix fal tts "Hello from multix" [--voice Kore] [--style "warm, slow"]
+multix fal tts --text-file ./script.txt -m elevenlabs/tts/eleven-v4 [--voice Aria] [--format mp3_44100_128] [--language en]
+multix fal tts "hi" -m <other-fal-tts-id> --text-field prompt --input '{"speed":1.1}'   # untyped: fields not checked
+
+# Find model ids: offline typed TTS profiles, or fal's live catalog (no key sent)
+multix fal models --typed [--json]
+multix fal models --category text-to-speech [--query gemini] [--limit 50] [--json]
+
 # Queue status / result for a request submitted any other way
 multix fal status <model> <requestId>
 multix fal result <model> <requestId> [--download] [--output-dir <dir>]
@@ -559,10 +569,11 @@ multix fal result <model> <requestId> [--download] [--output-dir <dir>]
 
 **Notes:**
 - Auth header is `Authorization: Key $FAL_KEY`; base URL is `https://queue.fal.run`.
-- All fal jobs are async: submit → poll `status` → fetch `result`. `run`/`image`/`video` do this automatically.
+- All fal jobs are async: submit → poll `status` → fetch `result`. `run`/`image`/`video`/`tts` do this automatically.
 - `--detach` saves a receipt (`~/.multix/fal/requests/<request_id>.json`, or `--receipt <path>`, which also works for a blocking run; mode 0600, ids and an input hash only). `status`/`result` only read, so resuming never pays twice. A submit whose outcome is unknown (connection cut off, 5xx gateway error) fails with `UNKNOWN_REMOTE_STATE` and is never retried.
 - `--file` / `fal upload` accept image, video and audio files only (up to `FAL_MAX_UPLOAD_MB`, default 1024). fal storage URLs are public to anyone with the link and fal controls retention; the key goes only to `https://rest.fal.ai`, never to the pre-signed upload URL.
 - Media URLs are extracted generically from the result JSON (any `url` field, recursively) and downloaded to `MULTIX_OUTPUT_DIR`.
+- `tts` maps flags onto each endpoint's own fields (Gemini: `prompt`, `voice` from 30 prebuilt, `style_instructions`, WAV; ElevenLabs: `text` up to 5000 chars, `output_format`, `language_code`, MP3) and refuses anything that endpoint would reject before submitting. Other fal TTS ids run untyped with a warning. Audio is named by its bytes (an extensionless URL or a wrong `content_type` still gives `.wav`/`.mp3`); an empty or non-audio body is refused and removed.
 
 ### `multix atlas`
 

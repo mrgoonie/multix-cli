@@ -6020,7 +6020,7 @@
     },
     {
       "group": "fal",
-      "description": "fal.ai: generic model runner, image, video, media upload, and queue status/result",
+      "description": "fal.ai: generic model runner, image, video, text-to-speech, model catalog, media upload, and queue status/result",
       "commands": [
         {
           "command": "fal run",
@@ -6343,6 +6343,223 @@
               "variadic": false,
               "negatable": false,
               "short": "-v"
+            }
+          ]
+        },
+        {
+          "command": "fal tts",
+          "description": "Text-to-speech on fal.ai with model-specific fields checked before submit (Gemini 3.8 Flash TTS, ElevenLabs v4, or any fal TTS id)",
+          "positionals": [
+            {
+              "name": "text",
+              "description": "",
+              "required": false,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--model",
+              "flags": "-m, --model <id>",
+              "description": "fal TTS endpoint (google/gemini-3.8-flash-tts|google/gemini-3.8-flash-lite-tts|elevenlabs/tts/eleven-v4|elevenlabs/tts/eleven-v4-turbo) default google/gemini-3.8-flash-tts; other ids run untyped",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-m"
+            },
+            {
+              "long": "--text-file",
+              "flags": "--text-file <path>",
+              "description": "Read the text to speak from a UTF-8 file",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--voice",
+              "flags": "--voice <name>",
+              "description": "Voice (Gemini: one of 30 prebuilt, e.g. Kore; ElevenLabs: name or id)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--style",
+              "flags": "--style <text>",
+              "description": "Delivery style (Gemini style_instructions)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--format",
+              "flags": "--format <fmt>",
+              "description": "Output format (ElevenLabs output_format, e.g. mp3_44100_128, pcm_24000)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--language",
+              "flags": "--language <code>",
+              "description": "Language code (ElevenLabs language_code, e.g. en, vi)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--text-field",
+              "flags": "--text-field <name>",
+              "description": "Untyped models only: input field for the text (default text)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--input",
+              "flags": "--input <json>",
+              "description": "Extra model fields as JSON or @file.json (e.g. Gemini speakers/turns)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--detach",
+              "flags": "--detach",
+              "description": "Return after fal queues the job; print a receipt instead of waiting",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--receipt",
+              "flags": "--receipt <path>",
+              "description": "Save the request receipt to this file (--detach saves to ~/.multix/fal/requests/ by default)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--no-download",
+              "flags": "--no-download",
+              "description": "Skip downloading audio; print result JSON only",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": true
+            },
+            {
+              "long": "--output-dir",
+              "flags": "--output-dir <dir>",
+              "description": "Download audio here (default MULTIX_OUTPUT_DIR or ./multix-output)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--wait-timeout",
+              "flags": "--wait-timeout <ms>",
+              "description": "Polling timeout in milliseconds",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "300000"
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        },
+        {
+          "command": "fal models",
+          "description": "List fal endpoint ids from fal's live catalog (e.g. --category text-to-speech), or --typed TTS profiles offline",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--category",
+              "flags": "-c, --category <name>",
+              "description": "Catalog category, e.g. text-to-speech, text-to-image",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-c"
+            },
+            {
+              "long": "--query",
+              "flags": "-q, --query <text>",
+              "description": "Search text, e.g. gemini tts",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-q"
+            },
+            {
+              "long": "--limit",
+              "flags": "--limit <n>",
+              "description": "Max models to list",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "50"
+            },
+            {
+              "long": "--typed",
+              "flags": "--typed",
+              "description": "Offline: the TTS endpoints `fal tts` validates field by field",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--json",
+              "flags": "--json",
+              "description": "Print JSON",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
             }
           ]
         },

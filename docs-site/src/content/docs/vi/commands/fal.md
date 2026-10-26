@@ -1,10 +1,11 @@
 ---
 title: Lệnh fal.ai
-description: Chạy bất kỳ model queue nào của fal.ai với file cục bộ và job tách rời, hoặc dùng lệnh tiện lợi image/video với default hợp lý.
+description: Chạy bất kỳ model queue nào của fal.ai với file cục bộ và job tách rời, dùng lệnh tiện lợi image/video/text-to-speech, hoặc tra cứu fal model id.
 ---
 
 Lệnh fal.ai cần `FAL_KEY`. `run` hoạt động với bất kỳ fal model id nào;
-`image` và `video` đặt sẵn default hợp lý và tự động download media.
+`image`, `video` và `tts` đặt sẵn default hợp lý và tự động download media,
+còn `models` liệt kê fal endpoint id.
 
 ```bash
 multix fal run fal-ai/flux/schnell --input '{"prompt":"a cyberpunk cat"}'
@@ -127,6 +128,60 @@ Nếu không truyền `-m`, model mặc định phụ thuộc vào `--image-url`
 - Text-to-video: `fal-ai/kling-video/v1.6/standard/text-to-video` (ghi đè bằng `FAL_VIDEO_MODEL`).
 - Image-to-video (khi có `--image-url`): `fal-ai/kling-video/v1.6/standard/image-to-video` (ghi đè bằng `FAL_VIDEO_IMAGE_MODEL`).
 
+## Chuyển văn bản thành giọng nói
+
+```bash
+multix fal tts "Xin chào từ multix" \
+  [-m <model>] [--text-file <path>] [--voice <name>] [--style <text>] \
+  [--format <fmt>] [--language <code>] [--input <json|@file>] \
+  [--detach] [--receipt <path>] [--no-download] [--output-dir <dir>] [-v]
+```
+
+Các endpoint TTS của fal không dùng chung một schema đầu vào, nên `tts` ánh xạ
+các flag sang đúng field của từng endpoint và kiểm tra trước khi đưa vào hàng
+đợi (fal vẫn nhận một job sai và chỉ báo lỗi khi lấy kết quả, sau khi đã tính
+phí):
+
+| Model (`-m`) | Field văn bản | `--voice` | `--style` | `--format` / `--language` | Trả về |
+|---|---|---|---|---|---|
+| `google/gemini-3.8-flash-tts` (mặc định), `google/gemini-3.8-flash-lite-tts` | `prompt` | một trong 30 giọng dựng sẵn (mặc định `Kore`) | `style_instructions` | không hỗ trợ | WAV |
+| `elevenlabs/tts/eleven-v4`, `elevenlabs/tts/eleven-v4-turbo` | `text` (tối đa 5000 ký tự) | tên hoặc id giọng bất kỳ (mặc định `Rachel`) | không hỗ trợ: dùng audio tag như `[whispering]` trong văn bản | `output_format` (mặc định `mp3_44100_128`; `pcm_*`, `ulaw_8000`, `opus_*`, ...) / `language_code` | MP3 (hoặc định dạng đã chọn) |
+
+- Truyền văn bản qua đối số hoặc `--text-file` (UTF-8, tối đa 1 MB), không
+  dùng cả hai. Hội thoại nhiều người nói của Gemini đặt trong `--input`, ví dụ
+  `--input '{"speakers":[...],"turns":[...]}'`, và không truyền đối số văn bản.
+- Flag mà endpoint không có field tương ứng (ví dụ `--format` với Gemini),
+  giọng hoặc định dạng không hợp lệ, văn bản vượt giới hạn, hay một field được
+  đặt cả bằng flag lẫn `--input` đều báo lỗi validation và không có gì được
+  submit.
+- Mọi fal TTS id khác chạy ở chế độ untyped, kèm cảnh báo: văn bản đi vào
+  `--text-field` (mặc định `text`), `--voice` đi vào `voice`, các field khác
+  lấy từ `--input`. Hãy xem schema trên trang fal của model.
+- Đổi model mặc định bằng `FAL_TTS_MODEL`.
+- Audio được lưu thành `fal-<request_id>-NN.<ext>`, phần mở rộng lấy theo nội
+  dung byte (file WAV trả về với tên `audio.mp3` hoặc từ URL không có phần mở
+  rộng vẫn được lưu thành `.wav`). Định dạng thô không có header (`.pcm`,
+  `.ulaw`, `.alaw`) giữ tên fal khai báo. File rỗng, hoặc nội dung là văn bản,
+  HTML hay JSON, bị từ chối và xóa, lệnh báo lỗi kèm gợi ý
+  `multix fal result <model> <request_id> --download`.
+- `--detach`, `--receipt`, `UNKNOWN_REMOTE_STATE` và việc tiếp tục bằng
+  `status`/`result` hoạt động giống hệt `run`. Receipt chỉ chứa id và hash của
+  input, không bao giờ chứa văn bản.
+
+## Tìm model
+
+```bash
+multix fal models --typed [--json]                       # offline: các endpoint TTS mà tts kiểm tra
+multix fal models --category text-to-speech [--json]     # catalog trực tiếp
+multix fal models --query "gemini tts" [--limit 50] [--json]
+```
+
+Danh sách trực tiếp lấy từ catalog công khai của fal
+(`https://api.fal.ai/v1/models`). Không cần key, và `FAL_KEY` không bao giờ
+được gửi tới đó. Những dòng mà `tts` biết rõ từng field được đánh dấu `typed`.
+`multix models --task speech --provider fal --json` hiển thị cùng lệnh này cho
+agent, kèm danh sách input, `output: audio` và `async: true`.
+
 ## Status và result
 
 Dùng để resume một job đã submit ở nơi khác, hoặc sau khi lệnh
@@ -162,4 +217,6 @@ cũng dùng được ở đây.
   `multix fal status` hoặc `multix fal result`.
 - Trích xuất media ưu tiên các field kết quả đã biết (`images[].url`,
   `video.url`, `image.url`, `audio.url`) trước khi rơi về quét chung toàn bộ
-  payload kết quả.
+  payload kết quả. Mỗi file được đặt tên theo nội dung byte thực tế, sau đó
+  theo `content_type` / `file_name` fal trả về, theo URL, rồi theo
+  `Content-Type` của lượt tải, theo đúng thứ tự đó.

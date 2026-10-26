@@ -4,7 +4,10 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ProviderError, ValidationError } from "../../../../src/core/errors.js";
 import {
+  audioProblem,
+  chooseMediaExt,
   downloadResultMedia,
+  extractMediaRefs,
   extractMediaUrls,
   extractMediaUrlsGeneric,
   parseInputArg,
@@ -486,5 +489,160 @@ describe("downloadResultMedia", () => {
 
     expect(saved.length).toBe(1);
     expect(fs.readdirSync(tmpDir).length).toBe(1);
+  });
+});
+
+/** Leading bytes of real files of each format. */
+const WAV = Buffer.concat([
+  Buffer.from("RIFF"),
+  Buffer.alloc(4),
+  Buffer.from("WAVEfmt "),
+  Buffer.alloc(32, 1),
+]);
+const MP3_ID3 = Buffer.concat([
+  Buffer.from("ID3"),
+  Buffer.from([4, 0, 0, 0, 0, 0, 0]),
+  Buffer.alloc(32, 7),
+]);
+const MP3_FRAME = Buffer.concat([Buffer.from([0xff, 0xfb, 0x90, 0x64]), Buffer.alloc(32, 3)]);
+const OGG = Buffer.concat([Buffer.from("OggS"), Buffer.alloc(32, 2)]);
+const PNG = Buffer.concat([
+  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+  Buffer.alloc(32),
+]);
+/** Raw 16-bit PCM: no header. These samples happen to look like an MPEG frame sync. */
+const PCM = Buffer.from([0xff, 0xfb, 0x90, 0x64, 0x01, 0x02, 0x03, 0x04]);
+
+describe("extractMediaRefs", () => {
+  it("keeps fal's content_type and file_name next to each URL", () => {
+    const result = {
+      audio: {
+        url: "https://v3b.fal.media/files/b/x/abc",
+        content_type: "audio/wav",
+        file_name: "gemini_tts_output.wav",
+        file_size: 104036,
+      },
+    };
+    expect(extractMediaRefs(result)).toEqual([
+      {
+        url: "https://v3b.fal.media/files/b/x/abc",
+        contentType: "audio/wav",
+        fileName: "gemini_tts_output.wav",
+      },
+    ]);
+  });
+
+  it("finds refs in unknown shapes through the generic fallback", () => {
+    const result = { output: { clips: [{ url: "https://x.test/1", content_type: "audio/mpeg" }] } };
+    expect(extractMediaRefs(result)).toEqual([
+      { url: "https://x.test/1", contentType: "audio/mpeg" },
+    ]);
+  });
+});
+
+describe("chooseMediaExt", () => {
+  it("names the file by its bytes when the URL has no extension", () => {
+    expect(chooseMediaExt(WAV, { url: "https://x.test/files/abc" })).toBe(".wav");
+    expect(chooseMediaExt(MP3_ID3, { url: "https://x.test/files/abc?sig=1" })).toBe(".mp3");
+    expect(chooseMediaExt(OGG, { url: "https://x.test/files/abc" })).toBe(".ogg");
+  });
+
+  it("trusts the bytes over a file name or MIME type that says otherwise", () => {
+    expect(
+      chooseMediaExt(WAV, {
+        url: "https://x.test/a.mp3",
+        contentType: "audio/mpeg",
+        fileName: "a.mp3",
+      }),
+    ).toBe(".wav");
+    expect(chooseMediaExt(MP3_FRAME, { url: "https://x.test/a.wav" }, "audio/wav")).toBe(".mp3");
+  });
+
+  it("keeps a declared raw format whose bytes carry no signature", () => {
+    expect(
+      chooseMediaExt(PCM, {
+        url: "https://x.test/files/w-YUnp_output.pcm",
+        contentType: "application/octet-stream",
+        fileName: "output.pcm",
+      }),
+    ).toBe(".pcm");
+    expect(chooseMediaExt(PCM, { url: "https://x.test/f", contentType: "audio/pcm" })).toBe(".pcm");
+  });
+
+  it("falls back to content_type, file_name, URL, response header, then .bin", () => {
+    const blank = Buffer.alloc(16);
+    expect(chooseMediaExt(blank, { url: "https://x.test/f", contentType: "audio/flac" })).toBe(
+      ".flac",
+    );
+    expect(chooseMediaExt(blank, { url: "https://x.test/f", fileName: "speech.OPUS" })).toBe(
+      ".opus",
+    );
+    expect(chooseMediaExt(blank, { url: "https://x.test/f.m4a" })).toBe(".m4a");
+    expect(chooseMediaExt(blank, { url: "https://x.test/f" }, "audio/ogg; codecs=opus")).toBe(
+      ".ogg",
+    );
+    expect(chooseMediaExt(blank, { url: "https://x.test/f" })).toBe(".bin");
+    // Text bytes never decide the extension (an error page is not a .txt result).
+    expect(chooseMediaExt(Buffer.from("<html>"), { url: "https://x.test/f.mp4" })).toBe(".mp4");
+  });
+});
+
+describe("audioProblem", () => {
+  it("accepts audio containers and raw formats", () => {
+    expect(audioProblem(WAV, 100, ".wav")).toBeUndefined();
+    expect(audioProblem(PCM, 8, ".pcm")).toBeUndefined();
+  });
+
+  it("refuses empty files, text bodies and other media", () => {
+    expect(audioProblem(Buffer.alloc(0), 0, ".mp3")).toMatch(/empty/);
+    expect(audioProblem(Buffer.from('{"detail":"quota"}'), 18, ".mp3")).toMatch(/text, not audio/);
+    expect(audioProblem(PNG, 40, ".png")).toMatch(/expected audio but the file is png/);
+  });
+});
+
+describe("downloadResultMedia with expect: audio", () => {
+  const originalFetch = globalThis.fetch;
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "fal-dl-audio-"));
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("saves good audio under the right extension and removes blank or bad files", async () => {
+    const bodies: Record<string, Uint8Array> = {
+      "https://x.test/good": WAV,
+      "https://x.test/blank.mp3": new Uint8Array(0),
+      "https://x.test/bad.mp3": Buffer.from("<html>Access denied</html>"),
+    };
+    globalThis.fetch = vi.fn(
+      async (url: string | URL) => new Response(bodies[String(url)], { status: 200 }),
+    ) as unknown as typeof fetch;
+    const problems: string[] = [];
+    const saved = await downloadResultMedia(
+      ["https://x.test/good", "https://x.test/blank.mp3", "https://x.test/bad.mp3"],
+      tmpDir,
+      "req-a",
+      noopLogger,
+      { expect: "audio", problems },
+    );
+    expect(saved.map((f) => path.basename(f))).toEqual(["fal-req-a-01.wav"]);
+    expect(fs.readdirSync(tmpDir)).toEqual(["fal-req-a-01.wav"]);
+    expect(problems).toEqual([
+      expect.stringMatching(/blank\.mp3: the file is empty/),
+      expect.stringMatching(/bad\.mp3: the body is text/),
+    ]);
+  });
+
+  it("without expect keeps any bytes, named by the URL as before", async () => {
+    globalThis.fetch = vi.fn(
+      async () => new Response("bytes", { status: 200 }),
+    ) as unknown as typeof fetch;
+    const saved = await downloadResultMedia(["https://x.test/a.mp4"], tmpDir, "req-b", noopLogger);
+    expect(saved.map((f) => path.basename(f))).toEqual(["fal-req-b-01.mp4"]);
   });
 });

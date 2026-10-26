@@ -8,7 +8,7 @@ import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import { appIdFromModel } from "../client.js";
 import { FAL_DEFAULTS } from "../models.js";
-import { downloadResultMedia, extractMediaUrls, submitAndWait } from "../run-helpers.js";
+import { downloadResultMedia, extractMediaRefs, submitAndWait } from "../run-helpers.js";
 
 export function registerFalVideoCommand(parent: Command): void {
   parent
@@ -64,22 +64,22 @@ export function registerFalVideoCommand(parent: Command): void {
           waitTimeoutMs: Number.parseInt(opts.waitTimeout, 10) || 900_000,
         });
 
-        const urls = extractMediaUrls(result);
-        if (urls.length === 0) {
+        const refs = extractMediaRefs(result);
+        if (refs.length === 0) {
           logger.warn("No video URLs found in result.");
           console.log(JSON.stringify(result, null, 2));
           return;
         }
 
         if (opts.download === false) {
-          for (const u of urls) console.log(u);
+          for (const r of refs) console.log(r.url);
           return;
         }
 
         const outDir = getOutputDir();
-        const saved = await downloadResultMedia(urls, outDir, requestId, logger);
+        const saved = await downloadResultMedia(refs, outDir, requestId, logger);
         if (saved.length === 0) {
-          logger.error(`Found ${urls.length} video URL(s) but none downloaded successfully.`);
+          logger.error(`Found ${refs.length} video URL(s) but none downloaded successfully.`);
           process.exit(1);
         }
         console.log(`\nGenerated ${saved.length} file(s):`);

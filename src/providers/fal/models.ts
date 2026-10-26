@@ -34,4 +34,8 @@ export const FAL_DEFAULTS = {
   get videoImageModel() {
     return envDefault("FAL_VIDEO_IMAGE_MODEL", "fal-ai/kling-video/v1.6/standard/image-to-video");
   },
+  // Gemini 3.8 Flash TTS — 30 voices, style instructions, WAV output.
+  get ttsModel() {
+    return envDefault("FAL_TTS_MODEL", "google/gemini-3.8-flash-tts");
+  },
 } as const;

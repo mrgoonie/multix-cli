@@ -1,10 +1,11 @@
 ---
 title: fal.ai commands
-description: Run any fal.ai queue model with local files and detached jobs, or use the image/video convenience commands with sensible defaults.
+description: Run any fal.ai queue model with local files and detached jobs, use the image/video/text-to-speech convenience commands, or look up fal model ids.
 ---
 
 fal.ai commands require `FAL_KEY`. `run` works with any fal model id;
-`image` and `video` set sensible defaults and download media automatically.
+`image`, `video` and `tts` set sensible defaults and download media
+automatically, and `models` lists fal endpoint ids.
 
 ```bash
 multix fal run fal-ai/flux/schnell --input '{"prompt":"a cyberpunk cat"}'
@@ -126,6 +127,58 @@ Without `-m`, the default model depends on `--image-url`:
 - Text-to-video: `fal-ai/kling-video/v1.6/standard/text-to-video` (override with `FAL_VIDEO_MODEL`).
 - Image-to-video (`--image-url` set): `fal-ai/kling-video/v1.6/standard/image-to-video` (override with `FAL_VIDEO_IMAGE_MODEL`).
 
+## Text-to-speech
+
+```bash
+multix fal tts "Hello from multix" \
+  [-m <model>] [--text-file <path>] [--voice <name>] [--style <text>] \
+  [--format <fmt>] [--language <code>] [--input <json|@file>] \
+  [--detach] [--receipt <path>] [--no-download] [--output-dir <dir>] [-v]
+```
+
+fal's TTS endpoints do not share one input schema, so `tts` maps its flags onto
+each endpoint's own fields and checks them before anything is queued (fal
+accepts a malformed job and only fails it at result time, after billing):
+
+| Model (`-m`) | Text field | `--voice` | `--style` | `--format` / `--language` | Returns |
+|---|---|---|---|---|---|
+| `google/gemini-3.8-flash-tts` (default), `google/gemini-3.8-flash-lite-tts` | `prompt` | one of 30 prebuilt voices (default `Kore`) | `style_instructions` | not supported | WAV |
+| `elevenlabs/tts/eleven-v4`, `elevenlabs/tts/eleven-v4-turbo` | `text` (max 5000 chars) | any voice name or id (default `Rachel`) | not supported: use audio tags such as `[whispering]` in the text | `output_format` (default `mp3_44100_128`; `pcm_*`, `ulaw_8000`, `opus_*`, ...) / `language_code` | MP3 (or the chosen format) |
+
+- Pass the text as the argument or with `--text-file` (UTF-8, up to 1 MB), not
+  both. Gemini dialogue goes in `--input`, e.g.
+  `--input '{"speakers":[...],"turns":[...]}'`, with no text argument.
+- A flag the endpoint has no field for (for example `--format` on Gemini), an
+  unknown voice or format, text over the limit, or a field set both by a flag
+  and by `--input` fails with a validation error, and nothing is submitted.
+- Any other fal TTS id runs untyped, with a warning: the text goes to
+  `--text-field` (default `text`), `--voice` to `voice`, and every other field
+  comes from `--input`. Check the model's schema on its fal page.
+- The default model can be changed with `FAL_TTS_MODEL`.
+- Audio is saved as `fal-<request_id>-NN.<ext>`, with the extension taken from
+  the bytes (a WAV served as `audio.mp3` or from a URL without an extension is
+  saved as `.wav`). Raw formats with no header (`.pcm`, `.ulaw`, `.alaw`) keep
+  the name fal declared. An empty file, or a text, HTML or JSON body, is
+  refused and removed, and the command fails with a
+  `multix fal result <model> <request_id> --download` hint.
+- `--detach`, `--receipt`, `UNKNOWN_REMOTE_STATE` and resuming with
+  `status`/`result` work exactly as for `run`. The receipt holds ids and an
+  input hash, never the text.
+
+## Finding models
+
+```bash
+multix fal models --typed [--json]                       # offline: the TTS endpoints tts validates
+multix fal models --category text-to-speech [--json]     # live catalog
+multix fal models --query "gemini tts" [--limit 50] [--json]
+```
+
+The live list comes from fal's public catalog (`https://api.fal.ai/v1/models`).
+It needs no key, and `FAL_KEY` is never sent to it. Rows `tts` knows field by
+field are marked `typed`. `multix models --task speech --provider fal --json`
+shows the same command for agents, with its inputs, `output: audio` and
+`async: true`.
+
 ## Status and result
 
 Use these to resume a job started elsewhere, or after a `run`/`image`/`video`
@@ -161,4 +214,6 @@ path segments, e.g. `fal-ai/kling-video`); the full model id used for `run`,
   `multix fal status` or `multix fal result`.
 - Media extraction prefers known result fields (`images[].url`, `video.url`,
   `image.url`, `audio.url`) before falling back to a generic scan of the
-  result payload.
+  result payload. Each file is named by what its bytes are, then by the
+  `content_type` / `file_name` fal returned, the URL, and the download's
+  `Content-Type`, in that order.

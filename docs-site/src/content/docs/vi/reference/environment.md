@@ -148,7 +148,8 @@ Chỉ đặt override khi cần thay default. Các biến gồm `IMAGE_GEN_MODEL
 `BYTEPLUS_IMAGE_MODEL`, `BYTEPLUS_VIDEO_MODEL`, `BYTEPLUS_3D_MODEL`,
 `FAL_BASE_URL`, `FAL_IMAGE_MODEL`, `FAL_VIDEO_MODEL` và
 `FAL_VIDEO_IMAGE_MODEL` (default image-to-video của fal, dùng khi truyền
-`multix fal video --image-url` mà không có `-m`). `FAL_MAX_UPLOAD_MB` đặt giới
+`multix fal video --image-url` mà không có `-m`), cùng `FAL_TTS_MODEL` (model
+mặc định của `multix fal tts`, `google/gemini-3.8-flash-tts`). `FAL_MAX_UPLOAD_MB` đặt giới
 hạn dung lượng cho file cục bộ upload bằng `multix fal upload` và
 `multix fal run --file` (mặc định 1024). Replicate nhận
 `REPLICATE_BASE_URL` (API root cho mock hoặc proxy), `REPLICATE_IMAGE_MODEL`

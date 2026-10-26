@@ -74,6 +74,35 @@ describe("prepareRun: argv", () => {
     expect(prepared.argv.slice(-2)).toEqual(["--", "in/0-still.jpg"]);
   });
 
+  it("fal tts: text as a positional or --text-file from inputs, audio into the output directory", async () => {
+    const prepared = run({
+      command: "fal tts",
+      options: { model: "elevenlabs/tts/eleven-v4", format: "mp3_44100_128" },
+      inputs: { "text-file": "https://cdn.example.com/script.txt" },
+    });
+    expect(prepared.inputs).toEqual([
+      { url: "https://cdn.example.com/script.txt", path: "in/0-script.txt" },
+    ]);
+    expect(prepared.argv).toEqual([
+      "fal",
+      "tts",
+      "--model=elevenlabs/tts/eleven-v4",
+      "--format=mp3_44100_128",
+      "--text-file=in/0-script.txt",
+      "--output-dir=out",
+    ]);
+    const parsed = await parseWithCli(prepared.argv, "fal tts");
+    expect(parsed.opts).toMatchObject({ textFile: "in/0-script.txt", outputDir: "out" });
+
+    expect(run({ command: "fal tts", args: ["-- Xin chào"] }).argv).toEqual([
+      "fal",
+      "tts",
+      "--output-dir=out",
+      "--",
+      "-- Xin chào",
+    ]);
+  }, 120_000);
+
   it("downloads a directory input into its own folder", () => {
     const prepared = run({
       command: "media batch",
@@ -356,6 +385,16 @@ describe("prepareRun: rejections", () => {
     [
       "fal run receipt path",
       { command: "fal run", args: ["a/b"], options: { input: "{}", receipt: "/tmp/r.json" } },
+      /not available/,
+    ],
+    [
+      "fal tts local text file",
+      { command: "fal tts", options: { "text-file": "/etc/passwd" } },
+      /--text-file is a file: pass its https URL in inputs\.text-file/,
+    ],
+    [
+      "fal tts receipt path",
+      { command: "fal tts", args: ["hi"], options: { receipt: "/tmp/r.json" } },
       /not available/,
     ],
     ["fal upload path as an arg", { command: "fal upload", args: ["/etc/hosts"] }, /inputs\.file/],

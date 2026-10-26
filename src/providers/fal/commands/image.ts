@@ -13,7 +13,7 @@ import {
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import { FAL_DEFAULTS } from "../models.js";
-import { downloadResultMedia, extractMediaUrls, submitAndWait } from "../run-helpers.js";
+import { downloadResultMedia, extractMediaRefs, submitAndWait } from "../run-helpers.js";
 
 export function registerFalImageCommand(parent: Command): void {
   parent
@@ -67,22 +67,22 @@ export function registerFalImageCommand(parent: Command): void {
           waitTimeoutMs: Number.parseInt(opts.waitTimeout, 10) || 480_000,
         });
 
-        const urls = extractMediaUrls(result);
-        if (urls.length === 0) {
+        const refs = extractMediaRefs(result);
+        if (refs.length === 0) {
           logger.warn("No image URLs found in result.");
           console.log(JSON.stringify(result, null, 2));
           return;
         }
 
         if (opts.download === false) {
-          for (const u of urls) console.log(u);
+          for (const r of refs) console.log(r.url);
           return;
         }
 
         const outDir = getOutputDir();
-        const saved = await downloadResultMedia(urls, outDir, requestId, logger);
+        const saved = await downloadResultMedia(refs, outDir, requestId, logger);
         if (saved.length === 0) {
-          logger.error(`Found ${urls.length} image URL(s) but none downloaded successfully.`);
+          logger.error(`Found ${refs.length} image URL(s) but none downloaded successfully.`);
           process.exit(1);
         }
 

@@ -9,7 +9,7 @@ import type { Command } from "commander";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import { createFalClient, resultPath } from "../client.js";
-import { downloadResultMedia, extractMediaUrls } from "../run-helpers.js";
+import { downloadResultMedia, extractMediaRefs } from "../run-helpers.js";
 import type { FalResultResponse } from "../types.js";
 
 export function registerFalResultCommand(parent: Command): void {
@@ -46,17 +46,17 @@ export function registerFalResultCommand(parent: Command): void {
           return;
         }
 
-        const urls = extractMediaUrls(result);
-        if (urls.length === 0) {
+        const refs = extractMediaRefs(result);
+        if (refs.length === 0) {
           logger.warn("No media URLs found in result.");
           console.log(JSON.stringify(result, null, 2));
           return;
         }
 
         const outDir = opts.outputDir ? path.resolve(opts.outputDir) : getOutputDir();
-        const saved = await downloadResultMedia(urls, outDir, requestId, logger);
+        const saved = await downloadResultMedia(refs, outDir, requestId, logger);
         if (saved.length === 0) {
-          logger.error(`Found ${urls.length} media URL(s) but none downloaded successfully.`);
+          logger.error(`Found ${refs.length} media URL(s) but none downloaded successfully.`);
           process.exit(1);
         }
         console.log(`\nDownloaded ${saved.length} file(s):`);
