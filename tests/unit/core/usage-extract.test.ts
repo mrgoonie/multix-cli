@@ -129,6 +129,9 @@ describe("extractUsage", () => {
     expect(usage.metrics["subscription.credits_used"]).toBe(1200);
     const cost = extractUsage({ subscription: { usage: { cost: 12.5 } }, usage: { cost: 0.2 } });
     expect(cost.cost_usd).toBe(0.2);
+    const both = extractUsage({ usage: { cost: 0.2 }, subscription: { credits_used: 7 } });
+    expect(both).toMatchObject({ cost_usd: 0.2, credits: 7 });
+    expect(extractUsage({ APICredits: 900 }).credits).toBeUndefined();
   });
 
   it("matches balance parents by whole segment, not substring", () => {
