@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.14.1](https://github.com/mrgoonie/multix-cli/compare/v1.14.0...v1.14.1) (2026-10-26)
+
+
+### Fixed
+
+* **agent:** never report a provider's estimated cost as credits or cost spent ([#301](https://github.com/mrgoonie/multix-cli/issues/301)) ([f8b98ef](https://github.com/mrgoonie/multix-cli/commit/f8b98ef6ee5201b5f02f5ded930ce4a87f19ae17)), closes [#298](https://github.com/mrgoonie/multix-cli/issues/298)
+
 ## [1.14.0](https://github.com/mrgoonie/multix-cli/compare/v1.13.0...v1.14.0) (2026-10-25)
 
 
