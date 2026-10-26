@@ -5225,6 +5225,16 @@
               "negatable": false
             },
             {
+              "long": "--clone-strength",
+              "flags": "--clone-strength <n>",
+              "description": "Professional Voice Clone adherence 0..1 (eleven_v4/eleven_v4_turbo only; the API recommends 0)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
               "long": "--no-speaker-boost",
               "flags": "--no-speaker-boost",
               "description": "Disable speaker boost (default: enabled on models that have it: eleven_multilingual_v2, eleven_v3_conversational)",
@@ -5237,7 +5247,7 @@
             {
               "long": "--language-code",
               "flags": "--language-code <code>",
-              "description": "ISO 639-1 language code to enforce (the API rejects codes a model does not support)",
+              "description": "ISO 639-1 language code to enforce (not enforced by eleven_multilingual_v2; the API rejects codes a model does not support)",
               "required": false,
               "takesValue": true,
               "valueOptional": false,

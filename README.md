@@ -60,6 +60,8 @@ multix guide                                  # the agent protocol in one screen
 multix models --task video --ready            # which command and model serve a task, key set or not
 multix fal image "a red fox" --dry-run --json # validate; show the request instead of sending it
 multix fal image "a red fox" --json           # one-line multix.result/v1 envelope on stdout
+multix elevenlabs tts --text "Hi" --estimate  # price range, units, rate and source; nothing is sent
+multix elevenlabs tts --text "Hi" --max-cost 0.01  # refuse before sending unless the cost fits
 multix history stats --by model               # runs, success rate, p50/p90 time, cost, credits, tokens
 multix rerun last                             # repeat a recorded run
 ```
@@ -68,9 +70,13 @@ The envelope lists `outputs` (path, bytes, MIME, SHA-256, dimensions, duration),
 `warnings`, `usage` as the provider reports it (tokens, `cost_usd`, `credits`,
 metrics, and `sources` naming the header or body field each money number came
 from), `error` (`code`, `retryable`, `retry_after_s`, `hint`) and `next`
-commands. With `--json`, exit codes are `2` usage or input, `3` key or setup,
-`4` temporary (retry), `5` rejected (quota, safety, model), `6` timed out (job may
-still run), `1` unknown; plain runs keep exit 1 and print the code and hint on
+commands, plus a `cost` receipt (`multix.cost/v1`: estimate, provider-reported
+and actual cost, variance; unknown stays `null`, never $0). Only
+`gemini generate-speech` and `elevenlabs tts` are priced so far; `--max-cost`
+refuses anything it cannot price. With `--json`, exit codes are `2` usage or
+input (including a refused `--max-cost`), `3` key or setup, `4` temporary
+(retry), `5` rejected (quota, safety, model), `6` timed out (job may still run),
+`1` unknown; plain runs keep exit 1 and print the code and hint on
 stderr. Each run is recorded in `~/.multix/history.jsonl` without keys or signed
 URLs (`MULTIX_HISTORY=0` turns it off). Details:
 [For AI agents](https://multix.zuey.me/reference/for-ai-agents/).
@@ -247,7 +253,7 @@ multix gemini generate-video --prompt "Ocean waves" --resolution 1080p --duratio
 - An explicit `--model veo-*` (or `VIDEO_GEN_MODEL=veo-*`) still uses the Veo path, with a shutdown warning for `*-preview` models. Omni-only flags (`--duration`, `--no-store`, `--no-wait`) fail with Veo; `--no-thumb` applies to Veo only. Any other model id is rejected.
 - Omni runs as a stored background interaction. Its id is written to `gemini_omni_<timestamp>-<random>.json` in the output directory before polling starts, so a timeout or crash can be resumed with `multix gemini video-status <id> --download`. On success stdout prints `Generated video: <path>` and `Interaction ID: <id>`.
 - `--no-store` sends one synchronous request that Google does not keep: it cannot be edited, extended or resumed, and it cannot be combined with `--no-wait`.
-- `edit-video` and `extend-video` keep the source video's format unless `--resolution`/`--aspect-ratio` is given; only a completed interaction can be continued. `extend-video` returns the source clip followed by the continuation. Editing or extending an uploaded `--video` is unavailable in the EEA, Switzerland and the UK; editing a generated video with `--interaction-id` works there.
+- `edit-video` and `extend-video` keep the source video's format unless `--resolution`/`--aspect-ratio` is given; only a completed interaction can be continued. `extend-video` returns the source clip followed by the continuation. With `--interaction-id` the API takes no task field, so the prompt is sent as `Edit this video: …` / `Extend this video: …` (unless it already starts that way); `extend-video --video` rejects `--aspect-ratio`, which the API refuses for an extension. Editing or extending an uploaded `--video` is unavailable in the EEA, Switzerland and the UK; editing a generated video with `--interaction-id` works there.
 - Stored interactions and uploaded files expire (Files API uploads after about 48 hours). `--upload-timeout` is deprecated and ignored.
 - Paid tier only. The session record holds a cost estimate from the reported token usage (video output $17.50, input $1.50, text/thought output $9 per 1M tokens; roughly $0.10 per second at 720p); the bill is what Google reports.
 
@@ -484,7 +490,7 @@ Set `CLOUDFLARE_AI_GATEWAY_COLLECT_LOG_PAYLOAD=true` only to explicitly opt in t
 # Text-to-speech (sync, returns audio bytes)
 multix elevenlabs tts --text "Hello world" [--voice <voiceId>] [--model eleven_multilingual_v2] \
   [--format mp3_44100_128] [--stability 0.5] [--similarity-boost 0.75] [--style 0.0] \
-  [--no-speaker-boost] [--language-code en] [--seed <n>] [--previous-text "..."] [--next-text "..."] \
+  [--no-speaker-boost] [--clone-strength 0] [--language-code en] [--seed <n>] [--previous-text "..."] [--next-text "..."] \
   [--timestamps] [--output out.mp3] [-v]
 # Eleven v4 / v4 Turbo: 90+ languages, audio tags, 10,000 characters per request
 multix elevenlabs tts --model eleven_v4 --text "[warmly] Xin chào!" --language-code vi
@@ -552,8 +558,8 @@ multix elevenlabs models   # live: capabilities, languages, text limit, credit m
 - Most generation endpoints (TTS, SFX, Music, Voice Changer, Isolation) return audio bytes synchronously.
 - Dubbing is async: submit → poll → download per-language tracks.
 - Output format strings combine codec + sample rate + bitrate, e.g. `mp3_44100_128`, `pcm_24000`, `ulaw_8000`. TTS also takes `wav_*`, `opus_48000_*`, `alaw_8000`, `mp3_24000_48`, `pcm_32000` and `pcm_48000` (`mp3_44100_192` needs Creator tier; 44.1 kHz PCM/WAV need Pro).
-- TTS options are checked against the model before anything is sent. v4, v4 Turbo, v3 and Flash/Turbo v2.x have no style control, so a non-zero `--style` is rejected rather than silently ignored, and `--style 0` or `--no-speaker-boost` on a model without that control is reported as a warning and not sent. `eleven_v3` rejects `--previous-text`/`--next-text`; text over the model's limit (v3 5,000, v4 and multilingual v2 10,000, Flash/Turbo v2.x 30,000–40,000) is rejected; bracketed audio tags such as `[whispering]` are performed by v3/v4 and trigger a warning on models that would read them aloud. Unsupported `--language-code` values are rejected by the API (nothing is billed). An unknown `--model` id is passed through unchecked with a warning.
-- `--timestamps` calls `/with-timestamps` and saves character timings next to the audio as `<audio>.timestamps.json`.
+- TTS options are checked against the model before anything is sent. v4, v4 Turbo, v3 and Flash/Turbo v2.x have no style control, so a non-zero `--style` is rejected rather than silently ignored, and `--style 0` or `--no-speaker-boost` on a model without that control is reported as a warning and not sent. `eleven_v3` rejects `--previous-text`/`--next-text`; text over the model's limit (v3 5,000, v4 and multilingual v2 10,000, Flash/Turbo v2.x 30,000–40,000) is rejected; bracketed audio tags such as `[whispering]` are performed by v3/v4 and trigger a warning on models that would read them aloud. Unsupported `--language-code` values are rejected by the API (nothing is billed); `eleven_multilingual_v2` accepts the codes on its list without enforcing them, so the CLI warns. `--clone-strength` (0–1, Professional Voice Clones fine-tuned for v4) is sent only to v4 and v4 Turbo and rejected on other models. SSML `<break>` on v3/v4 triggers a warning, and so does `<phoneme>` on multilingual v2, Flash v2.5 and Turbo v2.5, which drop the tagged word from the audio (v4, v4 Turbo, v3, v3 conversational, Flash v2 and Turbo v2 speak it). `--voice` must be a voice ID (letters, digits, `_`, `-`), and text length is counted in Unicode code points, as the API bills it. An unknown `--model` id is passed through unchecked with a warning.
+- `--timestamps` calls `/with-timestamps` and saves character timings next to the audio as `<audio>.timestamps.json`. If the response carries no audio, the raw body is saved as `elevenlabs_tts_raw_*` before the command fails, since the request may already be billed.
 - After each TTS run the CLI prints the credits ElevenLabs reports in its `character-cost` header (v4 Turbo bills 0.5 credits per character, see `multix elevenlabs models`). With `--json` the same number is `usage.credits`, attributed in `usage.sources.credits`. multix never prints an estimate as credits charged.
 
 ### `multix fal`

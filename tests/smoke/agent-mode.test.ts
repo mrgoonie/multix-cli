@@ -113,6 +113,22 @@ describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     expect(file.stdout + url.stdout).not.toContain("sk-or-not-real");
   });
 
+  it("dry run never prints a URL query value from the request body", async () => {
+    const image = "https://cdn.example.com/x/a.png?sig=SECRETSIG";
+    const result = await run(
+      ["fal", "video", "a cat", "--image-url", image, "--dry-run", "--json"],
+      {
+        FAL_KEY: "test-key-not-real",
+        HTTPS_PROXY: "http://127.0.0.1:9",
+      },
+    );
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).not.toContain("SECRETSIG");
+    expect(envelope(result.stdout).request.body.image_url).toBe(
+      "https://cdn.example.com/x/a.png?[redacted]",
+    );
+  });
+
   it("records runs in the ledger and shows them with history", async () => {
     await run(["fal", "image", "--help"]); // help is not a run
     await run(["fal", "image", "a cat"], { FAL_KEY: "" });

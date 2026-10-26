@@ -30,6 +30,14 @@ export interface TtsModelCaps {
   contextText: boolean;
   /** Performs inline audio tags such as [whispering] instead of reading them aloud. */
   audioTags: boolean;
+  /** Accepts voice_settings.clone_strength (Professional Voice Clones fine-tuned for v4). */
+  cloneStrength: boolean;
+  /** Enforces language_code (the API reference: "not supported for multilingual_v2 models"). */
+  languageCode: boolean;
+  /** Interprets SSML <break> tags. */
+  ssmlBreak: boolean;
+  /** Speaks words wrapped in SSML <phoneme> tags (other models drop the word). */
+  ssmlPhoneme: boolean;
 }
 
 /**
@@ -40,6 +48,14 @@ export interface TtsModelCaps {
  * and speaker boost without error but ignore them ("Style and Speed sliders
  * are not available in Eleven v4"). Language support is left to the API,
  * which answers an unsupported language_code with 400 unsupported_language.
+ * eleven_multilingual_v2 answers 200 to a code on its language list ("de")
+ * and 400 to others ("vi"); the API reference says it does not enforce the
+ * code. clone_strength (0..1) is accepted by v4 and v4 Turbo and rejected
+ * with 400 unsupported_model by every other model in this table. SSML, from live
+ * generations on 2026-10-26: v4 and v3 ignore <break>, the other models pause.
+ * A word wrapped in <phoneme> is spoken by v4, v4 Turbo, v3, v3 conversational,
+ * flash_v2 and turbo_v2, and dropped from the audio by multilingual_v2,
+ * flash_v2_5 and turbo_v2_5 (the best practices guide lists only flash_v2).
  */
 export const ELEVENLABS_TTS_MODEL_CAPS: Record<ElevenLabsTtsModel, TtsModelCaps> = {
   eleven_v4: {
@@ -48,6 +64,10 @@ export const ELEVENLABS_TTS_MODEL_CAPS: Record<ElevenLabsTtsModel, TtsModelCaps>
     speakerBoost: false,
     contextText: true,
     audioTags: true,
+    cloneStrength: true,
+    languageCode: true,
+    ssmlBreak: false,
+    ssmlPhoneme: true,
   },
   eleven_v4_turbo: {
     maxChars: 10_000,
@@ -55,6 +75,10 @@ export const ELEVENLABS_TTS_MODEL_CAPS: Record<ElevenLabsTtsModel, TtsModelCaps>
     speakerBoost: false,
     contextText: true,
     audioTags: true,
+    cloneStrength: true,
+    languageCode: true,
+    ssmlBreak: false,
+    ssmlPhoneme: true,
   },
   eleven_v3: {
     maxChars: 5_000,
@@ -62,6 +86,10 @@ export const ELEVENLABS_TTS_MODEL_CAPS: Record<ElevenLabsTtsModel, TtsModelCaps>
     speakerBoost: false,
     contextText: false,
     audioTags: true,
+    cloneStrength: false,
+    languageCode: true,
+    ssmlBreak: false,
+    ssmlPhoneme: true,
   },
   eleven_v3_conversational: {
     maxChars: 5_000,
@@ -69,6 +97,10 @@ export const ELEVENLABS_TTS_MODEL_CAPS: Record<ElevenLabsTtsModel, TtsModelCaps>
     speakerBoost: true,
     contextText: false,
     audioTags: true,
+    cloneStrength: false,
+    languageCode: true,
+    ssmlBreak: false,
+    ssmlPhoneme: true,
   },
   eleven_multilingual_v2: {
     maxChars: 10_000,
@@ -76,6 +108,10 @@ export const ELEVENLABS_TTS_MODEL_CAPS: Record<ElevenLabsTtsModel, TtsModelCaps>
     speakerBoost: true,
     contextText: true,
     audioTags: false,
+    cloneStrength: false,
+    languageCode: false,
+    ssmlBreak: true,
+    ssmlPhoneme: false,
   },
   eleven_flash_v2_5: {
     maxChars: 40_000,
@@ -83,6 +119,10 @@ export const ELEVENLABS_TTS_MODEL_CAPS: Record<ElevenLabsTtsModel, TtsModelCaps>
     speakerBoost: false,
     contextText: true,
     audioTags: false,
+    cloneStrength: false,
+    languageCode: true,
+    ssmlBreak: true,
+    ssmlPhoneme: false,
   },
   eleven_flash_v2: {
     maxChars: 30_000,
@@ -90,6 +130,10 @@ export const ELEVENLABS_TTS_MODEL_CAPS: Record<ElevenLabsTtsModel, TtsModelCaps>
     speakerBoost: false,
     contextText: true,
     audioTags: false,
+    cloneStrength: false,
+    languageCode: true,
+    ssmlBreak: true,
+    ssmlPhoneme: true,
   },
   eleven_turbo_v2_5: {
     maxChars: 40_000,
@@ -97,6 +141,10 @@ export const ELEVENLABS_TTS_MODEL_CAPS: Record<ElevenLabsTtsModel, TtsModelCaps>
     speakerBoost: false,
     contextText: true,
     audioTags: false,
+    cloneStrength: false,
+    languageCode: true,
+    ssmlBreak: true,
+    ssmlPhoneme: false,
   },
   eleven_turbo_v2: {
     maxChars: 30_000,
@@ -104,6 +152,10 @@ export const ELEVENLABS_TTS_MODEL_CAPS: Record<ElevenLabsTtsModel, TtsModelCaps>
     speakerBoost: false,
     contextText: true,
     audioTags: false,
+    cloneStrength: false,
+    languageCode: true,
+    ssmlBreak: true,
+    ssmlPhoneme: true,
   },
 };
 
