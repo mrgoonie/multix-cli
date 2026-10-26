@@ -42,6 +42,8 @@ export const PROJECT_ENV_EXCLUDED: ReadonlySet<string> = new Set([
   "MULTIX_LEGACY_CLAUDE_ENV",
   // Would let a repository choose where the run ledger (argv, prompts) is written.
   "MULTIX_HISTORY_FILE",
+  // Per-run: one id in a project file would merge every run's spend into one operation.
+  "MULTIX_OPERATION_ID",
 ]);
 
 /** The documented MULTIX_* settings a project may choose. */
@@ -71,6 +73,7 @@ const INLINE_SETTINGS = [
   "OPENAI_STT_MODEL",
   "OPENROUTER_IMAGE_MODEL",
   "OPENROUTER_VIDEO_MODEL",
+  "OPENROUTER_TTS_MODEL",
   "OPENROUTER_FALLBACK_MODELS",
   "OPENROUTER_SITE_URL",
   "OPENROUTER_APP_NAME",
@@ -87,6 +90,7 @@ const INLINE_SETTINGS = [
   "FAL_IMAGE_MODEL",
   "FAL_VIDEO_MODEL",
   "FAL_VIDEO_IMAGE_MODEL",
+  "FAL_TTS_MODEL",
   "REPLICATE_IMAGE_MODEL",
   "REPLICATE_VIDEO_MODEL",
   "RUNWAY_IMAGE_MODEL",

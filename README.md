@@ -4,7 +4,7 @@ AI multimodal CLI — generate images/video/speech/music, analyze and transcribe
 
 ![Isometric technical illustration of multix media workflows](docs-site/public/images/multix-isometric-banner.png)
 
-Supports **OpenAI** (image, image edits, TTS, STT, optional Codex image driver), **Gemini** (analyze, transcribe, generate, Omni Flash video generation and editing, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), **Cloudflare** (Workers AI image and speech; AI Gateway-routed Replicate video), **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment), **fal.ai** (generic model runner, image, video via the fal queue API), and **Atlas Cloud** (any model: image, image edit, video, audio, 3D, with resumable async predictions), **Replicate** (generic model runner, image, video, async prediction status/cancel via the direct Replicate API), **Runway** (Gen-4.5 and Gen-4 Turbo video, Gen-4 images, resumable task status/cancel), **HeyGen** (v3 Video Agent prompt-to-video, scripted avatar videos, video translation, lipsync, TTS).
+Supports **OpenAI** (image, image edits, TTS, STT, optional Codex image driver), **Gemini** (analyze, transcribe, generate, Omni Flash video generation and editing, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation, image-to-video, TTS), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), **Cloudflare** (Workers AI image and speech; AI Gateway-routed Replicate video), **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment), **fal.ai** (generic model runner, image, video, text-to-speech via the fal queue API), and **Atlas Cloud** (any model: image, image edit, video, audio, 3D, with resumable async predictions), **Replicate** (generic model runner, image, video, async prediction status/cancel via the direct Replicate API), **Runway** (Gen-4.5 and Gen-4 Turbo video, Gen-4 images, resumable task status/cancel), **HeyGen** (v3 Video Agent prompt-to-video, scripted avatar videos, video translation, lipsync, TTS).
 
 ## Documentation
 
@@ -60,16 +60,23 @@ multix guide                                  # the agent protocol in one screen
 multix models --task video --ready            # which command and model serve a task, key set or not
 multix fal image "a red fox" --dry-run --json # validate; show the request instead of sending it
 multix fal image "a red fox" --json           # one-line multix.result/v1 envelope on stdout
+multix elevenlabs tts --text "Hi" --estimate  # price range, units, rate and source; nothing is sent
+multix elevenlabs tts --text "Hi" --max-cost 0.01  # refuse before sending unless the cost fits
 multix history stats --by model               # runs, success rate, p50/p90 time, cost, credits, tokens
 multix rerun last                             # repeat a recorded run
 ```
 
 The envelope lists `outputs` (path, bytes, MIME, SHA-256, dimensions, duration),
 `warnings`, `usage` as the provider reports it (tokens, `cost_usd`, `credits`,
-metrics), `error` (`code`, `retryable`, `retry_after_s`, `hint`) and `next`
-commands. With `--json`, exit codes are `2` usage or input, `3` key or setup,
-`4` temporary (retry), `5` rejected (quota, safety, model), `6` timed out (job may
-still run), `1` unknown; plain runs keep exit 1 and print the code and hint on
+metrics, and `sources` naming the header or body field each money number came
+from), `error` (`code`, `retryable`, `retry_after_s`, `hint`) and `next`
+commands, plus a `cost` receipt (`multix.cost/v1`: estimate, provider-reported
+and actual cost, variance; unknown stays `null`, never $0). Only
+`gemini generate-speech` and `elevenlabs tts` are priced so far; `--max-cost`
+refuses anything it cannot price. With `--json`, exit codes are `2` usage or
+input (including a refused `--max-cost`), `3` key or setup, `4` temporary
+(retry), `5` rejected (quota, safety, model), `6` timed out (job may still run),
+`1` unknown; plain runs keep exit 1 and print the code and hint on
 stderr. Each run is recorded in `~/.multix/history.jsonl` without keys or signed
 URLs (`MULTIX_HISTORY=0` turns it off). Details:
 [For AI agents](https://multix.zuey.me/reference/for-ai-agents/).
@@ -97,6 +104,7 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `FAL_VIDEO_MODEL` | No | Default fal text-to-video model (default `fal-ai/kling-video/v1.6/standard/text-to-video`) |
 | `HEYGEN_API_KEY` | For HeyGen | [HeyGen API settings](https://app.heygen.com/developers/api). API usage is billed separately from HeyGen web plans |
 | `HEYGEN_BASE_URL` | No | Override the HeyGen API base (default `https://api.heygen.com`; proxies/tests). Must be `https://`, except `http://` on `localhost`/`127.0.0.1`/`[::1]` |
+| `FAL_TTS_MODEL` | No | Default fal text-to-speech model (default `google/gemini-3.8-flash-tts`) |
 | `FAL_VIDEO_IMAGE_MODEL` | No | Default fal image-to-video model, used when `--image-url` is passed without `-m` (default `fal-ai/kling-video/v1.6/standard/image-to-video`) |
 | `ATLASCLOUD_API_KEY` | For Atlas Cloud | [Atlas Cloud](https://www.atlascloud.ai/console/api-keys) |
 | `ATLASCLOUD_BASE_URL` | No | Override Atlas Cloud media API base (default `https://api.atlascloud.ai/api/v1`; `https://` required, `http://` only for localhost) |
@@ -136,6 +144,7 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `MULTIX_HISTORY_FILE` | No | Run ledger path (shell or `~/.multix/.env` only) |
 | `OPENROUTER_IMAGE_MODEL` | No | Default OpenRouter model |
 | `OPENROUTER_FALLBACK_MODELS` | No | Comma-separated fallback model ids |
+| `OPENROUTER_TTS_MODEL` | No | Default `multix openrouter tts` model (default `google/gemini-3.8-flash-tts`) |
 | `OPENAI_IMAGE_MODEL` | No | Default OpenAI image model (default `gpt-image-2`) |
 | `OPENAI_TTS_MODEL` | No | Default OpenAI TTS model (default `gpt-4o-mini-tts`) |
 | `OPENAI_STT_MODEL` | No | Default OpenAI STT model (default `gpt-4o-transcribe`) |
@@ -243,7 +252,7 @@ multix gemini generate-video --prompt "Ocean waves" --resolution 1080p --duratio
 - An explicit `--model veo-*` (or `VIDEO_GEN_MODEL=veo-*`) still uses the Veo path, with a shutdown warning for `*-preview` models. Omni-only flags (`--duration`, `--no-store`, `--no-wait`) fail with Veo; `--no-thumb` applies to Veo only. Any other model id is rejected.
 - Omni runs as a stored background interaction. Its id is written to `gemini_omni_<timestamp>-<random>.json` in the output directory before polling starts, so a timeout or crash can be resumed with `multix gemini video-status <id> --download`. On success stdout prints `Generated video: <path>` and `Interaction ID: <id>`.
 - `--no-store` sends one synchronous request that Google does not keep: it cannot be edited, extended or resumed, and it cannot be combined with `--no-wait`.
-- `edit-video` and `extend-video` keep the source video's format unless `--resolution`/`--aspect-ratio` is given; only a completed interaction can be continued. `extend-video` returns the source clip followed by the continuation. Editing or extending an uploaded `--video` is unavailable in the EEA, Switzerland and the UK; editing a generated video with `--interaction-id` works there.
+- `edit-video` and `extend-video` keep the source video's format unless `--resolution`/`--aspect-ratio` is given; only a completed interaction can be continued. `extend-video` returns the source clip followed by the continuation. With `--interaction-id` the API takes no task field, so the prompt is sent as `Edit this video: …` / `Extend this video: …` (unless it already starts that way); `extend-video --video` rejects `--aspect-ratio`, which the API refuses for an extension. Editing or extending an uploaded `--video` is unavailable in the EEA, Switzerland and the UK; editing a generated video with `--interaction-id` works there.
 - Stored interactions and uploaded files expire (Files API uploads after about 48 hours). `--upload-timeout` is deprecated and ignored.
 - Paid tier only. The session record holds a cost estimate from the reported token usage (video output $17.50, input $1.50, text/thought output $9 per 1M tokens; roughly $0.10 per second at 720p); the bill is what Google reports.
 
@@ -290,7 +299,16 @@ multix openrouter video-status <jobId> [--download] [--output <path>] [-v]
 
 # List available video models
 multix openrouter video-models
+
+# Text-to-speech (POST /api/v1/audio/speech); input: --text | --text-file | --turns-file (multi-speaker JSON)
+multix openrouter tts --text "Xin chào" [--model google/gemini-3.8-flash-tts] --voice Kore [--instructions <text>] [--format auto|mp3|pcm|wav] [--speed <n>] [--zdr] [--cost-wait 20] [--output <path>] [-v]
+
+# List speech models (live catalog) or one model's voices; read a generation's cost later
+multix openrouter speech-models [--model <id>]
+multix openrouter generation <id>
 ```
+
+**TTS:** the model and voice are checked against the live speech catalog before the paid request (`--no-model-check` skips it); Gemini and ElevenLabs models need `--voice`. `--format auto` writes WAV (pcm wrapped locally) for pcm-only models (Gemini, HeyGen) and MP3 otherwise; MiniMax returns MP3 only. The request is never retried; the cost is read from OpenRouter for up to `--cost-wait` seconds (max 120) and can be fetched later with `multix openrouter generation <id>`.
 
 **Supported i2i model families:** Gemini (default) and OpenAI gpt-image return `text+image` (modalities `["image","text"]`); Recraft accepts `--strength` (init-image strength 0..1); Flux / Sourceful are image-only (`["image"]`). The CLI picks the right `modalities` automatically based on the model id prefix.
 
@@ -463,7 +481,11 @@ Set `CLOUDFLARE_AI_GATEWAY_COLLECT_LOG_PAYLOAD=true` only to explicitly opt in t
 # Text-to-speech (sync, returns audio bytes)
 multix elevenlabs tts --text "Hello world" [--voice <voiceId>] [--model eleven_multilingual_v2] \
   [--format mp3_44100_128] [--stability 0.5] [--similarity-boost 0.75] [--style 0.0] \
-  [--no-speaker-boost] [--language-code en] [--seed <n>] [--output out.mp3] [-v]
+  [--no-speaker-boost] [--clone-strength 0] [--language-code en] [--seed <n>] [--previous-text "..."] [--next-text "..."] \
+  [--timestamps] [--output out.mp3] [-v]
+# Eleven v4 / v4 Turbo: 90+ languages, audio tags, 10,000 characters per request
+multix elevenlabs tts --model eleven_v4 --text "[warmly] Xin chào!" --language-code vi
+multix elevenlabs tts --model eleven_v4_turbo --text "Hello" --timestamps --format wav_24000
 
 # Voices: list / get / search shared / design / persist / delete
 multix elevenlabs voices list [--category cloned|generated|premade|professional]
@@ -510,11 +532,11 @@ multix elevenlabs align --input audio.mp3 --text-file transcript.txt
 
 # Account info / available models
 multix elevenlabs account
-multix elevenlabs models
+multix elevenlabs models   # live: capabilities, languages, text limit, credit multiplier
 ```
 
 **ElevenLabs models:**
-- TTS: `eleven_multilingual_v2` (default), `eleven_flash_v2_5`, `eleven_flash_v2`, `eleven_turbo_v2_5`, `eleven_turbo_v2`, `eleven_v3`
+- TTS: `eleven_multilingual_v2` (default), `eleven_v4`, `eleven_v4_turbo`, `eleven_v3`, `eleven_v3_conversational`, `eleven_flash_v2_5`, `eleven_flash_v2`, `eleven_turbo_v2_5`, `eleven_turbo_v2`
 - STT: `scribe_v1`, `scribe_v1_experimental`
 - Voice changer: `eleven_multilingual_sts_v2` (default)
 - Music: `music_v1`
@@ -526,7 +548,10 @@ multix elevenlabs models
 - Auth header is `xi-api-key`; base URL is `https://api.elevenlabs.io/v1`.
 - Most generation endpoints (TTS, SFX, Music, Voice Changer, Isolation) return audio bytes synchronously.
 - Dubbing is async: submit → poll → download per-language tracks.
-- Output format strings combine codec + sample rate + bitrate, e.g. `mp3_44100_128`, `pcm_24000`, `ulaw_8000`.
+- Output format strings combine codec + sample rate + bitrate, e.g. `mp3_44100_128`, `pcm_24000`, `ulaw_8000`. TTS also takes `wav_*`, `opus_48000_*`, `alaw_8000`, `mp3_24000_48`, `pcm_32000` and `pcm_48000` (`mp3_44100_192` needs Creator tier; 44.1 kHz PCM/WAV need Pro).
+- TTS options are checked against the model before anything is sent. v4, v4 Turbo, v3 and Flash/Turbo v2.x have no style control, so a non-zero `--style` is rejected rather than silently ignored, and `--style 0` or `--no-speaker-boost` on a model without that control is reported as a warning and not sent. `eleven_v3` rejects `--previous-text`/`--next-text`; text over the model's limit (v3 5,000, v4 and multilingual v2 10,000, Flash/Turbo v2.x 30,000–40,000) is rejected; bracketed audio tags such as `[whispering]` are performed by v3/v4 and trigger a warning on models that would read them aloud. Unsupported `--language-code` values are rejected by the API (nothing is billed); `eleven_multilingual_v2` accepts the codes on its list without enforcing them, so the CLI warns. `--clone-strength` (0–1, Professional Voice Clones fine-tuned for v4) is sent only to v4 and v4 Turbo and rejected on other models. SSML `<break>` on v3/v4 triggers a warning, and so does `<phoneme>` on multilingual v2, Flash v2.5 and Turbo v2.5, which drop the tagged word from the audio (v4, v4 Turbo, v3, v3 conversational, Flash v2 and Turbo v2 speak it). `--voice` must be a voice ID (letters, digits, `_`, `-`), and text length is counted in Unicode code points, as the API bills it. An unknown `--model` id is passed through unchecked with a warning.
+- `--timestamps` calls `/with-timestamps` and saves character timings next to the audio as `<audio>.timestamps.json`. If the response carries no audio, the raw body is saved as `elevenlabs_tts_raw_*` before the command fails, since the request may already be billed.
+- After each TTS run the CLI prints the credits ElevenLabs reports in its `character-cost` header (v4 Turbo bills 0.5 credits per character, see `multix elevenlabs models`). With `--json` the same number is `usage.credits`, attributed in `usage.sources.credits`. multix never prints an estimate as credits charged.
 
 ### `multix fal`
 
@@ -553,14 +578,19 @@ multix fal image "a cyberpunk cat" [-m <model>] [--image-size square_hd] [-n 1] 
 multix fal video "a dancer under neon lights" [-m <model>] [--image-url <https-url>] [--duration <n>] [--aspect-ratio 16:9] [--seed <n>] [--no-download] [--wait-timeout 900000] [-v]
 
 # Queue status / result for a request submitted any other way
+# Text-to-speech with per-model typed inputs (default model: google/gemini-3.8-flash-tts)
+multix fal tts "Xin chào" [--text-file <path>] [-m <model>] [--voice <name>] [--style <text>] [--format <fmt>] [--language <code>] [--input <json>] [--detach]
+multix fal voices [<model>] [--live]           # models, voices, formats; one model prints typed inputs as JSON
+
 multix fal status <model> <requestId>
-multix fal result <model> <requestId> [--download] [--output-dir <dir>]
+multix fal result <model> <requestId> [--download] [--output-dir <dir>] [--format <fmt>]   # --format: raw speech formats (pcm_*, ulaw_8000, alaw_8000)
 ```
 
 **Notes:**
 - Auth header is `Authorization: Key $FAL_KEY`; base URL is `https://queue.fal.run`.
 - All fal jobs are async: submit → poll `status` → fetch `result`. `run`/`image`/`video` do this automatically.
 - `--detach` saves a receipt (`~/.multix/fal/requests/<request_id>.json`, or `--receipt <path>`, which also works for a blocking run; mode 0600, ids and an input hash only). `status`/`result` only read, so resuming never pays twice. A submit whose outcome is unknown (connection cut off, 5xx gateway error) fails with `UNKNOWN_REMOTE_STATE` and is never retried.
+- `tts` maps flags to each model's schema (Gemini 3.8 Flash / Flash-Lite TTS: `prompt`, `voice`, `style_instructions`; ElevenLabs v4 / v4 Turbo: `text`, `voice`, `output_format`, `language_code`) and refuses a flag the model has no field for. Other fal TTS ids need `--text-field` (and `--voice-field`). Audio is saved under the extension its bytes have (raw `pcm_*`/`ulaw_8000`/`alaw_8000` from the requested format); empty, error-page or mislabelled downloads are refused.
 - `--file` / `fal upload` accept image, video and audio files only (up to `FAL_MAX_UPLOAD_MB`, default 1024). fal storage URLs are public to anyone with the link and fal controls retention; the key goes only to `https://rest.fal.ai`, never to the pre-signed upload URL.
 - Media URLs are extracted generically from the result JSON (any `url` field, recursively) and downloaded to `MULTIX_OUTPUT_DIR`.
 

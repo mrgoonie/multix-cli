@@ -34,4 +34,8 @@ export const FAL_DEFAULTS = {
   get videoImageModel() {
     return envDefault("FAL_VIDEO_IMAGE_MODEL", "fal-ai/kling-video/v1.6/standard/image-to-video");
   },
+  // Text-to-speech default for `fal tts`; see speech-models.ts for the verified list.
+  get ttsModel() {
+    return envDefault("FAL_TTS_MODEL", "google/gemini-3.8-flash-tts");
+  },
 } as const;

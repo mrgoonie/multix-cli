@@ -29,13 +29,16 @@ https://multix.zuey.me/llms.txt
    (flags, input files, keys), then the first provider request is shown
    (method, URL without query string, body with long values shortened, header
    names only) instead of being sent. Local `media` commands stop before
-   running.
+   running. Add `--estimate` to price the run, and `--max-cost <usd>` to cap
+   it; see [Cost](#cost-estimate-spend-guard-and-receipt).
 3. **Run with `--json`** (or `MULTIX_OUTPUT=json`). stdout is exactly one line,
    a `multix.result/v1` envelope; human output is captured.
 4. **Check the result.** Success means `ok: true`, a non-empty `outputs` list
    and no `warnings` (`EMPTY_OUTPUT`, `CONTENT_MISMATCH`, `UNREADABLE_MEDIA`).
 5. **On failure** follow `error.hint` and `next[]`; do not resubmit a paid job
-   blindly.
+   blindly. multix never repeats a paid submit that the provider may have
+   accepted: it retries status reads and downloads, and a submit only when the
+   provider proved nothing was created (such as a 429).
 6. **Long jobs.** Pass `--async` where offered, keep the job id, and run the
    status command from `next[]`.
 7. **History.** Every run is recorded locally; see [Run history](#run-history).
@@ -68,10 +71,13 @@ https://multix.zuey.me/llms.txt
 | `warnings[]` | Problems found in the outputs, such as an empty file or content that does not match its extension. |
 | `data` / `text` | The command's stdout: parsed JSON, or text capped at 32 KB. |
 | `error` | `code`, `message`, `retryable`, `retry_after_s`, `hint`, `http_status`, `env` (the key name when one is missing). |
-| `usage` | What the provider reported: `tokens` (`input`, `output`, `total`, `thinking`), `cost_usd`, `credits`, and other numeric `metrics` by key path. Nothing is estimated. `cost_usd` and `credits` are what the run spent: an account balance (Leonardo `apiCredit` from `leonardo me`, HeyGen remaining or included credits from `heygen me`) is never reported as `credits` or `cost_usd`. |
+| `usage` | What the provider reported: `tokens` (`input`, `output`, `total`, `thinking`), `cost_usd`, `credits`, and other numeric `metrics` by key path. `sources.cost_usd` / `sources.credits` name where each number came from (for example `api.elevenlabs.io header.character-cost`). Nothing is estimated: a provider's own estimate or quote (such as Runway `estimatedCost`) stays in `metrics` and is never reported as `cost_usd` or `credits`. `cost_usd` and `credits` are what the run spent: an account balance (Leonardo `apiCredit` from `leonardo me`, HeyGen remaining or included credits from `heygen me`) is never reported as `credits` or `cost_usd`. |
 | `http` | Provider request count, failed requests and total time. |
 | `provider_ids` | Request, job or prediction ids the provider returned. |
-| `request` | With `--dry-run`: the request that would have been sent. |
+| `request` | With `--dry-run`: the request that would have been sent. Header values, secret-named fields and URL query strings (pre-signed URLs) are redacted. |
+| `estimate` | Pre-flight price of the run (with `--estimate`, `--max-cost`, or on a priced command). `estimate_only: true` marks an `--estimate` run. |
+| `budget` | With `--max-cost`: `ok`, `max_cost_usd`, `policy`, and the refusal `code` and `message`. |
+| `cost` | The run's cost receipt (`multix.cost/v1`); see [Cost receipt](#cost-receipt). |
 | `next[]` | Commands to run next: a status command for an async job, `multix check` for a key problem, `multix rerun <id>` for a temporary failure. |
 
 ## Exit codes and error codes
@@ -79,7 +85,7 @@ https://multix.zuey.me/llms.txt
 | Exit | Class | Error codes | What to do |
 | --- | --- | --- | --- |
 | 0 | success | | |
-| 2 | usage or invalid input | `USAGE`, `INVALID_INPUT` | Fix the flags; nothing was billed. |
+| 2 | usage or invalid input | `USAGE`, `INVALID_INPUT`, `BUDGET_EXCEEDED`, `BUDGET_UNPROVEN` | Fix the flags; nothing was billed. For a budget error, run the `--estimate` command in `next[]`. |
 | 3 | key or setup | `MISSING_KEY`, `INVALID_KEY`, `CONFIG_ERROR`, `BINARY_MISSING` | `multix check`, set the key named in `error.env`. |
 | 4 | temporary | `RATE_LIMITED`, `PROVIDER_UNAVAILABLE`, `NETWORK_ERROR` | Wait `retry_after_s`, then `multix rerun <id>`. |
 | 5 | rejected | `QUOTA_EXCEEDED`, `CONTENT_BLOCKED`, `MODEL_NOT_FOUND`, `NOT_FOUND`, `PROVIDER_REJECTED`, `JOB_FAILED`, `RESPONSE_TOO_LARGE` | Change the input, model or provider. |
@@ -90,6 +96,96 @@ These exit classes apply in agent mode (`--json` or `MULTIX_OUTPUT=json`).
 Without it a failed command still exits 1, as in earlier versions, and prints
 `code:`, `hint:` and `next:` lines on stderr. The history ledger records the
 error code either way.
+
+## Cost: estimate, spend guard and receipt
+
+Every provider command that sends requests takes three cost flags:
+
+- `--estimate` prices the run and never calls a billable API. It prints the
+  low, expected and high cost in USD, the units counted per meter, the rate id,
+  its source URL and `last_checked` date, and the assumptions, then exits 0.
+  With `--json` the envelope has `estimate_only: true` and `estimate`.
+- `--max-cost <usd>` fails closed before anything is sent. `BUDGET_EXCEEDED`:
+  the ceiling is over the limit. `BUDGET_UNPROVEN`: the price is unknown, or
+  the ceiling is only estimated. Both exit 2 with `--json`, and `next[]`
+  suggests the same command with `--estimate`.
+- `--cost-policy strict|estimate` (with `--max-cost`). `strict`, the default,
+  passes only a proven ceiling; `estimate` accepts the estimated high end.
+
+```text
+$ multix elevenlabs tts --text "Xin chào thế giới" --estimate
+Estimate: $0.00136 expected, $0.00136–$0.00136 range (proven ceiling)
+  model: elevenlabs eleven_multilingual_v2
+  text: 17 characters (17 after NFC), 22 UTF-8 bytes
+  units: characters 17
+  rate: elevenlabs/multilingual@api (list), checked 2026-10-26, https://elevenlabs.io/pricing/api
+  Nothing was sent; no provider was billed.
+```
+
+### Priced commands
+
+| Command | Billed on | Ceiling |
+| --- | --- | --- |
+| `gemini generate-speech` | Text tokens in, audio tokens out (25 tokens per second of audio) | Estimated: the model decides the audio length, so `--max-cost` needs `--cost-policy estimate`. |
+| `elevenlabs tts` | Characters (Unicode code points as sent) | Proven. `--previous-text` and `--next-text` count only in the high end. |
+
+Any other command or model has estimate status `unknown`, never $0, and
+`--max-cost` refuses it.
+
+### Pricing catalog
+
+Prices live in a versioned catalog (`multix.pricing/v1`,
+[`src/budget/pricing-catalog.ts`](https://github.com/mrgoonie/multix-cli/blob/main/src/budget/pricing-catalog.ts)):
+USD per unit, dated price windows (promotions and scheduled changes), billing
+tier, `last_checked`, source URL and a verified flag. A price that is missing,
+unverified, or last checked more than 120 days ago resolves to `unknown`.
+Within 24 hours of a price change the high end uses the higher price.
+
+Prices as checked on 2026-10-26 (`--estimate` shows the rate in force):
+
+| Rate id | Models | Price (USD) |
+| --- | --- | --- |
+| `gemini/gemini-3.8-flash-tts@paid-standard` | `gemini-3.8-flash-tts` | $0.50 / 1M input tokens, $9 / 1M audio tokens; from 2027-01-01: $1 and $18 |
+| `gemini/gemini-3.8-flash-lite-tts@paid-standard` | `gemini-3.8-flash-lite-tts` | $0.50 / 1M input tokens, $6 / 1M audio tokens; from 2027-01-01: $1 and $12 |
+| `gemini/gemini-3.1-flash-tts-preview@paid-standard` | `gemini-3.1-flash-tts-preview` | $1 / 1M input tokens, $20 / 1M audio tokens |
+| `gemini/gemini-2.5-flash-preview-tts@paid-standard` | `gemini-2.5-flash-preview-tts` | $0.50 / 1M input tokens, $10 / 1M audio tokens |
+| `gemini/gemini-2.5-pro-preview-tts@paid-standard` | `gemini-2.5-pro-preview-tts` | $1 / 1M input tokens, $20 / 1M audio tokens |
+| `elevenlabs/multilingual@api` | `eleven_v4`, `eleven_v3`, `eleven_multilingual_v2` | $0.08 / 1K characters |
+| `elevenlabs/flash-turbo@api` | `eleven_v4_turbo`, `eleven_flash_v2_5`, `eleven_flash_v2`, `eleven_turbo_v2_5`, `eleven_turbo_v2` | $0.04 / 1K characters |
+| `fish/s2-pro@api` | `s2.1-pro`, `s2-pro` | $15 / 1M UTF-8 bytes |
+| `fish/s1@api` | `s1` | $15 / 1M UTF-8 bytes |
+| `fish/drama-3@api` | `drama-3` | $10 / 1M UTF-8 bytes (promotion until 2026-11-12T17:00Z), then $50 |
+
+Gemini prices are the paid Standard tier; the free tier costs nothing.
+ElevenLabs subscription plans spend credits instead of USD. The Fish Audio
+prices are kept for the upcoming Fish provider; no command uses them yet.
+
+### Cost receipt
+
+Every `--json` envelope of a provider command, and its history entry, carries
+a `cost` receipt (`multix.cost/v1`):
+
+| Field | Meaning |
+| --- | --- |
+| `operation_id` | The logical operation the run belongs to; see `MULTIX_OPERATION_ID` below. |
+| `role` | `charge` (sent a billable request), `observation` (status reads or downloads only) or `none` (sent nothing). |
+| `status` | `settled` (provider-reported, or $0 because nothing was sent or the provider refused every billable request with a 4xx), `computed` (measured usage at the catalog price), `uncertain` (a billable request was sent and the run failed or was cut off), `unknown`. |
+| `estimate` | The pre-flight range in short form, with rate id, source and `last_checked`. |
+| `provider_reported` | `cost_usd` and `credits` as the provider reported them; `null` when not reported, which is not $0. |
+| `actual_usd`, `actual_source` | The actual cost and where it came from: `provider_reported`, `computed_from_usage`, `no_request` or `refused`. `null` when unknown or uncertain. |
+| `measured` | Units the actual was computed from. |
+| `variance_usd` | Actual minus expected estimate. |
+| `max_cost_usd`, `policy` | The `--max-cost` limit and policy, when set. |
+
+Text mode prints a one-line `Cost: …` receipt on stderr.
+
+`MULTIX_OPERATION_ID` names the logical operation, so its runs are counted
+once: status polls and downloads add nothing, a replayed receipt counts once,
+a provider-reported figure settles the operation, and only each distinct paid
+submit (a resubmit is billed again) adds its cost. A run that sent nothing never
+lowers the operation's cost. The default is
+`<provider>:<job id>`, or `run:<history id>` when the provider returned no id.
+Set it in the shell for the run; a project `.env` cannot set it.
 
 ## Run history
 
@@ -108,6 +204,11 @@ multix history stats --by model     # runs, success rate, p50/p90 time, cost, cr
 multix rerun h_mfz3k2ab1c9d         # run it again (extra args are appended)
 ```
 
+`history stats` skips `--dry-run` and `--estimate` runs and counts each
+operation's cost once, from known figures only; `cost_uncertain_ops` and
+`cost_unknown_ops` count the operations whose cost is uncertain or unknown, so
+`cost_usd` is a lower bound when either is present.
+
 `MULTIX_HISTORY=0` turns the ledger off. `MULTIX_HISTORY_FILE` moves it (shell
 or `~/.multix/.env` only, not a project `.env`).
 
@@ -125,7 +226,7 @@ or `~/.multix/.env` only, not a project `.env`).
 | Analyze or transcribe files | [Gemini](/commands/gemini/) |
 | Generate or edit images, speech, or transcription | [OpenAI](/commands/openai/) |
 | MiniMax image, video, speech, or music | [MiniMax](/commands/minimax/) |
-| Routed image or image-to-video | [OpenRouter](/commands/openrouter/) |
+| Routed image, image-to-video, or speech | [OpenRouter](/commands/openrouter/) |
 | Leonardo image IDs, video, or upscale jobs | [Leonardo](/commands/leonardo/) |
 | Seedream, Seedance, reference video, or 3D | [BytePlus](/commands/byteplus/) |
 | Workers AI image/speech or AI Gateway video | [Cloudflare](/commands/cloudflare/) |

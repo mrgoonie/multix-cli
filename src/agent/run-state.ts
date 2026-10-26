@@ -5,6 +5,8 @@
  * the result envelope and the history entry.
  */
 
+import type { CostPolicy } from "../budget/command-cost.js";
+import type { CostEstimate } from "../budget/cost-estimate.js";
 import type { ResponseUsage, UsageTokens } from "../core/usage-extract.js";
 
 export interface HttpCall {
@@ -33,6 +35,8 @@ export interface RunState {
   postUsage: ResponseUsage[];
   getUsage: Map<string, ResponseUsage>;
   ids: string[];
+  /** Programs started for paid work outside fetch (the Codex image driver). */
+  externalRuns: string[];
   /** Model named by the first provider request that names one. */
   requestModel?: string;
   /** stdout/stderr text captured in JSON mode. */
@@ -40,6 +44,18 @@ export interface RunState {
   stderr: string[];
   /** Last error line a command logged before exiting. */
   lastErrorLine?: string;
+  /** Pre-flight estimate (`--estimate`, `--max-cost`, or a priceable command). */
+  estimate?: CostEstimate;
+  maxCost?: number;
+  costPolicy?: CostPolicy;
+  /** Outcome of the --max-cost check. */
+  budget?: {
+    ok: boolean;
+    max_cost_usd: number;
+    policy: CostPolicy;
+    code?: string;
+    message?: string;
+  };
   /** True once a command action started (help and parse errors never get there). */
   actionStarted: boolean;
   finalized: boolean;
@@ -59,6 +75,7 @@ export const run: RunState = {
   postUsage: [],
   getUsage: new Map(),
   ids: [],
+  externalRuns: [],
   stdout: [],
   stderr: [],
   actionStarted: false,
@@ -69,6 +86,8 @@ export interface UsageSummary {
   tokens?: UsageTokens;
   cost_usd?: number;
   credits?: number;
+  /** Where each provider reported cost_usd / credits ("<host> header.<name>" or "<host> body.<path>"). */
+  sources?: { cost_usd?: string[]; credits?: string[] };
   /** Provider-reported numbers by key path (polls: last value; creates: summed). */
   metrics?: Record<string, number>;
 }
@@ -88,7 +107,14 @@ export function summarizeUsage(state: RunState = run): UsageSummary | undefined 
   const metrics: Record<string, number> = {};
   let cost: number | undefined;
   let credits: number | undefined;
+  const sources: { cost_usd?: string[]; credits?: string[] } = {};
   for (const [i, r] of records.entries()) {
+    for (const key of ["cost_usd", "credits"] as const) {
+      const src = r.sources?.[key];
+      if (src && r[key] !== undefined && !sources[key]?.includes(src)) {
+        sources[key] = [...(sources[key] ?? []), src];
+      }
+    }
     addTokens(tokens, r.tokens);
     if (r.cost_usd !== undefined) cost = (cost ?? 0) + r.cost_usd;
     if (r.credits !== undefined) credits = (credits ?? 0) + r.credits;
@@ -101,6 +127,7 @@ export function summarizeUsage(state: RunState = run): UsageSummary | undefined 
   if (Object.keys(tokens).length > 0) summary.tokens = tokens;
   if (cost !== undefined) summary.cost_usd = Math.round(cost * 1e6) / 1e6;
   if (credits !== undefined) summary.credits = credits;
+  if (Object.keys(sources).length > 0) summary.sources = sources;
   if (Object.keys(metrics).length > 0) summary.metrics = metrics;
   return Object.keys(summary).length > 0 ? summary : undefined;
 }

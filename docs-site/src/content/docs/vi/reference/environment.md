@@ -33,6 +33,14 @@ cùng `MULTIX_HISTORY_FILE` (nơi ghi ledger lịch sử chạy), bị từ ch�
 không được nới rộng những gì nó có thể làm với key của bạn, chọn nơi ghi lịch sử
 chạy, hay kéo theo credential trong các file `.claude` ở thư mục home.
 
+`MULTIX_OPERATION_ID` cũng bị từ chối. Biến này đặt tên cho thao tác logic mà
+[biên nhận chi phí](/vi/reference/for-ai-agents/#biên-nhận-chi-phí) của lần chạy
+thuộc về, để nhiều lần chạy (submit, poll trạng thái, tải file, webhook gửi lại)
+chỉ được tính một lần; mặc định là `<provider>:<job id>` hoặc
+`run:<history id>`. Biến này dành cho từng lần chạy, nên hãy đặt trong shell cho
+lần chạy đó: một id cố định trong file của project sẽ gộp chi tiêu của mọi lần
+chạy vào một thao tác.
+
 [`.env.example`](https://github.com/mrgoonie/multix-cli/blob/main/.env.example)
 liệt kê các biến này, cùng hai biến opt-in. Mọi tên khác, ví dụ `NODE_OPTIONS`, `npm_config_registry`,
 `LD_PRELOAD`, `HTTPS_PROXY` hay `NODE_TLS_REJECT_UNAUTHORIZED`, không được nạp,
@@ -144,11 +152,13 @@ chuyển key sang `.env` hoặc `~/.multix/.env`.
 Chỉ đặt override khi cần thay default. Các biến gồm `IMAGE_GEN_MODEL`,
 `VIDEO_GEN_MODEL`, `MULTIMODAL_MODEL`, `GEMINI_TTS_MODEL`,
 `OPENAI_IMAGE_MODEL`, `OPENAI_TTS_MODEL`, `OPENAI_STT_MODEL`,
-`OPENROUTER_IMAGE_MODEL`, `LEONARDO_BASE_URL`, `BYTEPLUS_BASE_URL`,
+`OPENROUTER_IMAGE_MODEL`, `OPENROUTER_TTS_MODEL` (mặc định
+`google/gemini-3.8-flash-tts`), `LEONARDO_BASE_URL`, `BYTEPLUS_BASE_URL`,
 `BYTEPLUS_IMAGE_MODEL`, `BYTEPLUS_VIDEO_MODEL`, `BYTEPLUS_3D_MODEL`,
 `FAL_BASE_URL`, `FAL_IMAGE_MODEL`, `FAL_VIDEO_MODEL` và
 `FAL_VIDEO_IMAGE_MODEL` (default image-to-video của fal, dùng khi truyền
-`multix fal video --image-url` mà không có `-m`). `FAL_MAX_UPLOAD_MB` đặt giới
+`multix fal video --image-url` mà không có `-m`). `FAL_TTS_MODEL` đặt model
+mặc định của `multix fal tts` (mặc định `google/gemini-3.8-flash-tts`). `FAL_MAX_UPLOAD_MB` đặt giới
 hạn dung lượng cho file cục bộ upload bằng `multix fal upload` và
 `multix fal run --file` (mặc định 1024). Replicate nhận
 `REPLICATE_BASE_URL` (API root cho mock hoặc proxy), `REPLICATE_IMAGE_MODEL`

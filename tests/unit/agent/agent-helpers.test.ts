@@ -86,6 +86,22 @@ describe("telemetry helpers", () => {
       metrics: { a: 3, b: 9 },
     });
   });
+
+  it("keeps where each provider reported its credits", () => {
+    const src = { credits: "api.elevenlabs.io header.character-cost" };
+    const state = {
+      ...run,
+      postUsage: [
+        { tokens: {}, credits: 3, metrics: {}, ids: [], sources: src },
+        { tokens: {}, credits: 2, metrics: {}, ids: [], sources: src },
+      ],
+      getUsage: new Map(),
+    } as RunState;
+    expect(summarizeUsage(state)).toEqual({
+      credits: 5,
+      sources: { credits: ["api.elevenlabs.io header.character-cost"] },
+    });
+  });
 });
 
 describe("modelsFromDescription", () => {

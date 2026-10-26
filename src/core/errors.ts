@@ -96,3 +96,15 @@ export class ResponseTooLargeError extends MultixError {
     this.name = "ResponseTooLargeError";
   }
 }
+
+/**
+ * A spend guard refused the run before anything was sent: the estimate is over
+ * the caller's limit (BUDGET_EXCEEDED), the cost cannot be bounded
+ * (BUDGET_UNPROVEN), or the limit itself is malformed (INVALID_INPUT).
+ */
+export class BudgetError extends MultixError {
+  constructor(message: string, code: "BUDGET_EXCEEDED" | "BUDGET_UNPROVEN" | "INVALID_INPUT") {
+    super(message, code);
+    this.name = "BudgetError";
+  }
+}
