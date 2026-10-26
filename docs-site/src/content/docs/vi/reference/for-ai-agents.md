@@ -70,7 +70,7 @@ https://multix.zuey.me/llms.txt
 | `outputs[]` | File lần chạy đã ghi: path tương đối, kích thước, MIME đoán từ nội dung, SHA-256, `width`/`height` của ảnh, `duration_s` của media (cần ffprobe). |
 | `warnings[]` | Vấn đề tìm thấy trong output, ví dụ file rỗng hoặc nội dung không khớp phần mở rộng. |
 | `data` / `text` | stdout của lệnh: JSON đã parse, hoặc text tối đa 32 KB. |
-| `error` | `code`, `message`, `retryable`, `retry_after_s`, `hint`, `http_status`, `env` (tên key khi thiếu key). |
+| `error` | `code`, `message`, `retryable`, `retry_after_s`, `hint`, `http_status`, `env` (tên key khi thiếu key). Query string của URL trong `message` và `log` đều bị che, kể cả URL đầu vào đã ký mà provider lặp lại trong thông báo lỗi. |
 | `usage` | Số liệu provider trả về: `tokens` (`input`, `output`, `total`, `thinking`), `cost_usd`, `credits` và các `metrics` dạng số khác theo key path. `sources.cost_usd` / `sources.credits` ghi nguồn của từng số (ví dụ `api.elevenlabs.io header.character-cost`). Không ước tính: số ước tính hoặc báo giá của provider (như `estimatedCost` của Runway) chỉ nằm trong `metrics`, không bao giờ được báo là `cost_usd` hay `credits`. `cost_usd` và `credits` là số đã tiêu cho lần chạy: số dư tài khoản (`apiCredit` của Leonardo từ `leonardo me`, credit còn lại hoặc credit đi kèm gói của HeyGen từ `heygen me`) không bao giờ được tính vào `credits` hay `cost_usd`. |
 | `http` | Số request tới provider, số request lỗi và tổng thời gian. |
 | `provider_ids` | Request id, job id hoặc prediction id provider trả về. |

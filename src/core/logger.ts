@@ -4,7 +4,11 @@
  * debug() is a no-op unless verbose mode is enabled.
  * With `stderr: true` every line goes to stderr, so a command whose stdout is
  * machine-readable (JSON) keeps it parseable.
+ * Warnings and errors often carry provider text, so URL query strings in them
+ * (pre-signed URLs) are redacted.
  */
+
+import { redactUrlsInText } from "./redact.js";
 
 const ANSI = {
   reset: "\x1b[0m",
@@ -46,10 +50,10 @@ export function createLogger(opts: { verbose: boolean; stderr?: boolean }): Logg
       print(paint(ANSI.green, `✓ ${msg}`));
     },
     warn(msg) {
-      console.warn(c(ANSI.yellow, `⚠ ${msg}`, process.stderr));
+      console.warn(c(ANSI.yellow, `⚠ ${redactUrlsInText(msg)}`, process.stderr));
     },
     error(msg) {
-      console.error(c(ANSI.red, `✗ ${msg}`, process.stderr));
+      console.error(c(ANSI.red, `✗ ${redactUrlsInText(msg)}`, process.stderr));
     },
     debug(msg) {
       if (verbose) print(paint(ANSI.dim, `  [debug] ${msg}`));

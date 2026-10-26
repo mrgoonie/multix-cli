@@ -13,6 +13,8 @@ import path from "node:path";
 import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { run as runState } from "../../../../src/agent/run-state.js";
+import { classifyError } from "../../../../src/core/error-classify.js";
+import { HttpError } from "../../../../src/core/errors.js";
 import { _resetOutputDir } from "../../../../src/core/output-dir.js";
 import { registerOpenRouterCommands } from "../../../../src/providers/openrouter/commands/index.js";
 
@@ -271,6 +273,24 @@ describe("openrouter transcribe", () => {
     );
     expect(err.message).toContain("Model does not accept URL input");
     expect(calls.map((c) => c.method)).toEqual(["POST"]);
+  });
+
+  it("redacts a signed input URL that OpenRouter echoes in its error", async () => {
+    const signed = "https://cdn.example.com/talk.wav?X-Amz-Signature=SECRETSIG";
+    stubFetch(() => json({ error: { message: `Failed to download audio from ${signed}` } }, 400));
+    const err = await failure(
+      run("transcribe", "--input", signed, "--model", "new/model", "--no-model-check"),
+    );
+    expect(err).toBeInstanceOf(HttpError);
+    expect(err.message).toContain(
+      "Failed to download audio from https://cdn.example.com/talk.wav?[redacted]",
+    );
+    expect(err.message).not.toContain("SECRETSIG");
+    expect((err as HttpError).snippet).not.toContain("SECRETSIG");
+    const info = classifyError(err);
+    expect(info).toMatchObject({ code: "PROVIDER_REJECTED", http_status: 400 });
+    expect(info.message).not.toContain("SECRETSIG");
+    expect(allText()).not.toContain("SECRETSIG");
   });
 
   it("fails on an empty transcript without writing a file", async () => {

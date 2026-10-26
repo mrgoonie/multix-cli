@@ -70,7 +70,7 @@ https://multix.zuey.me/llms.txt
 | `outputs[]` | Files the run wrote: relative path, size, MIME type sniffed from the content, SHA-256, image `width`/`height`, media `duration_s` (with ffprobe). |
 | `warnings[]` | Problems found in the outputs, such as an empty file or content that does not match its extension. |
 | `data` / `text` | The command's stdout: parsed JSON, or text capped at 32 KB. |
-| `error` | `code`, `message`, `retryable`, `retry_after_s`, `hint`, `http_status`, `env` (the key name when one is missing). |
+| `error` | `code`, `message`, `retryable`, `retry_after_s`, `hint`, `http_status`, `env` (the key name when one is missing). URL query strings in `message` and `log` are redacted, including a pre-signed input URL a provider echoes back in its error. |
 | `usage` | What the provider reported: `tokens` (`input`, `output`, `total`, `thinking`), `cost_usd`, `credits`, and other numeric `metrics` by key path. `sources.cost_usd` / `sources.credits` name where each number came from (for example `api.elevenlabs.io header.character-cost`). Nothing is estimated: a provider's own estimate or quote (such as Runway `estimatedCost`) stays in `metrics` and is never reported as `cost_usd` or `credits`. `cost_usd` and `credits` are what the run spent: an account balance (Leonardo `apiCredit` from `leonardo me`, HeyGen remaining or included credits from `heygen me`) is never reported as `credits` or `cost_usd`. |
 | `http` | Provider request count, failed requests and total time. |
 | `provider_ids` | Request, job or prediction ids the provider returned. |

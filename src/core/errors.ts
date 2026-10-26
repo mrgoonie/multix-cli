@@ -3,7 +3,7 @@
  * All errors carry a short `code` string for programmatic handling.
  */
 
-import { redactUrl } from "./redact.js";
+import { redactUrl, redactUrlsInText } from "./redact.js";
 
 export class MultixError extends Error {
   constructor(
@@ -54,22 +54,28 @@ export class ValidationError extends MultixError {
  * HTTP request failed. The message and `url` show the request URL with its
  * query string redacted so API keys and signed-URL tokens never reach
  * terminal, CI or Worker logs; `rawUrl` keeps the original (non-enumerable).
+ * URLs inside the response snippet are redacted the same way, since a
+ * provider can echo an input URL (e.g. a pre-signed one) in its error body.
  */
 export class HttpError extends MultixError {
   /** Request URL with query string and fragment redacted — safe to log or serialize. */
   public readonly url: string;
+  /** Response body excerpt with URL query strings redacted. */
+  public readonly snippet: string;
   /** Raw request URL. Non-enumerable so JSON.stringify/console output never includes it. */
   public declare readonly rawUrl: string;
 
   constructor(
     public readonly status: number,
-    public readonly snippet: string,
+    snippet: string,
     url: string,
     /** Parsed Retry-After header (ms), when the server sent one. */
     public readonly retryAfterMs?: number,
     options?: ErrorOptions,
   ) {
-    super(`HTTP ${status} from ${redactUrl(url)}: ${snippet}`, "HTTP_ERROR", options);
+    const safeSnippet = redactUrlsInText(snippet);
+    super(`HTTP ${status} from ${redactUrl(url)}: ${safeSnippet}`, "HTTP_ERROR", options);
+    this.snippet = safeSnippet;
     this.url = redactUrl(url);
     Object.defineProperty(this, "rawUrl", { value: url, enumerable: false });
     this.name = "HttpError";

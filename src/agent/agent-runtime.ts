@@ -17,6 +17,7 @@ import fs from "node:fs";
 import type { Command } from "commander";
 import { type ErrorInfo, classifyError, classifyMessage } from "../core/error-classify.js";
 import { setExternalRunGuard } from "../core/external-run-guard.js";
+import { redactUrlsInText } from "../core/redact.js";
 import { costReceiptFor, formatEstimate, formatReceipt, preflightCost } from "./cost-preflight.js";
 import { type DryRunRequest, installFetchTelemetry, settleTelemetry } from "./fetch-telemetry.js";
 import { appendHistory, newHistoryId, redactArgv } from "./history-store.js";
@@ -333,7 +334,7 @@ export function finalizeRun(input: FinalizeInput): number {
       next: [...new Set(next)],
       ...(failed
         ? {
-            log: stripAnsi(run.stderr.join(""))
+            log: redactUrlsInText(stripAnsi(run.stderr.join("")))
               .split("\n")
               .map((l) => l.trimEnd())
               .filter(Boolean)

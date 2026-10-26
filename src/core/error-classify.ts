@@ -6,6 +6,7 @@
  */
 
 import { BudgetError, HttpError, MultixError, ResponseTooLargeError } from "./errors.js";
+import { redactUrlsInText } from "./redact.js";
 
 export type ErrorCode =
   | "USAGE"
@@ -175,11 +176,12 @@ const TEXT_RULES: Array<[RegExp, ErrorCode]> = [
   ],
 ];
 
+/** Messages leave here for the JSON envelope, stderr and the run ledger: redact URL query strings. */
 function build(code: ErrorCode, message: string, extra: Partial<ErrorInfo> = {}): ErrorInfo {
   const env = message.match(ENV_NAME)?.[1];
   return {
     code,
-    message,
+    message: redactUrlsInText(message),
     retryable: RETRYABLE.has(code),
     hint: HINTS[code],
     exit_code: EXIT_BY_CODE[code],

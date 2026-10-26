@@ -11,7 +11,7 @@
  */
 
 import { ConfigError, HttpError, ProviderError } from "./errors.js";
-import { redactUrl } from "./redact.js";
+import { redactUrl, redactUrlsInText } from "./redact.js";
 
 type DeterministicKind = "url" | "header" | "tls" | "request";
 
@@ -96,25 +96,15 @@ export function isNetworkFetchFailure(err: unknown): boolean {
   return deterministicKind(err) === undefined;
 }
 
-/**
- * Error message with URLs stripped of their query string and fragment, and any
- * other `?key=value` tail (e.g. after a URL containing a space) removed.
- */
-function scrub(message: string): string {
-  return message
-    .replace(/\b[a-z][a-z0-9+.-]*:\/\/[^\s"'<>]+/gi, (u) => redactUrl(u))
-    .replace(/[?#](?!\[redacted\])[^\s"'<>]*=[^\s"'<>]*/g, "?[redacted]");
-}
-
 function messageOf(e: ErrorLike | undefined): string {
-  return typeof e?.message === "string" ? scrub(e.message) : "";
+  return typeof e?.message === "string" ? redactUrlsInText(e.message) : "";
 }
 
 /** "fetch failed: <first cause>" style detail, scrubbed. */
 function detailOf(err: unknown): string {
   const chain = causeChain(err);
   const parts = [messageOf(chain[0]), messageOf(chain[1])].filter(Boolean);
-  return parts.length > 0 ? parts.join(": ") : scrub(String(err));
+  return parts.length > 0 ? parts.join(": ") : redactUrlsInText(String(err));
 }
 
 export interface FetchErrorOptions {
