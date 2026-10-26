@@ -77,6 +77,14 @@ describe("extractUsage", () => {
     expect(usage.sources).toEqual({ cost_usd: "body.usage.cost", credits: "body.apiCreditCost" });
   });
 
+  it("reads OpenRouter's x-generation-id header as an id", () => {
+    const usage = extractUsage(
+      { usage: { cost: 0.1 } },
+      new Headers({ "x-generation-id": "gen-9" }),
+    );
+    expect(usage.ids).toEqual(["gen-9"]);
+  });
+
   it("reads OpenRouter's GET /generation total_cost", () => {
     const usage = extractUsage({ data: { id: "gen-tts-1", total_cost: 0.000048, latency: 141 } });
     expect(usage.cost_usd).toBe(0.000048);

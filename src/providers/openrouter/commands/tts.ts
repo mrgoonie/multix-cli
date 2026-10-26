@@ -17,7 +17,7 @@ import path from "node:path";
 import type { Command } from "commander";
 import { run } from "../../../agent/run-state.js";
 import { envDefault } from "../../../core/env-default.js";
-import { HttpError, ValidationError } from "../../../core/errors.js";
+import { ValidationError } from "../../../core/errors.js";
 import { maxDownloadBytes } from "../../../core/http-client.js";
 import { type Logger, createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
@@ -43,10 +43,10 @@ import {
   type SpeechTurn,
   createSpeech,
   findSpeechModel,
-  getGeneration,
   listSpeechModels,
   matchVoice,
 } from "../speech-client.js";
+import { waitForGeneration } from "./generation.js";
 
 export const OPENROUTER_TTS_MODEL_ENV = "OPENROUTER_TTS_MODEL";
 /** Upper bound on input text; OpenRouter models cap far lower (ElevenLabs v4: 10,000). */
@@ -220,33 +220,6 @@ function estimateCost(entry: SpeechModel | undefined, chars: number): number | n
   if (!entry || !Number.isFinite(perChar) || perChar <= 0) return null;
   if (Number.isFinite(perSecond) && perSecond > 0) return null;
   return Math.round(perChar * chars * 1e6) / 1e6;
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/** Poll /generation until it has the stats or `waitMs` passed; undefined when it never answered. */
-async function waitForGeneration(
-  id: string,
-  headers: Record<string, string>,
-  waitMs: number,
-  logger: Logger,
-): Promise<GenerationStats | undefined> {
-  const deadline = Date.now() + waitMs;
-  for (let attempt = 0; ; attempt++) {
-    try {
-      const stats = await getGeneration({ id, headers });
-      if (stats) return stats;
-    } catch (err) {
-      // The audio is already saved; a failed lookup only leaves the cost unknown.
-      logger.debug(`generation lookup failed: ${err instanceof Error ? err.message : String(err)}`);
-      if (!(err instanceof HttpError) || err.status !== 0) return undefined;
-    }
-    const delay = Math.min(1000 * 2 ** attempt, 4000);
-    if (Date.now() + delay > deadline) return undefined;
-    await sleep(delay);
-  }
 }
 
 function writeAudio(bytes: Uint8Array, ext: string, output: string | undefined): string {
