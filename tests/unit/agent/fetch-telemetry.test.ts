@@ -4,7 +4,11 @@
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { installFetchTelemetry, settleTelemetry } from "../../../src/agent/fetch-telemetry.js";
+import {
+  installFetchTelemetry,
+  settleTelemetry,
+  shorten,
+} from "../../../src/agent/fetch-telemetry.js";
 import { run } from "../../../src/agent/run-state.js";
 
 const original = globalThis.fetch;
@@ -39,6 +43,33 @@ describe("installFetchTelemetry", () => {
     expect(run.postUsage[0]?.credits).toBe(5);
     expect(run.postUsage[0]?.sources).toEqual({
       credits: "api.elevenlabs.io header.character-cost",
+    });
+  });
+});
+
+describe("shorten (dry-run body)", () => {
+  it("drops URL query strings and fragments but keeps origin and path", () => {
+    const body = {
+      model: "openai/gpt-4o-audio",
+      input_audio: { url: "https://cdn.example.com/x/talk.m4a?sig=SECRETSIG&exp=1" },
+      image_urls: [
+        "https://bucket.s3.amazonaws.com/a.png?X-Amz-Signature=abc",
+        "https://r2.example.com/b.png#token=xyz",
+        "https://example.com/plain.png",
+      ],
+      prompt: "describe https://gcs.example.com/c.jpg?GoogleAccessId=g&Signature=s please",
+    };
+    const out = shorten(body);
+    expect(JSON.stringify(out)).not.toMatch(/SECRETSIG|exp=1|abc|xyz|GoogleAccessId|Signature=s/);
+    expect(out).toEqual({
+      model: "openai/gpt-4o-audio",
+      input_audio: { url: "https://cdn.example.com/x/talk.m4a?[redacted]" },
+      image_urls: [
+        "https://bucket.s3.amazonaws.com/a.png?[redacted]",
+        "https://r2.example.com/b.png?[redacted]",
+        "https://example.com/plain.png",
+      ],
+      prompt: "describe https://gcs.example.com/c.jpg?[redacted] please",
     });
   });
 });

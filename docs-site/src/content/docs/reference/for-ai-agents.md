@@ -27,8 +27,9 @@ https://multix.zuey.me/llms.txt
    narrow, `--json` for an array.
 2. **Validate for free.** Add `--dry-run` to any command: local checks run
    (flags, input files, keys), then the first provider request is shown
-   (method, URL without query string, body with long values shortened, header
-   names only) instead of being sent. Local `media` commands stop before
+   (method, URL without query string, body with long values shortened and
+   query strings of URLs inside it replaced by `?[redacted]`, header names
+   only) instead of being sent. Local `media` commands stop before
    running.
 3. **Run with `--json`** (or `MULTIX_OUTPUT=json`). stdout is exactly one line,
    a `multix.result/v1` envelope; human output is captured.

@@ -28,7 +28,8 @@ https://multix.zuey.me/llms.txt
 2. **Kiểm tra miễn phí.** Thêm `--dry-run` vào bất kỳ lệnh nào: các bước kiểm
    tra cục bộ vẫn chạy (flag, file đầu vào, key), rồi request đầu tiên tới
    provider được in ra (method, URL không có query string, body với giá trị dài
-   đã rút gọn, chỉ tên header) thay vì gửi đi. Lệnh `media` cục bộ dừng trước
+   đã rút gọn và query string của URL bên trong được thay bằng `?[redacted]`,
+   chỉ tên header) thay vì gửi đi. Lệnh `media` cục bộ dừng trước
    khi chạy.
 3. **Chạy với `--json`** (hoặc `MULTIX_OUTPUT=json`). stdout đúng một dòng, là
    envelope `multix.result/v1`; output cho người đọc được giữ lại.

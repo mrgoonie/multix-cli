@@ -30,10 +30,13 @@ export function safeUrl(url: string): string {
   }
 }
 
-function shorten(value: unknown, depth = 0): unknown {
+/** http(s) URLs keep origin and path; query and fragment (signatures, tokens) go. */
+const URL_SECRET_PART = /(https?:\/\/[^\s?#"'<>]*)[?#][^\s"'<>]*/gi;
+
+export function shorten(value: unknown, depth = 0): unknown {
   if (typeof value === "string") {
     if (value.startsWith("data:") || value.length > 400) return `<${value.length} chars>`;
-    return value;
+    return value.replace(URL_SECRET_PART, "$1?[redacted]");
   }
   if (Array.isArray(value)) {
     const items = value.slice(0, 10).map((v) => shorten(v, depth + 1));
