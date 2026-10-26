@@ -14,7 +14,12 @@ import fs from "node:fs";
 import type { Command } from "commander";
 import { type ErrorInfo, classifyError, classifyMessage } from "../core/error-classify.js";
 import { setExternalRunGuard } from "../core/external-run-guard.js";
-import { type DryRunRequest, installFetchTelemetry, settleTelemetry } from "./fetch-telemetry.js";
+import {
+  type DryRunRequest,
+  installFetchTelemetry,
+  redactUrlsInText,
+  settleTelemetry,
+} from "./fetch-telemetry.js";
 import { appendHistory, newHistoryId, redactArgv } from "./history-store.js";
 import { type OutputFile, type OutputWarning, inspectOutput } from "./output-file-inspect.js";
 import { installOutputFileTracker, producedFiles } from "./output-file-tracker.js";
@@ -330,7 +335,7 @@ export function installAgentRuntime(program: Command, cliVersion: string): void 
   // Paid work outside fetch (the Codex image driver) stops here in a dry run.
   setExternalRunGuard(({ program: name, args }) => {
     if (!run.dryRun) return;
-    const body = args.map((a) => (a.length > 400 ? `<${a.length} chars>` : a));
+    const body = args.map((a) => (a.length > 400 ? `<${a.length} chars>` : redactUrlsInText(a)));
     realExit(finalizeRun({ exitCode: 0, dryRunRequest: { method: "EXEC", url: name, body } }));
   });
 

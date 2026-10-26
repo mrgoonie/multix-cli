@@ -6,6 +6,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   installFetchTelemetry,
+  redactUrlsInText,
   settleTelemetry,
   shorten,
 } from "../../../src/agent/fetch-telemetry.js";
@@ -71,5 +72,30 @@ describe("shorten (dry-run body)", () => {
       ],
       prompt: "describe https://gcs.example.com/c.jpg?[redacted] please",
     });
+  });
+
+  it("redacts URLs whose path holds a quote or space, userinfo, and uppercase schemes", () => {
+    const out = shorten({
+      a: "https://b.s3.amazonaws.com/John's.png?X-Amz-Signature=LEAK1",
+      b: "https://cdn.example.com/my photo.png?sig=LEAK2",
+      c: "see https://x.com/a.png?sig=abc'LEAK3 now",
+      d: "https://user:LEAK4@x.com/a.png",
+      e: "HTTPS://X.COM/a.png?sig=LEAK5",
+    });
+    expect(JSON.stringify(out)).not.toMatch(/LEAK/);
+    expect(out).toMatchObject({
+      a: "https://b.s3.amazonaws.com/John's.png?[redacted]",
+      b: "https://cdn.example.com/my%20photo.png?[redacted]",
+      c: "see https://x.com/a.png?[redacted] now",
+      d: "https://x.com/a.png",
+    });
+  });
+});
+
+describe("redactUrlsInText", () => {
+  it("leaves text without signed URLs unchanged", () => {
+    expect(redactUrlsInText("a cat at https://example.com/a.png")).toBe(
+      "a cat at https://example.com/a.png",
+    );
   });
 });

@@ -6,6 +6,7 @@
  * JSON responses under a size cap, so downloads are never buffered twice.
  */
 
+import { redactUrl } from "../core/redact.js";
 import { extractUsage, hasUsage } from "../core/usage-extract.js";
 import { run } from "./run-state.js";
 
@@ -30,13 +31,21 @@ export function safeUrl(url: string): string {
   }
 }
 
-/** http(s) URLs keep origin and path; query and fragment (signatures, tokens) go. */
-const URL_SECRET_PART = /(https?:\/\/[^\s?#"'<>]*)[?#][^\s"'<>]*/gi;
+/**
+ * http(s) URLs in a string keep origin and path; userinfo, query and fragment
+ * (signatures, tokens) go. A string that is one URL is redacted whole, so a
+ * quote or space in its path cannot cut the match short.
+ */
+export function redactUrlsInText(text: string): string {
+  const scrub = (url: string) => (/[?#@]/.test(url) ? redactUrl(url) : url);
+  if (/^https?:\/\//i.test(text)) return scrub(text);
+  return text.replace(/https?:\/\/\S+/gi, scrub);
+}
 
 export function shorten(value: unknown, depth = 0): unknown {
   if (typeof value === "string") {
     if (value.startsWith("data:") || value.length > 400) return `<${value.length} chars>`;
-    return value.replace(URL_SECRET_PART, "$1?[redacted]");
+    return redactUrlsInText(value);
   }
   if (Array.isArray(value)) {
     const items = value.slice(0, 10).map((v) => shorten(v, depth + 1));
