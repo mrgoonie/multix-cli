@@ -74,7 +74,7 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
     : undefined;
 }
 
-/** Known token shapes: Gemini usageMetadata, OpenAI/OpenRouter/BytePlus usage. */
+/** Known token shapes: Gemini usageMetadata and Interactions usage, OpenAI/OpenRouter/BytePlus usage. */
 function tokensFrom(body: Record<string, unknown>, into: UsageTokens): void {
   const gemini = asRecord(body.usageMetadata) ?? asRecord(body.usage_metadata);
   if (gemini) {
@@ -86,10 +86,23 @@ function tokensFrom(body: Record<string, unknown>, into: UsageTokens): void {
   const usage = asRecord(body.usage);
   if (usage) {
     into.input =
-      pick(usage, "prompt_tokens", "input_tokens", "promptTokens", "inputTokens") ?? into.input;
+      pick(
+        usage,
+        "prompt_tokens",
+        "input_tokens",
+        "promptTokens",
+        "inputTokens",
+        "total_input_tokens",
+      ) ?? into.input;
     into.output =
-      pick(usage, "completion_tokens", "output_tokens", "completionTokens", "outputTokens") ??
-      into.output;
+      pick(
+        usage,
+        "completion_tokens",
+        "output_tokens",
+        "completionTokens",
+        "outputTokens",
+        "total_output_tokens",
+      ) ?? into.output;
     into.total = pick(usage, "total_tokens", "totalTokens") ?? into.total;
     const details =
       asRecord(usage.completion_tokens_details) ?? asRecord(usage.output_tokens_details);

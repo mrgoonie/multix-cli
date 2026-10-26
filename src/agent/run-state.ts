@@ -5,6 +5,8 @@
  * the result envelope and the history entry.
  */
 
+import type { CostPolicy } from "../budget/command-cost.js";
+import type { CostEstimate } from "../budget/cost-estimate.js";
 import type { ResponseUsage, UsageTokens } from "../core/usage-extract.js";
 
 export interface HttpCall {
@@ -40,6 +42,18 @@ export interface RunState {
   stderr: string[];
   /** Last error line a command logged before exiting. */
   lastErrorLine?: string;
+  /** Pre-flight estimate (`--estimate`, `--max-cost`, or a priceable command). */
+  estimate?: CostEstimate;
+  maxCost?: number;
+  costPolicy?: CostPolicy;
+  /** Outcome of the --max-cost check. */
+  budget?: {
+    ok: boolean;
+    max_cost_usd: number;
+    policy: CostPolicy;
+    code?: string;
+    message?: string;
+  };
   /** True once a command action started (help and parse errors never get there). */
   actionStarted: boolean;
   finalized: boolean;

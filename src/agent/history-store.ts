@@ -10,6 +10,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import type { CostReceipt } from "../budget/cost-receipt.js";
 import type { UsageSummary } from "./run-state.js";
 
 export interface HistoryEntry {
@@ -26,6 +27,7 @@ export interface HistoryEntry {
   ok: boolean;
   exit_code: number;
   dry_run?: boolean;
+  estimate_only?: boolean;
   error?: { code: string; message: string };
   outputs?: Array<{
     path: string;
@@ -37,6 +39,8 @@ export interface HistoryEntry {
   usage?: UsageSummary;
   http?: { requests: number; errors: number; ms: number };
   provider_ids?: string[];
+  /** Reconciled cost receipt (multix.cost/v1); absent on entries before it existed. */
+  cost?: CostReceipt;
 }
 
 const ROTATE_BYTES = 20 * 1024 * 1024;
