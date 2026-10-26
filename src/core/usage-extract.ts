@@ -72,6 +72,8 @@ const USAGE_HEADERS = [
   "x-request-id",
   "request-id",
   "x-amzn-requestid",
+  // OpenRouter names the generation of an audio call (no JSON id) here.
+  "x-generation-id",
   "character-cost",
   "x-character-count",
   "openai-processing-ms",
@@ -215,7 +217,7 @@ export function extractUsage(body: unknown, headers?: Headers | null): ResponseU
           out.credits = n;
           out.sources = { ...out.sources, credits: `header.${name}` };
         }
-      } else if (/request-?id/i.test(name) && raw.length <= 128 && out.ids.length < 5)
+      } else if (/(request|generation)-?id/i.test(name) && raw.length <= 128 && out.ids.length < 5)
         out.ids.push(raw);
     }
   }

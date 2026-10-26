@@ -226,7 +226,7 @@ or `~/.multix/.env` only, not a project `.env`).
 | Analyze or transcribe files | [Gemini](/commands/gemini/) |
 | Generate or edit images, speech, or transcription | [OpenAI](/commands/openai/) |
 | MiniMax image, video, speech, or music | [MiniMax](/commands/minimax/) |
-| Routed image, image-to-video, or speech | [OpenRouter](/commands/openrouter/) |
+| Routed image, image-to-video, speech, or transcription | [OpenRouter](/commands/openrouter/) |
 | Leonardo image IDs, video, or upscale jobs | [Leonardo](/commands/leonardo/) |
 | Seedream, Seedance, reference video, or 3D | [BytePlus](/commands/byteplus/) |
 | Workers AI image/speech or AI Gateway video | [Cloudflare](/commands/cloudflare/) |

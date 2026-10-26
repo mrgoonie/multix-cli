@@ -6,10 +6,38 @@
 
 import type { Command } from "commander";
 import { run } from "../../../agent/run-state.js";
-import { MultixError, ValidationError } from "../../../core/errors.js";
+import { HttpError, MultixError, ValidationError } from "../../../core/errors.js";
+import type { Logger } from "../../../core/logger.js";
 import { requireOpenRouterKey } from "../client.js";
 import { buildOpenRouterHeaders } from "../payload.js";
-import { getGeneration } from "../speech-client.js";
+import { type GenerationStats, getGeneration } from "../speech-client.js";
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Poll /generation until it has the stats or `waitMs` passed; undefined when it never answered. */
+export async function waitForGeneration(
+  id: string,
+  headers: Record<string, string>,
+  waitMs: number,
+  logger: Logger,
+): Promise<GenerationStats | undefined> {
+  const deadline = Date.now() + waitMs;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const stats = await getGeneration({ id, headers });
+      if (stats) return stats;
+    } catch (err) {
+      // The output is already saved; a failed lookup only leaves the cost unknown.
+      logger.debug(`generation lookup failed: ${err instanceof Error ? err.message : String(err)}`);
+      if (!(err instanceof HttpError) || err.status !== 0) return undefined;
+    }
+    const delay = Math.min(1000 * 2 ** attempt, 4000);
+    if (Date.now() + delay > deadline) return undefined;
+    await sleep(delay);
+  }
+}
 
 export function registerOpenRouterGenerationCommand(parent: Command): void {
   parent

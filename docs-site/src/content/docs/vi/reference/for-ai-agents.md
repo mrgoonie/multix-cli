@@ -223,7 +223,7 @@ shell hoặc `~/.multix/.env`, không nhận từ `.env` của project).
 | Phân tích hoặc transcribe file | [Gemini](/vi/commands/gemini/) |
 | Sinh/sửa ảnh, speech hoặc transcription | [OpenAI](/vi/commands/openai/) |
 | Ảnh, video, speech hoặc music MiniMax | [MiniMax](/vi/commands/minimax/) |
-| Ảnh, image-to-video hoặc giọng nói qua routing | [OpenRouter](/vi/commands/openrouter/) |
+| Ảnh, image-to-video, giọng nói hoặc transcription qua routing | [OpenRouter](/vi/commands/openrouter/) |
 | Leonardo image ID, video hoặc upscale job | [Leonardo](/vi/commands/leonardo/) |
 | Seedream, Seedance, reference video hoặc 3D | [BytePlus](/vi/commands/byteplus/) |
 | Workers AI image/speech hoặc AI Gateway video | [Cloudflare](/vi/commands/cloudflare/) |
