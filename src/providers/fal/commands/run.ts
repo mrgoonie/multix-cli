@@ -14,15 +14,13 @@ import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import { createFalClient, requireFalKey } from "../client.js";
 import { applyFileFlags, parseFileFlags } from "../local-files.js";
-import { type FalReceipt, buildReceipt, persistReceipt } from "../request-receipt.js";
 import {
   downloadResultMedia,
   extractMediaRefs,
   parseInputArg,
-  submitFalRequest,
+  submitOrDetach,
   waitForFalResult,
 } from "../run-helpers.js";
-import type { FalSubmitResponse } from "../types.js";
 
 interface RunFlags {
   input?: string;
@@ -71,29 +69,15 @@ export function registerFalRunCommand(parent: Command): void {
       const client = createFalClient();
       await applyFileFlags(input, fileFlags, requireFalKey(), logger);
 
-      logger.info(`Submitting to ${model}...`);
-      let receipt: FalReceipt | undefined;
-      // Runs as soon as fal returns a request_id, so a job that is queued (and
-      // billed) stays resumable even if a later check on the response fails.
-      const onAccepted = (accepted: FalSubmitResponse) => {
-        logger.info(`fal accepted request ${accepted.request_id}`);
-        receipt = buildReceipt({
-          model,
-          requestId: accepted.request_id,
-          status: accepted.status,
-          input,
-        });
-        if (opts.detach || opts.receipt) receipt = persistReceipt(receipt, opts.receipt, logger);
-      };
-      const submit = await submitFalRequest(client, model, input, logger, onAccepted);
-
-      if (opts.detach && receipt) {
-        logger.success(`Queued fal request ${submit.request_id}`);
-        logger.info(`Check: ${receipt.status_command}`);
-        logger.info(`Fetch: ${receipt.result_command}`);
-        console.log(JSON.stringify(receipt, null, 2));
-        return;
-      }
+      const submit = await submitOrDetach({
+        client,
+        model,
+        input,
+        logger,
+        detach: opts.detach,
+        receiptPath: opts.receipt,
+      });
+      if (!submit) return;
 
       const result = await waitForFalResult({
         client,

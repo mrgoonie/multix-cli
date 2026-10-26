@@ -3,17 +3,19 @@
  * and media-URL extraction/download from a result payload.
  */
 
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { isRetryableServerStatus } from "../../core/async-poll.js";
 import { MultixError, ProviderError } from "../../core/errors.js";
-import { downloadToFile } from "../../core/http-client.js";
+import { downloadToFile, replaceFile } from "../../core/http-client.js";
 import { parseJsonInput } from "../../core/json-input.js";
 import type { Logger } from "../../core/logger.js";
 import { redactUrl } from "../../core/redact.js";
 import { detectExtension } from "../../core/stdin-file.js";
 import { extFromContentType, extFromUrl } from "../replicate/output.js";
 import { type FalClient, HttpError, createFalClient, submitPath } from "./client.js";
+import { type FalReceipt, buildReceipt, persistReceipt } from "./request-receipt.js";
 import type { FalResultResponse, FalStatusResponse, FalSubmitResponse } from "./types.js";
 
 /** Parse `--input` as inline JSON or `@path/to/file.json`. */
@@ -311,6 +313,12 @@ const EXTRA_MIME_EXT: Record<string, string> = {
   "audio/pcm": ".pcm",
   "audio/l16": ".pcm",
   "audio/basic": ".ulaw",
+  "audio/mulaw": ".ulaw",
+  "audio/x-mulaw": ".ulaw",
+  "audio/pcmu": ".ulaw",
+  "audio/alaw": ".alaw",
+  "audio/x-alaw": ".alaw",
+  "audio/pcma": ".alaw",
   "audio/x-flac": ".flac",
   "audio/aiff": ".aiff",
   "audio/x-aiff": ".aiff",
@@ -339,12 +347,14 @@ export function chooseMediaExt(
   head: Buffer,
   ref: FalMediaRef,
   responseContentType?: string,
+  fallbackExt?: string,
 ): string {
   const declared =
     extFromMime(ref.contentType) ??
     extFromName(ref.fileName) ??
     extFromUrl(ref.url) ??
-    extFromMime(responseContentType);
+    extFromMime(responseContentType) ??
+    fallbackExt;
   const sniffed = head.length > 0 ? detectExtension(head) : undefined;
   if (sniffed && sniffed !== ".txt" && !(declared && RAW_AUDIO_EXTS.has(declared))) {
     return sniffed;
@@ -352,13 +362,37 @@ export function chooseMediaExt(
   return declared ?? ".bin";
 }
 
+/**
+ * Byte offset where a WAV's sample data starts, or undefined when the head
+ * is not a RIFF/WAVE file or its `data` chunk lies beyond the head.
+ */
+function wavDataOffset(head: Buffer): number | undefined {
+  if (head.length < 12 || head.toString("latin1", 0, 4) !== "RIFF") return undefined;
+  if (head.toString("latin1", 8, 12) !== "WAVE") return undefined;
+  let at = 12;
+  while (at + 8 <= head.length) {
+    const id = head.toString("latin1", at, at + 4);
+    const size = head.readUInt32LE(at + 4);
+    if (id === "data") return at + 8;
+    at += 8 + size + (size % 2);
+  }
+  return undefined;
+}
+
 /** Why `bytes` are not usable audio, or undefined when they are. */
 export function audioProblem(head: Buffer, bytes: number, ext: string): string | undefined {
   if (bytes === 0) return "the file is empty";
+  // Raw PCM / u-law / A-law has no header, so any byte pattern (even printable) is valid.
+  if (RAW_AUDIO_EXTS.has(ext)) return undefined;
   if (head.length > 0 && detectExtension(head) === ".txt") {
     return "the body is text, not audio (an error page or a JSON message)";
   }
   if (!AUDIO_EXTS.has(ext)) return `expected audio but the file is ${ext.slice(1)}`;
+  if (ext === ".wav") {
+    // Streaming writers may leave the data size at 0, so count the bytes after the header.
+    const offset = wavDataOffset(head) ?? 44;
+    if (bytes <= offset) return "the WAV has a header but no audio samples";
+  }
   return undefined;
 }
 
@@ -378,6 +412,8 @@ export interface DownloadMediaOptions {
   expect?: "audio";
   /** Collects a one-line reason per file that was not saved. */
   problems?: string[];
+  /** Extension to use when neither the bytes nor fal's metadata tell (e.g. ".pcm"). */
+  fallbackExt?: string;
 }
 
 /**
@@ -402,11 +438,12 @@ export async function downloadResultMedia(
     // The full id: fal ids are UUIDv7, whose leading characters are shared by
     // every job submitted within about a minute.
     const base = `fal-${requestId.replace(/[^A-Za-z0-9_.-]/g, "_")}-${String(i + 1).padStart(2, "0")}`;
-    const staging = path.join(outDir, `${base}.download.part`);
+    // Unique per run: two resumes of the same request may download at once.
+    const staging = path.join(outDir, `${base}.${randomUUID()}.download.part`);
     try {
       const res = await downloadToFile(ref.url, { dest: staging });
       const head = readHead(staging);
-      const ext = chooseMediaExt(head, ref, res.contentType);
+      const ext = chooseMediaExt(head, ref, res.contentType, opts.fallbackExt);
       const problem = opts.expect === "audio" ? audioProblem(head, res.bytes, ext) : undefined;
       if (problem) {
         fs.rmSync(staging, { force: true });
@@ -415,13 +452,7 @@ export async function downloadResultMedia(
         continue;
       }
       const filepath = path.join(outDir, `${base}${ext}`);
-      try {
-        fs.renameSync(staging, filepath);
-      } catch {
-        // Windows refuses to rename over an existing file.
-        fs.rmSync(filepath, { force: true });
-        fs.renameSync(staging, filepath);
-      }
+      replaceFile(staging, filepath);
       saved.push(filepath);
       logger.success(`Saved ${filepath}`);
     } catch (e) {
@@ -432,4 +463,45 @@ export async function downloadResultMedia(
     }
   }
   return saved;
+}
+
+/**
+ * Submit once and build the request receipt the moment fal returns a
+ * request_id, so a job that is queued (and billed) stays resumable even if a
+ * later check on the response fails. The receipt is saved with `detach` or a
+ * `receiptPath`. With `detach`, prints the receipt on stdout and returns
+ * undefined; otherwise returns the submit response to wait on.
+ */
+export async function submitOrDetach(opts: {
+  client: FalClient;
+  model: string;
+  input: Record<string, unknown>;
+  logger: Logger;
+  detach?: boolean;
+  receiptPath?: string;
+}): Promise<FalSubmitResponse | undefined> {
+  const { client, model, input, logger } = opts;
+  logger.info(`Submitting to ${model}...`);
+  let receipt: FalReceipt | undefined;
+  const onAccepted = (accepted: FalSubmitResponse) => {
+    logger.info(`fal accepted request ${accepted.request_id}`);
+    receipt = buildReceipt({
+      model,
+      requestId: accepted.request_id,
+      status: accepted.status,
+      input,
+    });
+    if (opts.detach || opts.receiptPath) {
+      receipt = persistReceipt(receipt, opts.receiptPath, logger);
+    }
+  };
+  const submit = await submitFalRequest(client, model, input, logger, onAccepted);
+  if (opts.detach && receipt) {
+    logger.success(`Queued fal request ${submit.request_id}`);
+    logger.info(`Check: ${receipt.status_command}`);
+    logger.info(`Fetch: ${receipt.result_command}`);
+    console.log(JSON.stringify(receipt, null, 2));
+    return undefined;
+  }
+  return submit;
 }

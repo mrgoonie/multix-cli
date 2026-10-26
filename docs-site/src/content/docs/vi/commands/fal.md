@@ -149,7 +149,11 @@ phí):
 
 - Truyền văn bản qua đối số hoặc `--text-file` (UTF-8, tối đa 1 MB), không
   dùng cả hai. Hội thoại nhiều người nói của Gemini đặt trong `--input`, ví dụ
-  `--input '{"speakers":[...],"turns":[...]}'`, và không truyền đối số văn bản.
+  `--input '{"speakers":[...],"turns":[...]}'`, và không truyền đối số văn bản:
+  đúng hai người nói, mỗi người một trong 30 giọng, và các lượt thoại gọi đúng
+  tên họ. Tính đến 2026-10-26, fal vẫn nhận hội thoại vào hàng đợi rồi từ chối
+  với HTTP 422, nên `tts` cảnh báo trước khi submit
+  ([#310](https://github.com/mrgoonie/multix-cli/issues/310)).
 - Flag mà endpoint không có field tương ứng (ví dụ `--format` với Gemini),
   giọng hoặc định dạng không hợp lệ, văn bản vượt giới hạn, hay một field được
   đặt cả bằng flag lẫn `--input` đều báo lỗi validation và không có gì được

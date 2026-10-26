@@ -106,7 +106,7 @@ function removeQuietly(file: string): void {
 }
 
 /** Move `from` over `to`, replacing an existing file (rename can refuse that on Windows). */
-function replaceFile(from: string, to: string): void {
+export function replaceFile(from: string, to: string): void {
   try {
     fs.renameSync(from, to);
   } catch (err) {

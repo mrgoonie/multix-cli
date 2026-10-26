@@ -132,6 +132,60 @@ describe("typed fal TTS profiles", () => {
     }
   });
 
+  it("holds fields from --input to the same rules as the flags", () => {
+    expect(() => buildTtsInput(ELEVEN, { extra: { text: "a".repeat(5001) } })).toThrow(
+      /at most 5000/,
+    );
+    expect(() =>
+      buildTtsInput(ELEVEN, { text: "hi", extra: { output_format: "mp3_bogus" } }),
+    ).toThrow(/Invalid --format "mp3_bogus"/);
+    expect(() => buildTtsInput(GEMINI, { text: "hi", extra: { voice: "Nobody" } })).toThrow(
+      /Invalid voice "Nobody"/,
+    );
+    expect(() => buildTtsInput(ELEVEN, { text: "hi", extra: { language_code: "xx!" } })).toThrow(
+      /Invalid --language/,
+    );
+    expect(() => buildTtsInput(ELEVEN, { extra: { text: "  " } })).toThrow(/non-empty/);
+    expect(buildTtsInput(GEMINI, { text: "hi", extra: { voice: "puck" } }).input.voice).toBe(
+      "Puck",
+    );
+  });
+
+  it("checks Gemini dialogue shape: two speakers with known voices, turns naming them", () => {
+    const speakers = [
+      { speaker_id: "A", voice: "Kore" },
+      { speaker_id: "B", voice: "Puck" },
+    ];
+    const turns = [{ speaker_id: "A", text: "Hi" }];
+    for (const [extra, message] of [
+      [{ turns: "nope", speakers }, /array of objects/],
+      [{ turns: [], speakers }, /must not be empty/],
+      [{ turns }, /needs "speakers"/],
+      [{ turns, speakers: [speakers[0]] }, /exactly 2/],
+      [{ turns, speakers: [speakers[0], { speaker_id: "B", voice: "Nobody" }] }, /Invalid voice/],
+      [{ turns, speakers: [speakers[0], { speaker_id: "A", voice: "Puck" }] }, /repeated/],
+      [{ turns: [{ speaker_id: "C", text: "x" }], speakers }, /not one of the speakers/],
+      [{ turns: [{ speaker_id: "A", text: "" }], speakers }, /turns\[0\]\.text/],
+      [{ turns, speakers, prompt: "x" }, /Omit the text/],
+    ] as const) {
+      expect(() => buildTtsInput(GEMINI, { extra: { ...extra } })).toThrow(message);
+    }
+    expect(() => buildTtsInput(GEMINI, { voice: "Kore", extra: { turns, speakers } })).toThrow(
+      /--voice does not apply to a dialogue/,
+    );
+  });
+
+  it("counts characters, not UTF-16 units, and ignores inherited keys", () => {
+    expect(buildTtsInput(ELEVEN, { text: "😀".repeat(5000) }).input.text).toBeDefined();
+    expect(() => buildTtsInput(ELEVEN, { text: "😀".repeat(5001) })).toThrow(/5001 characters/);
+    expect(() => buildTtsInput("fal-ai/x/tts", { textField: "toString" })).toThrow(
+      /Provide the text/,
+    );
+    expect(buildTtsInput("fal-ai/x/tts", { text: "hi", textField: "toString" }).input).toEqual({
+      toString: "hi",
+    });
+  });
+
   it("maps ElevenLabs output formats to containers", () => {
     expect(outputForFormat("mp3_44100_128")).toBe("mp3");
     expect(outputForFormat("pcm_16000")).toBe("pcm");

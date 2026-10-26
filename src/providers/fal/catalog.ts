@@ -39,6 +39,7 @@ function text(v: unknown): string | undefined {
 export async function listFalModels(q: CatalogQuery): Promise<FalCatalogModel[]> {
   const out: FalCatalogModel[] = [];
   let cursor: string | undefined;
+  const seen = new Set<string>();
   do {
     const url = new URL(FAL_CATALOG_URL);
     url.searchParams.set("limit", String(Math.min(100, q.limit - out.length)));
@@ -51,6 +52,7 @@ export async function listFalModels(q: CatalogQuery): Promise<FalCatalogModel[]>
       headers: { accept: "application/json" },
       timeoutMs: 30_000,
     });
+    const before = out.length;
     for (const m of page.models ?? []) {
       const id = text(m.endpoint_id);
       if (!id) continue;
@@ -66,7 +68,12 @@ export async function listFalModels(q: CatalogQuery): Promise<FalCatalogModel[]>
       });
       if (out.length >= q.limit) break;
     }
-    cursor = page.has_more ? (text(page.next_cursor) ?? undefined) : undefined;
+    const next = page.has_more ? text(page.next_cursor) : undefined;
+    // Stop on a page that adds nothing or a cursor seen before, so a
+    // misbehaving catalog cannot keep us paging forever.
+    if (out.length === before || (next !== undefined && seen.has(next))) break;
+    if (next !== undefined) seen.add(next);
+    cursor = next;
   } while (cursor && out.length < q.limit);
   return out;
 }

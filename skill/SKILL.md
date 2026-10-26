@@ -160,6 +160,7 @@ multix fal video "a dancer under neon lights" [-m <model>] [--image-url <https-u
 # (default google/gemini-3.8-flash-tts, or FAL_TTS_MODEL)
 multix fal tts "Hello" [--voice Kore] [--style "warm, slow"]                      # Gemini: prompt / 30 voices / style_instructions -> WAV
 multix fal tts --text-file script.txt -m elevenlabs/tts/eleven-v4-turbo [--voice Aria] [--format mp3_44100_128|pcm_24000|opus_48000_64] [--language vi]   # ElevenLabs: text (<=5000 chars) -> MP3
+# Dialogue: exactly 2 speakers + turns naming them. fal currently rejects it upstream (HTTP 422 after queueing, #310); prefer one prompt per speaker for now
 multix fal tts -m google/gemini-3.8-flash-lite-tts --input '{"speakers":[{"speaker_id":"A","voice":"Kore"},{"speaker_id":"B","voice":"Puck"}],"turns":[{"speaker_id":"A","text":"Hi"}]}'
 multix fal tts "hi" -m <other-fal-tts-id> --text-field prompt --input '{"speed":1.1}'   # untyped fallback (warns; fields unchecked)
 

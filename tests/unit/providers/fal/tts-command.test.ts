@@ -208,8 +208,18 @@ describe("fal tts: typed endpoints with different schemas", () => {
     const fake2 = stub(ttsRoutes(GEMINI, { audio: { url: `${CDN}a.wav` } }, { body: WAV }));
     stdout = [];
     const turns = [{ speaker_id: "A", text: "Hi" }];
-    await cli("tts", "--input", JSON.stringify({ turns }), "--no-download");
-    expect(submitBody(fake2)).toEqual({ turns });
+    const speakers = [
+      { speaker_id: "A", voice: "kore" },
+      { speaker_id: "B", voice: "Puck" },
+    ];
+    await cli("tts", "--input", JSON.stringify({ speakers, turns }), "--no-download");
+    expect(submitBody(fake2)).toEqual({
+      speakers: [
+        { speaker_id: "A", voice: "Kore" },
+        { speaker_id: "B", voice: "Puck" },
+      ],
+      turns,
+    });
   });
 });
 
@@ -359,6 +369,28 @@ describe("fal models", () => {
     expect(fake.calls[0]?.url).toContain("category=text-to-speech");
     expect(fake.calls[1]?.url).toContain("cursor=c2");
     for (const c of fake.calls) expect(c.headers.authorization).toBeUndefined();
+  });
+
+  it("stops paging when the catalog repeats a cursor or sends an empty page", async () => {
+    const page = (id: string) => ({
+      json: { models: [{ endpoint_id: id }], has_more: true, next_cursor: "same" },
+    });
+    const fake = stub({
+      [`GET ${FAL_CATALOG_URL}`]: [page("a/one"), page("a/two"), page("a/three")],
+    });
+    await cli("models", "--json");
+    expect(
+      JSON.parse(stdout.join("\n")).map((r: { endpoint_id: string }) => r.endpoint_id),
+    ).toEqual(["a/one", "a/two"]);
+    expect(fake.calls).toHaveLength(2);
+
+    stdout = [];
+    const empty = stub({
+      [`GET ${FAL_CATALOG_URL}`]: [{ json: { models: [], has_more: true, next_cursor: "n" } }],
+    });
+    await cli("models", "--json");
+    expect(JSON.parse(stdout.join("\n"))).toEqual([]);
+    expect(empty.calls).toHaveLength(1);
   });
 
   it("rejects a bad --limit before any request", async () => {

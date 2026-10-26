@@ -147,7 +147,11 @@ accepts a malformed job and only fails it at result time, after billing):
 
 - Pass the text as the argument or with `--text-file` (UTF-8, up to 1 MB), not
   both. Gemini dialogue goes in `--input`, e.g.
-  `--input '{"speakers":[...],"turns":[...]}'`, with no text argument.
+  `--input '{"speakers":[...],"turns":[...]}'`, with no text argument:
+  exactly two speakers, each with one of the 30 voices, and turns naming them.
+  As of 2026-10-26, fal queues such a dialogue and then rejects it with HTTP
+  422, so `tts` warns before submitting
+  ([#310](https://github.com/mrgoonie/multix-cli/issues/310)).
 - A flag the endpoint has no field for (for example `--format` on Gemini), an
   unknown voice or format, text over the limit, or a field set both by a flag
   and by `--input` fails with a validation error, and nothing is submitted.

@@ -15,16 +15,14 @@ import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import { appIdFromModel, createFalClient } from "../client.js";
 import { FAL_DEFAULTS } from "../models.js";
-import { type FalReceipt, buildReceipt, persistReceipt } from "../request-receipt.js";
 import {
   downloadResultMedia,
   extractMediaRefs,
   parseInputArg,
-  submitFalRequest,
+  submitOrDetach,
   waitForFalResult,
 } from "../run-helpers.js";
 import { FAL_TTS_PROFILES, buildTtsInput } from "../tts-models.js";
-import type { FalSubmitResponse } from "../types.js";
 
 interface TtsOpts {
   model?: string;
@@ -121,6 +119,11 @@ export function registerFalTtsCommand(parent: Command): void {
         textField: opts.textField,
         extra,
       });
+      if (profile?.dialogueField && Object.hasOwn(input, profile.dialogueField)) {
+        logger.warn(
+          `fal's Gemini endpoints currently reject dialogue (speakers/turns) after queueing (HTTP 422); see https://github.com/mrgoonie/multix-cli/issues/310`,
+        );
+      }
       if (!profile) {
         logger.warn(
           `${model} has no typed profile in multix: its fields are not checked before submit (schema: https://fal.ai/models/${model}/api)`,
@@ -128,27 +131,15 @@ export function registerFalTtsCommand(parent: Command): void {
       }
 
       const client = createFalClient();
-      logger.info(`Submitting to ${model}...`);
-      let receipt: FalReceipt | undefined;
-      const onAccepted = (accepted: FalSubmitResponse) => {
-        logger.info(`fal accepted request ${accepted.request_id}`);
-        receipt = buildReceipt({
-          model,
-          requestId: accepted.request_id,
-          status: accepted.status,
-          input,
-        });
-        if (opts.detach || opts.receipt) receipt = persistReceipt(receipt, opts.receipt, logger);
-      };
-      const submit = await submitFalRequest(client, model, input, logger, onAccepted);
-
-      if (opts.detach && receipt) {
-        logger.success(`Queued fal request ${submit.request_id}`);
-        logger.info(`Check: ${receipt.status_command}`);
-        logger.info(`Fetch: ${receipt.result_command}`);
-        console.log(JSON.stringify(receipt, null, 2));
-        return;
-      }
+      const submit = await submitOrDetach({
+        client,
+        model,
+        input,
+        logger,
+        detach: opts.detach,
+        receiptPath: opts.receipt,
+      });
+      if (!submit) return;
 
       const result = await waitForFalResult({
         client,
@@ -175,6 +166,7 @@ export function registerFalTtsCommand(parent: Command): void {
       const saved = await downloadResultMedia(refs, outDir, submit.request_id, logger, {
         expect: "audio",
         problems,
+        ...(expectedOutput ? { fallbackExt: `.${expectedOutput}` } : {}),
       });
       if (saved.length === 0) {
         throw new ProviderError(

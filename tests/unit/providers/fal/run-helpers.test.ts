@@ -598,6 +598,31 @@ describe("audioProblem", () => {
     expect(audioProblem(Buffer.from('{"detail":"quota"}'), 18, ".mp3")).toMatch(/text, not audio/);
     expect(audioProblem(PNG, 40, ".png")).toMatch(/expected audio but the file is png/);
   });
+
+  it("refuses a WAV with a header but no samples, even when the data size is a streaming 0", () => {
+    const fmt = Buffer.alloc(24);
+    fmt.write("fmt ", 0, "latin1");
+    fmt.writeUInt32LE(16, 4);
+    const data = Buffer.alloc(8);
+    data.write("data", 0, "latin1");
+    const header = Buffer.concat([
+      Buffer.from("RIFF"),
+      Buffer.alloc(4),
+      Buffer.from("WAVE"),
+      fmt,
+      data,
+    ]);
+    expect(header.length).toBe(44);
+    expect(audioProblem(header, 44, ".wav")).toMatch(/no audio samples/);
+    const withSamples = Buffer.concat([header, Buffer.alloc(64, 1)]);
+    expect(audioProblem(withSamples, withSamples.length, ".wav")).toBeUndefined();
+  });
+
+  it("never reads raw audio as text: A-law silence is printable 0x55", () => {
+    const alawSilence = Buffer.alloc(256, 0x55);
+    expect(audioProblem(alawSilence, 256, ".alaw")).toBeUndefined();
+    expect(audioProblem(alawSilence, 256, ".pcm")).toBeUndefined();
+  });
 });
 
 describe("downloadResultMedia with expect: audio", () => {
@@ -636,6 +661,18 @@ describe("downloadResultMedia with expect: audio", () => {
       expect.stringMatching(/blank\.mp3: the file is empty/),
       expect.stringMatching(/bad\.mp3: the body is text/),
     ]);
+  });
+
+  it("names headerless bytes by the expected format when fal declares nothing, and leaves no staging file", async () => {
+    globalThis.fetch = vi.fn(
+      async () => new Response(Buffer.alloc(256, 0x55), { status: 200 }),
+    ) as unknown as typeof fetch;
+    const saved = await downloadResultMedia(["https://x.test/out"], tmpDir, "req-c", noopLogger, {
+      expect: "audio",
+      fallbackExt: ".alaw",
+    });
+    expect(saved.map((f) => path.basename(f))).toEqual(["fal-req-c-01.alaw"]);
+    expect(fs.readdirSync(tmpDir)).toEqual(["fal-req-c-01.alaw"]);
   });
 
   it("without expect keeps any bytes, named by the URL as before", async () => {

@@ -161,6 +161,14 @@ export interface TtsInput {
 
 const FIELD_RE = /^[A-Za-z_]\w{0,63}$/;
 const UNSAFE_FIELDS = new Set(["__proto__", "constructor", "prototype"]);
+const LANGUAGE_RE = /^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})?$/;
+
+const has = (obj: object, key: string) => Object.hasOwn(obj, key);
+
+/** Length in characters (code points), as the endpoints count it, not UTF-16 units. */
+function charLength(text: string): number {
+  return [...text].length;
+}
 
 function pick(list: readonly string[], value: string, what: string, model: string): string {
   const match = list.find((v) => v.toLowerCase() === value.trim().toLowerCase());
@@ -174,11 +182,99 @@ function unsupported(flag: string, model: string, hint: string): never {
   throw new ValidationError(`${flag} is not supported by ${model}: ${hint}`);
 }
 
+function nonBlank(value: unknown, what: string): string {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new ValidationError(`${what} must be a non-empty string`);
+  }
+  return value;
+}
+
+function objectList(value: unknown, what: string): Record<string, unknown>[] {
+  if (!Array.isArray(value) || value.some((v) => v === null || typeof v !== "object")) {
+    throw new ValidationError(`${what} must be an array of objects`);
+  }
+  return value as Record<string, unknown>[];
+}
+
 /**
- * Build the queue input for `model` from the command flags. Throws
- * ValidationError for anything the endpoint would reject (missing or
- * oversized text, unknown voice or format, a flag it has no field for, a
- * field set twice), so nothing is submitted, or billed, for it.
+ * Gemini multi-speaker dialogue, per fal's schema: exactly two `speakers`
+ * ({speaker_id, voice}) and at least one turn ({speaker_id, text}) naming one
+ * of them. Voices are normalised to the endpoint's spelling.
+ */
+function checkDialogue(profile: FalTtsProfile, input: Record<string, unknown>): void {
+  const field = profile.dialogueField as string;
+  const turns = objectList(input[field], `--input ${field}`);
+  if (turns.length === 0) throw new ValidationError(`--input ${field} must not be empty`);
+  if (!has(input, "speakers")) {
+    throw new ValidationError(`--input ${field} needs "speakers": two {speaker_id, voice} entries`);
+  }
+  const speakers = objectList(input.speakers, "--input speakers");
+  if (speakers.length !== 2) {
+    throw new ValidationError(
+      `--input speakers must have exactly 2 entries for ${profile.id} (got ${speakers.length})`,
+    );
+  }
+  const ids = new Set<string>();
+  input.speakers = speakers.map((s, i) => {
+    const id = nonBlank(s.speaker_id, `speakers[${i}].speaker_id`);
+    if (ids.has(id)) throw new ValidationError(`speakers[${i}].speaker_id "${id}" is repeated`);
+    ids.add(id);
+    const voice = nonBlank(s.voice, `speakers[${i}].voice`);
+    return {
+      ...s,
+      voice: profile.voices ? pick(profile.voices, voice, "voice", profile.id) : voice,
+    };
+  });
+  turns.forEach((t, i) => {
+    const id = nonBlank(t.speaker_id, `${field}[${i}].speaker_id`);
+    if (!ids.has(id)) {
+      throw new ValidationError(`${field}[${i}].speaker_id "${id}" is not one of the speakers`);
+    }
+    nonBlank(t.text, `${field}[${i}].text`);
+  });
+}
+
+/**
+ * Check the merged input (flags and --input) against the profile, so a value
+ * from --input is held to the same rules as the matching flag.
+ */
+function checkTyped(profile: FalTtsProfile, input: Record<string, unknown>): void {
+  const id = profile.id;
+  if (has(input, profile.textField)) {
+    const text = nonBlank(input[profile.textField], profile.textField);
+    const length = charLength(text);
+    if (profile.maxChars !== undefined && length > profile.maxChars) {
+      throw new ValidationError(
+        `Text is ${length} characters; ${id} accepts at most ${profile.maxChars}`,
+      );
+    }
+  }
+  if (has(input, profile.voiceField)) {
+    const voice = nonBlank(input[profile.voiceField], "voice").trim();
+    input[profile.voiceField] = profile.voices ? pick(profile.voices, voice, "voice", id) : voice;
+  }
+  if (profile.styleField && has(input, profile.styleField)) {
+    nonBlank(input[profile.styleField], profile.styleField);
+  }
+  if (profile.formatField && profile.formats && has(input, profile.formatField)) {
+    const format = nonBlank(input[profile.formatField], profile.formatField);
+    input[profile.formatField] = pick(profile.formats, format, "--format", id);
+  }
+  if (profile.languageField && has(input, profile.languageField)) {
+    const language = nonBlank(input[profile.languageField], profile.languageField);
+    if (!LANGUAGE_RE.test(language)) {
+      throw new ValidationError(`Invalid --language "${language}" (expected e.g. en or vi)`);
+    }
+  }
+  if (profile.dialogueField && has(input, profile.dialogueField)) checkDialogue(profile, input);
+}
+
+/**
+ * Build the queue input for `model` from the command flags and --input.
+ * Throws ValidationError for anything the endpoint would reject (missing or
+ * oversized text, unknown voice or format, a malformed dialogue, a flag it
+ * has no field for, a field set twice), so nothing is submitted, or billed,
+ * for it.
  */
 export function buildTtsInput(model: string, flags: TtsFlags): TtsInput {
   const profile = findTtsProfile(model);
@@ -186,7 +282,7 @@ export function buildTtsInput(model: string, flags: TtsFlags): TtsInput {
   const text = flags.text?.trim() ? flags.text : undefined;
   const input: Record<string, unknown> = {};
   const set = (field: string, value: unknown, flag: string) => {
-    if (field in extra) {
+    if (has(extra, field)) {
       throw new ValidationError(`Set ${field} with ${flag} or --input, not both`);
     }
     input[field] = value;
@@ -197,7 +293,7 @@ export function buildTtsInput(model: string, flags: TtsFlags): TtsInput {
     if (!FIELD_RE.test(field) || UNSAFE_FIELDS.has(field)) {
       throw new ValidationError(`Invalid --text-field: ${field}`);
     }
-    if (!text && !(field in extra)) {
+    if (!text && !has(extra, field)) {
       throw new ValidationError("Provide the text to speak (argument or --text-file)");
     }
     if (text) set(field, text, "the text");
@@ -219,20 +315,18 @@ export function buildTtsInput(model: string, flags: TtsFlags): TtsInput {
       `--text-field does not apply to ${profile.id}: it reads the text from "${profile.textField}"`,
     );
   }
-  const dialogue = profile.dialogueField !== undefined && profile.dialogueField in extra;
-  if (text && dialogue) {
+  const dialogue = profile.dialogueField !== undefined && has(extra, profile.dialogueField);
+  if (dialogue && (text || has(extra, profile.textField))) {
     throw new ValidationError(
       `Omit the text when --input has ${profile.dialogueField}: ${profile.id} speaks either one text or a dialogue`,
     );
   }
+  if (dialogue && flags.voice !== undefined) {
+    throw new ValidationError("--voice does not apply to a dialogue: set each speaker's voice");
+  }
   if (text) {
-    if (profile.maxChars !== undefined && text.length > profile.maxChars) {
-      throw new ValidationError(
-        `Text is ${text.length} characters; ${profile.id} accepts at most ${profile.maxChars}`,
-      );
-    }
     set(profile.textField, text, "the text");
-  } else if (!dialogue && !(profile.textField in extra)) {
+  } else if (!dialogue && !has(extra, profile.textField)) {
     throw new ValidationError(
       `Provide the text to speak (argument or --text-file)${
         profile.dialogueField ? `, or ${profile.dialogueField} in --input for dialogue` : ""
@@ -240,14 +334,7 @@ export function buildTtsInput(model: string, flags: TtsFlags): TtsInput {
     );
   }
 
-  if (flags.voice !== undefined) {
-    const voice = profile.voices
-      ? pick(profile.voices, flags.voice, "voice", profile.id)
-      : flags.voice.trim();
-    if (!voice) throw new ValidationError("--voice must not be empty");
-    set(profile.voiceField, voice, "--voice");
-  }
-
+  if (flags.voice !== undefined) set(profile.voiceField, flags.voice, "--voice");
   if (flags.style !== undefined) {
     if (!profile.styleField) {
       unsupported(
@@ -258,29 +345,22 @@ export function buildTtsInput(model: string, flags: TtsFlags): TtsInput {
     }
     set(profile.styleField, flags.style, "--style");
   }
-
-  let expectedOutput = profile.output;
   if (flags.format !== undefined) {
     if (!profile.formatField || !profile.formats) {
       unsupported("--format", profile.id, `it always returns ${profile.output.toUpperCase()}`);
     }
-    const format = pick(profile.formats, flags.format, "--format", profile.id);
-    set(profile.formatField, format, "--format");
-    expectedOutput = outputForFormat(format);
-  } else if (profile.formatField) {
-    const fromInput = extra[profile.formatField];
-    if (typeof fromInput === "string") expectedOutput = outputForFormat(fromInput);
+    set(profile.formatField, flags.format, "--format");
   }
-
   if (flags.language !== undefined) {
     if (!profile.languageField) {
       unsupported("--language", profile.id, "the language follows the text");
     }
-    if (!/^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})?$/.test(flags.language)) {
-      throw new ValidationError(`Invalid --language "${flags.language}" (expected e.g. en or vi)`);
-    }
     set(profile.languageField, flags.language, "--language");
   }
 
-  return { input: { ...extra, ...input }, profile, expectedOutput };
+  const merged = { ...extra, ...input };
+  checkTyped(profile, merged);
+  const format = profile.formatField ? merged[profile.formatField] : undefined;
+  const expectedOutput = typeof format === "string" ? outputForFormat(format) : profile.output;
+  return { input: merged, profile, expectedOutput };
 }
