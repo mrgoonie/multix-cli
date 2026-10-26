@@ -3,70 +3,22 @@
  * provider schema accepts. Only ids checked against the provider's own schema
  * belong here; everything else a catalog lists stays "unverified" in discovery.
  *
+ * `command` is the multix command to use: `fal tts` maps typed flags onto the
+ * ids it lists; other verified fal ids run through `fal run --input`.
+ *
  * fal entries: fields from https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=<id>.
  * Re-check them (and bump verified_at) when an endpoint changes or disappears
  * from `multix models --task speech --live`.
  */
 
+import {
+  ELEVENLABS_FORMATS as ELEVEN_FORMATS,
+  GEMINI_VOICES as GEMINI_TTS_VOICES,
+} from "../providers/fal/speech-models.js";
 import type { InputSpec, ModelCapability, Task } from "./capability-types.js";
 
 const falSchema = (id: string) => `https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=${id}`;
 const VERIFIED = "2026-10-26";
-
-const GEMINI_TTS_VOICES = [
-  "Achernar",
-  "Achird",
-  "Algenib",
-  "Algieba",
-  "Alnilam",
-  "Aoede",
-  "Autonoe",
-  "Callirrhoe",
-  "Charon",
-  "Despina",
-  "Enceladus",
-  "Erinome",
-  "Fenrir",
-  "Gacrux",
-  "Iapetus",
-  "Kore",
-  "Laomedeia",
-  "Leda",
-  "Orus",
-  "Pulcherrima",
-  "Puck",
-  "Rasalgethi",
-  "Sadachbia",
-  "Sadaltager",
-  "Schedar",
-  "Sulafat",
-  "Umbriel",
-  "Vindemiatrix",
-  "Zephyr",
-  "Zubenelgenubi",
-] as const;
-
-const ELEVEN_FORMATS = [
-  "mp3_22050_32",
-  "mp3_44100_32",
-  "mp3_44100_64",
-  "mp3_44100_96",
-  "mp3_44100_128",
-  "mp3_44100_192",
-  "pcm_8000",
-  "pcm_16000",
-  "pcm_22050",
-  "pcm_24000",
-  "pcm_44100",
-  "pcm_48000",
-  "ulaw_8000",
-  "alaw_8000",
-  "opus_48000_32",
-  "opus_48000_64",
-  "opus_48000_96",
-  "opus_48000_128",
-  "opus_48000_192",
-] as const;
 
 const MINIMAX_LANGUAGES = [
   "Chinese",
@@ -115,8 +67,8 @@ function elevenV4(model: string, name: string): ModelCapability {
     model,
     name,
     tasks: ["speech"],
-    command: "fal run",
-    example: `multix fal run ${model} --input '{"text":"Hello from multix","voice":"Rachel"}'`,
+    command: "fal tts",
+    example: `multix fal tts "Hello from multix" --model ${model} --voice Rachel`,
     inputs: {
       text: {
         type: "string",
@@ -161,8 +113,8 @@ function geminiTts(model: string, name: string): ModelCapability {
     model,
     name,
     tasks: ["speech"],
-    command: "fal run",
-    example: `multix fal run ${model} --input '{"prompt":"Have a wonderful day!","voice":"Kore"}'`,
+    command: "fal tts",
+    example: `multix fal tts "Have a wonderful day!" --model ${model} --voice Kore`,
     inputs,
     required_any: [["prompt"], ["speakers", "turns"]],
     outputs: [{ field: "audio", modality: "audio", formats: ["wav"] }],

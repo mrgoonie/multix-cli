@@ -26,6 +26,7 @@ import {
 } from "../../../src/capabilities/model-views.js";
 import { modelRows } from "../../../src/commands/agent/models-command.js";
 import { registerCommands } from "../../../src/commands/index.js";
+import { FAL_SPEECH_MODELS, findSpeechModel } from "../../../src/providers/fal/speech-models.js";
 
 function buildProgram(): Command {
   const program = new Command().name("multix").enablePositionalOptions();
@@ -72,13 +73,24 @@ describe("command capabilities", () => {
     const falRun = modelRows(program).filter((r) => r.command === "fal run");
     expect(falRun.map((r) => r.task).sort()).toEqual(["any", "speech"]);
     const speech = falRun.find((r) => r.task === "speech");
-    // Speech through fal run is only the verified ids, not "any model".
+    // Speech through fal run is only the verified ids routed to it, not "any model".
     expect(speech?.any_model).toBeUndefined();
     expect(speech?.verified_models).toEqual(
-      verifiedModels({ task: "speech", provider: "fal" }).map((m) => m.model),
+      verifiedModels({ task: "speech", provider: "fal" })
+        .filter((m) => m.command === "fal run")
+        .map((m) => m.model),
     );
     expect(speech?.models).toEqual(speech?.verified_models);
     expect(speech?.example).toMatch(/^multix fal run /);
+  });
+
+  it("lists the typed fal tts models as verified on its row", () => {
+    const tts = modelRows(program).find((r) => r.command === "fal tts");
+    expect(tts).toMatchObject({ task: "speech", any_model: true, outputs: ["audio"] });
+    expect(tts?.verified_models?.sort()).toEqual(FAL_SPEECH_MODELS.map((m) => m.id).sort());
+    for (const id of tts?.verified_models ?? []) {
+      expect(findModelCapability(id)?.command).toBe("fal tts");
+    }
   });
 
   it("does not advertise arbitrary OpenRouter modalities", () => {
@@ -103,7 +115,8 @@ describe("command capabilities", () => {
   it("finds the command that takes any catalog id for a task, and the generic runner", () => {
     expect(catalogCommand("openrouter", "image")).toBe("openrouter generate");
     expect(catalogCommand("openrouter", "speech")).toBeNull();
-    expect(catalogCommand("fal", "speech")).toBeNull();
+    expect(catalogCommand("fal", "speech")).toBe("fal tts");
+    expect(catalogCommand("fal", "transcription")).toBeNull();
     expect(genericRunner("fal")).toBe("fal run");
     expect(genericRunner("openrouter")).toBeUndefined();
   });
@@ -136,7 +149,11 @@ describe("verified model registry", () => {
           expect(spec.values, `${m.model} ${field}`).toContain(spec.default);
         }
       }
-      // A valid example input passes its own check.
+      // fal tts maps typed flags onto the models it lists; --input examples pass their own check.
+      if (m.command === "fal tts") {
+        expect(findSpeechModel(m.model), m.model).toBeDefined();
+        continue;
+      }
       const json = m.example.match(/--input '(.+)'$/)?.[1];
       expect(json, m.model).toBeDefined();
       expect(checkModelInput(m, JSON.parse(json ?? "{}")), m.model).toEqual({
@@ -193,19 +210,35 @@ describe("merged model views", () => {
       },
     ]);
     const byId = Object.fromEntries(views.map((v) => [v.model, v]));
-    expect(byId[kept ?? ""]).toMatchObject({ verified: true, listed: true, command: "fal run" });
+    expect(byId[kept ?? ""]).toMatchObject({
+      verified: true,
+      listed: true,
+      command: findModelCapability(kept ?? "")?.command,
+    });
     expect(byId[kept ?? ""]?.status).toBeUndefined();
     for (const id of dropped) {
       expect(byId[id]).toMatchObject({ verified: true, listed: false, status: "missing" });
       expect(byId[id]?.note).toMatch(/removed or renamed/);
     }
-    // Catalog-only: never verified, no task command, only the generic runner.
+    // Catalog-only: never verified; fal tts takes any fal TTS id (with --text-field).
     expect(byId["new-vendor/tts"]).toMatchObject({
       verified: false,
-      command: null,
-      runner: "fal run",
+      command: "fal tts",
       listed: true,
     });
+    expect(byId["new-vendor/tts"]?.note).toMatch(/^unverified/);
+  });
+
+  it("offers only the generic runner when no command serves the task", () => {
+    const views = mergeModelViews("transcription", [
+      {
+        source: { provider: "fal", task: "transcription", state: "fresh" },
+        models: [{ provider: "fal", model: "vendor/stt", task: "transcription" }],
+      },
+    ]);
+    expect(views).toEqual([
+      expect.objectContaining({ verified: false, command: null, runner: "fal run" }),
+    ]);
   });
 
   it("does not call a verified model missing from a truncated catalog", () => {

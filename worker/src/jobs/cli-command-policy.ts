@@ -173,6 +173,9 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   "fal upload": { filePositionals: ["file"] },
   "fal image": { caps: IMAGE_COUNT },
   "fal video": { urlOptions: ["image-url"], caps: { duration: ["duration"] } },
+  // The text file comes from `inputs`; `--receipt` takes a local path (the
+  // detached receipt is still printed, and `fal status` / `fal result` resume it).
+  "fal tts": { fileOptions: { "text-file": "file" }, unsupported: ["receipt"] },
   "atlas image": { caps: IMAGE_COUNT },
   "atlas image-to-image": { fileOptions: { ref: "file" }, caps: IMAGE_COUNT },
   "atlas video": { caps: VIDEO_CAPS },

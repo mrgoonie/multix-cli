@@ -26,6 +26,10 @@ interface ModelsResp
     name?: string;
     can_do_text_to_speech?: boolean;
     can_do_voice_conversion?: boolean;
+    can_use_style?: boolean;
+    can_use_speaker_boost?: boolean;
+    maximum_text_length_per_request?: number;
+    model_rates?: { character_cost_multiplier?: number };
     languages?: Array<{ language_id: string; name: string }>;
   }> {}
 
@@ -52,7 +56,9 @@ export function registerAccountCommands(parent: Command): void {
 
   parent
     .command("models")
-    .description("List available ElevenLabs models")
+    .description(
+      "List ElevenLabs models live with capabilities (tts, style, speaker boost), languages, text limit and credit multiplier",
+    )
     .action(async () => {
       const apiKey = requireElevenLabsKey();
       const models = await apiGet<ModelsResp>("models", apiKey);
@@ -60,8 +66,16 @@ export function registerAccountCommands(parent: Command): void {
         const caps: string[] = [];
         if (m.can_do_text_to_speech) caps.push("tts");
         if (m.can_do_voice_conversion) caps.push("vc");
-        const langs = m.languages?.length ? `${m.languages.length} langs` : "";
-        console.log(`${m.model_id}\t${m.name ?? ""}\t[${caps.join(",")}] ${langs}`);
+        if (m.can_use_style) caps.push("style");
+        if (m.can_use_speaker_boost) caps.push("speaker-boost");
+        const extra = [
+          m.languages?.length ? `${m.languages.length} langs` : "",
+          m.maximum_text_length_per_request ? `max ${m.maximum_text_length_per_request} chars` : "",
+          typeof m.model_rates?.character_cost_multiplier === "number"
+            ? `${m.model_rates.character_cost_multiplier}x credits/char`
+            : "",
+        ].filter(Boolean);
+        console.log(`${m.model_id}\t${m.name ?? ""}\t[${caps.join(",")}] ${extra.join(", ")}`);
       }
       console.log(`\n${models.length} models`);
     });

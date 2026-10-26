@@ -15,7 +15,7 @@ import { type Logger, createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import { createFalClient, requireFalKey } from "../client.js";
 import { applyFileFlags, parseFileFlags } from "../local-files.js";
-import { type FalReceipt, buildReceipt, saveReceipt } from "../request-receipt.js";
+import { type FalReceipt, buildReceipt, persistReceipt } from "../request-receipt.js";
 import {
   downloadResultMedia,
   extractMediaUrls,
@@ -37,20 +37,6 @@ interface RunFlags {
 }
 
 const collect = (value: string, previous: string[]) => [...previous, value];
-
-/** Save the receipt; a failure only warns, since the job is already queued and paid for. */
-function persistReceipt(receipt: FalReceipt, file: string | undefined, logger: Logger): FalReceipt {
-  try {
-    const saved = saveReceipt(receipt, { file });
-    logger.debug(`Receipt saved to ${saved}`);
-    return { ...receipt, receipt_path: saved };
-  } catch (e) {
-    logger.warn(
-      `Could not save the request receipt (${e instanceof Error ? e.message : e}); keep the request_id to resume.`,
-    );
-    return receipt;
-  }
-}
 
 /**
  * For a model in the verified registry, warn about input fields its schema

@@ -69,6 +69,8 @@ export interface UsageSummary {
   tokens?: UsageTokens;
   cost_usd?: number;
   credits?: number;
+  /** Where each provider reported cost_usd / credits ("<host> header.<name>" or "<host> body.<path>"). */
+  sources?: { cost_usd?: string[]; credits?: string[] };
   /** Provider-reported numbers by key path (polls: last value; creates: summed). */
   metrics?: Record<string, number>;
 }
@@ -88,7 +90,14 @@ export function summarizeUsage(state: RunState = run): UsageSummary | undefined 
   const metrics: Record<string, number> = {};
   let cost: number | undefined;
   let credits: number | undefined;
+  const sources: { cost_usd?: string[]; credits?: string[] } = {};
   for (const [i, r] of records.entries()) {
+    for (const key of ["cost_usd", "credits"] as const) {
+      const src = r.sources?.[key];
+      if (src && r[key] !== undefined && !sources[key]?.includes(src)) {
+        sources[key] = [...(sources[key] ?? []), src];
+      }
+    }
     addTokens(tokens, r.tokens);
     if (r.cost_usd !== undefined) cost = (cost ?? 0) + r.cost_usd;
     if (r.credits !== undefined) credits = (credits ?? 0) + r.credits;
@@ -101,6 +110,7 @@ export function summarizeUsage(state: RunState = run): UsageSummary | undefined 
   if (Object.keys(tokens).length > 0) summary.tokens = tokens;
   if (cost !== undefined) summary.cost_usd = Math.round(cost * 1e6) / 1e6;
   if (credits !== undefined) summary.credits = credits;
+  if (Object.keys(sources).length > 0) summary.sources = sources;
   if (Object.keys(metrics).length > 0) summary.metrics = metrics;
   return Object.keys(summary).length > 0 ? summary : undefined;
 }

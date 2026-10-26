@@ -1,7 +1,7 @@
 ---
 name: multix
 description: AI multimodal CLI — generate and edit images (OpenAI, Codex driver, Gemini Nano Banana, Imagen, MiniMax, OpenRouter, Leonardo, BytePlus Seedream, Cloudflare Workers AI FLUX.1 Schnell, fal.ai FLUX, Replicate FLUX, Runway Gen-4 Image), generate, edit and extend video (Gemini Omni Flash, plus legacy Gemini Veo), generate video (MiniMax Hailuo, OpenRouter via Veo/Seedance/Kling, Leonardo via Motion/Veo/Kling/Hailuo/Seedance/LTX, BytePlus Seedance, Cloudflare AI Gateway via Replicate, fal.ai queue models, Replicate direct API models incl. P-Video, Runway Gen-4.5 and Gen-4 Turbo, HeyGen Video Agent and scripted avatar videos), video translation and lipsync (HeyGen), TTS/STT/music (OpenAI, Gemini Flash TTS incl. Gemini 3.8 with delivery-style control, MiniMax, Cloudflare Workers AI MeloTTS, ElevenLabs), 3D models (BytePlus Hyper3D/Hitem3d), analyze/transcribe media, convert documents to Markdown, optimize media via ffmpeg/ImageMagick, and self-update the CLI. Use whenever the user wants to create, edit, or transform images/video/audio/3D/documents from a CLI, mentions any of: OpenAI, Codex image driver, image-to-image, i2i, image edit, watercolor/cyberpunk style transfer, reference image, OpenRouter, Nano Banana, Flux, Seedream, Gemini Omni, Omni Flash, Veo, Hailuo, Seedance, Kling, Cloudflare Workers AI, AI Gateway, fal.ai, Atlas Cloud, Replicate, replicate.com models, Replicate predictions, Runway, Gen-4.5, Gen-4 Turbo, Gen-4 Image, HeyGen, avatar video, talking head, Video Agent, video translation, dubbing, lipsync, video generation, text-to-video, image-to-video, i2v, ElevenLabs voice cloning, updating/upgrading multix, or asks for batch media optimization.
-version: 1.14.0 # x-release-please-version
+version: 1.15.0 # x-release-please-version
 ---
 
 # multix — AI Multimodal CLI
@@ -17,10 +17,10 @@ multix <group> <cmd> ... --json         # stdout = ONE line, schema multix.resul
 ```
 
 - Tasks: image, image-edit, video, image-to-video, video-edit, speech, transcription, music, sfx, voice, 3d, analysis, document, avatar-video, any. `multix guide` prints the protocol for the installed version.
-- Models: only ids in the verified registry have known inputs; `any_model: true` rows (`fal run`, `replicate run`, OpenRouter, Atlas) pass any id through unverified (`model_scope` says which). Speech through fal = the `fal run` row's `verified_models`; copy its `example`. `--live` rows carry `verified` and `listed` (true/false, null = catalog unread or `truncated`); `status: "missing"` = verified model the catalog dropped (removed or renamed); a `sources[]` entry with `state: "unavailable"` (offline, no cache) confirms nothing. Cache `~/.multix/cache/models`, 1 day (`--refresh`, `MULTIX_CACHE_DIR`, `MULTIX_MODELS_TTL` up to 7 days).
+- Models: only ids in the verified registry have known inputs; `any_model: true` rows (`fal run`, `replicate run`, OpenRouter, Atlas) pass any id through unverified (`model_scope` says which). Speech through fal: the `fal tts` row (typed, checked flags) and the `fal run` row (MiniMax) list their `verified_models`; copy a model's `example`. `--live` rows carry `verified` and `listed` (true/false, null = catalog unread or `truncated`); `status: "missing"` = verified model the catalog dropped (removed or renamed); a `sources[]` entry with `state: "unavailable"` (offline, no cache) confirms nothing. Cache `~/.multix/cache/models`, 1 day (`--refresh`, `MULTIX_CACHE_DIR`, `MULTIX_MODELS_TTL` up to 7 days).
 - Success = `ok: true` AND `outputs[]` non-empty (path, bytes, mime, sha256, width/height, duration_s) AND no `warnings` (`EMPTY_OUTPUT`, `CONTENT_MISMATCH`, `UNREADABLE_MEDIA`).
 - Failure: read `error.code`, `error.hint`, `next[]`. Exit codes (with `--json`; plain runs exit 1): 2 fix flags/input · 3 key/setup (`multix check`, key named in `error.env`) · 4 temporary (wait `retry_after_s`, `multix rerun <history_id>`) · 5 rejected: quota, safety, model (change input/provider) · 6 timed out, job may still run (status command in `next[]`, do not resubmit) · 1 unknown (`log[]`).
-- `usage` = what the provider reported (tokens, `cost_usd`, `credits`, metrics); `history_id` names the run.
+- `usage` = what the provider reported (tokens, `cost_usd`, `credits`, metrics; `sources` names the header/body field each money number came from); `history_id` names the run.
 - History: `multix history [--failed] [--since 1d]`, `multix history show last`, `multix history stats --by model|provider|command`, `multix rerun <id|last>`. Ledger `~/.multix/history.jsonl` has no keys or signed URLs; `MULTIX_HISTORY=0` disables it.
 
 ## When to use
@@ -39,7 +39,7 @@ Activate this skill when the user asks to:
 - Analyze, transcribe, or extract structured data from media/docs
 - Convert PDFs / DOCX / images to Markdown
 - Optimize, resize, batch-convert, or split video/audio/image files
-- Run any fal.ai model (generic queue-API runner), or fal.ai's default image/video models
+- Run any fal.ai model (generic queue-API runner), or fal.ai's default image/video models and text-to-speech (Gemini 3.8 Flash/Flash-Lite TTS, ElevenLabs v4/v4 Turbo) with typed inputs
 - Run any Atlas Cloud model (image, image edit, video, TTS/STT, 3D) with schema-validated inputs and resumable async predictions
 - Run any Replicate model (official or versioned) via the direct API, generate Replicate images/video, or resume/cancel a Replicate prediction by id
 - Generate Runway Gen-4.5 / Gen-4 Turbo video or Gen-4 images (with tagged reference images), or check/resume/cancel a Runway task by id
@@ -64,7 +64,7 @@ MINIMAX_API_KEY       # MiniMax (image/video/speech/music)
 LEONARDO_API_KEY      # Leonardo.Ai (image/video/upscale)
 BYTEPLUS_API_KEY      # BytePlus / Volcengine ARK (Seedream/Seedance/Hyper3D)
 ELEVENLABS_API_KEY    # ElevenLabs (TTS, cloning, STT, music, dubbing)
-FAL_KEY                # fal.ai (generic queue-API model runner, image/video, local media upload)
+FAL_KEY                # fal.ai (generic queue-API model runner, image/video/TTS, local media upload)
 ATLASCLOUD_API_KEY    # Atlas Cloud (any model: image, edit, video, audio, 3D)
 REPLICATE_API_TOKEN   # Replicate direct API (REPLICATE_API_KEY accepted as fallback)
 RUNWAYML_API_SECRET   # Runway API (Gen-4.5 / Gen-4 Turbo video, Gen-4 images)
@@ -160,11 +160,17 @@ multix fal image "a cyberpunk cat" [-m <model>] [--image-size square_hd] [-n 1] 
 multix fal video "a dancer under neon lights" [-m <model>] [--image-url <https-url>] [--duration <n>] [--aspect-ratio 16:9] [--seed <n>] [-v]
 
 # Inspect a request submitted any other way
+# Text-to-speech (default google/gemini-3.8-flash-tts, or FAL_TTS_MODEL); flags map to each model's own fields
+multix fal tts "Xin chào" [--voice Puck] [--style "warm"]                       # Gemini: prompt/voice/style_instructions, wav
+multix fal tts --text-file script.txt -m elevenlabs/tts/eleven-v4-turbo [--format pcm_16000|opus_48000_64|mp3_44100_128] [--language vi]
+multix fal tts "hi" -m <other-fal-tts> --text-field <field> [--voice-field <field> --voice <v>]   # unlisted model: name its fields
+multix fal voices [<model>] [--live]   # verified models, voices, formats; <model> or --json prints typed inputs; --live lists fal's TTS catalog
+
 multix fal status <model> <requestId>
-multix fal result <model> <requestId> [--download] [--output-dir <dir>]
+multix fal result <model> <requestId> [--download] [--output-dir <dir>] [--format <fmt>]   # --format for raw speech formats; detach receipts include it
 ```
 
-`--detach` leaves a receipt in `~/.multix/fal/requests/` (or at `--receipt <path>`, which also works without `--detach`; mode 0600, no input or key). `status`/`result` never resubmit, so resume a detached or timed-out job with them instead of running `fal run` again. `UNKNOWN_REMOTE_STATE` means fal may or may not have queued the submit (connection cut off, 5xx gateway error): check https://fal.ai/dashboard/requests before resubmitting. `--file`/`fal upload` take image, video and audio only (`FAL_MAX_UPLOAD_MB`, default 1024); the uploaded URL is public to anyone with the link. For a verified model (`multix models --model <id>`), `fal run` warns about `--input` fields it does not take, required ones that are missing and values outside its listed choices; it still submits.
+`--detach` leaves a receipt in `~/.multix/fal/requests/` (or at `--receipt <path>`, which also works without `--detach`; mode 0600, no input or key). `status`/`result` never resubmit, so resume a detached or timed-out job with them instead of running `fal run` again. `UNKNOWN_REMOTE_STATE` means fal may or may not have queued the submit (connection cut off, 5xx gateway error): check https://fal.ai/dashboard/requests before resubmitting. `fal tts` refuses a flag the model has no field for (`--style` on ElevenLabs, `--format` on Gemini) and a voice or format outside the model's list, before sending. It saves `fal-<id>-01.<ext>` with the extension taken from the bytes (raw `pcm_*`/`ulaw_8000`/`alaw_8000` from the format) and refuses empty, error-page or mislabelled audio; `--detach` and `fal result --download` work as for `run`. `--file`/`fal upload` take image, video and audio only (`FAL_MAX_UPLOAD_MB`, default 1024); the uploaded URL is public to anyone with the link. For a verified model (`multix models --model <id>`), `fal run` warns about `--input` fields it does not take, required ones that are missing and values outside its listed choices; it still submits.
 
 ## Atlas Cloud
 
@@ -407,6 +413,10 @@ multix gemini generate-speech --text "Have a wonderful day!" --voice Kore
 multix gemini generate-speech --text "Have a wonderful day!" --model gemini-3.8-flash-tts --style "cheerful and friendly" --voice Kore
 multix minimax generate-speech --text "..." --voice <id> --emotion neutral
 multix elevenlabs tts --text "Hello world" [--voice <voiceId>] [--model eleven_multilingual_v2]
+# Eleven v4 (quality) / v4 Turbo (low latency, 0.5 credits/char): 90+ languages, [audio tags], 10k chars.
+# No --style on v4/v3/Flash (rejected, not ignored); v3 rejects --previous-text/--next-text.
+multix elevenlabs tts --model eleven_v4 --text "[warmly] Xin chào!" --language-code vi [--timestamps]
+multix elevenlabs models   # live capabilities per model
 
 # Voice cloning + STT
 multix openai transcribe --input audio.mp3 [--format text|json|diarized_json] [--language vi]
@@ -468,6 +478,7 @@ Requires `cwebp` (libwebp: `brew install webp`, `apt install webp`) on `PATH`.
 | `BYTEPLUS_VIDEO_PARAMS_MODE` | `flags` (default) or `structured` |
 | `FAL_BASE_URL` | Override fal queue base (default `https://queue.fal.run`) |
 | `FAL_IMAGE_MODEL` / `FAL_VIDEO_MODEL` | fal.ai default model ids (default `fal-ai/flux/schnell`, `fal-ai/kling-video/v1.6/standard/text-to-video`) |
+| `FAL_TTS_MODEL` | Default `multix fal tts` model (default `google/gemini-3.8-flash-tts`) |
 | `ATLASCLOUD_BASE_URL` | Override Atlas Cloud media API base (default `https://api.atlascloud.ai/api/v1`; `https://` required, `http://` only for localhost, 127.0.0.1 or [::1]) |
 | `ATLASCLOUD_IMAGE_MODEL` / `ATLASCLOUD_IMAGE_EDIT_MODEL` / `ATLASCLOUD_VIDEO_MODEL` / `ATLASCLOUD_IMAGE_TO_VIDEO_MODEL` / `ATLASCLOUD_TTS_MODEL` / `ATLASCLOUD_STT_MODEL` / `ATLASCLOUD_TEXT_TO_3D_MODEL` / `ATLASCLOUD_IMAGE_TO_3D_MODEL` | Atlas Cloud default model ids per command |
 | `FAL_MAX_UPLOAD_MB` | Size limit for local files uploaded by `fal upload` / `fal run --file` (default 1024) |

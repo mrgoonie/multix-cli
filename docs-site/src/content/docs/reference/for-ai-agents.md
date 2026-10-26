@@ -30,8 +30,10 @@ https://multix.zuey.me/llms.txt
    multix has not verified those ids. A verified model has known inputs:
    `multix models --model <id>` shows its inputs, voices, output formats and an
    example (an unknown id reports `verified: null`), and `fal run` warns when
-   `--input` does not match it. Speech through fal is listed as a `fal run` row
-   naming only its verified models.
+   `--input` does not match it. Speech through fal: the ElevenLabs and Gemini
+   TTS models use `fal tts` (typed flags, checked before sending; other fal TTS
+   ids need `--text-field`), and MiniMax uses a `fal run` row naming only that
+   verified model.
    `multix models --task <task> --live` also lists what the fal and OpenRouter
    catalogs serve now, each marked `verified` or not, with `listed`
    (`true`/`false`, or `null` when the catalog could not be read in full) and status
@@ -83,7 +85,7 @@ https://multix.zuey.me/llms.txt
 | `warnings[]` | Problems found in the outputs, such as an empty file or content that does not match its extension. |
 | `data` / `text` | The command's stdout: parsed JSON, or text capped at 32 KB. |
 | `error` | `code`, `message`, `retryable`, `retry_after_s`, `hint`, `http_status`, `env` (the key name when one is missing). |
-| `usage` | What the provider reported: `tokens` (`input`, `output`, `total`, `thinking`), `cost_usd`, `credits`, and other numeric `metrics` by key path. Nothing is estimated. |
+| `usage` | What the provider reported: `tokens` (`input`, `output`, `total`, `thinking`), `cost_usd`, `credits`, and other numeric `metrics` by key path. `sources.cost_usd` / `sources.credits` name where each number came from (for example `api.elevenlabs.io header.character-cost`). Nothing is estimated: a provider's own estimate or quote (such as Runway `estimatedCost`) stays in `metrics` and is never reported as `cost_usd` or `credits`. |
 | `http` | Provider request count, failed requests and total time. |
 | `provider_ids` | Request, job or prediction ids the provider returned. |
 | `request` | With `--dry-run`: the request that would have been sent. |

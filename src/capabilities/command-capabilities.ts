@@ -76,6 +76,11 @@ export const COMMAND_CAPABILITIES: Readonly<Record<string, CommandCapability>> =
   "elevenlabs dub": fixed(["video-edit"], ["video", "audio"]),
   "elevenlabs isolate": fixed(["voice"], ["audio"]),
   "fal run": catalog(["any"], [], "any fal endpoint id; inputs and outputs depend on the endpoint"),
+  "fal tts": catalog(
+    ["speech"],
+    ["audio"],
+    "fal text-to-speech ids; listed models are typed and checked, others need --text-field",
+  ),
   "fal image": catalog(["image"], ["image"], "fal text-to-image endpoint ids"),
   "fal video": catalog(
     ["video", "image-to-video"],
@@ -154,6 +159,7 @@ export const UTILITY_COMMANDS: ReadonlySet<string> = new Set([
   "fal status",
   "fal result",
   "fal upload",
+  "fal voices",
   "atlas status",
   "atlas upload",
   "replicate status",

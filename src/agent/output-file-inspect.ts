@@ -45,6 +45,8 @@ const MIME: Record<string, string> = {
   flac: "audio/flac",
   opus: "audio/opus",
   pcm: "audio/pcm",
+  ulaw: "audio/basic",
+  alaw: "audio/x-alaw-basic",
   glb: "model/gltf-binary",
   gltf: "model/gltf+json",
   obj: "model/obj",

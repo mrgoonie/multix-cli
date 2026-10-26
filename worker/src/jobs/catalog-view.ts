@@ -153,8 +153,8 @@ function modelPayload(
   provider?: string,
 ): Record<string, unknown> {
   const cap = findModelCapability(id, provider);
-  const runnablePaths = new Set(groups.flatMap((g) => runnable(g).map((c) => c.command)));
-  if (!cap || !runnablePaths.has(cap.command)) {
+  const command = groups.flatMap(runnable).find((c) => c.command === cap?.command);
+  if (!cap || !command) {
     return {
       schema: CAPABILITY_SCHEMA,
       model: id,
@@ -170,7 +170,9 @@ function modelPayload(
     usage:
       cap.command === "fal run"
         ? `multix_run: command "fal run", args ["${cap.model}"], options {"input": "<JSON of the inputs above>"}`
-        : `multix_run: command "${cap.command}", options {"model": "${cap.model}"}`,
+        : `multix_run: command "${cap.command}", args [${command.positionals
+            .map((p) => `"<${p.name}>"`)
+            .join(", ")}], options {"model": "${cap.model}"} plus the inputs above by long name`,
   };
 }
 

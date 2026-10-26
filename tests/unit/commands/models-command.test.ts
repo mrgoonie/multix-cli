@@ -107,7 +107,7 @@ describe("multix models --json", () => {
       model: "elevenlabs/tts/eleven-v4",
       ready: false,
       keys: ["FAL_KEY"],
-      verified: { provider: "fal", command: "fal run", tasks: ["speech"] },
+      verified: { provider: "fal", command: "fal tts", tasks: ["speech"] },
     });
     expect(result.verified.inputs.text).toMatchObject({ required: true, max_length: 5000 });
     expect(result.listed).toBeUndefined();
@@ -165,11 +165,7 @@ describe("multix models --live", () => {
       listed: false,
       status: "missing",
     });
-    expect(byId["vendor/new-tts"]).toMatchObject({
-      verified: false,
-      command: null,
-      runner: "fal run",
-    });
+    expect(byId["vendor/new-tts"]).toMatchObject({ verified: false, command: "fal tts" });
     expect(byId["vendor/or-tts"]).toMatchObject({ verified: false, command: null, voices: 1 });
     expect(calls).toHaveLength(2);
 

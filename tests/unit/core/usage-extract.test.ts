@@ -40,11 +40,41 @@ describe("extractUsage", () => {
     expect(usage.ids).toEqual(["t-1"]);
   });
 
+  it("keeps estimates in metrics but never reports them as credits or cost", () => {
+    const usage = extractUsage({
+      id: "t1",
+      estimatedCost: { credits: 60 },
+      quote: { credits: 3 },
+      expected_credits: 7,
+      usage: { estimated: { cost: 0.25 } },
+    });
+    expect(usage.metrics).toMatchObject({
+      "estimatedCost.credits": 60,
+      "quote.credits": 3,
+      expected_credits: 7,
+      "usage.estimated.cost": 0.25,
+    });
+    expect(usage.credits).toBeUndefined();
+    expect(usage.cost_usd).toBeUndefined();
+  });
+
+  it("reports credits charged next to an estimate", () => {
+    const usage = extractUsage({ estimatedCost: { credits: 60 }, cost: { credits: 55 } });
+    expect(usage.credits).toBe(55);
+  });
+
   it("reads usage headers and request ids", () => {
     const headers = new Headers({ "x-request-id": "req_abc", "character-cost": "42" });
     const usage = extractUsage(undefined, headers);
     expect(usage.metrics["header.character-cost"]).toBe(42);
     expect(usage.ids).toEqual(["req_abc"]);
+    expect(usage.credits).toBe(42);
+    expect(usage.sources).toEqual({ credits: "header.character-cost" });
+  });
+
+  it("names the body path a cost or credit number came from", () => {
+    const usage = extractUsage({ usage: { cost: 0.0021 }, apiCreditCost: 12 });
+    expect(usage.sources).toEqual({ cost_usd: "body.usage.cost", credits: "body.apiCreditCost" });
   });
 
   it("finds nothing in a plain body", () => {

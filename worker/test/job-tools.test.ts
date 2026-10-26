@@ -200,7 +200,8 @@ describe("CLI runner tools", () => {
     expect(commands).not.toContain("openrouter generate");
     const models = speech.models as { model: string; command: string; has_keys: boolean }[];
     expect(models.map((m) => m.model)).toContain("elevenlabs/tts/eleven-v4");
-    expect(models.every((m) => m.command === "fal run" && m.has_keys === false)).toBe(true);
+    expect(models.every((m) => m.command.startsWith("fal ") && m.has_keys === false)).toBe(true);
+    expect(models.find((m) => m.model === "elevenlabs/tts/eleven-v4")?.command).toBe("fal tts");
     const tts = speech.commands.find(
       (c: { command: string }) => c.command === "gemini generate-speech",
     );
@@ -217,9 +218,14 @@ describe("CLI runner tools", () => {
     const model = (
       await callTool(env, "multix_catalog", { model: "google/gemini-3.8-flash-tts" }, { jobs })
     ).structuredContent;
-    expect(model.verified).toMatchObject({ provider: "fal", command: "fal run" });
+    expect(model.verified).toMatchObject({ provider: "fal", command: "fal tts" });
     expect(model.verified.voices).toContain("Kore");
-    expect(model.usage).toContain('"fal run"');
+    expect(model.usage).toContain('command "fal tts", args ["<text>"]');
+
+    const runner = (
+      await callTool(env, "multix_catalog", { model: "fal-ai/minimax/speech-2.8-hd" }, { jobs })
+    ).structuredContent;
+    expect(runner.usage).toContain('command "fal run", args ["fal-ai/minimax/speech-2.8-hd"]');
 
     const unknownModel = (
       await callTool(env, "multix_catalog", { model: "someone/new-model" }, { jobs })

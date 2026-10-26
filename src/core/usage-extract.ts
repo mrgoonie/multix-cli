@@ -24,12 +24,22 @@ export interface ResponseUsage {
   metrics: Record<string, number>;
   /** Job / request ids the provider returned. */
   ids: string[];
+  /** Where cost_usd / credits came from ("body.<key path>" or "header.<name>"). */
+  sources?: UsageSources;
+}
+
+/** Provenance of the reported money numbers, so they are never mistaken for estimates. */
+export interface UsageSources {
+  cost_usd?: string;
+  credits?: string;
 }
 
 const METRIC_KEY =
   /(token|cost|credit|price|usage|billing|duration|seconds|_time$|^time$|time_ms|latency|characters?_?(count|cost)|units?$|predict|inference)/i;
 const SKIP_KEY =
   /(_at$|stamp|date|created|updated|expire|limit|max_|min_|width|height|seed|fps|index|count_?max)/i;
+/** Key paths that name a forecast, not a charge (Runway estimatedCost, quotes). */
+const ESTIMATE_PATH = /(estimat|quote|expected)/i;
 const ID_KEYS = new Set([
   "id",
   "request_id",
@@ -139,14 +149,18 @@ export function extractUsage(body: unknown, headers?: Headers | null): ResponseU
   }
   for (const [path, value] of Object.entries(out.metrics)) {
     const leaf = path.split(".").pop() ?? path;
+    // Estimates stay in metrics but are never reported as cost or credits spent.
+    if (ESTIMATE_PATH.test(path)) continue;
     if (
       out.cost_usd === undefined &&
       /^(cost|total_cost|cost_usd|usd)$/i.test(leaf) &&
       /usage|^cost|billing/i.test(path)
     ) {
       out.cost_usd = value;
+      out.sources = { ...out.sources, cost_usd: `body.${path}` };
     } else if (out.credits === undefined && /credit/i.test(leaf)) {
       out.credits = value;
+      out.sources = { ...out.sources, credits: `body.${path}` };
     }
   }
   if (headers) {
@@ -157,7 +171,10 @@ export function extractUsage(body: unknown, headers?: Headers | null): ResponseU
       if (Number.isFinite(n) && raw.trim() !== "") {
         out.metrics[`header.${name}`] = n;
         // ElevenLabs bills in characters (its credit unit) and reports them here.
-        if (name === "character-cost" && out.credits === undefined) out.credits = n;
+        if (name === "character-cost" && out.credits === undefined) {
+          out.credits = n;
+          out.sources = { ...out.sources, credits: `header.${name}` };
+        }
       } else if (/request-?id/i.test(name) && raw.length <= 128 && out.ids.length < 5)
         out.ids.push(raw);
     }

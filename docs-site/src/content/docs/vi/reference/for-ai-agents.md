@@ -30,8 +30,10 @@ https://multix.zuey.me/llms.txt
    `model_scope`; multix chưa xác minh các id đó. Model đã xác minh có input đã
    biết: `multix models --model <id>` hiển thị input, voice, định dạng đầu ra
    và một ví dụ (id không có trong danh sách trả về `verified: null`), và
-   `fal run` cảnh báo khi `--input` không khớp với model. Speech qua fal được
-   liệt kê thành một dòng `fal run` chỉ nêu các model đã xác minh.
+   `fal run` cảnh báo khi `--input` không khớp với model. Speech qua fal: các
+   model TTS của ElevenLabs và Gemini dùng `fal tts` (flag có kiểu, được kiểm
+   tra trước khi gửi; id TTS khác của fal cần `--text-field`), còn MiniMax dùng
+   một dòng `fal run` chỉ nêu model đã xác minh đó.
    `multix models --task <task> --live` liệt kê thêm những model mà catalog
    của fal và OpenRouter đang phục vụ, mỗi model được đánh dấu `verified` hay
    không, kèm `listed` (`true`/`false`, hoặc `null` khi không đọc được toàn bộ catalog)
@@ -84,7 +86,7 @@ https://multix.zuey.me/llms.txt
 | `warnings[]` | Vấn đề tìm thấy trong output, ví dụ file rỗng hoặc nội dung không khớp phần mở rộng. |
 | `data` / `text` | stdout của lệnh: JSON đã parse, hoặc text tối đa 32 KB. |
 | `error` | `code`, `message`, `retryable`, `retry_after_s`, `hint`, `http_status`, `env` (tên key khi thiếu key). |
-| `usage` | Số liệu provider trả về: `tokens` (`input`, `output`, `total`, `thinking`), `cost_usd`, `credits` và các `metrics` dạng số khác theo key path. Không ước tính. |
+| `usage` | Số liệu provider trả về: `tokens` (`input`, `output`, `total`, `thinking`), `cost_usd`, `credits` và các `metrics` dạng số khác theo key path. `sources.cost_usd` / `sources.credits` ghi nguồn của từng số (ví dụ `api.elevenlabs.io header.character-cost`). Không ước tính: số ước tính hoặc báo giá của provider (như `estimatedCost` của Runway) chỉ nằm trong `metrics`, không bao giờ được báo là `cost_usd` hay `credits`. |
 | `http` | Số request tới provider, số request lỗi và tổng thời gian. |
 | `provider_ids` | Request id, job id hoặc prediction id provider trả về. |
 | `request` | Với `--dry-run`: request lẽ ra đã được gửi. |
