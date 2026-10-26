@@ -82,6 +82,7 @@ describe.each(["eleven_v4", "eleven_v4_turbo"])("%s", (model) => {
   it.each([
     [{ style: "0.4" }, "--style is not used by"],
     [{ speakerBoost: false }, "--no-speaker-boost is not used by"],
+    [{ speed: "1.1" }, "--speed is not used by"],
   ])("rejects a setting the model ignores: %o", (over, message) => {
     expect(fails({ model, ...over })).toContain(message);
   });
@@ -141,6 +142,43 @@ describe("eleven_v3", () => {
 
   it("caps text at 5,000 characters", () => {
     expect(fails({ model: "eleven_v3", text: "a".repeat(5_001) })).toContain("at most 5000");
+  });
+});
+
+describe("eleven_v3_conversational", () => {
+  it("is verified, keeps speaker boost and rejects previous/next text", () => {
+    const req = build({ model: "eleven_v3_conversational", speakerBoost: false });
+    expect(req.warnings).toEqual([]);
+    expect(req.payload.voice_settings).toMatchObject({ use_speaker_boost: false });
+    expect(fails({ model: "eleven_v3_conversational", previousText: "x" })).toContain(
+      "not supported",
+    );
+    expect(fails({ model: "eleven_v3_conversational", text: "a".repeat(5_001) })).toContain(
+      "at most 5000",
+    );
+  });
+});
+
+describe("--speed", () => {
+  it("is sent for the v2 family", () => {
+    expect(build({ speed: "0.9" }).payload.voice_settings).toMatchObject({ speed: 0.9 });
+    expect(
+      build({ model: "eleven_flash_v2_5", speed: "1.2" }).payload.voice_settings,
+    ).toMatchObject({ speed: 1.2 });
+  });
+
+  it("is omitted unless given", () => {
+    expect(build({}).payload.voice_settings).not.toHaveProperty("speed");
+  });
+
+  it("rejects values outside 0.7..1.2, which the API refuses", () => {
+    expect(fails({ speed: "1.5" })).toContain("--speed must be a number from 0.7 to 1.2");
+    expect(fails({ speed: "0.5" })).toContain("--speed must be");
+  });
+
+  it("warns on eleven_v3, which ignores it", () => {
+    const req = build({ model: "eleven_v3", speed: "1.1" });
+    expect(req.warnings[0]).toContain("--speed is not used by eleven_v3");
   });
 });
 

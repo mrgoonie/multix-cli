@@ -30,6 +30,7 @@ export interface TtsOptions {
   similarityBoost: string;
   style: string;
   speakerBoost: boolean;
+  speed?: string;
   cloneStrength?: string;
   languageCode?: string;
   seed?: string;
@@ -55,6 +56,7 @@ const SETTING_FLAG: Record<VoiceSettingKey, string> = {
   similarity_boost: "--similarity-boost",
   style: "--style",
   use_speaker_boost: "--no-speaker-boost",
+  speed: "--speed",
   clone_strength: "--clone-strength",
 };
 const SETTING_OPTION: Record<VoiceSettingKey, keyof TtsOptions> = {
@@ -62,6 +64,7 @@ const SETTING_OPTION: Record<VoiceSettingKey, keyof TtsOptions> = {
   similarity_boost: "similarityBoost",
   style: "style",
   use_speaker_boost: "speakerBoost",
+  speed: "speed",
   clone_strength: "cloneStrength",
 };
 
@@ -75,6 +78,14 @@ function unit(flag: string, raw: string): number {
   const n = Number(raw);
   if (raw.trim() === "" || !Number.isFinite(n) || n < 0 || n > 1) {
     throw new ValidationError(`${flag} must be a number from 0 to 1, got "${raw}"`);
+  }
+  return n;
+}
+
+function speedValue(raw: string): number {
+  const n = Number(raw);
+  if (raw.trim() === "" || !Number.isFinite(n) || n < 0.7 || n > 1.2) {
+    throw new ValidationError(`--speed must be a number from 0.7 to 1.2, got "${raw}"`);
   }
   return n;
 }
@@ -114,10 +125,12 @@ export function buildTtsRequest(o: TtsOptions, explicit: ExplicitOptions): TtsRe
     similarity_boost: () => unit("--similarity-boost", o.similarityBoost),
     style: () => unit("--style", o.style),
     use_speaker_boost: () => o.speakerBoost,
+    speed: () => speedValue(o.speed ?? ""),
     clone_strength: () => unit("--clone-strength", o.cloneStrength ?? ""),
   };
   for (const key of Object.keys(values) as VoiceSettingKey[]) {
     const isExplicit = explicit.has(SETTING_OPTION[key]);
+    if (key === "speed" && o.speed === undefined) continue;
     if (key === "clone_strength") {
       if (o.cloneStrength === undefined) continue;
       if (caps && !caps.voiceSettings.includes(key)) {

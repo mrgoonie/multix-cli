@@ -8,6 +8,7 @@ export const ELEVENLABS_TTS_MODELS = [
   "eleven_v4",
   "eleven_v4_turbo",
   "eleven_v3",
+  "eleven_v3_conversational",
   "eleven_multilingual_v2",
   "eleven_flash_v2_5",
   "eleven_flash_v2",
@@ -62,11 +63,14 @@ export type VoiceSettingKey =
   | "similarity_boost"
   | "style"
   | "use_speaker_boost"
+  | "speed"
   | "clone_strength";
 
 /**
  * What each TTS model accepts, from GET /v1/models (`can_use_style`,
  * `can_use_speaker_boost`, `maximum_text_length_per_request`) and the model docs.
+ * `speed` is v2-family only: those models refuse it outside 0.7..1.2 (HTTP 400),
+ * while v3 and v4 accept any value and ignore it.
  * https://elevenlabs.io/docs/overview/capabilities/text-to-speech/eleven-v4
  */
 export interface TtsModelCapabilities {
@@ -102,7 +106,7 @@ const V4: TtsModelCapabilities = {
 
 const FLASH_TURBO = (maxChars: number, languageCode: boolean): TtsModelCapabilities => ({
   maxChars,
-  voiceSettings: ["stability", "similarity_boost"],
+  voiceSettings: ["stability", "similarity_boost", "speed"],
   languageCode,
   contextText: true,
   audioTags: false,
@@ -124,9 +128,18 @@ export const TTS_MODEL_CAPABILITIES: Readonly<
     ssml: false,
     strict: false,
   },
+  eleven_v3_conversational: {
+    maxChars: 5_000,
+    voiceSettings: ["stability", "similarity_boost", "use_speaker_boost"],
+    languageCode: true,
+    contextText: false,
+    audioTags: true,
+    ssml: false,
+    strict: false,
+  },
   eleven_multilingual_v2: {
     maxChars: 10_000,
-    voiceSettings: ["stability", "similarity_boost", "style", "use_speaker_boost"],
+    voiceSettings: ["stability", "similarity_boost", "style", "use_speaker_boost", "speed"],
     languageCode: false,
     contextText: true,
     audioTags: false,

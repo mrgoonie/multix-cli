@@ -20,6 +20,8 @@ export interface ResponseUsage {
   cost_usd?: number;
   /** Provider credits consumed (Leonardo, Runway, HeyGen, ...). */
   credits?: number;
+  /** Where `credits` came from: a body key path or `header.<name>`, so an estimate stays recognizable. */
+  credits_source?: string;
   /** Flattened numeric fields worth keeping, by key path. */
   metrics: Record<string, number>;
   /** Job / request ids the provider returned. */
@@ -147,6 +149,7 @@ export function extractUsage(body: unknown, headers?: Headers | null): ResponseU
       out.cost_usd = value;
     } else if (out.credits === undefined && /credit/i.test(leaf)) {
       out.credits = value;
+      out.credits_source = path;
     }
   }
   if (headers) {
@@ -157,7 +160,10 @@ export function extractUsage(body: unknown, headers?: Headers | null): ResponseU
       if (Number.isFinite(n) && raw.trim() !== "") {
         out.metrics[`header.${name}`] = n;
         // ElevenLabs bills in characters (its credit unit) and reports them here.
-        if (name === "character-cost" && out.credits === undefined) out.credits = n;
+        if (name === "character-cost" && out.credits === undefined) {
+          out.credits = n;
+          out.credits_source = `header.${name}`;
+        }
       } else if (/request-?id/i.test(name) && raw.length <= 128 && out.ids.length < 5)
         out.ids.push(raw);
     }

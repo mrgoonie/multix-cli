@@ -34,6 +34,7 @@ describe.skipIf(!enabled)("elevenlabs live smoke", () => {
         expect(result.ok).toBe(true);
         expect(result.model).toBe(model);
         expect(result.usage.credits).toBeGreaterThan(0);
+        expect(result.usage.credits_source).toBe("header.character-cost");
         expect(result.usage.metrics["header.character-cost"]).toBe(result.usage.credits);
         const files = fs.readdirSync(dir);
         const audio = files.find((f) => f.endsWith(".mp3"));

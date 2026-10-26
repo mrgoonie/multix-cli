@@ -34,15 +34,16 @@ one to three minutes.
 | `eleven_v4` | 10,000 | `--stability`, `--similarity-boost`, `--clone-strength` | Highest quality, audio tags, 90+ languages |
 | `eleven_v4_turbo` | 10,000 | `--stability`, `--similarity-boost`, `--clone-strength` | Low latency, half the character cost of v4 |
 | `eleven_v3` | 5,000 | `--stability`, `--similarity-boost` | Audio tags; no `--previous-text`/`--next-text` |
-| `eleven_multilingual_v2` (default) | 10,000 | all but `--clone-strength` | Ignores `--language-code` |
-| `eleven_flash_v2_5`, `eleven_turbo_v2_5` | 40,000 | `--stability`, `--similarity-boost` | Low latency |
-| `eleven_flash_v2`, `eleven_turbo_v2` | 30,000 | `--stability`, `--similarity-boost` | English only |
+| `eleven_v3_conversational` | 5,000 | `--stability`, `--similarity-boost`, `--no-speaker-boost` | Like v3, at half the character cost |
+| `eleven_multilingual_v2` (default) | 10,000 | all but `--clone-strength` (incl. `--speed`) | Ignores `--language-code` |
+| `eleven_flash_v2_5`, `eleven_turbo_v2_5` | 40,000 | `--stability`, `--similarity-boost`, `--speed` | Low latency |
+| `eleven_flash_v2`, `eleven_turbo_v2` | 30,000 | `--stability`, `--similarity-boost`, `--speed` | English only |
 
 ```bash
 multix elevenlabs tts --model eleven_v4 --language-code en \
   --text "[whispers] Keep it covered. [sighs] They may not ask as politely." --output line.mp3
 multix elevenlabs tts --model eleven_v4_turbo --text "Hi there." --timestamps
-multix elevenlabs models   # live model catalog
+multix elevenlabs models   # live catalog: languages, character limit, cost multiplier
 ```
 
 `tts` checks options against the model before calling the API, so a mismatch
@@ -51,7 +52,8 @@ costs nothing:
 - Eleven v4 and v4 Turbo reject `--style` and `--no-speaker-boost`; the API
   would accept and ignore them. `--clone-strength` (0 to 1, start at 0) only
   affects Professional Voice Clones fine-tuned for v4.
-- `--previous-text`/`--next-text` fail for `eleven_v3`, which the API refuses.
+- `--previous-text`/`--next-text` fail for the v3 models, which the API refuses.
+- `--speed` must be 0.7 to 1.2 (the API refuses other values); v3 and v4 ignore it.
 - For the older models an option the model ignores only prints a warning and
   is still sent, so existing scripts behave as before.
 - Audio tags such as `[whispers]` work on v4, v4 Turbo and v3; other models

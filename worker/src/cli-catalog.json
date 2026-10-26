@@ -4826,7 +4826,7 @@
             {
               "long": "--model",
               "flags": "--model <id>",
-              "description": "TTS model (eleven_v4|eleven_v4_turbo|eleven_v3|eleven_multilingual_v2|eleven_flash_v2_5|eleven_flash_v2|eleven_turbo_v2_5|eleven_turbo_v2)",
+              "description": "TTS model (eleven_v4|eleven_v4_turbo|eleven_v3|eleven_v3_conversational|eleven_multilingual_v2|eleven_flash_v2_5|eleven_flash_v2|eleven_turbo_v2_5|eleven_turbo_v2)",
               "required": false,
               "takesValue": true,
               "valueOptional": false,
@@ -4889,6 +4889,16 @@
               "negatable": true
             },
             {
+              "long": "--speed",
+              "flags": "--speed <n>",
+              "description": "Speaking speed 0.7..1.2 (multilingual_v2, Flash/Turbo; v3 and v4 ignore it)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
               "long": "--clone-strength",
               "flags": "--clone-strength <n>",
               "description": "Professional Voice Clone adherence 0..1 (eleven_v4/eleven_v4_turbo only; 0 recommended)",
@@ -4921,7 +4931,7 @@
             {
               "long": "--previous-text",
               "flags": "--previous-text <str>",
-              "description": "Preceding text for context continuity (not eleven_v3)",
+              "description": "Preceding text for context continuity (not the v3 models)",
               "required": false,
               "takesValue": true,
               "valueOptional": false,
@@ -4931,7 +4941,7 @@
             {
               "long": "--next-text",
               "flags": "--next-text <str>",
-              "description": "Following text for context continuity (not eleven_v3)",
+              "description": "Following text for context continuity (not the v3 models)",
               "required": false,
               "takesValue": true,
               "valueOptional": false,
@@ -6032,7 +6042,7 @@
         },
         {
           "command": "elevenlabs models",
-          "description": "List available ElevenLabs models",
+          "description": "List ElevenLabs models live: capabilities, languages, character limit and cost multiplier",
           "positionals": [],
           "options": []
         }

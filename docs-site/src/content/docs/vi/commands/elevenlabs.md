@@ -33,15 +33,16 @@ một đến ba phút.
 | `eleven_v4` | 10.000 | `--stability`, `--similarity-boost`, `--clone-strength` | Chất lượng cao nhất, audio tags, hơn 90 ngôn ngữ |
 | `eleven_v4_turbo` | 10.000 | `--stability`, `--similarity-boost`, `--clone-strength` | Độ trễ thấp, chi phí ký tự bằng một nửa v4 |
 | `eleven_v3` | 5.000 | `--stability`, `--similarity-boost` | Audio tags; không có `--previous-text`/`--next-text` |
-| `eleven_multilingual_v2` (mặc định) | 10.000 | tất cả trừ `--clone-strength` | Bỏ qua `--language-code` |
-| `eleven_flash_v2_5`, `eleven_turbo_v2_5` | 40.000 | `--stability`, `--similarity-boost` | Độ trễ thấp |
-| `eleven_flash_v2`, `eleven_turbo_v2` | 30.000 | `--stability`, `--similarity-boost` | Chỉ tiếng Anh |
+| `eleven_v3_conversational` | 5.000 | `--stability`, `--similarity-boost`, `--no-speaker-boost` | Như v3, chi phí ký tự bằng một nửa |
+| `eleven_multilingual_v2` (mặc định) | 10.000 | tất cả trừ `--clone-strength` (gồm `--speed`) | Bỏ qua `--language-code` |
+| `eleven_flash_v2_5`, `eleven_turbo_v2_5` | 40.000 | `--stability`, `--similarity-boost`, `--speed` | Độ trễ thấp |
+| `eleven_flash_v2`, `eleven_turbo_v2` | 30.000 | `--stability`, `--similarity-boost`, `--speed` | Chỉ tiếng Anh |
 
 ```bash
 multix elevenlabs tts --model eleven_v4 --language-code vi \
   --text "[whispers] Giữ bí mật nhé. [sighs] Họ sẽ không hỏi lịch sự vậy đâu." --output line.mp3
 multix elevenlabs tts --model eleven_v4_turbo --text "Xin chào." --timestamps
-multix elevenlabs models   # catalog model live
+multix elevenlabs models   # catalog live: số ngôn ngữ, giới hạn ký tự, hệ số chi phí
 ```
 
 `tts` kiểm tra tùy chọn theo model trước khi gọi API, nên cấu hình sai không
@@ -50,7 +51,8 @@ tốn phí:
 - Eleven v4 và v4 Turbo từ chối `--style` và `--no-speaker-boost`; API sẽ nhận
   rồi âm thầm bỏ qua chúng. `--clone-strength` (0 đến 1, nên bắt đầu từ 0) chỉ
   có tác dụng với Professional Voice Clone đã fine-tune cho v4.
-- `--previous-text`/`--next-text` báo lỗi với `eleven_v3`, vì API từ chối.
+- `--previous-text`/`--next-text` báo lỗi với các model v3, vì API từ chối.
+- `--speed` phải từ 0.7 đến 1.2 (API từ chối giá trị khác); v3 và v4 bỏ qua nó.
 - Với các model cũ, tùy chọn model không dùng chỉ in cảnh báo và vẫn được gửi,
   nên script hiện có chạy như trước.
 - Audio tags như `[whispers]` hoạt động trên v4, v4 Turbo và v3; model khác sẽ

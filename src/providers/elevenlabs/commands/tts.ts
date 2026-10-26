@@ -54,6 +54,10 @@ export function registerTtsCommand(parent: Command): void {
     .option("--style <n>", "Style exaggeration 0..1 (multilingual_v2 only)", "0.0")
     .option("--no-speaker-boost", "Disable speaker boost (multilingual_v2 only; default: enabled)")
     .option(
+      "--speed <n>",
+      "Speaking speed 0.7..1.2 (multilingual_v2, Flash/Turbo; v3 and v4 ignore it)",
+    )
+    .option(
       "--clone-strength <n>",
       "Professional Voice Clone adherence 0..1 (eleven_v4/eleven_v4_turbo only; 0 recommended)",
     )
@@ -62,8 +66,8 @@ export function registerTtsCommand(parent: Command): void {
       "ISO 639 language code to enforce (v4, v3, Flash/Turbo v2.5; not multilingual_v2)",
     )
     .option("--seed <n>", "Determinism seed (0..4294967295)")
-    .option("--previous-text <str>", "Preceding text for context continuity (not eleven_v3)")
-    .option("--next-text <str>", "Following text for context continuity (not eleven_v3)")
+    .option("--previous-text <str>", "Preceding text for context continuity (not the v3 models)")
+    .option("--next-text <str>", "Following text for context continuity (not the v3 models)")
     .option("--timestamps", "Also save character timing as <audio>.alignment.json")
     .option("--output <path>", "Copy generated audio to this path")
     .option("-v, --verbose", "Verbose logging")

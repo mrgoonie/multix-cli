@@ -76,13 +76,17 @@ describe("telemetry helpers", () => {
         { tokens: { input: 2 }, cost_usd: 0.02, metrics: { a: 2 }, ids: [] },
       ],
       getUsage: new Map([
-        ["host/status/:id", { tokens: {}, credits: 7, metrics: { b: 9 }, ids: [] }],
+        [
+          "host/status/:id",
+          { tokens: {}, credits: 7, credits_source: "cost.credits", metrics: { b: 9 }, ids: [] },
+        ],
       ]),
     } as RunState;
     expect(summarizeUsage(state)).toEqual({
       tokens: { input: 3 },
       cost_usd: 0.03,
       credits: 7,
+      credits_source: "cost.credits",
       metrics: { a: 3, b: 9 },
     });
   });
