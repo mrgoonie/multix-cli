@@ -34,6 +34,13 @@ The opt-ins `MULTIX_ALLOW_PROJECT_BASE_URL` and `MULTIX_LEGACY_CLAUDE_ENV`, and
 `MULTIX_HISTORY_FILE` (where the run ledger is written), are refused: a repository must not widen what it can do with your keys or pull in
 the `.claude` credentials from your home folder.
 
+`MULTIX_OPERATION_ID` is refused too. It names the logical operation a run's
+[cost receipt](/reference/for-ai-agents/#cost-receipt) belongs to, so several
+runs (submit, status polls, downloads, webhook replays) are counted once; the
+default is `<provider>:<job id>` or `run:<history id>`. It is per run, so set it
+in the shell for that run: one id in a project file would merge the spend of
+every run into one operation.
+
 [`.env.example`](https://github.com/mrgoonie/multix-cli/blob/main/.env.example)
 lists them, along with the two opt-ins. Any other name, for example `NODE_OPTIONS`, `npm_config_registry`,
 `LD_PRELOAD`, `HTTPS_PROXY` or `NODE_TLS_REJECT_UNAUTHORIZED`, is not loaded,
