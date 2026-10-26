@@ -99,7 +99,13 @@ describe("command capabilities", () => {
         .filter((r) => r.provider === "openrouter")
         .map((r) => r.task),
     );
-    expect([...tasks].sort()).toEqual(["image", "image-edit", "image-to-video", "speech"]);
+    expect([...tasks].sort()).toEqual([
+      "image",
+      "image-edit",
+      "image-to-video",
+      "speech",
+      "transcription",
+    ]);
   });
 
   it("reports outputs and model scope on rows, keeping the old row fields", () => {
@@ -115,7 +121,8 @@ describe("command capabilities", () => {
   it("finds the command that takes any catalog id for a task, and the generic runner", () => {
     expect(catalogCommand("openrouter", "image")).toBe("openrouter generate");
     expect(catalogCommand("openrouter", "speech")).toBe("openrouter tts");
-    expect(catalogCommand("openrouter", "transcription")).toBeNull();
+    expect(catalogCommand("openrouter", "transcription")).toBe("openrouter transcribe");
+    expect(catalogCommand("openrouter", "video-edit")).toBeNull();
     expect(catalogCommand("fal", "speech")).toBe("fal tts");
     expect(catalogCommand("fal", "transcription")).toBeNull();
     expect(genericRunner("fal")).toBe("fal run");
@@ -257,21 +264,21 @@ describe("merged model views", () => {
   });
 
   it("does not point catalog models at a command that cannot run them", () => {
-    const views = mergeModelViews("transcription", [
+    const views = mergeModelViews("video-edit", [
       {
-        source: { ...source("openrouter", "fresh"), task: "transcription" },
+        source: { ...source("openrouter", "fresh"), task: "video-edit" },
         models: [
           {
             provider: "openrouter",
-            model: "vendor/stt-1",
-            task: "transcription",
+            model: "vendor/video-edit-1",
+            task: "video-edit",
             voices: ["a", "b"],
             pricing: { prompt: "0.1" },
           },
         ],
       },
     ]);
-    const or = views.find((v) => v.model === "vendor/stt-1");
+    const or = views.find((v) => v.model === "vendor/video-edit-1");
     expect(or).toMatchObject({ verified: false, command: null, voices: 2 });
     expect(or?.runner).toBeUndefined();
     expect(or?.note).toMatch(/no multix command/);

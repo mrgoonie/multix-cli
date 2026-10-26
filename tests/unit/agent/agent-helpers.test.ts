@@ -87,6 +87,31 @@ describe("telemetry helpers", () => {
     });
   });
 
+  it("counts a POST estimate once when a GET read of the same generation reports the charge", () => {
+    const state = {
+      ...run,
+      postUsage: [
+        { tokens: {}, cost_usd: 0.000018, metrics: {}, ids: ["gen-1"] },
+        { tokens: {}, cost_usd: 0.01, metrics: {}, ids: ["other"] },
+      ],
+      getUsage: new Map([
+        ["host/generation", { tokens: {}, cost_usd: 0.0000177, metrics: {}, ids: ["gen-1"] }],
+      ]),
+    } as RunState;
+    expect(summarizeUsage(state)?.cost_usd).toBe(0.010018);
+  });
+
+  it("settles a POST only in the unit the GET read reports", () => {
+    const state = {
+      ...run,
+      postUsage: [{ tokens: {}, cost_usd: 0.5, credits: 4, metrics: {}, ids: ["j1"] }],
+      getUsage: new Map([
+        ["host/status/:id", { tokens: {}, credits: 10, metrics: {}, ids: ["j1"] }],
+      ]),
+    } as RunState;
+    expect(summarizeUsage(state)).toMatchObject({ cost_usd: 0.5, credits: 10 });
+  });
+
   it("keeps where each provider reported its credits", () => {
     const src = { credits: "api.elevenlabs.io header.character-cost" };
     const state = {

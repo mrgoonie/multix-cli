@@ -160,7 +160,8 @@ Use explicit overrides only when you need a different default. Available
 settings include `IMAGE_GEN_MODEL`, `VIDEO_GEN_MODEL`, `MULTIMODAL_MODEL`,
 `GEMINI_TTS_MODEL`, `OPENAI_IMAGE_MODEL`, `OPENAI_TTS_MODEL`,
 `OPENAI_STT_MODEL`, `OPENROUTER_IMAGE_MODEL`, `OPENROUTER_TTS_MODEL` (default
-`google/gemini-3.8-flash-tts`), `LEONARDO_BASE_URL`,
+`google/gemini-3.8-flash-tts`), `OPENROUTER_STT_MODEL` (default
+`openai/whisper-large-v3-turbo`), `LEONARDO_BASE_URL`,
 `BYTEPLUS_BASE_URL`, `BYTEPLUS_IMAGE_MODEL`, `BYTEPLUS_VIDEO_MODEL`,
 `BYTEPLUS_3D_MODEL`, `FAL_BASE_URL`, `FAL_IMAGE_MODEL`, `FAL_VIDEO_MODEL`, and
 `FAL_VIDEO_IMAGE_MODEL` (fal's image-to-video default, used when

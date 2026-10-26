@@ -30,6 +30,7 @@ const LIST_COMMANDS = new Set([
   "models",
   "video-models",
   "speech-models",
+  "transcription-models",
   "voices",
   "avatars",
   "styles",
@@ -100,6 +101,7 @@ function lister(program: Command, group: string, task: string): string | undefin
         LIST_COMMANDS.has(c.name()) &&
         (c.name() !== "voices" || task === "speech") &&
         (c.name() !== "speech-models" || task === "speech") &&
+        (c.name() !== "transcription-models" || task === "transcription") &&
         (c.name() !== "avatars" || task !== "speech") &&
         (c.name() !== "video-models" || task.includes("video")),
     );

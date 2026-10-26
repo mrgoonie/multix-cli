@@ -137,6 +137,7 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
     caps: VIDEO_CAPS,
   },
   "openrouter tts": { fileOptions: { "text-file": "file", "turns-file": "file" } },
+  "openrouter transcribe": { fileOptions: { input: "file" } },
   "leonardo generate": { caps: { count: ["num"] } },
   "leonardo image-to-image": { caps: { count: ["num"] } },
   "leonardo video": { caps: { resolution: ["resolution"] } },
