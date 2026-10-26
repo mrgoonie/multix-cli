@@ -1,6 +1,6 @@
 ---
 title: REST API and account API keys
-description: Use the multix MCP server's REST API from scripts and CI with an account API key to manage provider keys and R2 storage, read the CLI catalog, run, poll and cancel CLI jobs, and receive signed webhooks when jobs end.
+description: Use the multix MCP server's REST API from scripts and CI with an account API key to manage provider keys and R2 storage, read the CLI catalog, run, poll and cancel CLI jobs, receive signed webhooks when jobs end, and read usage, costs, budgets and the activity log.
 ---
 
 The [remote MCP server](/guides/mcp-server/) also serves a JSON REST API at
@@ -80,6 +80,20 @@ All paths are relative to `/api/v1`.
 | `DELETE` | `/events/subscriptions/{id}` | Revoke a subscription. |
 | `GET` | `/events/dead-letters` | Deliveries that were given up (ids, reason, attempts; no payload). |
 | `GET` | `/events/audit` | Subscription audit log: created, revoked, disabled, expired. |
+| `GET` | `/usage/summary` | Usage totals, optional groups, a daily series and every budget's status. |
+| `GET` | `/usage/operations` | Recorded operations, newest first, paged. |
+| `GET` | `/usage/operations/{op_id}` | One operation and its cost adjustments. |
+| `POST` | `/usage/operations/{op_id}/adjustments` | Record a refund or correction on an operation. |
+| `GET` | `/usage/export?format=csv\|json` | The filtered operations as CSV (default) or JSON. |
+| `POST` | `/usage/import` | Import CLI run history; what `multix history push` sends. |
+| `DELETE` | `/usage/data?confirm=delete` | Delete every usage record of the account. Budgets stay. |
+| `GET` | `/budgets` | Budgets with their spend, forecast and crossed thresholds. |
+| `POST` | `/budgets` | Create a budget. |
+| `GET` | `/budgets/{id}` | One budget's status. |
+| `PUT` | `/budgets/{id}` | Replace a budget (same body as create). |
+| `DELETE` | `/budgets/{id}` | Delete a budget. |
+| `GET` | `/activities` | Account activity log, newest first, paged. |
+| `GET` | `/activities/verify` | Check the activity log's hash chain. |
 
 Provider key names are the env names the CLI reads (for example
 `GEMINI_API_KEY`), plus the Cloudflare Workers AI names; `GET /provider-keys`
@@ -382,6 +396,136 @@ export function verifyMultixWebhook(secret, headers, rawBody) {
 or expired. To catch up after an outage, read the jobs named there with
 `GET /jobs/{id}`.
 
+## Usage, budgets and activities
+
+When the Worker has the `MULTIX_LEDGER` binding, each account has its own
+usage ledger: one record (an *operation*) per `multix_run` job, REST job and
+CLI run uploaded with [`multix history push`](/reference/for-ai-agents/#run-history),
+plus cost adjustments, budgets and an activity log. One account never reads
+another's records. Without the binding these routes answer
+`503 ledger_unavailable`. The dashboard shows the same records (see
+[Usage dashboard](/guides/mcp-server/#usage-dashboard)).
+
+How to read the numbers:
+
+- **Unknown is `null`, never `0`.** A cost, token count or credit amount the
+  provider did not report stays `null`. `known_cost_usd` adds up only the
+  known costs (provider-reported, estimated and adjustments), and
+  `unknown_cost_operations` counts the operations it could not include, so a
+  partial total is never shown as a full one. Costs are a record, not a bill.
+- Each operation's `cost_provenance` says where its cost came from
+  (`provider_reported`, `estimated`, `billed` or `unknown`).
+- Operation ids are `job_<job id>` for jobs and `cli_<history id>` for
+  imported CLI runs. A record is written once per id: a retried delivery or a
+  second push of the same run counts as a duplicate, never twice.
+- Only measurements are kept: ids, names, timings, counts, sizes, hashes and
+  the numbers a provider reported. Prompts, CLI arguments, working folders,
+  error text, signed URLs and keys are never stored.
+- Operations, adjustments and activities older than **400 days** are pruned
+  daily. Export them first to keep them longer.
+
+### Summaries and operations
+
+`GET /usage/summary`, `GET /usage/operations` and `GET /usage/export` take
+the same filters:
+
+- `from`, `to`: epoch milliseconds or an ISO date. Default: the last 30 days;
+  at most 400 days.
+- `provider`, `model`, `command`, `client_id`, `project_id`: exact values.
+- `source` (`mcp`, `rest`, `cli`, `unknown`) and `status` (`running`,
+  `succeeded`, `failed`, `timed_out`, `canceled`).
+
+The summary also takes `group_by` (`provider`, `model`, `source`, `command`,
+`status`, `client` or `project`) and `tz_offset_minutes` (minutes east of UTC
+for the daily series, default `0`):
+
+```bash
+curl -s "https://multix.zuey.me/api/v1/usage/summary?from=2026-10-01&group_by=provider" \
+  -H "Authorization: Bearer $MULTIX_API_KEY"
+```
+
+It returns `totals` (operations, success rate, known cost and its parts,
+operations of unknown cost, tokens, credits, outputs, HTTP errors, p50/p95
+latency), `groups` when `group_by` is set, a daily `series` and `budgets`, the
+status of every budget. `GET /usage/operations` lists operations newest first
+(`limit` 1–200, default 50); pass the response's `next_cursor` as `cursor`
+for the next page. `GET /usage/operations/{op_id}` returns `{ operation,
+adjustments }`.
+
+### Adjustments, export and deletion
+
+Costs are never edited in place. To record a refund or a correction, add an
+adjustment: a signed USD amount that counts in every total (a refund is
+negative).
+
+```bash
+curl -s -X POST https://multix.zuey.me/api/v1/usage/operations/job_<job_id>/adjustments \
+  -H "Authorization: Bearer $MULTIX_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"kind": "refund", "amount_usd": -0.04, "note": "provider credit"}'
+```
+
+`kind` is `refund` or `correction`, `amount_usd` lies between -1,000,000 and
+1,000,000, and `note` is optional (at most 200 characters).
+
+`GET /usage/export?format=csv` (the default) downloads the filtered
+operations, oldest first, at most 10,000 rows: ISO 8601 UTC times, empty cells
+for unknown values, and the header `x-multix-truncated: true` when the export
+was capped. `format=json` returns `{ operations, truncated }`. Every export is
+logged in the activity log.
+
+`POST /usage/import` is what `multix history push` calls: `{ "entries": [...] }`
+with at most 200 entries and 512 KiB per request. It answers
+`{ accepted, duplicates, rejected }`; invalid entries are rejected one by one,
+and runs already imported count as duplicates.
+
+`DELETE /usage/data?confirm=delete` deletes every operation, adjustment,
+budget alert and activity of the account. Budget definitions stay, and one
+`ledger.deleted` activity records the deletion.
+
+### Budgets
+
+Budgets are soft: they raise alerts and never stop a job. An account can have
+at most **20**.
+
+```bash
+curl -s -X POST https://multix.zuey.me/api/v1/budgets \
+  -H "Authorization: Bearer $MULTIX_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Gemini this month", "scope_kind": "provider", "scope_value": "gemini",
+       "period": "month", "limit_usd": 50, "thresholds": [50, 80, 100]}'
+```
+
+- `scope_kind`: `account` (no `scope_value`), `provider`, `model`, `command`,
+  `source`, `client` or `project`, with the matching `scope_value`.
+- `period`: `day`, `week` or `month`, in UTC; weeks start on Monday.
+- `thresholds`: 1–5 percentages (default `[50, 80, 100]`). Crossing one is
+  recorded once per period as a `budget.threshold_crossed` activity.
+
+The status (from `GET /budgets`, `GET /budgets/{id}` and the usage summary)
+adds the current period's `spent_usd`, `percent`, `state` (`ok`, `warning`
+once the lowest threshold is reached, `exceeded` at 100 %), the crossed
+`alerts`, and `forecast_usd`, a linear projection to the period end (`null`
+early in the period). Spend counts known costs only; `unknown_cost_operations`
+says how many operations in scope could not be counted. `PUT /budgets/{id}`
+replaces the whole budget.
+
+### Activity log
+
+`GET /activities` lists what happened on the account, newest first: jobs,
+imports, exports, adjustments, budgets and their alerts, and changes made with
+an API key (provider keys by name, storage, API keys, webhooks by host), with
+the `actor` that made them. Never key values, prompts or full URLs. Filter
+with `from`, `to`, `kind` (a prefix such as `budget.` or `job.failed`) and `q`
+(text search, at most 100 characters); page with `limit` and `cursor` as for
+operations.
+
+Entries form a hash chain: each one includes the hash of the one before it.
+`GET /activities/verify` recomputes the chain and returns
+`{ ok, checked, first_bad_seq }`, so an edited or removed entry shows up as
+the first `seq` that no longer matches. Pruning removes the oldest entries;
+the check starts from the oldest one left.
+
 ## Errors
 
 Errors are JSON with a stable `code` and a message that never contains
@@ -396,15 +540,17 @@ submitted values:
 | `400` | `bad_request` | Invalid JSON, field or value, unknown provider key name, or a command, option or input `multix_run` would reject. |
 | `401` | `unauthorized` | Missing, malformed, unknown or revoked API key. |
 | `403` | `forbidden` | The account is no longer in the sign-in allowlist. |
-| `404` | `not_found` | Unknown path, job, API key or event subscription, or one of another account. |
+| `404` | `not_found` | Unknown path, job, API key, event subscription, operation or budget, or one of another account. |
 | `405` | `method_not_allowed` | Wrong method; the `Allow` header lists the accepted ones. |
-| `413` | `payload_too_large` | Body over 64 KiB. |
+| `413` | `payload_too_large` | Body over 64 KiB (512 KiB for `POST /usage/import`). |
 | `415` | `unsupported_media_type` | Body not sent as `application/json`. |
 | `409` | `limit_reached` | The account already has 10 active event subscriptions. |
+| `409` | `budget_limit` | The account already has 20 budgets. |
 | `422` | `storage_check_failed` | The R2 access check failed; nothing was saved. |
 | `429` | `rate_limited` | Too many requests; retry after the `Retry-After` seconds. |
 | `429` | `busy` | Job caps reached: the account's running-job limit or the server's total. Wait for a job to end (or cancel one) instead of retrying at once. |
 | `503` | `unavailable` | The server has no job container, so jobs cannot run, or no events binding, so event routes are off; or a new subscription's `callback_url` host could not be resolved (retry after `Retry-After`). |
+| `503` | `ledger_unavailable` | The server keeps no usage records (no `MULTIX_LEDGER` binding), so usage, budget and activity routes are off. |
 | `500` | `internal` | Unexpected server error. |
 
 The set of codes is defined in `worker/src/api/api-http.ts`.
@@ -422,4 +568,7 @@ The set of codes is defined in `worker/src/api/api-http.ts`.
 - **API keys:** at most 10 per account; created only in the dashboard.
 - **Event subscriptions:** at most 10 active per account; lifetime 1 hour to
   90 days (default 30 days).
-- **Bodies:** JSON objects up to 64 KiB.
+- **Usage ledger:** pages of 1–200 entries (default 50), ranges of at most
+  400 days, exports of at most 10,000 operations, imports of at most 200
+  entries and 512 KiB, at most 20 budgets, and 400 days of retention.
+- **Bodies:** JSON objects up to 64 KiB (512 KiB for `POST /usage/import`).

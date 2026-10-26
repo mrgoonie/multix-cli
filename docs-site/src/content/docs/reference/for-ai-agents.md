@@ -111,6 +111,22 @@ multix rerun h_mfz3k2ab1c9d         # run it again (extra args are appended)
 `MULTIX_HISTORY=0` turns the ledger off. `MULTIX_HISTORY_FILE` moves it (shell
 or `~/.multix/.env` only, not a project `.env`).
 
+`multix history push` is opt-in; run it only when the user asks. It uploads
+the runs of the last 30 days (`--since`, `--failed`, `--provider` and
+`--command` narrow it) to the usage ledger of the user's multix account, where
+they show next to remote jobs in the
+[usage summary and dashboard](/guides/mcp-server/#usage-and-costs). Only
+measurements are sent: never prompts, arguments, the working folder, error
+messages, output paths or media. It needs `MULTIX_API_KEY` (see
+[Environment variables](/reference/environment/#usage-upload)); `--dry-run`
+shows the count and one sample entry without sending anything, and pushing
+the same runs again only counts duplicates.
+
+```bash
+multix history push --dry-run       # what would be sent
+multix history push --since 7d      # upload the last week
+```
+
 ## Safe command workflow
 
 - Do not print or request secret values; `multix check` reports which keys are

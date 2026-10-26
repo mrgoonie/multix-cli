@@ -587,6 +587,14 @@ server has its job container:
    `url` is null and a `note` mentions R2, tell the user to configure R2 at
    `/dashboard`. `stdout` still holds any provider URLs the CLI printed.
 
+For "how much did I spend / am I over budget", call `multix_usage_summary`
+(read only; `days` default 30, max 90; optional `group_by` such as `provider`
+or `model`; listed only when the server keeps a usage ledger). Report
+`known_cost_usd` together with `unknown_cost_operations`: an unreported cost is
+`null`, not `0`, so the total is a record, not a bill. Over REST the same
+ledger is at `GET /usage/summary`, `/usage/operations`, `/usage/export`,
+`/budgets` and `/activities`.
+
 Without an MCP client, the same server has a REST API at `/api/v1`
 (`Authorization: Bearer <mxk_… key>` from the user's `/dashboard`; `POST /jobs`
 takes the `multix_run` input and returns `202` while running, poll `next.path`).

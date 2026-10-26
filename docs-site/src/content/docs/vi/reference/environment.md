@@ -29,9 +29,11 @@ chỉ được đặt những biến mà chính `multix` đọc:
   `MULTIX_DISABLE_HOME_ENV` (không có tác dụng ở đó), cùng `NO_COLOR`.
 
 Hai biến opt-in `MULTIX_ALLOW_PROJECT_BASE_URL` và `MULTIX_LEGACY_CLAUDE_ENV`,
-cùng `MULTIX_HISTORY_FILE` (nơi ghi ledger lịch sử chạy), bị từ chối: repository
-không được nới rộng những gì nó có thể làm với key của bạn, chọn nơi ghi lịch sử
-chạy, hay kéo theo credential trong các file `.claude` ở thư mục home.
+`MULTIX_HISTORY_FILE` (nơi ghi ledger lịch sử chạy), cùng các thiết lập
+[tải lên mức sử dụng](#tải-lên-mức-sử-dụng) `MULTIX_API_KEY` và
+`MULTIX_REMOTE_URL` bị từ chối: repository không được nới rộng những gì nó có
+thể làm với key của bạn, chọn nơi ghi hay nơi tải lên lịch sử chạy, hay kéo theo
+credential trong các file `.claude` ở thư mục home.
 
 [`.env.example`](https://github.com/mrgoonie/multix-cli/blob/main/.env.example)
 liệt kê các biến này, cùng hai biến opt-in. Mọi tên khác, ví dụ `NODE_OPTIONS`, `npm_config_registry`,
@@ -77,6 +79,18 @@ một request API bị chuyển hướng (redirect) sang host khác, hoặc từ
 multix dừng lại và báo mã HTTP 3xx thay vì đi theo. Bản tải xuống mà provider
 chuyển sang host lưu trữ vẫn hoạt động, nhưng header chứa key được gỡ bỏ trước
 khi đi theo redirect đó.
+
+## Tải lên mức sử dụng
+
+`multix history push` (tùy chọn tự bật) tải lịch sử chạy cục bộ lên ledger mức
+sử dụng của một tài khoản multix; xem [Lịch sử chạy](/vi/reference/for-ai-agents/#lịch-sử-chạy).
+Đặt các biến này trong shell hoặc `~/.multix/.env`; `.env` của project không
+đặt được chúng.
+
+| Biến | Mục đích |
+| --- | --- |
+| `MULTIX_API_KEY` | API key của tài khoản (`mxk_…`) tạo trong `/dashboard` của server. Bắt buộc để push; chỉ đọc từ biến môi trường, không bao giờ từ flag. |
+| `MULTIX_REMOTE_URL` | Server nhận dữ liệu (mặc định `https://multix.zuey.me`). `--url` ghi đè biến này. Phải là `https://` (`http://` thường chỉ dùng được cho host loopback), không chứa credential, query string hay fragment. |
 
 ## Xoay vòng Gemini key
 

@@ -30,8 +30,11 @@ may only set variables that `multix` itself reads:
   for the agent envelope), `MULTIX_HISTORY` (`0` turns the run ledger off) and
   `MULTIX_DISABLE_HOME_ENV` (which has no effect there), plus `NO_COLOR`.
 
-The opt-ins `MULTIX_ALLOW_PROJECT_BASE_URL` and `MULTIX_LEGACY_CLAUDE_ENV`, and
-`MULTIX_HISTORY_FILE` (where the run ledger is written), are refused: a repository must not widen what it can do with your keys or pull in
+The opt-ins `MULTIX_ALLOW_PROJECT_BASE_URL` and `MULTIX_LEGACY_CLAUDE_ENV`,
+`MULTIX_HISTORY_FILE` (where the run ledger is written), and the
+[usage upload](#usage-upload) settings `MULTIX_API_KEY` and
+`MULTIX_REMOTE_URL` are refused: a repository must not widen what it can do
+with your keys, choose where your run history is uploaded, or pull in
 the `.claude` credentials from your home folder.
 
 [`.env.example`](https://github.com/mrgoonie/multix-cli/blob/main/.env.example)
@@ -78,6 +81,17 @@ request is redirected to another host, or from `https://` to `http://`, multix s
 reports the HTTP 3xx status instead of following it. A download that the
 provider hands off to a storage host still works, but the key header is removed
 before that redirect is followed.
+
+## Usage upload
+
+`multix history push` (opt-in) uploads your local run history to the usage
+ledger of a multix account; see [Run history](/reference/for-ai-agents/#run-history).
+Set these in the shell or `~/.multix/.env`; a project `.env` cannot set them.
+
+| Variable | Purpose |
+| --- | --- |
+| `MULTIX_API_KEY` | Account API key (`mxk_…`) created in the server's `/dashboard`. Required to push; read only from the environment, never from a flag. |
+| `MULTIX_REMOTE_URL` | Server to push to (default `https://multix.zuey.me`). `--url` overrides it. Must be `https://` (plain `http://` only for a loopback host), without credentials, query string or fragment. |
 
 ## Gemini key rotation
 

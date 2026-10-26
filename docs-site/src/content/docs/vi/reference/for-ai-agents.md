@@ -110,6 +110,22 @@ multix rerun h_mfz3k2ab1c9d         # chạy lại (tham số thêm được n�
 `MULTIX_HISTORY=0` tắt ledger. `MULTIX_HISTORY_FILE` đổi vị trí file (chỉ trong
 shell hoặc `~/.multix/.env`, không nhận từ `.env` của project).
 
+`multix history push` là tùy chọn tự bật; chỉ chạy khi người dùng yêu cầu. Lệnh
+này tải các lần chạy trong 30 ngày gần nhất (`--since`, `--failed`,
+`--provider` và `--command` thu hẹp phạm vi) lên ledger mức sử dụng của tài
+khoản multix của người dùng, nơi chúng hiện cạnh các job từ xa trong
+[phần tổng hợp mức sử dụng và dashboard](/vi/guides/mcp-server/#mức-sử-dụng-và-chi-phí).
+Chỉ số đo được gửi đi: không bao giờ có prompt, tham số, thư mục làm việc,
+thông báo lỗi, đường dẫn output hay media. Lệnh cần `MULTIX_API_KEY` (xem
+[Biến môi trường](/vi/reference/environment/#tải-lên-mức-sử-dụng)); `--dry-run`
+cho biết số lần chạy và một entry mẫu mà không gửi gì, và push lại cùng các lần
+chạy chỉ được tính là trùng lặp.
+
+```bash
+multix history push --dry-run       # xem trước những gì sẽ được gửi
+multix history push --since 7d      # tải lên tuần vừa qua
+```
+
 ## Quy trình lệnh an toàn
 
 - Không in hoặc yêu cầu giá trị secret; `multix check` cho biết key nào đã đặt.

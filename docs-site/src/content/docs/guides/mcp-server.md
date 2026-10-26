@@ -22,10 +22,12 @@ does not change how `multix` behaves on your machine.
 | `multix_run` | Run one CLI command in its own container with your saved keys. Waits up to `wait_seconds` (default 25, max 40, container start included), then returns the result or a job ID to poll. At most 2 running jobs per account by default (`MULTIX_MAX_JOBS_PER_ACCOUNT`). |
 | `multix_job_status` | Read a `multix_run` job: status, output URLs, stdout and the tail of stderr. |
 | `multix_job_cancel` | Stop a running job and its container. |
+| `multix_usage_summary` | Read only. Your usage over the last `days` (default 30, max 90, UTC): operations, success rate, known cost, operations of unknown cost, tokens, latency and every budget's status. `group_by` splits the totals (top 10). See [Usage and costs](#usage-and-costs). |
 
 `multix_catalog` is always listed. `multix_run`, `multix_job_status` and
 `multix_job_cancel` appear only when the Worker has its job bindings
-(`MULTIX_JOBS` and `MULTIX_JOB_QUOTA`, see [Deploy](#deploy)).
+(`MULTIX_JOBS` and `MULTIX_JOB_QUOTA`, see [Deploy](#deploy)), and
+`multix_usage_summary` only when it has the `MULTIX_LEDGER` binding.
 
 ## Running CLI commands
 
@@ -215,6 +217,42 @@ The settings are stored as one AES-GCM record under `r2:<account>` in
 public URL; replacing the settings asks for the secret again. **Remove**
 deletes them.
 
+## Usage and costs
+
+With the `MULTIX_LEDGER` binding, the server keeps a usage ledger per account
+(a SQLite Durable Object named by the account): one operation per
+`multix_run` job, REST job and CLI run uploaded with
+[`multix history push`](/reference/for-ai-agents/#run-history), with its
+timings, outcome, tokens, credits and cost, plus cost adjustments, budgets and
+a hash-chained activity log. A cost the provider did not report stays `null`
+and is counted in `unknown_cost_operations`, never as `0`, so `known_cost_usd`
+is a record of known costs, not a bill. Prompts, CLI arguments, working
+folders, signed URLs and keys are never stored, and records older than 400
+days are pruned. `multix_usage_summary` reads it over MCP; the
+[REST API](/guides/rest-api/#usage-budgets-and-activities) reads, exports and
+deletes it and manages budgets (soft: alerts at 50, 80 and 100 % by default
+and a forecast, never a blocked job).
+
+### Usage dashboard
+
+When the ledger is configured, `/dashboard` gets a tab bar next to
+**Account**:
+
+- **Overview**: this month (UTC) and the last 30 days, budget states, recent
+  failures and the latest activities.
+- **Usage & costs**: filters, a daily cost chart, a breakdown by a chosen
+  field, CSV and JSON export of the filtered operations, and deleting all
+  usage data (type `DELETE` to confirm; budgets are kept).
+- **Budgets**: each budget's spend against its limit, and forms to create,
+  edit and delete budgets.
+- **Traces**: operations newest first, filtered by status, provider and
+  source; one operation shows its recorded steps, measurements, outputs,
+  provider ids, adjustments and where its cost came from.
+- **Activity**: the activity log with search, kind and date filters, and the
+  result of checking its hash chain.
+
+Without the binding these pages show a "not configured" notice.
+
 ## Deploy
 
 Requirements: Node 20+, a Cloudflare account with a zone for your domain, and
@@ -252,7 +290,10 @@ image to Cloudflare.
    and deliveries, from the REST API and from
    [MCP Events](#mcp-events-protocol-2026-07-28); without it the
    `/api/v1/events` routes answer `503` and `server/discover` does not offer
-   events.
+   events. The `MULTIX_LEDGER` binding (class `AccountLedger`) holds each
+   account's [usage ledger](#usage-and-costs); without it
+   `multix_usage_summary` is not listed, the usage routes of the REST API
+   answer `503 ledger_unavailable` and the dashboard has no usage tabs.
 4. **Set the secrets** and deploy:
 
    ```bash

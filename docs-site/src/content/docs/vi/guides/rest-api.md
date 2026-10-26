@@ -1,6 +1,6 @@
 ---
 title: REST API và API key của tài khoản
-description: Dùng REST API của multix MCP server từ script và CI bằng API key của tài khoản để quản lý provider key và lưu trữ R2, đọc catalog CLI, chạy, theo dõi, hủy job CLI, và nhận webhook có chữ ký khi job kết thúc.
+description: Dùng REST API của multix MCP server từ script và CI bằng API key của tài khoản để quản lý provider key và lưu trữ R2, đọc catalog CLI, chạy, theo dõi, hủy job CLI, nhận webhook có chữ ký khi job kết thúc, và đọc mức sử dụng, chi phí, ngân sách cùng nhật ký hoạt động.
 ---
 
 [MCP server từ xa](/vi/guides/mcp-server/) còn cung cấp một REST API dạng JSON
@@ -80,6 +80,20 @@ Mọi path đều tương đối với `/api/v1`.
 | `DELETE` | `/events/subscriptions/{id}` | Thu hồi một subscription. |
 | `GET` | `/events/dead-letters` | Các lần gửi đã bị bỏ cuộc (ID, lý do, số lần thử; không kèm payload). |
 | `GET` | `/events/audit` | Nhật ký audit của subscription: tạo, thu hồi, vô hiệu hóa, hết hạn. |
+| `GET` | `/usage/summary` | Tổng mức sử dụng, nhóm tùy chọn, chuỗi theo ngày và trạng thái của mọi ngân sách. |
+| `GET` | `/usage/operations` | Các operation đã ghi, mới nhất trước, có phân trang. |
+| `GET` | `/usage/operations/{op_id}` | Một operation cùng các điều chỉnh chi phí của nó. |
+| `POST` | `/usage/operations/{op_id}/adjustments` | Ghi một khoản hoàn tiền hoặc điều chỉnh cho operation. |
+| `GET` | `/usage/export?format=csv\|json` | Các operation đã lọc dưới dạng CSV (mặc định) hoặc JSON. |
+| `POST` | `/usage/import` | Nhập lịch sử chạy CLI; đây là thứ `multix history push` gửi lên. |
+| `DELETE` | `/usage/data?confirm=delete` | Xóa mọi bản ghi mức sử dụng của tài khoản. Ngân sách được giữ lại. |
+| `GET` | `/budgets` | Các ngân sách kèm mức đã chi, dự báo và các ngưỡng đã vượt. |
+| `POST` | `/budgets` | Tạo ngân sách. |
+| `GET` | `/budgets/{id}` | Trạng thái của một ngân sách. |
+| `PUT` | `/budgets/{id}` | Thay thế một ngân sách (cùng body như khi tạo). |
+| `DELETE` | `/budgets/{id}` | Xóa một ngân sách. |
+| `GET` | `/activities` | Nhật ký hoạt động của tài khoản, mới nhất trước, có phân trang. |
+| `GET` | `/activities/verify` | Kiểm tra chuỗi hash của nhật ký hoạt động. |
 
 Tên provider key là tên biến môi trường mà CLI đọc (ví dụ `GEMINI_API_KEY`),
 cùng các tên của Cloudflare Workers AI; `GET /provider-keys` liệt kê tất cả.
@@ -383,6 +397,138 @@ export function verifyMultixWebhook(secret, headers, rawBody) {
 hóa hoặc hết hạn. Để bắt kịp sau sự cố, hãy đọc các job có tên ở đó bằng
 `GET /jobs/{id}`.
 
+## Mức sử dụng, ngân sách và hoạt động
+
+Khi Worker có binding `MULTIX_LEDGER`, mỗi tài khoản có một ledger mức sử dụng
+riêng: một bản ghi (một *operation*) cho mỗi job `multix_run`, job REST và lần
+chạy CLI được tải lên bằng
+[`multix history push`](/vi/reference/for-ai-agents/#lịch-sử-chạy), cùng các
+điều chỉnh chi phí, ngân sách và nhật ký hoạt động. Tài khoản này không bao
+giờ đọc được bản ghi của tài khoản khác. Thiếu binding, các route này trả về
+`503 ledger_unavailable`. Dashboard hiển thị cùng các bản ghi này (xem
+[Dashboard mức sử dụng](/vi/guides/mcp-server/#dashboard-mức-sử-dụng)).
+
+Cách đọc các con số:
+
+- **Không biết thì là `null`, không bao giờ là `0`.** Chi phí, số token hay số
+  credit mà provider không báo vẫn là `null`. `known_cost_usd` chỉ cộng các chi
+  phí đã biết (do provider báo, ước tính và điều chỉnh), còn
+  `unknown_cost_operations` đếm các operation không cộng được, nên một tổng
+  chưa đủ không bao giờ được trình bày như tổng đầy đủ. Chi phí là bản ghi,
+  không phải hóa đơn.
+- `cost_provenance` của mỗi operation cho biết chi phí đến từ đâu
+  (`provider_reported`, `estimated`, `billed` hoặc `unknown`).
+- ID operation là `job_<job id>` cho job và `cli_<history id>` cho lần chạy CLI
+  được nhập. Mỗi id chỉ được ghi một lần: một lần gửi lại hoặc push lại cùng
+  lần chạy được tính là trùng lặp, không bao giờ tính hai lần.
+- Chỉ lưu số đo: id, tên, thời gian, số đếm, kích thước, hash và các con số
+  provider báo. Prompt, tham số CLI, thư mục làm việc, nội dung lỗi, signed URL
+  và key không bao giờ được lưu.
+- Operation, điều chỉnh và hoạt động cũ hơn **400 ngày** bị xóa hằng ngày.
+  Hãy export trước nếu muốn giữ lâu hơn.
+
+### Tổng hợp và operation
+
+`GET /usage/summary`, `GET /usage/operations` và `GET /usage/export` nhận cùng
+các bộ lọc:
+
+- `from`, `to`: epoch mili giây hoặc ngày ISO. Mặc định: 30 ngày gần nhất;
+  tối đa 400 ngày.
+- `provider`, `model`, `command`, `client_id`, `project_id`: giá trị chính xác.
+- `source` (`mcp`, `rest`, `cli`, `unknown`) và `status` (`running`,
+  `succeeded`, `failed`, `timed_out`, `canceled`).
+
+Phần tổng hợp còn nhận `group_by` (`provider`, `model`, `source`, `command`,
+`status`, `client` hoặc `project`) và `tz_offset_minutes` (số phút lệch về phía
+đông so với UTC cho chuỗi theo ngày, mặc định `0`):
+
+```bash
+curl -s "https://multix.zuey.me/api/v1/usage/summary?from=2026-10-01&group_by=provider" \
+  -H "Authorization: Bearer $MULTIX_API_KEY"
+```
+
+Kết quả gồm `totals` (số operation, tỉ lệ thành công, chi phí đã biết và các
+thành phần của nó, số operation chưa rõ chi phí, token, credit, output, lỗi
+HTTP, độ trễ p50/p95), `groups` khi có `group_by`, chuỗi `series` theo ngày và
+`budgets`, trạng thái của mọi ngân sách. `GET /usage/operations` liệt kê
+operation mới nhất trước (`limit` 1–200, mặc định 50); truyền `next_cursor`
+của response vào `cursor` để lấy trang tiếp. `GET /usage/operations/{op_id}`
+trả về `{ operation, adjustments }`.
+
+### Điều chỉnh, export và xóa
+
+Chi phí không bao giờ bị sửa trực tiếp. Để ghi một khoản hoàn tiền hay điều
+chỉnh, hãy thêm một adjustment: một số USD có dấu, được tính vào mọi tổng (hoàn
+tiền là số âm).
+
+```bash
+curl -s -X POST https://multix.zuey.me/api/v1/usage/operations/job_<job_id>/adjustments \
+  -H "Authorization: Bearer $MULTIX_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"kind": "refund", "amount_usd": -0.04, "note": "provider credit"}'
+```
+
+`kind` là `refund` hoặc `correction`, `amount_usd` nằm trong khoảng -1.000.000
+đến 1.000.000, và `note` là tùy chọn (tối đa 200 ký tự).
+
+`GET /usage/export?format=csv` (mặc định) tải về các operation đã lọc, cũ nhất
+trước, tối đa 10.000 dòng: thời gian ISO 8601 UTC, ô trống cho giá trị chưa
+biết, và header `x-multix-truncated: true` khi bản export bị cắt bớt.
+`format=json` trả về `{ operations, truncated }`. Mỗi lần export đều được ghi
+vào nhật ký hoạt động.
+
+`POST /usage/import` là thứ `multix history push` gọi: `{ "entries": [...] }`
+với tối đa 200 entry và 512 KiB mỗi request. Response là
+`{ accepted, duplicates, rejected }`; entry không hợp lệ bị từ chối riêng lẻ,
+còn các lần chạy đã nhập được tính là trùng lặp.
+
+`DELETE /usage/data?confirm=delete` xóa mọi operation, điều chỉnh, cảnh báo
+ngân sách và hoạt động của tài khoản. Định nghĩa ngân sách được giữ lại, và một
+hoạt động `ledger.deleted` ghi nhận việc xóa.
+
+### Ngân sách
+
+Ngân sách là ngân sách mềm: chúng phát cảnh báo và không bao giờ dừng job. Mỗi
+tài khoản có tối đa **20** ngân sách.
+
+```bash
+curl -s -X POST https://multix.zuey.me/api/v1/budgets \
+  -H "Authorization: Bearer $MULTIX_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Gemini this month", "scope_kind": "provider", "scope_value": "gemini",
+       "period": "month", "limit_usd": 50, "thresholds": [50, 80, 100]}'
+```
+
+- `scope_kind`: `account` (không có `scope_value`), `provider`, `model`,
+  `command`, `source`, `client` hoặc `project`, kèm `scope_value` tương ứng.
+- `period`: `day`, `week` hoặc `month`, theo UTC; tuần bắt đầu từ thứ Hai.
+- `thresholds`: 1–5 phần trăm (mặc định `[50, 80, 100]`). Mỗi lần vượt một
+  ngưỡng được ghi một lần mỗi kỳ dưới dạng hoạt động `budget.threshold_crossed`.
+
+Trạng thái (từ `GET /budgets`, `GET /budgets/{id}` và phần tổng hợp mức sử
+dụng) bổ sung `spent_usd` của kỳ hiện tại, `percent`, `state` (`ok`, `warning`
+khi chạm ngưỡng thấp nhất, `exceeded` ở 100 %), các `alerts` đã vượt, và
+`forecast_usd`, dự báo tuyến tính đến cuối kỳ (`null` khi kỳ mới bắt đầu). Mức
+chi chỉ tính chi phí đã biết; `unknown_cost_operations` cho biết có bao nhiêu
+operation trong phạm vi không tính được. `PUT /budgets/{id}` thay thế toàn bộ
+ngân sách.
+
+### Nhật ký hoạt động
+
+`GET /activities` liệt kê những gì đã xảy ra trên tài khoản, mới nhất trước:
+job, lần nhập, lần export, điều chỉnh, ngân sách và cảnh báo của chúng, cùng
+các thay đổi thực hiện bằng API key (provider key theo tên, lưu trữ, API key,
+webhook theo host), kèm `actor` đã thực hiện. Không bao giờ có giá trị key,
+prompt hay URL đầy đủ. Lọc bằng `from`, `to`, `kind` (một tiền tố như
+`budget.` hoặc `job.failed`) và `q` (tìm kiếm văn bản, tối đa 100 ký tự); phân
+trang bằng `limit` và `cursor` như với operation.
+
+Các mục tạo thành một chuỗi hash: mỗi mục chứa hash của mục trước nó.
+`GET /activities/verify` tính lại chuỗi và trả về
+`{ ok, checked, first_bad_seq }`, nên một mục bị sửa hay bị xóa hiện ra là
+`seq` đầu tiên không còn khớp. Việc dọn dữ liệu cũ xóa các mục cũ nhất; phép
+kiểm tra bắt đầu từ mục cũ nhất còn lại.
+
 ## Lỗi
 
 Lỗi là JSON có `code` cố định và thông báo không bao giờ chứa giá trị đã gửi:
@@ -396,15 +542,17 @@ Lỗi là JSON có `code` cố định và thông báo không bao giờ chứa g
 | `400` | `bad_request` | JSON, trường hoặc giá trị không hợp lệ, tên provider key không hợp lệ, hoặc lệnh, option hay input mà `multix_run` sẽ từ chối. |
 | `401` | `unauthorized` | Thiếu API key, sai định dạng, không tồn tại hoặc đã bị thu hồi. |
 | `403` | `forbidden` | Tài khoản không còn trong danh sách được phép đăng nhập. |
-| `404` | `not_found` | Path, job, API key hoặc subscription sự kiện không tồn tại, hoặc thuộc tài khoản khác. |
+| `404` | `not_found` | Path, job, API key, subscription sự kiện, operation hoặc ngân sách không tồn tại, hoặc thuộc tài khoản khác. |
 | `405` | `method_not_allowed` | Sai method; header `Allow` liệt kê các method được chấp nhận. |
-| `413` | `payload_too_large` | Body lớn hơn 64 KiB. |
+| `413` | `payload_too_large` | Body lớn hơn 64 KiB (512 KiB với `POST /usage/import`). |
 | `415` | `unsupported_media_type` | Body không gửi dưới dạng `application/json`. |
 | `409` | `limit_reached` | Tài khoản đã có 10 subscription sự kiện đang hoạt động. |
+| `409` | `budget_limit` | Tài khoản đã có 20 ngân sách. |
 | `422` | `storage_check_failed` | Kiểm tra quyền truy cập R2 thất bại; không có gì được lưu. |
 | `429` | `rate_limited` | Quá nhiều request; thử lại sau số giây trong `Retry-After`. |
 | `429` | `busy` | Đã chạm giới hạn job: số job đang chạy của tài khoản hoặc tổng số job của server. Chờ một job kết thúc (hoặc hủy một job) thay vì thử lại ngay. |
 | `503` | `unavailable` | Server không có job container, nên không chạy được job, hoặc không có binding sự kiện, nên các route sự kiện bị tắt; hoặc không phân giải được host `callback_url` của subscription mới (thử lại sau `Retry-After`). |
+| `503` | `ledger_unavailable` | Server không lưu bản ghi mức sử dụng (không có binding `MULTIX_LEDGER`), nên các route mức sử dụng, ngân sách và hoạt động bị tắt. |
 | `500` | `internal` | Lỗi server không lường trước. |
 
 Tập mã lỗi được định nghĩa trong `worker/src/api/api-http.ts`.
@@ -423,4 +571,7 @@ Tập mã lỗi được định nghĩa trong `worker/src/api/api-http.ts`.
 - **API key:** tối đa 10 key mỗi tài khoản; chỉ tạo được trong dashboard.
 - **Subscription sự kiện:** tối đa 10 subscription đang hoạt động mỗi tài
   khoản; thời gian sống từ 1 giờ đến 90 ngày (mặc định 30 ngày).
-- **Body:** object JSON tối đa 64 KiB.
+- **Ledger mức sử dụng:** trang 1–200 mục (mặc định 50), khoảng thời gian tối
+  đa 400 ngày, export tối đa 10.000 operation, nhập tối đa 200 entry và
+  512 KiB, tối đa 20 ngân sách, và lưu giữ 400 ngày.
+- **Body:** object JSON tối đa 64 KiB (512 KiB với `POST /usage/import`).

@@ -23,10 +23,12 @@ thay đổi cách `multix` chạy trên máy bạn.
 | `multix_run` | Chạy một lệnh CLI trong container riêng bằng key đã lưu của bạn. Chờ tối đa `wait_seconds` (mặc định 25, tối đa 40, tính cả thời gian khởi động container), sau đó trả về kết quả hoặc job ID để poll. Mặc định mỗi tài khoản chạy tối đa 2 job cùng lúc (`MULTIX_MAX_JOBS_PER_ACCOUNT`). |
 | `multix_job_status` | Đọc job `multix_run`: trạng thái, URL output, stdout và phần cuối của stderr. |
 | `multix_job_cancel` | Dừng job đang chạy cùng container của nó. |
+| `multix_usage_summary` | Chỉ đọc. Mức sử dụng của bạn trong `days` ngày gần nhất (mặc định 30, tối đa 90, UTC): số operation, tỉ lệ thành công, chi phí đã biết, số operation chưa rõ chi phí, token, độ trễ và trạng thái của mọi ngân sách. `group_by` chia nhỏ các tổng (10 nhóm đầu). Xem [Mức sử dụng và chi phí](#mức-sử-dụng-và-chi-phí). |
 
 `multix_catalog` luôn được liệt kê. `multix_run`, `multix_job_status` và
 `multix_job_cancel` chỉ xuất hiện khi Worker có các binding chạy job
-(`MULTIX_JOBS` và `MULTIX_JOB_QUOTA`, xem [Triển khai](#triển-khai)).
+(`MULTIX_JOBS` và `MULTIX_JOB_QUOTA`, xem [Triển khai](#triển-khai)), còn
+`multix_usage_summary` chỉ xuất hiện khi Worker có binding `MULTIX_LEDGER`.
 
 ## Chạy lệnh CLI
 
@@ -210,6 +212,41 @@ Thiết lập được lưu thành một bản ghi AES-GCM dưới `r2:<account>
 `ACCOUNTS_KV`, giống provider key. Trang chỉ hiển thị tên bucket và URL công
 khai; khi thay thiết lập phải nhập lại secret. **Remove** sẽ xóa chúng.
 
+## Mức sử dụng và chi phí
+
+Với binding `MULTIX_LEDGER`, server giữ một ledger mức sử dụng cho mỗi tài
+khoản (một Durable Object SQLite đặt tên theo tài khoản): một operation cho mỗi
+job `multix_run`, job REST và lần chạy CLI được tải lên bằng
+[`multix history push`](/vi/reference/for-ai-agents/#lịch-sử-chạy), kèm thời
+gian, kết quả, token, credit và chi phí, cùng các điều chỉnh chi phí, ngân sách
+và một nhật ký hoạt động nối chuỗi hash. Chi phí mà provider không báo vẫn là
+`null` và được đếm trong `unknown_cost_operations`, không bao giờ là `0`, nên
+`known_cost_usd` là bản ghi các chi phí đã biết, không phải hóa đơn. Prompt,
+tham số CLI, thư mục làm việc, signed URL và key không bao giờ được lưu, và bản
+ghi cũ hơn 400 ngày bị xóa. `multix_usage_summary` đọc ledger qua MCP;
+[REST API](/vi/guides/rest-api/#mức-sử-dụng-ngân-sách-và-hoạt-động) đọc, export,
+xóa ledger và quản lý ngân sách (ngân sách mềm: mặc định cảnh báo ở 50, 80 và
+100 % kèm dự báo, không bao giờ chặn job).
+
+### Dashboard mức sử dụng
+
+Khi ledger được cấu hình, `/dashboard` có thêm thanh tab cạnh **Account**:
+
+- **Overview**: tháng này (UTC) và 30 ngày gần nhất, trạng thái ngân sách, các
+  lỗi gần đây và các hoạt động mới nhất.
+- **Usage & costs**: bộ lọc, biểu đồ chi phí theo ngày, phân tích theo một
+  trường tùy chọn, export CSV và JSON các operation đã lọc, và xóa toàn bộ dữ
+  liệu mức sử dụng (gõ `DELETE` để xác nhận; ngân sách được giữ lại).
+- **Budgets**: mức chi của từng ngân sách so với hạn mức, cùng form tạo, sửa và
+  xóa ngân sách.
+- **Traces**: operation mới nhất trước, lọc theo trạng thái, provider và nguồn;
+  một operation hiển thị các bước đã ghi, số đo, output, id phía provider, điều
+  chỉnh và nguồn gốc chi phí.
+- **Activity**: nhật ký hoạt động với tìm kiếm, bộ lọc loại và ngày, cùng kết
+  quả kiểm tra chuỗi hash.
+
+Thiếu binding, các trang này hiển thị thông báo "not configured".
+
 ## Triển khai
 
 Yêu cầu: Node 20+, tài khoản Cloudflare có zone cho tên miền của bạn, và
@@ -247,6 +284,11 @@ Cloudflare.
    gửi của từng tài khoản, tạo qua REST API lẫn
    [MCP Events](#mcp-events-giao-thức-2026-07-28); thiếu binding này, các route
    `/api/v1/events` trả về `503` và `server/discover` không cung cấp events.
+   Binding `MULTIX_LEDGER` (class `AccountLedger`) giữ
+   [ledger mức sử dụng](#mức-sử-dụng-và-chi-phí) của từng tài khoản; thiếu
+   binding này, `multix_usage_summary` không được liệt kê, các route mức sử
+   dụng của REST API trả về `503 ledger_unavailable` và dashboard không có các
+   tab mức sử dụng.
 4. **Đặt secret** và triển khai:
 
    ```bash
