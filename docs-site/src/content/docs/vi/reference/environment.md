@@ -33,6 +33,14 @@ cùng `MULTIX_HISTORY_FILE` (nơi ghi ledger lịch sử chạy), bị từ ch�
 không được nới rộng những gì nó có thể làm với key của bạn, chọn nơi ghi lịch sử
 chạy, hay kéo theo credential trong các file `.claude` ở thư mục home.
 
+`MULTIX_OPERATION_ID` cũng bị từ chối. Biến này đặt tên cho thao tác logic mà
+[biên nhận chi phí](/vi/reference/for-ai-agents/#biên-nhận-chi-phí) của lần chạy
+thuộc về, để nhiều lần chạy (submit, poll trạng thái, tải file, webhook gửi lại)
+chỉ được tính một lần; mặc định là `<provider>:<job id>` hoặc
+`run:<history id>`. Biến này dành cho từng lần chạy, nên hãy đặt trong shell cho
+lần chạy đó: một id cố định trong file của project sẽ gộp chi tiêu của mọi lần
+chạy vào một thao tác.
+
 [`.env.example`](https://github.com/mrgoonie/multix-cli/blob/main/.env.example)
 liệt kê các biến này, cùng hai biến opt-in. Mọi tên khác, ví dụ `NODE_OPTIONS`, `npm_config_registry`,
 `LD_PRELOAD`, `HTTPS_PROXY` hay `NODE_TLS_REJECT_UNAUTHORIZED`, không được nạp,

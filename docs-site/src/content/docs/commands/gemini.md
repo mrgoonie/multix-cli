@@ -63,7 +63,9 @@ multix gemini i2v ./first-frame.png --prompt "camera pans left" --last-frame ./l
   `--aspect-ratio` accepts `16:9` (default) or `9:16`; `--duration` takes 3–10
   seconds and the model picks a length when it is omitted.
 - `--reference-images` with one or two images sets the first and last frame;
-  more images are used as subject references.
+  more images are used as subject references. `i2v --last-frame` sends the
+  start image first and the closing image second, so the video opens on the
+  first and ends on the second.
 - Each request is stored and runs in the background. The interaction id is
   written to `gemini_omni_<timestamp>-<random>.json` in the output directory before
   polling starts. On success stdout prints `Generated video: <path>` and
@@ -102,6 +104,15 @@ multix gemini extend-video --prompt "the camera follows the ball out the door" \
 ```
 
 Without `--resolution` or `--aspect-ratio` the result keeps the source format.
+`extend-video --video` cannot take `--aspect-ratio` (the API refuses it for an
+extension); the continuation keeps the source frame.
+
+With `--video` the request names the task (`edit` or `extend`). With
+`--interaction-id` the API does not accept a task, so multix starts the prompt
+with `Edit this video:` or `Extend this video:` unless it already says so.
+Without it the model guesses from the wording: "the ball turns blue" sent as an
+extension came back as an edit.
+
 Only a completed interaction can be continued. Editing or extending an uploaded
 video is unavailable in the EEA, Switzerland and the UK; editing a generated
 video with `--interaction-id` works there. Stored interactions and uploaded

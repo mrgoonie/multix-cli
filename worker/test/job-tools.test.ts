@@ -132,7 +132,16 @@ describe("CLI runner tools", () => {
     const schemas = Object.fromEntries(
       list.result.tools.map((t: { name: string; inputSchema: unknown }) => [t.name, t.inputSchema]),
     );
-    expect(schemas).toEqual(legacySchemas);
+    // 2025 clients keep working: every known input is unchanged, nothing new is required.
+    type Schema = { properties?: Record<string, unknown>; required?: string[] };
+    for (const [name, legacy] of Object.entries(legacySchemas as Record<string, Schema>)) {
+      const current = schemas[name] as Schema;
+      expect({ ...current, properties: undefined }).toEqual({ ...legacy, properties: undefined });
+      for (const [prop, schema] of Object.entries(legacy.properties ?? {})) {
+        expect(current.properties?.[prop], `${name}.${prop}`).toEqual(schema);
+      }
+    }
+    expect(Object.keys(schemas).sort()).toEqual(Object.keys(legacySchemas).sort());
   });
 
   it("lists the job tools only when the job backend is available", async () => {
@@ -385,5 +394,74 @@ describe("CLI runner tools", () => {
       retryable: false,
     });
     expect(backend.specs.size).toBe(0);
+  });
+
+  it("estimate returns a priced range and starts nothing", async () => {
+    const backend = new FakeBackend(succeeded);
+    const jobs = jobsContext(backend);
+    const result = await callTool(
+      env,
+      "multix_run",
+      {
+        command: "elevenlabs tts",
+        options: { text: "Xin chào thế giới", "previous-text": "Trước đó." },
+        estimate: true,
+        max_cost_usd: 0.0001,
+      },
+      { jobs },
+    );
+    expect(result.isError).toBeUndefined();
+    expect(result.structuredContent).toMatchObject({
+      estimate_only: true,
+      command: "elevenlabs tts",
+      estimate: {
+        status: "estimated",
+        upper_bound: "proven",
+        units: { characters: { low: 17, expected: 17, high: 26 } },
+      },
+      budget: { ok: false, code: "BUDGET_EXCEEDED", max_cost_usd: 0.0001 },
+    });
+    expect(backend.specs.size).toBe(0);
+  });
+
+  it("max_cost_usd refuses an unknown or unproven ceiling before starting a job", async () => {
+    const backend = new FakeBackend(succeeded);
+    const jobs = jobsContext(backend);
+    const unknown = await callTool(
+      env,
+      "multix_run",
+      { command: "gemini generate", options: { prompt: "a cat" }, max_cost_usd: 5 },
+      { jobs },
+    );
+    expect(unknown.isError).toBe(true);
+    expect(unknown.content[0].text).toMatch(/^Refusing to run: cost of gemini .* is unknown/);
+    const unproven = await callTool(
+      env,
+      "multix_run",
+      { command: "gemini generate-speech", options: { text: "hi" }, max_cost_usd: 5 },
+      { jobs },
+    );
+    expect(unproven.isError).toBe(true);
+    expect(unproven.content[0].text).toContain("--cost-policy estimate");
+    expect(backend.specs.size).toBe(0);
+  });
+
+  it("max_cost_usd with cost_policy estimate lets an estimated ceiling under the limit run", async () => {
+    const backend = new FakeBackend(succeeded, 0);
+    const jobs = jobsContext(backend);
+    const result = await callTool(
+      env,
+      "multix_run",
+      {
+        command: "gemini generate-speech",
+        options: { text: "hi" },
+        max_cost_usd: 5,
+        cost_policy: "estimate",
+        wait_seconds: 10,
+      },
+      { jobs },
+    );
+    expect(result.isError).toBeUndefined();
+    expect(backend.specs.size).toBe(1);
   });
 });

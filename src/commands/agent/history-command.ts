@@ -15,6 +15,7 @@ import {
   readHistory,
 } from "../../agent/history-store.js";
 import { run } from "../../agent/run-state.js";
+import { type CostReceipt, settleOperations } from "../../budget/cost-receipt.js";
 import { ValidationError } from "../../core/errors.js";
 
 interface ListOpts {
@@ -41,9 +42,22 @@ function money(n: number | undefined): string {
 }
 
 function brief(e: HistoryEntry): string {
-  const status = e.ok ? (e.dry_run ? "dry" : "ok") : (e.error?.code ?? `exit ${e.exit_code}`);
+  const status = e.ok
+    ? e.dry_run
+      ? "dry"
+      : e.estimate_only
+        ? "estimate"
+        : "ok"
+    : (e.error?.code ?? `exit ${e.exit_code}`);
+  const cost = e.cost;
   const usage = [
-    money(e.usage?.cost_usd),
+    cost?.status === "uncertain"
+      ? "cost?"
+      : money(
+          cost?.actual_source === "no_request"
+            ? undefined
+            : (cost?.actual_usd ?? e.usage?.cost_usd ?? undefined),
+        ),
     e.usage?.credits !== undefined ? `${e.usage.credits} cr` : "",
     e.usage?.tokens?.total !== undefined ? `${e.usage.tokens.total} tok` : "",
   ]
@@ -69,10 +83,31 @@ interface Bucket {
   runs: number;
   ok: number;
   duration_ms: number[];
-  cost_usd?: number;
+  receipts: CostReceipt[];
   credits?: number;
   tokens?: number;
   outputs: number;
+}
+
+/**
+ * The entry's cost receipt; entries written before receipts existed get one
+ * from their provider-reported cost (one operation per run).
+ */
+export function receiptOf(e: HistoryEntry): CostReceipt | undefined {
+  if (e.cost) return e.cost;
+  if (e.usage?.cost_usd === undefined) return undefined;
+  return {
+    schema: "multix.cost/v1",
+    operation_id: `run:${e.id}`,
+    role: "charge",
+    status: "settled",
+    currency: "USD",
+    provider_reported: { cost_usd: e.usage.cost_usd, credits: e.usage.credits ?? null },
+    actual_usd: e.usage.cost_usd,
+    actual_source: "provider_reported",
+    variance_usd: null,
+    at: e.ts,
+  };
 }
 
 function percentile(values: number[], p: number): number {
@@ -84,14 +119,22 @@ function percentile(values: number[], p: number): number {
 export function historyStats(entries: HistoryEntry[], by: "provider" | "model" | "command") {
   const buckets = new Map<string, Bucket>();
   for (const e of entries) {
-    if (e.dry_run) continue;
+    if (e.dry_run || e.estimate_only) continue;
     const key = (by === "model" ? e.model : by === "command" ? e.command : e.provider) || "(none)";
-    const b = buckets.get(key) ?? { key, runs: 0, ok: 0, duration_ms: [], outputs: 0 };
+    const b = buckets.get(key) ?? {
+      key,
+      runs: 0,
+      ok: 0,
+      duration_ms: [],
+      outputs: 0,
+      receipts: [],
+    };
     b.runs++;
     if (e.ok) b.ok++;
     b.duration_ms.push(e.duration_ms);
     b.outputs += e.outputs?.length ?? 0;
-    if (e.usage?.cost_usd !== undefined) b.cost_usd = (b.cost_usd ?? 0) + e.usage.cost_usd;
+    const receipt = receiptOf(e);
+    if (receipt) b.receipts.push(receipt);
     if (e.usage?.credits !== undefined) b.credits = (b.credits ?? 0) + e.usage.credits;
     const tok =
       e.usage?.tokens?.total ?? (e.usage?.tokens?.input ?? 0) + (e.usage?.tokens?.output ?? 0);
@@ -100,17 +143,24 @@ export function historyStats(entries: HistoryEntry[], by: "provider" | "model" |
   }
   return [...buckets.values()]
     .sort((a, b) => b.runs - a.runs)
-    .map((b) => ({
-      [by]: b.key,
-      runs: b.runs,
-      success_rate: Math.round((b.ok / b.runs) * 1000) / 1000,
-      p50_s: Math.round(percentile(b.duration_ms, 50) / 100) / 10,
-      p90_s: Math.round(percentile(b.duration_ms, 90) / 100) / 10,
-      outputs: b.outputs,
-      ...(b.cost_usd !== undefined ? { cost_usd: Math.round(b.cost_usd * 1e4) / 1e4 } : {}),
-      ...(b.credits !== undefined ? { credits: b.credits } : {}),
-      ...(b.tokens !== undefined ? { tokens: b.tokens } : {}),
-    }));
+    .map((b) => {
+      // Spend counts each operation once (submit, polls and result reads share one).
+      const spend = settleOperations(b.receipts);
+      const priced = spend.operations.some((op) => op.actual_usd !== null);
+      return {
+        [by]: b.key,
+        runs: b.runs,
+        success_rate: Math.round((b.ok / b.runs) * 1000) / 1000,
+        p50_s: Math.round(percentile(b.duration_ms, 50) / 100) / 10,
+        p90_s: Math.round(percentile(b.duration_ms, 90) / 100) / 10,
+        outputs: b.outputs,
+        ...(priced ? { cost_usd: Math.round(spend.total_usd * 1e4) / 1e4 } : {}),
+        ...(spend.uncertain ? { cost_uncertain_ops: spend.uncertain } : {}),
+        ...(spend.unknown ? { cost_unknown_ops: spend.unknown } : {}),
+        ...(b.credits !== undefined ? { credits: Math.round(b.credits * 1e6) / 1e6 } : {}),
+        ...(b.tokens !== undefined ? { tokens: b.tokens } : {}),
+      };
+    });
 }
 
 function addFilters(cmd: Command): Command {
