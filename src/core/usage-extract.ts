@@ -47,10 +47,25 @@ const SKIP_KEY =
 const BALANCE_LEAF =
   /(balance|remaining|available|allowance|included|quota|granted|purchased|^api_?credits?$)/i;
 const BALANCE_PARENT = /^(wallet|subscription|user_details|balances?)$/i;
+/**
+ * Leaf words that name a spend even under a balance-like name or parent
+ * (quota_credits_used, included_credits_used, subscription.credits_used).
+ * Matched as whole words so a balance such as unused_credits stays a balance.
+ */
+const SPEND_WORDS = new Set(["used", "spent", "consumed", "cost", "costs", "charged"]);
+
+function isSpendLeaf(leaf: string): boolean {
+  return leaf
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .some((word) => SPEND_WORDS.has(word));
+}
 
 function isBalancePath(path: string): boolean {
   const segments = path.split(".").map((segment) => segment.replace(/\[\d+\]$/, ""));
   const leaf = segments.pop() ?? "";
+  if (isSpendLeaf(leaf)) return false;
   return BALANCE_LEAF.test(leaf) || segments.some((segment) => BALANCE_PARENT.test(segment));
 }
 /** Key paths that name a forecast, not a charge (Runway estimatedCost, quotes). */

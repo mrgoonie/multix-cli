@@ -93,6 +93,32 @@ describe("extractUsage", () => {
     expect(usage.metrics.remainingCredits).toBe(992);
   });
 
+  it("reports a spend leaf as credits spent even under a balance-like name or parent", () => {
+    for (const [body, path] of [
+      [{ quota_credits_used: 5 }, "body.quota_credits_used"],
+      [{ included_credits_used: 5 }, "body.included_credits_used"],
+      [{ subscription: { credits_used: 5 } }, "body.subscription.credits_used"],
+      [{ wallet: { creditsSpent: 5 } }, "body.wallet.creditsSpent"],
+      [{ remaining_credits_consumed: 5 }, "body.remaining_credits_consumed"],
+      [{ granted_credit_cost: 5 }, "body.granted_credit_cost"],
+      [{ balances: { credits_charged: 5 } }, "body.balances.credits_charged"],
+    ] as const) {
+      const usage = extractUsage(body);
+      expect(usage.credits, path).toBe(5);
+      expect(usage.sources?.credits).toBe(path);
+    }
+  });
+
+  it("matches spend words whole, so an unused balance stays a balance", () => {
+    for (const body of [
+      { included_unused_credits: 40 },
+      { subscription: { unusedCredits: 40 } },
+      { quota_credits: 40 },
+    ]) {
+      expect(extractUsage(body).credits).toBeUndefined();
+    }
+  });
+
   it("matches balance parents by whole segment, not substring", () => {
     expect(extractUsage({ subscription_job: { credits: 4 } }).credits).toBe(4);
     expect(extractUsage({ job: { apiCreditCost: 3 } }).credits).toBe(3);
