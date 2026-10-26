@@ -1,10 +1,10 @@
 ---
 title: Lệnh fal.ai
-description: Chạy bất kỳ model queue nào của fal.ai với file cục bộ và job tách rời, hoặc dùng lệnh tiện lợi image/video với default hợp lý.
+description: Chạy bất kỳ model queue nào của fal.ai với file cục bộ và job tách rời, hoặc dùng lệnh image, video và text-to-speech với input có kiểu và default hợp lý.
 ---
 
 Lệnh fal.ai cần `FAL_KEY`. `run` hoạt động với bất kỳ fal model id nào;
-`image` và `video` đặt sẵn default hợp lý và tự động download media.
+`image`, `video` và `tts` đặt sẵn default hợp lý và tự động download media.
 
 ```bash
 multix fal run fal-ai/flux/schnell --input '{"prompt":"a cyberpunk cat"}'
@@ -126,6 +126,50 @@ Nếu không truyền `-m`, model mặc định phụ thuộc vào `--image-url`
 
 - Text-to-video: `fal-ai/kling-video/v1.6/standard/text-to-video` (ghi đè bằng `FAL_VIDEO_MODEL`).
 - Image-to-video (khi có `--image-url`): `fal-ai/kling-video/v1.6/standard/image-to-video` (ghi đè bằng `FAL_VIDEO_IMAGE_MODEL`).
+
+## Giọng nói (text-to-speech)
+
+`fal tts` ánh xạ các flag có kiểu vào đúng schema input của từng model, rồi
+dùng cùng luồng queue với `run` (một lần submit, không bao giờ retry, receipt
+với `--detach`, polling, download).
+
+```bash
+multix fal tts "Xin chào các bạn" --voice Puck --style "ấm áp, chậm rãi"
+multix fal tts --text-file script.txt -m google/gemini-3.8-flash-lite-tts
+multix fal tts "Hello" -m elevenlabs/tts/eleven-v4-turbo --format pcm_16000 --language en
+multix fal tts "Hello" -m elevenlabs/tts/eleven-v4 --format opus_48000_64 --detach
+```
+
+Các model đã kiểm chứng (`multix fal voices` liệt kê; `multix fal voices <model>`
+in input có kiểu dạng JSON):
+
+| Model | Field văn bản | Giọng | Style | Ngôn ngữ | Định dạng | Output |
+|---|---|---|---|---|---|---|
+| `google/gemini-3.8-flash-tts` (mặc định) | `prompt` | 30 giọng có tên (mặc định `Kore`) | `--style` | — | — | wav |
+| `google/gemini-3.8-flash-lite-tts` (độ trễ thấp) | `prompt` | như trên | `--style` | — | — | wav |
+| `elevenlabs/tts/eleven-v4` | `text` (≤ 5000 ký tự) | tên hoặc voice id bất kỳ (mặc định `Rachel`) | — | `--language` | `--format` (`mp3_*`, `pcm_*`, `opus_*`, `ulaw_8000`, ...) | theo định dạng |
+| `elevenlabs/tts/eleven-v4-turbo` (độ trễ thấp) | như trên | như trên | — | `--language` | như trên | theo định dạng |
+
+- Truyền văn bản một lần: positional, `--text` hoặc `--text-file` (UTF-8, tối
+  đa 1 MB; BOM và một dòng trống cuối file được bỏ). Văn bản rỗng bị từ chối.
+- Flag mà model không có field tương ứng (`--style` với ElevenLabs, `--format`
+  với Gemini), giọng ngoài danh sách của model, hoặc định dạng ngoài enum sẽ
+  lỗi `INVALID_INPUT` trước khi gửi bất cứ gì. `--input` thêm field khác
+  (`stability`, `seed`, `turns` của Gemini cho hội thoại nhiều người nói, ...);
+  một field được đặt bởi cả flag và `--input` là lỗi.
+- Đặt model mặc định bằng `FAL_TTS_MODEL`.
+- Endpoint TTS khác của fal dùng được khi bạn chỉ rõ field:
+  `multix fal tts "hi" -m <model> --text-field input [--voice-field speaker --voice anna]`.
+  multix không bao giờ đoán schema. `multix fal voices --live` liệt kê catalog
+  text-to-speech đang có trên fal (không cần key) và đánh dấu model chưa kiểm chứng.
+
+Audio được lưu thành `fal-<request_id>-01.<ext>`, phần mở rộng lấy từ chính
+các byte: WAV, MP3, Ogg/Opus, FLAC, M4A, AAC, WebM và AIFF được nhận ra qua
+header, bất kể URL hay Content-Type ghi gì. Định dạng thô không có header
+(`pcm_*` → `.pcm`, `ulaw_8000` → `.ulaw`, `alaw_8000` → `.alaw`) được đặt tên
+theo định dạng đã yêu cầu. File rỗng, trang lỗi, hoặc byte không đúng container
+fal khai báo sẽ bị từ chối và không để lại file nào. `fal result <model> <id>
+--download` áp dụng cùng các kiểm tra cho job giọng nói.
 
 ## Status và result
 

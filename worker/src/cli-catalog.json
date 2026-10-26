@@ -6020,7 +6020,7 @@
     },
     {
       "group": "fal",
-      "description": "fal.ai: generic model runner, image, video, media upload, and queue status/result",
+      "description": "fal.ai: generic model runner, image, video, text-to-speech, media upload, and queue status/result",
       "commands": [
         {
           "command": "fal run",
@@ -6343,6 +6343,207 @@
               "variadic": false,
               "negatable": false,
               "short": "-v"
+            }
+          ]
+        },
+        {
+          "command": "fal tts",
+          "description": "Text-to-speech on fal.ai with per-model typed inputs (list models, voices and formats: multix fal voices)",
+          "positionals": [
+            {
+              "name": "text",
+              "description": "",
+              "required": false,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--model",
+              "flags": "-m, --model <id>",
+              "description": "TTS model (google/gemini-3.8-flash-tts|google/gemini-3.8-flash-lite-tts|elevenlabs/tts/eleven-v4|elevenlabs/tts/eleven-v4-turbo) (default: google/gemini-3.8-flash-tts); other fal TTS ids need --text-field",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-m"
+            },
+            {
+              "long": "--text",
+              "flags": "--text <str>",
+              "description": "Text to speak (or a positional, or --text-file)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--text-file",
+              "flags": "--text-file <path>",
+              "description": "Read the text to speak from a UTF-8 file",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--voice",
+              "flags": "--voice <name>",
+              "description": "Voice (checked against the model's voice list when it has one)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--style",
+              "flags": "--style <text>",
+              "description": "Delivery style instructions (Gemini TTS)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--format",
+              "flags": "--format <fmt>",
+              "description": "Output format, e.g. mp3_44100_128, pcm_16000, opus_48000_64 (ElevenLabs)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--language",
+              "flags": "--language <code>",
+              "description": "ISO 639-1 language code (ElevenLabs)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--input",
+              "flags": "--input <json>",
+              "description": "Extra model-specific input fields as JSON, or @path/to/file.json",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--text-field",
+              "flags": "--text-field <name>",
+              "description": "Input field for the text (required for unlisted models)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--voice-field",
+              "flags": "--voice-field <name>",
+              "description": "Input field for --voice on unlisted models",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--detach",
+              "flags": "--detach",
+              "description": "Return after fal queues the job; print a receipt instead of waiting",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--receipt",
+              "flags": "--receipt <path>",
+              "description": "Save the request receipt to this file (--detach saves to ~/.multix/fal/requests/ by default)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--no-download",
+              "flags": "--no-download",
+              "description": "Skip downloading audio; print result JSON only",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": true
+            },
+            {
+              "long": "--output-dir",
+              "flags": "--output-dir <dir>",
+              "description": "Download audio here (default MULTIX_OUTPUT_DIR or ./multix-output)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--wait-timeout",
+              "flags": "--wait-timeout <ms>",
+              "description": "Polling timeout in milliseconds",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "480000"
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        },
+        {
+          "command": "fal voices",
+          "description": "List fal TTS models for `fal tts`: typed inputs, voices, output formats, latency (--live: fal's current TTS catalog)",
+          "positionals": [
+            {
+              "name": "model",
+              "description": "",
+              "required": false,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--live",
+              "flags": "--live",
+              "description": "Also list fal's current text-to-speech endpoints from its public catalog",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
             }
           ]
         },

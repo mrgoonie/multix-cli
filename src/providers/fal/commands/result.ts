@@ -1,7 +1,9 @@
 /**
  * multix fal result <model> <requestId> — fetch a completed job's result.
  * `--download` saves any media URLs found in the payload to MULTIX_OUTPUT_DIR
- * (or `--output-dir`). Only reads: it never submits the job again.
+ * (or `--output-dir`); for a verified speech model the audio is saved under
+ * the extension its bytes have (speech-output.ts). Only reads: it never
+ * submits the job again.
  */
 
 import path from "node:path";
@@ -10,6 +12,8 @@ import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import { createFalClient, resultPath } from "../client.js";
 import { downloadResultMedia, extractMediaUrls } from "../run-helpers.js";
+import { findSpeechModel } from "../speech-models.js";
+import { saveSpeechAudio } from "../speech-output.js";
 import type { FalResultResponse } from "../types.js";
 
 export function registerFalResultCommand(parent: Command): void {
@@ -43,6 +47,13 @@ export function registerFalResultCommand(parent: Command): void {
 
         if (!opts.download) {
           console.log(JSON.stringify(result, null, 2));
+          return;
+        }
+
+        if (findSpeechModel(model)) {
+          const outDir = opts.outputDir ? path.resolve(opts.outputDir) : getOutputDir();
+          const saved = await saveSpeechAudio({ result, outDir, requestId, logger });
+          console.log(`\nDownloaded 1 file(s):\n  ${saved.path}`);
           return;
         }
 

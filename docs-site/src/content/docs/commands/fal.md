@@ -1,10 +1,10 @@
 ---
 title: fal.ai commands
-description: Run any fal.ai queue model with local files and detached jobs, or use the image/video convenience commands with sensible defaults.
+description: Run any fal.ai queue model with local files and detached jobs, or use the image, video and text-to-speech commands with typed inputs and sensible defaults.
 ---
 
 fal.ai commands require `FAL_KEY`. `run` works with any fal model id;
-`image` and `video` set sensible defaults and download media automatically.
+`image`, `video` and `tts` set sensible defaults and download media automatically.
 
 ```bash
 multix fal run fal-ai/flux/schnell --input '{"prompt":"a cyberpunk cat"}'
@@ -125,6 +125,51 @@ Without `-m`, the default model depends on `--image-url`:
 
 - Text-to-video: `fal-ai/kling-video/v1.6/standard/text-to-video` (override with `FAL_VIDEO_MODEL`).
 - Image-to-video (`--image-url` set): `fal-ai/kling-video/v1.6/standard/image-to-video` (override with `FAL_VIDEO_IMAGE_MODEL`).
+
+## Speech (text-to-speech)
+
+`fal tts` maps typed flags onto each model's own input schema, then uses the
+same queue flow as `run` (one submit that is never retried, receipts with
+`--detach`, polling, download).
+
+```bash
+multix fal tts "Xin chào các bạn" --voice Puck --style "warm and slow"
+multix fal tts --text-file script.txt -m google/gemini-3.8-flash-lite-tts
+multix fal tts "Hello" -m elevenlabs/tts/eleven-v4-turbo --format pcm_16000 --language en
+multix fal tts "Hello" -m elevenlabs/tts/eleven-v4 --format opus_48000_64 --detach
+```
+
+Verified models (`multix fal voices` lists them; `multix fal voices <model>`
+prints the typed inputs as JSON):
+
+| Model | Text field | Voice | Style | Language | Format | Output |
+|---|---|---|---|---|---|---|
+| `google/gemini-3.8-flash-tts` (default) | `prompt` | 30 named voices (default `Kore`) | `--style` | — | — | wav |
+| `google/gemini-3.8-flash-lite-tts` (low latency) | `prompt` | same | `--style` | — | — | wav |
+| `elevenlabs/tts/eleven-v4` | `text` (≤ 5000 chars) | any name or voice id (default `Rachel`) | — | `--language` | `--format` (`mp3_*`, `pcm_*`, `opus_*`, `ulaw_8000`, ...) | by format |
+| `elevenlabs/tts/eleven-v4-turbo` (low latency) | same | same | — | `--language` | same | by format |
+
+- Pass the text once: a positional, `--text` or `--text-file` (UTF-8, up to
+  1 MB; a BOM and one trailing newline are removed). Blank text is refused.
+- A flag the model has no field for (`--style` on ElevenLabs, `--format` on
+  Gemini), a voice outside the model's list, or a format outside its enum fails
+  with `INVALID_INPUT` before anything is sent. `--input` adds other fields
+  (`stability`, `seed`, Gemini `turns` for multi-speaker dialogue, ...); a field
+  set by both a flag and `--input` is an error.
+- Set the default model with `FAL_TTS_MODEL`.
+- Other fal TTS endpoints work when you name their fields:
+  `multix fal tts "hi" -m <model> --text-field input [--voice-field speaker --voice anna]`.
+  multix never guesses a schema. `multix fal voices --live` lists fal's live
+  text-to-speech catalog (no key needed) and marks the unverified ones.
+
+The audio is saved as `fal-<request_id>-01.<ext>`, with the extension taken
+from the bytes: WAV, MP3, Ogg/Opus, FLAC, M4A, AAC, WebM and AIFF are
+recognised by their header, whatever the URL or Content-Type says. Raw formats
+with no header (`pcm_*` → `.pcm`, `ulaw_8000` → `.ulaw`, `alaw_8000` →
+`.alaw`) are named from the requested format. An empty file, an error page, or
+bytes that are not the container fal declared are refused and no file is left
+behind. `fal result <model> <id> --download` applies the same checks to a
+speech job.
 
 ## Status and result
 
