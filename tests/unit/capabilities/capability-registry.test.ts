@@ -6,7 +6,7 @@
  */
 
 import { Command } from "commander";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { TASKS, isTask } from "../../../src/capabilities/capability-types.js";
 import {
   COMMAND_CAPABILITIES,
@@ -62,6 +62,22 @@ describe("command capabilities", () => {
       expect(cap.tasks.length, command).toBeGreaterThan(0);
       expect(cap.tasks.every(isTask), command).toBe(true);
       expect(cap.scope !== undefined, command).toBe(cap.models === "provider-catalog");
+    }
+  });
+
+  it("lists scene render for speech, ready only with a key of a scene provider", () => {
+    const sceneRows = () => modelRows(program).filter((r) => r.provider === "scene");
+    try {
+      for (const key of ["GEMINI_API_KEY", "OPENAI_API_KEY", "ELEVENLABS_API_KEY"]) {
+        vi.stubEnv(key, "");
+      }
+      expect(sceneRows()).toMatchObject([
+        { task: "speech", command: "scene render", outputs: ["audio"], ready: false },
+      ]);
+      vi.stubEnv("OPENAI_API_KEY", "sk-test-not-real");
+      expect(sceneRows()[0]?.ready).toBe(true);
+    } finally {
+      vi.unstubAllEnvs();
     }
   });
 

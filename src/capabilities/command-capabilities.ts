@@ -134,6 +134,9 @@ export const COMMAND_CAPABILITIES: Readonly<Record<string, CommandCapability>> =
   "heygen tts": fixed(["speech"], ["audio"]),
   "heygen run": fixed(["any"], []),
   "doc convert": fixed(["document"], ["text"]),
+  // Each line uses the model its voice profile names, checked against that
+  // provider's own TTS model list (Gemini, OpenAI or ElevenLabs).
+  "scene render": fixed(["speech"], ["audio"]),
 };
 
 /** Commands that serve no generation task: status, listings, accounts, local tools. */
@@ -189,6 +192,14 @@ export const UTILITY_COMMANDS: ReadonlySet<string> = new Set([
   "media optimize",
   "media split",
   "media batch",
+  "scene voice add",
+  "scene voice list",
+  "scene voice validate",
+  "scene plan",
+  "scene status",
+  "scene approve",
+  "scene reject",
+  "scene export",
 ]);
 
 export function commandCapability(command: string): CommandCapability | undefined {

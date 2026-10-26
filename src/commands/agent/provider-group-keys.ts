@@ -21,6 +21,9 @@ export const GROUP_KEY_ROWS: Readonly<Record<string, readonly (readonly string[]
   replicate: [["REPLICATE_API_TOKEN", "REPLICATE_API_KEY"]],
   runway: [["RUNWAYML_API_SECRET"]],
   heygen: [["HEYGEN_API_KEY"]],
+  // A scene renders through the providers its voice profiles name; `scene
+  // render` itself checks those exact keys before its first request.
+  scene: [["GEMINI_API_KEY", "OPENAI_API_KEY", "ELEVENLABS_API_KEY"]],
 };
 
 /** Key env names a group reads (first of each row), for messages. */
