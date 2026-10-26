@@ -30,6 +30,8 @@ const METRIC_KEY =
   /(token|cost|credit|price|usage|billing|duration|seconds|_time$|^time$|time_ms|latency|characters?_?(count|cost)|units?$|predict|inference)/i;
 const SKIP_KEY =
   /(_at$|stamp|date|created|updated|expire|limit|max_|min_|width|height|seed|fps|index|count_?max)/i;
+/** Key paths that name a forecast, not a charge (Runway estimatedCost, quotes). */
+const ESTIMATE_PATH = /(estimat|quote|expected)/i;
 const ID_KEYS = new Set([
   "id",
   "request_id",
@@ -139,6 +141,8 @@ export function extractUsage(body: unknown, headers?: Headers | null): ResponseU
   }
   for (const [path, value] of Object.entries(out.metrics)) {
     const leaf = path.split(".").pop() ?? path;
+    // Estimates stay in metrics but are never reported as cost or credits spent.
+    if (ESTIMATE_PATH.test(path)) continue;
     if (
       out.cost_usd === undefined &&
       /^(cost|total_cost|cost_usd|usd)$/i.test(leaf) &&
