@@ -88,7 +88,10 @@ async function handleAuthenticatedMcp(
   }
   const keys = await app.accounts.providerKeys(account.id);
   const toolEnv = toolEnvFor(serverSettings(env), keys);
-  const jobs = jobsContextFor(env, app, account.id, keys, deps);
+  const jobs = jobsContextFor(env, app, account.id, keys, deps, {
+    source: "mcp",
+    clientId: `mcp:${auth.clientId}`,
+  });
   const events = eventsContextFor(env, app, deps, account.id, auth.clientId);
   return handleMcpRequest(request, toolEnv, { jobs, events });
 }
@@ -197,5 +200,6 @@ export function createWorker(deps: AppDeps = {}): ExportedHandler<WorkerEnv> {
 export { AccountEvents } from "./events/account-events.js";
 export { AccountJobQuota } from "./jobs/account-job-quota.js";
 export { MultixJobContainer } from "./jobs/multix-job-container.js";
+export { AccountUsage } from "./usage/account-usage.js";
 
 export default createWorker();

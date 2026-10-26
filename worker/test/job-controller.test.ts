@@ -99,7 +99,8 @@ describe("JobController", () => {
       return json(done ? { state: "done", result: RESULT } : { state: "running" });
     });
     const controller = new JobController(port);
-    expect(await controller.start(SPEC)).toMatchObject({ status: "running" });
+    state.t = 5_000;
+    expect(await controller.start(SPEC)).toMatchObject({ status: "running", runningAt: 5_000 });
     expect(state.requests[0]?.body).toBe(JSON.stringify(SPEC));
     expect(state.polls).toEqual([POLL_SECONDS]);
 
@@ -110,7 +111,7 @@ describe("JobController", () => {
     done = true;
     await controller.poll();
     expect(state.polls).toHaveLength(2);
-    expect(state.stored).toMatchObject({ status: "succeeded", result: RESULT });
+    expect(state.stored).toMatchObject({ status: "succeeded", result: RESULT, runningAt: 5_000 });
     expect(state.destroyed).toBe(1);
     expect(state.released).toBe(1);
     expect(JSON.stringify(state.saved)).not.toContain("secret-value-123456");

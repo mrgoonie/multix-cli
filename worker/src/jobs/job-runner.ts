@@ -9,6 +9,8 @@ import { ValidationError } from "../../../src/core/errors.js";
 import { DEFAULT_R2_PREFIX, type R2Settings, r2Prefix } from "../accounts/r2-settings.js";
 import type { ProviderKeys } from "../provider-secret-names.js";
 import { NON_SECRET_NAMES } from "../provider-secret-names.js";
+import type { AccountUsageStub } from "../usage/account-usage.js";
+import type { UsageSource } from "../usage/usage-types.js";
 import { type JobCaps, type JobQuota, quotaError } from "./account-job-quota.js";
 import { GROUP_KEYS } from "./cli-command-policy.js";
 import {
@@ -44,6 +46,14 @@ export interface JobToolsContext {
   /** The caps `quota` enforces, for messages and tool descriptions. */
   caps: JobCaps;
   r2Settings(): Promise<R2Settings | null>;
+  /**
+   * The account's usage ledger; when set, every job is recorded and checked
+   * against blocking budgets before it starts.
+   */
+  usage?: AccountUsageStub;
+  /** Where jobs come from (`mcp`, `rest`) and which client sent them, for the ledger. */
+  source?: UsageSource;
+  clientId?: string;
   /** Injected for tests. */
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
@@ -51,6 +61,26 @@ export interface JobToolsContext {
 
 /** Thrown when the account or the server already runs as many jobs as allowed. */
 export class JobCapacityError extends ValidationError {}
+
+/** Thrown when a blocking budget refuses the job, or the ledger cannot check it. */
+export class BudgetBlockedError extends ValidationError {}
+
+export const PROJECT_RE = /^[A-Za-z0-9._-]{1,64}$/;
+
+export interface RunMeta {
+  /** Free label grouping runs in the ledger and in budgets (`project` scope). */
+  project?: string;
+}
+
+/** The `--model` value of a prepared argv, if any. */
+export function requestedModel(argv: readonly string[]): string | undefined {
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i] as string;
+    if (arg === "--model") return argv[i + 1];
+    if (arg.startsWith("--model=")) return arg.slice("--model=".length);
+  }
+  return undefined;
+}
 
 /** Thrown for a job that does not exist or belongs to another account. */
 export class JobNotFoundError extends ValidationError {
@@ -114,6 +144,17 @@ export function jobPayload(
   };
   const error = view.error ?? result?.error;
   if (error) payload.error = redactSecrets(error, secrets);
+  const run = result?.run;
+  if (run) {
+    // What the provider reported; the ledger adds estimates and adjustments later.
+    payload.usage = {
+      provider: run.provider,
+      model: run.model ?? null,
+      cost_usd: run.usage?.cost_usd ?? null,
+      credits: run.usage?.credits ?? null,
+      tokens: run.usage?.tokens ?? null,
+    };
+  }
   if (result?.note) payload.note = result.note;
   if (!isTerminal(view.status)) {
     payload.next = { tool: "multix_job_status", arguments: { job_id: jobId } };
@@ -130,7 +171,11 @@ export class JobRunner {
     this.now = ctx.now ?? Date.now;
   }
 
-  async run(prepared: PreparedRun, waitSeconds: number): Promise<Record<string, unknown>> {
+  async run(
+    prepared: PreparedRun,
+    waitSeconds: number,
+    meta: RunMeta = {},
+  ): Promise<Record<string, unknown>> {
     const r2 = await this.ctx.r2Settings();
     const jobId = crypto.randomUUID();
     const spec: JobSpec = {
@@ -144,8 +189,13 @@ export class JobRunner {
       spec.upload = { r2, keyPrefix: await outputKeyPrefix(this.ctx.userId, jobId, r2Prefix(r2)) };
     const { userId } = this.ctx;
     const deadline = this.now() + waitSeconds * 1000;
+    await this.beginUsage(jobId, prepared, meta);
     const acquired = await this.ctx.quota.acquire(userId, jobId);
-    if (acquired !== "ok") throw new JobCapacityError(quotaError(acquired, this.ctx.caps));
+    if (acquired !== "ok") {
+      const message = quotaError(acquired, this.ctx.caps);
+      await this.releaseUsage(jobId, "NO_CAPACITY", message);
+      throw new JobCapacityError(message);
+    }
     let view: JobView;
     try {
       await this.ctx.store.create(jobId, {
@@ -157,9 +207,15 @@ export class JobRunner {
     } catch (error) {
       // The job Durable Object normally gives the slot back; here it may never have run.
       await this.ctx.quota.release(userId, jobId).catch(() => undefined);
+      await this.releaseUsage(
+        jobId,
+        "START_FAILED",
+        "The job could not be handed to its container",
+      );
       throw error;
     }
     if (view.status === "failed" && view.error === SERVER_AT_CAPACITY_ERROR) {
+      await this.releaseUsage(jobId, "SERVER_BUSY", SERVER_AT_CAPACITY_ERROR);
       throw new JobCapacityError(SERVER_AT_CAPACITY_ERROR);
     }
     while (!isTerminal(view.status) && this.now() < deadline) {
@@ -183,6 +239,40 @@ export class JobRunner {
     const view = await this.ctx.backend.cancel(jobId);
     if (!view) throw new JobNotFoundError();
     return jobPayload(jobId, view, scrubList(this.ctx.keys, await this.ctx.r2Settings()));
+  }
+
+  /**
+   * Record the job and apply blocking budgets before anything starts. Fails
+   * closed: a job the ledger could not check does not run.
+   */
+  private async beginUsage(jobId: string, prepared: PreparedRun, meta: RunMeta): Promise<void> {
+    if (meta.project !== undefined && !PROJECT_RE.test(meta.project)) {
+      throw new ValidationError("project must be 1 to 64 letters, digits, '.', '_' or '-'");
+    }
+    const usage = this.ctx.usage;
+    if (!usage) return;
+    let result: Awaited<ReturnType<AccountUsageStub["begin"]>>;
+    try {
+      result = await usage.begin({
+        jobId,
+        source: this.ctx.source ?? "unknown",
+        clientId: this.ctx.clientId,
+        project: meta.project,
+        command: prepared.command,
+        provider: prepared.group,
+        modelRequested: requestedModel(prepared.argv),
+        startedAt: this.now(),
+      });
+    } catch {
+      throw new BudgetBlockedError(
+        "The usage ledger is unavailable, so budgets cannot be checked; retry shortly",
+      );
+    }
+    if (!result.ok) throw new BudgetBlockedError(result.message);
+  }
+
+  private async releaseUsage(jobId: string, code: string, reason: string): Promise<void> {
+    await this.ctx.usage?.release(jobId, code, reason).catch(() => undefined);
   }
 
   private async assertOwned(jobId: string): Promise<void> {

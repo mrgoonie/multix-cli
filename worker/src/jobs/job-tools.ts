@@ -7,14 +7,17 @@
 
 import type { CallToolResult, McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
+import { ValidationError } from "../../../src/core/errors.js";
 import type { Limits } from "../config.js";
 import type { ProviderKeys } from "../provider-secret-names.js";
+import { FilterError, parseUsageFilter } from "../usage/usage-queries.js";
 import { catalogPayload } from "./catalog-view.js";
 import {
   DEFAULT_WAIT_SECONDS,
   JobRunner,
   type JobToolsContext,
   MAX_WAIT_SECONDS,
+  PROJECT_RE,
 } from "./job-runner.js";
 import { prepareRun } from "./run-argv-builder.js";
 import { MAX_INPUT_FILES } from "./run-input-files.js";
@@ -68,13 +71,18 @@ export function registerJobTools(
     "multix_run",
     {
       title: "Run a multix CLI command",
-      description: `Run one multix CLI command in an isolated container with your saved keys. command: e.g. "gemini generate". options: by long name without dashes ({"prompt": "...", "num-images": 2, "no-webp": true}). args: positionals in order. inputs: https URLs for file options or positionals (downloaded for the CLI). Output files go to your R2 bucket (configure it in /dashboard) and come back as URLs. Waits up to wait_seconds (max ${MAX_WAIT_SECONDS}, container start included); if still running, poll multix_job_status. At most ${jobs.caps.perAccount} running jobs per account. Caps: ${limits.maxOutputs} outputs, ${limits.maxVideoSeconds} s video, resolutions ${limits.allowedResolutions.join("/")}.`,
+      description: `Run one multix CLI command in an isolated container with your saved keys. command: e.g. "gemini generate". options: by long name without dashes ({"prompt": "...", "num-images": 2, "no-webp": true}). args: positionals in order. inputs: https URLs for file options or positionals (downloaded for the CLI). Output files go to your R2 bucket (configure it in /dashboard) and come back as URLs. Waits up to wait_seconds (max ${MAX_WAIT_SECONDS}, container start included); if still running, poll multix_job_status. At most ${jobs.caps.perAccount} running jobs per account. A blocking budget set in /dashboard can refuse the run before it starts. Caps: ${limits.maxOutputs} outputs, ${limits.maxVideoSeconds} s video, resolutions ${limits.allowedResolutions.join("/")}.`,
       inputSchema: toolInput({
         command: z.string().min(1).max(100).describe("Command path from multix_catalog"),
         args: z.array(z.string()).max(20).optional(),
         options: z.record(z.string(), optionValueSchema).optional(),
         inputs: z.record(z.string(), urlListSchema).optional(),
         wait_seconds: z.number().int().min(0).max(MAX_WAIT_SECONDS).optional(),
+        project: z
+          .string()
+          .regex(PROJECT_RE)
+          .optional()
+          .describe("Label for usage reports and project budgets, e.g. website-redesign"),
       }),
       annotations: { readOnlyHint: false, openWorldHint: true },
     },
@@ -82,7 +90,9 @@ export function registerJobTools(
       const fields = { command: args.command.slice(0, 100) };
       return runTool("multix_run", fields, async () => {
         const prepared = prepareRun(args, limits);
-        return runner.run(prepared, args.wait_seconds ?? DEFAULT_WAIT_SECONDS);
+        return runner.run(prepared, args.wait_seconds ?? DEFAULT_WAIT_SECONDS, {
+          project: args.project,
+        });
       });
     },
   );
@@ -109,5 +119,39 @@ export function registerJobTools(
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
     },
     async (args) => runTool("multix_job_cancel", {}, async () => runner.cancel(args.job_id)),
+  );
+
+  const usage = jobs.usage;
+  if (!usage) return;
+  server.registerTool(
+    "multix_usage",
+    {
+      title: "multix usage and budgets",
+      description:
+        "Summarize your multix_run usage: job count, success rate, known cost (provider-reported or estimated), runs of unknown cost, latency, top models and providers, and each budget's committed spend and forecast. Default range: the last 30 days. Costs are USD; null means unknown, never zero.",
+      inputSchema: toolInput({
+        from: z.string().max(40).optional().describe("Start, YYYY-MM-DD or ISO time"),
+        to: z.string().max(40).optional().describe("End, YYYY-MM-DD (inclusive) or ISO time"),
+        provider: z.string().max(64).optional().describe("Command group, e.g. gemini"),
+        project: z.string().max(64).optional(),
+      }),
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async (args) =>
+      runTool("multix_usage", { provider: args.provider }, async () => {
+        const params = new URLSearchParams();
+        for (const key of ["from", "to", "provider", "project"] as const) {
+          const value = args[key];
+          if (value) params.set(key, value);
+        }
+        let filter: ReturnType<typeof parseUsageFilter>;
+        try {
+          filter = parseUsageFilter(params, (jobs.now ?? Date.now)());
+        } catch (error) {
+          if (error instanceof FilterError) throw new ValidationError(error.message);
+          throw error;
+        }
+        return { ...(await usage.digest(filter)) };
+      }),
   );
 }

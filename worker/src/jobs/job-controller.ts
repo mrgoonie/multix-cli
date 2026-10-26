@@ -109,7 +109,7 @@ export class JobController {
     // The container may have stopped (and onStop recorded it) while the job was being handed over.
     const latest = await this.port.load();
     if (latest && isTerminal(latest.status)) return latest;
-    const running: JobView = { ...view, status: "running" };
+    const running: JobView = { ...view, status: "running", runningAt: this.port.now() };
     await this.port.save(running);
     await this.port.schedulePoll(POLL_SECONDS);
     return running;
@@ -212,6 +212,7 @@ export class JobController {
     const latest = await this.port.load();
     if (latest && isTerminal(latest.status)) return latest;
     const done: JobView = { status, createdAt: view.createdAt, finishedAt: this.port.now() };
+    if (view.runningAt !== undefined) done.runningAt = view.runningAt;
     if (result) done.result = result;
     if (error) done.error = error;
     await this.port.saveFinal(done);

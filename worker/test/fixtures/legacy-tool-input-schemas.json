@@ -72,6 +72,11 @@
         "type": "integer",
         "minimum": 0,
         "maximum": 40
+      },
+      "project": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._-]{1,64}$",
+        "description": "Label for usage reports and project budgets, e.g. website-redesign"
       }
     },
     "required": ["command"],

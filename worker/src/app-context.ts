@@ -14,6 +14,7 @@ import { type Session, readSession } from "./auth/signed-cookies.js";
 import { MIN_SESSION_SECRET_LENGTH, type WorkerEnv } from "./config.js";
 import type { AccountEventsNamespace } from "./events/account-events.js";
 import type { JobBackend } from "./jobs/job-store.js";
+import type { AccountUsageNamespace, AccountUsageStub } from "./usage/account-usage.js";
 
 export interface AppDeps {
   /** Injected for tests; defaults to the Worker's fetch (GitHub sign-in and R2 checks). */
@@ -22,6 +23,17 @@ export interface AppDeps {
   jobBackend?: JobBackend;
   /** Injected for tests; defaults to the MULTIX_EVENTS Durable Object namespace. */
   events?: AccountEventsNamespace;
+  /** Injected for tests; defaults to the MULTIX_USAGE Durable Object namespace. */
+  usage?: AccountUsageNamespace;
+}
+
+/** The account's usage ledger, or undefined when the Worker has no MULTIX_USAGE binding. */
+export function usageLedgerFor(
+  env: WorkerEnv,
+  deps: AppDeps,
+  userId: string,
+): AccountUsageStub | undefined {
+  return (deps.usage ?? env.MULTIX_USAGE)?.getByName(userId);
 }
 
 export interface AppContext {

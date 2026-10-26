@@ -11,6 +11,7 @@
 
 import type { OAuthHelpers } from "@cloudflare/workers-oauth-provider";
 import type { AccountEventsNamespace } from "./events/account-events.js";
+import type { AccountUsageNamespace } from "./usage/account-usage.js";
 import {
   type JobCaps,
   type JobQuotaNamespace,
@@ -80,6 +81,8 @@ export interface WorkerEnv extends ServerSettings {
   MULTIX_JOB_QUOTA?: JobQuotaNamespace;
   /** Durable Object namespace of AccountEvents (event subscriptions and webhook deliveries per account). */
   MULTIX_EVENTS?: AccountEventsNamespace;
+  /** Durable Object namespace of AccountUsage (usage ledger, budgets and activities per account). */
+  MULTIX_USAGE?: AccountUsageNamespace;
   /** Jobs one account may run at the same time (default 2, at most 50). */
   MULTIX_MAX_JOBS_PER_ACCOUNT?: string;
   /** Jobs the server may run at the same time (default 10, at most 1000; keep <= containers max_instances). */

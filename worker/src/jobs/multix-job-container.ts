@@ -4,9 +4,10 @@
  * own microVM and nothing is shared between accounts. The job server in the
  * image (container/job-server.mjs) listens on 8080.
  *
- * When the job ends, its final view and lifecycle events (events/job-events.ts)
- * are stored in one write and relayed to the owner's AccountEvents object by
- * a scheduled call (events/event-outbox.ts).
+ * When the job ends, its final view, lifecycle events (events/job-events.ts)
+ * and usage record (usage/usage-outbox.ts) are stored in one write and
+ * relayed to the owner's AccountEvents and AccountUsage objects by scheduled
+ * calls (events/event-outbox.ts).
  *
  * The Worker talks to it over RPC only (startJob / jobStatus / cancelJob);
  * no route forwards outside requests to the container. Only startJob boots
@@ -20,6 +21,13 @@ import type { AccountEventsNamespace } from "../events/account-events.js";
 import type { MultixEvent } from "../events/event-catalog.js";
 import { OUTBOX_PREFIX, outboxKey, relayOutbox } from "../events/event-outbox.js";
 import { jobEvents } from "../events/job-events.js";
+import type { AccountUsageNamespace } from "../usage/account-usage.js";
+import {
+  USAGE_OUTBOX_KEY,
+  type UsageOutboxRecord,
+  relayUsage,
+  settleInputFor,
+} from "../usage/usage-outbox.js";
 import { type JobQuotaNamespace, durableJobQuota } from "./account-job-quota.js";
 import { ContainerCapacityError, JobController } from "./job-controller.js";
 import type { JobSpec, JobView } from "./job-protocol.js";
@@ -35,6 +43,7 @@ const JOB_SERVER_TIMEOUT_MS = 10_000;
 interface JobContainerEnv {
   MULTIX_JOB_QUOTA?: JobQuotaNamespace;
   MULTIX_EVENTS?: AccountEventsNamespace;
+  MULTIX_USAGE?: AccountUsageNamespace;
 }
 
 interface SlotRecord {
@@ -66,14 +75,23 @@ export class MultixJobContainer extends Container<JobContainerEnv> {
         slot && this.env.MULTIX_EVENTS
           ? jobEvents({ jobId: slot.jobId, command: slot.command ?? "" }, view)
           : [];
+      const usage = slot && this.env.MULTIX_USAGE ? settleInputFor(slot.jobId, view) : undefined;
       const writes: Record<string, unknown> = { [JOB_KEY]: view };
       for (const event of events) writes[outboxKey(event.id)] = event;
+      if (slot && usage) {
+        writes[USAGE_OUTBOX_KEY] = {
+          userId: slot.userId,
+          input: usage,
+        } satisfies UsageOutboxRecord;
+      }
       // No await between the write and schedule()'s synchronous SQL insert, so the
-      // view, the outbox entries and the relay schedule are committed together.
+      // view, the outbox entries and the relay schedules are committed together.
       const saved = this.ctx.storage.put(writes);
       const relay = events.length > 0 ? this.scheduleRelay(1, 0) : undefined;
+      const relayUsage = usage ? this.scheduleUsageRelay(1, 0) : undefined;
       await saved;
       await relay;
+      await relayUsage;
     },
     startContainer: async () => {
       try {
@@ -163,6 +181,26 @@ export class MultixJobContainer extends Container<JobContainerEnv> {
     );
   }
 
+  /** Scheduled: hand the job's usage record to the owner's AccountUsage object. */
+  async relayUsage(attempt = 1): Promise<void> {
+    const usage = this.env.MULTIX_USAGE;
+    await relayUsage(
+      {
+        load: () => this.ctx.storage.get<UsageOutboxRecord>(USAGE_OUTBOX_KEY),
+        remove: async () => {
+          await this.ctx.storage.delete(USAGE_OUTBOX_KEY);
+        },
+        settle: usage ? (record) => usage.getByName(record.userId).settle(record.input) : undefined,
+        scheduleRelay: (next, seconds) => this.scheduleUsageRelay(next, seconds),
+      },
+      attempt,
+    );
+  }
+
+  private async scheduleUsageRelay(attempt: number, seconds: number): Promise<void> {
+    await this.schedule(seconds, "relayUsage" satisfies keyof MultixJobContainer, attempt);
+  }
+
   private async scheduleRelay(attempt: number, seconds: number): Promise<void> {
     await this.schedule(seconds, "relayEvents" satisfies keyof MultixJobContainer, attempt);
   }
@@ -174,7 +212,7 @@ export class MultixJobContainer extends Container<JobContainerEnv> {
    */
   async expireJob(): Promise<void> {
     const outbox = await this.ctx.storage.list({ prefix: OUTBOX_PREFIX });
-    await this.ctx.storage.delete([JOB_KEY, SLOT_KEY, ...outbox.keys()]);
+    await this.ctx.storage.delete([JOB_KEY, SLOT_KEY, USAGE_OUTBOX_KEY, ...outbox.keys()]);
   }
 
   override async onStop(_params: StopParams): Promise<void> {
