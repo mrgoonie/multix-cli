@@ -14,7 +14,10 @@
  * catalog, whose `pricing` takes three shapes: `prompt` only = USD per input
  * character (speech) or per second of input audio (transcription),
  * `completion` only = USD per second of output audio, both = USD per input and
- * output token. Token-priced transcription models (audio tokens per second not
+ * output token. That list shows each model's cheapest endpoint, and OpenRouter
+ * may route a request to (or fall back on) any of them, so each entry holds the
+ * highest price among the model's endpoints (`/models/<id>/endpoints`).
+ * Token-priced transcription models (audio tokens per second not
  * published) and prices whose unit is unclear are left out, so they stay
  * "unknown".
  */
@@ -103,7 +106,7 @@ function openrouter(
   id: string,
   models: string[],
   components: PriceComponent[],
-  opts: { source: string; until?: string; notes?: string },
+  opts: { source: string; until?: string; label?: string; notes?: string },
 ): PriceEntry {
   return {
     id: `openrouter/${id}@api`,
@@ -115,7 +118,7 @@ function openrouter(
     // A known end without a known next price: no window after it, so "unknown".
     windows: [
       {
-        ...(opts.until ? { until: opts.until, label: "scheduled" } : {}),
+        ...(opts.until ? { until: opts.until, label: opts.label ?? "scheduled" } : {}),
         components,
       },
     ],
@@ -187,7 +190,7 @@ const OPENROUTER_CATALOG: PriceEntry[] = [
     ["qwen/qwen-audio-3.0-tts-plus", "qwen/qwen-audio-3.0-tts-plus-20260723"],
     20,
   ),
-  speechChars("voxtral-mini-tts-2603", ["mistralai/voxtral-mini-tts-2603"], 16),
+  speechChars("voxtral-mini-tts-2603", ["mistralai/voxtral-mini-tts-2603"], 17.6),
   speechChars(
     "speech-15",
     [
@@ -206,15 +209,16 @@ const OPENROUTER_CATALOG: PriceEntry[] = [
   speechChars(
     "voxtral-mini-tts",
     ["mistralai/voxtral-mini-tts-3-0", "mistralai/voxtral-mini-tts-3-0-20261020"],
-    13,
+    14.3,
   ),
-  speechChars("open-weights-tts", ["canopylabs/orpheus-3b-0.1-ft", "sesame/csm-1b"], 7),
+  speechChars("orpheus", ["canopylabs/orpheus-3b-0.1-ft"], 15),
+  speechChars("sesame-csm", ["sesame/csm-1b"], 7),
   speechChars(
     "heygen-voice-turbo",
     ["heygen/heygen-voice-1-turbo", "heygen/heygen-voice-1-turbo-20261009"],
     4,
   ),
-  speechChars("kokoro", ["hexgrad/kokoro-82m"], 0.62),
+  speechChars("kokoro", ["hexgrad/kokoro-82m"], 4),
   // Fish Audio bills UTF-8 bytes on its own API; bytes are never fewer than
   // characters, so pricing bytes keeps the ceiling safe whichever OpenRouter counts.
   openrouter(
@@ -234,7 +238,7 @@ const OPENROUTER_CATALOG: PriceEntry[] = [
     "fish-drama-3",
     ["fish-audio/drama-3", "fish-audio/drama-3-20261013"],
     [perM("utf8_bytes", 2)],
-    { source: OPENROUTER_SPEECH, until: DRAMA_3_PROMOTION_END },
+    { source: OPENROUTER_SPEECH, until: DRAMA_3_PROMOTION_END, label: "promotion" },
   ),
   // Gemini TTS through OpenRouter: tokens in, audio tokens out (25 per second).
   openrouter(
@@ -294,7 +298,7 @@ const OPENROUTER_CATALOG: PriceEntry[] = [
   sttSeconds(
     "voxtral-small-transcribe",
     ["mistralai/voxtral-small-transcribe-3-0", "mistralai/voxtral-small-transcribe-3-0-20261020"],
-    66.6667,
+    73.3333,
   ),
   sttSeconds(
     "elevenlabs-scribe-v2",
@@ -309,7 +313,12 @@ const OPENROUTER_CATALOG: PriceEntry[] = [
   sttSeconds(
     "voxtral-mini-transcribe-3",
     ["mistralai/voxtral-mini-transcribe-3-0", "mistralai/voxtral-mini-transcribe-3-0-20261020"],
-    58.3333,
+    64.1667,
+  ),
+  sttSeconds(
+    "voxtral-mini-transcribe",
+    ["mistralai/voxtral-mini-transcribe", "mistralai/voxtral-mini-transcribe-2602"],
+    55,
   ),
   sttSeconds(
     "stt-50",
@@ -318,8 +327,6 @@ const OPENROUTER_CATALOG: PriceEntry[] = [
       "meta/muse-voice-transcribe-1.0-20260903",
       "mistralai/voxtral-small-24b-2507-stt",
       "mistralai/voxtral-small-24b-2507-stt-20260813",
-      "mistralai/voxtral-mini-transcribe",
-      "mistralai/voxtral-mini-transcribe-2602",
     ],
     50,
   ),
@@ -330,15 +337,12 @@ const OPENROUTER_CATALOG: PriceEntry[] = [
     ["mistralai/voxtral-mini-3b-2507", "mistralai/voxtral-mini-3b-2507-20260813"],
     16.6667,
   ),
-  sttSeconds(
-    "stt-7.5",
-    ["openai/whisper-large-v3", "qwen/qwen3-asr-1.7b", "qwen/qwen3-asr-1.7b-20260813"],
-    7.5,
-  ),
+  sttSeconds("whisper-large-v3", ["openai/whisper-large-v3"], 30.8333333333),
+  sttSeconds("whisper-large-v3-turbo", ["openai/whisper-large-v3-turbo"], 11.1111111111),
+  sttSeconds("qwen3-asr-1.7b", ["qwen/qwen3-asr-1.7b", "qwen/qwen3-asr-1.7b-20260813"], 7.5),
   sttSeconds(
     "stt-3.33",
     [
-      "openai/whisper-large-v3-turbo",
       "qwen/qwen3-asr-0.6b",
       "qwen/qwen3-asr-0.6b-20260813",
       "nvidia/nemotron-3.5-asr-streaming-multilingual-0.6b",
@@ -573,6 +577,16 @@ export function resolveRate(
       ok: false,
       reason: "no_window",
       detail: `Price ${entry.id} has no window covering ${at.toISOString()}`,
+    };
+  }
+  // A price that ends within a day with no known successor may already have
+  // changed (time zones, rollout): there is no higher price to bound it with.
+  const end = current.until === undefined ? undefined : Date.parse(current.until);
+  if (end !== undefined && end - t < BOUNDARY_MS && !entry.windows.some((w) => inWindow(w, end))) {
+    return {
+      ok: false,
+      reason: "no_window",
+      detail: `Price ${entry.id} ends ${current.until} and the next price is not known`,
     };
   }
   return {

@@ -141,7 +141,8 @@ Prices live in a versioned catalog (`multix.pricing/v1`,
 USD per unit, dated price windows (promotions and scheduled changes), billing
 tier, `last_checked`, source URL and a verified flag. A price that is missing,
 unverified, or last checked more than 120 days ago resolves to `unknown`.
-Within 24 hours of a price change the high end uses the higher price.
+Within 24 hours of a price change the high end uses the higher price; a price
+that ends within 24 hours with no known next price is `unknown`.
 
 Prices as checked on 2026-10-26 (`--estimate` shows the rate in force):
 
@@ -163,7 +164,11 @@ models catalog (`/api/v1/models?output_modalities=speech` and
 `?output_modalities=transcription`, the same lists `multix openrouter
 speech-models` and `multix openrouter transcription-models` print), with rate
 ids `openrouter/<name>@api` and the model ids and canonical slugs OpenRouter
-lists. Transcription models priced per token (`google/gemini-3.5-transcribe`,
+lists. That list shows each model's cheapest endpoint, but OpenRouter can route
+a request to any of them, so each price is the highest among the model's
+endpoints (`/api/v1/models/<id>/endpoints`); for example
+`openai/whisper-large-v3-turbo` is priced at $0.0000111/s, not $0.00000333/s.
+Character prices count emoji and other astral characters twice in the high end. Transcription models priced per token (`google/gemini-3.5-transcribe`,
 `openai/gpt-4o-transcribe`, `openai/gpt-4o-mini-transcribe`) and the MAI
 Transcribe models, whose price unit is not stated, stay `unknown`. The OpenRouter
 prices of Fish Audio Drama 3 and Gemini 3.8 TTS end with their direct-API price

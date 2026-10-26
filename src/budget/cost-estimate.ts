@@ -16,6 +16,8 @@ export interface TextUnits {
   /** Code points after NFC: Vietnamese typed as NFD has more code points than NFC. */
   nfc_characters: number;
   utf8_bytes: number;
+  /** UTF-16 code units: astral characters (emoji) count twice if a provider counts these. */
+  utf16_units: number;
 }
 
 export interface UnitRange {
@@ -88,6 +90,7 @@ export function countText(text: string): TextUnits {
     characters: [...text].length,
     nfc_characters: [...text.normalize("NFC")].length,
     utf8_bytes: encoder.encode(text).length,
+    utf16_units: text.length,
   };
 }
 
@@ -96,6 +99,7 @@ function addUnits(a: TextUnits, b: TextUnits): TextUnits {
     characters: a.characters + b.characters,
     nfc_characters: a.nfc_characters + b.nfc_characters,
     utf8_bytes: a.utf8_bytes + b.utf8_bytes,
+    utf16_units: a.utf16_units + b.utf16_units,
   };
 }
 
@@ -140,9 +144,14 @@ function meterRanges(
 ): CostEstimate["units"] | undefined {
   const units: CostEstimate["units"] = {};
   if (meters.has("characters")) {
-    units.characters = { low: text.characters, expected: text.characters, high: all.characters };
+    // A provider may count UTF-16 units: the high end takes the larger count.
+    const high = Math.max(all.characters, all.utf16_units);
+    units.characters = { low: text.characters, expected: text.characters, high };
     if (all.characters > text.characters) {
       assumptions.push("High end also bills the context/style text sent with the request.");
+    }
+    if (all.utf16_units > all.characters) {
+      assumptions.push("High end counts emoji and other astral characters as two characters.");
     }
   }
   if (meters.has("utf8_bytes")) {

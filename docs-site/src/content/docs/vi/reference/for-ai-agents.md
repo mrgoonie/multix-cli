@@ -140,7 +140,8 @@ Giá nằm trong một catalog có version (`multix.pricing/v1`,
 USD theo đơn vị, các khung giá có ngày hiệu lực (khuyến mãi và thay đổi đã lên
 lịch), tier tính phí, `last_checked`, URL nguồn và cờ đã xác minh. Giá bị thiếu,
 chưa xác minh, hoặc được kiểm tra lần cuối hơn 120 ngày trước sẽ thành
-`unknown`. Trong vòng 24 giờ quanh một lần đổi giá, mức cao dùng giá cao hơn.
+`unknown`. Trong vòng 24 giờ quanh một lần đổi giá, mức cao dùng giá cao hơn; giá kết thúc
+trong vòng 24 giờ mà chưa biết giá tiếp theo sẽ là `unknown`.
 
 Giá được kiểm tra ngày 2026-10-26 (`--estimate` hiển thị giá đang áp dụng):
 
@@ -162,6 +163,12 @@ của OpenRouter (`/api/v1/models?output_modalities=speech` và
 `?output_modalities=transcription`, cũng là danh sách mà `multix openrouter
 speech-models` và `multix openrouter transcription-models` in ra), với rate id
 `openrouter/<tên>@api` cùng model id và canonical slug mà OpenRouter liệt kê.
+Danh sách đó chỉ hiện endpoint rẻ nhất của mỗi model, nhưng OpenRouter có thể
+định tuyến request tới bất kỳ endpoint nào, nên mỗi giá là mức cao nhất trong
+các endpoint của model (`/api/v1/models/<id>/endpoints`); ví dụ
+`openai/whisper-large-v3-turbo` được tính $0,0000111/giây, không phải
+$0,00000333/giây. Với giá theo ký tự, mức cao tính emoji và các ký tự astral khác
+là hai ký tự.
 Model transcription tính giá theo token (`google/gemini-3.5-transcribe`,
 `openai/gpt-4o-transcribe`, `openai/gpt-4o-mini-transcribe`) và các model MAI
 Transcribe, vốn không ghi rõ đơn vị giá, vẫn là `unknown`. Giá OpenRouter của

@@ -91,6 +91,7 @@ const BUILDERS: Record<string, RequestBuilder> = {
 
 /** What a command needs before it can be priced, for the "missing_input" detail. */
 const NEEDS: Record<string, string> = {
+  "openrouter tts": "--text or --prompt (text from --text-file or --turns-file is not priced)",
   "openrouter transcribe": "the audio to transcribe (--input)",
 };
 
@@ -130,7 +131,7 @@ export function estimateCommand(
     expected_usd: null,
     high_usd: null,
     upper_bound: "none",
-    text: { characters: 0, nfc_characters: 0, utf8_bytes: 0 },
+    text: { characters: 0, nfc_characters: 0, utf8_bytes: 0, utf16_units: 0 },
     units: {},
     assumptions: [],
     at,

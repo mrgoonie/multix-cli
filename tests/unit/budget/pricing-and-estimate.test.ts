@@ -76,7 +76,12 @@ describe("pricing catalog", () => {
 
 describe("unit counting", () => {
   it("counts Vietnamese characters as code points and bytes as UTF-8", () => {
-    expect(countText(VI_NFC)).toEqual({ characters: 17, nfc_characters: 17, utf8_bytes: 22 });
+    expect(countText(VI_NFC)).toEqual({
+      characters: 17,
+      nfc_characters: 17,
+      utf8_bytes: 22,
+      utf16_units: 17,
+    });
     // Decomposed input has more code points (billed characters) but the same NFC length.
     const nfd = countText(VI_NFD);
     expect(nfd.characters).toBeGreaterThan(17);
@@ -85,7 +90,7 @@ describe("unit counting", () => {
   });
 
   it("counts emoji and CJK as one character each", () => {
-    expect(countText("ok 👍")).toMatchObject({ characters: 4, utf8_bytes: 7 });
+    expect(countText("ok 👍")).toMatchObject({ characters: 4, utf8_bytes: 7, utf16_units: 5 });
     expect(countText("你好")).toMatchObject({ characters: 2, utf8_bytes: 6 });
   });
 });
@@ -216,12 +221,53 @@ describe("openrouter estimates", () => {
     expect(e.expected_usd).toBeCloseTo(10 * 0.0025, 9);
   });
 
-  it("a price with a known end and no known successor turns unknown after it", () => {
+  it("a price with a known end and no known successor turns unknown a day before it", () => {
     const drama = { text: "hi", model: "fish-audio/drama-3" };
-    expect(estimateCommand("openrouter tts", drama, { at: AT }).status).toBe("estimated");
+    const e = estimateCommand("openrouter tts", drama, { at: AT });
+    expect(e.status).toBe("estimated");
+    expect(e.assumptions.join(" ")).toContain("Promotional price ends");
+    for (const at of ["2026-11-11T17:00:01Z", "2026-11-13T00:00:00Z"]) {
+      expect(estimateCommand("openrouter tts", drama, { at: new Date(at) })).toMatchObject({
+        status: "unknown",
+        reason: "no_window",
+      });
+    }
     expect(
-      estimateCommand("openrouter tts", drama, { at: new Date("2026-11-13T00:00:00Z") }),
-    ).toMatchObject({ status: "unknown", reason: "no_window" });
+      estimateCommand("openrouter tts", drama, { at: new Date("2026-11-11T16:59:59Z") }).status,
+    ).toBe("estimated");
+  });
+
+  it("prices a model at its most expensive OpenRouter endpoint, not the cheapest listed", () => {
+    // whisper-large-v3-turbo: DeepInfra $0.00000333/s, Groq $0.0000111/s.
+    const turbo = estimateCommand(
+      "openrouter transcribe",
+      { input: "a.mp3" },
+      { audioSeconds: 600, at: AT },
+    );
+    expect(turbo.expected_usd).toBeCloseTo(600 * 0.0000111111111111, 6);
+    // kokoro-82m: $0.62/M characters listed, $4/M on its other endpoint.
+    const kokoro = estimateCommand(
+      "openrouter tts",
+      { text: "a".repeat(1000), model: "hexgrad/kokoro-82m" },
+      { at: AT },
+    );
+    expect(kokoro.high_usd).toBeCloseTo(0.004, 9);
+  });
+
+  it("counts astral characters twice in the high end, in case UTF-16 units are billed", () => {
+    const e = estimateCommand(
+      "openrouter tts",
+      { text: "ok 👍", model: "elevenlabs/eleven-v4" },
+      { at: AT },
+    );
+    expect(e.units.characters).toEqual({ low: 4, expected: 4, high: 5 });
+    expect(e.upper_bound).toBe("proven");
+  });
+
+  it("says which options can be priced when the text comes from a file", () => {
+    expect(estimateCommand("openrouter tts", { textFile: "a.txt" }, { at: AT }).detail).toContain(
+      "--text-file",
+    );
   });
 
   it("models OpenRouter has not priced in a known unit stay unknown", () => {
