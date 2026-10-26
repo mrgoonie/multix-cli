@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.0](https://github.com/mrgoonie/multix-cli/compare/v1.15.0...v1.16.0) (2026-10-26)
+
+
+### Added
+
+* **openrouter:** add text-to-speech via /audio/speech ([#313](https://github.com/mrgoonie/multix-cli/issues/313)) ([18dd61b](https://github.com/mrgoonie/multix-cli/commit/18dd61b17ccdbb82b481cc53ff6cfa5ed0912ebe)), closes [#290](https://github.com/mrgoonie/multix-cli/issues/290)
+
+## [1.15.0](https://github.com/mrgoonie/multix-cli/compare/v1.14.1...v1.15.0) (2026-10-26)
+
+
+### Added
+
+* **elevenlabs:** support v4 and v4 Turbo TTS with model-specific controls ([#308](https://github.com/mrgoonie/multix-cli/issues/308)) ([0e5ca9c](https://github.com/mrgoonie/multix-cli/commit/0e5ca9cee17d29d7e25189ef8d2c758347036fd8)), closes [#292](https://github.com/mrgoonie/multix-cli/issues/292)
+* **fal:** typed text-to-speech with verified audio output ([#305](https://github.com/mrgoonie/multix-cli/issues/305)) ([26c69b0](https://github.com/mrgoonie/multix-cli/commit/26c69b0b5b972a5201e878b0c200a848c0478c9f)), closes [#291](https://github.com/mrgoonie/multix-cli/issues/291)
+
+## [1.14.1](https://github.com/mrgoonie/multix-cli/compare/v1.14.0...v1.14.1) (2026-10-26)
+
+
+### Fixed
+
+* **agent:** never report a provider's estimated cost as credits or cost spent ([#301](https://github.com/mrgoonie/multix-cli/issues/301)) ([f8b98ef](https://github.com/mrgoonie/multix-cli/commit/f8b98ef6ee5201b5f02f5ded930ce4a87f19ae17)), closes [#298](https://github.com/mrgoonie/multix-cli/issues/298)
+
 ## [1.14.0](https://github.com/mrgoonie/multix-cli/compare/v1.13.0...v1.14.0) (2026-10-25)
 
 

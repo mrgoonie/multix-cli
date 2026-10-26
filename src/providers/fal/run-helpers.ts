@@ -6,6 +6,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { isRetryableServerStatus } from "../../core/async-poll.js";
+import { audioExtFromMime } from "../../core/audio-kind.js";
 import { MultixError, ProviderError } from "../../core/errors.js";
 import { downloadFile } from "../../core/http-client.js";
 import { parseJsonInput } from "../../core/json-input.js";
@@ -266,6 +267,26 @@ function extFromUrl(url: string, fallback = ".bin"): string {
   }
 }
 
+const EXT_BY_MIME: Record<string, string> = {
+  "image/png": ".png",
+  "image/jpeg": ".jpg",
+  "image/webp": ".webp",
+  "image/gif": ".gif",
+  "video/mp4": ".mp4",
+  "video/webm": ".webm",
+  "video/quicktime": ".mov",
+  "model/gltf-binary": ".glb",
+};
+
+/** Extension for a response Content-Type, for URLs that have none. */
+function extFromContentType(contentType: string | undefined): string | undefined {
+  const mime = contentType?.split(";")[0]?.trim().toLowerCase() ?? "";
+  const known = EXT_BY_MIME[mime];
+  if (known) return known;
+  const audio = audioExtFromMime(mime);
+  return audio ? `.${audio}` : undefined;
+}
+
 /**
  * Download every extracted media URL into outDir with a `fal-<request_id>-<n>.<ext>`
  * name. Any partially-written file from a failed download is removed.
@@ -284,9 +305,20 @@ export async function downloadResultMedia(
     // The full id: fal ids are UUIDv7, whose leading characters are shared by
     // every job submitted within about a minute.
     const filename = `fal-${requestId.replace(/[^A-Za-z0-9_.-]/g, "_")}-${String(i + 1).padStart(2, "0")}${ext}`;
-    const filepath = path.join(outDir, filename);
+    let filepath = path.join(outDir, filename);
     try {
-      await downloadFile(url, filepath);
+      const contentType = await downloadFile(url, filepath);
+      // A URL without an extension: name the file by the served Content-Type.
+      const typed = extFromUrl(url, "") === "" ? extFromContentType(contentType) : undefined;
+      if (typed) {
+        const renamed = filepath.replace(/\.bin$/, typed);
+        try {
+          fs.renameSync(filepath, renamed);
+          filepath = renamed;
+        } catch {
+          // The download succeeded; keep it under its .bin name.
+        }
+      }
       saved.push(filepath);
       logger.success(`Saved ${filepath}`);
     } catch (e) {

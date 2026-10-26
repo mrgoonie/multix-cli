@@ -145,11 +145,13 @@ values). Moving the keys to `.env` or `~/.multix/.env` is still recommended.
 Use explicit overrides only when you need a different default. Available
 settings include `IMAGE_GEN_MODEL`, `VIDEO_GEN_MODEL`, `MULTIMODAL_MODEL`,
 `GEMINI_TTS_MODEL`, `OPENAI_IMAGE_MODEL`, `OPENAI_TTS_MODEL`,
-`OPENAI_STT_MODEL`, `OPENROUTER_IMAGE_MODEL`, `LEONARDO_BASE_URL`,
+`OPENAI_STT_MODEL`, `OPENROUTER_IMAGE_MODEL`, `OPENROUTER_TTS_MODEL` (default
+`google/gemini-3.8-flash-tts`), `LEONARDO_BASE_URL`,
 `BYTEPLUS_BASE_URL`, `BYTEPLUS_IMAGE_MODEL`, `BYTEPLUS_VIDEO_MODEL`,
 `BYTEPLUS_3D_MODEL`, `FAL_BASE_URL`, `FAL_IMAGE_MODEL`, `FAL_VIDEO_MODEL`, and
 `FAL_VIDEO_IMAGE_MODEL` (fal's image-to-video default, used when
-`multix fal video --image-url` is passed without `-m`). `FAL_MAX_UPLOAD_MB`
+`multix fal video --image-url` is passed without `-m`). `FAL_TTS_MODEL` sets
+the `multix fal tts` default (default `google/gemini-3.8-flash-tts`). `FAL_MAX_UPLOAD_MB`
 sets the size limit for local files uploaded by `multix fal upload` and
 `multix fal run --file` (default 1024). Replicate accepts
 `REPLICATE_BASE_URL` (API root for mocks or proxies), `REPLICATE_IMAGE_MODEL`

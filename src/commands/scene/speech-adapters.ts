@@ -13,6 +13,7 @@ import { apiPostBinary, requireElevenLabsKey } from "../../providers/elevenlabs/
 import {
   ELEVENLABS_OUTPUT_FORMATS,
   ELEVENLABS_TTS_MODELS,
+  ttsModelCaps,
 } from "../../providers/elevenlabs/models.js";
 import { synthesizeGeminiSpeech, wrapPcmInWav } from "../../providers/gemini/generators/speech.js";
 import { listGeminiKeys } from "../../providers/gemini/key-pool.js";
@@ -174,14 +175,6 @@ const openai: SpeechAdapter = {
 // ── ElevenLabs ────────────────────────────────────────────────────────────────
 
 /** Character limits per request, from the ElevenLabs model docs. */
-const ELEVENLABS_MAX_CHARS: Record<string, number> = {
-  eleven_v3: 5_000,
-  eleven_multilingual_v2: 10_000,
-  eleven_flash_v2_5: 40_000,
-  eleven_turbo_v2_5: 40_000,
-  eleven_flash_v2: 30_000,
-  eleven_turbo_v2: 30_000,
-};
 const ELEVENLABS_LANGUAGE_MODELS = new Set(["eleven_v3", "eleven_flash_v2_5", "eleven_turbo_v2_5"]);
 /** mp3 and pcm only: telephony μ-law is not an editing format. */
 const ELEVENLABS_SCENE_FORMATS = ELEVENLABS_OUTPUT_FORMATS.filter((f) => !f.startsWith("ulaw"));
@@ -203,14 +196,18 @@ function elevenlabsSampleRate(format: string): number | undefined {
 const elevenlabs: SpeechAdapter = {
   keyEnv: "ELEVENLABS_API_KEY",
   formats: ELEVENLABS_SCENE_FORMATS,
-  limits: (model) => ({
-    maxChars: ELEVENLABS_MAX_CHARS[model] ?? 5_000,
-    audioTags: model === "eleven_v3",
-    ssmlBreaks: model !== "eleven_v3",
-    context: model !== "eleven_v3",
-    language: ELEVENLABS_LANGUAGE_MODELS.has(model),
-    style: false,
-  }),
+  limits: (model) => {
+    const caps = ttsModelCaps(model);
+    return {
+      maxChars: caps?.maxChars ?? 5_000,
+      audioTags: caps?.audioTags ?? false,
+      // Tag-driven models (v3, v4) take audio tags instead of SSML breaks.
+      ssmlBreaks: caps ? !caps.audioTags : false,
+      context: caps?.contextText ?? false,
+      language: ELEVENLABS_LANGUAGE_MODELS.has(model),
+      style: false,
+    };
+  },
   profileErrors(p) {
     const errors: string[] = [];
     if (!(ELEVENLABS_TTS_MODELS as readonly string[]).includes(p.model)) {
@@ -239,6 +236,14 @@ const elevenlabs: SpeechAdapter = {
     for (const name of ["stability", "similarity_boost", "style"])
       numberSetting(s, name, 0, 1, errors);
     numberSetting(s, "speed", 0.7, 1.2, errors);
+    // Settings a model ignores would be paid for without effect.
+    const caps = ttsModelCaps(p.model);
+    if (caps && !caps.style && s.style !== undefined) {
+      errors.push(`settings.style is ignored by ${p.model}`);
+    }
+    if (caps && !caps.speakerBoost && s.use_speaker_boost !== undefined) {
+      errors.push(`settings.use_speaker_boost is ignored by ${p.model}`);
+    }
     numberSetting(s, "seed", 0, 4_294_967_295, errors);
     if (s.seed !== undefined && !Number.isInteger(s.seed))
       errors.push("settings.seed must be an integer");

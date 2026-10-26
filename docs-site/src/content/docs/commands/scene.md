@@ -172,7 +172,9 @@ the model, voice and format lists come from each provider's model files.
 | Other Gemini TTS models | 4,000 | no | no | no | no | no | none |
 | OpenAI `gpt-4o-mini-tts` | 4,096 | yes | no | no | no | no | `speed` (0.25–4) |
 | OpenAI `tts-1`, `tts-1-hd` | 4,096 | no | no | no | no | no | `speed` (0.25–4) |
+| ElevenLabs `eleven_v4`, `eleven_v4_turbo` | 10,000 | no | no | yes | yes | no | see below |
 | ElevenLabs `eleven_v3` | 5,000 | no | no | yes | no | yes | see below |
+| ElevenLabs `eleven_v3_conversational` | 5,000 | no | no | yes | no | no | see below |
 | ElevenLabs `eleven_multilingual_v2` | 10,000 | no | yes | no | yes | no | see below |
 | ElevenLabs `eleven_flash_v2_5`, `eleven_turbo_v2_5` | 40,000 | no | yes | no | yes | yes | see below |
 | ElevenLabs `eleven_flash_v2`, `eleven_turbo_v2` | 30,000 | no | yes | no | yes | no | see below |
@@ -181,6 +183,11 @@ the model, voice and format lists come from each provider's model files.
   `use_speaker_boost` (true/false), `speed` (0.7–1.2) and `seed`. ElevenLabs
   takes no free-text style; use `settings.style` or v3 audio tags. Formats are
   the `mp3_*` and `pcm_*` output formats; μ-law is excluded.
+- ElevenLabs `settings.style` is accepted only by `eleven_multilingual_v2`, and
+  `use_speaker_boost` only by `eleven_multilingual_v2` and
+  `eleven_v3_conversational`; on other models they would be ignored, so the
+  profile is rejected. Limits come from the capability table in
+  `src/providers/elevenlabs/models.ts`.
 - Gemini scene output is `wav` only.
 - Characters are counted as Unicode code points. `--max-chars` (minimum 20)
   splits lines below the model limit.

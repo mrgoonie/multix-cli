@@ -1,8 +1,7 @@
 ---
 name: multix
-description: AI multimodal CLI — generate and edit images (OpenAI, Codex driver, Gemini Nano Banana, Imagen, MiniMax, OpenRouter, Leonardo, BytePlus Seedream, Cloudflare Workers AI FLUX.1 Schnell, fal.ai FLUX, Replicate FLUX, Runway Gen-4 Image), generate, edit and extend video (Gemini Omni Flash, plus legacy Gemini Veo), generate video (MiniMax Hailuo, OpenRouter via Veo/Seedance/Kling, Leonardo via Motion/Veo/Kling/Hailuo/Seedance/LTX, BytePlus Seedance, Cloudflare AI Gateway via Replicate, fal.ai queue models, Replicate direct API models incl. P-Video, Runway Gen-4.5 and Gen-4 Turbo, HeyGen Video Agent and scripted avatar videos), video translation and lipsync (HeyGen), TTS/STT/music (OpenAI, Gemini Flash TTS incl. Gemini 3.8 with delivery-style control, MiniMax, Cloudflare Workers AI MeloTTS, ElevenLabs), multi-character dialogue audio with per-character voice profiles, cached per-line takes and stem export (multix scene), 3D models (BytePlus Hyper3D/Hitem3d), analyze/transcribe media, convert documents to Markdown, optimize media via ffmpeg/ImageMagick, and self-update the CLI. Use whenever the user wants to create, edit, or transform images/video/audio/3D/documents from a CLI, mentions any of: OpenAI, Codex image driver, image-to-image, i2i, image edit, watercolor/cyberpunk style transfer, reference image, OpenRouter, Nano Banana, Flux, Seedream, Gemini Omni, Omni Flash, Veo, Hailuo, Seedance, Kling, Cloudflare Workers AI, AI Gateway, fal.ai, Atlas Cloud, Replicate, replicate.com models, Replicate predictions, Runway, Gen-4.5, Gen-4 Turbo, Gen-4 Image, HeyGen, avatar video, talking head, Video Agent, video translation, dubbing, lipsync, video generation, text-to-video, image-to-video, i2v, ElevenLabs voice cloning, updating/upgrading multix, or asks for batch media optimization.
-version: 1.14.0 # x-release-please-version
----
+description: AI multimodal CLI — generate and edit images (OpenAI, Codex driver, Gemini Nano Banana, Imagen, MiniMax, OpenRouter, Leonardo, BytePlus Seedream, Cloudflare Workers AI FLUX.1 Schnell, fal.ai FLUX, Replicate FLUX, Runway Gen-4 Image), generate, edit and extend video (Gemini Omni Flash, plus legacy Gemini Veo), generate video (MiniMax Hailuo, OpenRouter via Veo/Seedance/Kling, Leonardo via Motion/Veo/Kling/Hailuo/Seedance/LTX, BytePlus Seedance, Cloudflare AI Gateway via Replicate, fal.ai queue models, Replicate direct API models incl. P-Video, Runway Gen-4.5 and Gen-4 Turbo, HeyGen Video Agent and scripted avatar videos), video translation and lipsync (HeyGen), TTS/STT/music (OpenAI, Gemini Flash TTS incl. Gemini 3.8 with delivery-style control, OpenRouter TTS (Gemini, ElevenLabs, Fish Audio, MiniMax routed), MiniMax, Cloudflare Workers AI MeloTTS, ElevenLabs), multi-character dialogue audio with per-character voice profiles, cached per-line takes and stem export (multix scene), 3D models (BytePlus Hyper3D/Hitem3d), analyze/transcribe media, convert documents to Markdown, optimize media via ffmpeg/ImageMagick, and self-update the CLI. Use whenever the user wants to create, edit, or transform images/video/audio/3D/documents from a CLI, mentions any of: OpenAI, Codex image driver, image-to-image, i2i, image edit, watercolor/cyberpunk style transfer, reference image, OpenRouter, Nano Banana, Flux, Seedream, Gemini Omni, Omni Flash, Veo, Hailuo, Seedance, Kling, Cloudflare Workers AI, AI Gateway, fal.ai, Atlas Cloud, Replicate, replicate.com models, Replicate predictions, Runway, Gen-4.5, Gen-4 Turbo, Gen-4 Image, HeyGen, avatar video, talking head, Video Agent, video translation, dubbing, lipsync, video generation, text-to-video, image-to-video, i2v, ElevenLabs voice cloning, updating/upgrading multix, or asks for batch media optimization.
+version: 1.16.0 # x-release-please-version
 
 # multix — AI Multimodal CLI
 
@@ -17,7 +16,7 @@ multix <group> <cmd> ... --json         # stdout = ONE line, schema multix.resul
 - Tasks: image, image-edit, video, image-to-video, video-edit, speech, transcription, music, sfx, voice, 3d, analysis, document, avatar-video, any. `multix guide` prints the protocol for the installed version.
 - Success = `ok: true` AND `outputs[]` non-empty (path, bytes, mime, sha256, width/height, duration_s) AND no `warnings` (`EMPTY_OUTPUT`, `CONTENT_MISMATCH`, `UNREADABLE_MEDIA`).
 - Failure: read `error.code`, `error.hint`, `next[]`. Exit codes (with `--json`; plain runs exit 1): 2 fix flags/input · 3 key/setup (`multix check`, key named in `error.env`) · 4 temporary (wait `retry_after_s`, `multix rerun <history_id>`) · 5 rejected: quota, safety, model (change input/provider) · 6 timed out, job may still run (status command in `next[]`, do not resubmit) · 1 unknown (`log[]`).
-- `usage` = what the provider reported (tokens, `cost_usd`, `credits`, metrics); `history_id` names the run.
+- `usage` = what the provider reported (tokens, `cost_usd`, `credits`, metrics; `sources` names the header/body field each money number came from); `history_id` names the run.
 - History: `multix history [--failed] [--since 1d]`, `multix history show last`, `multix history stats --by model|provider|command`, `multix rerun <id|last>`. Ledger `~/.multix/history.jsonl` has no keys or signed URLs; `MULTIX_HISTORY=0` disables it.
 
 ## When to use
@@ -28,6 +27,7 @@ Activate this skill when the user asks to:
 - Generate video from text or from a reference image (image-to-video, alias `i2v`)
 - **Edit or extend a Gemini Omni video** (`gemini edit-video`, `gemini extend-video`) and check/resume/cancel it (`gemini video-status`, `gemini video-cancel`)
 - **Generate video via OpenRouter routed models** (Veo, Seedance, Kling — use `multix openrouter video-models` to list)
+- **Text-to-speech via OpenRouter** with one key across Gemini, ElevenLabs, Fish Audio, MiniMax and other speech models (`multix openrouter tts`; list with `multix openrouter speech-models`)
 - **Generate video via BytePlus Seedance** directly (text-to-video, image-to-video, reference-to-video)
 - **Generate video via Leonardo** (Motion, Veo, Kling, Hailuo, Seedance, LTX models)
 - Generate images or speech with Cloudflare Workers AI, or video through Cloudflare AI Gateway's Replicate route
@@ -36,7 +36,7 @@ Activate this skill when the user asks to:
 - Analyze, transcribe, or extract structured data from media/docs
 - Convert PDFs / DOCX / images to Markdown
 - Optimize, resize, batch-convert, or split video/audio/image files
-- Run any fal.ai model (generic queue-API runner), or fal.ai's default image/video models
+- Run any fal.ai model (generic queue-API runner), or fal.ai's default image/video models and text-to-speech (Gemini 3.8 Flash/Flash-Lite TTS, ElevenLabs v4/v4 Turbo) with typed inputs
 - Run any Atlas Cloud model (image, image edit, video, TTS/STT, 3D) with schema-validated inputs and resumable async predictions
 - Run any Replicate model (official or versioned) via the direct API, generate Replicate images/video, or resume/cancel a Replicate prediction by id
 - Generate Runway Gen-4.5 / Gen-4 Turbo video or Gen-4 images (with tagged reference images), or check/resume/cancel a Runway task by id
@@ -57,12 +57,12 @@ Detects whether `multix` was installed via npm, pnpm, yarn, or bun global instal
 ```
 GEMINI_API_KEY        # Google AI Studio (extra keys: GEMINI_API_KEY_2, _3, … rotate on 429/RESOURCE_EXHAUSTED)
 OPENAI_API_KEY        # OpenAI API (image, image edit, TTS, STT)
-OPENROUTER_API_KEY    # OpenRouter (multi-model gateway: image + video via Veo, Seedance, Kling)
+OPENROUTER_API_KEY    # OpenRouter (multi-model gateway: image, video via Veo, Seedance, Kling, and TTS)
 MINIMAX_API_KEY       # MiniMax (image/video/speech/music)
 LEONARDO_API_KEY      # Leonardo.Ai (image/video/upscale)
 BYTEPLUS_API_KEY      # BytePlus / Volcengine ARK (Seedream/Seedance/Hyper3D)
 ELEVENLABS_API_KEY    # ElevenLabs (TTS, cloning, STT, music, dubbing)
-FAL_KEY                # fal.ai (generic queue-API model runner, image/video, local media upload)
+FAL_KEY                # fal.ai (generic queue-API model runner, image/video/TTS, local media upload)
 ATLASCLOUD_API_KEY    # Atlas Cloud (any model: image, edit, video, audio, 3D)
 REPLICATE_API_TOKEN   # Replicate direct API (REPLICATE_API_KEY accepted as fallback)
 RUNWAYML_API_SECRET   # Runway API (Gen-4.5 / Gen-4 Turbo video, Gen-4 images)
@@ -158,11 +158,17 @@ multix fal image "a cyberpunk cat" [-m <model>] [--image-size square_hd] [-n 1] 
 multix fal video "a dancer under neon lights" [-m <model>] [--image-url <https-url>] [--duration <n>] [--aspect-ratio 16:9] [--seed <n>] [-v]
 
 # Inspect a request submitted any other way
+# Text-to-speech (default google/gemini-3.8-flash-tts, or FAL_TTS_MODEL); flags map to each model's own fields
+multix fal tts "Xin chào" [--voice Puck] [--style "warm"]                       # Gemini: prompt/voice/style_instructions, wav
+multix fal tts --text-file script.txt -m elevenlabs/tts/eleven-v4-turbo [--format pcm_16000|opus_48000_64|mp3_44100_128] [--language vi]
+multix fal tts "hi" -m <other-fal-tts> --text-field <field> [--voice-field <field> --voice <v>]   # unlisted model: name its fields
+multix fal voices [<model>] [--live]   # verified models, voices, formats; <model> or --json prints typed inputs; --live lists fal's TTS catalog
+
 multix fal status <model> <requestId>
-multix fal result <model> <requestId> [--download] [--output-dir <dir>]
+multix fal result <model> <requestId> [--download] [--output-dir <dir>] [--format <fmt>]   # --format for raw speech formats; detach receipts include it
 ```
 
-`--detach` leaves a receipt in `~/.multix/fal/requests/` (or at `--receipt <path>`, which also works without `--detach`; mode 0600, no input or key). `status`/`result` never resubmit, so resume a detached or timed-out job with them instead of running `fal run` again. `UNKNOWN_REMOTE_STATE` means fal may or may not have queued the submit (connection cut off, 5xx gateway error): check https://fal.ai/dashboard/requests before resubmitting. `--file`/`fal upload` take image, video and audio only (`FAL_MAX_UPLOAD_MB`, default 1024); the uploaded URL is public to anyone with the link.
+`--detach` leaves a receipt in `~/.multix/fal/requests/` (or at `--receipt <path>`, which also works without `--detach`; mode 0600, no input or key). `status`/`result` never resubmit, so resume a detached or timed-out job with them instead of running `fal run` again. `UNKNOWN_REMOTE_STATE` means fal may or may not have queued the submit (connection cut off, 5xx gateway error): check https://fal.ai/dashboard/requests before resubmitting. `fal tts` refuses a flag the model has no field for (`--style` on ElevenLabs, `--format` on Gemini) and a voice or format outside the model's list, before sending. It saves `fal-<id>-01.<ext>` with the extension taken from the bytes (raw `pcm_*`/`ulaw_8000`/`alaw_8000` from the format) and refuses empty, error-page or mislabelled audio; `--detach` and `fal result --download` work as for `run`. `--file`/`fal upload` take image, video and audio only (`FAL_MAX_UPLOAD_MB`, default 1024); the uploaded URL is public to anyone with the link.
 
 ## Atlas Cloud
 
@@ -426,6 +432,16 @@ multix gemini generate-speech --text "Have a wonderful day!" --voice Kore
 multix gemini generate-speech --text "Have a wonderful day!" --model gemini-3.8-flash-tts --style "cheerful and friendly" --voice Kore
 multix minimax generate-speech --text "..." --voice <id> --emotion neutral
 multix elevenlabs tts --text "Hello world" [--voice <voiceId>] [--model eleven_multilingual_v2]
+# OpenRouter speech (default google/gemini-3.8-flash-tts; Gemini and ElevenLabs need --voice; fish-audio/drama-3 does not)
+# --format auto = WAV for pcm-only Gemini/HeyGen, MP3 otherwise (MiniMax: mp3 only). The request is never retried:
+# on UNKNOWN_REMOTE_STATE check `openrouter generation <id>` or openrouter.ai/activity before resending.
+multix openrouter tts --text "Xin chào" --model google/gemini-3.8-flash-lite-tts --voice Kore --output hello.wav
+multix openrouter speech-models [--model <id>]       # live model list / one model's voices
+multix openrouter generation <generation-id>         # cost, if it was not reported yet
+# Eleven v4 (quality) / v4 Turbo (low latency, 0.5 credits/char): 90+ languages, [audio tags], 10k chars.
+# No --style on v4/v3/Flash (rejected, not ignored); v3 rejects --previous-text/--next-text.
+multix elevenlabs tts --model eleven_v4 --text "[warmly] Xin chào!" --language-code vi [--timestamps]
+multix elevenlabs models   # live capabilities per model
 
 # Voice cloning + STT
 multix openai transcribe --input audio.mp3 [--format text|json|diarized_json] [--language vi]
@@ -479,6 +495,7 @@ Requires `cwebp` (libwebp: `brew install webp`, `apt install webp`) on `PATH`.
 | `OPENROUTER_IMAGE_MODEL` | Default OpenRouter image model |
 | `OPENROUTER_FALLBACK_MODELS` | CSV; applies to `generate` AND `i2i` |
 | `OPENROUTER_VIDEO_MODEL` | Default OpenRouter video model (default `google/veo-3.1`) |
+| `OPENROUTER_TTS_MODEL` | Default `openrouter tts` model (default `google/gemini-3.8-flash-tts`) |
 | `OPENROUTER_SITE_URL` / `OPENROUTER_APP_NAME` | HTTP-Referer / X-Title headers |
 | `GEMINI_MODEL` / `MULTIMODAL_MODEL` | Override Gemini analyze/transcribe/extract defaults (doc convert uses `--model`; default `gemini-3.6-flash`) |
 | `IMAGE_GEN_MODEL` / `VIDEO_GEN_MODEL` | Override Gemini media-generation defaults (video default `gemini-omni-1.1-flash`; `veo-*` = legacy Veo) |
@@ -487,6 +504,7 @@ Requires `cwebp` (libwebp: `brew install webp`, `apt install webp`) on `PATH`.
 | `BYTEPLUS_VIDEO_PARAMS_MODE` | `flags` (default) or `structured` |
 | `FAL_BASE_URL` | Override fal queue base (default `https://queue.fal.run`) |
 | `FAL_IMAGE_MODEL` / `FAL_VIDEO_MODEL` | fal.ai default model ids (default `fal-ai/flux/schnell`, `fal-ai/kling-video/v1.6/standard/text-to-video`) |
+| `FAL_TTS_MODEL` | Default `multix fal tts` model (default `google/gemini-3.8-flash-tts`) |
 | `ATLASCLOUD_BASE_URL` | Override Atlas Cloud media API base (default `https://api.atlascloud.ai/api/v1`; `https://` required, `http://` only for localhost, 127.0.0.1 or [::1]) |
 | `ATLASCLOUD_IMAGE_MODEL` / `ATLASCLOUD_IMAGE_EDIT_MODEL` / `ATLASCLOUD_VIDEO_MODEL` / `ATLASCLOUD_IMAGE_TO_VIDEO_MODEL` / `ATLASCLOUD_TTS_MODEL` / `ATLASCLOUD_STT_MODEL` / `ATLASCLOUD_TEXT_TO_3D_MODEL` / `ATLASCLOUD_IMAGE_TO_3D_MODEL` | Atlas Cloud default model ids per command |
 | `FAL_MAX_UPLOAD_MB` | Size limit for local files uploaded by `fal upload` / `fal run --file` (default 1024) |

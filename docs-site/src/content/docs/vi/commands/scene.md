@@ -171,7 +171,9 @@ danh sách model, giọng và format lấy từ file model của từng provider
 | Các model Gemini TTS khác | 4.000 | không | không | không | không | không | không có |
 | OpenAI `gpt-4o-mini-tts` | 4.096 | có | không | không | không | không | `speed` (0,25–4) |
 | OpenAI `tts-1`, `tts-1-hd` | 4.096 | không | không | không | không | không | `speed` (0,25–4) |
+| ElevenLabs `eleven_v4`, `eleven_v4_turbo` | 10.000 | không | không | có | có | không | xem bên dưới |
 | ElevenLabs `eleven_v3` | 5.000 | không | không | có | không | có | xem bên dưới |
+| ElevenLabs `eleven_v3_conversational` | 5.000 | không | không | có | không | không | xem bên dưới |
 | ElevenLabs `eleven_multilingual_v2` | 10.000 | không | có | không | có | không | xem bên dưới |
 | ElevenLabs `eleven_flash_v2_5`, `eleven_turbo_v2_5` | 40.000 | không | có | không | có | có | xem bên dưới |
 | ElevenLabs `eleven_flash_v2`, `eleven_turbo_v2` | 30.000 | không | có | không | có | không | xem bên dưới |
@@ -180,6 +182,10 @@ danh sách model, giọng và format lấy từ file model của từng provider
   `use_speaker_boost` (true/false), `speed` (0,7–1,2) và `seed`. ElevenLabs
   không nhận style dạng văn bản tự do; dùng `settings.style` hoặc audio tag của
   v3. Format là các output format `mp3_*` và `pcm_*`; μ-law bị loại.
+- `settings.style` của ElevenLabs chỉ được nhận bởi `eleven_multilingual_v2`,
+  còn `use_speaker_boost` chỉ bởi `eleven_multilingual_v2` và
+  `eleven_v3_conversational`; model khác sẽ bỏ qua chúng nên profile bị từ chối.
+  Giới hạn lấy từ bảng capability trong `src/providers/elevenlabs/models.ts`.
 - Output của Gemini trong scene chỉ là `wav`.
 - Ký tự được đếm theo Unicode code point. `--max-chars` (tối thiểu 20) tách câu
   ở mức thấp hơn giới hạn của model.
