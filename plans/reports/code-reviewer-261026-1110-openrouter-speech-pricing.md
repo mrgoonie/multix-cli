@@ -94,3 +94,27 @@ Reviewer: isolated code-reviewer (did not write the change). Date: 2026-10-26.
 ## Unresolved questions
 - Should `--max-cost` pin the OpenRouter provider (`allow_fallbacks:false`) instead of pricing the worst endpoint? That is a product decision.
 - Does OpenRouter bill speech characters as code points, UTF-16 units or bytes? Not documented. A cheap live check would settle it.
+
+## Re-review: fix commit 31e4c14 (2026-10-26)
+
+**Verdict: merge OK. No blocking issues remain.**
+
+### Checks
+- **Endpoint prices (finding 1).** I re-fetched both `/models` lists and every priced model's `/models/<id>/endpoints`, then compared each catalog component with the highest endpoint price (`prompt` or `completion`).
+  - Result: 0 entries below the highest endpoint price, and all ids and slugs still exist.
+  - No endpoint carries any other non-zero price field (for example a per-request fee).
+  - The same six models as before stay unpriced (unknown).
+  - Default STT model, 600 s: proven ceiling $0.007334, which is at least the $0.00667 Groq charge.
+- **Prices ending with no known successor (finding 2).** Drama 3 is estimated at 2026-11-11T16:59Z and unknown (`no_window`) from 17:00:01Z on that day, so a day early. OpenRouter Gemini 3.8 goes unknown on 2026-12-31. The direct Gemini entries are unchanged, because they have a successor window. The "Promotional price ends" note now appears.
+- **Character high end (finding 4).** The high end is now the larger of code points and UTF-16 units: 1,000 emoji give a high end of 2,000. The new `utf16_units` field in `TextUnits` only adds a field; typecheck and the Worker build pass.
+- **Clearer message (finding 6).** The `missing_input` detail now names `--text-file` and `--turns-file`.
+- **Commands run:** lint, typecheck and build are clean. `npm test` reports 1912 passed and 22 skipped, 3 more than before. `check:mcp` reports a clean bundle.
+- **Not changed, reasons accepted:**
+  - Finding 3: the ffprobe margin is now documented, and no underestimate was reproduced.
+  - Finding 5: the ffprobe cost per run is small.
+  - Finding 7: harmless today.
+
+### Remaining notes (non-blocking)
+- `low` and `expected` now also use the highest endpoint price. Expected cost and the receipt variance therefore lean high for runs served by the cheaper endpoint. If that matters, keep the listed price for `expected` and the highest price for `high` only.
+- Each entry's `source` still names the `/models` list, while the price now comes from `/models/<id>/endpoints`. Name the endpoints URL, or add a note, so whoever re-checks the prices compares against the right data.
+- The new endpoint test pins two models only. A data-driven test cannot run offline, so the next price re-check should repeat the endpoint comparison by hand.

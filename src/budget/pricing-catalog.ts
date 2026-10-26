@@ -125,7 +125,9 @@ function openrouter(
     last_checked: "2026-10-26",
     source: opts.source,
     verified: true,
-    ...(opts.notes ? { notes: opts.notes } : {}),
+    notes:
+      opts.notes ??
+      "Highest price among the model's endpoints (/api/v1/models/<id>/endpoints); re-check against those, not only the models list.",
   };
 }
 
