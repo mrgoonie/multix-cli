@@ -157,7 +157,7 @@ describe("buildTtsRequest: value validation", () => {
   });
 });
 
-describe("buildTtsRequest: checks carried over from the duplicate v4 implementation", () => {
+describe("buildTtsRequest: clone strength, length, SSML and language checks", () => {
   for (const model of ["eleven_v4", "eleven_v4_turbo"]) {
     it(`${model}: sends --clone-strength as voice_settings.clone_strength`, () => {
       const { payload, warnings } = buildTtsRequest({ text: "Hi", model, cloneStrength: "0.25" });

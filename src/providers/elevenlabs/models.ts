@@ -51,8 +51,7 @@ export interface TtsModelCaps {
  * eleven_multilingual_v2 answers 200 to a code on its language list ("de")
  * and 400 to others ("vi"); the API reference says it does not enforce the
  * code. clone_strength (0..1) is accepted by v4 and v4 Turbo and rejected
- * with 400 unsupported_model by eleven_v3, eleven_multilingual_v2 and
- * eleven_flash_v2_5. SSML, per the TTS best
+ * with 400 unsupported_model by every other model in this table. SSML, per the TTS best
  * practices guide: v4 and v3 do not support <break>; <phoneme> works only
  * with eleven_flash_v2.
  */

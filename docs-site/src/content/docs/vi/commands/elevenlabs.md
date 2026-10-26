@@ -56,7 +56,7 @@ dụng, nên CLI cảnh báo. `--clone-strength` (0 đến 1, cho Professional V
 Clone đã fine-tune cho v4) chỉ được gửi tới `eleven_v4` và `eleven_v4_turbo`;
 model khác từ chối. Thẻ SSML `<break>` trên v3/v4 và `<phoneme>` trên mọi
 model trừ `eleven_flash_v2` sẽ có cảnh báo. `--voice` phải là voice ID (chữ,
-số, `_`, `-`). Độ dài text được đếm theo ký tự, mỗi emoji là một ký tự, giống
+số, `_`, `-`). Độ dài text được đếm theo Unicode code point, giống
 cách API tính. `--model` lạ được gửi nguyên trạng, không kiểm tra, kèm cảnh báo.
 
 `--timestamps` lưu thời gian từng ký tự cạnh file audio thành

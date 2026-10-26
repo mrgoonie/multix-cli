@@ -114,16 +114,16 @@ export function registerTtsCommand(parent: Command): void {
       };
 
       let bytes = res.bytes;
-      let timings: TimestampsResp | undefined;
+      let timings: TimestampsResp | null | undefined;
       if (opts.timestamps) {
-        let problem: string | undefined;
+        let problem = "carried no audio";
         try {
-          timings = JSON.parse(res.bytes.toString("utf8")) as TimestampsResp;
-          if (!timings.audio_base64) problem = "carried no audio";
+          timings = JSON.parse(res.bytes.toString("utf8")) as TimestampsResp | null;
         } catch {
           problem = "was not JSON";
         }
-        if (problem) {
+        const audio = timings?.audio_base64;
+        if (!audio) {
           // The request may already be billed: keep the body so it can be inspected.
           const raw = saveBytes({
             bytes: res.bytes,
@@ -137,7 +137,7 @@ export function registerTtsCommand(parent: Command): void {
             "elevenlabs",
           );
         }
-        bytes = Buffer.from(timings?.audio_base64 ?? "", "base64");
+        bytes = Buffer.from(audio, "base64");
       }
 
       const dest = saveBytes({

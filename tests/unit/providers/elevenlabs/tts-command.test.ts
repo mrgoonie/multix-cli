@@ -165,11 +165,19 @@ describe("elevenlabs tts", () => {
     await expect(run("--text", "Hi", "--model", "eleven_v4", "--timestamps")).rejects.toThrow(
       /carried no audio; raw response saved to .*elevenlabs_tts_raw_.*\.json/,
     );
+    stubFetch(
+      () => new Response("null", { status: 200, headers: { "content-type": "application/json" } }),
+    );
+    await expect(run("--text", "Hi", "--model", "eleven_v4", "--timestamps")).rejects.toThrow(
+      /carried no audio; raw response saved to .*\.json/,
+    );
     const saved = fs.readdirSync(outDir).sort();
-    expect(saved.filter((f) => f.startsWith("elevenlabs_tts_raw_"))).toHaveLength(2);
+    expect(saved.filter((f) => f.startsWith("elevenlabs_tts_raw_"))).toHaveLength(3);
     expect(saved.some((f) => /^elevenlabs_tts_\d/.test(f))).toBe(false);
-    const json = saved.find((f) => f.endsWith(".json")) ?? "";
-    expect(fs.readFileSync(path.join(outDir, json), "utf8")).toBe(body);
+    const json = saved
+      .filter((f) => f.endsWith(".json"))
+      .map((f) => fs.readFileSync(path.join(outDir, f), "utf8"));
+    expect(json.sort()).toEqual([body, "null"].sort());
   });
 
   it("--clone-strength reaches voice_settings on v4 and is refused elsewhere", async () => {

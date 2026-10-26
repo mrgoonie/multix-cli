@@ -66,7 +66,7 @@ export function buildTtsRequest(input: TtsInput): TtsRequestPlan {
   const { text, model } = input;
   const caps = ttsModelCaps(model);
   const warnings: string[] = [];
-  // Code points, not UTF-16 units: the API counts (and bills) an emoji as one character.
+  // Unicode code points, not UTF-16 units: the API counts and bills code points.
   const chars = [...text].length;
 
   if (!caps) {
@@ -161,7 +161,7 @@ export function buildTtsRequest(input: TtsInput): TtsRequestPlan {
   }
   if (caps && !caps.ssmlPhoneme && SSML_PHONEME.test(text)) {
     warnings.push(
-      `${model} does not support SSML <phoneme> tags. Models that support them: ${modelsWith((c) => c.ssmlPhoneme)}${model.startsWith("eleven_v4") ? "; eleven_v4 reads IPA wrapped in slashes (/.../) instead" : ""}.`,
+      `${model} does not support SSML <phoneme> tags. Models that support them: ${modelsWith((c) => c.ssmlPhoneme)}${model === "eleven_v4" ? "; eleven_v4 reads IPA wrapped in slashes (/.../) instead" : ""}.`,
     );
   }
 
