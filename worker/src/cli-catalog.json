@@ -10824,6 +10824,506 @@
       ]
     },
     {
+      "group": "scene",
+      "description": "Multi-character dialogue: voice profiles, scene manifests, per-line takes, approval and stem export",
+      "commands": [
+        {
+          "command": "scene voice add",
+          "description": "Create or update a character voice profile (no credentials are stored)",
+          "positionals": [
+            {
+              "name": "id",
+              "description": "",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--provider",
+              "flags": "--provider <name>",
+              "description": "Speech provider (gemini|openai|elevenlabs)",
+              "required": true,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--model",
+              "flags": "--model <id>",
+              "description": "TTS model id",
+              "required": true,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--voice",
+              "flags": "--voice <id>",
+              "description": "Provider voice id or name",
+              "required": true,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--format",
+              "flags": "--format <fmt>",
+              "description": "Output format (default: wav | mp3 | mp3_44100_128 by provider)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--language",
+              "flags": "--language <tag>",
+              "description": "BCP 47 language, e.g. vi or vi-VN",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--name",
+              "flags": "--name <str>",
+              "description": "Display name",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--alias",
+              "flags": "--alias <name>",
+              "description": "Script speaker name for this voice (repeatable)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--style",
+              "flags": "--style <text>",
+              "description": "Delivery direction for every line (models that take one)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--setting",
+              "flags": "--setting <key=value>",
+              "description": "Provider setting, e.g. stability=0.4 (repeatable)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--context",
+              "flags": "--context",
+              "description": "Send neighbouring lines as previous/next text (ElevenLabs v2 models)",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--max-chars",
+              "flags": "--max-chars <n>",
+              "description": "Split lines longer than this",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--cloned",
+              "flags": "--cloned",
+              "description": "The voice is a cloud clone of a real person's voice",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--consent-by",
+              "flags": "--consent-by <name>",
+              "description": "Who granted consent to clone the voice (required with --cloned)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--consent-at",
+              "flags": "--consent-at <iso>",
+              "description": "When consent was granted (default: now)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--consent-note",
+              "flags": "--consent-note <text>",
+              "description": "Scope or reference of the consent",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--force",
+              "flags": "--force",
+              "description": "Replace an existing profile (its version is bumped)",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--project",
+              "flags": "--project <dir>",
+              "description": "Scene project directory",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "."
+            }
+          ]
+        },
+        {
+          "command": "scene voice list",
+          "description": "List voice profiles",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--project",
+              "flags": "--project <dir>",
+              "description": "Scene project directory",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "."
+            }
+          ]
+        },
+        {
+          "command": "scene voice validate",
+          "description": "Validate every voice profile without calling a provider",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--project",
+              "flags": "--project <dir>",
+              "description": "Scene project directory",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "."
+            }
+          ]
+        },
+        {
+          "command": "scene plan",
+          "description": "Parse scene scripts (all of them; none = the ones already planned) into the manifest; keeps takes whose request is unchanged (local, no cost)",
+          "positionals": [
+            {
+              "name": "scripts",
+              "description": "",
+              "required": false,
+              "variadic": true
+            }
+          ],
+          "options": [
+            {
+              "long": "--project",
+              "flags": "--project <dir>",
+              "description": "Scene project directory",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "."
+            },
+            {
+              "long": "--name",
+              "flags": "--name <str>",
+              "description": "Project name (default: directory name)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            }
+          ]
+        },
+        {
+          "command": "scene render",
+          "description": "Render lines without a take for their current request (one request per line, no retries)",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--project",
+              "flags": "--project <dir>",
+              "description": "Scene project directory",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "."
+            },
+            {
+              "long": "--scene",
+              "flags": "--scene <id>",
+              "description": "Only this scene",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--line",
+              "flags": "--line <id>",
+              "description": "Only this line, e.g. s01/003 (repeatable)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--new-take",
+              "flags": "--new-take",
+              "description": "Render a new variant of the --line lines even if cached",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--limit",
+              "flags": "--limit <n>",
+              "description": "Send at most this many requests",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--keep-going",
+              "flags": "--keep-going",
+              "description": "Continue with other lines after a failed line",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        },
+        {
+          "command": "scene approve",
+          "description": "Approve the selected take (or --take) of each line",
+          "positionals": [
+            {
+              "name": "lines",
+              "description": "",
+              "required": true,
+              "variadic": true
+            }
+          ],
+          "options": [
+            {
+              "long": "--take",
+              "flags": "--take <id>",
+              "description": "Take to select and approve (one line only)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--project",
+              "flags": "--project <dir>",
+              "description": "Scene project directory",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "."
+            }
+          ]
+        },
+        {
+          "command": "scene reject",
+          "description": "Reject a take; the line falls back to its newest other take for the same request",
+          "positionals": [
+            {
+              "name": "line",
+              "description": "",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--take",
+              "flags": "--take <id>",
+              "description": "Take to reject",
+              "required": true,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--project",
+              "flags": "--project <dir>",
+              "description": "Scene project directory",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "."
+            }
+          ]
+        },
+        {
+          "command": "scene status",
+          "description": "Completion, takes, duration and reported spend per scene",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--project",
+              "flags": "--project <dir>",
+              "description": "Scene project directory",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "."
+            },
+            {
+              "long": "--lines",
+              "flags": "--lines",
+              "description": "Include per-line status (ids, speakers, takes; no script text)",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            }
+          ]
+        },
+        {
+          "command": "scene export",
+          "description": "Copy the selected take of every line as audio stems plus an export manifest",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--out",
+              "flags": "--out <dir>",
+              "description": "Export directory",
+              "required": true,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--approved-only",
+              "flags": "--approved-only",
+              "description": "Export approved takes only; other lines count as missing",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--allow-missing",
+              "flags": "--allow-missing",
+              "description": "Export even when some lines have no usable take",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--scene",
+              "flags": "--scene <id>",
+              "description": "Only this scene",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--project",
+              "flags": "--project <dir>",
+              "description": "Scene project directory",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "."
+            }
+          ]
+        }
+      ]
+    },
+    {
       "group": "doc",
       "description": "Document-to-Markdown: convert PDFs, images, DOCX, PPTX, and other docs to Markdown via Gemini",
       "commands": [

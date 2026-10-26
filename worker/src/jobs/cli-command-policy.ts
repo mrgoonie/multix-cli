@@ -66,6 +66,16 @@ export const EXCLUDED_COMMANDS: ReadonlySet<string> = new Set([
   "history show",
   "history stats",
   "rerun",
+  // Scene projects live in a local directory across runs; a job container is discarded after each run.
+  "scene voice add",
+  "scene voice list",
+  "scene voice validate",
+  "scene plan",
+  "scene render",
+  "scene approve",
+  "scene reject",
+  "scene status",
+  "scene export",
 ]);
 
 /** Options no remote command may use: stdin is not available in the container. */
