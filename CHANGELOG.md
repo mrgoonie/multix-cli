@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.18.0](https://github.com/mrgoonie/multix-cli/compare/v1.17.1...v1.18.0) (2026-10-26)
+
+
+### Added
+
+* **budget:** price estimates, spend guards and reconciled cost receipts ([#327](https://github.com/mrgoonie/multix-cli/issues/327)) ([1a1e1b3](https://github.com/mrgoonie/multix-cli/commit/1a1e1b3d38101f936f125859ec7e86113b003c16)), closes [#295](https://github.com/mrgoonie/multix-cli/issues/295)
+
 ## [1.17.1](https://github.com/mrgoonie/multix-cli/compare/v1.17.0...v1.17.1) (2026-10-26)
 
 
