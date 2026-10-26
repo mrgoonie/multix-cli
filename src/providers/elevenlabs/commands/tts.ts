@@ -104,6 +104,14 @@ export function registerTtsCommand(parent: Command): void {
         query: { output_format: opts.format },
       });
 
+      // Only what ElevenLabs reports; multix never estimates what was charged.
+      const charged = res.headers.get("character-cost");
+      const reportCharged = () => {
+        if (charged !== null && charged.trim() !== "") {
+          console.log(`Credits charged (ElevenLabs character-cost header): ${charged}`);
+        }
+      };
+
       let bytes = res.bytes;
       let timings: TimestampsResp | undefined;
       if (opts.timestamps) {
@@ -111,9 +119,10 @@ export function registerTtsCommand(parent: Command): void {
         try {
           parsed = JSON.parse(res.bytes.toString("utf8")) as TimestampsResp | null;
         } catch {}
-        if (!parsed?.audio_base64) {
+        if (typeof parsed?.audio_base64 !== "string" || parsed.audio_base64 === "") {
           // The request was billed: keep what came back so it can be inspected.
           const raw = saveBytes({ bytes: res.bytes, task: "tts_raw", ext: "bin", logger });
+          reportCharged();
           throw new ProviderError(
             `with-timestamps response ${parsed === undefined ? "was not JSON" : "carried no audio"}; raw response saved to ${raw}`,
             "elevenlabs",
@@ -145,10 +154,6 @@ export function registerTtsCommand(parent: Command): void {
         }
       }
 
-      // Only what ElevenLabs reports; multix never estimates what was charged.
-      const charged = res.headers.get("character-cost");
-      if (charged !== null && charged.trim() !== "") {
-        console.log(`Credits charged (ElevenLabs character-cost header): ${charged}`);
-      }
+      reportCharged();
     });
 }

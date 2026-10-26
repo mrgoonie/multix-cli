@@ -275,3 +275,27 @@ describe("checkVoiceId", () => {
     },
   );
 });
+
+describe("buildTtsRequest: --language-code", () => {
+  it("eleven_multilingual_v2 sends it with a warning that it is not enforced", () => {
+    const { payload, warnings } = buildTtsRequest({
+      text: "Hallo",
+      model: "eleven_multilingual_v2",
+      languageCode: "de",
+    });
+    expect(payload.language_code).toBe("de");
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(
+      /eleven_multilingual_v2 does not enforce --language-code.*eleven_v4/,
+    );
+  });
+
+  it.each(["eleven_v4", "eleven_v3", "eleven_flash_v2_5"])(
+    "%s sends it without a warning",
+    (model) => {
+      const { payload, warnings } = buildTtsRequest({ text: "Hallo", model, languageCode: "de" });
+      expect(payload.language_code).toBe("de");
+      expect(warnings).toEqual([]);
+    },
+  );
+});

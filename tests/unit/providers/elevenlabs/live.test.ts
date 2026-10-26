@@ -42,7 +42,9 @@ describe.skipIf(!enabled)("elevenlabs live smoke", () => {
 
   for (const model of ["eleven_v4", "eleven_v4_turbo"]) {
     it(`${model} returns MP3 audio and a character-cost header`, async () => {
-      const { payload, warnings } = buildTtsRequest({ text: "Hi.", model, cloneStrength: "0" });
+      // v4 Turbo also carries clone_strength, so both bodies are checked live.
+      const cloneStrength = model === "eleven_v4_turbo" ? "0" : undefined;
+      const { payload, warnings } = buildTtsRequest({ text: "Hi.", model, cloneStrength });
       expect(warnings).toEqual([]);
       const res = await apiPostBinaryWithHeaders(
         `text-to-speech/${TASK_DEFAULTS.ttsVoice}`,

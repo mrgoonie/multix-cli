@@ -48,10 +48,11 @@ multix elevenlabs models   # live: khả năng, ngôn ngữ, giới hạn ký t�
 CLI kiểm tra tùy chọn theo model trước khi gửi request:
 
 - Từ chối, kèm danh sách model hỗ trợ: `--style` khác 0 trên model không có
-  style (Flash/Turbo vẫn nhận và tính phí cho audio bỏ qua nó),
+  style (Flash v2.5 trả 200 cho `style` 0.8 và tính phí cho audio bỏ qua nó),
   `--clone-strength` ngoài v4 và v4 Turbo, `--previous-text`/`--next-text` với
   `eleven_v3`, và text dài hơn giới hạn của model. Giới hạn đếm theo ký tự (code
-  point) như ElevenLabs, nên emoji hay ký tự astral khác chỉ tính một.
+  point) như ElevenLabs, nên ký tự astral như `𠀀` chỉ tính một, còn emoji ghép
+  từ nhiều code point thì tính từng code point.
 - Từ chối trước khi gửi request: `--voice` không phải voice ID (chữ, số, `_`
   hoặc `-`).
 - Cảnh báo và không gửi: `--style 0` hoặc `--no-speaker-boost` trên model không
@@ -61,14 +62,17 @@ CLI kiểm tra tùy chọn theo model trước khi gửi request:
   v3 và v3 conversational (bị bỏ qua, không ngắt nghỉ), và SSML `<phoneme>` trên
   multilingual v2 và Flash/Turbo v2.5 (từ nằm trong tag bị bỏ thay vì được đọc).
 - Để API quyết định: `--language-code`. API từ chối mã mà model không hỗ trợ, và
-  không tính phí.
+  không tính phí. Với `eleven_multilingual_v2`, mã vẫn được gửi kèm cảnh báo: API
+  nhận các mã trong danh sách của model, nhưng tài liệu API ghi model này không
+  áp dụng tham số đó.
 - `--model` lạ được gửi nguyên trạng, không kiểm tra, kèm cảnh báo.
 
 `--clone-strength` (0 đến 1) đặt mức v4 bám theo Professional Voice Clone.
 
 `--timestamps` lưu thời gian từng ký tự cạnh file audio thành
 `<audio>.timestamps.json`. Nếu response đã tính phí mà không có audio, body gốc
-được lưu thành `elevenlabs_tts_raw_<stamp>.bin` và thông báo lỗi nêu tên file đó.
+được lưu thành `elevenlabs_tts_raw_<stamp>.bin`, số credit đã báo vẫn được in ra,
+và thông báo lỗi nêu tên file đó.
 
 TTS còn nhận các format `wav_*`, `opus_48000_*`, `alaw_8000`, `mp3_24000_48`,
 `pcm_32000` và `pcm_48000`.

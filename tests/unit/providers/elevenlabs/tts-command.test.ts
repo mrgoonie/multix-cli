@@ -159,7 +159,11 @@ describe("elevenlabs tts", () => {
     );
     const noAudio = JSON.stringify({ alignment: {} });
     stubFetch(
-      () => new Response(noAudio, { status: 200, headers: { "content-type": "application/json" } }),
+      () =>
+        new Response(noAudio, {
+          status: 200,
+          headers: { "content-type": "application/json", "character-cost": "5" },
+        }),
     );
     const err = await run("--text", "Hi", "--model", "eleven_v4", "--timestamps").catch(
       (e: Error) => e,
@@ -167,10 +171,23 @@ describe("elevenlabs tts", () => {
     expect(String(err)).toMatch(/carried no audio; raw response saved to/);
     const raw = String(err).match(/saved to (\S+\.bin)/)?.[1] ?? "";
     expect(fs.readFileSync(raw, "utf8")).toBe(noAudio);
+    expect(text()).toContain("Credits charged (ElevenLabs character-cost header): 5");
     const saved = fs.readdirSync(path.join(tmp, "out"));
     expect(saved.filter((f) => f.endsWith(".bin"))).toHaveLength(2);
     expect(saved.filter((f) => f.endsWith(".mp3"))).toHaveLength(0);
   });
+
+  it.each(["null", '{"audio_base64":""}', '{"audio_base64":123}'])(
+    "--timestamps treats %s as a response without audio",
+    async (body) => {
+      stubFetch(
+        () => new Response(body, { status: 200, headers: { "content-type": "application/json" } }),
+      );
+      await expect(run("--text", "Hi", "--model", "eleven_v4", "--timestamps")).rejects.toThrow(
+        /carried no audio; raw response saved to/,
+      );
+    },
+  );
 
   it("--clone-strength reaches the v4 body and is rejected for other models", async () => {
     stubFetch(() => audioResponse());

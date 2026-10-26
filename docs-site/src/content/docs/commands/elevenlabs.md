@@ -49,11 +49,11 @@ multix elevenlabs models   # live capabilities, languages, text limit, credit mu
 The CLI checks options against the model before sending anything:
 
 - Rejected, with the models that do support it: a non-zero `--style` on a model
-  without style control (Flash/Turbo accept it and bill for audio that ignores
-  it), `--clone-strength` outside v4 and v4 Turbo, `--previous-text`/`--next-text`
+  without style control (Flash v2.5 answered `style` 0.8 with 200 and billed
+  for audio that ignores it), `--clone-strength` outside v4 and v4 Turbo, `--previous-text`/`--next-text`
   on `eleven_v3`, and text over the model's limit. The limit counts characters
-  (code points) as ElevenLabs does, so an emoji or other astral character counts
-  once.
+  (code points) as ElevenLabs does, so an astral character such as `𠀀` counts
+  once, while an emoji built from several code points counts each of them.
 - Rejected before the request: a `--voice` that is not a voice ID (letters,
   digits, `_` or `-`).
 - Warned and not sent: `--style 0` or `--no-speaker-boost` on a model without
@@ -63,7 +63,9 @@ The CLI checks options against the model before sending anything:
   conversational (skipped without a pause), and SSML `<phoneme>` on multilingual
   v2 and Flash/Turbo v2.5 (the tagged word is dropped instead of spoken).
 - Left to the API: `--language-code`. It rejects a code the model does not
-  support, and nothing is billed.
+  support, and nothing is billed. On `eleven_multilingual_v2` the code is sent
+  with a warning: the API accepts the codes on its list, but its reference says
+  that model does not enforce the parameter.
 - An unknown `--model` id is passed through unchecked with a warning.
 
 `--clone-strength` (0 to 1) sets how closely v4 follows a Professional Voice
@@ -71,7 +73,8 @@ Clone.
 
 `--timestamps` saves character timings next to the audio as
 `<audio>.timestamps.json`. If a billed response carries no audio, its raw body
-is saved as `elevenlabs_tts_raw_<stamp>.bin` and the error names that file.
+is saved as `elevenlabs_tts_raw_<stamp>.bin`, the reported credits are still
+printed, and the error names that file.
 
 TTS also accepts `wav_*`, `opus_48000_*`, `alaw_8000`, `mp3_24000_48`,
 `pcm_32000` and `pcm_48000` formats.

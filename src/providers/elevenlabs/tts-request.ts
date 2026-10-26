@@ -35,7 +35,7 @@ export const TTS_VOICE_DEFAULTS = { stability: 0.5, similarityBoost: 0.75, style
 const AUDIO_TAG = /\[[a-z][a-z ,'-]{0,40}\]/i;
 const SSML_BREAK = /<\s*break\b/i;
 const SSML_PHONEME = /<\s*phoneme\b/i;
-/** ElevenLabs voice IDs are 20 letters and digits; this also keeps `.`/`..` out of the URL path. */
+/** Path-safe superset of ElevenLabs voice IDs (20 letters and digits); keeps `.`/`..` out of the URL path. */
 const VOICE_ID = /^[A-Za-z0-9_-]{1,64}$/;
 const MAX_SEED = 4_294_967_295;
 
@@ -59,7 +59,7 @@ function unitInterval(flag: string, raw: string | undefined, fallback: number): 
 export function checkVoiceId(voice: string): void {
   if (!VOICE_ID.test(voice)) {
     throw new ValidationError(
-      `--voice must be an ElevenLabs voice ID (letters, digits, "_" or "-"; got "${voice}"). List voices with: multix elevenlabs voices list`,
+      `--voice must be an ElevenLabs voice ID (letters, digits, "_" or "-"; got ${JSON.stringify(voice)}). List voices with: multix elevenlabs voices list`,
     );
   }
 }
@@ -124,7 +124,14 @@ export function buildTtsRequest(input: TtsInput): TtsRequestPlan {
 
   const payload: Record<string, unknown> = { text, model_id: model, voice_settings: voiceSettings };
 
-  if (input.languageCode) payload.language_code = input.languageCode;
+  if (input.languageCode) {
+    if (caps && !caps.languageCode) {
+      warnings.push(
+        `${model} does not enforce --language-code (API reference); it is sent, but the text decides the language. Models that enforce it: ${modelsWith((c) => c.languageCode)}.`,
+      );
+    }
+    payload.language_code = input.languageCode;
+  }
 
   if (input.seed !== undefined) {
     const seed = Number(input.seed);
