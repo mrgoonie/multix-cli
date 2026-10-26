@@ -7,7 +7,7 @@ export { ok, err, isOk, isErr } from "./result.js";
 export type { Result, OkResult, ErrResult } from "./result.js";
 export { loadEnv, resolveKey, _resetEnvLoader } from "./env-loader.js";
 export type { LoadEnvOptions } from "./env-loader.js";
-export { redact, redactUrl } from "./redact.js";
+export { redact, redactUrl, redactUrlsInText } from "./redact.js";
 export { getOutputDir, _resetOutputDir } from "./output-dir.js";
 export { outputStamp } from "./output-name.js";
 export { parseJsonInput } from "./json-input.js";

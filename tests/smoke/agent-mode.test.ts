@@ -13,6 +13,7 @@ import { isolatedEnv } from "./child-env.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLI = path.resolve(__dirname, "../../dist/cli.js");
+const ECHO_SIGNED_URL = path.resolve(__dirname, "fixtures/echo-signed-url-fetch.mjs");
 const SPAWN_TIMEOUT = 15_000;
 
 describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
@@ -93,6 +94,29 @@ describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     expect(envelope(result.stdout).request.body.image_url).toBe(
       "https://cdn.example.com/x/a.png?[redacted]",
     );
+  });
+
+  it("redacts a signed URL the provider echoes in its error, in every sink", async () => {
+    const args = ["--import", ECHO_SIGNED_URL, CLI, "openrouter", "tts", "--text", "hi"];
+    const opts = {
+      reject: false,
+      cwd: tmp,
+      extendEnv: false,
+      env: { ...env, OPENROUTER_API_KEY: "sk-or-v1-test-not-real" },
+      timeout: SPAWN_TIMEOUT - 1_000,
+    } as const;
+    const json = await execa("node", [...args, "--no-model-check", "--json"], opts);
+    expect(json.exitCode).toBe(5);
+    expect(envelope(json.stdout).error.message).toContain(
+      "failed to download https://bucket.s3.amazonaws.com/talk.m4a?[redacted]",
+    );
+    const text = await execa("node", [...args, "--no-model-check"], opts);
+    expect(text.stderr).toContain("talk.m4a?[redacted]");
+    const history = fs.readFileSync(path.join(tmp, "h.jsonl"), "utf8");
+    expect(history).toContain("talk.m4a?[redacted]");
+    for (const out of [json.stdout, json.stderr, text.stdout, text.stderr, history]) {
+      expect(out).not.toContain("SMOKESECRET");
+    }
   });
 
   it("records runs in the ledger and shows them with history", async () => {

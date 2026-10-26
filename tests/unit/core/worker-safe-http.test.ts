@@ -11,6 +11,7 @@ import {
 import {
   ConfigError,
   HttpError,
+  MultixError,
   ProviderError,
   ResponseTooLargeError,
   ValidationError,
@@ -18,7 +19,7 @@ import {
 import { isNetworkFetchFailure, toFetchError } from "../../../src/core/fetch-error.js";
 import { fetchJson, parseRetryAfter } from "../../../src/core/fetch-json.js";
 import { parseJsonInput } from "../../../src/core/json-input.js";
-import { redactUrl } from "../../../src/core/redact.js";
+import { redactUrl, redactUrlsInText } from "../../../src/core/redact.js";
 import { findNodeOnlyUses, formatNodeOnlyUses } from "../../helpers/import-graph.js";
 
 const WORKER_SAFE_MODULES = [
@@ -97,6 +98,40 @@ describe("redactUrl", () => {
   });
 });
 
+describe("redactUrlsInText", () => {
+  it("redacts the query of every http(s) URL in free text", () => {
+    expect(
+      redactUrlsInText(
+        "failed to download https://b.s3.amazonaws.com/a.m4a?X-Amz-Signature=SIG1&X-Amz-Credential=C, retry http://r2.example.dev/b?token=SIG2",
+      ),
+    ).toBe(
+      "failed to download https://b.s3.amazonaws.com/a.m4a?[redacted] retry http://r2.example.dev/b?[redacted]",
+    );
+  });
+
+  it("keeps the rest of a raw JSON or HTML body intact", () => {
+    const json = '{"error":{"message":"failed https://cdn.test/a.mp3?sig=SECRET","code":400}}';
+    const out = redactUrlsInText(json);
+    expect(out).not.toContain("SECRET");
+    expect(JSON.parse(out)).toEqual({
+      error: { message: "failed https://cdn.test/a.mp3?[redacted]", code: 400 },
+    });
+    expect(redactUrlsInText('<a href="https://x.test/y?sig=S">')).toBe(
+      '<a href="https://x.test/y?[redacted]">',
+    );
+  });
+
+  it("redacts URLs written with JSON-escaped slashes, escaped ampersands included", () => {
+    const out = redactUrlsInText('"https:\\/\\/x.test\\/a?a=1\\u0026sig=SECRET","k":1');
+    expect(out).toBe('"https:\\/\\/x.test\\/a?[redacted]","k":1');
+  });
+
+  it("leaves text without URL queries unchanged", () => {
+    const text = "check https://openrouter.ai/activity. Is it billed?";
+    expect(redactUrlsInText(text)).toBe(text);
+  });
+});
+
 describe("HttpError", () => {
   it("never puts the query string in its message but keeps the raw url", () => {
     const e = new HttpError(500, "boom", "https://x.test/a?key=SECRET123");
@@ -105,6 +140,30 @@ describe("HttpError", () => {
     expect(e.url).toBe("https://x.test/a?[redacted]");
     expect(e.rawUrl).toBe("https://x.test/a?key=SECRET123");
     expect(JSON.stringify(e)).not.toContain("SECRET123");
+  });
+
+  it("redacts URL queries the provider echoes in its error text", () => {
+    const e = new HttpError(
+      400,
+      "failed to download https://cdn.test/talk.m4a?sig=ECHOSECRET",
+      "https://openrouter.ai/api/v1/audio/transcriptions",
+    );
+    expect(e.snippet).toBe("failed to download https://cdn.test/talk.m4a?[redacted]");
+    expect(e.message).not.toContain("ECHOSECRET");
+    expect(JSON.stringify(e)).not.toContain("ECHOSECRET");
+  });
+});
+
+describe("MultixError", () => {
+  it("redacts URL queries in every subclass's message", () => {
+    for (const e of [
+      new MultixError("cannot read https://cdn.test/a.png?sig=S1", "X"),
+      new ProviderError("provider said https://cdn.test/a.png?sig=S1", "openrouter"),
+      new ValidationError("bad input https://cdn.test/a.png?sig=S1"),
+    ]) {
+      expect(e.message).toContain("https://cdn.test/a.png?[redacted]");
+      expect(e.message).not.toContain("S1");
+    }
   });
 });
 

@@ -73,4 +73,11 @@ describe("classifyError", () => {
       EXIT_CODES.config,
     );
   });
+  it("redacts URL queries in messages of any thrown value or log line", () => {
+    const plain = classifyError(new Error("fetch https://cdn.test/a.m4a?sig=PLAINSECRET failed"));
+    expect(plain.message).toBe("fetch https://cdn.test/a.m4a?[redacted] failed");
+    const line = classifyMessage("HTTP 400: failed to download https://cdn.test/a?sig=LINESECRET");
+    expect(line.message).not.toContain("LINESECRET");
+    expect(line).toMatchObject({ code: "PROVIDER_REJECTED", http_status: 400 });
+  });
 });

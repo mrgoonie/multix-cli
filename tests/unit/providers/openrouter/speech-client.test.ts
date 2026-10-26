@@ -112,6 +112,21 @@ describe("createSpeech", () => {
     expect(classifyError(err).retryable).toBe(status === 429 || status >= 500);
   });
 
+  it("redacts a URL query the provider echoes in its error message", async () => {
+    const echoed =
+      "https://bucket.s3.amazonaws.com/talk.m4a?X-Amz-Signature=ECHOSIG&X-Amz-Expires=60";
+    const fetch = async () =>
+      jsonResponse(400, { error: { message: `failed to download ${echoed}`, code: 400 } });
+    const err = (await failure(speak(fetch))) as HttpError;
+    expect(err).toBeInstanceOf(HttpError);
+    expect(err.snippet).toBe(
+      "failed to download https://bucket.s3.amazonaws.com/talk.m4a?[redacted]",
+    );
+    const info = classifyError(err);
+    expect(info.code).toBe("PROVIDER_REJECTED");
+    expect(JSON.stringify([err.message, info, err])).not.toContain("ECHOSIG");
+  });
+
   it("keeps a non-JSON error body as a bounded snippet", async () => {
     const fetch = async () => new Response("x".repeat(5000), { status: 400 });
     const err = (await failure(speak(fetch))) as HttpError;

@@ -3,15 +3,19 @@
  * All errors carry a short `code` string for programmatic handling.
  */
 
-import { redactUrl } from "./redact.js";
+import { redactUrl, redactUrlsInText } from "./redact.js";
 
+/**
+ * Messages have the query string of every http(s) URL in them redacted, so a
+ * provider error that echoes a pre-signed input URL cannot leak its signature.
+ */
 export class MultixError extends Error {
   constructor(
     message: string,
     public readonly code: string,
     options?: ErrorOptions,
   ) {
-    super(message, options);
+    super(redactUrlsInText(message), options);
     this.name = "MultixError";
     // Maintain proper stack trace in V8. Typed locally so the file also
     // type-checks without Node typings (the Cloudflare Worker build).
@@ -61,9 +65,12 @@ export class HttpError extends MultixError {
   /** Raw request URL. Non-enumerable so JSON.stringify/console output never includes it. */
   public declare readonly rawUrl: string;
 
+  /** Provider error text with URL query strings redacted. */
+  public readonly snippet: string;
+
   constructor(
     public readonly status: number,
-    public readonly snippet: string,
+    snippet: string,
     url: string,
     /** Parsed Retry-After header (ms), when the server sent one. */
     public readonly retryAfterMs?: number,
@@ -71,6 +78,7 @@ export class HttpError extends MultixError {
   ) {
     super(`HTTP ${status} from ${redactUrl(url)}: ${snippet}`, "HTTP_ERROR", options);
     this.url = redactUrl(url);
+    this.snippet = redactUrlsInText(snippet);
     Object.defineProperty(this, "rawUrl", { value: url, enumerable: false });
     this.name = "HttpError";
   }

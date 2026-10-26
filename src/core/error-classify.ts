@@ -6,6 +6,7 @@
  */
 
 import { HttpError, MultixError, ResponseTooLargeError } from "./errors.js";
+import { redactUrlsInText } from "./redact.js";
 
 export type ErrorCode =
   | "USAGE"
@@ -164,7 +165,10 @@ const TEXT_RULES: Array<[RegExp, ErrorCode]> = [
   ],
 ];
 
-function build(code: ErrorCode, message: string, extra: Partial<ErrorInfo> = {}): ErrorInfo {
+function build(code: ErrorCode, rawMessage: string, extra: Partial<ErrorInfo> = {}): ErrorInfo {
+  // Also covers errors that are not MultixErrors and stderr lines, which reach
+  // the envelope, stderr and history only through here.
+  const message = redactUrlsInText(rawMessage);
   const env = message.match(ENV_NAME)?.[1];
   return {
     code,
