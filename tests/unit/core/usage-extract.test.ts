@@ -45,7 +45,7 @@ describe("extractUsage", () => {
       id: "t1",
       estimatedCost: { credits: 60 },
       usage: { estimated_cost: 0.5 },
-      quote: { cost: 1.2 },
+      cost_estimate: { cost: 1.2 },
       expected_credits: 7,
     });
     expect(usage.credits).toBeUndefined();
@@ -53,14 +53,14 @@ describe("extractUsage", () => {
     expect(usage.metrics).toMatchObject({
       "estimatedCost.credits": 60,
       "usage.estimated_cost": 0.5,
-      "quote.cost": 1.2,
+      "cost_estimate.cost": 1.2,
       expected_credits: 7,
     });
   });
 
-  it("prefers a charged amount over an estimate in the same body", () => {
-    const usage = extractUsage({ estimatedCost: { credits: 60 }, creditsCharged: 55 });
-    expect(usage.credits).toBe(55);
+  it("reports Runway's charged cost, not its estimate", () => {
+    const usage = extractUsage({ estimatedCost: { credits: 60 }, cost: { credits: 40 } });
+    expect(usage.credits).toBe(40);
   });
 
   it("reads usage headers and request ids", () => {
