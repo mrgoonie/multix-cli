@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.17.1](https://github.com/mrgoonie/multix-cli/compare/v1.17.0...v1.17.1) (2026-10-26)
+
+
+### Fixed
+
+* **agent:** redact URL query strings in dry-run request bodies ([#326](https://github.com/mrgoonie/multix-cli/issues/326)) ([791e612](https://github.com/mrgoonie/multix-cli/commit/791e6120cc984d762bcc4e5673d419eb686391d0)), closes [#318](https://github.com/mrgoonie/multix-cli/issues/318)
+
 ## [1.17.0](https://github.com/mrgoonie/multix-cli/compare/v1.16.0...v1.17.0) (2026-10-26)
 
 

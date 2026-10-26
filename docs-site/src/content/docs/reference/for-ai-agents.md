@@ -74,7 +74,7 @@ https://multix.zuey.me/llms.txt
 | `usage` | What the provider reported: `tokens` (`input`, `output`, `total`, `thinking`), `cost_usd`, `credits`, and other numeric `metrics` by key path. `sources.cost_usd` / `sources.credits` name where each number came from (for example `api.elevenlabs.io header.character-cost`). Nothing is estimated: a provider's own estimate or quote (such as Runway `estimatedCost`) stays in `metrics` and is never reported as `cost_usd` or `credits`. |
 | `http` | Provider request count, failed requests and total time. |
 | `provider_ids` | Request, job or prediction ids the provider returned. |
-| `request` | With `--dry-run`: the request that would have been sent. |
+| `request` | With `--dry-run`: the request that would have been sent. Header values, secret-named fields and URL query strings (pre-signed URLs) are redacted. |
 | `estimate` | Pre-flight price of the run (with `--estimate`, `--max-cost`, or on a priced command). `estimate_only: true` marks an `--estimate` run. |
 | `budget` | With `--max-cost`: `ok`, `max_cost_usd`, `policy`, and the refusal `code` and `message`. |
 | `cost` | The run's cost receipt (`multix.cost/v1`); see [Cost receipt](#cost-receipt). |
