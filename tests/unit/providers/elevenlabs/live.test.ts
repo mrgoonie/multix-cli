@@ -2,18 +2,43 @@
  * Optional live smoke test against the real ElevenLabs API. Skipped unless
  * MULTIX_LIVE_TESTS=1 and ELEVENLABS_API_KEY are set. Synthesizes "Hi." once
  * with eleven_v4 and once with eleven_v4_turbo (about 5 characters of credits
- * in total) and never prints the key.
+ * in total), checks the capability table against the free GET /v1/models,
+ * and never prints the key.
  */
 
 import { describe, expect, it } from "vitest";
-import { apiPostBinaryWithHeaders } from "../../../../src/providers/elevenlabs/client.js";
-import { TASK_DEFAULTS } from "../../../../src/providers/elevenlabs/models.js";
+import { apiGet, apiPostBinaryWithHeaders } from "../../../../src/providers/elevenlabs/client.js";
+import {
+  ELEVENLABS_TTS_MODEL_CAPS,
+  TASK_DEFAULTS,
+} from "../../../../src/providers/elevenlabs/models.js";
 import { buildTtsRequest } from "../../../../src/providers/elevenlabs/tts-request.js";
 
 const apiKey = process.env.ELEVENLABS_API_KEY;
 const enabled = process.env.MULTIX_LIVE_TESTS === "1" && Boolean(apiKey);
 
+interface LiveModel {
+  model_id: string;
+  can_use_style?: boolean;
+  can_use_speaker_boost?: boolean;
+  maximum_text_length_per_request?: number;
+}
+
 describe.skipIf(!enabled)("elevenlabs live smoke", () => {
+  it("capability table matches the live model catalog", async () => {
+    const live = await apiGet<LiveModel[]>("models", apiKey ?? "");
+    for (const [id, caps] of Object.entries(ELEVENLABS_TTS_MODEL_CAPS)) {
+      const m = live.find((x) => x.model_id === id);
+      expect(m, id).toBeDefined();
+      expect({ id, style: m?.can_use_style, speakerBoost: m?.can_use_speaker_boost }).toEqual({
+        id,
+        style: caps.style,
+        speakerBoost: caps.speakerBoost,
+      });
+      expect(m?.maximum_text_length_per_request, id).toBe(caps.maxChars);
+    }
+  }, 30_000);
+
   for (const model of ["eleven_v4", "eleven_v4_turbo"]) {
     it(`${model} returns MP3 audio and a character-cost header`, async () => {
       const { payload, warnings } = buildTtsRequest({ text: "Hi.", model });

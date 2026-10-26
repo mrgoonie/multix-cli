@@ -122,16 +122,16 @@ export function registerTtsCommand(parent: Command): void {
       console.log(`\nGenerated audio: ${dest}`);
 
       if (timings) {
-        const timingsPath = `${dest}.timestamps.json`;
-        fs.writeFileSync(
-          timingsPath,
-          `${JSON.stringify(
-            { alignment: timings.alignment, normalized_alignment: timings.normalized_alignment },
-            null,
-            2,
-          )}\n`,
-        );
-        console.log(`Timestamps: ${timingsPath}`);
+        const json = `${JSON.stringify(
+          { alignment: timings.alignment, normalized_alignment: timings.normalized_alignment },
+          null,
+          2,
+        )}\n`;
+        // Next to the saved audio and next to the --output copy, like the audio itself.
+        for (const audio of opts.output ? [dest, opts.output] : [dest]) {
+          fs.writeFileSync(`${audio}.timestamps.json`, json);
+          console.log(`Timestamps: ${audio}.timestamps.json`);
+        }
       }
 
       // Only what ElevenLabs reports; multix never estimates what was charged.

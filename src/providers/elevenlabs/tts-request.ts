@@ -59,8 +59,11 @@ export function buildTtsRequest(input: TtsInput): TtsRequestPlan {
       `Model "${model}" is not in multix's ElevenLabs capability table; options are sent as given and not checked. List live models with: multix elevenlabs models`,
     );
   } else if (text.length > caps.maxChars) {
+    const higher = Object.entries(ELEVENLABS_TTS_MODEL_CAPS)
+      .filter(([, c]) => c.maxChars >= text.length)
+      .map(([id, c]) => `${id} (${c.maxChars})`);
     throw new ValidationError(
-      `${model} takes at most ${caps.maxChars} characters per request (got ${text.length}). Split the text, or use a model with a higher limit: eleven_v4 (10000), eleven_flash_v2_5 (40000).`,
+      `${model} takes at most ${caps.maxChars} characters per request (got ${text.length}). Split the text${higher.length ? `, or use a model with a higher limit: ${higher.join(", ")}` : ""}.`,
     );
   }
 

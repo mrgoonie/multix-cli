@@ -71,7 +71,7 @@ export function registerAccountCommands(parent: Command): void {
         const extra = [
           m.languages?.length ? `${m.languages.length} langs` : "",
           m.maximum_text_length_per_request ? `max ${m.maximum_text_length_per_request} chars` : "",
-          m.model_rates?.character_cost_multiplier !== undefined
+          typeof m.model_rates?.character_cost_multiplier === "number"
             ? `${m.model_rates.character_cost_multiplier}x credits/char`
             : "",
         ].filter(Boolean);

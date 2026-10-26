@@ -134,4 +134,37 @@ describe("elevenlabs tts", () => {
     expect(timings.alignment).toEqual(alignment);
     expect(text()).toContain("Credits charged (ElevenLabs character-cost header): 3");
   });
+
+  it("--timestamps with --output also writes timings next to the copy", async () => {
+    stubFetch(
+      () =>
+        new Response(
+          JSON.stringify({ audio_base64: Buffer.from(MP3).toString("base64"), alignment: {} }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+    );
+    const copy = path.join(tmp, "voice.mp3");
+    await run("--text", "Hi", "--model", "eleven_v4", "--timestamps", "--output", copy);
+    expect(new Uint8Array(fs.readFileSync(copy))).toEqual(MP3);
+    expect(JSON.parse(fs.readFileSync(`${copy}.timestamps.json`, "utf8"))).toEqual({
+      alignment: {},
+    });
+  });
+
+  it("--timestamps fails clearly on a response without JSON audio", async () => {
+    stubFetch(() => audioResponse());
+    await expect(run("--text", "Hi", "--model", "eleven_v4", "--timestamps")).rejects.toThrow(
+      /with-timestamps response was not JSON/,
+    );
+    stubFetch(
+      () =>
+        new Response(JSON.stringify({ alignment: {} }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    await expect(run("--text", "Hi", "--model", "eleven_v4", "--timestamps")).rejects.toThrow(
+      /carried no audio/,
+    );
+  });
 });

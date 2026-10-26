@@ -57,6 +57,9 @@ describe("buildTtsRequest: v4 family", () => {
       ValidationError,
     );
     expect(() => buildTtsRequest({ text: "a".repeat(10_000), model: "eleven_v4" })).not.toThrow();
+    expect(() => buildTtsRequest({ text: "a".repeat(10_001), model: "eleven_v4" })).toThrow(
+      /higher limit: eleven_flash_v2_5 \(40000\), eleven_flash_v2 \(30000\)/,
+    );
   });
 });
 
