@@ -47,6 +47,18 @@ describe("extractUsage", () => {
     expect(usage.ids).toEqual(["req_abc"]);
   });
 
+  it("reads OpenRouter's GET /generation total_cost", () => {
+    const usage = extractUsage({ data: { id: "gen-tts-1", total_cost: 0.000048, latency: 141 } });
+    expect(usage.cost_usd).toBe(0.000048);
+    expect(usage.ids).toEqual(["gen-tts-1"]);
+  });
+
+  it("ignores ids of catalog entries in a list of several items", () => {
+    const usage = extractUsage({ data: [{ id: "a/model-1" }, { id: "b/model-2" }] });
+    expect(usage.ids).toEqual([]);
+    expect(extractUsage({ data: [{ id: "job-1" }] }).ids).toEqual(["job-1"]);
+  });
+
   it("finds nothing in a plain body", () => {
     expect(hasUsage(extractUsage({ status: "ok", url: "https://x" }))).toBe(false);
   });

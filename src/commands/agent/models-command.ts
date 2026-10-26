@@ -68,7 +68,15 @@ const TASK_BY_LEAF: Record<string, string> = {
   convert: "document",
   run: "any",
 };
-const LIST_COMMANDS = new Set(["models", "video-models", "voices", "avatars", "styles", "list"]);
+const LIST_COMMANDS = new Set([
+  "models",
+  "video-models",
+  "speech-models",
+  "voices",
+  "avatars",
+  "styles",
+  "list",
+]);
 
 export interface ModelRow {
   task: string;
@@ -133,6 +141,7 @@ export function modelRows(program: Command): ModelRow[] {
         (c) =>
           LIST_COMMANDS.has(c.name()) &&
           (c.name() !== "voices" || task === "speech") &&
+          (c.name() !== "speech-models" || task === "speech") &&
           (c.name() !== "video-models" || task.includes("video")),
       );
     const named = modelsFromDescription(modelOpt?.description ?? "");

@@ -97,11 +97,19 @@ function tokensFrom(body: Record<string, unknown>, into: UsageTokens): void {
   }
 }
 
-function walk(value: unknown, path: string, depth: number, out: ResponseUsage): void {
+function walk(
+  value: unknown,
+  path: string,
+  depth: number,
+  out: ResponseUsage,
+  collectIds = true,
+): void {
   if (depth > MAX_DEPTH || Object.keys(out.metrics).length >= MAX_METRICS) return;
   if (Array.isArray(value)) {
     // Arrays of outputs/images rarely carry usage; look at the first few only.
-    value.slice(0, 3).forEach((item, i) => walk(item, `${path}[${i}]`, depth + 1, out));
+    // Ids in a list of several items name catalog entries (e.g. GET /models), not this request.
+    const ids = collectIds && value.length === 1;
+    value.slice(0, 3).forEach((item, i) => walk(item, `${path}[${i}]`, depth + 1, out, ids));
     return;
   }
   const obj = asRecord(value);
@@ -115,6 +123,7 @@ function walk(value: unknown, path: string, depth: number, out: ResponseUsage): 
         out.metrics[childPath] = n;
       }
     } else if (
+      collectIds &&
       depth <= 2 &&
       ID_KEYS.has(key) &&
       typeof child === "string" &&
@@ -124,7 +133,7 @@ function walk(value: unknown, path: string, depth: number, out: ResponseUsage): 
     ) {
       if (out.ids.length < 5) out.ids.push(child);
     } else if (child && typeof child === "object") {
-      walk(child, childPath, depth + 1, out);
+      walk(child, childPath, depth + 1, out, collectIds);
     }
   }
 }
@@ -142,7 +151,8 @@ export function extractUsage(body: unknown, headers?: Headers | null): ResponseU
     if (
       out.cost_usd === undefined &&
       /^(cost|total_cost|cost_usd|usd)$/i.test(leaf) &&
-      /usage|^cost|billing/i.test(path)
+      // OpenRouter's GET /generation reports the charge as data.total_cost.
+      (/usage|^cost|billing/i.test(path) || /^(data\.)?total_cost$/.test(path))
     ) {
       out.cost_usd = value;
     } else if (out.credits === undefined && /credit/i.test(leaf)) {

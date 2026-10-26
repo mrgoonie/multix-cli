@@ -4,7 +4,7 @@ AI multimodal CLI — generate images/video/speech/music, analyze and transcribe
 
 ![Isometric technical illustration of multix media workflows](docs-site/public/images/multix-isometric-banner.png)
 
-Supports **OpenAI** (image, image edits, TTS, STT, optional Codex image driver), **Gemini** (analyze, transcribe, generate, Omni Flash video generation and editing, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), **Cloudflare** (Workers AI image and speech; AI Gateway-routed Replicate video), **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment), **fal.ai** (generic model runner, image, video via the fal queue API), and **Atlas Cloud** (any model: image, image edit, video, audio, 3D, with resumable async predictions), **Replicate** (generic model runner, image, video, async prediction status/cancel via the direct Replicate API), **Runway** (Gen-4.5 and Gen-4 Turbo video, Gen-4 images, resumable task status/cancel), **HeyGen** (v3 Video Agent prompt-to-video, scripted avatar videos, video translation, lipsync, TTS).
+Supports **OpenAI** (image, image edits, TTS, STT, optional Codex image driver), **Gemini** (analyze, transcribe, generate, Omni Flash video generation and editing, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation, image-to-video, TTS), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), **Cloudflare** (Workers AI image and speech; AI Gateway-routed Replicate video), **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment), **fal.ai** (generic model runner, image, video via the fal queue API), and **Atlas Cloud** (any model: image, image edit, video, audio, 3D, with resumable async predictions), **Replicate** (generic model runner, image, video, async prediction status/cancel via the direct Replicate API), **Runway** (Gen-4.5 and Gen-4 Turbo video, Gen-4 images, resumable task status/cancel), **HeyGen** (v3 Video Agent prompt-to-video, scripted avatar videos, video translation, lipsync, TTS).
 
 ## Documentation
 
@@ -136,6 +136,7 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `MULTIX_HISTORY_FILE` | No | Run ledger path (shell or `~/.multix/.env` only) |
 | `OPENROUTER_IMAGE_MODEL` | No | Default OpenRouter model |
 | `OPENROUTER_FALLBACK_MODELS` | No | Comma-separated fallback model ids |
+| `OPENROUTER_TTS_MODEL` | No | Default `multix openrouter tts` model (default `google/gemini-3.8-flash-tts`) |
 | `OPENAI_IMAGE_MODEL` | No | Default OpenAI image model (default `gpt-image-2`) |
 | `OPENAI_TTS_MODEL` | No | Default OpenAI TTS model (default `gpt-4o-mini-tts`) |
 | `OPENAI_STT_MODEL` | No | Default OpenAI STT model (default `gpt-4o-transcribe`) |
@@ -290,7 +291,16 @@ multix openrouter video-status <jobId> [--download] [--output <path>] [-v]
 
 # List available video models
 multix openrouter video-models
+
+# Text-to-speech (POST /api/v1/audio/speech); input: --text | --text-file | --turns-file (multi-speaker JSON)
+multix openrouter tts --text "Xin chào" [--model google/gemini-3.8-flash-tts] [--voice Kore] [--instructions <text>] [--format auto|mp3|pcm|wav] [--speed <n>] [--zdr] [--cost-wait 20] [--output <path>] [-v]
+
+# List speech models (live catalog) or one model's voices; read a generation's cost later
+multix openrouter speech-models [--model <id>]
+multix openrouter generation <id>
 ```
+
+**TTS:** the model and voice are checked against the live speech catalog before the paid request (`--no-model-check` skips it); Gemini and ElevenLabs models need `--voice`. `--format auto` writes WAV (pcm wrapped locally) for pcm-only models (Gemini, HeyGen) and MP3 otherwise; MiniMax returns MP3 only. The request is never retried; the cost is read from OpenRouter for up to `--cost-wait` seconds (max 120) and can be fetched later with `multix openrouter generation <id>`.
 
 **Supported i2i model families:** Gemini (default) and OpenAI gpt-image return `text+image` (modalities `["image","text"]`); Recraft accepts `--strength` (init-image strength 0..1); Flux / Sourceful are image-only (`["image"]`). The CLI picks the right `modalities` automatically based on the model id prefix.
 
