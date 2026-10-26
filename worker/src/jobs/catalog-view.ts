@@ -12,6 +12,7 @@
 
 import {
   CAPABILITY_SCHEMA,
+  type ModelCapability,
   TASKS,
   type Task,
   isTask,
@@ -19,6 +20,7 @@ import {
 import { commandCapability } from "../../../src/capabilities/command-capabilities.js";
 import { findModelCapability, verifiedModels } from "../../../src/capabilities/model-registry.js";
 import { ValidationError } from "../../../src/core/errors.js";
+import { findSpeechModel } from "../../../src/providers/fal/speech-models.js";
 import type { ProviderKeys } from "../provider-secret-names.js";
 import type { CliCommand, CliGroup } from "./cli-catalog-types.js";
 import { CLI_CATALOG, isRepeatable, optionName } from "./cli-catalog.js";
@@ -170,10 +172,38 @@ function modelPayload(
     usage:
       cap.command === "fal run"
         ? `multix_run: command "fal run", args ["${cap.model}"], options {"input": "<JSON of the inputs above>"}`
-        : `multix_run: command "${cap.command}", args [${command.positionals
-            .map((p) => `"<${p.name}>"`)
-            .join(", ")}], options {"model": "${cap.model}"} plus the inputs above by long name`,
+        : cap.command === "fal tts"
+          ? falTtsUsage(cap)
+          : `multix_run: command "${cap.command}", args [${command.positionals
+              .map((p) => `"<${p.name}>"`)
+              .join(", ")}], options {"model": "${cap.model}"}`,
   };
+}
+
+/**
+ * `fal tts` has typed options (--voice, --style, --format, --language) that
+ * set the model's own fields; every other endpoint field goes through --input
+ * as JSON. Endpoint field names are not options: `fal tts` rejects them.
+ */
+function falTtsUsage(cap: ModelCapability): string {
+  const profile = findSpeechModel(cap.model);
+  const fields: Array<[option: string, field: string | undefined]> = [
+    ["voice", profile?.voiceField],
+    ["style", profile?.styleField],
+    ["format", profile?.formatField],
+    ["language", profile?.languageField],
+  ];
+  const typed = fields.flatMap(
+    ([option, field]): Array<[string, string]> => (field ? [[option, field]] : []),
+  );
+  const covered = new Set<string>([profile?.textField ?? "", ...typed.map(([, field]) => field)]);
+  const rest = Object.keys(cap.inputs).filter((field) => !covered.has(field));
+  const options = [
+    `"model": "${cap.model}"`,
+    ...typed.map(([option, field]) => `"${option}": "<${field}>"`),
+    ...(rest.length ? [`"input": "<JSON object with any of ${rest.join(", ")}>"`] : []),
+  ];
+  return `multix_run: command "fal tts", args ["<text>"], options {${options.join(", ")}}. Only these options are accepted; put other fields above in input.`;
 }
 
 export function catalogPayload(

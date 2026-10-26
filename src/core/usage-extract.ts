@@ -38,6 +38,21 @@ const METRIC_KEY =
   /(token|cost|credit|price|usage|billing|duration|seconds|_time$|^time$|time_ms|latency|characters?_?(count|cost)|units?$|predict|inference)/i;
 const SKIP_KEY =
   /(_at$|stamp|date|created|updated|expire|limit|max_|min_|width|height|seed|fps|index|count_?max)/i;
+/**
+ * Keys that name what an account holds, not what a request spent: Leonardo /me
+ * user_details[].apiCredit, HeyGen /v3/users/me usage_based.remaining_credits /
+ * included_credits, generic balance fields. Leaves match by name; the parents
+ * match whole segments so a spend leaf under e.g. subscription_job still counts.
+ */
+const BALANCE_LEAF =
+  /(balance|remaining|available|allowance|included|quota|granted|purchased|^api_?credits?$)/i;
+const BALANCE_PARENT = /^(wallet|subscription|user_details|balances?)$/i;
+
+function isBalancePath(path: string): boolean {
+  const segments = path.split(".").map((segment) => segment.replace(/\[\d+\]$/, ""));
+  const leaf = segments.pop() ?? "";
+  return BALANCE_LEAF.test(leaf) || segments.some((segment) => BALANCE_PARENT.test(segment));
+}
 /** Key paths that name a forecast, not a charge (Runway estimatedCost, quotes). */
 const ESTIMATE_PATH = /(estimat|quote|expected)/i;
 const ID_KEYS = new Set([
@@ -84,7 +99,7 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
     : undefined;
 }
 
-/** Known token shapes: Gemini usageMetadata, OpenAI/OpenRouter/BytePlus usage. */
+/** Known token shapes: Gemini usageMetadata and Interactions usage, OpenAI/OpenRouter/BytePlus usage. */
 function tokensFrom(body: Record<string, unknown>, into: UsageTokens): void {
   const gemini = asRecord(body.usageMetadata) ?? asRecord(body.usage_metadata);
   if (gemini) {
@@ -96,10 +111,23 @@ function tokensFrom(body: Record<string, unknown>, into: UsageTokens): void {
   const usage = asRecord(body.usage);
   if (usage) {
     into.input =
-      pick(usage, "prompt_tokens", "input_tokens", "promptTokens", "inputTokens") ?? into.input;
+      pick(
+        usage,
+        "prompt_tokens",
+        "input_tokens",
+        "promptTokens",
+        "inputTokens",
+        "total_input_tokens",
+      ) ?? into.input;
     into.output =
-      pick(usage, "completion_tokens", "output_tokens", "completionTokens", "outputTokens") ??
-      into.output;
+      pick(
+        usage,
+        "completion_tokens",
+        "output_tokens",
+        "completionTokens",
+        "outputTokens",
+        "total_output_tokens",
+      ) ?? into.output;
     into.total = pick(usage, "total_tokens", "totalTokens") ?? into.total;
     const details =
       asRecord(usage.completion_tokens_details) ?? asRecord(usage.output_tokens_details);
@@ -107,11 +135,19 @@ function tokensFrom(body: Record<string, unknown>, into: UsageTokens): void {
   }
 }
 
-function walk(value: unknown, path: string, depth: number, out: ResponseUsage): void {
+function walk(
+  value: unknown,
+  path: string,
+  depth: number,
+  out: ResponseUsage,
+  collectIds = true,
+): void {
   if (depth > MAX_DEPTH || Object.keys(out.metrics).length >= MAX_METRICS) return;
   if (Array.isArray(value)) {
     // Arrays of outputs/images rarely carry usage; look at the first few only.
-    value.slice(0, 3).forEach((item, i) => walk(item, `${path}[${i}]`, depth + 1, out));
+    // Ids in a list of several items name catalog entries (e.g. GET /models), not this request.
+    const ids = collectIds && value.length === 1;
+    value.slice(0, 3).forEach((item, i) => walk(item, `${path}[${i}]`, depth + 1, out, ids));
     return;
   }
   const obj = asRecord(value);
@@ -125,6 +161,7 @@ function walk(value: unknown, path: string, depth: number, out: ResponseUsage): 
         out.metrics[childPath] = n;
       }
     } else if (
+      collectIds &&
       depth <= 2 &&
       ID_KEYS.has(key) &&
       typeof child === "string" &&
@@ -134,7 +171,7 @@ function walk(value: unknown, path: string, depth: number, out: ResponseUsage): 
     ) {
       if (out.ids.length < 5) out.ids.push(child);
     } else if (child && typeof child === "object") {
-      walk(child, childPath, depth + 1, out);
+      walk(child, childPath, depth + 1, out, collectIds);
     }
   }
 }
@@ -149,12 +186,15 @@ export function extractUsage(body: unknown, headers?: Headers | null): ResponseU
   }
   for (const [path, value] of Object.entries(out.metrics)) {
     const leaf = path.split(".").pop() ?? path;
+    // Balances are never reported as cost or credits spent.
+    if (isBalancePath(path)) continue;
     // Estimates stay in metrics but are never reported as cost or credits spent.
     if (ESTIMATE_PATH.test(path)) continue;
     if (
       out.cost_usd === undefined &&
       /^(cost|total_cost|cost_usd|usd)$/i.test(leaf) &&
-      /usage|^cost|billing/i.test(path)
+      // OpenRouter's GET /generation reports the charge as data.total_cost.
+      (/usage|^cost|billing/i.test(path) || path === "data.total_cost")
     ) {
       out.cost_usd = value;
       out.sources = { ...out.sources, cost_usd: `body.${path}` };

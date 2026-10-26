@@ -5,6 +5,53 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.18.2](https://github.com/mrgoonie/multix-cli/compare/v1.18.1...v1.18.2) (2026-10-26)
+
+
+### Fixed
+
+* **agent:** never report an account credit balance as credits spent ([#306](https://github.com/mrgoonie/multix-cli/issues/306)) ([218e57a](https://github.com/mrgoonie/multix-cli/commit/218e57a12e29e4e265c8a7548aa83019166ea850))
+
+## [1.18.1](https://github.com/mrgoonie/multix-cli/compare/v1.18.0...v1.18.1) (2026-10-26)
+
+
+### Fixed
+
+* **elevenlabs:** warn on SSML &lt;phoneme&gt; only for models that drop the word ([#331](https://github.com/mrgoonie/multix-cli/issues/331)) ([60505f4](https://github.com/mrgoonie/multix-cli/commit/60505f4140283578b0ab5779eb41b84b9e1d5cf4)), closes [#323](https://github.com/mrgoonie/multix-cli/issues/323)
+
+## [1.18.0](https://github.com/mrgoonie/multix-cli/compare/v1.17.1...v1.18.0) (2026-10-26)
+
+
+### Added
+
+* **budget:** price estimates, spend guards and reconciled cost receipts ([#327](https://github.com/mrgoonie/multix-cli/issues/327)) ([1a1e1b3](https://github.com/mrgoonie/multix-cli/commit/1a1e1b3d38101f936f125859ec7e86113b003c16)), closes [#295](https://github.com/mrgoonie/multix-cli/issues/295)
+
+## [1.17.1](https://github.com/mrgoonie/multix-cli/compare/v1.17.0...v1.17.1) (2026-10-26)
+
+
+### Fixed
+
+* **agent:** redact URL query strings in dry-run request bodies ([#326](https://github.com/mrgoonie/multix-cli/issues/326)) ([791e612](https://github.com/mrgoonie/multix-cli/commit/791e6120cc984d762bcc4e5673d419eb686391d0)), closes [#318](https://github.com/mrgoonie/multix-cli/issues/318)
+
+## [1.17.0](https://github.com/mrgoonie/multix-cli/compare/v1.16.0...v1.17.0) (2026-10-26)
+
+
+### Added
+
+* **elevenlabs:** add --clone-strength and stricter TTS input checks ([#319](https://github.com/mrgoonie/multix-cli/issues/319)) ([aa9cbdf](https://github.com/mrgoonie/multix-cli/commit/aa9cbdf3f61c83dc0b782e49198ae51940e06b5e))
+
+
+### Fixed
+
+* **gemini:** state edit/extend intent on Omni follow-up turns ([#276](https://github.com/mrgoonie/multix-cli/issues/276)) ([7058c46](https://github.com/mrgoonie/multix-cli/commit/7058c46e8fdb9cc49fd2605278464531f834e009))
+
+## [1.16.0](https://github.com/mrgoonie/multix-cli/compare/v1.15.0...v1.16.0) (2026-10-26)
+
+
+### Added
+
+* **openrouter:** add text-to-speech via /audio/speech ([#313](https://github.com/mrgoonie/multix-cli/issues/313)) ([18dd61b](https://github.com/mrgoonie/multix-cli/commit/18dd61b17ccdbb82b481cc53ff6cfa5ed0912ebe)), closes [#290](https://github.com/mrgoonie/multix-cli/issues/290)
+
 ## [1.15.0](https://github.com/mrgoonie/multix-cli/compare/v1.14.1...v1.15.0) (2026-10-26)
 
 

@@ -15,6 +15,7 @@ export interface TtsInput {
   stability?: string;
   similarityBoost?: string;
   style?: string;
+  cloneStrength?: string;
   /** Set only when the user passed --no-speaker-boost (false) explicitly. */
   speakerBoost?: boolean;
   languageCode?: string;
@@ -31,6 +32,9 @@ export interface TtsRequestPlan {
 export const TTS_VOICE_DEFAULTS = { stability: 0.5, similarityBoost: 0.75, style: 0 } as const;
 
 const AUDIO_TAG = /\[[a-z][a-z ,'-]{0,40}\]/i;
+const SSML_BREAK = /<\s*break\b/i;
+const SSML_PHONEME = /<\s*phoneme\b/i;
+const VOICE_ID = /^[A-Za-z0-9_-]{1,64}$/;
 const MAX_SEED = 4_294_967_295;
 
 function modelsWith(pick: (caps: TtsModelCaps) => boolean): string {
@@ -49,21 +53,32 @@ function unitInterval(flag: string, raw: string | undefined, fallback: number): 
   return n;
 }
 
+/** Voice IDs go into the URL path, so anything outside their charset fails here, before a request. */
+export function checkVoiceId(voice: string): void {
+  if (!VOICE_ID.test(voice)) {
+    throw new ValidationError(
+      `--voice must be an ElevenLabs voice ID (letters, digits, "_" or "-"; got "${voice}"). List voices with: multix elevenlabs voices list`,
+    );
+  }
+}
+
 export function buildTtsRequest(input: TtsInput): TtsRequestPlan {
   const { text, model } = input;
   const caps = ttsModelCaps(model);
   const warnings: string[] = [];
+  // Unicode code points, not UTF-16 units: the API counts and bills code points.
+  const chars = [...text].length;
 
   if (!caps) {
     warnings.push(
       `Model "${model}" is not in multix's ElevenLabs capability table; options are sent as given and not checked. List live models with: multix elevenlabs models`,
     );
-  } else if (text.length > caps.maxChars) {
+  } else if (chars > caps.maxChars) {
     const higher = Object.entries(ELEVENLABS_TTS_MODEL_CAPS)
-      .filter(([, c]) => c.maxChars >= text.length)
+      .filter(([, c]) => c.maxChars >= chars)
       .map(([id, c]) => `${id} (${c.maxChars})`);
     throw new ValidationError(
-      `${model} takes at most ${caps.maxChars} characters per request (got ${text.length}). Split the text${higher.length ? `, or use a model with a higher limit: ${higher.join(", ")}` : ""}.`,
+      `${model} takes at most ${caps.maxChars} characters per request (got ${chars}). Split the text${higher.length ? `, or use a model with a higher limit: ${higher.join(", ")}` : ""}.`,
     );
   }
 
@@ -94,9 +109,25 @@ export function buildTtsRequest(input: TtsInput): TtsRequestPlan {
     warnings.push(`${model} has no speaker boost; --no-speaker-boost has no effect.`);
   }
 
+  if (input.cloneStrength !== undefined) {
+    if (caps && !caps.cloneStrength) {
+      throw new ValidationError(
+        `${model} does not accept --clone-strength (the API answers 400 unsupported_model). Drop it, or use a model that does: ${modelsWith((c) => c.cloneStrength)}.`,
+      );
+    }
+    voiceSettings.clone_strength = unitInterval("--clone-strength", input.cloneStrength, 0);
+  }
+
   const payload: Record<string, unknown> = { text, model_id: model, voice_settings: voiceSettings };
 
-  if (input.languageCode) payload.language_code = input.languageCode;
+  if (input.languageCode) {
+    if (caps && !caps.languageCode) {
+      warnings.push(
+        `${model} does not enforce --language-code (API reference); the text's own language decides. The API still rejects a code outside the model's language list. Models that enforce it: ${modelsWith((c) => c.languageCode)}.`,
+      );
+    }
+    payload.language_code = input.languageCode;
+  }
 
   if (input.seed !== undefined) {
     const seed = Number(input.seed);
@@ -121,6 +152,16 @@ export function buildTtsRequest(input: TtsInput): TtsRequestPlan {
   if (caps && !caps.audioTags && AUDIO_TAG.test(text)) {
     warnings.push(
       `${model} reads bracketed audio tags such as [whispering] aloud. Models that perform them: ${modelsWith((c) => c.audioTags)}.`,
+    );
+  }
+  if (caps && !caps.ssmlBreak && SSML_BREAK.test(text)) {
+    warnings.push(
+      `${model} does not support SSML <break> tags; use punctuation, ellipses or audio tags for pauses. Models that support <break>: ${modelsWith((c) => c.ssmlBreak)}.`,
+    );
+  }
+  if (caps && !caps.ssmlPhoneme && SSML_PHONEME.test(text)) {
+    warnings.push(
+      `${model} drops words wrapped in SSML <phoneme> tags from the audio; remove the tags or use a model that speaks them: ${modelsWith((c) => c.ssmlPhoneme)}.`,
     );
   }
 

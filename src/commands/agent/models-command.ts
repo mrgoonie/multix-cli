@@ -26,7 +26,15 @@ import { groupKeyNames, groupReady } from "./provider-group-keys.js";
 
 export { TASKS };
 
-const LIST_COMMANDS = new Set(["models", "video-models", "voices", "avatars", "styles", "list"]);
+const LIST_COMMANDS = new Set([
+  "models",
+  "video-models",
+  "speech-models",
+  "voices",
+  "avatars",
+  "styles",
+  "list",
+]);
 
 export interface ModelRow {
   task: string;
@@ -91,6 +99,7 @@ function lister(program: Command, group: string, task: string): string | undefin
       (c) =>
         LIST_COMMANDS.has(c.name()) &&
         (c.name() !== "voices" || task === "speech") &&
+        (c.name() !== "speech-models" || task === "speech") &&
         (c.name() !== "avatars" || task !== "speech") &&
         (c.name() !== "video-models" || task.includes("video")),
     );
@@ -233,6 +242,11 @@ function printInspect(id: string, provider?: string, live?: ModelView[]): void {
       .filter(Boolean)
       .join("; ");
     console.log(`    ${name} (${spec.type})${values}${extra ? `  ${extra}` : ""}`);
+  }
+  if (cap.command === "fal tts") {
+    console.log(
+      "  set fields without a typed flag (--voice, --style, --format, --language) through --input JSON",
+    );
   }
   if (cap.required_any) {
     console.log(`  give one of: ${cap.required_any.map((g) => g.join(" + ")).join("  or  ")}`);

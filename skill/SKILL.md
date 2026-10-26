@@ -1,7 +1,7 @@
 ---
 name: multix
-description: AI multimodal CLI — generate and edit images (OpenAI, Codex driver, Gemini Nano Banana, Imagen, MiniMax, OpenRouter, Leonardo, BytePlus Seedream, Cloudflare Workers AI FLUX.1 Schnell, fal.ai FLUX, Replicate FLUX, Runway Gen-4 Image), generate, edit and extend video (Gemini Omni Flash, plus legacy Gemini Veo), generate video (MiniMax Hailuo, OpenRouter via Veo/Seedance/Kling, Leonardo via Motion/Veo/Kling/Hailuo/Seedance/LTX, BytePlus Seedance, Cloudflare AI Gateway via Replicate, fal.ai queue models, Replicate direct API models incl. P-Video, Runway Gen-4.5 and Gen-4 Turbo, HeyGen Video Agent and scripted avatar videos), video translation and lipsync (HeyGen), TTS/STT/music (OpenAI, Gemini Flash TTS incl. Gemini 3.8 with delivery-style control, MiniMax, Cloudflare Workers AI MeloTTS, ElevenLabs), 3D models (BytePlus Hyper3D/Hitem3d), analyze/transcribe media, convert documents to Markdown, optimize media via ffmpeg/ImageMagick, and self-update the CLI. Use whenever the user wants to create, edit, or transform images/video/audio/3D/documents from a CLI, mentions any of: OpenAI, Codex image driver, image-to-image, i2i, image edit, watercolor/cyberpunk style transfer, reference image, OpenRouter, Nano Banana, Flux, Seedream, Gemini Omni, Omni Flash, Veo, Hailuo, Seedance, Kling, Cloudflare Workers AI, AI Gateway, fal.ai, Atlas Cloud, Replicate, replicate.com models, Replicate predictions, Runway, Gen-4.5, Gen-4 Turbo, Gen-4 Image, HeyGen, avatar video, talking head, Video Agent, video translation, dubbing, lipsync, video generation, text-to-video, image-to-video, i2v, ElevenLabs voice cloning, updating/upgrading multix, or asks for batch media optimization.
-version: 1.15.0 # x-release-please-version
+description: AI multimodal CLI — generate and edit images (OpenAI, Codex driver, Gemini Nano Banana, Imagen, MiniMax, OpenRouter, Leonardo, BytePlus Seedream, Cloudflare Workers AI FLUX.1 Schnell, fal.ai FLUX, Replicate FLUX, Runway Gen-4 Image), generate, edit and extend video (Gemini Omni Flash, plus legacy Gemini Veo), generate video (MiniMax Hailuo, OpenRouter via Veo/Seedance/Kling, Leonardo via Motion/Veo/Kling/Hailuo/Seedance/LTX, BytePlus Seedance, Cloudflare AI Gateway via Replicate, fal.ai queue models, Replicate direct API models incl. P-Video, Runway Gen-4.5 and Gen-4 Turbo, HeyGen Video Agent and scripted avatar videos), video translation and lipsync (HeyGen), TTS/STT/music (OpenAI, Gemini Flash TTS incl. Gemini 3.8 with delivery-style control, OpenRouter TTS (Gemini, ElevenLabs, Fish Audio, MiniMax routed), MiniMax, Cloudflare Workers AI MeloTTS, ElevenLabs), 3D models (BytePlus Hyper3D/Hitem3d), analyze/transcribe media, convert documents to Markdown, optimize media via ffmpeg/ImageMagick, and self-update the CLI. Use whenever the user wants to create, edit, or transform images/video/audio/3D/documents from a CLI, mentions any of: OpenAI, Codex image driver, image-to-image, i2i, image edit, watercolor/cyberpunk style transfer, reference image, OpenRouter, Nano Banana, Flux, Seedream, Gemini Omni, Omni Flash, Veo, Hailuo, Seedance, Kling, Cloudflare Workers AI, AI Gateway, fal.ai, Atlas Cloud, Replicate, replicate.com models, Replicate predictions, Runway, Gen-4.5, Gen-4 Turbo, Gen-4 Image, HeyGen, avatar video, talking head, Video Agent, video translation, dubbing, lipsync, video generation, text-to-video, image-to-video, i2v, ElevenLabs voice cloning, updating/upgrading multix, or asks for batch media optimization.
+version: 1.18.2 # x-release-please-version
 ---
 
 # multix — AI Multimodal CLI
@@ -21,6 +21,7 @@ multix <group> <cmd> ... --json         # stdout = ONE line, schema multix.resul
 - Success = `ok: true` AND `outputs[]` non-empty (path, bytes, mime, sha256, width/height, duration_s) AND no `warnings` (`EMPTY_OUTPUT`, `CONTENT_MISMATCH`, `UNREADABLE_MEDIA`).
 - Failure: read `error.code`, `error.hint`, `next[]`. Exit codes (with `--json`; plain runs exit 1): 2 fix flags/input · 3 key/setup (`multix check`, key named in `error.env`) · 4 temporary (wait `retry_after_s`, `multix rerun <history_id>`) · 5 rejected: quota, safety, model (change input/provider) · 6 timed out, job may still run (status command in `next[]`, do not resubmit) · 1 unknown (`log[]`).
 - `usage` = what the provider reported (tokens, `cost_usd`, `credits`, metrics; `sources` names the header/body field each money number came from); `history_id` names the run.
+- Cost: `--estimate` prices a run without sending it (USD range, units, rate source; exit 0). `--max-cost <usd>` refuses before sending (exit 2: `BUDGET_EXCEEDED`, or `BUDGET_UNPROVEN` when the price is unknown or the ceiling only estimated; `--cost-policy estimate` accepts an estimated ceiling). Priced: `gemini generate-speech`, `elevenlabs tts`. Receipt `cost` (`multix.cost/v1`): `status` settled|computed|uncertain|unknown, `actual_usd` (`null` = unknown, not $0). `MULTIX_OPERATION_ID` (shell) groups submit/poll/download runs into one operation.
 - History: `multix history [--failed] [--since 1d]`, `multix history show last`, `multix history stats --by model|provider|command`, `multix rerun <id|last>`. Ledger `~/.multix/history.jsonl` has no keys or signed URLs; `MULTIX_HISTORY=0` disables it.
 
 ## When to use
@@ -31,6 +32,7 @@ Activate this skill when the user asks to:
 - Generate video from text or from a reference image (image-to-video, alias `i2v`)
 - **Edit or extend a Gemini Omni video** (`gemini edit-video`, `gemini extend-video`) and check/resume/cancel it (`gemini video-status`, `gemini video-cancel`)
 - **Generate video via OpenRouter routed models** (Veo, Seedance, Kling — use `multix openrouter video-models` to list)
+- **Text-to-speech via OpenRouter** with one key across Gemini, ElevenLabs, Fish Audio, MiniMax and other speech models (`multix openrouter tts`; list with `multix openrouter speech-models`)
 - **Generate video via BytePlus Seedance** directly (text-to-video, image-to-video, reference-to-video)
 - **Generate video via Leonardo** (Motion, Veo, Kling, Hailuo, Seedance, LTX models)
 - Generate images or speech with Cloudflare Workers AI, or video through Cloudflare AI Gateway's Replicate route
@@ -59,7 +61,7 @@ Detects whether `multix` was installed via npm, pnpm, yarn, or bun global instal
 ```
 GEMINI_API_KEY        # Google AI Studio (extra keys: GEMINI_API_KEY_2, _3, … rotate on 429/RESOURCE_EXHAUSTED)
 OPENAI_API_KEY        # OpenAI API (image, image edit, TTS, STT)
-OPENROUTER_API_KEY    # OpenRouter (multi-model gateway: image + video via Veo, Seedance, Kling)
+OPENROUTER_API_KEY    # OpenRouter (multi-model gateway: image, video via Veo, Seedance, Kling, and TTS)
 MINIMAX_API_KEY       # MiniMax (image/video/speech/music)
 LEONARDO_API_KEY      # Leonardo.Ai (image/video/upscale)
 BYTEPLUS_API_KEY      # BytePlus / Volcengine ARK (Seedream/Seedance/Hyper3D)
@@ -372,7 +374,7 @@ multix byteplus reference-to-video --prompt "<text>" --ref-image ./hero.jpg:subj
 Gemini Omni notes:
 - Default resolution 720p (Omni) vs 1080p (Veo). `--model veo-*` still runs legacy Veo (the Veo 3.1 previews and `gemini-omni-flash-preview` shut down on the Gemini API on 2026-10-22); Omni-only flags (`--duration`, `--no-store`, `--no-wait`) fail with Veo, and other model ids are rejected.
 - The interaction id is saved in `gemini_omni_<ts>-<random>.json` in the output dir before polling; resume a timeout with `multix gemini video-status <id> --download`. `--wait-timeout` (default 15 min) is one deadline covering uploads, submit and polling (nothing is submitted once it has run out; a started submit may take up to 2 min so a billed job keeps its id); saving the finished video has its own budget (5 min file wait + 10 min download). An inline video over the base64 size of `MULTIX_MAX_DOWNLOAD_MB` (max 384 MB of JSON) fails at once with that resume command. Success prints `Generated video: <path>` and `Interaction ID: <id>`.
-- `--no-store` = one synchronous unstored request (cannot be edited, extended or resumed; not with `--no-wait`). Edit/extend keep the source format unless flags are given; extend appends 3-10 s (total up to 40 s). Uploaded `--video` clips must be at most 10 s, and editing/extending them is unavailable in the EEA, Switzerland and the UK (use `--interaction-id` there). Stored interactions and files expire (Files about 48 h).
+- `--no-store` = one synchronous unstored request (cannot be edited, extended or resumed; not with `--no-wait`). Edit/extend keep the source format unless flags are given; extend appends 3-10 s (total up to 40 s). With `--interaction-id` the prompt is sent as `Edit this video: …` / `Extend this video: …` (the API takes no task there); `extend-video --video` rejects `--aspect-ratio`. Uploaded `--video` clips must be at most 10 s, and editing/extending them is unavailable in the EEA, Switzerland and the UK (use `--interaction-id` there). Stored interactions and files expire (Files about 48 h).
 - Cost is roughly $0.10 per second at 720p (paid tier); the session record holds an estimate. Do not resubmit after a network failure on submit: the request may already be billed.
 
 Most other video commands accept `--wait`, `--wait-timeout <ms>`, `--download`, `--output <path>`, `--no-thumb`. Cloudflare video has no thumbnail flags; see [Cloudflare media](#cloudflare-media) for its distinct `--wait` and `--download` behavior.
@@ -413,8 +415,15 @@ multix gemini generate-speech --text "Have a wonderful day!" --voice Kore
 multix gemini generate-speech --text "Have a wonderful day!" --model gemini-3.8-flash-tts --style "cheerful and friendly" --voice Kore
 multix minimax generate-speech --text "..." --voice <id> --emotion neutral
 multix elevenlabs tts --text "Hello world" [--voice <voiceId>] [--model eleven_multilingual_v2]
+# OpenRouter speech (default google/gemini-3.8-flash-tts; Gemini and ElevenLabs need --voice; fish-audio/drama-3 does not)
+# --format auto = WAV for pcm-only Gemini/HeyGen, MP3 otherwise (MiniMax: mp3 only). The request is never retried:
+# on UNKNOWN_REMOTE_STATE check `openrouter generation <id>` or openrouter.ai/activity before resending.
+multix openrouter tts --text "Xin chào" --model google/gemini-3.8-flash-lite-tts --voice Kore --output hello.wav
+multix openrouter speech-models [--model <id>]       # live model list / one model's voices
+multix openrouter generation <generation-id>         # cost, if it was not reported yet
 # Eleven v4 (quality) / v4 Turbo (low latency, 0.5 credits/char): 90+ languages, [audio tags], 10k chars.
 # No --style on v4/v3/Flash (rejected, not ignored); v3 rejects --previous-text/--next-text.
+# --clone-strength 0..1 only on v4/v4 Turbo (PVC fine-tuned for v4); multilingual_v2 ignores --language-code (warned).
 multix elevenlabs tts --model eleven_v4 --text "[warmly] Xin chào!" --language-code vi [--timestamps]
 multix elevenlabs models   # live capabilities per model
 
@@ -470,6 +479,7 @@ Requires `cwebp` (libwebp: `brew install webp`, `apt install webp`) on `PATH`.
 | `OPENROUTER_IMAGE_MODEL` | Default OpenRouter image model |
 | `OPENROUTER_FALLBACK_MODELS` | CSV; applies to `generate` AND `i2i` |
 | `OPENROUTER_VIDEO_MODEL` | Default OpenRouter video model (default `google/veo-3.1`) |
+| `OPENROUTER_TTS_MODEL` | Default `openrouter tts` model (default `google/gemini-3.8-flash-tts`) |
 | `OPENROUTER_SITE_URL` / `OPENROUTER_APP_NAME` | HTTP-Referer / X-Title headers |
 | `GEMINI_MODEL` / `MULTIMODAL_MODEL` | Override Gemini analyze/transcribe/extract defaults (doc convert uses `--model`; default `gemini-3.6-flash`) |
 | `IMAGE_GEN_MODEL` / `VIDEO_GEN_MODEL` | Override Gemini media-generation defaults (video default `gemini-omni-1.1-flash`; `veo-*` = legacy Veo) |

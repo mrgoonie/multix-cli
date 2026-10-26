@@ -99,7 +99,7 @@ describe("command capabilities", () => {
         .filter((r) => r.provider === "openrouter")
         .map((r) => r.task),
     );
-    expect([...tasks].sort()).toEqual(["image", "image-edit", "image-to-video"]);
+    expect([...tasks].sort()).toEqual(["image", "image-edit", "image-to-video", "speech"]);
   });
 
   it("reports outputs and model scope on rows, keeping the old row fields", () => {
@@ -114,7 +114,8 @@ describe("command capabilities", () => {
 
   it("finds the command that takes any catalog id for a task, and the generic runner", () => {
     expect(catalogCommand("openrouter", "image")).toBe("openrouter generate");
-    expect(catalogCommand("openrouter", "speech")).toBeNull();
+    expect(catalogCommand("openrouter", "speech")).toBe("openrouter tts");
+    expect(catalogCommand("openrouter", "transcription")).toBeNull();
     expect(catalogCommand("fal", "speech")).toBe("fal tts");
     expect(catalogCommand("fal", "transcription")).toBeNull();
     expect(genericRunner("fal")).toBe("fal run");
@@ -256,21 +257,21 @@ describe("merged model views", () => {
   });
 
   it("does not point catalog models at a command that cannot run them", () => {
-    const views = mergeModelViews("speech", [
+    const views = mergeModelViews("transcription", [
       {
-        source: source("openrouter", "fresh"),
+        source: { ...source("openrouter", "fresh"), task: "transcription" },
         models: [
           {
             provider: "openrouter",
-            model: "vendor/speech-1",
-            task: "speech",
+            model: "vendor/stt-1",
+            task: "transcription",
             voices: ["a", "b"],
             pricing: { prompt: "0.1" },
           },
         ],
       },
     ]);
-    const or = views.find((v) => v.model === "vendor/speech-1");
+    const or = views.find((v) => v.model === "vendor/stt-1");
     expect(or).toMatchObject({ verified: false, command: null, voices: 2 });
     expect(or?.runner).toBeUndefined();
     expect(or?.note).toMatch(/no multix command/);

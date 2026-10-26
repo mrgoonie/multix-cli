@@ -2147,7 +2147,7 @@
     },
     {
       "group": "openrouter",
-      "description": "OpenRouter: text-to-image, image-to-image, and video generation (image-to-video) via routed models — Veo, Seedance, Kling, and others",
+      "description": "OpenRouter: text-to-image, image-to-image, video generation (image-to-video) and text-to-speech via routed models — Veo, Seedance, Kling, Gemini TTS, ElevenLabs, Fish Audio, and others",
       "commands": [
         {
           "command": "openrouter generate",
@@ -2581,6 +2581,227 @@
               "short": "-v"
             }
           ]
+        },
+        {
+          "command": "openrouter tts",
+          "description": "Text-to-speech via OpenRouter /audio/speech (Gemini 3.8 Flash TTS, Fish Audio Drama 3, ElevenLabs v4, ...)",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--text",
+              "flags": "--text <str>",
+              "description": "Text to speak",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--prompt",
+              "flags": "--prompt <str>",
+              "description": "Alias for --text",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--text-file",
+              "flags": "--text-file <path>",
+              "description": "Read the text to speak from a UTF-8 file",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--turns-file",
+              "flags": "--turns-file <path>",
+              "description": "Multi-speaker input: JSON array of {\"text\", \"voice\"?, \"instructions\"?} (Gemini TTS, Fish Audio)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--model",
+              "flags": "--model <id>",
+              "description": "Speech model (env OPENROUTER_TTS_MODEL), e.g. google/gemini-3.8-flash-lite-tts, fish-audio/drama-3, elevenlabs/eleven-v4, elevenlabs/eleven-v4-turbo",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "google/gemini-3.8-flash-tts"
+            },
+            {
+              "long": "--voice",
+              "flags": "--voice <id>",
+              "description": "Voice id of the model (Gemini: Kore, Puck, ...; ElevenLabs: sarah, george, ...)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--instructions",
+              "flags": "--instructions <text>",
+              "description": "Delivery directions: tone, pace, emotion (Gemini TTS, Fish Audio, OpenAI)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--format",
+              "flags": "--format <fmt>",
+              "description": "Output auto|mp3|pcm|wav: auto = wav for pcm-only models (Gemini, HeyGen), mp3 otherwise; wav = pcm with a WAV header",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "auto"
+            },
+            {
+              "long": "--sample-rate",
+              "flags": "--sample-rate <hz>",
+              "description": "PCM sample rate for the WAV header when OpenRouter does not state it (default 24000)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--speed",
+              "flags": "--speed <n>",
+              "description": "Speed multiplier, for models that support it (others ignore it or return 400)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--provider-options",
+              "flags": "--provider-options <json>",
+              "description": "Provider passthrough options keyed by provider slug, e.g. {\"google-ai-studio\":{\"temperature\":0.7}}",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--zdr",
+              "flags": "--zdr",
+              "description": "Route only to Zero Data Retention endpoints",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--deny-data-collection",
+              "flags": "--deny-data-collection",
+              "description": "Route only to providers that do not store or train on data",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--no-model-check",
+              "flags": "--no-model-check",
+              "description": "Skip checking the model and voice against OpenRouter's speech catalog",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": true
+            },
+            {
+              "long": "--no-cost",
+              "flags": "--no-cost",
+              "description": "Skip reading the generation's cost from OpenRouter after the audio arrives",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": true
+            },
+            {
+              "long": "--cost-wait",
+              "flags": "--cost-wait <s>",
+              "description": "Seconds to wait for OpenRouter to report the cost",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "20"
+            },
+            {
+              "long": "--output",
+              "flags": "--output <path>",
+              "description": "Copy the generated audio to this path",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        },
+        {
+          "command": "openrouter speech-models",
+          "description": "List OpenRouter text-to-speech models and their voices (live catalog)",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--model",
+              "flags": "--model <id>",
+              "description": "Show one model with all of its voices",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            }
+          ]
+        },
+        {
+          "command": "openrouter generation",
+          "description": "Show the model, provider and cost OpenRouter recorded for a generation id",
+          "positionals": [
+            {
+              "name": "id",
+              "description": "Generation id (X-Generation-Id, e.g. from `openrouter tts`)",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": []
         }
       ]
     },
@@ -4876,6 +5097,16 @@
               "negatable": false
             },
             {
+              "long": "--clone-strength",
+              "flags": "--clone-strength <n>",
+              "description": "Professional Voice Clone adherence 0..1 (eleven_v4/eleven_v4_turbo only; the API recommends 0)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
               "long": "--no-speaker-boost",
               "flags": "--no-speaker-boost",
               "description": "Disable speaker boost (default: enabled on models that have it: eleven_multilingual_v2, eleven_v3_conversational)",
@@ -4888,7 +5119,7 @@
             {
               "long": "--language-code",
               "flags": "--language-code <code>",
-              "description": "ISO 639-1 language code to enforce (the API rejects codes a model does not support)",
+              "description": "ISO 639-1 language code to enforce (not enforced by eleven_multilingual_v2; the API rejects codes a model does not support)",
               "required": false,
               "takesValue": true,
               "valueOptional": false,

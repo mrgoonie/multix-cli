@@ -166,7 +166,11 @@ describe("multix models --live", () => {
       status: "missing",
     });
     expect(byId["vendor/new-tts"]).toMatchObject({ verified: false, command: "fal tts" });
-    expect(byId["vendor/or-tts"]).toMatchObject({ verified: false, command: null, voices: 1 });
+    expect(byId["vendor/or-tts"]).toMatchObject({
+      verified: false,
+      command: "openrouter tts",
+      voices: 1,
+    });
     expect(calls).toHaveLength(2);
 
     const again = (await models("--task", "speech", "--live")) as Json;

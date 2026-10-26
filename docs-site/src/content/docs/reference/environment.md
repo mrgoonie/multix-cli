@@ -27,12 +27,26 @@ may only set variables that `multix` itself reads:
 - the documented `MULTIX_*` settings `MULTIX_OUTPUT_DIR` (so a project can
   choose where generated files are written), `MULTIX_IMAGE_FORMAT`,
   `MULTIX_MAX_DOWNLOAD_MB`, `MULTIX_UPLOAD_MIN_KBPS`, `MULTIX_OUTPUT` (`json`
-  for the agent envelope), `MULTIX_HISTORY` (`0` turns the run ledger off) and
-  `MULTIX_DISABLE_HOME_ENV` (which has no effect there), plus `NO_COLOR`.
+  for the agent envelope), `MULTIX_HISTORY` (`0` turns the run ledger off),
+  `MULTIX_MODELS_TTL` (seconds a `multix models --live` catalog cache stays
+  fresh; default `86400`, at most `604800`) and `MULTIX_DISABLE_HOME_ENV`
+  (which has no effect there), plus `NO_COLOR`.
 
 The opt-ins `MULTIX_ALLOW_PROJECT_BASE_URL` and `MULTIX_LEGACY_CLAUDE_ENV`, and
 `MULTIX_HISTORY_FILE` (where the run ledger is written), are refused: a repository must not widen what it can do with your keys or pull in
 the `.claude` credentials from your home folder.
+
+`MULTIX_OPERATION_ID` is refused too. It names the logical operation a run's
+[cost receipt](/reference/for-ai-agents/#cost-receipt) belongs to, so several
+runs (submit, status polls, downloads, webhook replays) are counted once; the
+default is `<provider>:<job id>` or `run:<history id>`. It is per run, so set it
+in the shell for that run: one id in a project file would merge the spend of
+every run into one operation.
+
+`MULTIX_CACHE_DIR` (cache root for the `multix models --live` catalogs, default
+`~/.multix/cache`) is refused as well: a repository must not choose, or seed,
+the catalog cache that `multix models` reports from. Set it in the shell or
+`~/.multix/.env`.
 
 [`.env.example`](https://github.com/mrgoonie/multix-cli/blob/main/.env.example)
 lists them, along with the two opt-ins. Any other name, for example `NODE_OPTIONS`, `npm_config_registry`,
@@ -145,7 +159,8 @@ values). Moving the keys to `.env` or `~/.multix/.env` is still recommended.
 Use explicit overrides only when you need a different default. Available
 settings include `IMAGE_GEN_MODEL`, `VIDEO_GEN_MODEL`, `MULTIMODAL_MODEL`,
 `GEMINI_TTS_MODEL`, `OPENAI_IMAGE_MODEL`, `OPENAI_TTS_MODEL`,
-`OPENAI_STT_MODEL`, `OPENROUTER_IMAGE_MODEL`, `LEONARDO_BASE_URL`,
+`OPENAI_STT_MODEL`, `OPENROUTER_IMAGE_MODEL`, `OPENROUTER_TTS_MODEL` (default
+`google/gemini-3.8-flash-tts`), `LEONARDO_BASE_URL`,
 `BYTEPLUS_BASE_URL`, `BYTEPLUS_IMAGE_MODEL`, `BYTEPLUS_VIDEO_MODEL`,
 `BYTEPLUS_3D_MODEL`, `FAL_BASE_URL`, `FAL_IMAGE_MODEL`, `FAL_VIDEO_MODEL`, and
 `FAL_VIDEO_IMAGE_MODEL` (fal's image-to-video default, used when

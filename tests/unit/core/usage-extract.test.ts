@@ -40,6 +40,64 @@ describe("extractUsage", () => {
     expect(usage.ids).toEqual(["t-1"]);
   });
 
+  it("keeps an account balance in metrics but never reports it as credits spent", () => {
+    // Leonardo GET /me: apiCredit is the remaining API credit balance.
+    const leonardo = extractUsage({
+      user_details: [{ user: { id: "u1" }, apiCredit: 1000, subscriptionTokens: 500 }],
+    });
+    expect(leonardo.metrics["user_details[0].apiCredit"]).toBe(1000);
+    expect(leonardo.credits).toBeUndefined();
+    expect(leonardo.cost_usd).toBeUndefined();
+
+    // HeyGen GET /v3/users/me: wallet, subscription and usage-based allowances.
+    const heygen = extractUsage({
+      data: {
+        billing_type: "usage_based",
+        wallet: { currency: "usd", remaining_balance: 42.5 },
+        subscription: {
+          plan: "pro",
+          credits: { premium_credits: { remaining: 300 }, add_on_credits: { remaining: 20 } },
+        },
+        usage_based: {
+          spending_current_usd: 3,
+          included_credits: 100,
+          remaining_credits: 97,
+        },
+      },
+    });
+    expect(heygen.metrics).toMatchObject({
+      "data.usage_based.included_credits": 100,
+      "data.usage_based.remaining_credits": 97,
+    });
+    expect(heygen.credits).toBeUndefined();
+    expect(heygen.cost_usd).toBeUndefined();
+
+    for (const body of [
+      { credits_remaining: 50 },
+      { available_credits: 50 },
+      { billing: { balance: { usd: 12 } } },
+      { subscription: { credits: 300 } },
+    ]) {
+      const usage = extractUsage(body);
+      expect(usage.credits).toBeUndefined();
+      expect(usage.cost_usd).toBeUndefined();
+    }
+  });
+
+  it("still reports credits spent next to a balance in the same response", () => {
+    const usage = extractUsage({
+      remainingCredits: 992,
+      sdGenerationJob: { generationId: "g-1", apiCreditCost: 8 },
+    });
+    expect(usage.credits).toBe(8);
+    expect(usage.metrics.remainingCredits).toBe(992);
+  });
+
+  it("matches balance parents by whole segment, not substring", () => {
+    expect(extractUsage({ subscription_job: { credits: 4 } }).credits).toBe(4);
+    expect(extractUsage({ job: { apiCreditCost: 3 } }).credits).toBe(3);
+  });
+
   it("keeps estimates in metrics but never reports them as credits or cost", () => {
     const usage = extractUsage({
       id: "t1",
@@ -75,6 +133,18 @@ describe("extractUsage", () => {
   it("names the body path a cost or credit number came from", () => {
     const usage = extractUsage({ usage: { cost: 0.0021 }, apiCreditCost: 12 });
     expect(usage.sources).toEqual({ cost_usd: "body.usage.cost", credits: "body.apiCreditCost" });
+  });
+
+  it("reads OpenRouter's GET /generation total_cost", () => {
+    const usage = extractUsage({ data: { id: "gen-tts-1", total_cost: 0.000048, latency: 141 } });
+    expect(usage.cost_usd).toBe(0.000048);
+    expect(usage.ids).toEqual(["gen-tts-1"]);
+  });
+
+  it("ignores ids of catalog entries in a list of several items", () => {
+    const usage = extractUsage({ data: [{ id: "a/model-1" }, { id: "b/model-2" }] });
+    expect(usage.ids).toEqual([]);
+    expect(extractUsage({ data: [{ id: "job-1" }] }).ids).toEqual(["job-1"]);
   });
 
   it("finds nothing in a plain body", () => {

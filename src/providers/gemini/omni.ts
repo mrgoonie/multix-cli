@@ -156,6 +156,26 @@ export function parseOmniDuration(value: string | undefined): number | undefined
   return seconds;
 }
 
+/**
+ * A follow-up turn cannot carry `task` (the API rejects it beside
+ * previous_interaction_id), so the intent goes into the prompt, phrased as in
+ * the Omni docs. Checked live: without it, extend-video "the ball turns blue"
+ * came back as a same-length edit, and "the ball falls off the edge of the
+ * table" (what edit-video sent) as a 10 s extension.
+ */
+const FOLLOW_UP_PREFIXES: Partial<Record<OmniVideoTask, string>> = {
+  edit: "Edit this video: ",
+  extend: "Extend this video: ",
+};
+
+/** The prompt sent for a follow-up turn: the task's prefix, unless the prompt already names an intent. */
+export function followUpPrompt(prompt: string, task: OmniVideoTask | undefined): string {
+  const prefix = task ? FOLLOW_UP_PREFIXES[task] : undefined;
+  const text = prompt.trimStart();
+  if (!prefix || /^(edit|extend) this video\b/i.test(text)) return prompt;
+  return `${prefix}${text}`;
+}
+
 /** Build the POST /v1beta/interactions body for an Omni video request. */
 export function buildOmniRequest(opts: OmniRequestOptions): Record<string, unknown> {
   validateOmniFormat(opts);
@@ -170,9 +190,10 @@ export function buildOmniRequest(opts: OmniRequestOptions): Record<string, unkno
   if (opts.durationSeconds !== undefined) responseFormat.duration = `${opts.durationSeconds}s`;
 
   const media = opts.media ?? [];
+  const prompt = opts.previousInteractionId ? followUpPrompt(opts.prompt, opts.task) : opts.prompt;
   const body: Record<string, unknown> = {
     model: opts.model.replace(/^models\//, ""),
-    input: media.length > 0 ? [...media, { type: "text", text: opts.prompt }] : opts.prompt,
+    input: media.length > 0 ? [...media, { type: "text", text: prompt }] : prompt,
     response_format: responseFormat,
     store,
     // A background interaction must be stored; an unstored one runs synchronously.
@@ -180,7 +201,7 @@ export function buildOmniRequest(opts: OmniRequestOptions): Record<string, unkno
   };
   if (opts.previousInteractionId) body.previous_interaction_id = opts.previousInteractionId;
   // The API rejects a task next to previous_interaction_id: a follow-up turn
-  // takes its edit/extend intent from the prompt.
+  // takes its edit/extend intent from the prompt prefix above.
   if (opts.task && !opts.previousInteractionId) {
     body.generation_config = { video_config: { task: opts.task } };
   }

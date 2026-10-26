@@ -56,12 +56,19 @@ function registerFollowUp(
     .action(async (opts: FollowUpOpts) => {
       // With --no-wait, stdout carries only the JSON result.
       const logger = createLogger({ verbose: opts.verbose ?? false, stderr: opts.wait === false });
+      if (!opts.prompt.trim()) throw new ValidationError("--prompt must not be empty");
       if (Boolean(opts.interactionId) === Boolean(opts.video)) {
         throw new ValidationError("Pass exactly one of --interaction-id or --video");
       }
       const model = (opts.model ?? GEMINI_OMNI_MODEL_DEFAULT).replace(/^models\//, "");
       if (!isOmniVideoModel(model)) {
         throw new ValidationError(`${spec.name} needs a Gemini Omni model (got '${model}')`);
+      }
+      // The API answers HTTP 400 to an aspect ratio beside task "extend"; fail before the upload.
+      if (spec.task === "extend" && opts.video && opts.aspectRatio) {
+        throw new ValidationError(
+          "extend-video --video keeps the source aspect ratio; drop --aspect-ratio",
+        );
       }
       // Without explicit flags the follow-up keeps the source's own format.
       const format = omniFormat(opts, false);

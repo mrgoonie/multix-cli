@@ -221,6 +221,19 @@ describe("CLI runner tools", () => {
     expect(model.verified).toMatchObject({ provider: "fal", command: "fal tts" });
     expect(model.verified.voices).toContain("Kore");
     expect(model.usage).toContain('command "fal tts", args ["<text>"]');
+    // Typed fal tts flags set the endpoint fields; the rest go through input.
+    expect(model.usage).toContain('"voice": "<voice>"');
+    expect(model.usage).toContain('"style": "<style_instructions>"');
+    expect(model.usage).toMatch(/"input": "<JSON object with any of [^>]*turns/);
+    expect(model.usage).not.toContain("by long name");
+    expect(model.usage).not.toContain('"style_instructions":');
+
+    const eleven = (
+      await callTool(env, "multix_catalog", { model: "elevenlabs/tts/eleven-v4" }, { jobs })
+    ).structuredContent;
+    expect(eleven.usage).toContain('"format": "<output_format>"');
+    expect(eleven.usage).toContain('"language": "<language_code>"');
+    expect(eleven.usage).not.toContain('"stability":');
 
     const runner = (
       await callTool(env, "multix_catalog", { model: "fal-ai/minimax/speech-2.8-hd" }, { jobs })
@@ -445,5 +458,74 @@ describe("CLI runner tools", () => {
       retryable: false,
     });
     expect(backend.specs.size).toBe(0);
+  });
+
+  it("estimate returns a priced range and starts nothing", async () => {
+    const backend = new FakeBackend(succeeded);
+    const jobs = jobsContext(backend);
+    const result = await callTool(
+      env,
+      "multix_run",
+      {
+        command: "elevenlabs tts",
+        options: { text: "Xin chào thế giới", "previous-text": "Trước đó." },
+        estimate: true,
+        max_cost_usd: 0.0001,
+      },
+      { jobs },
+    );
+    expect(result.isError).toBeUndefined();
+    expect(result.structuredContent).toMatchObject({
+      estimate_only: true,
+      command: "elevenlabs tts",
+      estimate: {
+        status: "estimated",
+        upper_bound: "proven",
+        units: { characters: { low: 17, expected: 17, high: 26 } },
+      },
+      budget: { ok: false, code: "BUDGET_EXCEEDED", max_cost_usd: 0.0001 },
+    });
+    expect(backend.specs.size).toBe(0);
+  });
+
+  it("max_cost_usd refuses an unknown or unproven ceiling before starting a job", async () => {
+    const backend = new FakeBackend(succeeded);
+    const jobs = jobsContext(backend);
+    const unknown = await callTool(
+      env,
+      "multix_run",
+      { command: "gemini generate", options: { prompt: "a cat" }, max_cost_usd: 5 },
+      { jobs },
+    );
+    expect(unknown.isError).toBe(true);
+    expect(unknown.content[0].text).toMatch(/^Refusing to run: cost of gemini .* is unknown/);
+    const unproven = await callTool(
+      env,
+      "multix_run",
+      { command: "gemini generate-speech", options: { text: "hi" }, max_cost_usd: 5 },
+      { jobs },
+    );
+    expect(unproven.isError).toBe(true);
+    expect(unproven.content[0].text).toContain("--cost-policy estimate");
+    expect(backend.specs.size).toBe(0);
+  });
+
+  it("max_cost_usd with cost_policy estimate lets an estimated ceiling under the limit run", async () => {
+    const backend = new FakeBackend(succeeded, 0);
+    const jobs = jobsContext(backend);
+    const result = await callTool(
+      env,
+      "multix_run",
+      {
+        command: "gemini generate-speech",
+        options: { text: "hi" },
+        max_cost_usd: 5,
+        cost_policy: "estimate",
+        wait_seconds: 10,
+      },
+      { jobs },
+    );
+    expect(result.isError).toBeUndefined();
+    expect(backend.specs.size).toBe(1);
   });
 });

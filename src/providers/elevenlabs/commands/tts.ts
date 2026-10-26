@@ -15,7 +15,7 @@ import {
   TASK_DEFAULTS,
   extFromFormat,
 } from "../models.js";
-import { TTS_VOICE_DEFAULTS, buildTtsRequest } from "../tts-request.js";
+import { TTS_VOICE_DEFAULTS, buildTtsRequest, checkVoiceId } from "../tts-request.js";
 
 interface TimestampsResp {
   audio_base64?: string;
@@ -52,12 +52,16 @@ export function registerTtsCommand(parent: Command): void {
       `Style exaggeration 0..1 (default ${TTS_VOICE_DEFAULTS.style}; eleven_multilingual_v2 only)`,
     )
     .option(
+      "--clone-strength <n>",
+      "Professional Voice Clone adherence 0..1 (eleven_v4/eleven_v4_turbo only; the API recommends 0)",
+    )
+    .option(
       "--no-speaker-boost",
       "Disable speaker boost (default: enabled on models that have it: eleven_multilingual_v2, eleven_v3_conversational)",
     )
     .option(
       "--language-code <code>",
-      "ISO 639-1 language code to enforce (the API rejects codes a model does not support)",
+      "ISO 639-1 language code to enforce (not enforced by eleven_multilingual_v2; the API rejects codes a model does not support)",
     )
     .option("--seed <n>", "Determinism seed (0..4294967295, best effort)")
     .option("--previous-text <str>", "Preceding text for context continuity (not eleven_v3)")
@@ -74,6 +78,7 @@ export function registerTtsCommand(parent: Command): void {
       const text = opts.text ?? opts.prompt;
       if (!text) throw new ValidationError("Either --text or --prompt is required");
       if (!opts.voice) throw new ValidationError("--voice <id> is required");
+      checkVoiceId(opts.voice);
 
       const { payload, warnings } = buildTtsRequest({
         text,
@@ -81,6 +86,7 @@ export function registerTtsCommand(parent: Command): void {
         stability: opts.stability,
         similarityBoost: opts.similarityBoost,
         style: opts.style,
+        cloneStrength: opts.cloneStrength,
         speakerBoost:
           cmd.getOptionValueSource("speakerBoost") === "cli" ? opts.speakerBoost : undefined,
         languageCode: opts.languageCode,
@@ -98,18 +104,40 @@ export function registerTtsCommand(parent: Command): void {
         query: { output_format: opts.format },
       });
 
+      // Only what ElevenLabs reports; multix never estimates what was charged.
+      const header = res.headers.get("character-cost");
+      const charged = header !== null && header.trim() !== "" ? header : undefined;
+      const printCharged = () => {
+        if (charged !== undefined) {
+          console.log(`Credits charged (ElevenLabs character-cost header): ${charged}`);
+        }
+      };
+
       let bytes = res.bytes;
-      let timings: TimestampsResp | undefined;
+      let timings: TimestampsResp | null | undefined;
       if (opts.timestamps) {
+        let problem = "carried no audio";
         try {
-          timings = JSON.parse(res.bytes.toString("utf8")) as TimestampsResp;
+          timings = JSON.parse(res.bytes.toString("utf8")) as TimestampsResp | null;
         } catch {
-          throw new ProviderError("with-timestamps response was not JSON", "elevenlabs");
+          problem = "was not JSON";
         }
-        if (!timings.audio_base64) {
-          throw new ProviderError("with-timestamps response carried no audio", "elevenlabs");
+        const audio = timings?.audio_base64;
+        if (!audio) {
+          // The request may already be billed: keep the body so it can be inspected.
+          const raw = saveBytes({
+            bytes: res.bytes,
+            task: "tts_raw",
+            ext: problem === "was not JSON" ? "bin" : "json",
+            logger,
+          });
+          printCharged();
+          throw new ProviderError(
+            `with-timestamps response ${problem}; raw response saved to ${raw}`,
+            "elevenlabs",
+          );
         }
-        bytes = Buffer.from(timings.audio_base64, "base64");
+        bytes = Buffer.from(audio, "base64");
       }
 
       const dest = saveBytes({
@@ -134,10 +162,6 @@ export function registerTtsCommand(parent: Command): void {
         }
       }
 
-      // Only what ElevenLabs reports; multix never estimates what was charged.
-      const charged = res.headers.get("character-cost");
-      if (charged !== null && charged.trim() !== "") {
-        console.log(`Credits charged (ElevenLabs character-cost header): ${charged}`);
-      }
+      printCharged();
     });
 }
