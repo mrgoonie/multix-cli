@@ -150,7 +150,7 @@ export const PRICING_CATALOG: PriceEntry[] = [
   {
     id: "elevenlabs/multilingual@api",
     provider: "elevenlabs",
-    models: ["eleven_v3", "eleven_multilingual_v2"],
+    models: ["eleven_v4", "eleven_v3", "eleven_multilingual_v2"],
     tier: "api-usage",
     currency: "USD",
     region: "global",
@@ -163,7 +163,13 @@ export const PRICING_CATALOG: PriceEntry[] = [
   {
     id: "elevenlabs/flash-turbo@api",
     provider: "elevenlabs",
-    models: ["eleven_flash_v2_5", "eleven_flash_v2", "eleven_turbo_v2_5", "eleven_turbo_v2"],
+    models: [
+      "eleven_v4_turbo",
+      "eleven_flash_v2_5",
+      "eleven_flash_v2",
+      "eleven_turbo_v2_5",
+      "eleven_turbo_v2",
+    ],
     tier: "api-usage",
     currency: "USD",
     region: "global",

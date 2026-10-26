@@ -152,11 +152,13 @@ chuyển key sang `.env` hoặc `~/.multix/.env`.
 Chỉ đặt override khi cần thay default. Các biến gồm `IMAGE_GEN_MODEL`,
 `VIDEO_GEN_MODEL`, `MULTIMODAL_MODEL`, `GEMINI_TTS_MODEL`,
 `OPENAI_IMAGE_MODEL`, `OPENAI_TTS_MODEL`, `OPENAI_STT_MODEL`,
-`OPENROUTER_IMAGE_MODEL`, `LEONARDO_BASE_URL`, `BYTEPLUS_BASE_URL`,
+`OPENROUTER_IMAGE_MODEL`, `OPENROUTER_TTS_MODEL` (mặc định
+`google/gemini-3.8-flash-tts`), `LEONARDO_BASE_URL`, `BYTEPLUS_BASE_URL`,
 `BYTEPLUS_IMAGE_MODEL`, `BYTEPLUS_VIDEO_MODEL`, `BYTEPLUS_3D_MODEL`,
 `FAL_BASE_URL`, `FAL_IMAGE_MODEL`, `FAL_VIDEO_MODEL` và
 `FAL_VIDEO_IMAGE_MODEL` (default image-to-video của fal, dùng khi truyền
-`multix fal video --image-url` mà không có `-m`). `FAL_MAX_UPLOAD_MB` đặt giới
+`multix fal video --image-url` mà không có `-m`). `FAL_TTS_MODEL` đặt model
+mặc định của `multix fal tts` (mặc định `google/gemini-3.8-flash-tts`). `FAL_MAX_UPLOAD_MB` đặt giới
 hạn dung lượng cho file cục bộ upload bằng `multix fal upload` và
 `multix fal run --file` (mặc định 1024). Replicate nhận
 `REPLICATE_BASE_URL` (API root cho mock hoặc proxy), `REPLICATE_IMAGE_MODEL`

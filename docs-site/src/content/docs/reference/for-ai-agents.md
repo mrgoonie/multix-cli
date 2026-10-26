@@ -71,7 +71,7 @@ https://multix.zuey.me/llms.txt
 | `warnings[]` | Problems found in the outputs, such as an empty file or content that does not match its extension. |
 | `data` / `text` | The command's stdout: parsed JSON, or text capped at 32 KB. |
 | `error` | `code`, `message`, `retryable`, `retry_after_s`, `hint`, `http_status`, `env` (the key name when one is missing). |
-| `usage` | What the provider reported: `tokens` (`input`, `output`, `total`, `thinking`), `cost_usd`, `credits`, and other numeric `metrics` by key path. Nothing is estimated. |
+| `usage` | What the provider reported: `tokens` (`input`, `output`, `total`, `thinking`), `cost_usd`, `credits`, and other numeric `metrics` by key path. `sources.cost_usd` / `sources.credits` name where each number came from (for example `api.elevenlabs.io header.character-cost`). Nothing is estimated: a provider's own estimate or quote (such as Runway `estimatedCost`) stays in `metrics` and is never reported as `cost_usd` or `credits`. |
 | `http` | Provider request count, failed requests and total time. |
 | `provider_ids` | Request, job or prediction ids the provider returned. |
 | `request` | With `--dry-run`: the request that would have been sent. |
@@ -150,8 +150,8 @@ Prices as checked on 2026-10-26 (`--estimate` shows the rate in force):
 | `gemini/gemini-3.1-flash-tts-preview@paid-standard` | `gemini-3.1-flash-tts-preview` | $1 / 1M input tokens, $20 / 1M audio tokens |
 | `gemini/gemini-2.5-flash-preview-tts@paid-standard` | `gemini-2.5-flash-preview-tts` | $0.50 / 1M input tokens, $10 / 1M audio tokens |
 | `gemini/gemini-2.5-pro-preview-tts@paid-standard` | `gemini-2.5-pro-preview-tts` | $1 / 1M input tokens, $20 / 1M audio tokens |
-| `elevenlabs/multilingual@api` | `eleven_v3`, `eleven_multilingual_v2` | $0.08 / 1K characters |
-| `elevenlabs/flash-turbo@api` | `eleven_flash_v2_5`, `eleven_flash_v2`, `eleven_turbo_v2_5`, `eleven_turbo_v2` | $0.04 / 1K characters |
+| `elevenlabs/multilingual@api` | `eleven_v4`, `eleven_v3`, `eleven_multilingual_v2` | $0.08 / 1K characters |
+| `elevenlabs/flash-turbo@api` | `eleven_v4_turbo`, `eleven_flash_v2_5`, `eleven_flash_v2`, `eleven_turbo_v2_5`, `eleven_turbo_v2` | $0.04 / 1K characters |
 | `fish/s2-pro@api` | `s2.1-pro`, `s2-pro` | $15 / 1M UTF-8 bytes |
 | `fish/s1@api` | `s1` | $15 / 1M UTF-8 bytes |
 | `fish/drama-3@api` | `drama-3` | $10 / 1M UTF-8 bytes (promotion until 2026-11-12T17:00Z), then $50 |
@@ -226,7 +226,7 @@ or `~/.multix/.env` only, not a project `.env`).
 | Analyze or transcribe files | [Gemini](/commands/gemini/) |
 | Generate or edit images, speech, or transcription | [OpenAI](/commands/openai/) |
 | MiniMax image, video, speech, or music | [MiniMax](/commands/minimax/) |
-| Routed image or image-to-video | [OpenRouter](/commands/openrouter/) |
+| Routed image, image-to-video, or speech | [OpenRouter](/commands/openrouter/) |
 | Leonardo image IDs, video, or upscale jobs | [Leonardo](/commands/leonardo/) |
 | Seedream, Seedance, reference video, or 3D | [BytePlus](/commands/byteplus/) |
 | Workers AI image/speech or AI Gateway video | [Cloudflare](/commands/cloudflare/) |

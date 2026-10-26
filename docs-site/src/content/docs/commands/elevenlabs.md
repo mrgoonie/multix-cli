@@ -27,6 +27,51 @@ multix elevenlabs voice-changer --input source.wav --voice <voiceId> --output ch
 `tts` returns audio synchronously. Clone input is local audio and should total
 one to three minutes.
 
+## TTS models and options
+
+| Model | Use | Max characters | Style | Speaker boost | Previous/next text |
+|---|---|---|---|---|---|
+| `eleven_v4` | Highest quality, 90+ languages, audio tags | 10,000 | no | no | yes |
+| `eleven_v4_turbo` | v4 quality at low latency, 0.5 credits per character | 10,000 | no | no | yes |
+| `eleven_v3` | Expressive, audio tags | 5,000 | no | no | no |
+| `eleven_v3_conversational` | v3 tuned for dialogue | 5,000 | no | yes | no |
+| `eleven_multilingual_v2` (default) | 29 languages | 10,000 | yes | yes | yes |
+| `eleven_flash_v2_5`, `eleven_turbo_v2_5` | Low latency, 32 languages | 40,000 | no | no | yes |
+| `eleven_flash_v2`, `eleven_turbo_v2` | English only | 30,000 | no | no | yes |
+
+```bash
+multix elevenlabs tts --model eleven_v4 --text "[warmly] Xin chào!" --language-code vi
+multix elevenlabs tts --model eleven_v4_turbo --text "Hello" --timestamps --format wav_24000
+multix elevenlabs models   # live capabilities, languages, text limit, credit multiplier
+```
+
+The CLI checks options against the model before sending anything. A non-zero
+`--style` on a model without style control, `--previous-text`/`--next-text` on
+`eleven_v3`, or text over the model's limit is rejected with the models that do
+support it. `--style 0` or `--no-speaker-boost` on a model without that control
+is reported as a warning and not sent. Audio tags such as `[whispering]` are
+performed by v3 and v4; other models read them aloud, so the CLI warns. The API
+itself rejects a `--language-code` the model does not support; nothing is
+billed. `eleven_multilingual_v2` accepts the codes on its list but does not
+enforce them, so the CLI warns. `--clone-strength` (0 to 1, for Professional
+Voice Clones fine-tuned for v4) is sent only to `eleven_v4` and
+`eleven_v4_turbo`; other models reject it. SSML `<break>` tags on v3/v4 and
+`<phoneme>` tags on any model but `eleven_flash_v2` trigger a warning.
+`--voice` must be a voice ID (letters, digits, `_`, `-`). Text length is
+counted in Unicode code points, as the API counts it. An unknown
+`--model` id is passed through unchecked with a warning.
+
+`--timestamps` saves character timings next to the audio as
+`<audio>.timestamps.json`. If the response carries no audio, the raw body is
+saved as `elevenlabs_tts_raw_*` before the command fails, since the request
+may already be billed. TTS also accepts `wav_*`, `opus_48000_*`,
+`alaw_8000`, `mp3_24000_48`, `pcm_32000` and `pcm_48000` formats.
+
+After each run the CLI prints the credits ElevenLabs reports in its
+`character-cost` header. With `--json` the same number is `usage.credits`, and
+`usage.sources.credits` names the header. The CLI never presents an estimate
+as credits charged.
+
 ## Transcription and generated audio
 
 ```bash

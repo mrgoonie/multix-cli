@@ -239,6 +239,11 @@ async function recordUsage(
   const usage = extractUsage(body, response.headers);
   for (const id of usage.ids) if (!run.ids.includes(id) && run.ids.length < 10) run.ids.push(id);
   if (!hasUsage(usage)) return;
+  if (usage.sources) {
+    usage.sources = Object.fromEntries(
+      Object.entries(usage.sources).map(([k, v]) => [k, `${host} ${v}`]),
+    );
+  }
   if (method === "GET") {
     // Polls repeat the job's running totals: keep the latest per endpoint family.
     run.getUsage.set(`${host}${path.replace(/[^/]{16,}/g, ":id")}`, usage);

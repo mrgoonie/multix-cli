@@ -71,7 +71,7 @@ https://multix.zuey.me/llms.txt
 | `warnings[]` | Vấn đề tìm thấy trong output, ví dụ file rỗng hoặc nội dung không khớp phần mở rộng. |
 | `data` / `text` | stdout của lệnh: JSON đã parse, hoặc text tối đa 32 KB. |
 | `error` | `code`, `message`, `retryable`, `retry_after_s`, `hint`, `http_status`, `env` (tên key khi thiếu key). |
-| `usage` | Số liệu provider trả về: `tokens` (`input`, `output`, `total`, `thinking`), `cost_usd`, `credits` và các `metrics` dạng số khác theo key path. Không ước tính. |
+| `usage` | Số liệu provider trả về: `tokens` (`input`, `output`, `total`, `thinking`), `cost_usd`, `credits` và các `metrics` dạng số khác theo key path. `sources.cost_usd` / `sources.credits` ghi nguồn của từng số (ví dụ `api.elevenlabs.io header.character-cost`). Không ước tính: số ước tính hoặc báo giá của provider (như `estimatedCost` của Runway) chỉ nằm trong `metrics`, không bao giờ được báo là `cost_usd` hay `credits`. |
 | `http` | Số request tới provider, số request lỗi và tổng thời gian. |
 | `provider_ids` | Request id, job id hoặc prediction id provider trả về. |
 | `request` | Với `--dry-run`: request lẽ ra đã được gửi. |
@@ -149,8 +149,8 @@ Giá được kiểm tra ngày 2026-10-26 (`--estimate` hiển thị giá đang 
 | `gemini/gemini-3.1-flash-tts-preview@paid-standard` | `gemini-3.1-flash-tts-preview` | $1 / 1 triệu token đầu vào, $20 / 1 triệu token âm thanh |
 | `gemini/gemini-2.5-flash-preview-tts@paid-standard` | `gemini-2.5-flash-preview-tts` | $0,50 / 1 triệu token đầu vào, $10 / 1 triệu token âm thanh |
 | `gemini/gemini-2.5-pro-preview-tts@paid-standard` | `gemini-2.5-pro-preview-tts` | $1 / 1 triệu token đầu vào, $20 / 1 triệu token âm thanh |
-| `elevenlabs/multilingual@api` | `eleven_v3`, `eleven_multilingual_v2` | $0,08 / 1.000 ký tự |
-| `elevenlabs/flash-turbo@api` | `eleven_flash_v2_5`, `eleven_flash_v2`, `eleven_turbo_v2_5`, `eleven_turbo_v2` | $0,04 / 1.000 ký tự |
+| `elevenlabs/multilingual@api` | `eleven_v4`, `eleven_v3`, `eleven_multilingual_v2` | $0,08 / 1.000 ký tự |
+| `elevenlabs/flash-turbo@api` | `eleven_v4_turbo`, `eleven_flash_v2_5`, `eleven_flash_v2`, `eleven_turbo_v2_5`, `eleven_turbo_v2` | $0,04 / 1.000 ký tự |
 | `fish/s2-pro@api` | `s2.1-pro`, `s2-pro` | $15 / 1 triệu byte UTF-8 |
 | `fish/s1@api` | `s1` | $15 / 1 triệu byte UTF-8 |
 | `fish/drama-3@api` | `drama-3` | $10 / 1 triệu byte UTF-8 (khuyến mãi đến 2026-11-12T17:00Z), sau đó $50 |
@@ -223,7 +223,7 @@ shell hoặc `~/.multix/.env`, không nhận từ `.env` của project).
 | Phân tích hoặc transcribe file | [Gemini](/vi/commands/gemini/) |
 | Sinh/sửa ảnh, speech hoặc transcription | [OpenAI](/vi/commands/openai/) |
 | Ảnh, video, speech hoặc music MiniMax | [MiniMax](/vi/commands/minimax/) |
-| Ảnh hoặc image-to-video qua routing | [OpenRouter](/vi/commands/openrouter/) |
+| Ảnh, image-to-video hoặc giọng nói qua routing | [OpenRouter](/vi/commands/openrouter/) |
 | Leonardo image ID, video hoặc upscale job | [Leonardo](/vi/commands/leonardo/) |
 | Seedream, Seedance, reference video hoặc 3D | [BytePlus](/vi/commands/byteplus/) |
 | Workers AI image/speech hoặc AI Gateway video | [Cloudflare](/vi/commands/cloudflare/) |

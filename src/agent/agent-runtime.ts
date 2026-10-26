@@ -34,6 +34,8 @@ import { run, summarizeUsage } from "./run-state.js";
 
 /** Commands that are themselves agent tooling or setup: not recorded in history. */
 const UNRECORDED = /^(history|models|guide|rerun|check|update)\b/;
+/** Read-only lookups that report another run's spend: counting it here would bill it twice in history. */
+const SPEND_LOOKUPS = /^openrouter generation\b/;
 /** Groups that run locally (ffmpeg/ImageMagick): dry run stops before the action. */
 const LOCAL_GROUPS = new Set(["media"]);
 
@@ -241,7 +243,7 @@ export function finalizeRun(input: FinalizeInput): number {
   const historyId = recorded ? newHistoryId(run.startedAt) : undefined;
   const optionModel = typeof run.options.model === "string" ? run.options.model : undefined;
   const model = run.requestModel ?? optionModel;
-  const usage = summarizeUsage();
+  const usage = SPEND_LOOKUPS.test(run.command) ? undefined : summarizeUsage();
   const httpErrors = run.calls.filter((c) => c.status === 0 || c.status >= 400).length;
   const http = run.calls.length
     ? {
