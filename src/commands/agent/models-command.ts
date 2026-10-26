@@ -157,7 +157,9 @@ export function modelRows(program: Command): ModelRow[] {
         : {}),
       ready: groupReady(group),
       ...(groupKeyNames(group).length ? { keys: groupKeyNames(group) } : {}),
-      ...(cmd.options.some((o) => o.long === "--async") ? { async: true } : {}),
+      ...(cmd.options.some((o) => o.long === "--async" || o.long === "--detach")
+        ? { async: true }
+        : {}),
       ...(lister
         ? { list: `multix ${group} ${lister.name()}${lister.commands.length ? " list" : ""}` }
         : {}),
