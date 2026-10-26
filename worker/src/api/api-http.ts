@@ -10,6 +10,7 @@ import { MAX_BODY_BYTES } from "../config.js";
 import { BodyTooLargeError, readBodyLimited } from "../http-guards.js";
 import { json } from "../http-responses.js";
 import { JobCapacityError, JobNotFoundError } from "../jobs/job-runner.js";
+import { LedgerQueryError } from "../ledger/ledger-query.js";
 import { logEvent, sanitizeText } from "../redaction.js";
 
 export type ApiErrorCode =
@@ -25,6 +26,8 @@ export type ApiErrorCode =
   | "limit_reached"
   | "unavailable"
   | "storage_check_failed"
+  | "ledger_unavailable"
+  | "budget_limit"
   | "internal";
 
 /** A failure with a fixed code and a caller-safe message. */
@@ -49,22 +52,21 @@ export function apiError(
   return json(status, { error: { code, message } }, headers);
 }
 
-/** Parse a JSON object body (application/json, at most MAX_BODY_BYTES). */
-export async function readJsonObject(request: Request): Promise<Record<string, unknown>> {
+/** Parse a JSON object body (application/json, at most `maxBytes`, default MAX_BODY_BYTES). */
+export async function readJsonObject(
+  request: Request,
+  maxBytes = MAX_BODY_BYTES,
+): Promise<Record<string, unknown>> {
   const type = request.headers.get("content-type") ?? "";
   if (!/^application\/json\b/i.test(type)) {
     throw new ApiError(415, "unsupported_media_type", "Send the body as application/json");
   }
   let body: unknown;
   try {
-    body = JSON.parse(await readBodyLimited(request, MAX_BODY_BYTES));
+    body = JSON.parse(await readBodyLimited(request, maxBytes));
   } catch (error) {
     if (error instanceof BodyTooLargeError) {
-      throw new ApiError(
-        413,
-        "payload_too_large",
-        `The body must be at most ${MAX_BODY_BYTES} bytes`,
-      );
+      throw new ApiError(413, "payload_too_large", `The body must be at most ${maxBytes} bytes`);
     }
     throw new ApiError(400, "bad_request", "The body is not valid JSON");
   }
@@ -89,6 +91,8 @@ export function errorResponse(
     return apiError(error.status, error.code, error.message, error.headers);
   }
   if (error instanceof JobNotFoundError) return apiError(404, "not_found", error.message);
+  // Ledger query and budget messages name the field and the rule, never the value.
+  if (error instanceof LedgerQueryError) return apiError(400, "bad_request", error.message);
   if (error instanceof JobCapacityError) {
     return apiError(429, "busy", error.message, { "retry-after": "60" });
   }

@@ -24,6 +24,20 @@
  *   GET    /api/v1/events/audit                subscription audit log
  *   GET    /api/v1/api-keys                    the account's API keys (no values)
  *   DELETE /api/v1/api-keys/{id}               revoke an API key
+ *   GET    /api/v1/usage/summary               usage totals, groups, daily series and budgets
+ *   GET    /api/v1/usage/operations            recorded operations, newest first (paged)
+ *   GET    /api/v1/usage/operations/{op_id}    one operation and its cost adjustments
+ *   POST   /api/v1/usage/operations/{op_id}/adjustments  record a refund or correction
+ *   GET    /api/v1/usage/export                operations as CSV or JSON
+ *   POST   /api/v1/usage/import                import CLI history (`multix history push`)
+ *   DELETE /api/v1/usage/data?confirm=delete   delete every usage record (budgets stay)
+ *   GET    /api/v1/budgets                     budgets with their current status
+ *   POST   /api/v1/budgets                     create a budget
+ *   GET    /api/v1/budgets/{id}                one budget's status
+ *   PUT    /api/v1/budgets/{id}                replace a budget
+ *   DELETE /api/v1/budgets/{id}                delete a budget
+ *   GET    /api/v1/activities                  account activity log, newest first (paged)
+ *   GET    /api/v1/activities/verify           check the activity log's hash chain
  *
  * Every authenticated request checks the key, the per-account rate limit
  * shared with /mcp and the sign-in allowlist. Failed authentication is rate
@@ -37,6 +51,7 @@ import type { AppContext, AppDeps } from "../app-context.js";
 import { limitsFrom, secretValues, serverSettings } from "../config.js";
 import { json } from "../http-responses.js";
 import { jobsContextFor } from "../jobs/job-context.js";
+import type { AccountLedgerStub } from "../ledger/account-ledger.js";
 import type { ProviderKeys } from "../provider-secret-names.js";
 import {
   type ApiCaller,
@@ -64,6 +79,23 @@ import {
 } from "./event-api-handlers.js";
 import { cancelJob, getCatalog, getJob, postJob } from "./job-api-handlers.js";
 import { openApiDocument } from "./openapi-document.js";
+import {
+  createBudget,
+  deleteBudget,
+  deleteUsageData,
+  exportUsage,
+  getBudget,
+  getOperation,
+  getUsageSummary,
+  importUsage,
+  listActivities,
+  listBudgets,
+  listOperations,
+  postAdjustment,
+  putBudget,
+  usageLedger,
+  verifyActivities,
+} from "./usage-api-handlers.js";
 
 export const API_PREFIX = "/api/v1";
 
@@ -138,18 +170,18 @@ async function route(
   if (resource === "provider-keys" && !action) {
     if (!id) {
       if (method === "GET") return listProviderKeys(app, caller);
-      if (method === "PATCH") return patchProviderKeys(app, caller, request);
+      if (method === "PATCH") return patchProviderKeys(app, deps, caller, request);
       methodNotAllowed("GET, PATCH");
     }
-    if (method === "PUT") return putProviderKey(app, caller, id, request);
-    if (method === "DELETE") return deleteProviderKey(app, caller, id);
+    if (method === "PUT") return putProviderKey(app, deps, caller, id, request);
+    if (method === "DELETE") return deleteProviderKey(app, deps, caller, id);
     methodNotAllowed("PUT, DELETE");
   }
 
   if (resource === "storage" && !id) {
     if (method === "GET") return getStorage(app, caller);
-    if (method === "PUT") return putStorage(app, caller, request);
-    if (method === "DELETE") return deleteStorage(app, caller);
+    if (method === "PUT") return putStorage(app, deps, caller, request);
+    if (method === "DELETE") return deleteStorage(app, deps, caller);
     methodNotAllowed("GET, PUT, DELETE");
   }
 
@@ -159,7 +191,7 @@ async function route(
       return listApiKeys(app, caller);
     }
     if (method !== "DELETE") methodNotAllowed("DELETE");
-    return revokeApiKey(app, caller, id);
+    return revokeApiKey(app, deps, caller, id);
   }
 
   if (resource === "catalog" && !id) {
@@ -168,7 +200,11 @@ async function route(
   }
 
   if (resource === "jobs") {
-    const jobs = jobsContextFor(app.env, app, userId, keys, deps);
+    const jobs = jobsContextFor(app.env, app, userId, keys, deps, {
+      source: "rest",
+      clientId: `api_key:${caller.keyId}`,
+      clientName: null,
+    });
     if (!id) {
       if (method !== "POST") methodNotAllowed("POST");
       const limits = limitsFrom(toolEnvFor(serverSettings(app.env), keys));
@@ -188,7 +224,94 @@ async function route(
     return routeEvents(app, deps, caller, request, parts.slice(1));
   }
 
+  if (resource === "usage" || resource === "budgets" || resource === "activities") {
+    const ledger = () => usageLedger(app, deps, userId);
+    if (resource === "usage") return routeUsage(ledger, caller, request, parts.slice(1), url);
+    if (resource === "budgets") return routeBudgets(ledger, caller, request, parts.slice(1));
+    return routeActivities(ledger, request, parts.slice(1), url);
+  }
+
   throw new ApiError(404, "not_found", "Not found");
+}
+
+type LedgerOf = () => AccountLedgerStub;
+
+async function routeUsage(
+  ledger: LedgerOf,
+  caller: ApiCaller,
+  request: Request,
+  parts: string[],
+  url: URL,
+): Promise<Response> {
+  const method = request.method;
+  const [collection, id, sub] = parts;
+  if (collection === "operations" && parts.length <= 3) {
+    if (!id) {
+      if (method !== "GET") methodNotAllowed("GET");
+      return listOperations(ledger(), url);
+    }
+    if (!sub) {
+      if (method !== "GET") methodNotAllowed("GET");
+      return getOperation(ledger(), id);
+    }
+    if (sub === "adjustments") {
+      if (method !== "POST") methodNotAllowed("POST");
+      return postAdjustment(ledger(), caller, id, request);
+    }
+  }
+  if (parts.length === 1) {
+    if (collection === "summary") {
+      if (method !== "GET") methodNotAllowed("GET");
+      return getUsageSummary(ledger(), url);
+    }
+    if (collection === "export") {
+      if (method !== "GET") methodNotAllowed("GET");
+      return exportUsage(ledger(), caller, url);
+    }
+    if (collection === "import") {
+      if (method !== "POST") methodNotAllowed("POST");
+      return importUsage(ledger(), caller, request);
+    }
+    if (collection === "data") {
+      if (method !== "DELETE") methodNotAllowed("DELETE");
+      return deleteUsageData(ledger(), caller, url);
+    }
+  }
+  throw new ApiError(404, "not_found", "Not found");
+}
+
+async function routeBudgets(
+  ledger: LedgerOf,
+  caller: ApiCaller,
+  request: Request,
+  parts: string[],
+): Promise<Response> {
+  const method = request.method;
+  const [id, extra] = parts;
+  if (extra) throw new ApiError(404, "not_found", "Not found");
+  if (!id) {
+    if (method === "GET") return listBudgets(ledger());
+    if (method === "POST") return createBudget(ledger(), caller, request);
+    methodNotAllowed("GET, POST");
+  }
+  if (method === "GET") return getBudget(ledger(), id);
+  if (method === "PUT") return putBudget(ledger(), caller, id, request);
+  if (method === "DELETE") return deleteBudget(ledger(), caller, id);
+  methodNotAllowed("GET, PUT, DELETE");
+}
+
+async function routeActivities(
+  ledger: LedgerOf,
+  request: Request,
+  parts: string[],
+  url: URL,
+): Promise<Response> {
+  const [sub] = parts;
+  if (parts.length > 1 || (sub && sub !== "verify")) {
+    throw new ApiError(404, "not_found", "Not found");
+  }
+  if (request.method !== "GET") methodNotAllowed("GET");
+  return sub ? verifyActivities(ledger()) : listActivities(ledger(), url);
 }
 
 async function routeEvents(
@@ -208,11 +331,11 @@ async function routeEvents(
   if (collection === "subscriptions" && !extra) {
     if (!id) {
       if (method === "GET") return listSubscriptions(hub());
-      if (method === "POST") return createSubscription(app, hub(), caller, request);
+      if (method === "POST") return createSubscription(app, deps, hub(), caller, request);
       methodNotAllowed("GET, POST");
     }
     if (method === "GET") return getSubscription(hub(), id);
-    if (method === "DELETE") return deleteSubscription(hub(), caller, id);
+    if (method === "DELETE") return deleteSubscription(app, deps, hub(), caller, id);
     methodNotAllowed("GET, DELETE");
   }
   if ((collection === "dead-letters" || collection === "audit") && !id) {

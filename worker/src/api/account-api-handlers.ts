@@ -2,14 +2,17 @@
  * REST handlers for the account itself: who is calling, provider keys, R2
  * storage and API keys. Key values and R2 credentials are write-only: no
  * response ever contains them, and errors name the field, not the value.
+ * Each change is appended to the account's activity log by key name, bucket
+ * or key id only.
  */
 
 import type { Account, SecretChanges } from "../accounts/account-store.js";
 import { isProviderSecretName, isValidSecretValue } from "../accounts/account-store.js";
 import { ApiKeyStore, publicApiKey } from "../accounts/api-key-store.js";
 import { type R2SettingsProblem, parseR2Settings, r2Prefix } from "../accounts/r2-settings.js";
-import type { AppContext } from "../app-context.js";
+import { type AppContext, type AppDeps, recordActivity } from "../app-context.js";
 import { json } from "../http-responses.js";
+import type { ActivityInput } from "../ledger/ledger-types.js";
 import { PROVIDER_SECRET_NAMES } from "../provider-secret-names.js";
 import { logEvent } from "../redaction.js";
 import { checkR2Access } from "../storage/r2-access-check.js";
@@ -19,6 +22,43 @@ export interface ApiCaller {
   account: Account;
   /** Id of the API key that authenticated the request. */
   keyId: string;
+}
+
+/** Log an account change made with an API key; best effort, never fails the request. */
+export function logActivity(
+  app: AppContext,
+  deps: AppDeps,
+  caller: ApiCaller,
+  activity: Omit<ActivityInput, "actor">,
+): Promise<void> {
+  return recordActivity(app.env, deps, caller.account.id, {
+    ...activity,
+    actor: `api_key:${caller.keyId}`,
+  });
+}
+
+async function logKeyChanges(
+  app: AppContext,
+  deps: AppDeps,
+  caller: ApiCaller,
+  saved: readonly string[],
+  removed: readonly string[],
+): Promise<void> {
+  // Sequential, so the log lists the keys in the order they were given.
+  for (const name of saved) {
+    await logActivity(app, deps, caller, {
+      kind: "provider_key.saved",
+      subject: name,
+      metadata: {},
+    });
+  }
+  for (const name of removed) {
+    await logActivity(app, deps, caller, {
+      kind: "provider_key.removed",
+      subject: name,
+      metadata: {},
+    });
+  }
 }
 
 export function getMe(caller: ApiCaller): Response {
@@ -69,6 +109,7 @@ function secretName(name: string): asserts name is keyof SecretChanges {
 /** PATCH /provider-keys: `{ "keys": { NAME: "value" | null } }`; validated in full before any write. */
 export async function patchProviderKeys(
   app: AppContext,
+  deps: AppDeps,
   caller: ApiCaller,
   request: Request,
 ): Promise<Response> {
@@ -96,12 +137,14 @@ export async function patchProviderKeys(
     saved: saved.join(","),
     removed: removed.join(","),
   });
+  await logKeyChanges(app, deps, caller, saved, removed);
   return json(200, { saved, removed });
 }
 
 /** PUT /provider-keys/{name}: `{ "value": "..." }`. */
 export async function putProviderKey(
   app: AppContext,
+  deps: AppDeps,
   caller: ApiCaller,
   name: string,
   request: Request,
@@ -110,17 +153,20 @@ export async function putProviderKey(
   const value = secretValue(name, (await readJsonObject(request)).value);
   await app.accounts.setSecret(caller.account.id, name, value);
   logEvent("info", "provider_key_saved_api", { user: caller.account.id, name });
+  await logKeyChanges(app, deps, caller, [name], []);
   return json(200, { saved: [name], removed: [] });
 }
 
 export async function deleteProviderKey(
   app: AppContext,
+  deps: AppDeps,
   caller: ApiCaller,
   name: string,
 ): Promise<Response> {
   secretName(name);
   await app.accounts.deleteSecret(caller.account.id, name);
   logEvent("info", "provider_key_removed_api", { user: caller.account.id, name });
+  await logKeyChanges(app, deps, caller, [], [name]);
   return json(200, { saved: [], removed: [name] });
 }
 
@@ -157,6 +203,7 @@ function field(body: Record<string, unknown>, name: string): string {
 /** PUT /storage: validate, check access with a list, upload and delete, then save. */
 export async function putStorage(
   app: AppContext,
+  deps: AppDeps,
   caller: ApiCaller,
   request: Request,
 ): Promise<Response> {
@@ -181,12 +228,22 @@ export async function putStorage(
   }
   await app.accounts.saveR2Settings(caller.account.id, parsed.settings);
   logEvent("info", "r2_settings_saved_api", { user: caller.account.id });
+  await logActivity(app, deps, caller, {
+    kind: "storage.updated",
+    subject: parsed.settings.bucket,
+    metadata: {},
+  });
   return getStorage(app, caller);
 }
 
-export async function deleteStorage(app: AppContext, caller: ApiCaller): Promise<Response> {
+export async function deleteStorage(
+  app: AppContext,
+  deps: AppDeps,
+  caller: ApiCaller,
+): Promise<Response> {
   await app.accounts.deleteR2Settings(caller.account.id);
   logEvent("info", "r2_settings_removed_api", { user: caller.account.id });
+  await logActivity(app, deps, caller, { kind: "storage.removed", subject: null, metadata: {} });
   return json(200, { configured: false });
 }
 
@@ -198,11 +255,13 @@ export async function listApiKeys(app: AppContext, caller: ApiCaller): Promise<R
 /** DELETE /api-keys/{id}. A key may revoke itself; creating keys is dashboard-only. */
 export async function revokeApiKey(
   app: AppContext,
+  deps: AppDeps,
   caller: ApiCaller,
   id: string,
 ): Promise<Response> {
   const revoked = await new ApiKeyStore(app.env.ACCOUNTS_KV).revoke(caller.account.id, id);
   if (!revoked) throw new ApiError(404, "not_found", "API key not found");
   logEvent("info", "api_key_revoked_api", { user: caller.account.id });
+  await logActivity(app, deps, caller, { kind: "api_key.revoked", subject: id, metadata: {} });
   return json(200, { revoked: id });
 }

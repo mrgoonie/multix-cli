@@ -18,7 +18,7 @@ import { parseSubscriptionInput } from "../events/subscription-input.js";
 import { TIMESTAMP_TOLERANCE_SECONDS } from "../events/webhook-signing.js";
 import { json } from "../http-responses.js";
 import { logEvent } from "../redaction.js";
-import type { ApiCaller } from "./account-api-handlers.js";
+import { type ApiCaller, logActivity } from "./account-api-handlers.js";
 import { ApiError, readJsonObject } from "./api-http.js";
 
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -39,6 +39,7 @@ export async function listSubscriptions(hub: AccountEventsStub): Promise<Respons
 
 export async function createSubscription(
   app: AppContext,
+  deps: AppDeps,
   hub: AccountEventsStub,
   caller: ApiCaller,
   request: Request,
@@ -63,6 +64,12 @@ export async function createSubscription(
   const result = await hub.subscribe(input, `api_key:${caller.keyId}`);
   if (!result.ok) throw new ApiError(409, "limit_reached", result.message);
   logEvent("info", "event_subscription_created", { user: caller.account.id });
+  // The callback host only: its path and query may carry a token.
+  await logActivity(app, deps, caller, {
+    kind: "webhook.subscribed",
+    subject: result.subscription.id,
+    metadata: { host: new URL(input.callbackUrl).hostname, events: input.events.length },
+  });
   return json(201, {
     subscription: result.subscription,
     secret: result.secret,
@@ -83,6 +90,8 @@ export async function getSubscription(hub: AccountEventsStub, id: string): Promi
 }
 
 export async function deleteSubscription(
+  app: AppContext,
+  deps: AppDeps,
   hub: AccountEventsStub,
   caller: ApiCaller,
   id: string,
@@ -91,6 +100,7 @@ export async function deleteSubscription(
     throw new ApiError(404, "not_found", "Subscription not found");
   }
   logEvent("info", "event_subscription_revoked", { user: caller.account.id });
+  await logActivity(app, deps, caller, { kind: "webhook.unsubscribed", subject: id, metadata: {} });
   return json(200, { revoked: id });
 }
 

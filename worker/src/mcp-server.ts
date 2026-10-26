@@ -1,8 +1,10 @@
 /**
  * MCP surface. A fresh server is built per request (stateless Streamable
- * HTTP). Every tool is a CLI runner tool (jobs/job-tools.ts): multix_catalog,
+ * HTTP). The CLI runner tools (jobs/job-tools.ts) are multix_catalog,
  * multix_run, multix_job_status and multix_job_cancel, with job state in a
- * per-job Durable Object. Servers answering protocol 2026-07-28 requests also
+ * per-job Durable Object. multix_usage_summary (ledger/usage-tools.ts) reads
+ * the account's usage ledger when the deployment has one. Servers answering
+ * protocol 2026-07-28 requests also
  * offer MCP Events (events/events-methods.ts) when the deployment has the
  * subscription store.
  */
@@ -15,6 +17,8 @@ import { type Env, limitsFrom, secretValues } from "./config.js";
 import { type EventsContext, registerEventMethods } from "./events/events-methods.js";
 import type { JobToolsContext } from "./jobs/job-runner.js";
 import { registerJobTools } from "./jobs/job-tools.js";
+import type { AccountLedgerStub } from "./ledger/account-ledger.js";
+import { registerUsageTools } from "./ledger/usage-tools.js";
 import { logEvent, sanitizeText } from "./redaction.js";
 
 export const SERVER_NAME = "multix";
@@ -30,6 +34,8 @@ export interface ServerDeps {
   era?: "legacy" | "modern";
   /** The caller's MCP Events context; events are offered only to modern requests when present. */
   events?: EventsContext;
+  /** The caller's usage ledger; multix_usage_summary is registered only when present. */
+  ledger?: AccountLedgerStub;
 }
 
 function ok(payload: Record<string, unknown>): CallToolResult {
@@ -116,9 +122,13 @@ export function createMcpServer(env: Env, deps: ServerDeps): McpServer {
   );
 
   // `env` holds only the caller's own provider keys (toolEnvFor in index.ts).
-  registerJobTools(server, limits, env, deps.jobs, (tool, fields, body) =>
-    runTool(env, tool, fields, body),
-  );
+  const run = (
+    tool: string,
+    fields: Record<string, string | undefined>,
+    body: () => Promise<Record<string, unknown>>,
+  ) => runTool(env, tool, fields, body);
+  registerJobTools(server, limits, env, deps.jobs, run);
+  registerUsageTools(server, deps.ledger, run);
   if (events) registerEventMethods(server, events);
 
   return server;

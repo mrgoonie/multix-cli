@@ -3,7 +3,12 @@ import { ApiKeyStore } from "../src/accounts/api-key-store.js";
 import { openApiDocument } from "../src/api/openapi-document.js";
 import type { EventHub } from "../src/events/event-hub.js";
 import { jobEvents } from "../src/events/job-events.js";
-import { fakeEventsNamespace, fakeNamespace, fakeQuotaNamespace } from "./fake-job-bindings.js";
+import {
+  fakeEventsNamespace,
+  fakeLedgerNamespace,
+  fakeNamespace,
+  fakeQuotaNamespace,
+} from "./fake-job-bindings.js";
 import { fakeKv } from "./fake-kv.js";
 import { jsonResponse, route } from "./helpers.js";
 import {
@@ -455,7 +460,8 @@ describe("REST API documentation", () => {
   });
 
   it("documents only routes the router answers", async () => {
-    const { browser } = await signedInBrowser();
+    const ledger = await fakeLedgerNamespace();
+    const { browser } = await signedInBrowser({ MULTIX_LEDGER: ledger.namespace });
     const key = await createApiKey(browser);
     const paths = openApiDocument(ORIGIN).paths as Record<string, Record<string, unknown>>;
     for (const [path, item] of Object.entries(paths)) {
@@ -463,14 +469,15 @@ describe("REST API documentation", () => {
         if (!item[method]) continue;
         const concrete = path
           .replace("{name}", "GEMINI_API_KEY")
-          .replace("{id}", "00000000-0000-4000-8000-000000000000");
+          .replace("{id}", "00000000-0000-4000-8000-000000000000")
+          .replace("{op_id}", "job_00000000-0000-4000-8000-000000000000");
         const response = await api(browser, key, concrete, {
           method: method.toUpperCase(),
           body: ["put", "patch", "post"].includes(method) ? "{}" : undefined,
         });
         expect(response.status, `${method} ${path}`).not.toBe(405);
-        // Only an unknown job or API key id may be "not found"; the route itself must exist.
-        if (response.status === 404) expect(path, `${method} ${path}`).toContain("{id}");
+        // Only an unknown id may be "not found"; the route itself must exist.
+        if (response.status === 404) expect(path, `${method} ${path}`).toMatch(/\{(op_)?id\}/);
       }
     }
   });

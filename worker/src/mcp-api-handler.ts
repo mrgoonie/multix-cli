@@ -24,6 +24,7 @@ import type { EventsContext } from "./events/events-methods.js";
 import { BodyTooLargeError, originAllowed, readBodyLimited } from "./http-guards.js";
 import { SECURITY_HEADERS, jsonRpcError, text } from "./http-responses.js";
 import type { JobToolsContext } from "./jobs/job-runner.js";
+import type { AccountLedgerStub } from "./ledger/account-ledger.js";
 import { createMcpServer } from "./mcp-server.js";
 
 export interface McpDeps {
@@ -31,6 +32,8 @@ export interface McpDeps {
   jobs?: JobToolsContext;
   /** The caller's MCP Events context (absent = events not offered). */
   events?: EventsContext;
+  /** The caller's usage ledger (absent = multix_usage_summary not offered). */
+  ledger?: AccountLedgerStub;
 }
 
 /**
@@ -105,7 +108,12 @@ export async function handleMcpRequest(
     });
   }
 
-  const server = createMcpServer(env, { version, jobs: deps.jobs, era: "legacy" });
+  const server = createMcpServer(env, {
+    version,
+    jobs: deps.jobs,
+    ledger: deps.ledger,
+    era: "legacy",
+  });
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
     enableJsonResponse: true,
@@ -143,7 +151,14 @@ async function handleModern(
     );
   }
   const handler = createMcpHandler(
-    () => createMcpServer(env, { version, jobs: deps.jobs, events: deps.events, era: "modern" }),
+    () =>
+      createMcpServer(env, {
+        version,
+        jobs: deps.jobs,
+        events: deps.events,
+        ledger: deps.ledger,
+        era: "modern",
+      }),
     { legacy: "reject", responseMode: "json", maxRequestBodySize: MAX_BODY_BYTES },
   );
   try {

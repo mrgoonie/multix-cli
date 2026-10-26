@@ -28,7 +28,7 @@ import {
 import { toolEnvFor } from "./accounts/account-store.js";
 import { isAllowed } from "./accounts/allowlist.js";
 import { API_PREFIX, handleApi } from "./api/api-router.js";
-import { type AppDeps, publicOrigin, resolveAppContext } from "./app-context.js";
+import { type AppDeps, ledgerFor, publicOrigin, resolveAppContext } from "./app-context.js";
 import { type WorkerEnv, serverSettings } from "./config.js";
 import { eventsContextFor } from "./events/events-context.js";
 import { html, json, text } from "./http-responses.js";
@@ -88,9 +88,14 @@ async function handleAuthenticatedMcp(
   }
   const keys = await app.accounts.providerKeys(account.id);
   const toolEnv = toolEnvFor(serverSettings(env), keys);
-  const jobs = jobsContextFor(env, app, account.id, keys, deps);
+  const jobs = jobsContextFor(env, app, account.id, keys, deps, {
+    source: "mcp",
+    clientId: auth.clientId ?? null,
+    clientName: null,
+  });
   const events = eventsContextFor(env, app, deps, account.id, auth.clientId);
-  return handleMcpRequest(request, toolEnv, { jobs, events });
+  const ledger = ledgerFor(env, deps, account.id);
+  return handleMcpRequest(request, toolEnv, { jobs, events, ledger });
 }
 
 /** Everything that is not the protected /mcp resource or a library-owned OAuth endpoint. */
@@ -196,6 +201,7 @@ export function createWorker(deps: AppDeps = {}): ExportedHandler<WorkerEnv> {
 
 export { AccountEvents } from "./events/account-events.js";
 export { AccountJobQuota } from "./jobs/account-job-quota.js";
+export { AccountLedger } from "./ledger/account-ledger.js";
 export { MultixJobContainer } from "./jobs/multix-job-container.js";
 
 export default createWorker();
