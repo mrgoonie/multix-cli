@@ -4,7 +4,11 @@
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { installFetchTelemetry, settleTelemetry } from "../../../src/agent/fetch-telemetry.js";
+import {
+  type DryRunRequest,
+  installFetchTelemetry,
+  settleTelemetry,
+} from "../../../src/agent/fetch-telemetry.js";
 import { run } from "../../../src/agent/run-state.js";
 
 const original = globalThis.fetch;
@@ -15,6 +19,7 @@ afterEach(() => {
   run.calls = [];
   run.ids = [];
   run.requestModel = undefined;
+  run.dryRun = false;
 });
 
 describe("installFetchTelemetry", () => {
@@ -40,5 +45,61 @@ describe("installFetchTelemetry", () => {
     expect(run.postUsage[0]?.sources).toEqual({
       credits: "api.elevenlabs.io header.character-cost",
     });
+  });
+});
+
+describe("dry-run request body", () => {
+  async function dryRunBody(body: BodyInit): Promise<DryRunRequest> {
+    const inner = vi.fn();
+    globalThis.fetch = inner as unknown as typeof fetch;
+    let seen: DryRunRequest | undefined;
+    installFetchTelemetry((request) => {
+      seen = request;
+      throw new Error("dry run stop");
+    });
+    run.dryRun = true;
+    await expect(
+      fetch("https://openrouter.ai/api/v1/x?key=k", { method: "POST", body }),
+    ).rejects.toThrow("dry run stop");
+    expect(inner).not.toHaveBeenCalled();
+    if (!seen) throw new Error("onDryRun was not called");
+    return seen;
+  }
+
+  it("redacts URL query strings in nested values and keeps origin and path", async () => {
+    const request = await dryRunBody(
+      JSON.stringify({
+        model: "m",
+        input_audio: { url: "https://cdn.example.com/x/talk.m4a?sig=SECRETSIG", format: "m4a" },
+        image_urls: [
+          "https://bucket.s3.amazonaws.com/a.png?X-Amz-Signature=AMZSECRET&X-Amz-Expires=60",
+          "http://r2.example.dev/b.jpg?token=R2SECRET#frag",
+          "https://plain.example.com/c.png",
+        ],
+        prompt: "describe https://host.example/p.png?se=2026&sig=INLINESECRET please",
+      }),
+    );
+    const text = JSON.stringify(request);
+    for (const secret of ["SECRETSIG", "AMZSECRET", "R2SECRET", "INLINESECRET", "X-Amz-Expires"]) {
+      expect(text).not.toContain(secret);
+    }
+    expect(request.url).toBe("https://openrouter.ai/api/v1/x");
+    expect(request.body).toEqual({
+      model: "m",
+      input_audio: { url: "https://cdn.example.com/x/talk.m4a?[redacted]", format: "m4a" },
+      image_urls: [
+        "https://bucket.s3.amazonaws.com/a.png?[redacted]",
+        "http://r2.example.dev/b.jpg?[redacted]#frag",
+        "https://plain.example.com/c.png",
+      ],
+      prompt: "describe https://host.example/p.png?[redacted] please",
+    });
+  });
+
+  it("redacts URL query strings in form fields", async () => {
+    const form = new FormData();
+    form.append("image_url", "https://cdn.example.com/a.png?sig=FORMSECRET");
+    const request = await dryRunBody(form);
+    expect(request.body).toEqual({ image_url: "https://cdn.example.com/a.png?[redacted]" });
   });
 });
