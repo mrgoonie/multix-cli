@@ -66,7 +66,8 @@ multix rerun last                             # repeat a recorded run
 
 The envelope lists `outputs` (path, bytes, MIME, SHA-256, dimensions, duration),
 `warnings`, `usage` as the provider reports it (tokens, `cost_usd`, `credits`,
-metrics), `error` (`code`, `retryable`, `retry_after_s`, `hint`) and `next`
+metrics, and `sources` naming the header or body field each money number came
+from), `error` (`code`, `retryable`, `retry_after_s`, `hint`) and `next`
 commands. With `--json`, exit codes are `2` usage or input, `3` key or setup,
 `4` temporary (retry), `5` rejected (quota, safety, model), `6` timed out (job may
 still run), `1` unknown; plain runs keep exit 1 and print the code and hint on
@@ -463,7 +464,11 @@ Set `CLOUDFLARE_AI_GATEWAY_COLLECT_LOG_PAYLOAD=true` only to explicitly opt in t
 # Text-to-speech (sync, returns audio bytes)
 multix elevenlabs tts --text "Hello world" [--voice <voiceId>] [--model eleven_multilingual_v2] \
   [--format mp3_44100_128] [--stability 0.5] [--similarity-boost 0.75] [--style 0.0] \
-  [--no-speaker-boost] [--language-code en] [--seed <n>] [--output out.mp3] [-v]
+  [--no-speaker-boost] [--language-code en] [--seed <n>] [--previous-text "..."] [--next-text "..."] \
+  [--timestamps] [--output out.mp3] [-v]
+# Eleven v4 / v4 Turbo: 90+ languages, audio tags, 10,000 characters per request
+multix elevenlabs tts --model eleven_v4 --text "[warmly] Xin chào!" --language-code vi
+multix elevenlabs tts --model eleven_v4_turbo --text "Hello" --timestamps --format wav_24000
 
 # Voices: list / get / search shared / design / persist / delete
 multix elevenlabs voices list [--category cloned|generated|premade|professional]
@@ -510,11 +515,11 @@ multix elevenlabs align --input audio.mp3 --text-file transcript.txt
 
 # Account info / available models
 multix elevenlabs account
-multix elevenlabs models
+multix elevenlabs models   # live: capabilities, languages, text limit, credit multiplier
 ```
 
 **ElevenLabs models:**
-- TTS: `eleven_multilingual_v2` (default), `eleven_flash_v2_5`, `eleven_flash_v2`, `eleven_turbo_v2_5`, `eleven_turbo_v2`, `eleven_v3`
+- TTS: `eleven_multilingual_v2` (default), `eleven_v4`, `eleven_v4_turbo`, `eleven_v3`, `eleven_v3_conversational`, `eleven_flash_v2_5`, `eleven_flash_v2`, `eleven_turbo_v2_5`, `eleven_turbo_v2`
 - STT: `scribe_v1`, `scribe_v1_experimental`
 - Voice changer: `eleven_multilingual_sts_v2` (default)
 - Music: `music_v1`
@@ -526,7 +531,10 @@ multix elevenlabs models
 - Auth header is `xi-api-key`; base URL is `https://api.elevenlabs.io/v1`.
 - Most generation endpoints (TTS, SFX, Music, Voice Changer, Isolation) return audio bytes synchronously.
 - Dubbing is async: submit → poll → download per-language tracks.
-- Output format strings combine codec + sample rate + bitrate, e.g. `mp3_44100_128`, `pcm_24000`, `ulaw_8000`.
+- Output format strings combine codec + sample rate + bitrate, e.g. `mp3_44100_128`, `pcm_24000`, `ulaw_8000`. TTS also takes `wav_*`, `opus_48000_*`, `alaw_8000`, `mp3_24000_48`, `pcm_32000` and `pcm_48000` (`mp3_44100_192` needs Creator tier; 44.1 kHz PCM/WAV need Pro).
+- TTS options are checked against the model before anything is sent. v4, v4 Turbo, v3 and Flash/Turbo v2.x have no style control, so a non-zero `--style` is rejected rather than silently ignored, and `--style 0` or `--no-speaker-boost` on a model without that control is reported as a warning and not sent. `eleven_v3` rejects `--previous-text`/`--next-text`; text over the model's limit (v3 5,000, v4 and multilingual v2 10,000, Flash/Turbo v2.x 30,000–40,000) is rejected; bracketed audio tags such as `[whispering]` are performed by v3/v4 and trigger a warning on models that would read them aloud. Unsupported `--language-code` values are rejected by the API (nothing is billed). An unknown `--model` id is passed through unchecked with a warning.
+- `--timestamps` calls `/with-timestamps` and saves character timings next to the audio as `<audio>.timestamps.json`.
+- After each TTS run the CLI prints the credits ElevenLabs reports in its `character-cost` header (v4 Turbo bills 0.5 credits per character, see `multix elevenlabs models`). With `--json` the same number is `usage.credits`, attributed in `usage.sources.credits`. multix never prints an estimate as credits charged.
 
 ### `multix fal`
 

@@ -17,7 +17,7 @@ multix <group> <cmd> ... --json         # stdout = ONE line, schema multix.resul
 - Tasks: image, image-edit, video, image-to-video, video-edit, speech, transcription, music, sfx, voice, 3d, analysis, document, avatar-video, any. `multix guide` prints the protocol for the installed version.
 - Success = `ok: true` AND `outputs[]` non-empty (path, bytes, mime, sha256, width/height, duration_s) AND no `warnings` (`EMPTY_OUTPUT`, `CONTENT_MISMATCH`, `UNREADABLE_MEDIA`).
 - Failure: read `error.code`, `error.hint`, `next[]`. Exit codes (with `--json`; plain runs exit 1): 2 fix flags/input · 3 key/setup (`multix check`, key named in `error.env`) · 4 temporary (wait `retry_after_s`, `multix rerun <history_id>`) · 5 rejected: quota, safety, model (change input/provider) · 6 timed out, job may still run (status command in `next[]`, do not resubmit) · 1 unknown (`log[]`).
-- `usage` = what the provider reported (tokens, `cost_usd`, `credits`, metrics); `history_id` names the run.
+- `usage` = what the provider reported (tokens, `cost_usd`, `credits`, metrics; `sources` names the header/body field each money number came from); `history_id` names the run.
 - History: `multix history [--failed] [--since 1d]`, `multix history show last`, `multix history stats --by model|provider|command`, `multix rerun <id|last>`. Ledger `~/.multix/history.jsonl` has no keys or signed URLs; `MULTIX_HISTORY=0` disables it.
 
 ## When to use
@@ -404,6 +404,10 @@ multix gemini generate-speech --text "Have a wonderful day!" --voice Kore
 multix gemini generate-speech --text "Have a wonderful day!" --model gemini-3.8-flash-tts --style "cheerful and friendly" --voice Kore
 multix minimax generate-speech --text "..." --voice <id> --emotion neutral
 multix elevenlabs tts --text "Hello world" [--voice <voiceId>] [--model eleven_multilingual_v2]
+# Eleven v4 (quality) / v4 Turbo (low latency, 0.5 credits/char): 90+ languages, [audio tags], 10k chars.
+# No --style on v4/v3/Flash (rejected, not ignored); v3 rejects --previous-text/--next-text.
+multix elevenlabs tts --model eleven_v4 --text "[warmly] Xin chào!" --language-code vi [--timestamps]
+multix elevenlabs models   # live capabilities per model
 
 # Voice cloning + STT
 multix openai transcribe --input audio.mp3 [--format text|json|diarized_json] [--language vi]

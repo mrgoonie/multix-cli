@@ -45,6 +45,13 @@ describe("extractUsage", () => {
     const usage = extractUsage(undefined, headers);
     expect(usage.metrics["header.character-cost"]).toBe(42);
     expect(usage.ids).toEqual(["req_abc"]);
+    expect(usage.credits).toBe(42);
+    expect(usage.sources).toEqual({ credits: "header.character-cost" });
+  });
+
+  it("names the body path a cost or credit number came from", () => {
+    const usage = extractUsage({ usage: { cost: 0.0021 }, apiCreditCost: 12 });
+    expect(usage.sources).toEqual({ cost_usd: "body.usage.cost", credits: "body.apiCreditCost" });
   });
 
   it("finds nothing in a plain body", () => {

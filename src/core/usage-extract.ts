@@ -24,6 +24,14 @@ export interface ResponseUsage {
   metrics: Record<string, number>;
   /** Job / request ids the provider returned. */
   ids: string[];
+  /** Where cost_usd / credits came from ("body.<key path>" or "header.<name>"). */
+  sources?: UsageSources;
+}
+
+/** Provenance of the reported money numbers, so they are never mistaken for estimates. */
+export interface UsageSources {
+  cost_usd?: string;
+  credits?: string;
 }
 
 const METRIC_KEY =
@@ -145,8 +153,10 @@ export function extractUsage(body: unknown, headers?: Headers | null): ResponseU
       /usage|^cost|billing/i.test(path)
     ) {
       out.cost_usd = value;
+      out.sources = { ...out.sources, cost_usd: `body.${path}` };
     } else if (out.credits === undefined && /credit/i.test(leaf)) {
       out.credits = value;
+      out.sources = { ...out.sources, credits: `body.${path}` };
     }
   }
   if (headers) {
@@ -157,7 +167,10 @@ export function extractUsage(body: unknown, headers?: Headers | null): ResponseU
       if (Number.isFinite(n) && raw.trim() !== "") {
         out.metrics[`header.${name}`] = n;
         // ElevenLabs bills in characters (its credit unit) and reports them here.
-        if (name === "character-cost" && out.credits === undefined) out.credits = n;
+        if (name === "character-cost" && out.credits === undefined) {
+          out.credits = n;
+          out.sources = { ...out.sources, credits: `header.${name}` };
+        }
       } else if (/request-?id/i.test(name) && raw.length <= 128 && out.ids.length < 5)
         out.ids.push(raw);
     }
