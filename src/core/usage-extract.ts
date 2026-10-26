@@ -38,6 +38,21 @@ const METRIC_KEY =
   /(token|cost|credit|price|usage|billing|duration|seconds|_time$|^time$|time_ms|latency|characters?_?(count|cost)|units?$|predict|inference)/i;
 const SKIP_KEY =
   /(_at$|stamp|date|created|updated|expire|limit|max_|min_|width|height|seed|fps|index|count_?max)/i;
+/**
+ * Keys that name what an account holds, not what a request spent: Leonardo /me
+ * user_details[].apiCredit, HeyGen /v3/users/me usage_based.remaining_credits /
+ * included_credits, generic balance fields. Leaves match by name; the parents
+ * match whole segments so a spend leaf under e.g. subscription_job still counts.
+ */
+const BALANCE_LEAF =
+  /(balance|remaining|available|allowance|included|quota|granted|purchased|^api_?credits?$)/i;
+const BALANCE_PARENT = /^(wallet|subscription|user_details|balances?)$/i;
+
+function isBalancePath(path: string): boolean {
+  const segments = path.split(".").map((segment) => segment.replace(/\[\d+\]$/, ""));
+  const leaf = segments.pop() ?? "";
+  return BALANCE_LEAF.test(leaf) || segments.some((segment) => BALANCE_PARENT.test(segment));
+}
 /** Key paths that name a forecast, not a charge (Runway estimatedCost, quotes). */
 const ESTIMATE_PATH = /(estimat|quote|expected)/i;
 const ID_KEYS = new Set([
@@ -158,6 +173,8 @@ export function extractUsage(body: unknown, headers?: Headers | null): ResponseU
   }
   for (const [path, value] of Object.entries(out.metrics)) {
     const leaf = path.split(".").pop() ?? path;
+    // Balances are never reported as cost or credits spent.
+    if (isBalancePath(path)) continue;
     // Estimates stay in metrics but are never reported as cost or credits spent.
     if (ESTIMATE_PATH.test(path)) continue;
     if (
