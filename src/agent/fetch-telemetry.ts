@@ -30,10 +30,32 @@ export function safeUrl(url: string): string {
   }
 }
 
+const URL_IN_TEXT = /\bhttps?:\/\/[^\s"'<>]+/gi;
+
+/**
+ * Every http(s) URL in a string, alone or inside text, with its query string
+ * and fragment (pre-signed S3/R2/GCS signatures, tokens) and any
+ * user:password removed; origin and path stay so the request remains
+ * inspectable.
+ */
+function redactUrls(value: string): string {
+  return value.replace(URL_IN_TEXT, (url) => {
+    const suffix = /[?#]/.test(url) ? "?[redacted]" : "";
+    try {
+      const u = new URL(url);
+      return `${u.origin}${u.pathname}${suffix}`;
+    } catch {
+      return `${url.split(/[?#]/)[0]?.replace(/^(https?:\/\/)[^/@]*@/i, "$1")}${suffix}`;
+    }
+  });
+}
+
 function shorten(value: unknown, depth = 0): unknown {
   if (typeof value === "string") {
-    if (value.startsWith("data:") || value.length > 400) return `<${value.length} chars>`;
-    return value;
+    if (value.startsWith("data:")) return `<${value.length} chars>`;
+    const text = redactUrls(value);
+    if (text.length > 400) return `<${text.length} chars>`;
+    return text;
   }
   if (Array.isArray(value)) {
     const items = value.slice(0, 10).map((v) => shorten(v, depth + 1));

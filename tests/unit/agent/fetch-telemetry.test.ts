@@ -42,3 +42,74 @@ describe("installFetchTelemetry", () => {
     });
   });
 });
+
+describe("dry-run request body", () => {
+  async function dryRunBody(body: unknown): Promise<unknown> {
+    return dryRun(body instanceof FormData ? body : JSON.stringify(body));
+  }
+
+  async function dryRun(body: BodyInit): Promise<unknown> {
+    globalThis.fetch = vi.fn() as typeof fetch;
+    let captured: unknown;
+    run.dryRun = true;
+    try {
+      installFetchTelemetry((request) => {
+        captured = request.body;
+        throw new Error("dry run stop");
+      });
+      await expect(
+        fetch("https://api.example.com/v1/run?key=abc", {
+          method: "POST",
+          body,
+        }),
+      ).rejects.toThrow("dry run stop");
+    } finally {
+      run.dryRun = false;
+    }
+    return captured;
+  }
+
+  it("redacts query strings of nested and listed URLs but keeps origin and path", async () => {
+    const body = await dryRunBody({
+      model: "m",
+      input_audio: { url: "https://cdn.example.com/x/talk.m4a?sig=SECRETSIG", format: "m4a" },
+      image_urls: [
+        "https://bucket.s3.amazonaws.com/a.png?X-Amz-Signature=SECRETA",
+        "https://storage.googleapis.com/b/c.jpg?X-Goog-Signature=SECRETB#frag",
+        "https://user:SECRETPW@example.com/plain.png",
+        "https://example.com/no-query.png",
+      ],
+      prompt: "a cat",
+    });
+    const text = JSON.stringify(body);
+    expect(text).not.toMatch(/SECRET/);
+    expect(body).toEqual({
+      model: "m",
+      input_audio: { url: "https://cdn.example.com/x/talk.m4a?[redacted]", format: "m4a" },
+      image_urls: [
+        "https://bucket.s3.amazonaws.com/a.png?[redacted]",
+        "https://storage.googleapis.com/b/c.jpg?[redacted]",
+        "https://example.com/plain.png",
+        "https://example.com/no-query.png",
+      ],
+      prompt: "a cat",
+    });
+  });
+
+  it("keeps the path of a long signed URL instead of hiding it entirely", async () => {
+    const url = `https://r2.example.com/out/v.mp4?sig=${"S".repeat(600)}`;
+    expect(await dryRunBody({ video_url: url })).toEqual({
+      video_url: "https://r2.example.com/out/v.mp4?[redacted]",
+    });
+  });
+
+  it("redacts signed URLs in multipart fields and inside longer text", async () => {
+    const form = new FormData();
+    form.append("image_url", "https://b.s3.amazonaws.com/a.png?X-Amz-Signature=SECRETF");
+    form.append("prompt", "Describe https://cdn.example.com/p.jpg?token=SECRETT please");
+    expect(await dryRunBody(form)).toEqual({
+      image_url: "https://b.s3.amazonaws.com/a.png?[redacted]",
+      prompt: "Describe https://cdn.example.com/p.jpg?[redacted] please",
+    });
+  });
+});
