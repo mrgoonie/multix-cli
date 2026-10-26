@@ -8,6 +8,10 @@
  * downloads, the CLI and uploads. The CLI gets what is left minus a reserve
  * for uploads, so a finished job still has time to deliver its files before
  * the Durable Object gives up on it.
+ *
+ * The result also reports how long each phase took (`timings`) and, when the
+ * CLI recorded its run in the job's history file, a redacted summary of that
+ * record (`run`) for the usage ledger.
  */
 
 import { execFile } from "node:child_process";
@@ -16,6 +20,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { InputError, downloadInputs } from "./job-inputs.mjs";
 import { collectOutputs, uploadOutputs } from "./job-outputs.mjs";
+import { readRunSummary } from "./job-run-summary.mjs";
 
 export const MAX_TEXT_BYTES = 16 * 1024;
 const MAX_CLI_BUFFER_BYTES = 16 * 1024 * 1024;
@@ -126,6 +131,16 @@ export async function runJob(spec, options = {}) {
   const dir = await mkdtemp(join(tmpdir(), "multix-job-"));
   const result = { status: "failed", exitCode: null, stdout: "", stderrTail: "", outputs: [] };
   if (!spec.upload) result.note = NO_STORAGE_NOTE;
+  // Phases that never ran stay at 0; a phase that threw still reports its time.
+  const timings = { inputsMs: 0, cliMs: 0, uploadMs: 0 };
+  const timed = async (phase, work) => {
+    const started = performance.now();
+    try {
+      return await work();
+    } finally {
+      timings[phase] = Math.round(performance.now() - started);
+    }
+  };
   const stopped = () => {
     if (options.signal?.aborted) return "canceled";
     return deadline.aborted ? "timed_out" : undefined;
@@ -134,25 +149,30 @@ export async function runJob(spec, options = {}) {
     const outDir = join(dir, "out");
     await mkdir(join(dir, "in"));
     await mkdir(outDir);
-    await downloadInputs(dir, spec.inputs, { signal, get: options.get });
+    await timed("inputsMs", () => downloadInputs(dir, spec.inputs, { signal, get: options.get }));
     const reserve = Math.min(MAX_UPLOAD_RESERVE_MS, Math.floor(budget / 4));
     const cliTimeout = Math.max(1, budget - (Date.now() - startedAt) - reserve);
-    const run = await runCli(options.bin ?? "multix", spec.argv, {
-      cwd: dir,
-      env: {
-        PATH: options.basePath ?? process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin",
-        HOME: dir,
-        MULTIX_DISABLE_HOME_ENV: "1",
-        // The job directory is thrown away: no local run ledger.
-        MULTIX_HISTORY: "0",
-        MULTIX_OUTPUT_DIR: outDir,
-        NO_COLOR: "1",
-        ...spec.env,
-      },
-      timeout: cliTimeout,
-      killSignal: "SIGTERM",
-      signal,
-    });
+    // Outside out/, so the CLI's record of the run is never uploaded as an output.
+    const historyFile = join(dir, "history.jsonl");
+    const run = await timed("cliMs", () =>
+      runCli(options.bin ?? "multix", spec.argv, {
+        cwd: dir,
+        env: {
+          PATH: options.basePath ?? process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin",
+          HOME: dir,
+          MULTIX_DISABLE_HOME_ENV: "1",
+          MULTIX_HISTORY_FILE: historyFile,
+          MULTIX_OUTPUT_DIR: outDir,
+          NO_COLOR: "1",
+          ...spec.env,
+        },
+        timeout: cliTimeout,
+        killSignal: "SIGTERM",
+        signal,
+      }),
+    );
+    const summary = await readRunSummary(historyFile, (text) => redact(text, secrets));
+    if (summary) result.run = summary;
     result.exitCode = run.exitCode;
     // Redact first: a key cut in half by truncation could not be matched any more.
     result.stdout = head(redact(run.stdout, secrets));
@@ -164,10 +184,12 @@ export async function runJob(spec, options = {}) {
     else if (run.killed) result.status = "timed_out";
     else result.status = run.exitCode === 0 ? "succeeded" : "failed";
 
-    const files = await collectOutputs(outDir);
-    result.outputs = spec.upload
-      ? await uploadOutputs(files, spec.upload, { fetch: options.fetch, signal })
-      : files.map(({ name, bytes }) => ({ name, url: null, bytes }));
+    result.outputs = await timed("uploadMs", async () => {
+      const files = await collectOutputs(outDir);
+      return spec.upload
+        ? await uploadOutputs(files, spec.upload, { fetch: options.fetch, signal })
+        : files.map(({ name, bytes }) => ({ name, url: null, bytes }));
+    });
   } catch (error) {
     result.status = stopped() ?? "failed";
     const known = error instanceof InputError || error?.name === "R2UploadError";
@@ -181,5 +203,6 @@ export async function runJob(spec, options = {}) {
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+  result.timings = timings;
   return result;
 }

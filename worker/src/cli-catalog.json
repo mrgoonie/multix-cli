@@ -11102,6 +11102,53 @@
               "negatable": false
             }
           ]
+        },
+        {
+          "command": "history sync",
+          "description": "Upload the ledger to a multix server for usage reports (opt-in; never sends argv, paths, cwd or error text). Key: MULTIX_API_KEY",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--url",
+              "flags": "--url <origin>",
+              "description": "Server origin (default: MULTIX_REMOTE_URL or https://multix.zuey.me)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--since",
+              "flags": "--since <age>",
+              "description": "Only runs newer than 30m, 12h, 7d or an ISO date",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--project",
+              "flags": "--project <label>",
+              "description": "Project label stored with the runs (1-64 of A-Z a-z 0-9 . _ -)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--dry-run",
+              "flags": "--dry-run",
+              "description": "Show counts and one sample entry without sending anything",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            }
+          ]
         }
       ]
     },

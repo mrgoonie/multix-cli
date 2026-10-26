@@ -78,6 +78,9 @@ describe("container job runner", () => {
     expect(seen.home).toMatch(/multix-job-/);
     expect(seen.out).toBe(`${seen.home}/out`);
     expect(seen.disableHomeEnv).toBe("1");
+    // History stays on, in the job directory but outside out/.
+    expect(seen.history).toBeUndefined();
+    expect(seen.historyFile).toBe(`${seen.home}/history.jsonl`);
     expect(seen.envNames).toEqual(
       expect.arrayContaining(["GEMINI_API_KEY", "HOME", "MULTIX_OUTPUT_DIR", "NO_COLOR", "PATH"]),
     );
@@ -91,6 +94,53 @@ describe("container job runner", () => {
     expect(result.note).toContain("configure R2 in /dashboard");
     const fs: Any = await import(/* @vite-ignore */ ["node", "fs"].join(":"));
     expect(fs.existsSync(seen.home)).toBe(false);
+    // No history entry written: no run summary, but timings for every phase.
+    expect(result.run).toBeUndefined();
+    expect(Object.keys(result.timings)).toEqual(["inputsMs", "cliMs", "uploadMs"]);
+    for (const ms of Object.values(result.timings)) expect(Number.isInteger(ms)).toBe(true);
+    expect(result.timings.cliMs).toBeGreaterThan(0);
+  }, 30_000);
+
+  it("reports a redacted summary of the CLI's history entry", async () => {
+    const { runJob } = await load("../container/job-runner.mjs");
+    const { fetch, get } = mockFetch();
+    const result = await runJob(spec({ argv: ["gemini", "generate", "--history"], inputs: [] }), {
+      bin: FAKE_BIN,
+      fetch,
+      get,
+    });
+    const home = JSON.parse(result.stdout).home;
+    expect(result.run).toEqual({
+      command: "gemini generate",
+      provider: "gemini",
+      model: "gemini-2.5-flash-[redacted]",
+      ok: false,
+      exitCode: 3,
+      durationMs: 1234,
+      errorCode: "provider_error",
+      usage: {
+        tokens: { input: 10, output: 20, total: 30 },
+        cost_usd: 0.0012,
+        metrics: Object.fromEntries(Array.from({ length: 40 }, (_, i) => [`m${i}`, i])),
+      },
+      http: { requests: 2, errors: 1, ms: 88 },
+      providerIds: ["op-[redacted]", ...Array.from({ length: 9 }, (_, i) => `id-${i}`)],
+      outputs: [
+        {
+          name: "result.txt",
+          bytes: 5,
+          mime: "text/plain",
+          sha256: "a".repeat(64),
+          durationS: 1.5,
+        },
+      ],
+    });
+    const json = JSON.stringify(result.run);
+    for (const absent of [KEY, "request failed", "secret prompt", "argv", "cwd", "9.9.9", home]) {
+      expect(json).not.toContain(absent);
+    }
+    expect(result.outputs.map((o: { name: string }) => o.name)).not.toContain("history.jsonl");
+    expect(result.timings.inputsMs).toBe(0);
   }, 30_000);
 
   it("uploads every output under the job prefix with safe names", async () => {
@@ -147,6 +197,41 @@ describe("container job runner", () => {
     expect(url.searchParams.get("X-Amz-Signature")).toMatch(/^[0-9a-f]{64}$/);
   }, 30_000);
 
+  it("ignores a history file over 1 MB and one with no valid entry", async () => {
+    const { readRunSummary } = await load("../container/job-run-summary.mjs");
+    const fs: Any = await import(/* @vite-ignore */ ["node", "fs"].join(":"));
+    const os: Any = await import(/* @vite-ignore */ ["node", "os"].join(":"));
+    const dir = fs.mkdtempSync(`${os.tmpdir()}/multix-history-`);
+    const clean = (text: string) => text;
+    const line = JSON.stringify({
+      command: "x",
+      provider: "y",
+      ok: true,
+      exit_code: 0,
+      duration_ms: 1,
+    });
+    try {
+      const big = `${dir}/big.jsonl`;
+      fs.writeFileSync(big, `${"#".repeat(1024 * 1024)}\n${line}\n`);
+      expect(await readRunSummary(big, clean)).toBeUndefined();
+      const bad = `${dir}/bad.jsonl`;
+      fs.writeFileSync(bad, `[1]\n{"command":1,"provider":"y","ok":true}\nnot json\n`);
+      expect(await readRunSummary(bad, clean)).toBeUndefined();
+      expect(await readRunSummary(`${dir}/missing.jsonl`, clean)).toBeUndefined();
+      const good = `${dir}/good.jsonl`;
+      fs.writeFileSync(good, `${line}\n`);
+      expect(await readRunSummary(good, clean)).toEqual({
+        command: "x",
+        provider: "y",
+        ok: true,
+        exitCode: 0,
+        durationMs: 1,
+      });
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("reports a failing CLI, a refused input and a timeout", async () => {
     const { runJob } = await load("../container/job-runner.mjs");
     const { fetch, get } = mockFetch();
@@ -159,6 +244,9 @@ describe("container job runner", () => {
     );
     expect(redirected).toMatchObject({ status: "failed", exitCode: null });
     expect(redirected.error).toBe("Input URL must be a public https URL");
+    // Failed while downloading: the CLI and upload phases never ran.
+    expect(redirected.timings).toMatchObject({ cliMs: 0, uploadMs: 0 });
+    expect(redirected.run).toBeUndefined();
 
     const escaped = await runJob(
       spec({ inputs: [{ url: "https://cdn.example.com/photo.png", path: "in/../../x" }] }),

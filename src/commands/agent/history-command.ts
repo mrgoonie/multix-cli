@@ -16,6 +16,7 @@ import {
 } from "../../agent/history-store.js";
 import { run } from "../../agent/run-state.js";
 import { ValidationError } from "../../core/errors.js";
+import { type SyncOptions, formatSyncSummary, syncHistory } from "./history-sync.js";
 
 interface ListOpts {
   last?: string;
@@ -181,6 +182,24 @@ export function registerHistoryCommands(program: Command): void {
       );
     }
   });
+
+  history
+    .command("sync")
+    .description(
+      "Upload the ledger to a multix server for usage reports (opt-in; never sends argv, paths, cwd or error text). Key: MULTIX_API_KEY",
+    )
+    .option(
+      "--url <origin>",
+      "Server origin (default: MULTIX_REMOTE_URL or https://multix.zuey.me)",
+    )
+    .option("--since <age>", "Only runs newer than 30m, 12h, 7d or an ISO date")
+    .option("--project <label>", "Project label stored with the runs (1-64 of A-Z a-z 0-9 . _ -)")
+    .option("--dry-run", "Show counts and one sample entry without sending anything")
+    .action(async (opts: SyncOptions) => {
+      const summary = await syncHistory(opts);
+      if (run.json) console.log(JSON.stringify(summary));
+      else for (const line of formatSyncSummary(summary)) console.log(line);
+    });
 
   program
     .command("rerun <ref>")

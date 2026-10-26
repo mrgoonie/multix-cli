@@ -74,6 +74,22 @@ stderr. Each run is recorded in `~/.multix/history.jsonl` without keys or signed
 URLs (`MULTIX_HISTORY=0` turns it off). Details:
 [For AI agents](https://multix.zuey.me/reference/for-ai-agents/).
 
+To see usage across machines on a multix server, upload the ledger on demand
+(it never syncs on its own):
+
+```bash
+MULTIX_API_KEY=mxk_... multix history sync --since 7d --project team-a --dry-run  # preview, sends nothing
+MULTIX_API_KEY=mxk_... multix history sync --since 7d --project team-a
+```
+
+It posts batches of 500 runs to `/api/v1/usage/import` on `--url` (default
+`MULTIX_REMOTE_URL`, else `https://multix.zuey.me`; https only, http for
+localhost). Each run keeps its id, time, command, provider, model, outcome,
+error code, usage, HTTP counts and outputs as extension, size, MIME type and
+hash; argv, prompts, paths, working directory and error text are not sent.
+Dry runs and local commands are skipped, and the server ignores runs it already
+has, so re-running is safe. The key is read from `MULTIX_API_KEY` only.
+
 ## Environment variables
 
 Set at least one provider key. Add to `.env` in your project root or `~/.multix/.env`.

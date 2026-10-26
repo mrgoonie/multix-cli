@@ -38,6 +38,46 @@ export interface JobOutput {
   bytes: number;
 }
 
+/** Milliseconds the container spent in each phase of the job. */
+export interface JobTimings {
+  inputsMs: number;
+  cliMs: number;
+  uploadMs: number;
+}
+
+/** Provider usage as the CLI measured it (src/agent/run-state.ts UsageSummary). */
+export interface JobRunUsage {
+  tokens?: { input?: number; output?: number; total?: number; thinking?: number };
+  cost_usd?: number;
+  credits?: number;
+  metrics?: Record<string, number>;
+}
+
+/**
+ * What the CLI recorded about its own run (its history entry, written to a
+ * file in the job directory), without argv, cwd, error text or paths.
+ * Absent when the container predates it or the CLI wrote no entry.
+ */
+export interface JobRunSummary {
+  command: string;
+  provider: string;
+  model?: string;
+  ok: boolean;
+  exitCode: number;
+  durationMs: number;
+  errorCode?: string;
+  usage?: JobRunUsage;
+  http?: { requests: number; errors: number; ms: number };
+  providerIds?: string[];
+  outputs?: Array<{
+    name: string;
+    bytes: number;
+    mime?: string;
+    sha256?: string;
+    durationS?: number;
+  }>;
+}
+
 /** Final report from the job server. stdout/stderr are truncated and redacted. */
 export interface JobResult {
   status: JobTerminalStatus;
@@ -48,12 +88,17 @@ export interface JobResult {
   /** Short explanation for a failure outside the CLI (download, upload, timeout). */
   error?: string;
   note?: string;
+  /** Absent from containers older than the usage ledger. */
+  timings?: JobTimings;
+  run?: JobRunSummary;
 }
 
 /** What the Durable Object reports about its job. */
 export interface JobView {
   status: JobStatus;
   createdAt: number;
+  /** When the job server accepted the job (status became running). */
+  runningAt?: number;
   finishedAt?: number;
   result?: JobResult;
   error?: string;
