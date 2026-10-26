@@ -462,8 +462,14 @@ Set `CLOUDFLARE_AI_GATEWAY_COLLECT_LOG_PAYLOAD=true` only to explicitly opt in t
 ```bash
 # Text-to-speech (sync, returns audio bytes)
 multix elevenlabs tts --text "Hello world" [--voice <voiceId>] [--model eleven_multilingual_v2] \
-  [--format mp3_44100_128] [--stability 0.5] [--similarity-boost 0.75] [--style 0.0] \
-  [--no-speaker-boost] [--language-code en] [--seed <n>] [--output out.mp3] [-v]
+  [--format mp3_44100_128|wav_44100|opus_48000_64|...] [--stability 0.5] [--similarity-boost 0.75] \
+  [--style 0.0] [--speed 1.0] [--clone-strength 0] [--speaker-boost|--no-speaker-boost] \
+  [--language-code en] [--seed <n>] [--previous-text "..."] [--next-text "..."] \
+  [--timestamps] [--output out.mp3] [-v]
+
+# Eleven v4 / v4 Turbo with audio tags (v4 takes only stability, similarity and clone strength)
+multix elevenlabs tts --model eleven_v4 --text "[whispering] Can you keep a secret?" --language-code en
+multix elevenlabs tts --model eleven_v4_turbo --text "[cheerfully] Hi!" --similarity-boost 0.8 --timestamps
 
 # Voices: list / get / search shared / design / persist / delete
 multix elevenlabs voices list [--category cloned|generated|premade|professional]
@@ -514,7 +520,20 @@ multix elevenlabs models
 ```
 
 **ElevenLabs models:**
-- TTS: `eleven_multilingual_v2` (default), `eleven_flash_v2_5`, `eleven_flash_v2`, `eleven_turbo_v2_5`, `eleven_turbo_v2`, `eleven_v3`
+- TTS: `eleven_multilingual_v2` (default), `eleven_v4`, `eleven_v4_turbo`, `eleven_v3`, `eleven_v3_conversational`, `eleven_flash_v2_5`, `eleven_flash_v2`, `eleven_turbo_v2_5`, `eleven_turbo_v2`
+- TTS voice settings per model (a flag the model would silently ignore is rejected before any paid request):
+
+  | Model | Settings | Max chars | Audio tags | SSML |
+  |---|---|---|---|---|
+  | `eleven_v4`, `eleven_v4_turbo` | `--stability`, `--similarity-boost`, `--clone-strength` (PVC only) | 10,000 | yes | no |
+  | `eleven_v3` | `--stability`, `--similarity-boost` | 5,000 | yes | no |
+  | `eleven_v3_conversational` | `--stability`, `--similarity-boost`, `--speaker-boost` | 5,000 | yes | no |
+  | `eleven_multilingual_v2` | `--stability`, `--similarity-boost`, `--style`, `--speaker-boost`, `--speed` | 10,000 | no | yes |
+  | `eleven_flash_v2_5`, `eleven_turbo_v2_5` | `--stability`, `--similarity-boost`, `--speed` | 40,000 | no | yes |
+  | `eleven_flash_v2`, `eleven_turbo_v2` | `--stability`, `--similarity-boost`, `--speed` | 30,000 | no | yes |
+
+  v2/v3 models keep the CLI's historical defaults (stability 0.5, similarity 0.75; style 0 and speaker boost on where supported). v4 sends only the settings you pass, so the voice's stored settings apply. Other model ids pass through with a warning. `multix elevenlabs models` lists the live catalog with each model's character limit and cost multiplier (v4 Turbo bills 0.5× characters).
+- TTS billing: the CLI prints the characters ElevenLabs billed (`character-cost` response header); with `--json` they appear as `usage.credits` with `usage.credits_source: "header.character-cost"`. Nothing is estimated.
 - STT: `scribe_v1`, `scribe_v1_experimental`
 - Voice changer: `eleven_multilingual_sts_v2` (default)
 - Music: `music_v1`

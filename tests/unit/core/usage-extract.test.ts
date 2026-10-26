@@ -35,6 +35,7 @@ describe("extractUsage", () => {
     });
     expect(usage.metrics).toMatchObject({ "metrics.predict_time": 3.2, apiCreditCost: 15 });
     expect(usage.credits).toBe(15);
+    expect(usage.credits_source).toBe("apiCreditCost");
     expect(usage.metrics.width).toBeUndefined();
     expect(usage.metrics.created_at).toBeUndefined();
     expect(usage.ids).toEqual(["t-1"]);
@@ -44,6 +45,8 @@ describe("extractUsage", () => {
     const headers = new Headers({ "x-request-id": "req_abc", "character-cost": "42" });
     const usage = extractUsage(undefined, headers);
     expect(usage.metrics["header.character-cost"]).toBe(42);
+    expect(usage.credits).toBe(42);
+    expect(usage.credits_source).toBe("header.character-cost");
     expect(usage.ids).toEqual(["req_abc"]);
   });
 

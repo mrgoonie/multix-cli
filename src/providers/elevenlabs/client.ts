@@ -93,7 +93,12 @@ export async function apiPostBinary(
   endpoint: string,
   body: Record<string, unknown> | FormData,
   apiKey: string,
-  opts: { timeoutMs?: number; query?: Record<string, string> } = {},
+  opts: {
+    timeoutMs?: number;
+    query?: Record<string, string>;
+    /** Sees the response headers (request-id, character-cost) on success. */
+    onHeaders?: (headers: Headers) => void;
+  } = {},
 ): Promise<Buffer> {
   const url = new URL(`${ELEVENLABS_BASE_URL}/${endpoint.replace(/^\//, "")}`);
   if (opts.query) {
@@ -131,6 +136,7 @@ export async function apiPostBinary(
     throw new HttpError(res.status, text.slice(0, 500), url.toString());
   }
 
+  opts.onHeaders?.(res.headers);
   return Buffer.from(await res.arrayBuffer());
 }
 

@@ -27,6 +27,8 @@ interface ModelsResp
     can_do_text_to_speech?: boolean;
     can_do_voice_conversion?: boolean;
     languages?: Array<{ language_id: string; name: string }>;
+    maximum_text_length_per_request?: number;
+    model_rates?: { character_cost_multiplier?: number };
   }> {}
 
 export function registerAccountCommands(parent: Command): void {
@@ -52,7 +54,9 @@ export function registerAccountCommands(parent: Command): void {
 
   parent
     .command("models")
-    .description("List available ElevenLabs models")
+    .description(
+      "List ElevenLabs models live: capabilities, languages, character limit and cost multiplier",
+    )
     .action(async () => {
       const apiKey = requireElevenLabsKey();
       const models = await apiGet<ModelsResp>("models", apiKey);
@@ -60,8 +64,14 @@ export function registerAccountCommands(parent: Command): void {
         const caps: string[] = [];
         if (m.can_do_text_to_speech) caps.push("tts");
         if (m.can_do_voice_conversion) caps.push("vc");
-        const langs = m.languages?.length ? `${m.languages.length} langs` : "";
-        console.log(`${m.model_id}\t${m.name ?? ""}\t[${caps.join(",")}] ${langs}`);
+        const details = [
+          m.languages?.length ? `${m.languages.length} langs` : "",
+          m.maximum_text_length_per_request ? `max ${m.maximum_text_length_per_request} chars` : "",
+          m.model_rates?.character_cost_multiplier !== undefined
+            ? `x${m.model_rates.character_cost_multiplier} char cost`
+            : "",
+        ].filter(Boolean);
+        console.log(`${m.model_id}\t${m.name ?? ""}\t[${caps.join(",")}] ${details.join(", ")}`);
       }
       console.log(`\n${models.length} models`);
     });

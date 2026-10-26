@@ -4789,7 +4789,7 @@
       "commands": [
         {
           "command": "elevenlabs tts",
-          "description": "Text-to-speech (returns audio synchronously)",
+          "description": "Text-to-speech (returns audio synchronously). Voice settings a model ignores are rejected.",
           "positionals": [],
           "options": [
             {
@@ -4826,7 +4826,7 @@
             {
               "long": "--model",
               "flags": "--model <id>",
-              "description": "TTS model (eleven_v3|eleven_multilingual_v2|eleven_flash_v2_5|eleven_flash_v2|eleven_turbo_v2_5|eleven_turbo_v2)",
+              "description": "TTS model (eleven_v4|eleven_v4_turbo|eleven_v3|eleven_v3_conversational|eleven_multilingual_v2|eleven_flash_v2_5|eleven_flash_v2|eleven_turbo_v2_5|eleven_turbo_v2)",
               "required": false,
               "takesValue": true,
               "valueOptional": false,
@@ -4837,7 +4837,7 @@
             {
               "long": "--format",
               "flags": "--format <fmt>",
-              "description": "Output format (mp3_22050_32|mp3_44100_32|mp3_44100_64|mp3_44100_96|mp3_44100_128|mp3_44100_192|pcm_8000|pcm_16000|pcm_22050|pcm_24000|pcm_44100|ulaw_8000)",
+              "description": "Output format (mp3_22050_32|mp3_44100_32|mp3_44100_64|mp3_44100_96|mp3_44100_128|mp3_44100_192|pcm_8000|pcm_16000|pcm_22050|pcm_24000|pcm_44100|ulaw_8000|mp3_24000_48|pcm_32000|pcm_48000|wav_8000|wav_16000|wav_22050|wav_24000|wav_32000|wav_44100|wav_48000|opus_48000_32|opus_48000_64|opus_48000_96|opus_48000_128|opus_48000_192|alaw_8000)",
               "required": false,
               "takesValue": true,
               "valueOptional": false,
@@ -4848,40 +4848,67 @@
             {
               "long": "--stability",
               "flags": "--stability <n>",
-              "description": "Voice stability 0..1",
+              "description": "Voice stability 0..1 (v2/v3 default 0.5; v4: voice's stored value)",
               "required": false,
               "takesValue": true,
               "valueOptional": false,
               "variadic": false,
-              "negatable": false,
-              "default": "0.5"
+              "negatable": false
             },
             {
               "long": "--similarity-boost",
               "flags": "--similarity-boost <n>",
-              "description": "Voice similarity boost 0..1",
+              "description": "Voice similarity 0..1 (v2/v3 default 0.75; v4: voice's stored value)",
               "required": false,
               "takesValue": true,
               "valueOptional": false,
               "variadic": false,
-              "negatable": false,
-              "default": "0.75"
+              "negatable": false
             },
             {
               "long": "--style",
               "flags": "--style <n>",
-              "description": "Style exaggeration 0..1",
+              "description": "Style exaggeration 0..1 (eleven_multilingual_v2 only)",
               "required": false,
               "takesValue": true,
               "valueOptional": false,
               "variadic": false,
-              "negatable": false,
-              "default": "0.0"
+              "negatable": false
+            },
+            {
+              "long": "--speed",
+              "flags": "--speed <n>",
+              "description": "Speech speed 0.7..1.2 (v2 models only; v3/v4 ignore speed)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--clone-strength",
+              "flags": "--clone-strength <n>",
+              "description": "Professional Voice Clone adherence 0..1 (eleven_v4/eleven_v4_turbo only)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--speaker-boost",
+              "flags": "--speaker-boost",
+              "description": "Enable speaker boost (multilingual_v2, v3_conversational)",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
             },
             {
               "long": "--no-speaker-boost",
               "flags": "--no-speaker-boost",
-              "description": "Disable speaker boost (default: enabled)",
+              "description": "Disable speaker boost",
               "required": false,
               "takesValue": false,
               "valueOptional": false,
@@ -4891,7 +4918,7 @@
             {
               "long": "--language-code",
               "flags": "--language-code <code>",
-              "description": "ISO language code (Flash/Turbo/v3 only)",
+              "description": "ISO 639-1 language code (not eleven_multilingual_v2)",
               "required": false,
               "takesValue": true,
               "valueOptional": false,
@@ -4924,6 +4951,16 @@
               "description": "Following text for context continuity",
               "required": false,
               "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--timestamps",
+              "flags": "--timestamps",
+              "description": "Also save character-level timing as <audio>.alignment.json",
+              "required": false,
+              "takesValue": false,
               "valueOptional": false,
               "variadic": false,
               "negatable": false
@@ -6012,7 +6049,7 @@
         },
         {
           "command": "elevenlabs models",
-          "description": "List available ElevenLabs models",
+          "description": "List ElevenLabs models live: capabilities, languages, character limit and cost multiplier",
           "positionals": [],
           "options": []
         }

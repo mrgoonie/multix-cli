@@ -27,6 +27,48 @@ multix elevenlabs voice-changer --input source.wav --voice <voiceId> --output ch
 `tts` returns audio synchronously. Clone input is local audio and should total
 one to three minutes.
 
+## TTS models and voice settings
+
+`--model` takes `eleven_multilingual_v2` (default), `eleven_v4`,
+`eleven_v4_turbo`, `eleven_v3`, `eleven_v3_conversational` and the Flash/Turbo
+v2 models. Eleven v4 is the highest-quality model (90+ languages, audio tags
+such as `[whispering]`); Eleven v4 Turbo is the low-latency variant and bills
+half the characters.
+
+```bash
+multix elevenlabs tts --model eleven_v4 --text "[whispering] Can you keep a secret?"
+multix elevenlabs tts --model eleven_v4_turbo --text "Hi!" --similarity-boost 0.8 --timestamps
+multix elevenlabs models   # live catalog: languages, character limit, cost multiplier
+```
+
+The API accepts voice settings a model does not use and drops them, so `tts`
+rejects such a flag before sending anything:
+
+| Model | Voice settings | Max characters | Audio tags | SSML |
+|---|---|---|---|---|
+| `eleven_v4`, `eleven_v4_turbo` | `--stability`, `--similarity-boost`, `--clone-strength` | 10,000 | yes | no |
+| `eleven_v3` | `--stability`, `--similarity-boost` | 5,000 | yes | no |
+| `eleven_v3_conversational` | `--stability`, `--similarity-boost`, `--speaker-boost` | 5,000 | yes | no |
+| `eleven_multilingual_v2` | `--stability`, `--similarity-boost`, `--style`, `--speaker-boost`, `--speed` | 10,000 | no | yes |
+| Flash/Turbo v2.5 | `--stability`, `--similarity-boost`, `--speed` | 40,000 | no | yes |
+| Flash/Turbo v2 | `--stability`, `--similarity-boost`, `--speed` | 30,000 | no | yes |
+
+`--clone-strength` applies only to Professional Voice Clones fine-tuned for v4.
+v2 and v3 models keep the historical defaults (stability 0.5, similarity 0.75);
+v4 sends only the settings you pass, so the voice's stored settings apply.
+Audio tags on a model that does not read them, or SSML on v3/v4, print a
+warning. An unknown model ID is sent as-is with a warning.
+
+`--language-code` takes an ISO 639-1 code; ElevenLabs rejects codes a model
+does not support (including any code on `eleven_multilingual_v2`). `--timestamps`
+also saves character-level timing next to the audio as `<audio>.alignment.json`.
+`--format` accepts MP3, PCM, WAV, Opus, μ-law and A-law variants
+(`wav_44100`, `opus_48000_64`, ...).
+
+After each request `tts` prints the characters ElevenLabs billed, read from the
+`character-cost` response header. With `--json` the same number is
+`usage.credits`, and `usage.credits_source` is `header.character-cost`.
+
 ## Transcription and generated audio
 
 ```bash

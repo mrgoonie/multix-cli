@@ -69,6 +69,8 @@ export interface UsageSummary {
   tokens?: UsageTokens;
   cost_usd?: number;
   credits?: number;
+  /** Key paths the credits were read from (e.g. `header.character-cost`, `estimatedCost.credits`). */
+  credits_source?: string;
   /** Provider-reported numbers by key path (polls: last value; creates: summed). */
   metrics?: Record<string, number>;
 }
@@ -88,10 +90,12 @@ export function summarizeUsage(state: RunState = run): UsageSummary | undefined 
   const metrics: Record<string, number> = {};
   let cost: number | undefined;
   let credits: number | undefined;
+  const creditSources = new Set<string>();
   for (const [i, r] of records.entries()) {
     addTokens(tokens, r.tokens);
     if (r.cost_usd !== undefined) cost = (cost ?? 0) + r.cost_usd;
     if (r.credits !== undefined) credits = (credits ?? 0) + r.credits;
+    if (r.credits_source) creditSources.add(r.credits_source);
     const isPost = i < state.postUsage.length;
     for (const [k, v] of Object.entries(r.metrics)) {
       metrics[k] = isPost && metrics[k] !== undefined ? (metrics[k] ?? 0) + v : v;
@@ -101,6 +105,7 @@ export function summarizeUsage(state: RunState = run): UsageSummary | undefined 
   if (Object.keys(tokens).length > 0) summary.tokens = tokens;
   if (cost !== undefined) summary.cost_usd = Math.round(cost * 1e6) / 1e6;
   if (credits !== undefined) summary.credits = credits;
+  if (creditSources.size > 0) summary.credits_source = [...creditSources].join(", ");
   if (Object.keys(metrics).length > 0) summary.metrics = metrics;
   return Object.keys(summary).length > 0 ? summary : undefined;
 }
