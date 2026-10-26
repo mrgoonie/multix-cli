@@ -50,11 +50,18 @@ dài hơn giới hạn của model sẽ bị từ chối kèm danh sách model h
 `--style 0` hoặc `--no-speaker-boost` trên model không có điều khiển đó được báo
 bằng cảnh báo và không gửi đi. Audio tag như `[whispering]` được v3 và v4 thể
 hiện; model khác sẽ đọc thành tiếng nên CLI cảnh báo. Chính API từ chối
-`--language-code` mà model không hỗ trợ, và không tính phí. `--model` lạ được
-gửi nguyên trạng, không kiểm tra, kèm cảnh báo.
+`--language-code` mà model không hỗ trợ, và không tính phí.
+`eleven_multilingual_v2` nhận các mã trong danh sách của nó nhưng không áp
+dụng, nên CLI cảnh báo. `--clone-strength` (0 đến 1, cho Professional Voice
+Clone đã fine-tune cho v4) chỉ được gửi tới `eleven_v4` và `eleven_v4_turbo`;
+model khác từ chối. Thẻ SSML `<break>` trên v3/v4 và `<phoneme>` trên mọi
+model trừ `eleven_flash_v2` sẽ có cảnh báo. `--voice` phải là voice ID (chữ,
+số, `_`, `-`). Độ dài text được đếm theo ký tự, mỗi emoji là một ký tự, giống
+cách API tính. `--model` lạ được gửi nguyên trạng, không kiểm tra, kèm cảnh báo.
 
 `--timestamps` lưu thời gian từng ký tự cạnh file audio thành
-`<audio>.timestamps.json`. TTS còn nhận các format `wav_*`, `opus_48000_*`,
+`<audio>.timestamps.json`. Nếu response không có audio, body gốc được lưu thành
+`elevenlabs_tts_raw_*` trước khi lệnh báo lỗi, vì request có thể đã bị tính phí. TTS còn nhận các format `wav_*`, `opus_48000_*`,
 `alaw_8000`, `mp3_24000_48`, `pcm_32000` và `pcm_48000`.
 
 Sau mỗi lần chạy, CLI in số credit ElevenLabs báo qua header `character-cost`.

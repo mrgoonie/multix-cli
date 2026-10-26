@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from "vitest";
 import { ValidationError } from "../../../../src/core/errors.js";
-import { buildTtsRequest } from "../../../../src/providers/elevenlabs/tts-request.js";
+import { buildTtsRequest, checkVoiceId } from "../../../../src/providers/elevenlabs/tts-request.js";
 
 describe("buildTtsRequest: v4 family", () => {
   for (const model of ["eleven_v4", "eleven_v4_turbo"]) {
@@ -154,5 +154,83 @@ describe("buildTtsRequest: value validation", () => {
     expect(() => buildTtsRequest({ text: "Hi", model: "eleven_v4", seed })).toThrow(
       /--seed must be an integer/,
     );
+  });
+});
+
+describe("buildTtsRequest: checks carried over from the duplicate v4 implementation", () => {
+  for (const model of ["eleven_v4", "eleven_v4_turbo"]) {
+    it(`${model}: sends --clone-strength as voice_settings.clone_strength`, () => {
+      const { payload, warnings } = buildTtsRequest({ text: "Hi", model, cloneStrength: "0.25" });
+      expect(payload.voice_settings).toEqual({
+        stability: 0.5,
+        similarity_boost: 0.75,
+        clone_strength: 0.25,
+      });
+      expect(warnings).toEqual([]);
+    });
+  }
+
+  it.each(["eleven_v3", "eleven_multilingual_v2", "eleven_flash_v2_5"])(
+    "rejects --clone-strength on %s (the API answers 400 unsupported_model)",
+    (model) => {
+      expect(() => buildTtsRequest({ text: "Hi", model, cloneStrength: "0" })).toThrow(
+        /does not accept --clone-strength.*eleven_v4, eleven_v4_turbo/,
+      );
+    },
+  );
+
+  it.each(["1.5", "-0.1", "x"])("rejects --clone-strength %s", (cloneStrength) => {
+    expect(() => buildTtsRequest({ text: "Hi", model: "eleven_v4", cloneStrength })).toThrow(
+      /--clone-strength must be a number from 0 to 1/,
+    );
+  });
+
+  it("counts text length in code points, as the API bills it", () => {
+    const emoji = "😀".repeat(10_000); // 20,000 UTF-16 units, 10,000 characters
+    expect(() => buildTtsRequest({ text: emoji, model: "eleven_v4" })).not.toThrow();
+    expect(() => buildTtsRequest({ text: `${emoji}!`, model: "eleven_v4" })).toThrow(
+      /at most 10000 characters per request \(got 10001\)/,
+    );
+  });
+
+  it("warns that eleven_multilingual_v2 does not enforce --language-code, and still sends it", () => {
+    const { payload, warnings } = buildTtsRequest({
+      text: "Hallo",
+      model: "eleven_multilingual_v2",
+      languageCode: "de",
+    });
+    expect(payload.language_code).toBe("de");
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/eleven_multilingual_v2 does not enforce --language-code/);
+    expect(
+      buildTtsRequest({ text: "Hi", model: "eleven_flash_v2_5", languageCode: "de" }).warnings,
+    ).toEqual([]);
+  });
+
+  it("warns on SSML <break> for v3/v4, and on <phoneme> for every model but eleven_flash_v2", () => {
+    const brk = 'Wait <break time="1s" /> now.';
+    expect(buildTtsRequest({ text: brk, model: "eleven_v4" }).warnings[0]).toMatch(
+      /eleven_v4 does not support SSML <break>/,
+    );
+    expect(buildTtsRequest({ text: brk, model: "eleven_v3" }).warnings[0]).toMatch(
+      /eleven_v3 does not support SSML <break>/,
+    );
+    expect(buildTtsRequest({ text: brk, model: "eleven_flash_v2_5" }).warnings).toEqual([]);
+
+    const ph = '<phoneme alphabet="ipa" ph="ˈæktʃuəli">actually</phoneme>';
+    expect(buildTtsRequest({ text: ph, model: "eleven_flash_v2" }).warnings).toEqual([]);
+    const v4 = buildTtsRequest({ text: ph, model: "eleven_v4" }).warnings;
+    expect(v4).toHaveLength(1);
+    expect(v4[0]).toMatch(/does not support SSML <phoneme>.*eleven_flash_v2.*IPA/);
+    expect(buildTtsRequest({ text: ph, model: "eleven_multilingual_v2" }).warnings[0]).toMatch(
+      /eleven_multilingual_v2 does not support SSML <phoneme>/,
+    );
+  });
+
+  it("checkVoiceId accepts voice IDs and rejects path-unsafe input", () => {
+    expect(() => checkVoiceId("kdmDKE6EkgrWrrykO9Qt")).not.toThrow();
+    for (const bad of ["", "../voices", "abc/def", "a b", "id?x=1", "x".repeat(65)]) {
+      expect(() => checkVoiceId(bad), bad).toThrow(ValidationError);
+    }
   });
 });

@@ -52,10 +52,19 @@ support it. `--style 0` or `--no-speaker-boost` on a model without that control
 is reported as a warning and not sent. Audio tags such as `[whispering]` are
 performed by v3 and v4; other models read them aloud, so the CLI warns. The API
 itself rejects a `--language-code` the model does not support; nothing is
-billed. An unknown `--model` id is passed through unchecked with a warning.
+billed. `eleven_multilingual_v2` accepts the codes on its list but does not
+enforce them, so the CLI warns. `--clone-strength` (0 to 1, for Professional
+Voice Clones fine-tuned for v4) is sent only to `eleven_v4` and
+`eleven_v4_turbo`; other models reject it. SSML `<break>` tags on v3/v4 and
+`<phoneme>` tags on any model but `eleven_flash_v2` trigger a warning.
+`--voice` must be a voice ID (letters, digits, `_`, `-`). Text length is
+counted in characters, an emoji being one, as the API counts it. An unknown
+`--model` id is passed through unchecked with a warning.
 
 `--timestamps` saves character timings next to the audio as
-`<audio>.timestamps.json`. TTS also accepts `wav_*`, `opus_48000_*`,
+`<audio>.timestamps.json`. If the response carries no audio, the raw body is
+saved as `elevenlabs_tts_raw_*` before the command fails, since the request
+may already be billed. TTS also accepts `wav_*`, `opus_48000_*`,
 `alaw_8000`, `mp3_24000_48`, `pcm_32000` and `pcm_48000` formats.
 
 After each run the CLI prints the credits ElevenLabs reports in its

@@ -151,20 +151,46 @@ describe("elevenlabs tts", () => {
     });
   });
 
-  it("--timestamps fails clearly on a response without JSON audio", async () => {
-    stubFetch(() => audioResponse());
+  it("--timestamps keeps a billed body that carries no audio, then fails", async () => {
+    const outDir = path.join(tmp, "out");
+    stubFetch(() => audioResponse({ "character-cost": "4" }));
     await expect(run("--text", "Hi", "--model", "eleven_v4", "--timestamps")).rejects.toThrow(
-      /with-timestamps response was not JSON/,
+      /with-timestamps response was not JSON; raw response saved to .*elevenlabs_tts_raw_.*\.bin/,
     );
+    expect(text()).toContain("Credits charged (ElevenLabs character-cost header): 4");
+    const body = JSON.stringify({ alignment: {} });
     stubFetch(
-      () =>
-        new Response(JSON.stringify({ alignment: {} }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
+      () => new Response(body, { status: 200, headers: { "content-type": "application/json" } }),
     );
     await expect(run("--text", "Hi", "--model", "eleven_v4", "--timestamps")).rejects.toThrow(
-      /carried no audio/,
+      /carried no audio; raw response saved to .*elevenlabs_tts_raw_.*\.json/,
     );
+    const saved = fs.readdirSync(outDir).sort();
+    expect(saved.filter((f) => f.startsWith("elevenlabs_tts_raw_"))).toHaveLength(2);
+    expect(saved.some((f) => /^elevenlabs_tts_\d/.test(f))).toBe(false);
+    const json = saved.find((f) => f.endsWith(".json")) ?? "";
+    expect(fs.readFileSync(path.join(outDir, json), "utf8")).toBe(body);
+  });
+
+  it("--clone-strength reaches voice_settings on v4 and is refused elsewhere", async () => {
+    stubFetch(() => audioResponse());
+    await run("--text", "Hi", "--model", "eleven_v4", "--clone-strength", "0");
+    expect(requests[0]?.body.voice_settings).toEqual({
+      stability: 0.5,
+      similarity_boost: 0.75,
+      clone_strength: 0,
+    });
+    await expect(run("--text", "Hi", "--clone-strength", "0")).rejects.toThrow(
+      /eleven_multilingual_v2 does not accept --clone-strength/,
+    );
+    expect(requests).toHaveLength(1);
+  });
+
+  it("rejects a path-unsafe --voice before any request", async () => {
+    stubFetch(() => audioResponse());
+    await expect(run("--text", "Hi", "--voice", "../models")).rejects.toThrow(
+      /--voice must be an ElevenLabs voice ID/,
+    );
+    expect(requests).toHaveLength(0);
   });
 });
