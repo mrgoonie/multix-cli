@@ -1,6 +1,6 @@
 ---
 name: multix
-description: AI multimodal CLI — generate and edit images (OpenAI, Codex driver, Gemini Nano Banana, Imagen, MiniMax, OpenRouter, Leonardo, BytePlus Seedream, Cloudflare Workers AI FLUX.1 Schnell, fal.ai FLUX, Replicate FLUX, Runway Gen-4 Image), generate, edit and extend video (Gemini Omni Flash, plus legacy Gemini Veo), generate video (MiniMax Hailuo, OpenRouter via Veo/Seedance/Kling, Leonardo via Motion/Veo/Kling/Hailuo/Seedance/LTX, BytePlus Seedance, Cloudflare AI Gateway via Replicate, fal.ai queue models, Replicate direct API models incl. P-Video, Runway Gen-4.5 and Gen-4 Turbo, HeyGen Video Agent and scripted avatar videos), video translation and lipsync (HeyGen), TTS/STT/music (OpenAI, Gemini Flash TTS incl. Gemini 3.8 with delivery-style control, MiniMax, Cloudflare Workers AI MeloTTS, ElevenLabs), 3D models (BytePlus Hyper3D/Hitem3d), analyze/transcribe media, convert documents to Markdown, optimize media via ffmpeg/ImageMagick, and self-update the CLI. Use whenever the user wants to create, edit, or transform images/video/audio/3D/documents from a CLI, mentions any of: OpenAI, Codex image driver, image-to-image, i2i, image edit, watercolor/cyberpunk style transfer, reference image, OpenRouter, Nano Banana, Flux, Seedream, Gemini Omni, Omni Flash, Veo, Hailuo, Seedance, Kling, Cloudflare Workers AI, AI Gateway, fal.ai, Atlas Cloud, Replicate, replicate.com models, Replicate predictions, Runway, Gen-4.5, Gen-4 Turbo, Gen-4 Image, HeyGen, avatar video, talking head, Video Agent, video translation, dubbing, lipsync, video generation, text-to-video, image-to-video, i2v, ElevenLabs voice cloning, updating/upgrading multix, or asks for batch media optimization.
+description: AI multimodal CLI — generate and edit images (OpenAI, Codex driver, Gemini Nano Banana, Imagen, MiniMax, OpenRouter, Leonardo, BytePlus Seedream, Cloudflare Workers AI FLUX.1 Schnell, fal.ai FLUX, Replicate FLUX, Runway Gen-4 Image), generate, edit and extend video (Gemini Omni Flash, plus legacy Gemini Veo), generate video (MiniMax Hailuo, OpenRouter via Veo/Seedance/Kling, Leonardo via Motion/Veo/Kling/Hailuo/Seedance/LTX, BytePlus Seedance, Cloudflare AI Gateway via Replicate, fal.ai queue models, Replicate direct API models incl. P-Video, Runway Gen-4.5 and Gen-4 Turbo, HeyGen Video Agent and scripted avatar videos), video translation and lipsync (HeyGen), TTS/STT/music (OpenAI, Gemini Flash TTS incl. Gemini 3.8 with delivery-style control, MiniMax, Cloudflare Workers AI MeloTTS, ElevenLabs), multi-character dialogue audio with per-character voice profiles, cached per-line takes and stem export (multix scene), 3D models (BytePlus Hyper3D/Hitem3d), analyze/transcribe media, convert documents to Markdown, optimize media via ffmpeg/ImageMagick, and self-update the CLI. Use whenever the user wants to create, edit, or transform images/video/audio/3D/documents from a CLI, mentions any of: OpenAI, Codex image driver, image-to-image, i2i, image edit, watercolor/cyberpunk style transfer, reference image, OpenRouter, Nano Banana, Flux, Seedream, Gemini Omni, Omni Flash, Veo, Hailuo, Seedance, Kling, Cloudflare Workers AI, AI Gateway, fal.ai, Atlas Cloud, Replicate, replicate.com models, Replicate predictions, Runway, Gen-4.5, Gen-4 Turbo, Gen-4 Image, HeyGen, avatar video, talking head, Video Agent, video translation, dubbing, lipsync, video generation, text-to-video, image-to-video, i2v, ElevenLabs voice cloning, updating/upgrading multix, or asks for batch media optimization.
 version: 1.14.0 # x-release-please-version
 ---
 
@@ -41,6 +41,7 @@ Activate this skill when the user asks to:
 - Run any Replicate model (official or versioned) via the direct API, generate Replicate images/video, or resume/cancel a Replicate prediction by id
 - Generate Runway Gen-4.5 / Gen-4 Turbo video or Gen-4 images (with tagged reference images), or check/resume/cancel a Runway task by id
 - Make HeyGen avatar videos from a prompt (Video Agent) or an exact script, translate/lipsync videos, HeyGen TTS
+- Voice a multi-character dialogue (anime, film, audio drama) line by line with a fixed voice per character, approve takes, and export stems (`multix scene`)
 - Update multix itself to the latest (or a given dist-tag) npm version
 
 ## Self-update
@@ -259,6 +260,27 @@ multix heygen status <id> --type agent|video|translation|lipsync|model-video --w
 - `<ref>` = `https://` URL, `asset:<asset_id>`, or a local file (uploaded, max 32 MB).
 - Commands wait and download by default. `--async` prints IDs and a resume command; `--type agent` resumes with the Video Agent `session_id`.
 - Failed jobs exit 1 with HeyGen's failure code. 402 means add API credits; 403 means a scope or entitlement is missing.
+
+## Scenes (multi-character dialogue)
+
+Use `multix scene` when a script has several speakers who must keep the same voice across lines and scenes. For one voice reading one text, use the provider's TTS command instead. A project is a local directory (`--project <dir>`, default `.`); scene commands are not available through the remote MCP server.
+
+```bash
+multix scene voice add <id> --provider gemini|openai|elevenlabs --model <tts-model> --voice <voice> [--language vi-VN] [--style "..."] [--setting key=value] [--alias NAME]
+multix scene voice validate
+multix scene plan scripts/s01.txt [scripts/s02.txt ...] --json   # local, free: to_render, to_render_chars, invalidated
+multix scene render --dry-run --json                             # local checks + key preflight, shows the first request
+multix scene render --json [--scene s01] [--line s01/002] [--limit <n>] [--keep-going]
+multix scene status --lines --json
+multix scene approve s01/001 [--take <takeId>]   |   multix scene reject s01/002 --take <takeId>
+multix scene export --out stems [--approved-only] [--allow-missing]
+```
+
+- Script lines: `SPEAKER: text` or `SPEAKER (direction): text`; `# scene: <id>`, `# title: ...`; other lines continue the line above. The speaker matches a profile id, `--name` or `--alias`, ignoring case.
+- Run `plan` and then `render --dry-run` before the first paid render. They reject unsupported markup (SSML, `[audio tags]`, `(direction)` on models without style) and missing keys before any request is billed.
+- `render` sends one request per uncached line and never retries. On a failure it records the error and stops (or continues with `--keep-going`), then exits non-zero. Do not re-run it in a loop: read `failed[]`, fix the cause, then re-render; only failed and pending lines are sent again. `--new-take --line <id>` pays for a new variant.
+- Editing one line re-renders only that line, plus its neighbours for profiles with `--context`. Per-take `usage.cost_usd`/`credits` are `null` when the provider reported nothing; `plan.estimated_cost_usd` is always `null`.
+- Profiles never hold keys. A cloned voice needs `--cloned --consent-by <name>`. Model limits table: <https://multix.zuey.me/commands/scene/>.
 
 ## Image-to-image (edit existing image with a prompt)
 

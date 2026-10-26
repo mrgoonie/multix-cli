@@ -21,6 +21,7 @@ description: Choose the multix command group that matches your media workflow.
 | [Replicate](/commands/replicate/) | Any Replicate model via the direct API, image/video wrappers, and prediction status/cancel. |
 | [Runway](/commands/runway/) | Gen-4.5 and Gen-4 Turbo video, Gen-4 images, and task status/cancel. |
 | [HeyGen](/commands/heygen/) | Video Agent prompt-to-video, scripted avatar videos, video translation, lipsync, and TTS. |
+| [Scenes](/commands/scene/) | Multi-character dialogue audio: voice profiles, per-line cached takes, approval, and stem export. |
 | `multix media` | Optimize, split, and batch-process files with ffmpeg/ImageMagick. |
 | `multix doc` | Convert supported documents to Markdown through Gemini. |
 | `multix update` | Self-update multix to the latest, or a specific, published version. |

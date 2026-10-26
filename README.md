@@ -710,6 +710,26 @@ multix heygen me
 - `--callback-url` webhooks are signed with HMAC-SHA256 of the raw body (hex, `signature` header). The npm package does not export a verifier; copy `src/providers/heygen/webhook.ts` or the Node snippet in the [HeyGen docs](https://multix.zuey.me/commands/heygen/#webhooks).
 - Digital-twin creation and voice cloning are out of scope. Full reference: [HeyGen commands](https://multix.zuey.me/commands/heygen/).
 
+### `multix scene`
+
+Multi-character dialogue audio from plain-text scripts (`SPEAKER (direction): text`, one file per scene). Each character has a voice profile in `voices/<id>.json` (Gemini, OpenAI or ElevenLabs; no credentials stored). Each line is rendered as a separate take and cached by its exact request, so editing one line re-renders only that line.
+
+```bash
+multix scene voice add hiro --provider openai --model gpt-4o-mini-tts --voice cedar
+multix scene voice add mai --provider elevenlabs --model eleven_flash_v2_5 --voice <voiceId> --language vi-VN
+multix scene plan scripts/s01.txt scripts/s02.txt   # local, no cost
+multix scene render --dry-run                       # checks keys, shows the first request
+multix scene render [--scene s01] [--line s01/002 --new-take] [--limit 10] [--keep-going]
+multix scene status [--lines]
+multix scene approve s01/001 [--take <takeId>]
+multix scene export --out stems [--approved-only]
+```
+
+**Notes:**
+- One request per line. A failed request is never retried and never falls back to another provider. The keys of all providers a render needs are checked before the first request.
+- Every take records the `cost_usd`/`credits` the provider reported, or `null` when it reported nothing. `plan` returns `estimated_cost_usd: null` because multix has no price table for these models.
+- A cloned voice requires `--cloned --consent-by <name>`. Scene commands are not available through the remote MCP server. Full reference: [Scene commands](https://multix.zuey.me/commands/scene/).
+
 ### `multix media`
 
 Requires `ffmpeg` (video/audio) and `magick` (images) on PATH.
