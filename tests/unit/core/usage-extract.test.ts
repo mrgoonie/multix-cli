@@ -44,12 +44,14 @@ describe("extractUsage", () => {
     const usage = extractUsage({
       id: "t1",
       estimatedCost: { credits: 60 },
-      quote: { cost: 0.5 },
+      quote: { credits: 3 },
+      expected_credits: 7,
       usage: { estimated: { cost: 0.25 } },
     });
     expect(usage.metrics).toMatchObject({
       "estimatedCost.credits": 60,
-      "quote.cost": 0.5,
+      "quote.credits": 3,
+      expected_credits: 7,
       "usage.estimated.cost": 0.25,
     });
     expect(usage.credits).toBeUndefined();
