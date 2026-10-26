@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.17.0](https://github.com/mrgoonie/multix-cli/compare/v1.16.0...v1.17.0) (2026-10-26)
+
+
+### Added
+
+* **elevenlabs:** add --clone-strength and stricter TTS input checks ([#319](https://github.com/mrgoonie/multix-cli/issues/319)) ([aa9cbdf](https://github.com/mrgoonie/multix-cli/commit/aa9cbdf3f61c83dc0b782e49198ae51940e06b5e))
+
+
+### Fixed
+
+* **gemini:** state edit/extend intent on Omni follow-up turns ([#276](https://github.com/mrgoonie/multix-cli/issues/276)) ([7058c46](https://github.com/mrgoonie/multix-cli/commit/7058c46e8fdb9cc49fd2605278464531f834e009))
+
 ## [1.16.0](https://github.com/mrgoonie/multix-cli/compare/v1.15.0...v1.16.0) (2026-10-26)
 
 
