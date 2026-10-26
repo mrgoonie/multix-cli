@@ -20,8 +20,8 @@ export const DEFAULT_PCM_SAMPLE_RATE = 24_000;
  * TTS guide: Gemini TTS and HeyGen Voice only pcm, MiniMax only mp3). Others
  * accept both.
  */
-const PCM_ONLY = /^(google|heygen)\//;
-const MP3_ONLY = /^minimax\//;
+const PCM_ONLY = /^(google|heygen)\//i;
+const MP3_ONLY = /^minimax\//i;
 
 export function parseSpeechFormat(value: string): SpeechFormat {
   const v = value.trim().toLowerCase();

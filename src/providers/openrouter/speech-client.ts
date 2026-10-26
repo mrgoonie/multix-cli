@@ -75,6 +75,16 @@ export interface SpeechAudio {
   providerName?: string;
 }
 
+/** True when the body is OpenRouter's own JSON error (`{"error": ...}`): a definite answer. */
+function isOpenRouterError(text: string): boolean {
+  try {
+    const parsed = JSON.parse(text) as { error?: unknown };
+    return parsed !== null && typeof parsed === "object" && parsed.error !== undefined;
+  } catch {
+    return false;
+  }
+}
+
 function errorMessageOf(text: string): string {
   try {
     const parsed = JSON.parse(text) as {
@@ -236,6 +246,11 @@ export async function createSpeech(opts: CreateSpeechOptions): Promise<SpeechAud
 
   if (!response.ok) {
     const text = await readCappedText(response, ERROR_BODY_MAX);
+    // A gateway page (502/504/524 HTML from the edge) does not say whether the
+    // generation went on and was billed; OpenRouter's own JSON error does.
+    if (response.status >= 500 && !isOpenRouterError(text)) {
+      throw unknownState(model, `HTTP ${response.status} from the gateway`, generationId);
+    }
     throw new HttpError(
       response.status,
       errorMessageOf(text),
@@ -255,7 +270,13 @@ export async function createSpeech(opts: CreateSpeechOptions): Promise<SpeechAud
   try {
     audio = await readAudio(response, opts.maxBytes, opts.idleTimeoutMs ?? 60_000, url);
   } catch (err) {
-    if (err instanceof ResponseTooLargeError) throw err;
+    if (err instanceof ResponseTooLargeError) {
+      // The generation is done (and billed) even though its audio was dropped.
+      if (generationId) {
+        err.message += `; generation ${generationId} may still be billed: multix openrouter generation ${generationId}`;
+      }
+      throw err;
+    }
     const reason = err instanceof Error ? err.message : String(err);
     throw unknownState(model, `audio stream failed: ${reason}`, generationId, err);
   }

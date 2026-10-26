@@ -152,7 +152,7 @@ export function extractUsage(body: unknown, headers?: Headers | null): ResponseU
       out.cost_usd === undefined &&
       /^(cost|total_cost|cost_usd|usd)$/i.test(leaf) &&
       // OpenRouter's GET /generation reports the charge as data.total_cost.
-      (/usage|^cost|billing/i.test(path) || /^(data\.)?total_cost$/.test(path))
+      (/usage|^cost|billing/i.test(path) || path === "data.total_cost")
     ) {
       out.cost_usd = value;
     } else if (out.credits === undefined && /credit/i.test(leaf)) {

@@ -6,7 +6,18 @@
 import type { Command } from "commander";
 import { run } from "../../../agent/run-state.js";
 import { ValidationError } from "../../../core/errors.js";
-import { findSpeechModel, listSpeechModels } from "../speech-client.js";
+import { type SpeechModel, findSpeechModel, listSpeechModels } from "../speech-client.js";
+
+function toJson(m: SpeechModel) {
+  return {
+    id: m.id,
+    canonical_slug: m.canonicalSlug ?? null,
+    name: m.name ?? null,
+    voices: m.voices,
+    pricing: { prompt: m.pricing.prompt ?? null, completion: m.pricing.completion ?? null },
+    price: formatPrice(m.pricing),
+  };
+}
 
 export function registerOpenRouterSpeechModelsCommand(parent: Command): void {
   parent
@@ -23,7 +34,7 @@ export function registerOpenRouterSpeechModelsCommand(parent: Command): void {
           );
         }
         if (run.json) {
-          console.log(JSON.stringify(entry));
+          console.log(JSON.stringify(toJson(entry)));
           return;
         }
         console.log(`${entry.id}\t${entry.name ?? ""}`);
@@ -36,7 +47,7 @@ export function registerOpenRouterSpeechModelsCommand(parent: Command): void {
         return;
       }
       if (run.json) {
-        console.log(JSON.stringify(models));
+        console.log(JSON.stringify(models.map(toJson)));
         return;
       }
       for (const m of models) {
@@ -46,11 +57,21 @@ export function registerOpenRouterSpeechModelsCommand(parent: Command): void {
     });
 }
 
+/**
+ * OpenRouter speech pricing comes in three shapes: `prompt` only = USD per
+ * input character, `completion` only = USD per output second (Seed Audio),
+ * both = USD per input and output token (Gemini TTS).
+ */
 function formatPrice(pricing: { prompt?: string; completion?: string }): string {
-  const perChar = Number(pricing.prompt);
-  const perSecond = Number(pricing.completion);
-  if (Number.isFinite(perSecond) && perSecond > 0) return `$${perSecond}/s of audio`;
-  if (Number.isFinite(perChar) && perChar > 0)
-    return `$${Math.round(perChar * 1e8) / 100}/1M chars`;
+  const perIn = Number(pricing.prompt);
+  const perOut = Number(pricing.completion);
+  const hasIn = Number.isFinite(perIn) && perIn > 0;
+  const hasOut = Number.isFinite(perOut) && perOut > 0;
+  const perMillion = (n: number) => Math.round(n * 1e8) / 100;
+  if (hasIn && hasOut) {
+    return `$${perMillion(perIn)}/1M input tokens + $${perMillion(perOut)}/1M audio tokens`;
+  }
+  if (hasOut) return `$${perOut}/s of audio`;
+  if (hasIn) return `$${perMillion(perIn)}/1M chars`;
   return pricing.prompt === "0" ? "free" : "price not listed";
 }

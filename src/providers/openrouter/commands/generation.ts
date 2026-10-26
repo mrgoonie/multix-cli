@@ -6,7 +6,7 @@
 
 import type { Command } from "commander";
 import { run } from "../../../agent/run-state.js";
-import { ValidationError } from "../../../core/errors.js";
+import { MultixError, ValidationError } from "../../../core/errors.js";
 import { requireOpenRouterKey } from "../client.js";
 import { buildOpenRouterHeaders } from "../payload.js";
 import { getGeneration } from "../speech-client.js";
@@ -23,8 +23,9 @@ export function registerOpenRouterGenerationCommand(parent: Command): void {
         headers: buildOpenRouterHeaders(requireOpenRouterKey()),
       });
       if (!stats) {
-        throw new ValidationError(
-          `Generation ${id} not found yet: OpenRouter records it a few seconds after the response; retry shortly`,
+        throw new MultixError(
+          `Generation ${id} not found (yet): OpenRouter records a generation about 10 s after its response, so retry shortly if the id is right`,
+          "NOT_FOUND",
         );
       }
       if (run.json) {

@@ -293,7 +293,7 @@ multix openrouter video-status <jobId> [--download] [--output <path>] [-v]
 multix openrouter video-models
 
 # Text-to-speech (POST /api/v1/audio/speech); input: --text | --text-file | --turns-file (multi-speaker JSON)
-multix openrouter tts --text "Xin chào" [--model google/gemini-3.8-flash-tts] [--voice Kore] [--instructions <text>] [--format auto|mp3|pcm|wav] [--speed <n>] [--zdr] [--cost-wait 20] [--output <path>] [-v]
+multix openrouter tts --text "Xin chào" [--model google/gemini-3.8-flash-tts] --voice Kore [--instructions <text>] [--format auto|mp3|pcm|wav] [--speed <n>] [--zdr] [--cost-wait 20] [--output <path>] [-v]
 
 # List speech models (live catalog) or one model's voices; read a generation's cost later
 multix openrouter speech-models [--model <id>]

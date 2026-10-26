@@ -79,7 +79,13 @@ function readUtf8(file: string, flag: string): string {
   if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) {
     throw new ValidationError(`${flag} file not found: ${file}`);
   }
-  return fs.readFileSync(resolved, "utf8");
+  // UTF-8 takes at most 4 bytes per character; JSON turns add a little framing.
+  if (fs.statSync(resolved).size > MAX_TEXT_CHARS * 4 + 64 * 1024) {
+    throw new ValidationError(
+      `${flag} is too large: at most ${MAX_TEXT_CHARS} characters are allowed`,
+    );
+  }
+  return fs.readFileSync(resolved, "utf8").replace(/^\uFEFF/, "");
 }
 
 function positiveNumber(value: string, flag: string, max: number): number {
@@ -137,6 +143,9 @@ function parseProviderOptions(raw: string): Record<string, unknown> {
 }
 
 function inputText(opts: TtsOptions): string | SpeechTurn[] {
+  if (opts.text !== undefined && opts.prompt !== undefined) {
+    throw new ValidationError("--text and --prompt are the same flag: give only one");
+  }
   const sources = [opts.text ?? opts.prompt, opts.textFile, opts.turnsFile].filter(
     (v) => v !== undefined,
   );
@@ -309,16 +318,13 @@ export function registerOpenRouterTtsCommand(parent: Command): void {
     .option("-v, --verbose", "Verbose logging")
     .action(async (opts: TtsOptions) => {
       const logger = createLogger({ verbose: opts.verbose ?? false });
-      const model = (opts.model ?? DEFAULT_OPENROUTER_TTS_MODEL).trim();
+      let model = (opts.model ?? DEFAULT_OPENROUTER_TTS_MODEL).trim();
       if (!model.includes("/")) {
         throw new ValidationError(
           `--model must be an OpenRouter model id like provider/name, got "${model}"`,
         );
       }
-      const format: ResolvedSpeechFormat = resolveSpeechFormat(
-        parseSpeechFormat(opts.format),
-        model,
-      );
+      let format: ResolvedSpeechFormat = resolveSpeechFormat(parseSpeechFormat(opts.format), model);
       const sampleRateFlag = opts.sampleRate
         ? Math.round(positiveNumber(opts.sampleRate, "--sample-rate", 384_000))
         : undefined;
@@ -346,6 +352,7 @@ export function registerOpenRouterTtsCommand(parent: Command): void {
       if (opts.modelCheck && !run.dryRun) {
         const checked = await checkCatalog(model, voice, input, logger);
         entry = checked.entry;
+        model = entry.id; // the catalog spelling, whatever case --model used
         voice = checked.voice;
         input = checked.input;
       }
@@ -376,10 +383,18 @@ export function registerOpenRouterTtsCommand(parent: Command): void {
       const sampleRateSource = responseRate ? "content-type" : sampleRateFlag ? "flag" : "assumed";
 
       let bytes = speech.audio;
+      const responseMime = speech.contentType.mime;
       if (format === "mp3" && !looksLikeMp3(bytes)) {
         logger.warn(
-          `${model} returned ${speech.contentType.mime ?? "unlabelled"} data that does not look like MP3`,
+          `${model} returned ${responseMime ?? "unlabelled"} data that does not look like MP3`,
         );
+      } else if (
+        format !== "mp3" &&
+        (responseMime === "audio/mpeg" || (responseMime !== "audio/pcm" && looksLikeMp3(bytes)))
+      ) {
+        // A WAV header on MP3 bytes would be a corrupt file: keep what was returned.
+        logger.warn(`${model} returned MP3 instead of pcm; saving it as .mp3`);
+        format = "mp3";
       }
       if (format === "wav") bytes = pcmToWav(bytes, sampleRate, channels);
       const dest = writeAudio(bytes, format, opts.output);

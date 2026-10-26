@@ -113,10 +113,28 @@ describe("createSpeech", () => {
   });
 
   it("keeps a non-JSON error body as a bounded snippet", async () => {
-    const fetch = async () => new Response("x".repeat(5000), { status: 503 });
+    const fetch = async () => new Response("x".repeat(5000), { status: 400 });
     const err = (await failure(speak(fetch))) as HttpError;
     expect(err.snippet.length).toBe(500);
   });
+
+  it.each([502, 504, 524])(
+    "reports a gateway %i page as an unknown remote state, not retryable",
+    async (status) => {
+      const fetch = vi.fn(
+        async () =>
+          new Response("<html>gateway timeout</html>", {
+            status,
+            headers: { "content-type": "text/html", "x-generation-id": "gen-tts-5-gw" },
+          }),
+      );
+      const err = await failure(speak(fetch as unknown as typeof globalThis.fetch));
+      expect((err as { code?: string }).code).toBe(UNKNOWN_REMOTE_STATE);
+      expect(err.message).toContain("multix openrouter generation gen-tts-5-gw");
+      expect(classifyError(err).retryable).toBe(false);
+      expect(fetch).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it("fails when a 2xx answer is JSON instead of audio", async () => {
     const fetch = async () => jsonResponse(200, { error: { message: "moderation flagged" } });
@@ -138,7 +156,10 @@ describe("createSpeech", () => {
       audioResponse(MP3, "audio/mpeg", { "content-length": String(10_000_000) });
     expect(await failure(speak(declared, 100))).toBeInstanceOf(ResponseTooLargeError);
     const streamed = async () => audioResponse(new Uint8Array(500), "audio/mpeg");
-    expect(await failure(speak(streamed, 100))).toBeInstanceOf(ResponseTooLargeError);
+    const err = await failure(speak(streamed, 100));
+    expect(err).toBeInstanceOf(ResponseTooLargeError);
+    // The dropped generation was still billed: name it.
+    expect(err.message).toContain("multix openrouter generation gen-tts-1-abc");
   });
 
   it("reports an unknown remote state when the connection drops after sending", async () => {

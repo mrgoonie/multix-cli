@@ -26,7 +26,7 @@ const CATALOG = {
     {
       id: "google/gemini-3.8-flash-tts",
       supported_voices: ["Kore", "Puck"],
-      pricing: { prompt: "0" },
+      pricing: { prompt: "0.0000005", completion: "0.000009" },
     },
     {
       id: "elevenlabs/eleven-v4",
@@ -206,7 +206,7 @@ describe("openrouter tts", () => {
       bytes: 44 + PCM.byteLength,
       cost_usd: null,
       cost_source: null,
-      estimated_cost_usd: null, // a zero catalog price is not an estimate
+      estimated_cost_usd: null, // priced per token, so no per-character estimate
       output: target,
     });
     const wav = fs.readFileSync(target);
@@ -308,10 +308,53 @@ describe("openrouter tts", () => {
     expect(result).toMatchObject({ turns: 2, input_chars: 7, sample_rate_source: "assumed" });
   });
 
+  it("uses the catalog spelling of the model for the format and the request", async () => {
+    stubFetch(() => audio(PCM, "audio/pcm;rate=24000;channels=1"));
+    runState.json = true;
+    await run("tts", "--text", "Hi", "--model", "Google/Gemini-3.8-Flash-TTS", "--voice", "Kore");
+    expect(posts()[0]?.body).toMatchObject({
+      model: "google/gemini-3.8-flash-tts",
+      response_format: "pcm",
+    });
+    const result = JSON.parse(stdout.find((l) => l.startsWith("{")) ?? "{}");
+    expect(result).toMatchObject({ model_requested: "google/gemini-3.8-flash-tts", format: "wav" });
+  });
+
+  it("saves MP3 bytes as .mp3 when pcm was asked for, instead of a corrupt WAV", async () => {
+    stubFetch(() => audio(MP3, "audio/mpeg"));
+    runState.json = true;
+    await run(
+      "tts",
+      "--text",
+      "Hi",
+      "--model",
+      "elevenlabs/eleven-v4",
+      "--voice",
+      "sarah",
+      "--format",
+      "wav",
+      "--no-cost",
+    );
+    expect(posts()[0]?.body).toMatchObject({ response_format: "pcm" });
+    const result = JSON.parse(stdout.find((l) => l.startsWith("{")) ?? "{}");
+    expect(result).toMatchObject({ format: "mp3", mime: "audio/mpeg", sample_rate_hz: null });
+    expect(result.path).toMatch(/\.mp3$/);
+    expect(fs.readFileSync(result.path)).toEqual(Buffer.from(MP3));
+  });
+
+  it("strips a BOM from --text-file", async () => {
+    stubFetch(() => audio(MP3, "audio/mpeg"));
+    const file = path.join(tmp, "text.txt");
+    fs.writeFileSync(file, "\uFEFFHello");
+    await run("tts", "--text-file", file, "--model", "fish-audio/drama-3", "--no-cost");
+    expect(posts()[0]?.body).toMatchObject({ input: "Hello" });
+  });
+
   it("validates flags before any request", async () => {
     stubFetch(() => audio(MP3, "audio/mpeg"));
     await expect(run("tts")).rejects.toThrow(/Provide the text/);
     await expect(run("tts", "--text", "x", "--model", "gemini")).rejects.toThrow(/provider\/name/);
+    await expect(run("tts", "--text", "x", "--prompt", "y")).rejects.toThrow(/only one/);
     await expect(run("tts", "--text", "x", "--speed", "9")).rejects.toThrow(/--speed/);
     await expect(run("tts", "--text", "x", "--cost-wait", "500")).rejects.toThrow(/--cost-wait/);
     await expect(run("tts", "--text", "x", "--provider-options", "[1]")).rejects.toThrow(
@@ -337,6 +380,9 @@ describe("openrouter speech-models and generation", () => {
     await run("speech-models");
     expect(allText()).toContain("elevenlabs/eleven-v4\t\t2 voices\t$80/1M chars");
     expect(allText()).toContain("fish-audio/drama-3\t\tno listed voices\t$2/1M chars");
+    expect(allText()).toContain(
+      "google/gemini-3.8-flash-tts\t\t2 voices\t$0.5/1M input tokens + $9/1M audio tokens",
+    );
     output = [];
     await run("speech-models", "--model", "google/gemini-3.8-flash-tts");
     expect(allText()).toContain("voices (2): Kore, Puck");
@@ -367,6 +413,9 @@ describe("openrouter speech-models and generation", () => {
       () => audio(MP3, "audio/mpeg"),
       () => json({}, 404),
     );
-    await expect(run("generation", "gen-1")).rejects.toThrow(/not found yet/);
+    await expect(run("generation", "gen-1")).rejects.toMatchObject({
+      code: "NOT_FOUND",
+      message: expect.stringContaining("not found (yet)"),
+    });
   });
 });
