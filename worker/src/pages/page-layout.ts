@@ -59,6 +59,42 @@ details.provider .secret:first-of-type{border-top:0;padding-top:0}
 .copy-btn[data-state=copied] .i-copy{display:none}.copy-btn[data-state=copied] .i-done{display:inline}
 .copy-btn[data-state=failed]{color:var(--danger);border-color:var(--danger)}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+main.wide{max-width:1100px}
+.tabs{display:flex;gap:4px;overflow-x:auto;border-bottom:1px solid var(--border);margin:-8px 0 20px;white-space:nowrap}
+.tabs a{padding:8px 12px;color:var(--muted);text-decoration:none;border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs a:hover{color:var(--text)}
+.tabs a[aria-current=page]{color:var(--text);border-bottom-color:var(--accent);font-weight:600}
+.kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px;margin-bottom:12px}
+.kpi{border:1px solid var(--border);border-radius:10px;padding:12px}
+.kpi .label{color:var(--muted);font-size:13px}
+.kpi .value{font-size:20px;font-weight:700;overflow-wrap:anywhere}
+.kpi.attention{border-color:var(--warn)}
+.table-wrap{overflow-x:auto;max-width:100%;margin-bottom:12px}
+table.data{min-width:100%;width:auto}
+table.data th,table.data td{padding:6px 10px 6px 0;text-align:left;white-space:nowrap;border-top:1px solid var(--border);vertical-align:top}
+table.data th{font-size:13px;color:var(--muted);font-weight:600;border-top:0}
+table.data td.num,table.data th.num{text-align:right}
+table.data tr:first-child td{border-top:1px solid var(--border)}
+.filters{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:12px}
+.filters label{display:grid;gap:2px;font-size:13px;color:var(--muted)}
+.filters input,.filters select,.form-grid input,.form-grid select{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:6px 8px;font:inherit;min-width:0}
+.form-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin-bottom:10px}
+.form-grid label{display:grid;gap:2px;font-size:13px;color:var(--muted)}
+.state{font-weight:600}.state.ok{color:var(--ok)}.state.warning{color:var(--warn)}.state.exceeded,.state.failed{color:var(--danger)}
+.meter{height:10px;border-radius:5px;background:var(--bg);border:1px solid var(--border);overflow:hidden;margin:6px 0}
+.meter>span{display:block;height:100%;background:var(--ok)}
+.meter.warning>span{background:var(--warn)}.meter.exceeded>span{background:var(--danger)}
+.chart{width:100%;height:auto;display:block}
+.chart .bar{fill:var(--accent)}.chart .unk{fill:var(--warn)}
+.chart .axis{stroke:var(--border)}.chart text{fill:var(--muted);font-size:11px}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+.swatch{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:middle}
+.wf-row{display:grid;grid-template-columns:minmax(70px,120px) 1fr minmax(60px,90px);gap:8px;align-items:center;margin:4px 0;font-size:13px}
+.wf-track{position:relative;height:14px;background:var(--bg);border:1px solid var(--border);border-radius:4px}
+.wf-bar{position:absolute;top:0;bottom:0;background:var(--accent);border-radius:3px;min-width:2px}
+dl.fields-list{display:grid;grid-template-columns:minmax(120px,max-content) 1fr;gap:4px 16px;margin:0}
+dl.fields-list dt{color:var(--muted)}dl.fields-list dd{margin:0;overflow-wrap:anywhere}
+.pager{display:flex;gap:8px;justify-content:space-between;flex-wrap:wrap}
 `;
 
 /** The copy script and its live region, only on pages that have a copy button. */
@@ -67,7 +103,12 @@ function copySupport(body: string): string {
   return `<div id="copy-status" class="sr-only" role="status" aria-live="polite"></div><script>${COPY_SCRIPT}</script>`;
 }
 
-export function page(title: string, body: string): string {
+export interface PageOptions {
+  /** Wider main column (about 1100px) for the usage and trace pages. */
+  wide?: boolean;
+}
+
+export function page(title: string, body: string, options: PageOptions = {}): string {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -77,7 +118,7 @@ export function page(title: string, body: string): string {
 <title>${escapeHtml(title)}</title>
 <style>${STYLES}</style>
 </head>
-<body><main>
+<body><main${options.wide ? ' class="wide"' : ""}>
 <header><div class="brand">multix <span>MCP</span></div></header>
 ${body}
 </main>${copySupport(body)}</body>

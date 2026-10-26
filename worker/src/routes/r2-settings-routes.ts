@@ -7,7 +7,7 @@
 
 import type { Account } from "../accounts/account-store.js";
 import { type R2SettingsProblem, parseR2Settings, r2Prefix } from "../accounts/r2-settings.js";
-import type { AppContext } from "../app-context.js";
+import { type AppContext, type AppDeps, recordActivity } from "../app-context.js";
 import { redirect } from "../http-responses.js";
 import { logEvent } from "../redaction.js";
 import { type R2AccessResult, checkR2Access } from "../storage/r2-access-check.js";
@@ -78,10 +78,18 @@ export async function handleR2SettingsPost(
   ctx: AppContext,
   account: Account,
   form: FormData,
+  deps: AppDeps = {},
 ): Promise<Response> {
+  const actor = `user:${account.id}`;
   if (form.get("intent") === "delete") {
     await ctx.accounts.deleteR2Settings(account.id);
     logEvent("info", "r2_settings_removed", { user: account.id });
+    await recordActivity(ctx.env, deps, account.id, {
+      actor,
+      kind: "storage.removed",
+      subject: null,
+      metadata: {},
+    });
     return redirect("/dashboard?notice=r2-removed");
   }
   const parsed = parseR2Settings({
@@ -101,5 +109,12 @@ export async function handleR2SettingsPost(
   }
   await ctx.accounts.saveR2Settings(account.id, parsed.settings);
   logEvent("info", "r2_settings_saved", { user: account.id });
+  // The bucket name only: no account id, key pair or public URL.
+  await recordActivity(ctx.env, deps, account.id, {
+    actor,
+    kind: "storage.updated",
+    subject: parsed.settings.bucket,
+    metadata: {},
+  });
   return redirect("/dashboard?notice=r2-saved");
 }

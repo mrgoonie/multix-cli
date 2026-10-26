@@ -8,9 +8,12 @@
  *   POST /dashboard/api-keys              create (shown once) or revoke a REST API key
  *   POST /dashboard/connections/revoke    disconnect one MCP client (revoke its grant)
  *   POST /dashboard/logout                end every dashboard session of the account
+ *   … /dashboard/{overview,usage,budgets,traces,activity}  usage ledger pages (finops-dashboard-routes.ts)
  *
  * Every POST needs a same-origin Origin header, a valid session and the
  * account's CSRF token. Values are validated but never echoed back.
+ * Account changes are appended to the account's activity log (actor
+ * `user:<id>`) with names and ids only, never key values or URLs.
  */
 
 import { isProviderSecretName, isValidSecretValue } from "../accounts/account-store.js";
@@ -20,7 +23,9 @@ import { r2Prefix } from "../accounts/r2-settings.js";
 import {
   type AppContext,
   type AppDeps,
+  ledgerFor,
   oauthHelpers,
+  recordActivity,
   sameOriginPost,
   signedInSession,
 } from "../app-context.js";
@@ -29,6 +34,7 @@ import { html, redirect, text } from "../http-responses.js";
 import type { NewApiKey } from "../pages/api-keys-card.js";
 import { type ConnectedClient, dashboardPage, signInPage } from "../pages/dashboard-page.js";
 import { logEvent } from "../redaction.js";
+import { handleFinopsGet, handleFinopsPost, isFinopsPath } from "./finops-dashboard-routes.js";
 import { startGithubSignIn } from "./github-sign-in-routes.js";
 import { type Notice, R2_NOTICES, handleR2SettingsPost } from "./r2-settings-routes.js";
 
@@ -97,6 +103,7 @@ async function connectedClients(ctx: AppContext, account: Account): Promise<Conn
 
 async function showDashboard(
   ctx: AppContext,
+  deps: AppDeps,
   request: Request,
   newApiKey?: NewApiKey,
 ): Promise<Response> {
@@ -125,6 +132,7 @@ async function showDashboard(
       newApiKey,
       clients: await connectedClients(ctx, account),
       notice: !newApiKey && Object.hasOwn(NOTICES, noticeKey) ? NOTICES[noticeKey] : undefined,
+      ledger: ledgerFor(ctx.env, deps, account.id) !== undefined,
     }),
   );
 }
@@ -143,9 +151,14 @@ async function handlePost(
   if (!(await csrfValid(ctx.sessionSecret, session, form.get("csrf")))) {
     return text(403, "Forbidden");
   }
+  if (isFinopsPath(pathname)) return handleFinopsPost(ctx, deps, signedIn, form, pathname);
+  const actor = `user:${account.id}`;
+  const activity = (kind: string, subject: string | null, metadata = {}) =>
+    recordActivity(ctx.env, deps, account.id, { actor, kind, subject, metadata });
 
   if (pathname === "/dashboard/logout") {
     await ctx.accounts.endSessions(account.id);
+    await activity("auth.signed_out", null);
     return redirect("/dashboard", { "set-cookie": clearCookie(SESSION_COOKIE) });
   }
 
@@ -155,6 +168,7 @@ async function handlePost(
     if (form.get("intent") === "delete") {
       await ctx.accounts.deleteSecret(account.id, name);
       logEvent("info", "provider_key_removed", { user: account.id, name });
+      await activity("provider_key.removed", name);
       return redirect("/dashboard?notice=removed");
     }
     const value = String(form.get("value") ?? "").trim();
@@ -163,10 +177,11 @@ async function handlePost(
     }
     await ctx.accounts.setSecret(account.id, name, value);
     logEvent("info", "provider_key_saved", { user: account.id, name });
+    await activity("provider_key.saved", name);
     return redirect("/dashboard?notice=saved");
   }
 
-  if (pathname === "/dashboard/storage") return handleR2SettingsPost(ctx, account, form);
+  if (pathname === "/dashboard/storage") return handleR2SettingsPost(ctx, account, form, deps);
 
   if (pathname === "/dashboard/api-keys") {
     const store = new ApiKeyStore(ctx.env.ACCOUNTS_KV);
@@ -175,15 +190,17 @@ async function handlePost(
       const revoked = /^[A-Za-z0-9_-]{1,128}$/.test(id) && (await store.revoke(account.id, id));
       if (!revoked) return redirect("/dashboard?notice=api-key-not-found");
       logEvent("info", "api_key_revoked", { user: account.id });
+      await activity("api_key.revoked", id);
       return redirect("/dashboard?notice=api-key-revoked");
     }
     const name = String(form.get("name") ?? "").trim();
     if (!API_KEY_NAME_RE.test(name)) return redirect("/dashboard?notice=api-key-invalid-name");
     try {
-      const { key } = await store.create(account.id, name);
+      const { key, record } = await store.create(account.id, name);
       logEvent("info", "api_key_created", { user: account.id });
+      await activity("api_key.created", record.id, { name });
       // Rendered in this response only: never stored, never put in a URL.
-      return showDashboard(ctx, request, { name, key });
+      return showDashboard(ctx, deps, request, { name, key });
     } catch (error) {
       if (error instanceof TooManyApiKeysError) return redirect("/dashboard?notice=api-key-limit");
       throw error;
@@ -202,6 +219,12 @@ async function handlePost(
     // revokeGrant is scoped to the account id, so another user's grant id does nothing.
     await oauth.revokeGrant(grantId, account.id);
     logEvent("info", "mcp_client_disconnected", { user: account.id, subscriptions: removed });
+    if (grant) {
+      const client = await oauth.lookupClient(grant.clientId).catch(() => null);
+      await activity("mcp_client.disconnected", grant.clientId, {
+        client_name: client?.clientName ?? null,
+      });
+    }
     return redirect("/dashboard?notice=disconnected");
   }
 
@@ -216,7 +239,10 @@ export async function handleDashboard(
   const url = new URL(request.url);
   const { pathname } = url;
   if (request.method === "GET" || request.method === "HEAD") {
-    if (pathname === "/dashboard" || pathname === "/dashboard/") return showDashboard(ctx, request);
+    if (pathname === "/dashboard" || pathname === "/dashboard/") {
+      return showDashboard(ctx, deps, request);
+    }
+    if (isFinopsPath(pathname)) return handleFinopsGet(ctx, deps, request);
     if (pathname === "/dashboard/login") {
       return startGithubSignIn(ctx, url.searchParams.get("return_to") ?? "/dashboard");
     }

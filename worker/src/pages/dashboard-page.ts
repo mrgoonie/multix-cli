@@ -10,6 +10,7 @@ import type { ApiKeyRecord } from "../accounts/api-key-store.js";
 import { escapeHtml } from "../http-responses.js";
 import { type NewApiKey, apiKeysCard, newApiKeyNotice } from "./api-keys-card.js";
 import { copyBlock } from "./copy-button.js";
+import { dashboardTabs } from "./finops-format.js";
 import { formatDate, page } from "./page-layout.js";
 import { providerKeysCard } from "./provider-keys-card.js";
 import { type R2SettingsSummary, r2SettingsCard } from "./r2-settings-card.js";
@@ -35,6 +36,8 @@ export interface DashboardView {
   newApiKey?: NewApiKey;
   clients: ConnectedClient[];
   notice?: { text: string; warn?: boolean };
+  /** The usage ledger is configured: show the usage tabs. */
+  ledger?: boolean;
 }
 
 export function signInPage(notice?: string): string {
@@ -74,7 +77,7 @@ export function dashboardPage(view: DashboardView): string {
     : "";
   return page(
     "multix MCP dashboard",
-    `${notice}${view.newApiKey ? newApiKeyNotice(view.newApiKey) : ""}<section class="card">
+    `${view.ledger ? dashboardTabs("account") : ""}${notice}${view.newApiKey ? newApiKeyNotice(view.newApiKey) : ""}<section class="card">
 <div class="row" style="justify-content:space-between">
 <div>${avatar}<strong>${escapeHtml(account.login)}</strong></div>
 <form method="post" action="/dashboard/logout"><input type="hidden" name="csrf" value="${escapeHtml(view.csrf)}"><button class="btn secondary small" title="Ends the dashboard session on every device">Sign out</button></form>
