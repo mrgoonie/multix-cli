@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.18.2](https://github.com/mrgoonie/multix-cli/compare/v1.18.1...v1.18.2) (2026-10-26)
+
+
+### Fixed
+
+* **agent:** never report an account credit balance as credits spent ([#306](https://github.com/mrgoonie/multix-cli/issues/306)) ([218e57a](https://github.com/mrgoonie/multix-cli/commit/218e57a12e29e4e265c8a7548aa83019166ea850))
+
 ## [1.18.1](https://github.com/mrgoonie/multix-cli/compare/v1.18.0...v1.18.1) (2026-10-26)
 
 
