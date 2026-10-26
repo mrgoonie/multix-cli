@@ -7,11 +7,12 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type FetchFn, readCatalog } from "../../../src/capabilities/model-discovery.js";
 import {
   DEFAULT_MODELS_TTL_S,
   discoverCatalog,
+  modelsTtlSeconds,
 } from "../../../src/commands/agent/model-discovery-cache.js";
 
 type Route = { status?: number; body: unknown } | Error;
@@ -114,6 +115,14 @@ describe("catalog parsing", () => {
     ]);
     const models = (await readCatalog("openrouter", "image-edit", edit.fn)).models;
     expect(models.map((m) => m.model)).toEqual(["edit"]);
+  });
+
+  it("strips control characters from catalog text", async () => {
+    const { fn } = fakeFetch([
+      ["openrouter.ai", { body: { data: [{ id: "v/tts\u001b[31m", name: "\u0007Bell\u009b" }] } }],
+    ]);
+    const [model] = (await readCatalog("openrouter", "speech", fn)).models;
+    expect(model).toMatchObject({ model: "v/tts[31m", name: "Bell" });
   });
 
   it("throws on HTTP errors and unexpected shapes, without the query string", async () => {
@@ -256,7 +265,45 @@ describe("catalog cache", () => {
     expect(calls).toEqual([]);
   });
 
-  it("defaults to a one-day TTL", () => {
+  it("treats a cache stamped in the future as expired", async () => {
+    await discoverCatalog("fal", "speech", { dir, ttlSeconds, now, fetchFn: fal(["old/tts"]).fn });
+    clock -= 365 * 86_400_000; // the file now looks a year in the future
+    const result = await discoverCatalog("fal", "speech", {
+      dir,
+      ttlSeconds,
+      now,
+      fetchFn: fal(["new/tts"]).fn,
+    });
+    expect(result.source.state).toBe("fresh");
+    expect(result.models.map((m) => m.model)).toEqual(["new/tts"]);
+  });
+
+  it("drops malformed cache entries instead of printing them", async () => {
+    await discoverCatalog("fal", "speech", { dir, ttlSeconds, now, fetchFn: fal(["a/tts"]).fn });
+    const file = path.join(dir, "fal-speech.json");
+    const data = JSON.parse(fs.readFileSync(file, "utf8"));
+    data.models.push({ model: 42 }, null, { provider: "openrouter", model: "x/y" });
+    fs.writeFileSync(file, JSON.stringify(data));
+    const cached = await discoverCatalog("fal", "speech", { dir, ttlSeconds, now });
+    expect(cached.source.state).toBe("cached");
+    expect(cached.models.map((m) => m.model)).toEqual(["a/tts"]);
+  });
+
+  it("defaults to a one-day TTL and caps MULTIX_MODELS_TTL at a week", () => {
     expect(DEFAULT_MODELS_TTL_S).toBe(86_400);
+    const ttl = (value: string) => {
+      vi.stubEnv("MULTIX_MODELS_TTL", value);
+      return modelsTtlSeconds();
+    };
+    try {
+      expect(ttl("")).toBe(86_400);
+      expect(ttl("abc")).toBe(86_400);
+      expect(ttl("-5")).toBe(86_400);
+      expect(ttl("0")).toBe(0);
+      expect(ttl("3600")).toBe(3600);
+      expect(ttl("999999999")).toBe(7 * 86_400);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });

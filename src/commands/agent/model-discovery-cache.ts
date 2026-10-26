@@ -33,9 +33,13 @@ export function modelsCacheDir(): string {
     : path.join(os.homedir(), ".multix", "cache", "models");
 }
 
+/** Longest TTL honoured, so a setting cannot keep a removed model "listed" for long. */
+export const MAX_MODELS_TTL_S = 7 * 24 * 60 * 60;
+
 export function modelsTtlSeconds(): number {
-  const raw = Number(process.env.MULTIX_MODELS_TTL);
-  return Number.isFinite(raw) && raw >= 0 ? raw : DEFAULT_MODELS_TTL_S;
+  const value = process.env.MULTIX_MODELS_TTL?.trim();
+  const raw = value ? Number(value) : Number.NaN;
+  return Number.isFinite(raw) && raw >= 0 ? Math.min(raw, MAX_MODELS_TTL_S) : DEFAULT_MODELS_TTL_S;
 }
 
 interface CacheFile {
@@ -61,7 +65,15 @@ function readCache(file: string, provider: string, task: Task): CacheFile | unde
     ) {
       return undefined;
     }
-    return data as CacheFile;
+    const models = data.models.filter(
+      (m): m is DiscoveredModel =>
+        typeof m === "object" &&
+        m !== null &&
+        m.provider === provider &&
+        typeof m.model === "string" &&
+        m.model.length > 0,
+    );
+    return { ...(data as CacheFile), models };
   } catch {
     return undefined; // missing or corrupt: treat as no cache
   }
@@ -111,7 +123,9 @@ export async function discoverCatalog(
   const file = path.join(opts.dir ?? modelsCacheDir(), `${provider}-${task}.json`);
   const cached = readCache(file, provider, task);
   const ttlMs = (opts.ttlSeconds ?? modelsTtlSeconds()) * 1000;
-  if (cached && !opts.refresh && now() - Date.parse(cached.fetched_at) < ttlMs) {
+  const age = cached ? now() - Date.parse(cached.fetched_at) : Number.NaN;
+  // A future fetched_at (clock change, edited file) counts as expired, not fresh forever.
+  if (cached && !opts.refresh && age >= 0 && age < ttlMs) {
     return fromCache(cached, "cached");
   }
   try {

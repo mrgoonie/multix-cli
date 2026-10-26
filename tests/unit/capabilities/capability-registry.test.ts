@@ -208,6 +208,14 @@ describe("merged model views", () => {
     });
   });
 
+  it("does not call a verified model missing from a truncated catalog", () => {
+    const views = mergeModelViews("speech", [
+      { source: { ...source("fal", "fresh"), truncated: true }, models: [] },
+    ]);
+    expect(views.length).toBe(verifiedFal.length);
+    expect(views.every((v) => v.listed === null && v.status === undefined)).toBe(true);
+  });
+
   it("leaves verified models unknown when the catalog could not be read", () => {
     const views = mergeModelViews("speech", [{ source: source("fal", "unavailable"), models: [] }]);
     expect(views.map((v) => v.model)).toEqual(verifiedFal);

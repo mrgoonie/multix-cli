@@ -146,8 +146,13 @@ function taskPayload(keys: ProviderKeys, groups: CliGroup[], task: Task): Record
   };
 }
 
-function modelPayload(keys: ProviderKeys, groups: CliGroup[], id: string): Record<string, unknown> {
-  const cap = findModelCapability(id);
+function modelPayload(
+  keys: ProviderKeys,
+  groups: CliGroup[],
+  id: string,
+  provider?: string,
+): Record<string, unknown> {
+  const cap = findModelCapability(id, provider);
   const runnablePaths = new Set(groups.flatMap((g) => runnable(g).map((c) => c.command)));
   if (!cap || !runnablePaths.has(cap.command)) {
     return {
@@ -175,7 +180,7 @@ export function catalogPayload(
   filter: CatalogFilter = {},
 ): Record<string, unknown> {
   const groups = CLI_CATALOG.groups.filter((g) => runnable(g).length > 0);
-  if (filter.model !== undefined) return modelPayload(keys, groups, filter.model);
+  if (filter.model !== undefined) return modelPayload(keys, groups, filter.model, group);
   if (filter.task !== undefined) {
     const task = parseTask(filter.task);
     const scope = group === undefined ? groups : groups.filter((g) => g.group === group);

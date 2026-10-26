@@ -184,7 +184,7 @@ export function openApiDocument(origin: string): Json {
         get: {
           summary: "CLI commands the server can run",
           description:
-            "Without group: every group, its commands and whether your saved keys cover it. With group: positionals, options, file inputs and server caps of each command. With task: only the commands and verified models for that task (combine with group to stay in one group). With model: a verified model's inputs, voices and output formats, or verified null when its inputs are unknown.",
+            "Without group: every group, its commands and whether your saved keys cover it. With group: positionals, options, file inputs and server caps of each command. With task: only the commands and verified models for that task (combine with group to stay in one group). With model (group then names its provider, task is ignored): a verified model's inputs, voices and output formats, or verified null when its inputs are unknown.",
           operationId: "getCatalog",
           parameters: [
             {

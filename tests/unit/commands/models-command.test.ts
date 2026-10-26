@@ -121,8 +121,28 @@ describe("multix models --json", () => {
     });
   });
 
+  it("matches a verified model only under its own provider", async () => {
+    const other = (await models(
+      "--model",
+      "google/gemini-3.8-flash-tts",
+      "--provider",
+      "openrouter",
+    )) as Json;
+    expect(other.verified).toBeNull();
+    const fal = (await models(
+      "--model",
+      "google/gemini-3.8-flash-tts",
+      "--provider",
+      "fal",
+    )) as Json;
+    expect(fal.verified).not.toBeNull();
+  });
+
   it("rejects --live without a task and an unknown task", async () => {
     await expect(models("--live")).rejects.toBeInstanceOf(ValidationError);
+    await expect(models("--model", "someone/unknown", "--live")).rejects.toBeInstanceOf(
+      ValidationError,
+    );
     await expect(models("--task", "telepathy")).rejects.toBeInstanceOf(ValidationError);
   });
 });

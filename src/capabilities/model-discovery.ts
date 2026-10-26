@@ -51,7 +51,12 @@ async function getJson(fetchFn: FetchFn, url: string) {
   return (await res.json()) as unknown;
 }
 
-const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
+/** Non-empty catalog text with control characters removed (it reaches terminals). */
+const str = (v: unknown) => {
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: stripping them is the point
+  const s = typeof v === "string" ? v.replace(/[\u0000-\u001f\u007f-\u009f]/g, "") : "";
+  return s || undefined;
+};
 
 interface FalPage {
   models?: Array<{

@@ -68,6 +68,9 @@ export function mergeModelViews(
       .filter((c) => c.source.state !== "unavailable" && c.source.state !== "unsupported")
       .map((c) => [c.source.provider, c.models]),
   );
+  const truncated = new Set(
+    catalogs.filter((c) => c.source.truncated).map((c) => c.source.provider),
+  );
   const views: ModelView[] = [];
   const seen = new Set<string>();
   for (const cap of verifiedModels({ task, ...(provider ? { provider } : {}) })) {
@@ -81,10 +84,11 @@ export function mergeModelViews(
       task,
       verified: true,
       command: cap.command,
-      listed: listing ? Boolean(found) : null,
+      // A truncated catalog cannot prove absence: unknown, not missing.
+      listed: found ? true : listing && !truncated.has(cap.provider) ? false : null,
       ...(found?.status
         ? { status: found.status }
-        : listing && !found
+        : listing && !found && !truncated.has(cap.provider)
           ? {
               status: "missing",
               note: "not in the provider catalog: removed or renamed; do not run it until re-verified",

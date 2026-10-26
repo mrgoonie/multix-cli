@@ -84,7 +84,8 @@ through unverified. Only models checked against the provider's own schema are
 when its `--input` has fields such a model does not take, misses a required
 one, or uses a value outside its listed choices. `--live` (with `--task`) marks
 each catalog model verified or not, and a verified model the catalog no longer
-lists with status `missing`. Catalogs are cached for a day in `~/.multix/cache/models`
+lists with status `missing` (unless the catalog was too long to read in full,
+`truncated`, when it stays unknown). Catalogs are cached for a day in `~/.multix/cache/models`
 (`--refresh` refetches); offline, a stale copy is used, or the catalog is
 reported `unavailable` and nothing is claimed available.
 
@@ -149,7 +150,7 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `MULTIX_HISTORY` | No | `0` stops recording runs in `~/.multix/history.jsonl` |
 | `MULTIX_HISTORY_FILE` | No | Run ledger path (shell or `~/.multix/.env` only) |
 | `MULTIX_CACHE_DIR` | No | Cache root for `multix models --live` catalogs (default `~/.multix/cache`; shell or `~/.multix/.env` only) |
-| `MULTIX_MODELS_TTL` | No | Seconds a cached catalog stays fresh (default `86400`) |
+| `MULTIX_MODELS_TTL` | No | Seconds a cached catalog stays fresh (default `86400`, at most `604800`) |
 | `OPENROUTER_IMAGE_MODEL` | No | Default OpenRouter model |
 | `OPENROUTER_FALLBACK_MODELS` | No | Comma-separated fallback model ids |
 | `OPENAI_IMAGE_MODEL` | No | Default OpenAI image model (default `gpt-image-2`) |

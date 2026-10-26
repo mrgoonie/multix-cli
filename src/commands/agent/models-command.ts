@@ -91,6 +91,7 @@ function lister(program: Command, group: string, task: string): string | undefin
       (c) =>
         LIST_COMMANDS.has(c.name()) &&
         (c.name() !== "voices" || task === "speech") &&
+        (c.name() !== "avatars" || task !== "speech") &&
         (c.name() !== "video-models" || task.includes("video")),
     );
   return found
@@ -201,8 +202,8 @@ async function liveModels(
   };
 }
 
-function printInspect(id: string, live?: ModelView[]): void {
-  const cap = findModelCapability(id);
+function printInspect(id: string, provider?: string, live?: ModelView[]): void {
+  const cap = findModelCapability(id, provider);
   if (!cap) {
     const seen = live?.filter((m) => m.model === id) ?? [];
     console.log(
@@ -346,8 +347,13 @@ export function registerModelsCommand(program: Command): void {
         throw new ValidationError("--live needs --task (e.g. multix models --task speech --live)");
       }
       if (opts.model !== undefined) {
-        const cap = findModelCapability(opts.model);
+        const cap = findModelCapability(opts.model, opts.provider);
         const liveTask = task ?? cap?.tasks[0];
+        if ((opts.live || opts.refresh) && !liveTask) {
+          throw new ValidationError(
+            `--live needs --task for a model multix has not verified (e.g. multix models --model ${opts.model} --task speech --live)`,
+          );
+        }
         const live =
           (opts.live || opts.refresh) && liveTask ? await liveModels(liveTask, opts) : undefined;
         const listed = live?.models.filter((m) => m.model === opts.model);
@@ -363,7 +369,7 @@ export function registerModelsCommand(program: Command): void {
           );
           return;
         }
-        printInspect(opts.model, live?.models);
+        printInspect(opts.model, opts.provider, live?.models);
         if (live) printLive(listed ?? [], live.sources);
         return;
       }
