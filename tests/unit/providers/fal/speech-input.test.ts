@@ -154,6 +154,22 @@ describe("buildSpeechRequest", () => {
   });
 });
 
+describe("listFalSpeechCatalog control characters", () => {
+  it("drops terminal control characters from catalog text", async () => {
+    const fetchFn = (async () =>
+      new Response(
+        JSON.stringify({
+          models: [
+            { endpoint_id: "fal-ai/x\u001b[2J-tts", metadata: { display_name: "A\u0007B" } },
+          ],
+        }),
+      )) as typeof fetch;
+    expect(await listFalSpeechCatalog(fetchFn)).toEqual([
+      { endpoint_id: "fal-ai/x[2J-tts", display_name: "AB" },
+    ]);
+  });
+});
+
 describe("listFalSpeechCatalog", () => {
   it("follows the cursor and keeps only well-formed entries; sends no key", async () => {
     const seen: Array<{ url: string; headers: unknown }> = [];

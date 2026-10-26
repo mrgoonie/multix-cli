@@ -169,7 +169,9 @@ header, bất kể URL hay Content-Type ghi gì. Định dạng thô không có 
 (`pcm_*` → `.pcm`, `ulaw_8000` → `.ulaw`, `alaw_8000` → `.alaw`) được đặt tên
 theo định dạng đã yêu cầu. File rỗng, trang lỗi, hoặc byte không đúng container
 fal khai báo sẽ bị từ chối và không để lại file nào. `fal result <model> <id>
---download` áp dụng cùng các kiểm tra cho job giọng nói.
+--download` áp dụng cùng các kiểm tra cho job giọng nói; với định dạng thô hãy
+thêm `--format <fmt>` (`result_command` trong receipt của `--detach` đã có sẵn),
+nếu không thì không thể đặt tên cho các byte không có header.
 
 ## Status và result
 
@@ -179,7 +181,7 @@ mục đích này.
 
 ```bash
 multix fal status <model> <requestId>
-multix fal result <model> <requestId> [--download] [--output-dir <dir>]
+multix fal result <model> <requestId> [--download] [--output-dir <dir>] [--format <fmt>]
 ```
 
 `status` in trạng thái hàng đợi của fal (`IN_QUEUE`, `IN_PROGRESS` hoặc

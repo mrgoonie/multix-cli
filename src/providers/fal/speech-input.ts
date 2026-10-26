@@ -32,9 +32,10 @@ export interface SpeechRequest {
 }
 
 const FIELD_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const RESERVED_FIELDS = new Set(["__proto__", "constructor", "prototype"]);
 function fieldName(flag: string, value: string | undefined): string | undefined {
   if (value === undefined) return undefined;
-  if (!FIELD_RE.test(value)) {
+  if (!FIELD_RE.test(value) || RESERVED_FIELDS.has(value)) {
     throw new ValidationError(`${flag} must be a plain input field name, got "${value}"`);
   }
   return value;
@@ -42,6 +43,25 @@ function fieldName(flag: string, value: string | undefined): string | undefined 
 
 function verifiedIds(): string {
   return FAL_SPEECH_MODELS.map((m) => m.id).join(", ");
+}
+
+function checkText(text: string, profile: FalSpeechModel | undefined): void {
+  if (text.trim() === "") throw new ValidationError("The text to speak is blank");
+  // Counted in code points, as fal's schema validation does.
+  const chars = [...text].length;
+  if (profile?.maxTextChars && chars > profile.maxTextChars) {
+    throw new ValidationError(
+      `${profile.id} accepts at most ${profile.maxTextChars} characters of text, got ${chars}`,
+    );
+  }
+}
+
+function checkFormat(format: string, profile: FalSpeechModel, flag: string): void {
+  if (!profile.formats?.includes(format)) {
+    throw new ValidationError(
+      `Unknown ${flag} "${format}" for ${profile.id}. Formats: ${profile.formats?.join(", ") ?? "none"}`,
+    );
+  }
 }
 
 function unsupported(flag: string, model: string): ValidationError {
@@ -60,26 +80,26 @@ export function buildSpeechRequest(flags: SpeechFlags): SpeechRequest {
     );
   }
   const voiceField = fieldName("--voice-field", flags.voiceField) ?? profile?.voiceField;
+  if (voiceField === textField) {
+    throw new ValidationError(`--voice-field and --text-field are both "${textField}"`);
+  }
+  const has = (field: string) => Object.hasOwn(extra, field);
 
   const input: Record<string, unknown> = { ...extra };
   const set = (flag: string, field: string, value: unknown) => {
-    if (field in extra) {
+    if (has(field)) {
       throw new ValidationError(`${flag} and --input both set "${field}"; use one of them`);
     }
     input[field] = value;
   };
 
   if (flags.text !== undefined) {
-    if (flags.text.trim() === "") throw new ValidationError("The text to speak is blank");
-    // Counted in code points, as fal's schema validation does.
-    const chars = [...flags.text].length;
-    if (profile?.maxTextChars && chars > profile.maxTextChars) {
-      throw new ValidationError(
-        `${profile.id} accepts at most ${profile.maxTextChars} characters of text, got ${chars}`,
-      );
-    }
+    checkText(flags.text, profile);
     set("--text", textField, flags.text);
-  } else if (!(textField in extra) && !(profile?.dialogueField && profile.dialogueField in extra)) {
+  } else if (has(textField)) {
+    const text = extra[textField];
+    if (typeof text === "string") checkText(text, profile);
+  } else if (!(profile?.dialogueField && has(profile.dialogueField))) {
     throw new ValidationError(
       "Provide the text: --text <str>, --text-file <path>, or a positional",
     );
@@ -114,15 +134,16 @@ export function buildSpeechRequest(flags: SpeechFlags): SpeechRequest {
   let format: string | undefined;
   if (flags.format !== undefined) {
     if (!profile?.formatField || !profile.formats) throw unsupported("--format", flags.model);
-    if (!profile.formats.includes(flags.format)) {
-      throw new ValidationError(
-        `Unknown --format "${flags.format}" for ${profile.id}. Formats: ${profile.formats.join(", ")}`,
-      );
-    }
+    checkFormat(flags.format, profile, "--format");
     set("--format", profile.formatField, flags.format);
     format = flags.format;
-  } else if (profile?.formatField && typeof extra[profile.formatField] === "string") {
-    format = extra[profile.formatField] as string;
+  } else if (profile?.formatField && has(profile.formatField)) {
+    const extraFormat = extra[profile.formatField];
+    if (typeof extraFormat !== "string") {
+      throw new ValidationError(`--input "${profile.formatField}" must be a string`);
+    }
+    checkFormat(extraFormat, profile, `--input ${profile.formatField}`);
+    format = extraFormat;
   }
 
   return { input, ...(profile ? { profile } : {}), ...(format ? { format } : {}) };

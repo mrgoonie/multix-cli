@@ -128,6 +128,8 @@ export function registerFalTtsCommand(parent: Command): void {
           requestId: accepted.request_id,
           status: accepted.status,
           input: request.input,
+          // Raw formats (pcm, ulaw, alaw) have no header; resuming must know which was asked for.
+          ...(request.format ? { resultArgs: ["--format", request.format] } : {}),
         });
         if (opts.detach || opts.receipt) receipt = persistReceipt(receipt, opts.receipt, logger);
       };

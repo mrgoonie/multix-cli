@@ -312,8 +312,12 @@ export async function downloadResultMedia(
       const typed = extFromUrl(url, "") === "" ? extFromContentType(contentType) : undefined;
       if (typed) {
         const renamed = filepath.replace(/\.bin$/, typed);
-        fs.renameSync(filepath, renamed);
-        filepath = renamed;
+        try {
+          fs.renameSync(filepath, renamed);
+          filepath = renamed;
+        } catch {
+          // The download succeeded; keep it under its .bin name.
+        }
       }
       saved.push(filepath);
       logger.success(`Saved ${filepath}`);

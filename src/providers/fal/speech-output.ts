@@ -11,9 +11,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { audioExtFromMime, looksLikeText, sniffAudioKind } from "../../core/audio-kind.js";
 import { ProviderError } from "../../core/errors.js";
-import { downloadToFile } from "../../core/http-client.js";
+import { downloadToFile, maxDownloadBytes } from "../../core/http-client.js";
 import type { Logger } from "../../core/logger.js";
 import { redactUrl } from "../../core/redact.js";
+import { checkUrlSafety } from "../../core/url-safety.js";
 import { extractMediaUrls } from "./run-helpers.js";
 
 /** Formats without a header: they cannot be sniffed, only trusted from the request. */
@@ -54,9 +55,14 @@ export function audioRefOf(result: unknown): AudioRef | undefined {
   return first ? { url: first } : undefined;
 }
 
+/** An extension safe to put in a file name; anything else is ignored. */
+function safeExt(ext: string | undefined): string | undefined {
+  const e = ext?.toLowerCase();
+  return e && /^[a-z0-9]{1,5}$/.test(e) ? e : undefined;
+}
+
 function extOfName(name: string | undefined): string | undefined {
-  const ext = name ? path.extname(name).slice(1).toLowerCase() : "";
-  return /^[a-z0-9]{1,5}$/.test(ext) ? ext : undefined;
+  return safeExt(name ? path.extname(name).slice(1) : undefined);
 }
 
 function extOfUrl(url: string): string | undefined {
@@ -84,16 +90,18 @@ export function resolveAudioExt(
   hints: { expected?: string; ref: AudioRef; responseType?: string },
 ): { ext: string; verified: boolean; declared?: string } {
   if (head.length === 0) throw new ProviderError("fal returned an empty audio file", "fal");
-  if (looksLikeText(head)) {
-    throw new ProviderError("fal returned text (an error page or JSON), not audio", "fal");
-  }
   const declared =
-    hints.expected ??
+    safeExt(hints.expected) ??
     extOfName(hints.ref.fileName) ??
     audioExtFromMime(hints.ref.contentType) ??
     extOfUrl(hints.ref.url) ??
     audioExtFromMime(hints.responseType);
-  const sniffed = sniffAudioKind(head, { frameSync: !(declared && RAW_EXTS.has(declared)) });
+  const raw = declared !== undefined && RAW_EXTS.has(declared);
+  // Raw samples can start with any byte, including "<", "{" or "[".
+  if (!raw && looksLikeText(head)) {
+    throw new ProviderError("fal returned text (an error page or JSON), not audio", "fal");
+  }
+  const sniffed = sniffAudioKind(head, { frameSync: !raw });
   if (sniffed) return { ext: sniffed, verified: true, ...(declared ? { declared } : {}) };
   if (declared && SNIFFABLE.has(declared)) {
     throw new ProviderError(
@@ -101,7 +109,7 @@ export function resolveAudioExt(
       "fal",
     );
   }
-  if (declared && RAW_EXTS.has(declared)) return { ext: declared, verified: false, declared };
+  if (raw) return { ext: declared, verified: false, declared };
   return { ext: declared ?? "bin", verified: false, ...(declared ? { declared } : {}) };
 }
 
@@ -130,7 +138,14 @@ export async function saveSpeechAudio(opts: {
   const tmp = path.join(opts.outDir, `${base}.download`);
   let downloaded: Awaited<ReturnType<typeof downloadToFile>>;
   try {
-    downloaded = await downloadToFile(ref.url, { dest: tmp });
+    downloaded = await downloadToFile(ref.url, {
+      dest: tmp,
+      maxBytes: maxDownloadBytes(),
+      // Every redirect hop: https only, never a local or private address.
+      validateUrl: (hop) => {
+        checkUrlSafety(hop, { provider: "fal" });
+      },
+    });
   } catch (e) {
     fs.rmSync(tmp, { force: true });
     throw new ProviderError(
@@ -158,7 +173,12 @@ export async function saveSpeechAudio(opts: {
     opts.logger.warn(`Could not verify the audio container; saved as .${resolved.ext}`);
   }
   const dest = path.join(opts.outDir, `${base}.${resolved.ext}`);
-  fs.renameSync(tmp, dest);
+  try {
+    fs.renameSync(tmp, dest);
+  } catch (e) {
+    fs.rmSync(tmp, { force: true });
+    throw e;
+  }
   opts.logger.success(`Saved ${dest}`);
   return { path: dest, format: resolved.ext, bytes: downloaded.bytes, verified: resolved.verified };
 }

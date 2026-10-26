@@ -59,6 +59,8 @@ export function buildReceipt(opts: {
   requestId: string;
   status?: string;
   input: Record<string, unknown>;
+  /** Extra `fal result` arguments needed to save the output correctly, e.g. ["--format", "pcm_16000"]. */
+  resultArgs?: string[];
   now?: Date;
 }): FalReceipt {
   const target = `${shellQuote(opts.model)} ${shellQuote(opts.requestId)}`;
@@ -70,7 +72,9 @@ export function buildReceipt(opts: {
     submitted_at: (opts.now ?? new Date()).toISOString(),
     input_hash: hashInput(opts.input),
     status_command: `multix fal status ${target}`,
-    result_command: `multix fal result ${target} --download`,
+    result_command: ["multix fal result", target, "--download", ...(opts.resultArgs ?? [])]
+      .map((a, i) => (i < 3 ? a : shellQuote(a)))
+      .join(" "),
   };
 }
 

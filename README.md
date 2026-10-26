@@ -559,7 +559,7 @@ multix fal tts "Xin chào" [--text-file <path>] [-m <model>] [--voice <name>] [-
 multix fal voices [<model>] [--live]           # models, voices, formats; one model prints typed inputs as JSON
 
 multix fal status <model> <requestId>
-multix fal result <model> <requestId> [--download] [--output-dir <dir>]
+multix fal result <model> <requestId> [--download] [--output-dir <dir>] [--format <fmt>]   # --format: raw speech formats (pcm_*, ulaw_8000, alaw_8000)
 ```
 
 **Notes:**

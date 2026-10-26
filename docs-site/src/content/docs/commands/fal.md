@@ -169,7 +169,8 @@ with no header (`pcm_*` → `.pcm`, `ulaw_8000` → `.ulaw`, `alaw_8000` →
 `.alaw`) are named from the requested format. An empty file, an error page, or
 bytes that are not the container fal declared are refused and no file is left
 behind. `fal result <model> <id> --download` applies the same checks to a
-speech job.
+speech job; for a raw format add `--format <fmt>` (a `--detach` receipt's
+`result_command` already includes it), or the headerless bytes cannot be named.
 
 ## Status and result
 
@@ -179,7 +180,7 @@ this purpose.
 
 ```bash
 multix fal status <model> <requestId>
-multix fal result <model> <requestId> [--download] [--output-dir <dir>]
+multix fal result <model> <requestId> [--download] [--output-dir <dir>] [--format <fmt>]
 ```
 
 `status` prints fal's queue status (`IN_QUEUE`, `IN_PROGRESS` or `COMPLETED`)

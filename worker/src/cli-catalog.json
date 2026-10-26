@@ -6617,6 +6617,16 @@
               "negatable": false
             },
             {
+              "long": "--format",
+              "flags": "--format <fmt>",
+              "description": "Output format the speech job was submitted with (e.g. pcm_16000), to name raw audio correctly",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
               "long": "--verbose",
               "flags": "-v, --verbose",
               "description": "Verbose logging",

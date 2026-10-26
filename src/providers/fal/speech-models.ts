@@ -164,8 +164,11 @@ export const FAL_CATALOG_URL = "https://api.fal.ai/v1/models";
  */
 export async function listFalSpeechCatalog(
   fetchFn: typeof fetch,
-  opts: { baseUrl?: string; maxPages?: number } = {},
+  opts: { baseUrl?: string; maxPages?: number; timeoutMs?: number } = {},
 ): Promise<FalCatalogModel[]> {
+  const signal = AbortSignal.timeout(opts.timeoutMs ?? 30_000);
+  // Catalog text is printed to a terminal: drop control characters (escape sequences).
+  const clean = (v: unknown) => (typeof v === "string" ? v.replace(/\p{Cc}/gu, "") : undefined);
   const out: FalCatalogModel[] = [];
   let cursor: string | undefined;
   for (let page = 0; page < (opts.maxPages ?? 5); page++) {
@@ -173,7 +176,10 @@ export async function listFalSpeechCatalog(
     url.searchParams.set("category", "text-to-speech");
     url.searchParams.set("limit", "100");
     if (cursor) url.searchParams.set("cursor", cursor);
-    const res = await fetchFn(url.toString(), { headers: { accept: "application/json" } });
+    const res = await fetchFn(url.toString(), {
+      headers: { accept: "application/json" },
+      signal,
+    });
     if (!res.ok) throw new ProviderError(`fal model catalog returned HTTP ${res.status}`, "fal");
     const body = (await res.json()) as {
       models?: Array<{ endpoint_id?: unknown; metadata?: Record<string, unknown> }>;
@@ -181,13 +187,17 @@ export async function listFalSpeechCatalog(
       next_cursor?: string | null;
     };
     for (const m of body.models ?? []) {
-      if (typeof m.endpoint_id !== "string") continue;
+      const id = clean(m.endpoint_id);
+      if (!id) continue;
       const meta = m.metadata ?? {};
+      const displayName = clean(meta.display_name);
+      const category = clean(meta.category);
+      const status = clean(meta.status);
       out.push({
-        endpoint_id: m.endpoint_id,
-        ...(typeof meta.display_name === "string" ? { display_name: meta.display_name } : {}),
-        ...(typeof meta.category === "string" ? { category: meta.category } : {}),
-        ...(typeof meta.status === "string" ? { status: meta.status } : {}),
+        endpoint_id: id,
+        ...(displayName ? { display_name: displayName } : {}),
+        ...(category ? { category } : {}),
+        ...(status ? { status } : {}),
       });
     }
     if (!body.has_more || !body.next_cursor) break;

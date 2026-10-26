@@ -152,6 +152,12 @@ describe("fal tts — two endpoints, two schemas", () => {
     expect(saved()).toEqual([`fal-${REQUEST_ID}-01.pcm`]);
   });
 
+  it("keeps raw PCM whose first byte looks like the start of JSON", async () => {
+    job(ELEVEN, { audio: { url: `${CDN}blob` } }, { body: Buffer.from([0x7b, 0x01, 0x02, 0x03]) });
+    await cli("tts", "Hi", "-m", ELEVEN, "--format", "pcm_16000");
+    expect(saved()).toEqual([`fal-${REQUEST_ID}-01.pcm`]);
+  });
+
   it("reads --text-file without its trailing newline", async () => {
     const fake = job(GEMINI, { audio: { url: `${CDN}a.wav` } }, { body: WAV });
     const file = path.join(tmp, "script.txt");
@@ -201,6 +207,13 @@ describe("fal tts — audio output verification", () => {
     });
   }
 
+  it("refuses an audio URL that is not https before fetching it", async () => {
+    const fake = job(GEMINI, { audio: { url: "http://v3b.fal.media/files/a.wav" } });
+    await expect(cli("tts", "Hi")).rejects.toThrow(/only https/);
+    expect(fake.calls.some((c) => c.url.includes("fal.media"))).toBe(false);
+    expect(fs.existsSync(out) ? saved() : []).toEqual([]);
+  });
+
   it("fails clearly when the result has no audio URL", async () => {
     job(GEMINI, { detail: "nothing" });
     await expect(cli("tts", "Hi")).rejects.toBeInstanceOf(ProviderError);
@@ -226,6 +239,10 @@ describe("fal tts — validation before any request", () => {
     ["tts", "Hi", "-m", "fal-ai/other-tts"],
     ["tts", "--text-file", "/no/such/file.txt"],
     ["tts", "Hi", "-m", "not-a-model-id"],
+    ["tts", "Hi", "-m", ELEVEN, "--input", '{"output_format":"../../evil"}'],
+    ["tts", "-m", ELEVEN, "--input", '{"text":"  "}'],
+    ["tts", "Hi", "-m", "fal-ai/other-tts", "--text-field", "__proto__"],
+    ["tts", "Hi", "-m", "fal-ai/other-tts", "--text-field", "t", "--voice-field", "t"],
   ];
   for (const args of bad) {
     it(`refuses: ${args.join(" ")}`, async () => {
@@ -256,6 +273,35 @@ describe("fal tts — queue receipts and resume", () => {
     await cli("result", receipt.model, receipt.request_id, "--download");
     expect(fake.calls.every((c) => c.method === "GET")).toBe(true);
     expect(saved()).toEqual([`fal-${REQUEST_ID}-01.ogg`]);
+  });
+
+  it("a detached raw-format job resumes with --format and is named from it", async () => {
+    let fake = job(ELEVEN, {});
+    await cli("tts", "Hi", "-m", ELEVEN, "--format", "ulaw_8000", "--detach");
+    const receipt = JSON.parse(stdout.join("\n"));
+    expect(receipt.result_command).toBe(
+      `multix fal result ${ELEVEN} ${REQUEST_ID} --download --format ulaw_8000`,
+    );
+    // Mu-law silence (0xFF) matches an MP3 frame sync; the requested format wins.
+    fake = job(
+      ELEVEN,
+      { audio: { url: `${CDN}blob` } },
+      { body: Buffer.alloc(16, 0xff), headers: { "content-type": "application/octet-stream" } },
+    );
+    await cli("result", ELEVEN, REQUEST_ID, "--download", "--format", "ulaw_8000");
+    expect(fake.calls.every((c) => c.method === "GET")).toBe(true);
+    expect(saved()).toEqual([`fal-${REQUEST_ID}-01.ulaw`]);
+  });
+
+  it("fal result refuses a --format the model does not have", async () => {
+    const fake = job(ELEVEN, {});
+    for (const args of [
+      [ELEVEN, REQUEST_ID, "--download", "--format", "wav"],
+      ["fal-ai/flux/schnell", REQUEST_ID, "--download", "--format", "pcm_16000"],
+    ]) {
+      await expect(cli("result", ...args)).rejects.toBeInstanceOf(ValidationError);
+    }
+    expect(fake.calls).toHaveLength(0);
   });
 
   it("an ambiguous submit is reported as UNKNOWN_REMOTE_STATE and never retried", async () => {
@@ -293,6 +339,21 @@ describe("fal tts — generic fallback for unlisted models", () => {
     );
     expect(submitted(fake)).toEqual({ speed: 1.2, input: "Hi", speaker: "anna" });
     expect(saved()).toEqual([`fal-${REQUEST_ID}-01.flac`]);
+  });
+});
+
+describe("fal run — media URLs without an extension", () => {
+  it("names the file by the served Content-Type", async () => {
+    job(
+      "fal-ai/some-audio",
+      { audio: { url: `${CDN}noext` } },
+      {
+        body: MP3,
+        headers: { "content-type": "audio/mpeg" },
+      },
+    );
+    await cli("run", "fal-ai/some-audio", "--input", '{"prompt":"x"}');
+    expect(saved()).toEqual([`fal-${REQUEST_ID}-01.mp3`]);
   });
 });
 
