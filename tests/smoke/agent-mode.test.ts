@@ -104,6 +104,25 @@ describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     expect(envelope(again.stdout)).toMatchObject({ dry_run: true, command: "fal image" });
   });
 
+  it("history push --dry-run sends nothing; without MULTIX_API_KEY it stops with exit 3", async () => {
+    await run(["fal", "image", "a cat"], { FAL_KEY: "" });
+    const offline = { HTTPS_PROXY: "http://127.0.0.1:9", MULTIX_API_KEY: "" };
+    const dry = await run(["history", "push", "--dry-run", "--json"], offline);
+    expect(dry.exitCode).toBe(0);
+    const preview = envelope(dry.stdout).data;
+    expect(preview).toMatchObject({ url: "https://multix.zuey.me", entries: 1, batches: 1 });
+    expect(preview.sample).toMatchObject({ command: "fal image", error_code: "MISSING_KEY" });
+    expect(preview.sample).not.toHaveProperty("argv");
+    expect(dry.stdout).not.toContain("a cat");
+
+    const push = await run(["history", "push", "--json"], offline);
+    expect(push.exitCode).toBe(3);
+    expect(envelope(push.stdout).error).toMatchObject({
+      code: "MISSING_KEY",
+      env: "MULTIX_API_KEY",
+    });
+  });
+
   it("keeps exit 1 without --json but prints the code, hint and next steps", async () => {
     const result = await run(["fal", "image", "a cat"], { FAL_KEY: "" });
     expect(result.exitCode).toBe(1);

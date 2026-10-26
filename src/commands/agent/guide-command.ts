@@ -25,7 +25,8 @@ export const GUIDE_TEXT = `multix agent protocol
    exit ${EXIT_CODES.timeout} timed out, job may still run -> use the status command in next[], do not resubmit
 6. Long jobs: pass --async (or --no-wait) where offered, keep the job id, run the status command in next[].
 7. History: multix history [--failed] | history show last | history stats --by model | rerun <id>
-   Ledger ~/.multix/history.jsonl records outputs, tokens, cost, credits, duration (MULTIX_HISTORY=0 disables).`;
+   Ledger ~/.multix/history.jsonl records outputs, tokens, cost, credits, duration (MULTIX_HISTORY=0 disables).
+   Opt-in: multix history push [--dry-run] sends redacted usage (no prompts/paths) to your account (MULTIX_API_KEY).`;
 
 export function registerGuideCommand(program: Command): void {
   program

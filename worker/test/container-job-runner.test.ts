@@ -230,6 +230,82 @@ describe("container job runner", () => {
     expect(flood.error).toMatch(/more than 16 MB/);
   }, 30_000);
 
+  it("returns a reduced usage report and phase timings, never the ledger itself", async () => {
+    const { runJob } = await load("../container/job-runner.mjs");
+    const { fetch, get } = mockFetch();
+    const prompt = "PRIVATE-PROMPT-a-cat-on-the-moon";
+    const signed = "https://signed.example.com/input.png?X-Amz-Signature=deadbeef";
+    const before = Date.now();
+    const result = await runJob(
+      spec({ argv: ["gemini", "generate", prompt, `--input=${signed}`, "--ledger"] }),
+      { bin: FAKE_BIN, fetch, get },
+    );
+    expect(result.status).toBe("succeeded");
+    expect(result.usage).toEqual({
+      provider: "gemini",
+      model: "gemini-2.5-flash",
+      durationMs: 1234,
+      errorCode: "provider_error",
+      tokens: { input: 100, output: 50, total: 150 },
+      costUsd: 0.0125,
+      credits: 3,
+      metrics: { "images.count": 2 },
+      http: { requests: 2, errors: 0, ms: 840 },
+      providerIds: ["req_abc123"],
+      outputs: [
+        { name: "result.txt", bytes: 5, mime: "text/plain", sha256: "a".repeat(64) },
+        { name: "nested/result.txt", bytes: 5, durationS: 2.5 },
+      ],
+    });
+    // The ledger is never reported as an output.
+    expect(result.outputs.map((o: { name: string }) => o.name)).not.toContain("history.jsonl");
+    expect(result.outputs).toHaveLength(2);
+    const { home } = JSON.parse(result.stdout);
+    // stdout is the fake CLI echoing its own argv; the usage report must carry none of it.
+    const usage = JSON.stringify(result.usage);
+    for (const leaked of [
+      prompt,
+      signed,
+      "signed.example.com",
+      home,
+      "SECRET-ERROR-MESSAGE",
+      "/etc/passwd",
+    ]) {
+      expect(usage).not.toContain(leaked);
+    }
+    const { stdout: _echo, ...rest } = result;
+    const whole = JSON.stringify(rest);
+    for (const leaked of [prompt, signed, home, "SECRET-ERROR-MESSAGE"]) {
+      expect(whole).not.toContain(leaked);
+    }
+    const t = result.timings;
+    expect(t.startedAt).toBeGreaterThanOrEqual(before);
+    expect(t.inputsDoneAt).toBeGreaterThanOrEqual(t.startedAt);
+    expect(t.cliDoneAt).toBeGreaterThanOrEqual(t.inputsDoneAt);
+    expect(t.uploadsDoneAt).toBeGreaterThanOrEqual(t.cliDoneAt);
+    expect(t.uploadsDoneAt).toBeLessThanOrEqual(Date.now());
+  }, 30_000);
+
+  it("omits usage without a ledger and stops timings at the failed phase", async () => {
+    const { runJob } = await load("../container/job-runner.mjs");
+    const { fetch, get } = mockFetch();
+    const plain = await runJob(spec(), { bin: FAKE_BIN, fetch, get });
+    expect(plain.usage).toBeUndefined();
+    expect(Object.keys(plain.timings)).toEqual([
+      "startedAt",
+      "inputsDoneAt",
+      "cliDoneAt",
+      "uploadsDoneAt",
+    ]);
+    const refused = await runJob(
+      spec({ inputs: [{ url: "https://cdn.example.com/redirect", path: "in/0-a.png" }] }),
+      { bin: FAKE_BIN, fetch, get },
+    );
+    expect(refused.status).toBe("failed");
+    expect(Object.keys(refused.timings)).toEqual(["startedAt"]);
+    expect(refused.usage).toBeUndefined();
+  }, 30_000);
+
   it("validates the job body shape and the env names it may pass", async () => {
     const { validateSpec } = await load("../container/job-runner.mjs");
     expect(() => validateSpec(spec())).not.toThrow();
@@ -238,6 +314,104 @@ describe("container job runner", () => {
     expect(() => validateSpec(spec({ argv: [] }))).toThrow();
     expect(() => validateSpec(spec({ upload: { r2: R2, keyPrefix: "../other" } }))).toThrow();
     expect(() => validateSpec(null)).toThrow();
+  });
+});
+
+describe("container usage report reader", () => {
+  const node = (name: string): Promise<Any> => import(/* @vite-ignore */ ["node", name].join(":"));
+  async function jobDir() {
+    const fs = await node("fs/promises");
+    const os = await node("os");
+    const path = await node("path");
+    const dir: string = await fs.mkdtemp(path.join(os.tmpdir(), "multix-usage-"));
+    await fs.mkdir(path.join(dir, "out"));
+    return {
+      dir,
+      out: path.join(dir, "out"),
+      file: path.join(dir, "history.jsonl"),
+      write: (text: string) => fs.writeFile(path.join(dir, "history.jsonl"), text),
+      cleanup: () => fs.rm(dir, { recursive: true, force: true }),
+    };
+  }
+
+  it("returns undefined for a missing, malformed, empty or oversized ledger", async () => {
+    const { readUsageReport, MAX_HISTORY_BYTES } = await load("../container/job-usage.mjs");
+    const job = await jobDir();
+    try {
+      expect(await readUsageReport(job.file, job.out)).toBeUndefined();
+      await job.write("{not json\n");
+      expect(await readUsageReport(job.file, job.out)).toBeUndefined();
+      await job.write("\n\n");
+      expect(await readUsageReport(job.file, job.out)).toBeUndefined();
+      await job.write("[1,2]\n");
+      expect(await readUsageReport(job.file, job.out)).toBeUndefined();
+      await job.write(`${JSON.stringify({ argv: ["secret"], cwd: job.dir })}\n`);
+      expect(await readUsageReport(job.file, job.out)).toBeUndefined();
+      const line = JSON.stringify({ provider: "gemini", pad: "x".repeat(MAX_HISTORY_BYTES) });
+      await job.write(`${line}\n`);
+      expect(await readUsageReport(job.file, job.out)).toBeUndefined();
+    } finally {
+      await job.cleanup();
+    }
+  });
+
+  it("reads only the last entry and never defaults absent numbers", async () => {
+    const { readUsageReport } = await load("../container/job-usage.mjs");
+    const job = await jobDir();
+    try {
+      const first = { provider: "openai", duration_ms: 1, usage: { cost_usd: 9 } };
+      const last = { provider: "gemini", usage: { tokens: { input: "12" }, credits: Number.NaN } };
+      await job.write(`${JSON.stringify(first)}\n${JSON.stringify(last)}\n`);
+      expect(await readUsageReport(job.file, job.out)).toEqual({ provider: "gemini" });
+    } finally {
+      await job.cleanup();
+    }
+  });
+
+  it("names outputs relative to out/ and drops paths that escape it", async () => {
+    const { readUsageReport } = await load("../container/job-usage.mjs");
+    const job = await jobDir();
+    try {
+      const entry = {
+        outputs: [
+          { path: `${job.out}/a/b.png`, bytes: 7, sha256: "F".repeat(64) },
+          { path: "out/c.png", bytes: 1 },
+          { path: `${job.out}/../history.jsonl`, bytes: 1 },
+          { path: "../../etc/passwd", bytes: 1 },
+          { path: job.out, bytes: 1 },
+          { path: "in/0-photo.png", bytes: 1 },
+          { path: "out/no-bytes.png" },
+        ],
+        provider_ids: ["ok-1", "/abs/path", "s3://bucket/key", "a//b", "pred_9:x/y"],
+        model: "https://evil.example.com/model",
+      };
+      await job.write(`${JSON.stringify(entry)}\n`);
+      expect(await readUsageReport(job.file, job.out, job.dir)).toEqual({
+        outputs: [
+          { name: "a/b.png", bytes: 7, sha256: "f".repeat(64) },
+          { name: "c.png", bytes: 1 },
+        ],
+        providerIds: ["ok-1", "pred_9:x/y"],
+      });
+    } finally {
+      await job.cleanup();
+    }
+  });
+
+  it("caps metrics at 20 keys of at most 80 characters", async () => {
+    const { readUsageReport } = await load("../container/job-usage.mjs");
+    const job = await jobDir();
+    try {
+      const metrics: Record<string, number> = { ["k".repeat(81)]: 1 };
+      for (let i = 0; i < 30; i++) metrics[`m${i}`] = i;
+      await job.write(`${JSON.stringify({ usage: { metrics } })}\n`);
+      const report = await readUsageReport(job.file, job.out);
+      expect(Object.keys(report.metrics)).toHaveLength(20);
+      expect(report.metrics.m0).toBe(0);
+      expect(report.metrics["k".repeat(81)]).toBeUndefined();
+    } finally {
+      await job.cleanup();
+    }
   });
 });
 

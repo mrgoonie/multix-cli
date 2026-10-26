@@ -28,15 +28,19 @@ export function relayDelaySeconds(attempt: number): number {
   return Math.min(RELAY_BASE_SECONDS * 2 ** Math.max(0, attempt - 2), RELAY_MAX_SECONDS);
 }
 
-export interface OutboxPort {
-  list(): Promise<Map<string, MultixEvent>>;
+export interface OutboxPort<T = MultixEvent> {
+  list(): Promise<Map<string, T>>;
   delete(keys: string[]): Promise<void>;
-  /** Hand events to the owner's AccountEvents; undefined when events are not configured. */
-  publish: ((events: MultixEvent[]) => Promise<unknown>) | undefined;
+  /** Hand entries to the owner's Durable Object; undefined when it is not configured. */
+  publish: ((entries: T[]) => Promise<unknown>) | undefined;
   scheduleRelay(attempt: number, seconds: number): Promise<void>;
+  /** Log name prefix, `event` (default) or `ledger`. */
+  label?: string;
 }
 
-export async function relayOutbox(port: OutboxPort, attempt = 1): Promise<void> {
+/** Also relays the job's usage-ledger record (ledger/ledger-records.ts) the same way. */
+export async function relayOutbox<T>(port: OutboxPort<T>, attempt = 1): Promise<void> {
+  const label = port.label ?? "event";
   try {
     const entries = await port.list();
     if (entries.size === 0 || !port.publish) return;
@@ -46,14 +50,14 @@ export async function relayOutbox(port: OutboxPort, attempt = 1): Promise<void> 
     const name = error instanceof Error ? error.name : "unknown";
     if (attempt >= RELAY_ATTEMPTS) {
       // The entries stay until the job's data expires; nothing else retries them.
-      logEvent("error", "event_relay_gave_up", { attempt, error: name });
+      logEvent("error", `${label}_relay_gave_up`, { attempt, error: name });
       return;
     }
-    logEvent("warn", "event_relay_failed", { attempt, error: name });
+    logEvent("warn", `${label}_relay_failed`, { attempt, error: name });
     try {
       await port.scheduleRelay(attempt + 1, relayDelaySeconds(attempt + 1));
     } catch {
-      logEvent("error", "event_relay_unscheduled", { attempt });
+      logEvent("error", `${label}_relay_unscheduled`, { attempt });
     }
   }
 }

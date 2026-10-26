@@ -6,7 +6,9 @@
  *
  * When the job ends, its final view and lifecycle events (events/job-events.ts)
  * are stored in one write and relayed to the owner's AccountEvents object by
- * a scheduled call (events/event-outbox.ts).
+ * a scheduled call (events/event-outbox.ts). The job's usage-ledger record
+ * (ledger/ledger-records.ts) is stored in that same write and relayed to the
+ * owner's AccountLedger object the same way.
  *
  * The Worker talks to it over RPC only (startJob / jobStatus / cancelJob);
  * no route forwards outside requests to the container. Only startJob boots
@@ -20,6 +22,9 @@ import type { AccountEventsNamespace } from "../events/account-events.js";
 import type { MultixEvent } from "../events/event-catalog.js";
 import { OUTBOX_PREFIX, outboxKey, relayOutbox } from "../events/event-outbox.js";
 import { jobEvents } from "../events/job-events.js";
+import type { AccountLedgerNamespace } from "../ledger/account-ledger.js";
+import { type JobLedgerMeta, jobFinishRecord } from "../ledger/ledger-records.js";
+import type { OperationInput } from "../ledger/ledger-types.js";
 import { type JobQuotaNamespace, durableJobQuota } from "./account-job-quota.js";
 import { ContainerCapacityError, JobController } from "./job-controller.js";
 import type { JobSpec, JobView } from "./job-protocol.js";
@@ -28,6 +33,8 @@ import { JOB_RETENTION_SECONDS } from "./job-protocol.js";
 const JOB_KEY = "job";
 /** `{ userId, jobId, command }`: the account slot this job holds and what its events report. */
 const SLOT_KEY = "slot";
+/** The job's final usage-ledger record until AccountLedger accepted it. */
+const LEDGER_OUTBOX_PREFIX = "ledger-outbox:";
 const JOB_SERVER_PORT = 8080;
 /** A status or cancel request to the job server never waits longer than this. */
 const JOB_SERVER_TIMEOUT_MS = 10_000;
@@ -35,6 +42,7 @@ const JOB_SERVER_TIMEOUT_MS = 10_000;
 interface JobContainerEnv {
   MULTIX_JOB_QUOTA?: JobQuotaNamespace;
   MULTIX_EVENTS?: AccountEventsNamespace;
+  MULTIX_LEDGER?: AccountLedgerNamespace;
 }
 
 interface SlotRecord {
@@ -42,6 +50,8 @@ interface SlotRecord {
   jobId: string;
   /** CLI command, e.g. "gemini generate"; absent on jobs started before events existed. */
   command?: string;
+  /** Absent on jobs started before the usage ledger existed (or without one). */
+  ledger?: JobLedgerMeta;
 }
 
 /** Errors @cloudflare/containers raises when no instance can be had (max_instances, rate limit). */
@@ -68,12 +78,19 @@ export class MultixJobContainer extends Container<JobContainerEnv> {
           : [];
       const writes: Record<string, unknown> = { [JOB_KEY]: view };
       for (const event of events) writes[outboxKey(event.id)] = event;
+      const record =
+        slot?.ledger && this.env.MULTIX_LEDGER
+          ? jobFinishRecord(slot.jobId, slot.ledger, view, Date.now())
+          : undefined;
+      if (record) writes[`${LEDGER_OUTBOX_PREFIX}${record.op_id}`] = record;
       // No await between the write and schedule()'s synchronous SQL insert, so the
       // view, the outbox entries and the relay schedule are committed together.
       const saved = this.ctx.storage.put(writes);
       const relay = events.length > 0 ? this.scheduleRelay(1, 0) : undefined;
+      const ledgerRelay = record ? this.scheduleLedgerRelay(1, 0) : undefined;
       await saved;
       await relay;
+      await ledgerRelay;
     },
     startContainer: async () => {
       try {
@@ -114,10 +131,16 @@ export class MultixJobContainer extends Container<JobContainerEnv> {
    * Start the job once; `userId` identifies the account slot to give back
    * when it ends and the account its events go to.
    */
-  async startJob(spec: JobSpec, userId: string, command?: string): Promise<JobView> {
+  async startJob(
+    spec: JobSpec,
+    userId: string,
+    command?: string,
+    ledger?: JobLedgerMeta,
+  ): Promise<JobView> {
     if (!(await this.ctx.storage.get(JOB_KEY))) {
       const slot: SlotRecord = { userId, jobId: spec.jobId };
       if (command) slot.command = command;
+      if (ledger) slot.ledger = ledger;
       await this.ctx.storage.put(SLOT_KEY, slot);
       await this.schedule(JOB_RETENTION_SECONDS, "expireJob");
     }
@@ -163,6 +186,35 @@ export class MultixJobContainer extends Container<JobContainerEnv> {
     );
   }
 
+  /** Scheduled: hand the job's usage-ledger record to the owner's AccountLedger object. */
+  async relayLedger(attempt = 1): Promise<void> {
+    const ledger = this.env.MULTIX_LEDGER;
+    await relayOutbox<OperationInput>(
+      {
+        label: "ledger",
+        list: () => this.ctx.storage.list<OperationInput>({ prefix: LEDGER_OUTBOX_PREFIX }),
+        delete: async (keys) => {
+          await this.ctx.storage.delete(keys);
+        },
+        publish: ledger
+          ? async (records) => {
+              const slot = await this.ctx.storage.get<SlotRecord>(SLOT_KEY);
+              if (!slot) return;
+              const stub = ledger.getByName(slot.userId);
+              // recordFinish is idempotent: a replay after a crash is a duplicate.
+              for (const record of records) await stub.recordFinish(record);
+            }
+          : undefined,
+        scheduleRelay: (next, seconds) => this.scheduleLedgerRelay(next, seconds),
+      },
+      attempt,
+    );
+  }
+
+  private async scheduleLedgerRelay(attempt: number, seconds: number): Promise<void> {
+    await this.schedule(seconds, "relayLedger" satisfies keyof MultixJobContainer, attempt);
+  }
+
   private async scheduleRelay(attempt: number, seconds: number): Promise<void> {
     await this.schedule(seconds, "relayEvents" satisfies keyof MultixJobContainer, attempt);
   }
@@ -174,7 +226,8 @@ export class MultixJobContainer extends Container<JobContainerEnv> {
    */
   async expireJob(): Promise<void> {
     const outbox = await this.ctx.storage.list({ prefix: OUTBOX_PREFIX });
-    await this.ctx.storage.delete([JOB_KEY, SLOT_KEY, ...outbox.keys()]);
+    const ledgerOutbox = await this.ctx.storage.list({ prefix: LEDGER_OUTBOX_PREFIX });
+    await this.ctx.storage.delete([JOB_KEY, SLOT_KEY, ...outbox.keys(), ...ledgerOutbox.keys()]);
   }
 
   override async onStop(_params: StopParams): Promise<void> {

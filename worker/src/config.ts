@@ -18,6 +18,7 @@ import {
   MAX_ACTIVE_JOBS_TOTAL,
 } from "./jobs/account-job-quota.js";
 import type { JobNamespace } from "./jobs/job-store.js";
+import type { AccountLedgerNamespace } from "./ledger/account-ledger.js";
 import {
   NON_SECRET_NAMES,
   PROVIDER_SECRET_NAMES,
@@ -80,6 +81,8 @@ export interface WorkerEnv extends ServerSettings {
   MULTIX_JOB_QUOTA?: JobQuotaNamespace;
   /** Durable Object namespace of AccountEvents (event subscriptions and webhook deliveries per account). */
   MULTIX_EVENTS?: AccountEventsNamespace;
+  /** Durable Object namespace of AccountLedger (usage, budgets and activity log per account). */
+  MULTIX_LEDGER?: AccountLedgerNamespace;
   /** Jobs one account may run at the same time (default 2, at most 50). */
   MULTIX_MAX_JOBS_PER_ACCOUNT?: string;
   /** Jobs the server may run at the same time (default 10, at most 1000; keep <= containers max_instances). */

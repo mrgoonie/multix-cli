@@ -62,18 +62,22 @@
   // (worker/src/jobs/account-job-quota.ts), so the per-account cap is strongly consistent.
   // MULTIX_EVENTS: one Durable Object per account holding its job event subscriptions and
   // webhook deliveries (worker/src/events/account-events.ts).
+  // MULTIX_LEDGER: one Durable Object per account holding its usage ledger, budgets and
+  // activity log in SQLite (worker/src/ledger/account-ledger.ts).
   "durable_objects": {
     "bindings": [
       { "name": "MULTIX_JOBS", "class_name": "MultixJobContainer" },
       { "name": "MULTIX_JOB_QUOTA", "class_name": "AccountJobQuota" },
-      { "name": "MULTIX_EVENTS", "class_name": "AccountEvents" }
+      { "name": "MULTIX_EVENTS", "class_name": "AccountEvents" },
+      { "name": "MULTIX_LEDGER", "class_name": "AccountLedger" }
     ]
   },
   // Declarative Durable Object config (wrangler 4.149+); replaces `migrations`.
   "exports": {
     "MultixJobContainer": { "type": "durable-object", "storage": "sqlite" },
     "AccountJobQuota": { "type": "durable-object", "storage": "sqlite" },
-    "AccountEvents": { "type": "durable-object", "storage": "sqlite" }
+    "AccountEvents": { "type": "durable-object", "storage": "sqlite" },
+    "AccountLedger": { "type": "durable-object", "storage": "sqlite" }
   },
   "vars": {
     "MULTIX_PUBLIC_URL": "https://multix.zuey.me",

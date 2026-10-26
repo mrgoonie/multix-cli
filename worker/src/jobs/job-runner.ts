@@ -7,8 +7,11 @@
 
 import { ValidationError } from "../../../src/core/errors.js";
 import { DEFAULT_R2_PREFIX, type R2Settings, r2Prefix } from "../accounts/r2-settings.js";
+import type { AccountLedgerStub } from "../ledger/account-ledger.js";
+import { type JobOrigin, jobStartRecord, modelFromArgv } from "../ledger/ledger-records.js";
 import type { ProviderKeys } from "../provider-secret-names.js";
 import { NON_SECRET_NAMES } from "../provider-secret-names.js";
+import { logEvent } from "../redaction.js";
 import { type JobCaps, type JobQuota, quotaError } from "./account-job-quota.js";
 import { GROUP_KEYS } from "./cli-command-policy.js";
 import {
@@ -44,6 +47,10 @@ export interface JobToolsContext {
   /** The caps `quota` enforces, for messages and tool descriptions. */
   caps: JobCaps;
   r2Settings(): Promise<R2Settings | null>;
+  /** The account's usage ledger (absent when the Worker has none). */
+  ledger?: AccountLedgerStub;
+  /** Who is calling (MCP client or REST API key), recorded with each job. */
+  origin?: JobOrigin;
   /** Injected for tests. */
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
@@ -147,17 +154,36 @@ export class JobRunner {
     const acquired = await this.ctx.quota.acquire(userId, jobId);
     if (acquired !== "ok") throw new JobCapacityError(quotaError(acquired, this.ctx.caps));
     let view: JobView;
+    const startedAt = this.now();
+    const ledgerMeta = this.ctx.ledger
+      ? {
+          source: this.ctx.origin?.source ?? "unknown",
+          clientId: this.ctx.origin?.clientId ?? null,
+          clientName: this.ctx.origin?.clientName ?? null,
+          command: prepared.command,
+          model: modelFromArgv(prepared.argv),
+          startedAt,
+        }
+      : undefined;
     try {
       await this.ctx.store.create(jobId, {
         userId,
         command: prepared.command,
-        createdAt: this.now(),
+        createdAt: startedAt,
       });
-      view = await this.ctx.backend.start(jobId, spec, userId, prepared.command);
+      view = await this.ctx.backend.start(jobId, spec, userId, prepared.command, ledgerMeta);
     } catch (error) {
       // The job Durable Object normally gives the slot back; here it may never have run.
       await this.ctx.quota.release(userId, jobId).catch(() => undefined);
       throw error;
+    }
+    if (this.ctx.ledger && ledgerMeta) {
+      // Best effort: the job's final record arrives from its Durable Object anyway.
+      await this.ctx.ledger.recordStart(jobStartRecord(jobId, ledgerMeta)).catch((error) => {
+        logEvent("warn", "ledger_start_failed", {
+          error: error instanceof Error ? error.name : "unknown",
+        });
+      });
     }
     if (view.status === "failed" && view.error === SERVER_AT_CAPACITY_ERROR) {
       throw new JobCapacityError(SERVER_AT_CAPACITY_ERROR);

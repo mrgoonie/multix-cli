@@ -12,6 +12,7 @@
  * `MULTIX_*` literal); a name read some other way must be added here by hand.
  */
 
+import { API_KEY_ENV, REMOTE_URL_ENV } from "./commands/agent/history-push.js";
 import { ALLOW_PROJECT_BASE_URL_ENV, envNameKey } from "./core/env-loader.js";
 import { MAX_DOWNLOAD_ENV } from "./core/http-client.js";
 import { ATLAS_MODEL_ENV, MAX_UPLOAD_ENV } from "./providers/atlascloud/commands/env.js";
@@ -42,6 +43,10 @@ export const PROJECT_ENV_EXCLUDED: ReadonlySet<string> = new Set([
   "MULTIX_LEGACY_CLAUDE_ENV",
   // Would let a repository choose where the run ledger (argv, prompts) is written.
   "MULTIX_HISTORY_FILE",
+  // `multix history push` uploads the user's run ledger (all projects): a
+  // repository must not choose the server it goes to, nor the account it lands in.
+  REMOTE_URL_ENV,
+  API_KEY_ENV,
 ]);
 
 /** The documented MULTIX_* settings a project may choose. */

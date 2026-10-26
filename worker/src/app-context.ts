@@ -14,6 +14,9 @@ import { type Session, readSession } from "./auth/signed-cookies.js";
 import { MIN_SESSION_SECRET_LENGTH, type WorkerEnv } from "./config.js";
 import type { AccountEventsNamespace } from "./events/account-events.js";
 import type { JobBackend } from "./jobs/job-store.js";
+import type { AccountLedgerNamespace, AccountLedgerStub } from "./ledger/account-ledger.js";
+import type { ActivityInput } from "./ledger/ledger-types.js";
+import { logEvent } from "./redaction.js";
 
 export interface AppDeps {
   /** Injected for tests; defaults to the Worker's fetch (GitHub sign-in and R2 checks). */
@@ -22,6 +25,39 @@ export interface AppDeps {
   jobBackend?: JobBackend;
   /** Injected for tests; defaults to the MULTIX_EVENTS Durable Object namespace. */
   events?: AccountEventsNamespace;
+  /** Injected for tests; defaults to the MULTIX_LEDGER Durable Object namespace. */
+  ledger?: AccountLedgerNamespace;
+}
+
+/** The account's usage ledger, or undefined when the Worker has no MULTIX_LEDGER binding. */
+export function ledgerFor(
+  env: WorkerEnv,
+  deps: AppDeps,
+  userId: string,
+): AccountLedgerStub | undefined {
+  return (deps.ledger ?? env.MULTIX_LEDGER)?.getByName(userId);
+}
+
+/**
+ * Append to the account's activity log without failing the action it
+ * describes: the action already happened, a lost log line is only logged.
+ */
+export async function recordActivity(
+  env: WorkerEnv,
+  deps: AppDeps,
+  userId: string,
+  activity: ActivityInput,
+): Promise<void> {
+  const ledger = ledgerFor(env, deps, userId);
+  if (!ledger) return;
+  try {
+    await ledger.recordActivity(activity);
+  } catch (error) {
+    logEvent("warn", "activity_record_failed", {
+      kind: activity.kind,
+      error: error instanceof Error ? error.name : "unknown",
+    });
+  }
 }
 
 export interface AppContext {

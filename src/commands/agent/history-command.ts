@@ -2,6 +2,7 @@
  * `multix history` (list / show / stats) and `multix rerun`: read the local
  * run ledger written by the agent runtime, to review past runs, measure cost,
  * tokens and duration per provider or model, and repeat a run exactly.
+ * `history push` (opt-in) uploads redacted entries to a multix account.
  */
 
 import { spawnSync } from "node:child_process";
@@ -16,6 +17,15 @@ import {
 } from "../../agent/history-store.js";
 import { run } from "../../agent/run-state.js";
 import { ValidationError } from "../../core/errors.js";
+import {
+  API_KEY_ENV,
+  PUSH_BATCH_SIZE,
+  pushHistory,
+  pushableEntries,
+  resolveApiKey,
+  resolveRemoteUrl,
+  toImportEntry,
+} from "./history-push.js";
 
 interface ListOpts {
   last?: string;
@@ -180,6 +190,60 @@ export function registerHistoryCommands(program: Command): void {
           .join("  ")}`,
       );
     }
+  });
+
+  addFilters(
+    history
+      .command("push")
+      .description(
+        `Opt-in: upload redacted runs (no prompts, argv, paths, error messages or media) to your multix account usage ledger (default --since 30d). Key: ${API_KEY_ENV}`,
+      )
+      .option(
+        "--url <base>",
+        "Server base URL (default MULTIX_REMOTE_URL or https://multix.zuey.me)",
+      )
+      .option("--dry-run", "Show how many runs would be sent and one sample entry; send nothing"),
+  ).action(async (opts: ListOpts & { url?: string; dryRun?: boolean }) => {
+    const baseUrl = resolveRemoteUrl(opts.url);
+    const entries = pushableEntries(filterEntries({ ...opts, since: opts.since ?? "30d" })).map(
+      toImportEntry,
+    );
+    const batches = Math.ceil(entries.length / PUSH_BATCH_SIZE);
+    if (opts.dryRun) {
+      const preview = {
+        url: baseUrl,
+        entries: entries.length,
+        batches,
+        sample: entries[0] ?? null,
+      };
+      console.log(
+        run.json
+          ? JSON.stringify(preview)
+          : `Would send ${entries.length} run(s) in ${batches} request(s) to ${baseUrl}.${entries[0] ? `\nSample entry:\n${JSON.stringify(entries[0], null, 2)}` : ""}`,
+      );
+      return;
+    }
+    const apiKey = resolveApiKey(baseUrl);
+    if (entries.length === 0) {
+      console.log(
+        run.json
+          ? JSON.stringify({ url: baseUrl, entries: 0, accepted: 0, duplicates: 0, rejected: 0 })
+          : "No runs to push for these filters.",
+      );
+      return;
+    }
+    const summary = await pushHistory(entries, {
+      baseUrl,
+      apiKey,
+      onBatch: (done, total) => {
+        if (!run.json && total > 1) console.error(`Sent batch ${done}/${total}`);
+      },
+    });
+    console.log(
+      run.json
+        ? JSON.stringify({ url: baseUrl, entries: entries.length, ...summary })
+        : `Pushed ${entries.length} run(s) to ${baseUrl}: ${summary.accepted} accepted, ${summary.duplicates} duplicates, ${summary.rejected} rejected.`,
+    );
   });
 
   program

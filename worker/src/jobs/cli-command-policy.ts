@@ -65,6 +65,7 @@ export const EXCLUDED_COMMANDS: ReadonlySet<string> = new Set([
   "history list",
   "history show",
   "history stats",
+  "history push",
   "rerun",
 ]);
 

@@ -11102,6 +11102,75 @@
               "negatable": false
             }
           ]
+        },
+        {
+          "command": "history push",
+          "description": "Opt-in: upload redacted runs (no prompts, argv, paths, error messages or media) to your multix account usage ledger (default --since 30d). Key: MULTIX_API_KEY",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--url",
+              "flags": "--url <base>",
+              "description": "Server base URL (default MULTIX_REMOTE_URL or https://multix.zuey.me)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--dry-run",
+              "flags": "--dry-run",
+              "description": "Show how many runs would be sent and one sample entry; send nothing",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--failed",
+              "flags": "--failed",
+              "description": "Only failed runs",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--provider",
+              "flags": "-p, --provider <group>",
+              "description": "Only this provider group",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-p"
+            },
+            {
+              "long": "--command",
+              "flags": "-c, --command <text>",
+              "description": "Only commands containing this text",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-c"
+            },
+            {
+              "long": "--since",
+              "flags": "--since <age>",
+              "description": "Only runs newer than 30m, 12h, 7d or an ISO date",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            }
+          ]
         }
       ]
     },

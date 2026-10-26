@@ -4,6 +4,11 @@
  * the files it wrote to out/, upload them to the caller's R2 bucket, and
  * report truncated, redacted stdout/stderr. The directory is always removed.
  *
+ * The CLI keeps its run ledger in `<job dir>/history.jsonl`, outside out/, so
+ * it is never uploaded and goes away with the directory. Only a reduced usage
+ * report (numbers, ids, hashes, output names; job-usage.mjs) is copied into
+ * the result, together with epoch-ms phase timings (`timings`).
+ *
  * One deadline (`spec.timeoutMs`, at most 30 minutes) covers the whole job:
  * downloads, the CLI and uploads. The CLI gets what is left minus a reserve
  * for uploads, so a finished job still has time to deliver its files before
@@ -16,6 +21,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { InputError, downloadInputs } from "./job-inputs.mjs";
 import { collectOutputs, uploadOutputs } from "./job-outputs.mjs";
+import { readUsageReport } from "./job-usage.mjs";
 
 export const MAX_TEXT_BYTES = 16 * 1024;
 const MAX_CLI_BUFFER_BYTES = 16 * 1024 * 1024;
@@ -124,7 +130,15 @@ export async function runJob(spec, options = {}) {
   const deadline = AbortSignal.timeout(budget);
   const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
   const dir = await mkdtemp(join(tmpdir(), "multix-job-"));
-  const result = { status: "failed", exitCode: null, stdout: "", stderrTail: "", outputs: [] };
+  const timings = { startedAt };
+  const result = {
+    status: "failed",
+    exitCode: null,
+    stdout: "",
+    stderrTail: "",
+    outputs: [],
+    timings,
+  };
   if (!spec.upload) result.note = NO_STORAGE_NOTE;
   const stopped = () => {
     if (options.signal?.aborted) return "canceled";
@@ -132,9 +146,11 @@ export async function runJob(spec, options = {}) {
   };
   try {
     const outDir = join(dir, "out");
+    const historyFile = join(dir, "history.jsonl");
     await mkdir(join(dir, "in"));
     await mkdir(outDir);
     await downloadInputs(dir, spec.inputs, { signal, get: options.get });
+    timings.inputsDoneAt = Date.now();
     const reserve = Math.min(MAX_UPLOAD_RESERVE_MS, Math.floor(budget / 4));
     const cliTimeout = Math.max(1, budget - (Date.now() - startedAt) - reserve);
     const run = await runCli(options.bin ?? "multix", spec.argv, {
@@ -143,8 +159,9 @@ export async function runJob(spec, options = {}) {
         PATH: options.basePath ?? process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin",
         HOME: dir,
         MULTIX_DISABLE_HOME_ENV: "1",
-        // The job directory is thrown away: no local run ledger.
-        MULTIX_HISTORY: "0",
+        // The run ledger stays in the job directory, outside out/: never uploaded,
+        // removed with the directory; only its reduced usage report is returned.
+        MULTIX_HISTORY_FILE: historyFile,
         MULTIX_OUTPUT_DIR: outDir,
         NO_COLOR: "1",
         ...spec.env,
@@ -153,7 +170,10 @@ export async function runJob(spec, options = {}) {
       killSignal: "SIGTERM",
       signal,
     });
+    timings.cliDoneAt = Date.now();
     result.exitCode = run.exitCode;
+    const usage = await readUsageReport(historyFile, outDir, dir);
+    if (usage) result.usage = usage;
     // Redact first: a key cut in half by truncation could not be matched any more.
     result.stdout = head(redact(run.stdout, secrets));
     result.stderrTail = tail(redact(run.stderr, secrets));
@@ -168,6 +188,7 @@ export async function runJob(spec, options = {}) {
     result.outputs = spec.upload
       ? await uploadOutputs(files, spec.upload, { fetch: options.fetch, signal })
       : files.map(({ name, bytes }) => ({ name, url: null, bytes }));
+    timings.uploadsDoneAt = Date.now();
   } catch (error) {
     result.status = stopped() ?? "failed";
     const known = error instanceof InputError || error?.name === "R2UploadError";

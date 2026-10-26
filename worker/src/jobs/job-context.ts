@@ -5,8 +5,9 @@
  * has no job Durable Object bindings (then only the catalog is offered).
  */
 
-import type { AppContext, AppDeps } from "../app-context.js";
+import { type AppContext, type AppDeps, ledgerFor } from "../app-context.js";
 import { type WorkerEnv, jobCapsFrom } from "../config.js";
+import type { JobOrigin } from "../ledger/ledger-records.js";
 import type { ProviderKeys } from "../provider-secret-names.js";
 import { durableJobQuota } from "./account-job-quota.js";
 import type { JobToolsContext } from "./job-runner.js";
@@ -18,6 +19,7 @@ export function jobsContextFor(
   userId: string,
   keys: ProviderKeys,
   deps: AppDeps,
+  origin?: JobOrigin,
 ): JobToolsContext | undefined {
   // The CLI runner needs both Durable Objects: the per-job container and the job slots.
   if (!env.MULTIX_JOBS || !env.MULTIX_JOB_QUOTA) return undefined;
@@ -30,5 +32,7 @@ export function jobsContextFor(
     quota: durableJobQuota(env.MULTIX_JOB_QUOTA, caps),
     caps,
     r2Settings: () => app.accounts.r2Settings(userId),
+    ledger: ledgerFor(env, deps, userId),
+    origin,
   };
 }

@@ -38,6 +38,52 @@ export interface JobOutput {
   bytes: number;
 }
 
+/**
+ * What the CLI's run ledger recorded for the job (container/job-usage.mjs),
+ * reduced to numbers, ids and hashes: never argv, prompts, paths or URLs.
+ * Absent from containers that predate it and when the CLI recorded nothing;
+ * a field the provider did not report is absent, never 0.
+ */
+export interface JobUsageReport {
+  /** Command group the CLI resolved, e.g. "gemini". */
+  provider?: string;
+  /** Model the provider request named, else the --model option. */
+  model?: string;
+  /** CLI run time as the CLI measured it. */
+  durationMs?: number;
+  /** The CLI's classified error code (`multix.result/v1` codes), on failure. */
+  errorCode?: string;
+  tokens?: { input?: number; output?: number; total?: number; thinking?: number };
+  /** Cost the provider reported in USD. */
+  costUsd?: number;
+  /** Credits the provider reported (unit is provider-specific). */
+  credits?: number;
+  /** Other provider-reported numbers by key path (at most 20). */
+  metrics?: Record<string, number>;
+  http?: { requests: number; errors: number; ms: number };
+  /** Provider request / prediction ids (at most 10, 128 characters each). */
+  providerIds?: string[];
+  /**
+   * Output metadata; `name` is the path relative to out/ (JobOutput.name is a
+   * basename, so match the two lists by bytes and sha256, not by name).
+   */
+  outputs?: Array<{
+    name: string;
+    bytes: number;
+    mime?: string;
+    sha256?: string;
+    durationS?: number;
+  }>;
+}
+
+/** Wall-clock phases inside the container, epoch milliseconds. */
+export interface JobTimings {
+  startedAt: number;
+  inputsDoneAt?: number;
+  cliDoneAt?: number;
+  uploadsDoneAt?: number;
+}
+
 /** Final report from the job server. stdout/stderr are truncated and redacted. */
 export interface JobResult {
   status: JobTerminalStatus;
@@ -48,6 +94,10 @@ export interface JobResult {
   /** Short explanation for a failure outside the CLI (download, upload, timeout). */
   error?: string;
   note?: string;
+  /** Optional: absent from older containers. */
+  usage?: JobUsageReport;
+  /** Optional: absent from older containers. */
+  timings?: JobTimings;
 }
 
 /** What the Durable Object reports about its job. */
