@@ -313,7 +313,7 @@ function printLive(
   for (const m of models) {
     const state = m.listed === null ? "catalog unknown" : (m.status ?? "");
     const run = m.command
-      ? `multix ${m.command}${m.ready === false ? ` [needs ${m.keys?.join(", ")}]` : ""}`
+      ? `${m.verified ? "" : "unverified, "}multix ${m.command}${m.ready === false ? ` [needs ${m.keys?.join(", ")}]` : ""}`
       : m.runner
         ? `unverified, multix ${m.runner} passes any id`
         : "no multix command";
