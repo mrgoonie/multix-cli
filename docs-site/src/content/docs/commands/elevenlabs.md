@@ -27,6 +27,41 @@ multix elevenlabs voice-changer --input source.wav --voice <voiceId> --output ch
 `tts` returns audio synchronously. Clone input is local audio and should total
 one to three minutes.
 
+### TTS models and model-specific options
+
+| Model | Max characters | Voice settings it uses | Notes |
+|---|---|---|---|
+| `eleven_v4` | 10,000 | `--stability`, `--similarity-boost`, `--clone-strength` | Highest quality, audio tags, 90+ languages |
+| `eleven_v4_turbo` | 10,000 | `--stability`, `--similarity-boost`, `--clone-strength` | Low latency, half the character cost of v4 |
+| `eleven_v3` | 5,000 | `--stability`, `--similarity-boost` | Audio tags; no `--previous-text`/`--next-text` |
+| `eleven_multilingual_v2` (default) | 10,000 | all but `--clone-strength` | Ignores `--language-code` |
+| `eleven_flash_v2_5`, `eleven_turbo_v2_5` | 40,000 | `--stability`, `--similarity-boost` | Low latency |
+
+```bash
+multix elevenlabs tts --model eleven_v4 --language-code en \
+  --text "[whispers] Keep it covered. [sighs] They may not ask as politely." --output line.mp3
+multix elevenlabs tts --model eleven_v4_turbo --text "Hi there." --timestamps
+multix elevenlabs models   # live model catalog
+```
+
+`tts` checks options against the model before calling the API, so a mismatch
+costs nothing:
+
+- Eleven v4 and v4 Turbo reject `--style` and `--no-speaker-boost`; the API
+  would accept and ignore them. `--clone-strength` (0 to 1, start at 0) only
+  affects Professional Voice Clones fine-tuned for v4.
+- `--previous-text`/`--next-text` fail for `eleven_v3`, which the API refuses.
+- For the older models an option the model ignores only prints a warning and
+  is still sent, so existing scripts behave as before.
+- Audio tags such as `[whispers]` work on v4, v4 Turbo and v3; other models
+  get a warning that the tags may be read aloud. v4 and v3 do not support SSML
+  `<break>`; use punctuation or audio tags, and IPA between slashes on v4.
+
+`--timestamps` saves character timing as `<audio>.alignment.json` next to the
+audio. Every `tts` run prints the characters ElevenLabs reports in its
+`character-cost` header; with `--json` the same number is `usage.credits`, and
+`usage.metrics["header.character-cost"]` names its source.
+
 ## Transcription and generated audio
 
 ```bash

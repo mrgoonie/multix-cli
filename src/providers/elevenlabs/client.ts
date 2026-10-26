@@ -88,12 +88,17 @@ export async function apiDelete(endpoint: string, apiKey: string): Promise<void>
 
 /**
  * POST and return raw bytes (audio/binary endpoints like TTS, SFX, Music, Isolation).
+ * `onHeaders` sees the response headers of a successful call (e.g. `character-cost`).
  */
 export async function apiPostBinary(
   endpoint: string,
   body: Record<string, unknown> | FormData,
   apiKey: string,
-  opts: { timeoutMs?: number; query?: Record<string, string> } = {},
+  opts: {
+    timeoutMs?: number;
+    query?: Record<string, string>;
+    onHeaders?: (headers: Headers) => void;
+  } = {},
 ): Promise<Buffer> {
   const url = new URL(`${ELEVENLABS_BASE_URL}/${endpoint.replace(/^\//, "")}`);
   if (opts.query) {
@@ -131,6 +136,7 @@ export async function apiPostBinary(
     throw new HttpError(res.status, text.slice(0, 500), url.toString());
   }
 
+  opts.onHeaders?.(res.headers);
   return Buffer.from(await res.arrayBuffer());
 }
 

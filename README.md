@@ -463,7 +463,10 @@ Set `CLOUDFLARE_AI_GATEWAY_COLLECT_LOG_PAYLOAD=true` only to explicitly opt in t
 # Text-to-speech (sync, returns audio bytes)
 multix elevenlabs tts --text "Hello world" [--voice <voiceId>] [--model eleven_multilingual_v2] \
   [--format mp3_44100_128] [--stability 0.5] [--similarity-boost 0.75] [--style 0.0] \
-  [--no-speaker-boost] [--language-code en] [--seed <n>] [--output out.mp3] [-v]
+  [--no-speaker-boost] [--clone-strength 0] [--language-code en] [--seed <n>] \
+  [--previous-text "..."] [--next-text "..."] [--timestamps] [--output out.mp3] [-v]
+# Eleven v4 (audio tags, 90+ languages); v4 Turbo is the low-latency variant at half the character cost
+multix elevenlabs tts --text "[whispers] Keep it covered." --model eleven_v4 --language-code en
 
 # Voices: list / get / search shared / design / persist / delete
 multix elevenlabs voices list [--category cloned|generated|premade|professional]
@@ -514,7 +517,7 @@ multix elevenlabs models
 ```
 
 **ElevenLabs models:**
-- TTS: `eleven_multilingual_v2` (default), `eleven_flash_v2_5`, `eleven_flash_v2`, `eleven_turbo_v2_5`, `eleven_turbo_v2`, `eleven_v3`
+- TTS: `eleven_multilingual_v2` (default), `eleven_v4`, `eleven_v4_turbo`, `eleven_v3`, `eleven_flash_v2_5`, `eleven_flash_v2`, `eleven_turbo_v2_5`, `eleven_turbo_v2` (`multix elevenlabs models` lists the live catalog)
 - STT: `scribe_v1`, `scribe_v1_experimental`
 - Voice changer: `eleven_multilingual_sts_v2` (default)
 - Music: `music_v1`
@@ -526,7 +529,11 @@ multix elevenlabs models
 - Auth header is `xi-api-key`; base URL is `https://api.elevenlabs.io/v1`.
 - Most generation endpoints (TTS, SFX, Music, Voice Changer, Isolation) return audio bytes synchronously.
 - Dubbing is async: submit → poll → download per-language tracks.
-- Output format strings combine codec + sample rate + bitrate, e.g. `mp3_44100_128`, `pcm_24000`, `ulaw_8000`.
+- Output format strings combine codec + sample rate + bitrate, e.g. `mp3_44100_128`, `pcm_24000`, `ulaw_8000`; `tts` also accepts `wav_*`, `opus_48000_*`, `alaw_8000`, `pcm_32000`/`pcm_48000` and `mp3_24000_48`.
+- `tts` checks options against the model before calling the API. Eleven v4 and v4 Turbo use only `--stability`, `--similarity-boost` and `--clone-strength` (Professional Voice Clones fine-tuned for v4); `--style` and `--no-speaker-boost` are rejected for them, as are `--previous-text`/`--next-text` for `eleven_v3` (the API refuses them). For the older models an option the model ignores (e.g. `--style` on Flash, `--language-code` on `eleven_multilingual_v2`) only prints a warning, so existing scripts keep working. Audio tags (`[whispers]`) work on v4, v4 Turbo and v3; SSML `<break>` does not.
+- Text length per request: 10,000 characters for v4, v4 Turbo and multilingual_v2, 5,000 for v3, 40,000 for Flash/Turbo v2.5.
+- `--timestamps` uses the `/with-timestamps` endpoint and writes character timing to `<audio>.alignment.json` next to the audio (and next to the `--output` copy).
+- The billed characters come from ElevenLabs' `character-cost` response header: `tts` prints them, and `--json` reports them as `usage.credits` with the source in `usage.metrics["header.character-cost"]`. Nothing is estimated.
 
 ### `multix fal`
 

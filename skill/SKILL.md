@@ -404,6 +404,9 @@ multix gemini generate-speech --text "Have a wonderful day!" --voice Kore
 multix gemini generate-speech --text "Have a wonderful day!" --model gemini-3.8-flash-tts --style "cheerful and friendly" --voice Kore
 multix minimax generate-speech --text "..." --voice <id> --emotion neutral
 multix elevenlabs tts --text "Hello world" [--voice <voiceId>] [--model eleven_multilingual_v2]
+# Eleven v4 / v4 Turbo: audio tags, 90+ languages; only --stability, --similarity-boost,
+# --clone-strength apply (--style/--no-speaker-boost are rejected). --timestamps adds alignment JSON.
+multix elevenlabs tts --text "[whispers] Keep it covered." --model eleven_v4 [--language-code en] [--timestamps]
 
 # Voice cloning + STT
 multix openai transcribe --input audio.mp3 [--format text|json|diarized_json] [--language vi]
