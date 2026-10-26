@@ -36,7 +36,7 @@ export interface TtsModelCaps {
   languageCode: boolean;
   /** Interprets SSML <break> tags. */
   ssmlBreak: boolean;
-  /** Interprets SSML <phoneme> tags. */
+  /** Speaks words wrapped in SSML <phoneme> tags (other models drop the word). */
   ssmlPhoneme: boolean;
 }
 
@@ -51,9 +51,11 @@ export interface TtsModelCaps {
  * eleven_multilingual_v2 answers 200 to a code on its language list ("de")
  * and 400 to others ("vi"); the API reference says it does not enforce the
  * code. clone_strength (0..1) is accepted by v4 and v4 Turbo and rejected
- * with 400 unsupported_model by every other model in this table. SSML, per the TTS best
- * practices guide: v4 and v3 do not support <break>; <phoneme> works only
- * with eleven_flash_v2.
+ * with 400 unsupported_model by every other model in this table. SSML, from live
+ * generations on 2026-10-26: v4 and v3 ignore <break>, the other models pause.
+ * A word wrapped in <phoneme> is spoken by v4, v4 Turbo, v3, v3 conversational,
+ * flash_v2 and turbo_v2, and dropped from the audio by multilingual_v2,
+ * flash_v2_5 and turbo_v2_5 (the best practices guide lists only flash_v2).
  */
 export const ELEVENLABS_TTS_MODEL_CAPS: Record<ElevenLabsTtsModel, TtsModelCaps> = {
   eleven_v4: {
@@ -65,7 +67,7 @@ export const ELEVENLABS_TTS_MODEL_CAPS: Record<ElevenLabsTtsModel, TtsModelCaps>
     cloneStrength: true,
     languageCode: true,
     ssmlBreak: false,
-    ssmlPhoneme: false,
+    ssmlPhoneme: true,
   },
   eleven_v4_turbo: {
     maxChars: 10_000,
@@ -76,7 +78,7 @@ export const ELEVENLABS_TTS_MODEL_CAPS: Record<ElevenLabsTtsModel, TtsModelCaps>
     cloneStrength: true,
     languageCode: true,
     ssmlBreak: false,
-    ssmlPhoneme: false,
+    ssmlPhoneme: true,
   },
   eleven_v3: {
     maxChars: 5_000,
@@ -87,7 +89,7 @@ export const ELEVENLABS_TTS_MODEL_CAPS: Record<ElevenLabsTtsModel, TtsModelCaps>
     cloneStrength: false,
     languageCode: true,
     ssmlBreak: false,
-    ssmlPhoneme: false,
+    ssmlPhoneme: true,
   },
   eleven_v3_conversational: {
     maxChars: 5_000,
@@ -98,7 +100,7 @@ export const ELEVENLABS_TTS_MODEL_CAPS: Record<ElevenLabsTtsModel, TtsModelCaps>
     cloneStrength: false,
     languageCode: true,
     ssmlBreak: false,
-    ssmlPhoneme: false,
+    ssmlPhoneme: true,
   },
   eleven_multilingual_v2: {
     maxChars: 10_000,
@@ -153,7 +155,7 @@ export const ELEVENLABS_TTS_MODEL_CAPS: Record<ElevenLabsTtsModel, TtsModelCaps>
     cloneStrength: false,
     languageCode: true,
     ssmlBreak: true,
-    ssmlPhoneme: false,
+    ssmlPhoneme: true,
   },
 };
 
