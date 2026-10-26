@@ -27,7 +27,7 @@ import {
   unknownState,
 } from "./speech-client.js";
 
-export const DEFAULT_OPENROUTER_STT_MODEL = "openai/whisper-large-v3-turbo";
+export { DEFAULT_OPENROUTER_STT_MODEL } from "./speech-defaults.js";
 /** OpenRouter's cap on a multipart upload (the same as OpenAI's). */
 export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 /** `input_audio.format` as OpenRouter validates it. */

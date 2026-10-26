@@ -18,8 +18,22 @@ describe("pricing catalog", () => {
     for (const e of PRICING_CATALOG) {
       expect(e.verified).toBe(true);
       expect(e.last_checked).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-      expect(e.source).toMatch(/^https:\/\/(ai\.google\.dev|elevenlabs\.io|docs\.fish\.audio)\//);
+      expect(e.source).toMatch(
+        /^https:\/\/(ai\.google\.dev|elevenlabs\.io|docs\.fish\.audio|openrouter\.ai)\//,
+      );
       expect(e.windows.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("lists each model once, and OpenRouter ids in lower case as OpenRouter matches them", () => {
+    const seen = new Set<string>();
+    for (const e of PRICING_CATALOG) {
+      for (const m of e.models) {
+        const key = `${e.provider} ${m}`;
+        expect(seen.has(key), key).toBe(false);
+        seen.add(key);
+        if (e.provider === "openrouter") expect(m).toBe(m.toLowerCase());
+      }
     }
   });
 
@@ -138,6 +152,142 @@ describe("estimates", () => {
       { at: AT },
     );
     expect(flags.units).toEqual(mcp.units);
+  });
+});
+
+describe("openrouter estimates", () => {
+  it("prices OpenRouter TTS per character from the models catalog: proven ceiling", () => {
+    const e = estimateCommand(
+      "openrouter tts",
+      { text: VI_NFC, model: "elevenlabs/eleven-v4", instructions: "calm" },
+      { at: AT },
+    );
+    expect(e).toMatchObject({
+      status: "estimated",
+      provider: "openrouter",
+      upper_bound: "proven",
+      units: { characters: { low: 17, expected: 17, high: 21 } },
+      rate: {
+        id: "openrouter/elevenlabs-multilingual@api",
+        source: "https://openrouter.ai/api/v1/models?output_modalities=speech",
+      },
+    });
+    // $0.00008 per character.
+    expect(e.expected_usd).toBeCloseTo(17 * 0.00008, 9);
+    expect(e.high_usd).toBeCloseTo(21 * 0.00008, 9);
+  });
+
+  it("defaults to the CLI's TTS model, matches ids ignoring case, and knows canonical slugs", () => {
+    const d = estimateCommand("openrouter tts", { text: "hello" }, { at: AT });
+    expect(d).toMatchObject({ model: "google/gemini-3.8-flash-tts", upper_bound: "estimated" });
+    expect(d.units.output_audio_tokens).toBeDefined();
+    const upper = estimateCommand(
+      "openrouter tts",
+      { text: "hello", model: "ElevenLabs/Eleven-V4-Turbo" },
+      { at: AT },
+    );
+    expect(upper.rate?.id).toBe("openrouter/elevenlabs-flash-turbo@api");
+    const slug = estimateCommand(
+      "openrouter tts",
+      { text: "hello", model: "minimax/speech-2.8-hd-20260716" },
+      { at: AT },
+    );
+    expect(slug.rate?.id).toBe("openrouter/minimax-speech-hd@api");
+  });
+
+  it("prices Fish models on OpenRouter by UTF-8 bytes, never fewer than characters", () => {
+    const e = estimateCommand(
+      "openrouter tts",
+      { text: VI_NFC, model: "fish-audio/s2.1-pro" },
+      { at: AT },
+    );
+    expect(e.units.utf8_bytes?.high).toBe(22);
+    expect(e.high_usd).toBeCloseTo(22 * 0.000015, 9);
+  });
+
+  it("Seed Audio bills output seconds: the ceiling is only estimated", () => {
+    const e = estimateCommand(
+      "openrouter tts",
+      { text: "a".repeat(140), model: "bytedance-seed/seed-audio-1-0" },
+      { at: AT },
+    );
+    expect(e.upper_bound).toBe("estimated");
+    expect(e.units.output_audio_seconds).toEqual({ low: 5.6, expected: 10, high: 23.3 });
+    expect(e.expected_usd).toBeCloseTo(10 * 0.0025, 9);
+  });
+
+  it("a price with a known end and no known successor turns unknown after it", () => {
+    const drama = { text: "hi", model: "fish-audio/drama-3" };
+    expect(estimateCommand("openrouter tts", drama, { at: AT }).status).toBe("estimated");
+    expect(
+      estimateCommand("openrouter tts", drama, { at: new Date("2026-11-13T00:00:00Z") }),
+    ).toMatchObject({ status: "unknown", reason: "no_window" });
+  });
+
+  it("models OpenRouter has not priced in a known unit stay unknown", () => {
+    for (const model of ["openai/gpt-4o-transcribe", "microsoft/mai-transcribe-2"]) {
+      expect(
+        estimateCommand(
+          "openrouter transcribe",
+          { input: "a.mp3", model },
+          { audioSeconds: 10, at: AT },
+        ),
+      ).toMatchObject({ status: "unknown", reason: "no_price" });
+    }
+    expect(
+      estimateCommand("openrouter tts", { text: "hi", model: "x/unknown" }, { at: AT }),
+    ).toMatchObject({ status: "unknown", reason: "no_price" });
+  });
+
+  it("prices transcription per second of input audio, rounded up to a minute at the high end", () => {
+    const e = estimateCommand(
+      "openrouter transcribe",
+      { input: "talk.mp3", model: "openai/whisper-1" },
+      { audioSeconds: 90.5, at: AT },
+    );
+    expect(e).toMatchObject({
+      status: "estimated",
+      upper_bound: "proven",
+      units: { input_audio_seconds: { low: 90.5, expected: 90.5, high: 120 } },
+      rate: { id: "openrouter/stt-100@api" },
+    });
+    // whisper-1: $0.006 per minute.
+    expect(e.expected_usd).toBeCloseTo(90.5 * 0.0001, 9);
+    expect(e.high_usd).toBeCloseTo(0.012, 9);
+    // Within 5% of a minute boundary, the ceiling moves to the next minute.
+    const edge = estimateCommand(
+      "openrouter transcribe",
+      { input: "talk.mp3" },
+      { audioSeconds: 58, at: AT },
+    );
+    expect(edge.model).toBe("openai/whisper-large-v3-turbo");
+    expect(edge.units.input_audio_seconds?.high).toBe(120);
+  });
+
+  it("transcription without a measured audio length is unknown, never $0", () => {
+    expect(
+      estimateCommand("openrouter transcribe", { input: "https://x.test/a.mp3" }, { at: AT }),
+    ).toMatchObject({ status: "unknown", reason: "missing_input", high_usd: null });
+    for (const audioSeconds of [0, Number.NaN]) {
+      expect(
+        estimateCommand("openrouter transcribe", { input: "a.mp3" }, { audioSeconds, at: AT })
+          .status,
+      ).toBe("unknown");
+    }
+    expect(estimateCommand("openrouter transcribe", {}, { at: AT })).toMatchObject({
+      reason: "missing_input",
+      detail: expect.stringContaining("--input"),
+    });
+  });
+
+  it("the guard admits a transcription whose proven ceiling fits and refuses one that does not", () => {
+    const e = estimateCommand(
+      "openrouter transcribe",
+      { input: "talk.mp3", model: "openai/whisper-1" },
+      { audioSeconds: 30, at: AT },
+    );
+    expect(() => checkBudget(e, 0.01, "strict")).not.toThrow();
+    expect(() => checkBudget(e, 0.005, "strict")).toThrow(/exceeds --max-cost/);
   });
 });
 

@@ -9,6 +9,14 @@
  * Audio is not billed by one formula: Gemini TTS bills text tokens in and audio
  * tokens out (25 tokens per second), ElevenLabs bills characters, Fish Audio
  * bills UTF-8 bytes. The meter names keep those units apart.
+ *
+ * OpenRouter speech and transcription prices are copied from its public models
+ * catalog, whose `pricing` takes three shapes: `prompt` only = USD per input
+ * character (speech) or per second of input audio (transcription),
+ * `completion` only = USD per second of output audio, both = USD per input and
+ * output token. Token-priced transcription models (audio tokens per second not
+ * published) and prices whose unit is unclear are left out, so they stay
+ * "unknown".
  */
 
 export const PRICING_SCHEMA = "multix.pricing/v1";
@@ -22,7 +30,11 @@ export type PriceMeter =
   /** Characters of the text to speak (Unicode code points as sent). */
   | "characters"
   /** UTF-8 bytes of the text to speak. */
-  | "utf8_bytes";
+  | "utf8_bytes"
+  /** Seconds of audio sent to be transcribed. */
+  | "input_audio_seconds"
+  /** Seconds of audio the model returns. */
+  | "output_audio_seconds";
 
 export interface PriceComponent {
   meter: PriceMeter;
@@ -71,12 +83,270 @@ const ELEVENLABS_PRICING = "https://elevenlabs.io/pricing/api";
 const FISH_PRICING =
   "https://docs.fish.audio/developer-guide/models-pricing/pricing-and-rate-limits";
 
+const OPENROUTER_SPEECH = "https://openrouter.ai/api/v1/models?output_modalities=speech";
+const OPENROUTER_TRANSCRIPTION =
+  "https://openrouter.ai/api/v1/models?output_modalities=transcription";
+/** Gemini 3.8 TTS prices double on this date; re-check OpenRouter's price then. */
+const GEMINI_38_PRICE_CHANGE = "2027-01-01T00:00:00Z";
+/** Fish Audio's Drama 3 promotion ends; re-check OpenRouter's price then. */
+const DRAMA_3_PROMOTION_END = "2026-11-12T17:00:00Z";
+
 const perM = (meter: PriceMeter, usd: number): PriceComponent => ({ meter, usd, per: 1_000_000 });
 const perK = (meter: PriceMeter, usd: number): PriceComponent => ({ meter, usd, per: 1_000 });
 
 function geminiTts(input: number, output: number): PriceComponent[] {
   return [perM("input_text_tokens", input), perM("output_audio_tokens", output)];
 }
+
+/** One OpenRouter price, keyed by model id and canonical slug as the catalog lists them. */
+function openrouter(
+  id: string,
+  models: string[],
+  components: PriceComponent[],
+  opts: { source: string; until?: string; notes?: string },
+): PriceEntry {
+  return {
+    id: `openrouter/${id}@api`,
+    provider: "openrouter",
+    models,
+    tier: "api-usage",
+    currency: "USD",
+    region: "global",
+    // A known end without a known next price: no window after it, so "unknown".
+    windows: [
+      {
+        ...(opts.until ? { until: opts.until, label: "scheduled" } : {}),
+        components,
+      },
+    ],
+    last_checked: "2026-10-26",
+    source: opts.source,
+    verified: true,
+    ...(opts.notes ? { notes: opts.notes } : {}),
+  };
+}
+
+const speechChars = (id: string, models: string[], usdPerM: number) =>
+  openrouter(id, models, [perM("characters", usdPerM)], { source: OPENROUTER_SPEECH });
+const sttSeconds = (id: string, models: string[], usdPerM: number) =>
+  openrouter(id, models, [perM("input_audio_seconds", usdPerM)], {
+    source: OPENROUTER_TRANSCRIPTION,
+  });
+
+const OPENROUTER_CATALOG: PriceEntry[] = [
+  // Text to speech, USD per input character.
+  speechChars(
+    "elevenlabs-multilingual",
+    [
+      "elevenlabs/eleven-v4",
+      "elevenlabs/eleven-v4-20260930",
+      "elevenlabs/eleven-v3",
+      "elevenlabs/eleven-v3-20260930",
+      "elevenlabs/eleven-multilingual-v2",
+      "elevenlabs/eleven-multilingual-v2-20260930",
+    ],
+    80,
+  ),
+  speechChars(
+    "elevenlabs-flash-turbo",
+    [
+      "elevenlabs/eleven-v4-turbo",
+      "elevenlabs/eleven-v4-turbo-20260930",
+      "elevenlabs/eleven-v3-conversational",
+      "elevenlabs/eleven-v3-conversational-20260930",
+      "elevenlabs/eleven-flash-v2.5",
+      "elevenlabs/eleven-flash-v2.5-20260930",
+      "elevenlabs/eleven-flash-v2",
+      "elevenlabs/eleven-flash-v2-20260930",
+      "elevenlabs/eleven-turbo-v2.5",
+      "elevenlabs/eleven-turbo-v2.5-20260930",
+      "elevenlabs/eleven-turbo-v2",
+      "elevenlabs/eleven-turbo-v2-20260930",
+    ],
+    40,
+  ),
+  speechChars(
+    "minimax-speech-hd",
+    ["minimax/speech-2.8-hd", "minimax/speech-2.8-hd-20260716"],
+    100,
+  ),
+  speechChars(
+    "minimax-speech-turbo",
+    ["minimax/speech-2.8-turbo", "minimax/speech-2.8-turbo-20260716"],
+    60,
+  ),
+  speechChars("deepgram-flux-tts", ["deepgram/flux-tts", "deepgram/flux-tts-20260812"], 45),
+  speechChars("deepgram-aura-2", ["deepgram/aura-2", "deepgram/aura-2-20260716"], 30),
+  speechChars(
+    "microsoft-mai-voice",
+    ["microsoft/mai-voice-2.1", "microsoft/mai-voice-2.1-20261001", "microsoft/mai-voice-2"],
+    22,
+  ),
+  speechChars(
+    "qwen-tts-plus",
+    ["qwen/qwen-audio-3.0-tts-plus", "qwen/qwen-audio-3.0-tts-plus-20260723"],
+    20,
+  ),
+  speechChars("voxtral-mini-tts-2603", ["mistralai/voxtral-mini-tts-2603"], 16),
+  speechChars(
+    "speech-15",
+    [
+      "heygen/heygen-voice-1",
+      "heygen/heygen-voice-1-20261009",
+      "microsoft/mai-voice-2.1-flash",
+      "microsoft/mai-voice-2.1-flash-20261001",
+      "microsoft/mai-voice-2-flash",
+      "microsoft/mai-voice-2-flash-20260723",
+      "qwen/qwen-audio-3.0-tts-flash",
+      "qwen/qwen-audio-3.0-tts-flash-20260723",
+      "x-ai/grok-voice-tts-1.0",
+    ],
+    15,
+  ),
+  speechChars(
+    "voxtral-mini-tts",
+    ["mistralai/voxtral-mini-tts-3-0", "mistralai/voxtral-mini-tts-3-0-20261020"],
+    13,
+  ),
+  speechChars("open-weights-tts", ["canopylabs/orpheus-3b-0.1-ft", "sesame/csm-1b"], 7),
+  speechChars(
+    "heygen-voice-turbo",
+    ["heygen/heygen-voice-1-turbo", "heygen/heygen-voice-1-turbo-20261009"],
+    4,
+  ),
+  speechChars("kokoro", ["hexgrad/kokoro-82m"], 0.62),
+  // Fish Audio bills UTF-8 bytes on its own API; bytes are never fewer than
+  // characters, so pricing bytes keeps the ceiling safe whichever OpenRouter counts.
+  openrouter(
+    "fish-s2",
+    [
+      "fish-audio/s2.1-pro",
+      "fish-audio/s2.1-pro-20260729",
+      "fish-audio/s2-pro",
+      "fish-audio/s2-pro-20260729",
+      "fish-audio/s1",
+      "fish-audio/s1-20260729",
+    ],
+    [perM("utf8_bytes", 15)],
+    { source: OPENROUTER_SPEECH },
+  ),
+  openrouter(
+    "fish-drama-3",
+    ["fish-audio/drama-3", "fish-audio/drama-3-20261013"],
+    [perM("utf8_bytes", 2)],
+    { source: OPENROUTER_SPEECH, until: DRAMA_3_PROMOTION_END },
+  ),
+  // Gemini TTS through OpenRouter: tokens in, audio tokens out (25 per second).
+  openrouter(
+    "gemini-3.8-flash-tts",
+    ["google/gemini-3.8-flash-tts", "google/gemini-3.8-flash-tts-20260922"],
+    geminiTts(0.5, 9),
+    { source: OPENROUTER_SPEECH, until: GEMINI_38_PRICE_CHANGE },
+  ),
+  openrouter(
+    "gemini-3.8-flash-lite-tts",
+    ["google/gemini-3.8-flash-lite-tts", "google/gemini-3.8-flash-lite-tts-20260922"],
+    geminiTts(0.5, 6),
+    { source: OPENROUTER_SPEECH, until: GEMINI_38_PRICE_CHANGE },
+  ),
+  openrouter(
+    "gemini-3.1-flash-tts-preview",
+    ["google/gemini-3.1-flash-tts-preview"],
+    geminiTts(1, 20),
+    { source: OPENROUTER_SPEECH },
+  ),
+  // Seed Audio bills seconds of audio it returns, so its ceiling is an estimate.
+  openrouter(
+    "seed-audio",
+    ["bytedance-seed/seed-audio-1-0", "bytedance-seed/seed-audio-1-0-20260630"],
+    [perK("output_audio_seconds", 2.5)],
+    { source: OPENROUTER_SPEECH },
+  ),
+  // Speech to text, USD per second of input audio.
+  sttSeconds("google-chirp-3", ["google/chirp-3"], 266.666666667),
+  sttSeconds(
+    "stt-100",
+    [
+      "openai/whisper-1",
+      "fish-audio/transcribe-1-pro",
+      "fish-audio/transcribe-1-pro-20260924",
+      "fish-audio/transcribe-1",
+      "fish-audio/transcribe-1-20260729",
+    ],
+    100,
+  ),
+  sttSeconds(
+    "assemblyai-universal",
+    [
+      "assemblyai/universal-3-6-pro",
+      "assemblyai/universal-3-6-pro-20261014",
+      "assemblyai/universal-3-5-pro",
+      "assemblyai/universal-3-5-pro-20260914",
+    ],
+    83.3333,
+  ),
+  sttSeconds(
+    "openai-gpt-transcribe",
+    ["openai/gpt-transcribe", "openai/gpt-transcribe-20260805"],
+    75,
+  ),
+  sttSeconds("deepgram-nova-3", ["deepgram/nova-3", "deepgram/nova-3-20260714"], 71.6666666667),
+  sttSeconds(
+    "voxtral-small-transcribe",
+    ["mistralai/voxtral-small-transcribe-3-0", "mistralai/voxtral-small-transcribe-3-0-20261020"],
+    66.6667,
+  ),
+  sttSeconds(
+    "elevenlabs-scribe-v2",
+    [
+      "elevenlabs/scribe-v2",
+      "elevenlabs/scribe-v2-20260929",
+      "elevenlabs/scribe-v2-medical",
+      "elevenlabs/scribe-v2-medical-20260929",
+    ],
+    61.1111111111,
+  ),
+  sttSeconds(
+    "voxtral-mini-transcribe-3",
+    ["mistralai/voxtral-mini-transcribe-3-0", "mistralai/voxtral-mini-transcribe-3-0-20261020"],
+    58.3333,
+  ),
+  sttSeconds(
+    "stt-50",
+    [
+      "meta/muse-voice-transcribe-1.0",
+      "meta/muse-voice-transcribe-1.0-20260903",
+      "mistralai/voxtral-small-24b-2507-stt",
+      "mistralai/voxtral-small-24b-2507-stt-20260813",
+      "mistralai/voxtral-mini-transcribe",
+      "mistralai/voxtral-mini-transcribe-2602",
+    ],
+    50,
+  ),
+  sttSeconds("x-ai-grok-stt", ["x-ai/grok-stt-1.0", "x-ai/grok-stt-20260723"], 27.7777777778),
+  sttSeconds("nvidia-parakeet", ["nvidia/parakeet-tdt-0.6b-v3"], 25),
+  sttSeconds(
+    "voxtral-mini-3b",
+    ["mistralai/voxtral-mini-3b-2507", "mistralai/voxtral-mini-3b-2507-20260813"],
+    16.6667,
+  ),
+  sttSeconds(
+    "stt-7.5",
+    ["openai/whisper-large-v3", "qwen/qwen3-asr-1.7b", "qwen/qwen3-asr-1.7b-20260813"],
+    7.5,
+  ),
+  sttSeconds(
+    "stt-3.33",
+    [
+      "openai/whisper-large-v3-turbo",
+      "qwen/qwen3-asr-0.6b",
+      "qwen/qwen3-asr-0.6b-20260813",
+      "nvidia/nemotron-3.5-asr-streaming-multilingual-0.6b",
+      "nvidia/nemotron-3.5-asr-streaming-multilingual-0.6b-20260813",
+    ],
+    3.33,
+  ),
+];
 
 export const PRICING_CATALOG: PriceEntry[] = [
   {
@@ -223,6 +493,7 @@ export const PRICING_CATALOG: PriceEntry[] = [
     source: FISH_PRICING,
     verified: true,
   },
+  ...OPENROUTER_CATALOG,
 ];
 
 export interface ResolvedRate {

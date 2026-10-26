@@ -6,7 +6,9 @@
  * runtime-neutral (src/budget) and shared with the MCP Worker.
  */
 
+import fs from "node:fs";
 import {
+  type CommandDefaults,
   type CostPolicy,
   checkBudget,
   estimateCommand,
@@ -18,6 +20,7 @@ import type { CostEstimate } from "../budget/cost-estimate.js";
 import { type CostReceipt, buildCostReceipt, operationIdFor } from "../budget/cost-receipt.js";
 import { BudgetError } from "../core/errors.js";
 import { getDefaultModel } from "../providers/gemini/models.js";
+import { probeDuration } from "./output-file-inspect.js";
 import { run } from "./run-state.js";
 
 export interface BudgetCheck {
@@ -28,9 +31,20 @@ export interface BudgetCheck {
   message?: string;
 }
 
-/** Defaults a command resolves at run time (env overrides), not in commander. */
-function runtimeDefaults(command: string): { model?: string } {
+/** The length of a local audio file; a URL or an unreadable file has none (fail closed). */
+function localAudioSeconds(input: unknown): number | undefined {
+  if (typeof input !== "string" || /^https?:\/\//i.test(input)) return undefined;
+  if (!fs.existsSync(input) || !fs.statSync(input).isFile()) return undefined;
+  return probeDuration(input);
+}
+
+/** Defaults a command resolves at run time (env overrides, file probes), not in commander. */
+function runtimeDefaults(command: string, options: Record<string, unknown>): CommandDefaults {
   if (command === "gemini generate-speech") return { model: getDefaultModel("generate-speech") };
+  if (command === "openrouter transcribe") {
+    const audioSeconds = localAudioSeconds(options.input);
+    return audioSeconds !== undefined ? { audioSeconds } : {};
+  }
   return {};
 }
 
@@ -46,7 +60,7 @@ export function preflightCost(): boolean {
   const maxCost = hasMax ? parseMaxCost(o.maxCost) : undefined;
   const policy = parseCostPolicy(o.costPolicy);
   if (estimateOnly || hasMax || pricedCommands().includes(run.command)) {
-    run.estimate = estimateCommand(run.command, o, runtimeDefaults(run.command));
+    run.estimate = estimateCommand(run.command, o, runtimeDefaults(run.command, o));
   }
   if (maxCost !== undefined && run.estimate) {
     run.maxCost = maxCost;
@@ -118,9 +132,11 @@ export function formatEstimate(e: CostEstimate, budget?: BudgetCheck): string {
     const counted = Object.entries(e.units)
       .map(([meter, r]) => `${meter} ${r.low === r.high ? r.expected : `${r.low}–${r.high}`}`)
       .join(", ");
-    lines.push(
-      `  text: ${e.text.characters} characters (${e.text.nfc_characters} after NFC), ${e.text.utf8_bytes} UTF-8 bytes`,
-    );
+    if (e.text.characters > 0) {
+      lines.push(
+        `  text: ${e.text.characters} characters (${e.text.nfc_characters} after NFC), ${e.text.utf8_bytes} UTF-8 bytes`,
+      );
+    }
     if (counted) lines.push(`  units: ${counted}`);
     if (e.rate) {
       const window = e.rate.effective_until ? `, until ${e.rate.effective_until}` : "";

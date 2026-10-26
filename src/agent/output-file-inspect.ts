@@ -87,7 +87,8 @@ function sha256(file: string): string {
   return hash.digest("hex");
 }
 
-function probeDuration(file: string): number | undefined {
+/** Media duration in seconds from ffprobe; undefined when ffprobe is missing or cannot read it. */
+export function probeDuration(file: string): number | undefined {
   if (!hasFfprobe()) return undefined;
   const res = spawnSync(
     "ffprobe",

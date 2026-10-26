@@ -9,6 +9,10 @@
 import { BudgetError } from "../core/errors.js";
 import { TASK_DEFAULTS as ELEVENLABS_DEFAULTS } from "../providers/elevenlabs/models.js";
 import { TTS_MODEL_DEFAULT as GEMINI_TTS_DEFAULT } from "../providers/gemini/voices.js";
+import {
+  DEFAULT_OPENROUTER_STT_MODEL,
+  DEFAULT_OPENROUTER_TTS_MODEL,
+} from "../providers/openrouter/speech-defaults.js";
 import { type CostEstimate, type EstimateRequest, estimateCost } from "./cost-estimate.js";
 
 export type CostPolicy = "strict" | "estimate";
@@ -25,11 +29,19 @@ function opt(options: Options, name: string): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
+export interface CommandDefaults {
+  model?: string;
+  /** Length of the input audio, measured by a caller that can read the file. */
+  audioSeconds?: number;
+  at?: Date;
+}
+
 /** Speaker labels ("Joe:") of multi-speaker text are part of the text; nothing extra to add. */
-type RequestBuilder = (
-  options: Options,
-  defaults: { model?: string },
-) => EstimateRequest | undefined;
+type RequestBuilder = (options: Options, defaults: CommandDefaults) => EstimateRequest | undefined;
+
+/** OpenRouter matches model ids ignoring case; the price list spells them in lower case. */
+const openrouterModel = (o: Options, d: CommandDefaults, fallback: string) =>
+  (opt(o, "model") ?? d.model ?? fallback).trim().toLowerCase();
 
 const BUILDERS: Record<string, RequestBuilder> = {
   "gemini generate-speech": (o, d) => {
@@ -55,6 +67,31 @@ const BUILDERS: Record<string, RequestBuilder> = {
       ),
     };
   },
+  "openrouter tts": (o, d) => {
+    const text = opt(o, "text") ?? opt(o, "prompt");
+    if (text === undefined) return undefined;
+    const instructions = opt(o, "instructions");
+    return {
+      provider: "openrouter",
+      model: openrouterModel(o, d, DEFAULT_OPENROUTER_TTS_MODEL),
+      text,
+      ...(instructions ? { extra_text: [instructions] } : {}),
+    };
+  },
+  "openrouter transcribe": (o, d) => {
+    if (opt(o, "input") === undefined) return undefined;
+    return {
+      provider: "openrouter",
+      model: openrouterModel(o, d, DEFAULT_OPENROUTER_STT_MODEL),
+      text: "",
+      ...(d.audioSeconds !== undefined ? { audio_seconds: d.audioSeconds } : {}),
+    };
+  },
+};
+
+/** What a command needs before it can be priced, for the "missing_input" detail. */
+const NEEDS: Record<string, string> = {
+  "openrouter transcribe": "the audio to transcribe (--input)",
 };
 
 /** Commands with a pre-flight estimator. */
@@ -69,7 +106,7 @@ export function pricedCommands(): string[] {
 export function estimateCommand(
   command: string,
   options: Options,
-  defaults: { model?: string; at?: Date } = {},
+  defaults: CommandDefaults = {},
 ): CostEstimate {
   const builder = BUILDERS[command];
   // MCP callers may spell keys as CLI flags ("--text"), like multix_run accepts.
@@ -84,7 +121,7 @@ export function estimateCommand(
     status: "unknown",
     reason: builder ? "missing_input" : "unsupported",
     detail: builder
-      ? `Cannot estimate ${command} without the text to speak`
+      ? `Cannot estimate ${command} without ${NEEDS[command] ?? "the text to speak"}`
       : `No pre-flight estimator for ${command || "this command"}; priced commands: ${pricedCommands().join(", ")}`,
     currency: "USD",
     provider: command.split(" ")[0] ?? "",

@@ -5,6 +5,7 @@
  * answered by a local fetch stub preloaded with `node --import`.
  */
 
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -18,6 +19,27 @@ const CLI = path.resolve(__dirname, "../../dist/cli.js");
 const FAKE_ELEVENLABS = pathToFileURL(path.join(__dirname, "fixtures/fake-elevenlabs-fetch.mjs"));
 const SPAWN_TIMEOUT = 15_000;
 const VI = "Xin chào thế giới";
+const HAS_FFPROBE = spawnSync("ffprobe", ["-version"], { stdio: "ignore" }).status === 0;
+
+/** A silent 16-bit mono PCM WAV of `seconds` at 8 kHz. */
+function silentWav(seconds: number): Buffer {
+  const rate = 8000;
+  const data = rate * 2 * seconds;
+  const b = Buffer.alloc(44 + data);
+  b.write("RIFF", 0);
+  b.writeUInt32LE(36 + data, 4);
+  b.write("WAVEfmt ", 8);
+  b.writeUInt32LE(16, 16);
+  b.writeUInt16LE(1, 20);
+  b.writeUInt16LE(1, 22);
+  b.writeUInt32LE(rate, 24);
+  b.writeUInt32LE(rate * 2, 28);
+  b.writeUInt16LE(2, 32);
+  b.writeUInt16LE(16, 34);
+  b.write("data", 36);
+  b.writeUInt32LE(data, 40);
+  return b;
+}
 
 describe("budget guards (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
   let tmp: string;
@@ -44,6 +66,7 @@ describe("budget guards (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
       ...isolatedEnv(tmp),
       ELEVENLABS_API_KEY: "test-key-not-real",
       GEMINI_API_KEY: "test-key-not-real",
+      OPENROUTER_API_KEY: "test-key-not-real",
       MULTIX_HISTORY: "1",
       MULTIX_HISTORY_FILE: path.join(tmp, "h.jsonl"),
       // Any real request would fail fast instead of hanging.
@@ -140,6 +163,83 @@ describe("budget guards (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     expect(out.cost.actual_usd).toBeCloseTo(0.00136, 9);
     expect(ledger()[0].cost.operation_id).toBe("job-42");
   });
+
+  it("--estimate prices openrouter tts from the OpenRouter catalog and sends nothing", async () => {
+    const result = await run([
+      "openrouter",
+      "tts",
+      "--text",
+      VI,
+      "--model",
+      "elevenlabs/eleven-v4",
+      "--estimate",
+      "--json",
+    ]);
+    expect(result.exitCode).toBe(0);
+    const out = envelope(result.stdout);
+    expect(out).toMatchObject({ ok: true, estimate_only: true });
+    expect(out.estimate).toMatchObject({
+      status: "estimated",
+      upper_bound: "proven",
+      provider: "openrouter",
+      rate: { id: "openrouter/elevenlabs-multilingual@api" },
+    });
+    expect(result.stdout).not.toContain("test-key-not-real");
+  });
+
+  it("--max-cost refuses openrouter transcribe of a URL: its length is not known", async () => {
+    const result = await run([
+      "openrouter",
+      "transcribe",
+      "--input",
+      "https://example.com/talk.mp3",
+      "--max-cost",
+      "1",
+      "--json",
+    ]);
+    expect(result.exitCode).toBe(2);
+    const out = envelope(result.stdout);
+    expect(out.error.code).toBe("BUDGET_UNPROVEN");
+    expect(out.estimate).toMatchObject({ status: "unknown", reason: "missing_input" });
+  });
+
+  it.skipIf(!HAS_FFPROBE)(
+    "--estimate prices openrouter transcribe of a local file by its measured length",
+    async () => {
+      fs.writeFileSync(path.join(tmp, "talk.wav"), silentWav(2));
+      const est = await run([
+        "openrouter",
+        "transcribe",
+        "--input",
+        "talk.wav",
+        "--model",
+        "openai/whisper-1",
+        "--estimate",
+        "--json",
+      ]);
+      expect(est.exitCode).toBe(0);
+      expect(envelope(est.stdout).estimate).toMatchObject({
+        status: "estimated",
+        upper_bound: "proven",
+        units: { input_audio_seconds: { low: 2, expected: 2, high: 60 } },
+        high_usd: 0.006,
+      });
+      // A ceiling over the limit is refused before the upload.
+      const over = await run([
+        "openrouter",
+        "transcribe",
+        "--input",
+        "talk.wav",
+        "--model",
+        "openai/whisper-1",
+        "--max-cost",
+        "0.001",
+        "--json",
+      ]);
+      expect(over.exitCode).toBe(2);
+      expect(envelope(over.stdout).error.code).toBe("BUDGET_EXCEEDED");
+    },
+  );
 
   it("a submit that fails after it was sent is uncertain, never $0", async () => {
     const result = await run(

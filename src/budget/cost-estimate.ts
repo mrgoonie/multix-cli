@@ -1,7 +1,8 @@
 /**
  * Pre-flight cost estimates (runtime-neutral, no network). Counts the units a
  * provider bills (characters, UTF-8 bytes, text tokens, audio seconds/tokens)
- * from the request itself and prices them with the catalog. The result is a
+ * from the request itself (and, for transcription, the measured length of the
+ * input audio) and prices them with the catalog. The result is a
  * range with its provenance; `upper_bound` says whether the high end is a
  * proven ceiling (billed units are known up front) or only an estimate (the
  * provider bills output it has not produced yet, e.g. seconds of audio).
@@ -30,6 +31,8 @@ export interface EstimateRequest {
   text: string;
   /** Text sent alongside that may be billed (context, style); counted in the high end only. */
   extra_text?: string[];
+  /** Length of the audio to transcribe, measured by the caller (seconds). */
+  audio_seconds?: number;
   at?: Date;
 }
 
@@ -47,7 +50,7 @@ export interface CostEstimate {
   /** proven: billed units are known up front; estimated: high end is a guess; none: no price. */
   upper_bound: "proven" | "estimated" | "none";
   text: TextUnits;
-  units: Partial<Record<PriceMeter | "output_audio_seconds", UnitRange>>;
+  units: Partial<Record<PriceMeter, UnitRange>>;
   rate?: Pick<
     ResolvedRate,
     | "id"
@@ -69,6 +72,12 @@ export interface CostEstimate {
 export const GEMINI_AUDIO_TOKENS_PER_SECOND = 25;
 /** Speech rate bounds in characters per second (fast read, typical, slow with pauses). */
 const CHARS_PER_SECOND = { fast: 25, typical: 14, slow: 6 };
+/**
+ * Billed audio seconds may exceed the measured length: a container's header
+ * can understate it, and providers may bill in increments of up to a minute.
+ */
+const AUDIO_LENGTH_MARGIN = 1.05;
+const BILLING_INCREMENT_SECONDS = 60;
 /** Tokens the request adds around the text (voice config, turn markers). */
 const PROMPT_OVERHEAD_TOKENS = 64;
 
@@ -126,6 +135,7 @@ function meterRanges(
   meters: Set<PriceMeter>,
   text: TextUnits,
   all: TextUnits,
+  audioSeconds: number | undefined,
   assumptions: string[],
 ): CostEstimate["units"] | undefined {
   const units: CostEstimate["units"] = {};
@@ -149,7 +159,19 @@ function meterRanges(
       "Input tokens: about 4 characters per token; at most one token per UTF-8 byte.",
     );
   }
-  if (meters.has("output_audio_tokens")) {
+  if (meters.has("input_audio_seconds") && audioSeconds !== undefined) {
+    const s = Math.round(audioSeconds * 1000) / 1000;
+    const billed = Math.ceil((s * AUDIO_LENGTH_MARGIN) / BILLING_INCREMENT_SECONDS);
+    units.input_audio_seconds = {
+      low: s,
+      expected: s,
+      high: Math.max(1, billed) * BILLING_INCREMENT_SECONDS,
+    };
+    assumptions.push(
+      `Audio billed per second of input; the high end adds ${Math.round((AUDIO_LENGTH_MARGIN - 1) * 100)}% to the measured length and rounds up to a whole minute.`,
+    );
+  }
+  if (meters.has("output_audio_tokens") || meters.has("output_audio_seconds")) {
     const sec = (cps: number) => Math.max(1, text.characters / cps);
     const seconds = {
       low: Math.round(sec(CHARS_PER_SECOND.fast) * 10) / 10,
@@ -157,11 +179,13 @@ function meterRanges(
       high: Math.round(sec(CHARS_PER_SECOND.slow) * 10) / 10,
     };
     units.output_audio_seconds = seconds;
-    units.output_audio_tokens = {
-      low: Math.ceil(seconds.low * GEMINI_AUDIO_TOKENS_PER_SECOND),
-      expected: Math.ceil(seconds.expected * GEMINI_AUDIO_TOKENS_PER_SECOND),
-      high: Math.ceil(seconds.high * GEMINI_AUDIO_TOKENS_PER_SECOND),
-    };
+    if (meters.has("output_audio_tokens")) {
+      units.output_audio_tokens = {
+        low: Math.ceil(seconds.low * GEMINI_AUDIO_TOKENS_PER_SECOND),
+        expected: Math.ceil(seconds.expected * GEMINI_AUDIO_TOKENS_PER_SECOND),
+        high: Math.ceil(seconds.high * GEMINI_AUDIO_TOKENS_PER_SECOND),
+      };
+    }
     assumptions.push(
       `Audio length: ${CHARS_PER_SECOND.slow}-${CHARS_PER_SECOND.fast} characters per second of speech (typical ${CHARS_PER_SECOND.typical}); the model decides the real length, so the high end is not a hard cap.`,
     );
@@ -180,7 +204,17 @@ export function estimateCost(req: EstimateRequest): CostEstimate {
   const { rate } = lookup;
   const assumptions: string[] = [];
   const meters = new Set(rate.components.map((c) => c.meter));
-  const units = meterRanges(meters, text, all, assumptions);
+  const seconds = req.audio_seconds;
+  if (meters.has("input_audio_seconds") && !(Number.isFinite(seconds) && (seconds ?? 0) > 0)) {
+    return unknown(
+      req,
+      text,
+      at,
+      "missing_input",
+      `${rate.id} bills seconds of audio, and the length of the input audio is not known (pass a local file that ffprobe can read)`,
+    );
+  }
+  const units = meterRanges(meters, text, all, seconds, assumptions);
   if (!units) {
     return unknown(req, text, at, "unsupported", `Cannot count units for ${rate.id}`);
   }
@@ -203,7 +237,9 @@ export function estimateCost(req: EstimateRequest): CostEstimate {
   ) {
     assumptions.push("A price change is within a day: the high end uses the higher price.");
   }
-  const proven = !meters.has("output_audio_tokens") && !meters.has("input_text_tokens");
+  const proven = !["output_audio_tokens", "output_audio_seconds", "input_text_tokens"].some((m) =>
+    meters.has(m as PriceMeter),
+  );
   return {
     status: "estimated",
     currency: "USD",

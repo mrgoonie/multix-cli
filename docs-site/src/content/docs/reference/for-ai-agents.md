@@ -128,6 +128,8 @@ Estimate: $0.00136 expected, $0.00136–$0.00136 range (proven ceiling)
 | --- | --- | --- |
 | `gemini generate-speech` | Text tokens in, audio tokens out (25 tokens per second of audio) | Estimated: the model decides the audio length, so `--max-cost` needs `--cost-policy estimate`. |
 | `elevenlabs tts` | Characters (Unicode code points as sent) | Proven. `--previous-text` and `--next-text` count only in the high end. |
+| `openrouter tts` | The model's OpenRouter price: characters for most models, UTF-8 bytes for Fish Audio, tokens for Gemini TTS, seconds of output audio for Seed Audio | Proven for character and byte prices (`--instructions` counts only in the high end); estimated for token and output-second prices. Text must come from `--text`. |
+| `openrouter transcribe` | Seconds of input audio, measured with `ffprobe` from the local `--input` file | Proven. The high end adds 5% to the measured length and rounds up to a whole minute. A URL input, a file `ffprobe` cannot read, or a token-priced model is `unknown`. |
 
 Any other command or model has estimate status `unknown`, never $0, and
 `--max-cost` refuses it.
@@ -155,6 +157,17 @@ Prices as checked on 2026-10-26 (`--estimate` shows the rate in force):
 | `fish/s2-pro@api` | `s2.1-pro`, `s2-pro` | $15 / 1M UTF-8 bytes |
 | `fish/s1@api` | `s1` | $15 / 1M UTF-8 bytes |
 | `fish/drama-3@api` | `drama-3` | $10 / 1M UTF-8 bytes (promotion until 2026-11-12T17:00Z), then $50 |
+
+OpenRouter speech and transcription prices are copied from OpenRouter's public
+models catalog (`/api/v1/models?output_modalities=speech` and
+`?output_modalities=transcription`, the same lists `multix openrouter
+speech-models` and `multix openrouter transcription-models` print), with rate
+ids `openrouter/<name>@api` and the model ids and canonical slugs OpenRouter
+lists. Transcription models priced per token (`google/gemini-3.5-transcribe`,
+`openai/gpt-4o-transcribe`, `openai/gpt-4o-mini-transcribe`) and the MAI
+Transcribe models, whose price unit is not stated, stay `unknown`. The OpenRouter
+prices of Fish Audio Drama 3 and Gemini 3.8 TTS end with their direct-API price
+changes (2026-11-12 and 2027-01-01) and become `unknown` until re-checked.
 
 Gemini prices are the paid Standard tier; the free tier costs nothing.
 ElevenLabs subscription plans spend credits instead of USD. The Fish Audio

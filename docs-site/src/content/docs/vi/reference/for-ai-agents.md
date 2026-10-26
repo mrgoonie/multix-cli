@@ -127,6 +127,8 @@ Estimate: $0.00136 expected, $0.00136–$0.00136 range (proven ceiling)
 | --- | --- | --- |
 | `gemini generate-speech` | Token văn bản đầu vào, token âm thanh đầu ra (25 token mỗi giây âm thanh) | Ước tính: model quyết định độ dài âm thanh, nên `--max-cost` cần `--cost-policy estimate`. |
 | `elevenlabs tts` | Ký tự (Unicode code point đúng như khi gửi) | Đã chứng minh. `--previous-text` và `--next-text` chỉ được tính vào mức cao. |
+| `openrouter tts` | Giá OpenRouter của model: ký tự với đa số model, byte UTF-8 với Fish Audio, token với Gemini TTS, giây âm thanh đầu ra với Seed Audio | Đã chứng minh với giá theo ký tự và byte (`--instructions` chỉ được tính vào mức cao); ước tính với giá theo token và theo giây đầu ra. Văn bản phải truyền qua `--text`. |
+| `openrouter transcribe` | Số giây âm thanh đầu vào, đo bằng `ffprobe` từ file `--input` cục bộ | Đã chứng minh. Mức cao cộng thêm 5% vào độ dài đo được và làm tròn lên tròn phút. Đầu vào là URL, file mà `ffprobe` không đọc được, hoặc model tính giá theo token sẽ là `unknown`. |
 
 Mọi lệnh hoặc model khác có trạng thái ước tính `unknown`, không bao giờ là $0,
 và `--max-cost` từ chối chạy.
@@ -154,6 +156,17 @@ Giá được kiểm tra ngày 2026-10-26 (`--estimate` hiển thị giá đang 
 | `fish/s2-pro@api` | `s2.1-pro`, `s2-pro` | $15 / 1 triệu byte UTF-8 |
 | `fish/s1@api` | `s1` | $15 / 1 triệu byte UTF-8 |
 | `fish/drama-3@api` | `drama-3` | $10 / 1 triệu byte UTF-8 (khuyến mãi đến 2026-11-12T17:00Z), sau đó $50 |
+
+Giá speech và transcription của OpenRouter được chép từ catalog model công khai
+của OpenRouter (`/api/v1/models?output_modalities=speech` và
+`?output_modalities=transcription`, cũng là danh sách mà `multix openrouter
+speech-models` và `multix openrouter transcription-models` in ra), với rate id
+`openrouter/<tên>@api` cùng model id và canonical slug mà OpenRouter liệt kê.
+Model transcription tính giá theo token (`google/gemini-3.5-transcribe`,
+`openai/gpt-4o-transcribe`, `openai/gpt-4o-mini-transcribe`) và các model MAI
+Transcribe, vốn không ghi rõ đơn vị giá, vẫn là `unknown`. Giá OpenRouter của
+Fish Audio Drama 3 và Gemini 3.8 TTS kết thúc cùng lúc giá API gốc thay đổi
+(2026-11-12 và 2027-01-01) và thành `unknown` cho đến khi được kiểm tra lại.
 
 Giá Gemini là tier Standard trả phí; tier miễn phí không tốn tiền. Gói thuê bao
 ElevenLabs trừ credit thay vì USD. Giá Fish Audio được giữ sẵn cho provider Fish

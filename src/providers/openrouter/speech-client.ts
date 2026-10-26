@@ -21,7 +21,7 @@ import { fetchFollowingRedirects } from "../../core/redirect-fetch.js";
 import { type AudioContentType, parseAudioContentType } from "./speech-audio.js";
 
 export const OPENROUTER_API_BASE = "https://openrouter.ai/api/v1";
-export const DEFAULT_OPENROUTER_TTS_MODEL = "google/gemini-3.8-flash-tts";
+export { DEFAULT_OPENROUTER_TTS_MODEL } from "./speech-defaults.js";
 /** Error code of a request whose outcome (and billing) is unknown. */
 export const UNKNOWN_REMOTE_STATE = "UNKNOWN_REMOTE_STATE";
 
