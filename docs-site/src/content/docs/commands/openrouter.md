@@ -1,11 +1,12 @@
 ---
 title: OpenRouter commands
-description: Generate routed images, submit, poll, or download image-to-video jobs, and synthesize speech.
+description: Generate routed images, submit, poll, or download image-to-video jobs, synthesize speech, and transcribe audio.
 ---
 
 OpenRouter commands require `OPENROUTER_API_KEY`. Run `multix openrouter
-video-models` to discover available video model IDs and `multix openrouter
-speech-models` for speech model IDs.
+video-models` to discover available video model IDs, `multix openrouter
+speech-models` for speech model IDs, and `multix openrouter
+transcription-models` for transcription model IDs.
 
 ## Images
 
@@ -81,4 +82,34 @@ multix openrouter generation <generation-id>        # cost recorded later
   `--json`, the result includes the generation ID, cost, voice, format, size,
   SHA-256, and duration (pcm/WAV only); unknown values are `null`.
 
-Speech-to-text is not available through `multix openrouter`.
+## Speech-to-text
+
+`transcribe` sends one request to OpenRouter's `/api/v1/audio/transcriptions`.
+The default model is `openai/whisper-large-v3-turbo` (override with `--model`
+or `OPENROUTER_STT_MODEL`). `--input` is a local audio file, uploaded as
+multipart (at most 25 MB), or a public http(s) URL that the provider downloads;
+not every provider accepts URLs. The format comes from the file extension or
+`--audio-format`.
+
+```bash
+multix openrouter transcribe --input meeting.mp3 --language en --json
+
+multix openrouter transcription-models              # live catalog with prices
+multix openrouter transcription-models --model google/gemini-3.5-transcribe
+```
+
+- The model is checked against the live transcription catalog (Whisper, GPT-4o
+  transcribe, Gemini Transcribe, ElevenLabs Scribe, Voxtral, Deepgram,
+  AssemblyAI, ...) before the paid request; `--no-model-check` skips it.
+  `multix models --task transcription` lists these models as well.
+- `--language` takes an ISO-639-1 code; without it the language is detected.
+- The transcript is saved as `openrouter_transcript_<stamp>.txt` in the output
+  directory and copied to `--output` if given. Text mode prints only the path,
+  never the transcript.
+- The request is never retried. A connection cut off after sending fails with
+  `UNKNOWN_REMOTE_STATE`; check `multix openrouter generation <id>` before
+  sending it again.
+- `--cost-wait` and `--no-cost` work as for `tts`. With `--json`, the result
+  includes the text, detected language, audio duration, generation ID, cost
+  and its source, and the input's size and SHA-256 (a URL input is shown
+  without its query string); unknown values are `null`.

@@ -1,11 +1,12 @@
 ---
 title: Lệnh OpenRouter
-description: Tạo ảnh qua routing, submit, poll hoặc download job image-to-video, và chuyển văn bản thành giọng nói.
+description: Tạo ảnh qua routing, submit, poll hoặc download job image-to-video, chuyển văn bản thành giọng nói và chuyển giọng nói thành văn bản.
 ---
 
 Lệnh OpenRouter cần `OPENROUTER_API_KEY`. Chạy `multix openrouter video-models`
-để xem video model ID có sẵn và `multix openrouter speech-models` để xem
-speech model ID.
+để xem video model ID có sẵn, `multix openrouter speech-models` để xem
+speech model ID và `multix openrouter transcription-models` để xem
+transcription model ID.
 
 ## Ảnh
 
@@ -81,4 +82,34 @@ multix openrouter generation <generation-id>        # chi phí ghi nhận sau
   kết quả gồm generation ID, chi phí, voice, định dạng, kích thước, SHA-256 và
   thời lượng (chỉ pcm/WAV); giá trị chưa biết là `null`.
 
-`multix openrouter` không hỗ trợ speech-to-text.
+## Chuyển giọng nói thành văn bản
+
+`transcribe` gửi một request tới `/api/v1/audio/transcriptions` của
+OpenRouter. Model mặc định là `openai/whisper-large-v3-turbo` (đổi bằng
+`--model` hoặc `OPENROUTER_STT_MODEL`). `--input` là file audio local, được
+upload dạng multipart (tối đa 25 MB), hoặc một URL http(s) công khai để
+provider tự tải; không phải provider nào cũng nhận URL. Định dạng lấy từ phần
+mở rộng của file hoặc `--audio-format`.
+
+```bash
+multix openrouter transcribe --input meeting.mp3 --language en --json
+
+multix openrouter transcription-models              # catalog trực tiếp kèm giá
+multix openrouter transcription-models --model google/gemini-3.5-transcribe
+```
+
+- Model được kiểm tra với transcription catalog trực tiếp (Whisper, GPT-4o
+  transcribe, Gemini Transcribe, ElevenLabs Scribe, Voxtral, Deepgram,
+  AssemblyAI, ...) trước request trả phí; `--no-model-check` bỏ qua bước này.
+  `multix models --task transcription` cũng liệt kê các model này.
+- `--language` nhận mã ISO-639-1; nếu bỏ trống, ngôn ngữ được tự nhận diện.
+- Transcript được lưu thành `openrouter_transcript_<stamp>.txt` trong thư mục
+  output và sao chép tới `--output` nếu có. Chế độ text chỉ in đường dẫn,
+  không bao giờ in nội dung transcript.
+- Request không bao giờ được thử lại. Kết nối bị ngắt sau khi đã gửi sẽ báo
+  `UNKNOWN_REMOTE_STATE`; kiểm tra `multix openrouter generation <id>` trước
+  khi gửi lại.
+- `--cost-wait` và `--no-cost` hoạt động như với `tts`. Với `--json`, kết quả
+  gồm văn bản, ngôn ngữ nhận diện được, thời lượng audio, generation ID, chi
+  phí và nguồn của chi phí, cùng kích thước và SHA-256 của input (URL được
+  hiển thị không kèm query string); giá trị chưa biết là `null`.
