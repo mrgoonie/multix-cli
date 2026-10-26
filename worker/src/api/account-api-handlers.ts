@@ -13,12 +13,21 @@ import { json } from "../http-responses.js";
 import { PROVIDER_SECRET_NAMES } from "../provider-secret-names.js";
 import { logEvent } from "../redaction.js";
 import { checkR2Access } from "../storage/r2-access-check.js";
+import type { AccountUsageStub } from "../usage/account-usage.js";
+import { recordActivity } from "../usage/record-activity.js";
 import { ApiError, readJsonObject } from "./api-http.js";
 
 export interface ApiCaller {
   account: Account;
   /** Id of the API key that authenticated the request. */
   keyId: string;
+  /** The account's usage ledger, for the activity log; absent without MULTIX_USAGE. */
+  usage?: AccountUsageStub;
+}
+
+/** Best-effort activity entry for a change made with this API key; names and ids only. */
+export function logActivity(caller: ApiCaller, kind: string, target?: string): Promise<void> {
+  return recordActivity(caller.usage, { actor: `api_key:${caller.keyId}`, kind, target });
 }
 
 export function getMe(caller: ApiCaller): Response {
@@ -96,6 +105,10 @@ export async function patchProviderKeys(
     saved: saved.join(","),
     removed: removed.join(","),
   });
+  await Promise.all([
+    ...saved.map((n) => logActivity(caller, "provider_key.saved", n)),
+    ...removed.map((n) => logActivity(caller, "provider_key.removed", n)),
+  ]);
   return json(200, { saved, removed });
 }
 
@@ -110,6 +123,7 @@ export async function putProviderKey(
   const value = secretValue(name, (await readJsonObject(request)).value);
   await app.accounts.setSecret(caller.account.id, name, value);
   logEvent("info", "provider_key_saved_api", { user: caller.account.id, name });
+  await logActivity(caller, "provider_key.saved", name);
   return json(200, { saved: [name], removed: [] });
 }
 
@@ -121,6 +135,7 @@ export async function deleteProviderKey(
   secretName(name);
   await app.accounts.deleteSecret(caller.account.id, name);
   logEvent("info", "provider_key_removed_api", { user: caller.account.id, name });
+  await logActivity(caller, "provider_key.removed", name);
   return json(200, { saved: [], removed: [name] });
 }
 
@@ -181,12 +196,14 @@ export async function putStorage(
   }
   await app.accounts.saveR2Settings(caller.account.id, parsed.settings);
   logEvent("info", "r2_settings_saved_api", { user: caller.account.id });
+  await logActivity(caller, "storage.saved", parsed.settings.bucket);
   return getStorage(app, caller);
 }
 
 export async function deleteStorage(app: AppContext, caller: ApiCaller): Promise<Response> {
   await app.accounts.deleteR2Settings(caller.account.id);
   logEvent("info", "r2_settings_removed_api", { user: caller.account.id });
+  await logActivity(caller, "storage.removed");
   return json(200, { configured: false });
 }
 
@@ -204,5 +221,6 @@ export async function revokeApiKey(
   const revoked = await new ApiKeyStore(app.env.ACCOUNTS_KV).revoke(caller.account.id, id);
   if (!revoked) throw new ApiError(404, "not_found", "API key not found");
   logEvent("info", "api_key_revoked_api", { user: caller.account.id });
+  await logActivity(caller, "api_key.revoked", id);
   return json(200, { revoked: id });
 }

@@ -8,7 +8,12 @@ import type { Limits } from "../config.js";
 import { json } from "../http-responses.js";
 import { catalogPayload } from "../jobs/catalog-view.js";
 import { type JobStatus, isTerminal } from "../jobs/job-protocol.js";
-import { DEFAULT_WAIT_SECONDS, JobRunner, MAX_WAIT_SECONDS } from "../jobs/job-runner.js";
+import {
+  DEFAULT_WAIT_SECONDS,
+  JobRunner,
+  MAX_WAIT_SECONDS,
+  PROJECT_RE,
+} from "../jobs/job-runner.js";
 import type { JobToolsContext } from "../jobs/job-runner.js";
 import { type RunRequest, prepareRun } from "../jobs/run-argv-builder.js";
 import type { ProviderKeys } from "../provider-secret-names.js";
@@ -30,8 +35,12 @@ function requireJobs(jobs: JobToolsContext | undefined): JobToolsContext {
 }
 
 /** Same shape as multix_run's arguments; prepareRun validates the details. */
-function runRequest(body: Record<string, unknown>): { request: RunRequest; wait: number } {
-  const { command, args, options, inputs, wait_seconds: wait } = body;
+function runRequest(body: Record<string, unknown>): {
+  request: RunRequest;
+  wait: number;
+  project?: string;
+} {
+  const { command, args, options, inputs, wait_seconds: wait, project } = body;
   if (typeof command !== "string" || !command.trim() || command.length > 100) {
     throw new ApiError(400, "bad_request", 'command is required, e.g. "gemini generate"');
   }
@@ -59,7 +68,15 @@ function runRequest(body: Record<string, unknown>): { request: RunRequest; wait:
       `wait_seconds must be an integer from 0 to ${MAX_WAIT_SECONDS}`,
     );
   }
+  if (project !== undefined && (typeof project !== "string" || !PROJECT_RE.test(project))) {
+    throw new ApiError(
+      400,
+      "bad_request",
+      "project must be 1 to 64 letters, digits, '.', '_' or '-'",
+    );
+  }
   return {
+    project: project as string | undefined,
     request: {
       command,
       args: args as string[] | undefined,
@@ -85,9 +102,9 @@ export async function postJob(
   request: Request,
 ): Promise<Response> {
   const ctx = requireJobs(jobs);
-  const { request: run, wait } = runRequest(await readJsonObject(request));
+  const { request: run, wait, project } = runRequest(await readJsonObject(request));
   const prepared = prepareRun(run, limits);
-  return jobResponse(await new JobRunner(ctx).run(prepared, wait));
+  return jobResponse(await new JobRunner(ctx).run(prepared, wait, { project }));
 }
 
 export async function getJob(jobs: JobToolsContext | undefined, jobId: string): Promise<Response> {

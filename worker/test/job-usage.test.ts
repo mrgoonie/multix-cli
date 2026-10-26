@@ -6,6 +6,7 @@ import type { JobToolsContext } from "../src/jobs/job-runner.js";
 import { type JobBackend, JobStore } from "../src/jobs/job-store.js";
 import type { AccountUsageStub } from "../src/usage/account-usage.js";
 import { type UsageOutboxRecord, relayUsage, settleInputFor } from "../src/usage/usage-outbox.js";
+import type { SettleInput } from "../src/usage/usage-types.js";
 import { fakeKv } from "./fake-kv.js";
 import { callTool, fullEnv } from "./helpers.js";
 import { memoryUsageNamespace } from "./usage-sql.js";
@@ -173,7 +174,7 @@ describe("job usage capture", () => {
     expect(event).toMatchObject({ chargeState: "no_charge" });
     // A later settle for the same job is ignored.
     const replay = ledger.settle(
-      settleInputFor(event?.id ?? "", finished({ argv: [] } as unknown as JobSpec))!,
+      settleInputFor(event?.id ?? "", finished({ argv: [] } as unknown as JobSpec)) as SettleInput,
     );
     expect(replay).toMatchObject({ chargeState: "no_charge", status: event?.status });
   });
@@ -188,7 +189,7 @@ describe("job usage capture", () => {
     const { jobs, ledger } = setup();
     const started = await run(jobs);
     const id = started.structuredContent.job_id;
-    ledger.settle(settleInputFor(id, finished({ argv: [] } as unknown as JobSpec))!);
+    ledger.settle(settleInputFor(id, finished({ argv: [] } as unknown as JobSpec)) as SettleInput);
     const result = await callTool(
       env,
       "multix_usage",
@@ -233,7 +234,7 @@ describe("usage outbox", () => {
   it("relays once and removes the record, retries on failure, gives up at the limit", async () => {
     const record: UsageOutboxRecord = {
       userId: "gh-1",
-      input: settleInputFor("j1", finished({ argv: [] } as unknown as JobSpec))!,
+      input: settleInputFor("j1", finished({ argv: [] } as unknown as JobSpec)) as SettleInput,
     };
     let stored: UsageOutboxRecord | undefined = record;
     const scheduled: number[] = [];

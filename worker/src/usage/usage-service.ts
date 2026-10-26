@@ -250,9 +250,11 @@ export class UsageService {
 
   saveBalances(balances: ProviderBalance[], actor: string): void {
     this.ledger.sql.transaction(() => {
+      // A refresh replaces the whole set: a provider whose key was removed drops out.
+      this.ledger.sql.exec("DELETE FROM balances");
       for (const b of balances) {
         this.ledger.sql.exec(
-          `INSERT OR REPLACE INTO balances (provider, status, checked_at, kind, unit, remaining, used, limit_value, detail)
+          `INSERT INTO balances (provider, status, checked_at, kind, unit, remaining, used, limit_value, detail)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           b.provider,
           b.status,

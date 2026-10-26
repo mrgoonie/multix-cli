@@ -588,3 +588,23 @@ describe("usage ledger: activities, retention, deletion", () => {
     expect(ms).toBeLessThan(5000);
   });
 });
+
+describe("usage ledger: provider balances", () => {
+  it("replaces the stored set on refresh, so a removed provider drops out", () => {
+    const { usage } = setup();
+    const row = (provider: string) => ({
+      provider,
+      status: "ok" as const,
+      checkedAt: 1,
+      kind: "cash" as const,
+      unit: "USD",
+      remaining: 5,
+      used: null,
+      limit: null,
+      detail: null,
+    });
+    usage.saveBalances([row("openrouter"), row("elevenlabs")], "t");
+    usage.saveBalances([row("openrouter")], "t");
+    expect(usage.balances().map((b) => b.provider)).toEqual(["openrouter"]);
+  });
+});

@@ -24,6 +24,23 @@
  *   GET    /api/v1/events/audit                subscription audit log
  *   GET    /api/v1/api-keys                    the account's API keys (no values)
  *   DELETE /api/v1/api-keys/{id}               revoke an API key
+ *   GET    /api/v1/usage/summary               KPIs, time series and breakdowns
+ *   GET    /api/v1/usage/events                usage events, newest first (cursor paging)
+ *   GET    /api/v1/usage/events/{id}           one event with its adjustments
+ *   POST   /api/v1/usage/events/{id}/adjustments  record a refund, correction or billed amount
+ *   GET    /api/v1/usage/export                CSV or JSON export
+ *   POST   /api/v1/usage/import                import `multix history sync` entries
+ *   DELETE /api/v1/usage?confirm=delete-all-usage  delete every usage record
+ *   GET    /api/v1/budgets                     budgets with their current status
+ *   POST   /api/v1/budgets                     create a budget
+ *   PATCH  /api/v1/budgets/{id}                change a budget
+ *   DELETE /api/v1/budgets/{id}                delete a budget
+ *   GET    /api/v1/activities                  account activity log
+ *   GET    /api/v1/activities/verify           check the activity log's hash chain
+ *   GET    /api/v1/rate-card                   prices used for cost estimates
+ *   PUT    /api/v1/rate-card                   replace the rate card
+ *   GET    /api/v1/balances                    last stored provider balances
+ *   POST   /api/v1/balances/refresh            read live balances with the saved keys
  *
  * Every authenticated request checks the key, the per-account rate limit
  * shared with /mcp and the sign-in allowlist. Failed authentication is rate
@@ -33,7 +50,7 @@
 import { toolEnvFor } from "../accounts/account-store.js";
 import { isAllowed } from "../accounts/allowlist.js";
 import { ApiKeyStore } from "../accounts/api-key-store.js";
-import type { AppContext, AppDeps } from "../app-context.js";
+import { type AppContext, type AppDeps, usageLedgerFor } from "../app-context.js";
 import { limitsFrom, secretValues, serverSettings } from "../config.js";
 import { json } from "../http-responses.js";
 import { jobsContextFor } from "../jobs/job-context.js";
@@ -64,6 +81,26 @@ import {
 } from "./event-api-handlers.js";
 import { cancelJob, getCatalog, getJob, postJob } from "./job-api-handlers.js";
 import { openApiDocument } from "./openapi-document.js";
+import {
+  createBudget,
+  deleteBudget,
+  deleteUsage,
+  exportUsage,
+  getRateCard,
+  getUsageEvent,
+  getUsageSummary,
+  importUsage,
+  listActivities,
+  listBalances,
+  listBudgets,
+  listUsageEvents,
+  postAdjustment,
+  putRateCard,
+  refreshBalances,
+  updateBudget,
+  usageLedger,
+  verifyActivities,
+} from "./usage-api-handlers.js";
 
 export const API_PREFIX = "/api/v1";
 
@@ -168,7 +205,10 @@ async function route(
   }
 
   if (resource === "jobs") {
-    const jobs = jobsContextFor(app.env, app, userId, keys, deps);
+    const jobs = jobsContextFor(app.env, app, userId, keys, deps, {
+      source: "rest",
+      clientId: `api_key:${caller.keyId}`,
+    });
     if (!id) {
       if (method !== "POST") methodNotAllowed("POST");
       const limits = limitsFrom(toolEnvFor(serverSettings(app.env), keys));
@@ -186,6 +226,89 @@ async function route(
 
   if (resource === "events") {
     return routeEvents(app, deps, caller, request, parts.slice(1));
+  }
+
+  if (resource && USAGE_RESOURCES.has(resource)) {
+    return routeUsage(app, deps, caller, request, parts, url);
+  }
+
+  throw new ApiError(404, "not_found", "Not found");
+}
+
+const USAGE_RESOURCES = new Set(["usage", "budgets", "activities", "rate-card", "balances"]);
+
+async function routeUsage(
+  app: AppContext,
+  deps: AppDeps,
+  caller: ApiCaller,
+  request: Request,
+  parts: string[],
+  url: URL,
+): Promise<Response> {
+  const method = request.method;
+  const [resource, first, second, third] = parts;
+  const usage = usageLedger(app, deps, caller.account.id);
+
+  if (resource === "usage") {
+    if (!first) {
+      if (method !== "DELETE") methodNotAllowed("DELETE");
+      return deleteUsage(usage, caller, url);
+    }
+    if ((first === "summary" || first === "export") && !second) {
+      if (method !== "GET") methodNotAllowed("GET");
+      return first === "summary" ? getUsageSummary(usage, url) : exportUsage(usage, caller, url);
+    }
+    if (first === "import" && !second) {
+      if (method !== "POST") methodNotAllowed("POST");
+      return importUsage(usage, caller, request);
+    }
+    if (first === "events") {
+      if (!second) {
+        if (method !== "GET") methodNotAllowed("GET");
+        return listUsageEvents(usage, url);
+      }
+      if (!third) {
+        if (method !== "GET") methodNotAllowed("GET");
+        return getUsageEvent(usage, second);
+      }
+      if (third === "adjustments" && parts.length === 4) {
+        if (method !== "POST") methodNotAllowed("POST");
+        return postAdjustment(usage, caller, second, request);
+      }
+    }
+  }
+
+  if (resource === "budgets" && !second) {
+    if (!first) {
+      if (method === "GET") return listBudgets(usage);
+      if (method === "POST") return createBudget(usage, caller, request);
+      methodNotAllowed("GET, POST");
+    }
+    if (method === "PATCH") return updateBudget(usage, caller, first, request);
+    if (method === "DELETE") return deleteBudget(usage, caller, first);
+    methodNotAllowed("PATCH, DELETE");
+  }
+
+  if (resource === "activities" && !second && (!first || first === "verify")) {
+    if (method !== "GET") methodNotAllowed("GET");
+    return first ? verifyActivities(usage) : listActivities(usage, url);
+  }
+
+  if (resource === "rate-card" && !first) {
+    if (method === "GET") return getRateCard(usage);
+    if (method === "PUT") return putRateCard(usage, caller, request);
+    methodNotAllowed("GET, PUT");
+  }
+
+  if (resource === "balances" && !second) {
+    if (!first) {
+      if (method !== "GET") methodNotAllowed("GET");
+      return listBalances(usage);
+    }
+    if (first === "refresh") {
+      if (method !== "POST") methodNotAllowed("POST");
+      return refreshBalances(app, usage, caller);
+    }
   }
 
   throw new ApiError(404, "not_found", "Not found");
@@ -239,8 +362,12 @@ export async function handleApi(
   try {
     const parts = segments(url.pathname);
     routeName = parts[0] ?? "root";
-    const caller = await authenticate(app, request);
-    if (caller instanceof Response) return caller;
+    const authenticated = await authenticate(app, request);
+    if (authenticated instanceof Response) return authenticated;
+    const caller: ApiCaller = {
+      ...authenticated,
+      usage: usageLedgerFor(app.env, deps, authenticated.account.id),
+    };
     // Only the catalog and jobs use the decrypted keys; the other routes must keep
     // working (e.g. to revoke an API key) even if a stored key cannot be decrypted.
     const needsKeys = routeName === "catalog" || routeName === "jobs";

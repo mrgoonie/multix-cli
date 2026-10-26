@@ -18,7 +18,7 @@ import { parseSubscriptionInput } from "../events/subscription-input.js";
 import { TIMESTAMP_TOLERANCE_SECONDS } from "../events/webhook-signing.js";
 import { json } from "../http-responses.js";
 import { logEvent } from "../redaction.js";
-import type { ApiCaller } from "./account-api-handlers.js";
+import { type ApiCaller, logActivity } from "./account-api-handlers.js";
 import { ApiError, readJsonObject } from "./api-http.js";
 
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -63,6 +63,7 @@ export async function createSubscription(
   const result = await hub.subscribe(input, `api_key:${caller.keyId}`);
   if (!result.ok) throw new ApiError(409, "limit_reached", result.message);
   logEvent("info", "event_subscription_created", { user: caller.account.id });
+  await logActivity(caller, "subscription.created", result.subscription.id);
   return json(201, {
     subscription: result.subscription,
     secret: result.secret,
@@ -91,6 +92,7 @@ export async function deleteSubscription(
     throw new ApiError(404, "not_found", "Subscription not found");
   }
   logEvent("info", "event_subscription_revoked", { user: caller.account.id });
+  await logActivity(caller, "subscription.deleted", id);
   return json(200, { revoked: id });
 }
 
