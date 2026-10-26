@@ -12,13 +12,22 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { ValidationError } from "../../core/errors.js";
-import { type ParsedScript, charCount, chunkText, markupIn, parseScript } from "./script-parser.js";
+import {
+  type ParsedScript,
+  SCENE_ID,
+  charCount,
+  chunkText,
+  markupIn,
+  parseScript,
+} from "./script-parser.js";
 import { type SceneProvider, adapterFor } from "./speech-adapters.js";
-import { type VoiceProfile, speakerIndex } from "./voice-profile.js";
+import { PROFILE_ID, type VoiceProfile, speakerIndex } from "./voice-profile.js";
 
 export const SCENE_SCHEMA = "multix.scene/v1";
 export const MANIFEST_FILE = "multix-scene.json";
 export const TAKES_DIR = "takes";
+export const LOCK_FILE = "multix-scene.lock";
+const TAKE_ID = /^t_[0-9a-f]{12}(_\d+)?$/;
 
 export type CostProvenance = "provider_reported" | "unknown";
 
@@ -123,7 +132,81 @@ export function readManifest(projectDir: string): SceneManifest | undefined {
   if (data.schema !== SCENE_SCHEMA) {
     throw new ValidationError(`${file} is not a ${SCENE_SCHEMA} manifest`);
   }
+  const errors = manifestErrors(data);
+  if (errors.length) {
+    throw new ValidationError(`${file} is invalid:\n  - ${errors.slice(0, 10).join("\n  - ")}`);
+  }
   return data;
+}
+
+/** True when `rel` is a relative path that stays inside `dir` (POSIX form). */
+function isInside(rel: string, dir: string): boolean {
+  const norm = path.posix.normalize(rel);
+  return norm === rel && !path.posix.isAbsolute(rel) && norm.startsWith(`${dir}/`);
+}
+
+/**
+ * Ids and paths in a manifest become file names (takes, export stems), so a
+ * hand-edited or shared manifest must not be able to point outside the project.
+ */
+function manifestErrors(data: SceneManifest): string[] {
+  const errors: string[] = [];
+  if (!Array.isArray(data.scenes)) return ["scenes must be an array"];
+  for (const scene of data.scenes) {
+    if (!SCENE_ID.test(String(scene?.id))) {
+      errors.push(`scene id "${scene?.id}" is not a valid scene id`);
+      continue;
+    }
+    for (const line of scene.lines ?? []) {
+      if (!new RegExp(`^${scene.id}/\\d{3}(\\.\\d+)?$`).test(String(line?.id))) {
+        errors.push(`line id "${line?.id}" does not belong to scene ${scene.id}`);
+      }
+      if (!PROFILE_ID.test(String(line?.speaker))) {
+        errors.push(`${line?.id}: speaker "${line?.speaker}" is not a valid voice id`);
+      }
+      for (const take of line?.takes ?? []) {
+        if (!TAKE_ID.test(String(take?.id)) || !isInside(String(take?.path), TAKES_DIR)) {
+          errors.push(`${line.id}: take "${take?.id}" has an invalid id or path`);
+        }
+      }
+    }
+  }
+  return errors;
+}
+
+/**
+ * Hold the project for the duration of a command that rewrites the manifest,
+ * so two commands cannot overwrite each other's takes. A lock left by a
+ * process that no longer runs is taken over. Returns the release function.
+ */
+export function lockProject(projectDir: string): () => void {
+  const file = path.join(projectDir, LOCK_FILE);
+  fs.mkdirSync(projectDir, { recursive: true });
+  for (let attempt = 0; ; attempt++) {
+    try {
+      fs.writeFileSync(file, String(process.pid), { flag: "wx" });
+      break;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST" || attempt > 0) throw error;
+      const pid = Number(fs.readFileSync(file, "utf8").trim());
+      if (Number.isInteger(pid) && pid > 0 && isAlive(pid)) {
+        throw new ValidationError(
+          `Another multix scene command (pid ${pid}) is using ${projectDir}; wait for it, or delete ${file} if that process is gone`,
+        );
+      }
+      fs.rmSync(file, { force: true });
+    }
+  }
+  return () => fs.rmSync(file, { force: true });
+}
+
+function isAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
 }
 
 export function requireManifest(projectDir: string): SceneManifest {
@@ -184,7 +267,7 @@ export interface PlanInput {
 
 export interface PlanResult {
   manifest: SceneManifest;
-  /** Line ids whose request differs from every take they had. */
+  /** Line ids that had takes but none for their current request. */
   invalidated: string[];
   added: string[];
   removed: string[];
@@ -192,10 +275,15 @@ export interface PlanResult {
 
 function lineStatus(line: LineEntry): LineEntry["status"] {
   const take = line.takes.find((t) => t.id === line.selected_take);
-  if (take && take.cache_key === line.cache_key) {
+  if (take && usableTake(take, line.cache_key)) {
     return take.status === "approved" ? "approved" : "rendered";
   }
   return line.error ? "failed" : "pending";
+}
+
+/** A take that answers the line's current request and passed verification. */
+export function usableTake(take: Take, cacheKey: string): boolean {
+  return take.cache_key === cacheKey && take.verification.ok && take.status !== "rejected";
 }
 
 export function refreshStatus(line: LineEntry): void {
@@ -283,22 +371,6 @@ export function planScenes(input: PlanInput): PlanResult {
         nextText,
       });
       line.cache_key = cacheKey(line.request, line.text);
-      const old = oldLines.get(line.id);
-      const takes = [...(old?.takes ?? [])];
-      for (const t of takesByKey.get(line.cache_key) ?? []) {
-        if (!takes.some((x) => x.path === t.path)) takes.push(t);
-      }
-      line.takes = takes;
-      const keep = old?.selected_take
-        ? takes.find((t) => t.id === old.selected_take && t.cache_key === line.cache_key)
-        : undefined;
-      const match =
-        keep ??
-        takes.find((t) => t.cache_key === line.cache_key && t.status === "approved") ??
-        [...takes].reverse().find((t) => t.cache_key === line.cache_key && t.status !== "rejected");
-      if (match) line.selected_take = match.id;
-      if (old?.error && old.cache_key === line.cache_key) line.error = old.error;
-      refreshStatus(line);
     });
 
     return {
@@ -316,13 +388,40 @@ export function planScenes(input: PlanInput): PlanResult {
     );
   }
 
+  // A take follows its cache key, wherever the line moved. Takes for requests
+  // no line makes any more stay on the line id they were rendered for, as
+  // history (and spend), but are never selected.
+  const liveKeys = new Set(scenes.flatMap((s) => s.lines.map((l) => l.cache_key)));
+  for (const line of scenes.flatMap((s) => s.lines)) {
+    const old = oldLines.get(line.id);
+    const takes = (old?.takes ?? []).filter((t) => !liveKeys.has(t.cache_key));
+    for (const t of takesByKey.get(line.cache_key) ?? []) {
+      if (!takes.some((x) => x.path === t.path)) takes.push(t);
+    }
+    line.takes = takes;
+    const previousSelection = [...oldLines.values()]
+      .filter((l) => l.cache_key === line.cache_key)
+      .map((l) => l.selected_take);
+    const usable = takes.filter((t) => usableTake(t, line.cache_key));
+    const match =
+      usable.find((t) => t.id === old?.selected_take) ??
+      usable.find((t) => previousSelection.includes(t.id)) ??
+      usable.find((t) => t.status === "approved") ??
+      usable.at(-1);
+    if (match) line.selected_take = match.id;
+    if (old?.error && old.cache_key === line.cache_key) line.error = old.error;
+    refreshStatus(line);
+  }
+
   const newIds = new Set(scenes.flatMap((s) => s.lines.map((l) => l.id)));
   const added: string[] = [];
   const invalidated: string[] = [];
   for (const line of scenes.flatMap((s) => s.lines)) {
     const old = oldLines.get(line.id);
     if (!old) added.push(line.id);
-    else if (old.cache_key !== line.cache_key && old.takes.length > 0) invalidated.push(line.id);
+    else if (old.cache_key !== line.cache_key && old.takes.length > 0 && !line.selected_take) {
+      invalidated.push(line.id);
+    }
   }
   const removed = [...oldLines.keys()].filter((id) => !newIds.has(id));
 
@@ -373,8 +472,9 @@ export interface SceneSummary {
   takes: number;
 }
 
-/** Per-scene completion and spend, over every take (rejected variants cost money too). */
+/** Per-scene completion and spend, over every distinct take (rejected variants cost money too). */
 export function summarize(manifest: SceneManifest): SceneSummary[] {
+  const counted = new Set<string>();
   return manifest.scenes.map((scene) => {
     const s: SceneSummary = {
       scene: scene.id,
@@ -399,6 +499,9 @@ export function summarize(manifest: SceneManifest): SceneSummary[] {
         s.duration_s += selected.duration_s ?? 0;
       }
       for (const take of line.takes) {
+        // Identical lines share a take; it was paid for once.
+        if (counted.has(take.path)) continue;
+        counted.add(take.path);
         s.takes += 1;
         s.characters_rendered += take.usage.characters;
         if (take.usage.cost_usd !== null) s.cost_usd = (s.cost_usd ?? 0) + take.usage.cost_usd;

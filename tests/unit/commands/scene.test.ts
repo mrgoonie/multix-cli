@@ -14,8 +14,11 @@ import {
   allLines,
   cacheKey,
   findLine,
+  lockProject,
   planScenes,
+  readManifest,
   summarize,
+  writeManifest,
 } from "../../../src/commands/scene/scene-manifest.js";
 import { renderScenes } from "../../../src/commands/scene/scene-render.js";
 import { chunkText, parseScript } from "../../../src/commands/scene/script-parser.js";
@@ -63,19 +66,38 @@ let failUrl: RegExp | undefined;
 const originalFetch = globalThis.fetch;
 const savedEnv = { ...process.env };
 
+/** A short valid 24 kHz mono WAV whose samples come from `seed`, so ffprobe can read it. */
+function fakeWav(seed: Buffer): Buffer {
+  const data = Buffer.alloc(480);
+  for (let i = 0; i < data.length; i++) data[i] = seed[i % seed.length];
+  const h = Buffer.alloc(44);
+  h.write("RIFF", 0);
+  h.writeUInt32LE(36 + data.length, 4);
+  h.write("WAVEfmt ", 8);
+  h.writeUInt32LE(16, 16);
+  h.writeUInt16LE(1, 20);
+  h.writeUInt16LE(1, 22);
+  h.writeUInt32LE(24000, 24);
+  h.writeUInt32LE(48000, 28);
+  h.writeUInt16LE(2, 32);
+  h.writeUInt16LE(16, 34);
+  h.write("data", 36);
+  h.writeUInt32LE(data.length, 40);
+  return Buffer.concat([h, data]);
+}
+
 function fakeFetch(): void {
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input instanceof Request ? input.url : input);
     const body = typeof init?.body === "string" ? init.body : "";
     calls.push({ url, body });
     if (failUrl?.test(body)) return new Response("upstream exploded", { status: 500 });
-    const audio = Buffer.concat([
-      Buffer.from([0xff, 0xfb, 0x90, 0x00]),
+    const audio = fakeWav(
       createHash("sha256")
         .update(url + body)
         .digest(),
-    ]);
-    return new Response(audio, { status: 200, headers: { "content-type": "audio/mpeg" } });
+    );
+    return new Response(audio, { status: 200, headers: { "content-type": "audio/wav" } });
   }) as typeof fetch;
 }
 
@@ -265,8 +287,8 @@ describe("scene render", () => {
     // The fake provider is deterministic, so vary the request the way a seed would.
     calls = [];
     globalThis.fetch = (async () =>
-      new Response(Buffer.from([0xff, 0xfb, 1, 2, 3]), {
-        headers: { "content-type": "audio/mpeg" },
+      new Response(fakeWav(Buffer.from([1, 2, 3])), {
+        headers: { "content-type": "audio/wav" },
       })) as typeof fetch;
     const r = await renderScenes({
       projectDir: tmp,
@@ -297,6 +319,105 @@ describe("scene render", () => {
   });
 });
 
+describe("scene review regressions", () => {
+  it("counts each paid take once when a line is inserted above rendered lines", async () => {
+    const first = plan().manifest;
+    await renderScenes({ projectDir: tmp, manifest: first, profiles: loadProfiles(tmp) });
+    const before = summarize(first)[0];
+    writeScripts({
+      "s01.txt":
+        SCENES["s01.txt"]?.replace("# title: Rooftop\n", "# title: Rooftop\nMAI: Chờ đã.\n") ?? "",
+    });
+    const moved = plan(first).manifest;
+    const s01 = summarize(moved)[0];
+    expect(s01?.takes).toBe(before?.takes);
+    expect(s01?.characters_rendered).toBe(before?.characters_rendered);
+    // The shifted lines keep their audio; only the new line is pending.
+    expect(
+      allLines(moved)
+        .filter((l) => l.status === "pending")
+        .map((l) => l.id),
+    ).toEqual(["s01/001"]);
+    expect(findLine(moved, "s01/001").takes).toEqual([]);
+  });
+
+  it("sends one request for identical lines and counts their shared take once", async () => {
+    writeScripts({ "s03.txt": "HIRO: Đi thôi.\nMAI: Ừ.\nHIRO: Đi thôi.\n" });
+    const { manifest } = plan();
+    const r = await renderScenes({
+      projectDir: tmp,
+      manifest,
+      profiles: loadProfiles(tmp),
+      scene: "s03",
+    });
+    expect(r.rendered).toEqual(["s03/001", "s03/002"]);
+    expect(calls).toHaveLength(2);
+    expect(findLine(manifest, "s03/003").status).toBe("rendered");
+    expect(summarize(manifest)[2]?.takes).toBe(2);
+  });
+
+  it("keeps both takes when a new variant returns identical bytes", async () => {
+    const { manifest } = plan();
+    await renderScenes({ projectDir: tmp, manifest, profiles: loadProfiles(tmp), scene: "s03" });
+    const line = findLine(manifest, "s03/001");
+    const first = line.selected_take;
+    await renderScenes({
+      projectDir: tmp,
+      manifest,
+      profiles: loadProfiles(tmp),
+      lines: ["s03/001"],
+      newTake: true,
+    });
+    expect(line.takes.map((t) => t.id)).toEqual([first, `${first}_2`]);
+    expect(new Set(line.takes.map((t) => t.path)).size).toBe(2);
+  });
+
+  it("does not select a take that fails verification", async () => {
+    globalThis.fetch = (async () =>
+      new Response(Buffer.from("not audio at all"), {
+        headers: { "content-type": "audio/mpeg" },
+      })) as typeof fetch;
+    const { manifest } = plan();
+    const r = await renderScenes({
+      projectDir: tmp,
+      manifest,
+      profiles: loadProfiles(tmp),
+      scene: "s03",
+    });
+    const line = findLine(manifest, "s03/001");
+    // ffprobe is what tells non-audio apart; without it the take is accepted.
+    if (line.takes[0]?.verification.ok) return;
+    expect(r.failed[0]).toMatchObject({ line: "s03/001", code: "VERIFICATION_FAILED" });
+    expect(line.takes).toHaveLength(1);
+    expect(line.selected_take).toBeUndefined();
+    expect(line.status).toBe("failed");
+  });
+
+  it("rejects a manifest whose ids or take paths would leave the project", async () => {
+    const { manifest } = plan();
+    await renderScenes({ projectDir: tmp, manifest, profiles: loadProfiles(tmp), scene: "s03" });
+    writeManifest(tmp, manifest);
+    const raw = JSON.parse(fs.readFileSync(path.join(tmp, "multix-scene.json"), "utf8"));
+    raw.scenes[2].id = "../../escaped";
+    fs.writeFileSync(path.join(tmp, "multix-scene.json"), JSON.stringify(raw));
+    expect(() => readManifest(tmp)).toThrow(/not a valid scene id/);
+    raw.scenes[2].id = "s03";
+    raw.scenes[2].lines[0].takes[0].path = "takes/../../outside.mp3";
+    fs.writeFileSync(path.join(tmp, "multix-scene.json"), JSON.stringify(raw));
+    expect(() => readManifest(tmp)).toThrow(/invalid id or path/);
+  });
+
+  it("lets one command at a time rewrite the manifest", () => {
+    const release = lockProject(tmp);
+    expect(() => lockProject(tmp)).toThrow(/Another multix scene command/);
+    release();
+    // A lock left by a process that is gone is taken over.
+    fs.writeFileSync(path.join(tmp, "multix-scene.lock"), "999999999");
+    lockProject(tmp)();
+    expect(fs.existsSync(path.join(tmp, "multix-scene.lock"))).toBe(false);
+  });
+});
+
 describe("scene scripts", () => {
   it("normalises Vietnamese text so composed and decomposed input hash alike", () => {
     const composed = parseScript("HIRO: Tiếng Việt", "s01").lines[0]?.text ?? "";
@@ -317,6 +438,14 @@ describe("scene scripts", () => {
       lines: [{ speaker: "MAI", direction: "nhỏ nhẹ", text: "Chào mọi người.", sourceLine: 3 }],
     });
     expect(() => parseScript("no speaker here\n", "x")).toThrow(/SPEAKER: text/);
+  });
+
+  it("never drops characters when splitting", () => {
+    const text = '…Khoan. "Dừng lại!". Anh nói (thật đấy)? Được… rồi';
+    for (const max of [8, 12, 20]) {
+      const parts = chunkText(text, max);
+      expect(parts.join("").replace(/\s/g, "")).toBe(text.replace(/\s/g, ""));
+    }
   });
 
   it("splits long lines at sentence boundaries within the model limit", () => {

@@ -30,7 +30,7 @@ export interface ParsedScript {
   lines: ScriptLine[];
 }
 
-const SCENE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
+export const SCENE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 const DIALOGUE = /^([^\s:：(][^:：(]{0,63}?)\s*(?:\(([^)]{1,200})\))?\s*[:：]\s*(.*)$/u;
 
 export function normalizeText(text: string): string {
@@ -93,7 +93,9 @@ export function parseScript(source: string, fallbackScene: string): ParsedScript
 /** Split `text` into parts of at most `maxChars` code points. */
 export function chunkText(text: string, maxChars: number): string[] {
   if (charCount(text) <= maxChars) return [text];
-  const sentences = text.match(/[^.!?…。！？]+(?:[.!?…。！？]+["'”’)\]]*|$)\s*/gu) ?? [text];
+  // Every character lands in exactly one sentence, so nothing is dropped.
+  const found = text.match(/[^.!?…。！？]*[.!?…。！？]+["'”’)\]]*\s*|[^.!?…。！？]+$/gu) ?? [];
+  const sentences = found.join("") === text ? found : [text];
   const parts: string[] = [];
   let current = "";
   const push = () => {

@@ -100,14 +100,19 @@ multix scene export --out stems --approved-only
 
 - **plan** parses the scripts and profiles and writes the manifest. It reports
   `to_render`, `to_render_chars`, `cached`, `invalidated`, `added` and
-  `removed`. Run `plan` with no script arguments to re-read the scripts it
-  already knows. It sends no request.
+  `removed`. Scripts you name are added to the ones already planned (a script
+  at the same path is re-read); `--replace` plans only the scripts you name and
+  drops the other scenes. Run `plan` with no script arguments to re-read the
+  scripts it already knows. It sends no request.
 - **render** re-plans first, so edited scripts and profiles are picked up. Then
   it sends one request for each line with no take for its current request.
   `--scene <id>` and `--line <id>` (repeatable) narrow the selection.
   `--limit <n>` caps how many requests one run sends. `--keep-going` continues
   past a failed line; without it, the run stops at the first failure. The
-  command exits non-zero if any line failed.
+  command exits non-zero if any line failed. A take whose file fails
+  verification (empty, or unreadable by ffprobe when it is installed) is kept
+  with its receipt but not selected, and the line fails with
+  `VERIFICATION_FAILED`. Identical lines in one run share a single request.
 - **`--new-take`** requires `--line`. It renders a new variant of those lines
   even when a take is cached. Earlier takes stay in the manifest.
 - **approve** marks the selected take, or the take given with `--take` (one line
@@ -138,6 +143,11 @@ multix never retries a paid request and never switches to another provider. A
 failed line is recorded with its error code. Running `render` again sends that
 line again; that is your decision, not an automatic retry. The manifest is
 written after every take, so an interrupted run keeps what it paid for.
+`plan`, `render`, `approve` and `reject` hold `multix-scene.lock` while they
+run, so two commands cannot overwrite each other's takes; a lock left by a
+process that has exited is taken over. Takes follow their cache key, so
+inserting a line keeps the audio of the lines below it, but their ids (and
+export file names) are renumbered.
 
 Before anything is billed, `plan` and `render` reject:
 

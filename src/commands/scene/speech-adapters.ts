@@ -240,6 +240,8 @@ const elevenlabs: SpeechAdapter = {
       numberSetting(s, name, 0, 1, errors);
     numberSetting(s, "speed", 0.7, 1.2, errors);
     numberSetting(s, "seed", 0, 4_294_967_295, errors);
+    if (s.seed !== undefined && !Number.isInteger(s.seed))
+      errors.push("settings.seed must be an integer");
     if (s.use_speaker_boost !== undefined && typeof s.use_speaker_boost !== "boolean") {
       errors.push("settings.use_speaker_boost must be true or false");
     }

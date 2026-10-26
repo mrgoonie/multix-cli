@@ -155,6 +155,11 @@ describe("scene workflow (smoke)", { timeout: 60_000 }, () => {
     });
     expect(fs.existsSync(path.join(tmp, "stems", "s03", "003_hiro.mp3"))).toBe(true);
 
+    // Planning one script adds to the plan; it does not drop the other scenes.
+    const subset = await cli(["scene", "plan", "s02.txt"]);
+    expect(subset.out.data).toMatchObject({ scenes: 3, to_render: [], removed: [] });
+    expect(fs.existsSync(path.join(tmp, "multix-scene.lock"))).toBe(false);
+
     const status = await cli(["scene", "status"]);
     expect(status.out.data.scenes.map((s: { complete: boolean }) => s.complete)).toEqual([
       true,

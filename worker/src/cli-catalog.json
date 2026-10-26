@@ -11052,7 +11052,7 @@
         },
         {
           "command": "scene plan",
-          "description": "Parse scene scripts (all of them; none = the ones already planned) into the manifest; keeps takes whose request is unchanged (local, no cost)",
+          "description": "Parse scene scripts into the manifest (added to the ones already planned; none = re-plan those); keeps takes whose request is unchanged (local, no cost)",
           "positionals": [
             {
               "name": "scripts",
@@ -11079,6 +11079,16 @@
               "description": "Project name (default: directory name)",
               "required": false,
               "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--replace",
+              "flags": "--replace",
+              "description": "Plan only the given scripts, dropping scenes from other scripts",
+              "required": false,
+              "takesValue": false,
               "valueOptional": false,
               "variadic": false,
               "negatable": false

@@ -100,14 +100,19 @@ multix scene export --out stems --approved-only
 
 - **plan** phân tích kịch bản và profile rồi ghi manifest. Lệnh báo
   `to_render`, `to_render_chars`, `cached`, `invalidated`, `added` và
-  `removed`. Chạy `plan` không kèm file kịch bản để đọc lại các kịch bản đã
-  biết. Lệnh không gửi request nào.
+  `removed`. Kịch bản bạn truyền vào được thêm vào các kịch bản đã plan (kịch bản
+  cùng đường dẫn được đọc lại); `--replace` chỉ plan các kịch bản bạn truyền và
+  bỏ các scene khác. Chạy `plan` không kèm file kịch bản để đọc lại các kịch bản
+  đã biết. Lệnh không gửi request nào.
 - **render** chạy lại bước plan trước, nên kịch bản và profile vừa sửa được cập
   nhật. Sau đó lệnh gửi một request cho mỗi câu chưa có take ứng với request
   hiện tại của nó. `--scene <id>` và `--line <id>` (lặp lại được) thu hẹp phạm
   vi. `--limit <n>` giới hạn số request của một lần chạy. `--keep-going` tiếp
   tục sau câu bị lỗi; không có cờ này, lần chạy dừng ở lỗi đầu tiên. Lệnh thoát
-  với mã khác 0 nếu có câu bị lỗi.
+  với mã khác 0 nếu có câu bị lỗi. Take có file không qua bước kiểm tra (rỗng,
+  hoặc ffprobe không đọc được khi máy có ffprobe) vẫn được giữ cùng biên nhận
+  nhưng không được chọn, và câu đó lỗi với mã `VERIFICATION_FAILED`. Các câu
+  giống hệt nhau trong một lần chạy dùng chung một request.
 - **`--new-take`** bắt buộc đi kèm `--line`. Cờ này render một biến thể mới cho
   các câu đó dù đã có take trong cache. Các take cũ vẫn nằm trong manifest.
 - **approve** đánh dấu duyệt take đang chọn, hoặc take truyền qua `--take` (chỉ
@@ -137,6 +142,10 @@ multix không bao giờ retry một request trả phí và không bao giờ chuy
 provider khác. Câu bị lỗi được ghi lại cùng mã lỗi. Chạy lại `render` sẽ gửi lại
 câu đó; đó là quyết định của bạn, không phải retry tự động. Manifest được ghi
 sau mỗi take, nên một lần chạy bị ngắt vẫn giữ lại những gì đã trả tiền.
+`plan`, `render`, `approve` và `reject` giữ file `multix-scene.lock` trong lúc
+chạy, nên hai lệnh không ghi đè take của nhau; lock do một tiến trình đã thoát
+để lại sẽ được tiếp quản. Take đi theo cache key, nên khi chèn thêm một câu, các
+câu phía dưới vẫn giữ audio, nhưng id (và tên file khi export) được đánh số lại.
 
 Trước khi tính phí, `plan` và `render` từ chối:
 

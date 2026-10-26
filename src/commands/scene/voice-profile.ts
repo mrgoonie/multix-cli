@@ -46,7 +46,7 @@ export interface VoiceProfile {
   clone?: { consent: { granted_by: string; granted_at: string; note?: string } };
 }
 
-const ID = /^[a-z0-9][a-z0-9_-]{0,63}$/;
+export const PROFILE_ID = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 const SECRET_FIELD = /(api[_-]?key|token|secret|password|authorization|credential|bearer)/i;
 const SECRET_VALUE = /^(sk-|sk_|xi-|AIza|Bearer\s)/;
 const LANGUAGE = /^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/;
@@ -56,6 +56,9 @@ export function voicesDir(projectDir: string): string {
 }
 
 export function profilePath(projectDir: string, id: string): string {
+  if (!PROFILE_ID.test(id)) {
+    throw new ValidationError(`Voice id "${id}" must be lowercase letters, digits, "_" or "-"`);
+  }
   return path.join(voicesDir(projectDir), `${id}.json`);
 }
 
@@ -79,7 +82,7 @@ export function profileErrors(raw: unknown): string[] {
   const p = raw as Partial<VoiceProfile>;
   findSecrets(raw, "profile", errors);
   if (p.schema !== VOICE_PROFILE_SCHEMA) errors.push(`schema must be "${VOICE_PROFILE_SCHEMA}"`);
-  if (typeof p.id !== "string" || !ID.test(p.id)) {
+  if (typeof p.id !== "string" || !PROFILE_ID.test(p.id)) {
     errors.push("id must match [a-z0-9][a-z0-9_-]{0,63}");
   }
   if (!Number.isInteger(p.version) || (p.version ?? 0) < 1) {

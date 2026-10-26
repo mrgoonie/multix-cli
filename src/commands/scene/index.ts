@@ -11,17 +11,19 @@ import path from "node:path";
 import type { Command } from "commander";
 import { run } from "../../agent/run-state.js";
 import { ValidationError } from "../../core/errors.js";
-import { createLogger } from "../../core/logger.js";
+import { type Logger, createLogger } from "../../core/logger.js";
 import {
   type SceneManifest,
   allLines,
   findLine,
+  lockProject,
   planScenes,
   readManifest,
   refreshStatus,
   requireManifest,
   sha256,
   summarize,
+  usableTake,
   writeManifest,
 } from "./scene-manifest.js";
 import { renderScenes, selectTargets } from "./scene-render.js";
@@ -82,8 +84,18 @@ function relScript(projectDir: string, file: string): string {
   return path.relative(projectDir, path.resolve(file)).split(path.sep).join("/");
 }
 
-function replan(projectDir: string, previous: SceneManifest, scripts?: string[]) {
-  const files = scripts ?? previous.scenes.map((s) => path.join(projectDir, s.script));
+/**
+ * Re-plan from the scripts already in the manifest plus `scripts` (which
+ * replace a planned script at the same path). With `replace`, only `scripts`.
+ */
+function replan(
+  projectDir: string,
+  previous: SceneManifest,
+  scripts: string[] = [],
+  replace = false,
+) {
+  const planned = replace ? [] : previous.scenes.map((s) => path.join(projectDir, s.script));
+  const files = [...new Set([...planned.map((f) => path.resolve(f)), ...scripts])];
   const sources = files.map((file) => {
     if (!fs.existsSync(file)) throw new ValidationError(`Script not found: ${file}`);
     return { path: relScript(projectDir, file), source: fs.readFileSync(file, "utf8") };
@@ -94,6 +106,136 @@ function replan(projectDir: string, previous: SceneManifest, scripts?: string[])
     project: previous.project,
     previous,
   });
+}
+
+function planCommand(
+  projectDir: string,
+  base: SceneManifest,
+  scripts: string[],
+  opts: { dryRun?: boolean; replace?: boolean },
+): void {
+  const plan = replan(
+    projectDir,
+    base,
+    scripts.map((s) => path.resolve(s)),
+    opts.replace,
+  );
+  const { targets, cached } = selectTargets(plan.manifest, {});
+  const data = {
+    project: plan.manifest.project,
+    manifest: path.join(projectDir, "multix-scene.json"),
+    written: !opts.dryRun,
+    scenes: plan.manifest.scenes.length,
+    lines: allLines(plan.manifest).length,
+    to_render: targets.map((l) => l.id),
+    to_render_chars: targets.reduce((n, l) => n + l.chars, 0),
+    cached,
+    invalidated: plan.invalidated,
+    added: plan.added,
+    removed: plan.removed,
+    // No price table yet: unknown is reported as null, never as zero.
+    estimated_cost_usd: null,
+  };
+  if (!opts.dryRun) writeManifest(projectDir, plan.manifest);
+  emit(data, () =>
+    [
+      `${data.scenes} scene(s), ${data.lines} line(s): ${targets.length} to render (${data.to_render_chars} chars), ${cached} cached`,
+      ...(plan.invalidated.length
+        ? [`Changed since last render: ${plan.invalidated.join(", ")}`]
+        : []),
+      data.written ? `Manifest: ${data.manifest}` : "Dry run: manifest not written",
+      ...(targets.length ? [`Next: multix scene render --project ${projectDir}`] : []),
+    ].join("\n"),
+  );
+}
+
+// biome-ignore lint/suspicious/noExplicitAny: commander options
+async function renderCommand(projectDir: string, opts: any, logger: Logger): Promise<void> {
+  const plan = replan(projectDir, requireManifest(projectDir));
+  const manifest = plan.manifest;
+  if (plan.invalidated.length)
+    logger.info(`Script or voice changed: ${plan.invalidated.join(", ")}`);
+  const limit = opts.limit !== undefined ? Number(opts.limit) : undefined;
+  if (limit !== undefined && !(Number.isInteger(limit) && limit > 0)) {
+    throw new ValidationError("--limit must be a positive integer");
+  }
+  // A dry run stops at the first request; nothing is written before it.
+  if (!opts.dryRun) writeManifest(projectDir, manifest);
+  const result = await renderScenes({
+    projectDir,
+    manifest,
+    profiles: loadProfiles(projectDir),
+    scene: opts.scene,
+    lines: opts.line,
+    newTake: opts.newTake,
+    limit,
+    keepGoing: opts.keepGoing,
+    logger,
+  });
+  const scenes = summarize(manifest);
+  emit({ ...result, scenes }, () =>
+    [
+      `Rendered ${result.rendered.length} line(s), ${result.cached} cached, ${result.failed.length} failed`,
+      ...result.failed.map((f) => `  ✗ ${f.line}: ${f.code} ${f.message}`),
+      ...(result.remaining.length ? [`Not rendered yet: ${result.remaining.length} line(s)`] : []),
+      ...scenes.map(
+        (s) => `  ${s.scene}: ${s.rendered}/${s.lines} rendered, ${s.approved} approved`,
+      ),
+    ].join("\n"),
+  );
+  if (result.failed.length) process.exitCode = 1;
+}
+
+function approveLines(
+  projectDir: string,
+  lines: string[],
+  opts: { take?: string; dryRun?: boolean },
+): void {
+  const manifest = requireManifest(projectDir);
+  if (opts.take && lines.length > 1) throw new ValidationError("--take applies to one line");
+  for (const id of lines) {
+    const line = findLine(manifest, id);
+    const takeId = opts.take ?? line.selected_take;
+    const take = line.takes.find((t) => t.id === takeId);
+    if (!take)
+      throw new ValidationError(`Line ${id} has no take "${takeId ?? ""}" (render it first)`);
+    if (take.cache_key !== line.cache_key) {
+      throw new ValidationError(
+        `Take ${take.id} of ${id} was rendered for an older script or voice`,
+      );
+    }
+    for (const t of line.takes)
+      if (t.status === "approved" && t.id !== take.id) t.status = "candidate";
+    take.status = "approved";
+    line.selected_take = take.id;
+    refreshStatus(line);
+  }
+  if (!opts.dryRun) writeManifest(projectDir, manifest);
+  emit({ approved: lines, written: !opts.dryRun }, () => `Approved: ${lines.join(", ")}`);
+}
+
+function rejectTake(
+  projectDir: string,
+  id: string,
+  opts: { take: string; dryRun?: boolean },
+): void {
+  const manifest = requireManifest(projectDir);
+  const line = findLine(manifest, id);
+  const take = line.takes.find((t) => t.id === opts.take);
+  if (!take) throw new ValidationError(`Line ${id} has no take "${opts.take}"`);
+  take.status = "rejected";
+  if (line.selected_take === take.id) {
+    const fallback = [...line.takes]
+      .reverse()
+      .find((t) => t.cache_key === line.cache_key && t.status !== "rejected");
+    line.selected_take = fallback?.id;
+  }
+  refreshStatus(line);
+  if (!opts.dryRun) writeManifest(projectDir, manifest);
+  emit(
+    { rejected: take.id, line: id, status: line.status },
+    () => `Rejected ${take.id}; ${id} is ${line.status}`,
+  );
 }
 
 function registerVoiceCommands(scene: Command): void {
@@ -228,10 +370,11 @@ export function registerSceneCommands(program: Command): void {
   scene
     .command("plan [scripts...]")
     .description(
-      "Parse scene scripts (all of them; none = the ones already planned) into the manifest; keeps takes whose request is unchanged (local, no cost)",
+      "Parse scene scripts into the manifest (added to the ones already planned; none = re-plan those); keeps takes whose request is unchanged (local, no cost)",
     )
     .option("--project <dir>", "Scene project directory", ".")
     .option("--name <str>", "Project name (default: directory name)")
+    .option("--replace", "Plan only the given scripts, dropping scenes from other scripts")
     .action((scripts: string[], opts) => {
       const projectDir = projectOf(opts);
       const previous = readManifest(projectDir);
@@ -246,38 +389,12 @@ export function registerSceneCommands(program: Command): void {
       if (scripts.length === 0 && !previous) {
         throw new ValidationError("Pass the scene script files: multix scene plan s01.txt s02.txt");
       }
-      const plan = replan(
-        projectDir,
-        base,
-        scripts.length ? scripts.map((s) => path.resolve(s)) : undefined,
-      );
-      const { targets, cached } = selectTargets(plan.manifest, {});
-      const data = {
-        project: plan.manifest.project,
-        manifest: path.join(projectDir, "multix-scene.json"),
-        written: !opts.dryRun,
-        scenes: plan.manifest.scenes.length,
-        lines: allLines(plan.manifest).length,
-        to_render: targets.map((l) => l.id),
-        to_render_chars: targets.reduce((n, l) => n + l.chars, 0),
-        cached,
-        invalidated: plan.invalidated,
-        added: plan.added,
-        removed: plan.removed,
-        // No price table yet: unknown is reported as null, never as zero.
-        estimated_cost_usd: null,
-      };
-      if (!opts.dryRun) writeManifest(projectDir, plan.manifest);
-      emit(data, () =>
-        [
-          `${data.scenes} scene(s), ${data.lines} line(s): ${targets.length} to render (${data.to_render_chars} chars), ${cached} cached`,
-          ...(plan.invalidated.length
-            ? [`Changed since last render: ${plan.invalidated.join(", ")}`]
-            : []),
-          data.written ? `Manifest: ${data.manifest}` : "Dry run: manifest not written",
-          ...(targets.length ? [`Next: multix scene render --project ${projectDir}`] : []),
-        ].join("\n"),
-      );
+      const release = opts.dryRun ? undefined : lockProject(projectDir);
+      try {
+        planCommand(projectDir, base, scripts, opts);
+      } finally {
+        release?.();
+      }
     });
 
   scene
@@ -296,41 +413,12 @@ export function registerSceneCommands(program: Command): void {
       // Progress goes to stderr so stdout stays the result (JSON with --json).
       const logger = createLogger({ verbose: opts.verbose ?? false, stderr: true });
       const projectDir = projectOf(opts);
-      const plan = replan(projectDir, requireManifest(projectDir));
-      const manifest = plan.manifest;
-      if (plan.invalidated.length)
-        logger.info(`Script or voice changed: ${plan.invalidated.join(", ")}`);
-      const limit = opts.limit !== undefined ? Number(opts.limit) : undefined;
-      if (limit !== undefined && !(Number.isInteger(limit) && limit > 0)) {
-        throw new ValidationError("--limit must be a positive integer");
+      const release = opts.dryRun ? undefined : lockProject(projectDir);
+      try {
+        await renderCommand(projectDir, opts, logger);
+      } finally {
+        release?.();
       }
-      // A dry run stops at the first request; nothing is written before it.
-      if (!opts.dryRun) writeManifest(projectDir, manifest);
-      const result = await renderScenes({
-        projectDir,
-        manifest,
-        profiles: loadProfiles(projectDir),
-        scene: opts.scene,
-        lines: opts.line,
-        newTake: opts.newTake,
-        limit,
-        keepGoing: opts.keepGoing,
-        logger,
-      });
-      const scenes = summarize(manifest);
-      emit({ ...result, scenes }, () =>
-        [
-          `Rendered ${result.rendered.length} line(s), ${result.cached} cached, ${result.failed.length} failed`,
-          ...result.failed.map((f) => `  ✗ ${f.line}: ${f.code} ${f.message}`),
-          ...(result.remaining.length
-            ? [`Not rendered yet: ${result.remaining.length} line(s)`]
-            : []),
-          ...scenes.map(
-            (s) => `  ${s.scene}: ${s.rendered}/${s.lines} rendered, ${s.approved} approved`,
-          ),
-        ].join("\n"),
-      );
-      if (result.failed.length) process.exitCode = 1;
     });
 
   scene
@@ -340,27 +428,12 @@ export function registerSceneCommands(program: Command): void {
     .option("--project <dir>", "Scene project directory", ".")
     .action((lines: string[], opts) => {
       const projectDir = projectOf(opts);
-      const manifest = requireManifest(projectDir);
-      if (opts.take && lines.length > 1) throw new ValidationError("--take applies to one line");
-      for (const id of lines) {
-        const line = findLine(manifest, id);
-        const takeId = opts.take ?? line.selected_take;
-        const take = line.takes.find((t) => t.id === takeId);
-        if (!take)
-          throw new ValidationError(`Line ${id} has no take "${takeId ?? ""}" (render it first)`);
-        if (take.cache_key !== line.cache_key) {
-          throw new ValidationError(
-            `Take ${take.id} of ${id} was rendered for an older script or voice`,
-          );
-        }
-        for (const t of line.takes)
-          if (t.status === "approved" && t.id !== take.id) t.status = "candidate";
-        take.status = "approved";
-        line.selected_take = take.id;
-        refreshStatus(line);
+      const release = opts.dryRun ? undefined : lockProject(projectDir);
+      try {
+        approveLines(projectDir, lines, opts);
+      } finally {
+        release?.();
       }
-      if (!opts.dryRun) writeManifest(projectDir, manifest);
-      emit({ approved: lines, written: !opts.dryRun }, () => `Approved: ${lines.join(", ")}`);
     });
 
   scene
@@ -370,23 +443,12 @@ export function registerSceneCommands(program: Command): void {
     .option("--project <dir>", "Scene project directory", ".")
     .action((id: string, opts) => {
       const projectDir = projectOf(opts);
-      const manifest = requireManifest(projectDir);
-      const line = findLine(manifest, id);
-      const take = line.takes.find((t) => t.id === opts.take);
-      if (!take) throw new ValidationError(`Line ${id} has no take "${opts.take}"`);
-      take.status = "rejected";
-      if (line.selected_take === take.id) {
-        const fallback = [...line.takes]
-          .reverse()
-          .find((t) => t.cache_key === line.cache_key && t.status !== "rejected");
-        line.selected_take = fallback?.id;
+      const release = opts.dryRun ? undefined : lockProject(projectDir);
+      try {
+        rejectTake(projectDir, id, opts);
+      } finally {
+        release?.();
       }
-      refreshStatus(line);
-      if (!opts.dryRun) writeManifest(projectDir, manifest);
-      emit(
-        { rejected: take.id, line: id, status: line.status },
-        () => `Rejected ${take.id}; ${id} is ${line.status}`,
-      );
     });
 
   scene
@@ -446,7 +508,7 @@ export function registerSceneCommands(program: Command): void {
             const take = line.takes.find((t) => t.id === line.selected_take);
             const usable =
               take &&
-              take.cache_key === line.cache_key &&
+              usableTake(take, line.cache_key) &&
               (!opts.approvedOnly || take.status === "approved");
             if (!usable) {
               missing.push(line.id);
@@ -495,7 +557,10 @@ export function registerSceneCommands(program: Command): void {
       if (!opts.dryRun) {
         for (const s of scenes) {
           for (const stem of s.stems) {
-            const dest = path.join(outDir, stem.file);
+            const dest = path.resolve(outDir, stem.file);
+            if (!dest.startsWith(`${outDir}${path.sep}`)) {
+              throw new ValidationError(`Stem path ${stem.file} leaves ${outDir}`);
+            }
             fs.mkdirSync(path.dirname(dest), { recursive: true });
             fs.copyFileSync(stem._src, dest);
           }

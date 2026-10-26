@@ -26,6 +26,7 @@ import {
   combinedStyle,
   refreshStatus,
   sha256,
+  usableTake,
   writeManifest,
 } from "./scene-manifest.js";
 import { adapterFor } from "./speech-adapters.js";
@@ -123,7 +124,10 @@ async function renderLine(
   );
   await settleTelemetry();
   const digest = sha256(audio.bytes);
-  const id = `t_${digest.slice(0, 12)}`;
+  // Each request is its own take, even when a provider returns the same
+  // bytes again (a fixed seed): its receipt and approval must not be lost.
+  let id = `t_${digest.slice(0, 12)}`;
+  for (let n = 2; line.takes.some((t) => t.id === id); n++) id = `t_${digest.slice(0, 12)}_${n}`;
   const rel = takeFile(line, id, audio.ext);
   const abs = path.join(projectDir, rel);
   fs.mkdirSync(path.dirname(abs), { recursive: true });
@@ -144,7 +148,7 @@ async function renderLine(
     ...(audio.sampleRate ? { sample_rate: audio.sampleRate } : {}),
     created_at: new Date().toISOString(),
     verification: {
-      ok: !warnings.some((w) => w.code === "EMPTY_OUTPUT" || w.code === "CONTENT_MISMATCH"),
+      ok: warnings.length === 0,
       warnings: warnings.map((w) => `${w.code}: ${w.message}`),
     },
     status: "candidate",
@@ -171,21 +175,48 @@ export async function renderScenes(opts: RenderOptions): Promise<RenderResult> {
   const result: RenderResult = { rendered: [], cached, failed: [], remaining: [] };
   const limit = opts.limit ?? Number.POSITIVE_INFINITY;
   let stopped = false;
+  const renderedThisRun = new Map<string, Take>();
   for (const line of targets) {
     if (stopped || result.rendered.length + result.failed.length >= limit) {
       result.remaining.push(line.id);
+      continue;
+    }
+    // An identical line earlier in this run already paid for this request.
+    const shared = opts.newTake ? undefined : renderedThisRun.get(line.cache_key);
+    if (shared) {
+      line.takes.push(shared);
+      line.selected_take = shared.id;
+      line.error = undefined;
+      refreshStatus(line);
+      result.cached += 1;
+      writeManifest(projectDir, manifest);
       continue;
     }
     const profile = profiles.get(line.speaker) as VoiceProfile;
     logger?.info(`Rendering ${line.id} (${line.speaker}, ${line.chars} chars)`);
     try {
       const take = await renderLine(line, profile, projectDir, logger);
-      const existing = line.takes.findIndex((t) => t.id === take.id);
-      if (existing >= 0) line.takes[existing] = take;
-      else line.takes.push(take);
-      line.selected_take = take.id;
-      line.error = undefined;
-      result.rendered.push(line.id);
+      line.takes.push(take);
+      if (usableTake(take, line.cache_key)) {
+        line.selected_take = take.id;
+        line.error = undefined;
+        renderedThisRun.set(line.cache_key, take);
+        result.rendered.push(line.id);
+      } else {
+        // Paid for and kept (with its receipt) but not selected.
+        line.error = {
+          code: "VERIFICATION_FAILED",
+          message:
+            `take ${take.id} failed verification: ${take.verification.warnings.join("; ")}`.slice(
+              0,
+              300,
+            ),
+          at: new Date().toISOString(),
+        };
+        result.failed.push({ line: line.id, code: line.error.code, message: line.error.message });
+        logger?.error(`${line.id}: ${line.error.code} ${line.error.message}`);
+        if (!opts.keepGoing) stopped = true;
+      }
     } catch (error) {
       const info = classifyError(error);
       line.error = {
