@@ -10,7 +10,7 @@
 
 import { isAllowed } from "../accounts/allowlist.js";
 import { randomBase64Url } from "../accounts/base64.js";
-import type { AppContext } from "../app-context.js";
+import { type AppContext, type AppDeps, usageLedgerFor } from "../app-context.js";
 import {
   GithubSignInError,
   fetchGithubIdentity,
@@ -31,6 +31,7 @@ import { tokensMatch } from "../http-guards.js";
 import { html, redirect } from "../http-responses.js";
 import { messagePage } from "../pages/page-layout.js";
 import { logEvent } from "../redaction.js";
+import { recordActivity } from "../usage/record-activity.js";
 
 export const GITHUB_CALLBACK_PATH = "/oauth/github/callback";
 
@@ -76,7 +77,11 @@ function failure(status: number, title: string, message: string): Response {
   );
 }
 
-export async function finishGithubSignIn(ctx: AppContext, request: Request): Promise<Response> {
+export async function finishGithubSignIn(
+  ctx: AppContext,
+  request: Request,
+  deps: AppDeps = {},
+): Promise<Response> {
   const url = new URL(request.url);
   const login = await verify<LoginState>(
     ctx.sessionSecret,
@@ -127,6 +132,11 @@ export async function finishGithubSignIn(ctx: AppContext, request: Request): Pro
   }
   const account = await ctx.accounts.upsertFromGithub(identity);
   logEvent("info", "sign_in", { user: account.id });
+  await recordActivity(usageLedgerFor(ctx.env, deps, account.id), {
+    actor: `dashboard:${account.id}`,
+    kind: "auth.sign_in",
+    meta: { login: account.login },
+  });
   const headers = new Headers();
   headers.append("set-cookie", clearCookie(LOGIN_COOKIE));
   headers.append("set-cookie", await sessionCookie(ctx.sessionSecret, account.id));

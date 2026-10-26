@@ -346,7 +346,7 @@ describe("budgets, activities, rate card", () => {
 
     expect(await body(await api(a.browser, a.key, "/activities/verify"))).toEqual({
       ok: true,
-      checked: 3,
+      checked: 5,
       brokenAtSeq: null,
     });
 

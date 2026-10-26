@@ -11,6 +11,8 @@ import type { AppContext } from "../app-context.js";
 import { redirect } from "../http-responses.js";
 import { logEvent } from "../redaction.js";
 import { type R2AccessResult, checkR2Access } from "../storage/r2-access-check.js";
+import type { AccountUsageStub } from "../usage/account-usage.js";
+import { recordActivity } from "../usage/record-activity.js";
 
 export interface Notice {
   text: string;
@@ -78,10 +80,13 @@ export async function handleR2SettingsPost(
   ctx: AppContext,
   account: Account,
   form: FormData,
+  usage?: AccountUsageStub,
 ): Promise<Response> {
+  const actor = `dashboard:${account.id}`;
   if (form.get("intent") === "delete") {
     await ctx.accounts.deleteR2Settings(account.id);
     logEvent("info", "r2_settings_removed", { user: account.id });
+    await recordActivity(usage, { actor, kind: "storage.removed" });
     return redirect("/dashboard?notice=r2-removed");
   }
   const parsed = parseR2Settings({
@@ -101,5 +106,6 @@ export async function handleR2SettingsPost(
   }
   await ctx.accounts.saveR2Settings(account.id, parsed.settings);
   logEvent("info", "r2_settings_saved", { user: account.id });
+  await recordActivity(usage, { actor, kind: "storage.saved" });
   return redirect("/dashboard?notice=r2-saved");
 }

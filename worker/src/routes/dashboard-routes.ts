@@ -8,9 +8,11 @@
  *   POST /dashboard/api-keys              create (shown once) or revoke a REST API key
  *   POST /dashboard/connections/revoke    disconnect one MCP client (revoke its grant)
  *   POST /dashboard/logout                end every dashboard session of the account
+ *   …/overview, /usage, /budgets, /traces, /activities and their POSTs: usage-dashboard-routes.ts
  *
  * Every POST needs a same-origin Origin header, a valid session and the
  * account's CSRF token. Values are validated but never echoed back.
+ * Changes are recorded in the account's activity log (names and ids only).
  */
 
 import { isProviderSecretName, isValidSecretValue } from "../accounts/account-store.js";
@@ -23,14 +25,22 @@ import {
   oauthHelpers,
   sameOriginPost,
   signedInSession,
+  usageLedgerFor,
 } from "../app-context.js";
 import { SESSION_COOKIE, clearCookie, csrfToken, csrfValid } from "../auth/signed-cookies.js";
 import { html, redirect, text } from "../http-responses.js";
 import type { NewApiKey } from "../pages/api-keys-card.js";
 import { type ConnectedClient, dashboardPage, signInPage } from "../pages/dashboard-page.js";
 import { logEvent } from "../redaction.js";
+import { recordActivity } from "../usage/record-activity.js";
 import { startGithubSignIn } from "./github-sign-in-routes.js";
 import { type Notice, R2_NOTICES, handleR2SettingsPost } from "./r2-settings-routes.js";
+import {
+  handleUsageDashboardGet,
+  handleUsageDashboardPost,
+  isUsageDashboardGet,
+  isUsageDashboardPost,
+} from "./usage-dashboard-routes.js";
 
 const NOTICES: Record<string, Notice> = {
   saved: { text: "Key saved." },
@@ -95,6 +105,13 @@ async function connectedClients(ctx: AppContext, account: Account): Promise<Conn
   );
 }
 
+/** Signed-out visitors of a dashboard tab go to the sign-in landing. */
+async function showUsageTab(ctx: AppContext, deps: AppDeps, request: Request): Promise<Response> {
+  const signedIn = await signedInSession(ctx, request);
+  if (!signedIn) return redirect("/dashboard");
+  return handleUsageDashboardGet(ctx, deps, request, signedIn);
+}
+
 async function showDashboard(
   ctx: AppContext,
   request: Request,
@@ -143,9 +160,15 @@ async function handlePost(
   if (!(await csrfValid(ctx.sessionSecret, session, form.get("csrf")))) {
     return text(403, "Forbidden");
   }
+  if (isUsageDashboardPost(pathname)) {
+    return handleUsageDashboardPost(ctx, deps, signedIn, pathname, form);
+  }
+  const usage = usageLedgerFor(ctx.env, deps, account.id);
+  const actor = `dashboard:${account.id}`;
 
   if (pathname === "/dashboard/logout") {
     await ctx.accounts.endSessions(account.id);
+    await recordActivity(usage, { actor, kind: "auth.sign_out" });
     return redirect("/dashboard", { "set-cookie": clearCookie(SESSION_COOKIE) });
   }
 
@@ -155,6 +178,7 @@ async function handlePost(
     if (form.get("intent") === "delete") {
       await ctx.accounts.deleteSecret(account.id, name);
       logEvent("info", "provider_key_removed", { user: account.id, name });
+      await recordActivity(usage, { actor, kind: "provider_key.removed", target: name });
       return redirect("/dashboard?notice=removed");
     }
     const value = String(form.get("value") ?? "").trim();
@@ -163,10 +187,11 @@ async function handlePost(
     }
     await ctx.accounts.setSecret(account.id, name, value);
     logEvent("info", "provider_key_saved", { user: account.id, name });
+    await recordActivity(usage, { actor, kind: "provider_key.saved", target: name });
     return redirect("/dashboard?notice=saved");
   }
 
-  if (pathname === "/dashboard/storage") return handleR2SettingsPost(ctx, account, form);
+  if (pathname === "/dashboard/storage") return handleR2SettingsPost(ctx, account, form, usage);
 
   if (pathname === "/dashboard/api-keys") {
     const store = new ApiKeyStore(ctx.env.ACCOUNTS_KV);
@@ -175,13 +200,20 @@ async function handlePost(
       const revoked = /^[A-Za-z0-9_-]{1,128}$/.test(id) && (await store.revoke(account.id, id));
       if (!revoked) return redirect("/dashboard?notice=api-key-not-found");
       logEvent("info", "api_key_revoked", { user: account.id });
+      await recordActivity(usage, { actor, kind: "api_key.revoked", target: id });
       return redirect("/dashboard?notice=api-key-revoked");
     }
     const name = String(form.get("name") ?? "").trim();
     if (!API_KEY_NAME_RE.test(name)) return redirect("/dashboard?notice=api-key-invalid-name");
     try {
-      const { key } = await store.create(account.id, name);
+      const { key, record } = await store.create(account.id, name);
       logEvent("info", "api_key_created", { user: account.id });
+      await recordActivity(usage, {
+        actor,
+        kind: "api_key.created",
+        target: record.id,
+        meta: { name },
+      });
       // Rendered in this response only: never stored, never put in a URL.
       return showDashboard(ctx, request, { name, key });
     } catch (error) {
@@ -202,6 +234,14 @@ async function handlePost(
     // revokeGrant is scoped to the account id, so another user's grant id does nothing.
     await oauth.revokeGrant(grantId, account.id);
     logEvent("info", "mcp_client_disconnected", { user: account.id, subscriptions: removed });
+    if (grant) {
+      await recordActivity(usage, {
+        actor,
+        kind: "client.disconnected",
+        target: grant.clientId,
+        meta: { subscriptions: removed },
+      });
+    }
     return redirect("/dashboard?notice=disconnected");
   }
 
@@ -220,6 +260,7 @@ export async function handleDashboard(
     if (pathname === "/dashboard/login") {
       return startGithubSignIn(ctx, url.searchParams.get("return_to") ?? "/dashboard");
     }
+    if (isUsageDashboardGet(pathname)) return showUsageTab(ctx, deps, request);
     return text(404, "Not Found");
   }
   if (request.method === "POST") return handlePost(ctx, deps, request, pathname);

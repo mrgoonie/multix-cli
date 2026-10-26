@@ -10,6 +10,7 @@ import type { ApiKeyRecord } from "../accounts/api-key-store.js";
 import { escapeHtml } from "../http-responses.js";
 import { type NewApiKey, apiKeysCard, newApiKeyNotice } from "./api-keys-card.js";
 import { copyBlock } from "./copy-button.js";
+import { dashboardNav } from "./dashboard-nav.js";
 import { formatDate, page } from "./page-layout.js";
 import { providerKeysCard } from "./provider-keys-card.js";
 import { type R2SettingsSummary, r2SettingsCard } from "./r2-settings-card.js";
@@ -74,7 +75,7 @@ export function dashboardPage(view: DashboardView): string {
     : "";
   return page(
     "multix MCP dashboard",
-    `${notice}${view.newApiKey ? newApiKeyNotice(view.newApiKey) : ""}<section class="card">
+    `${dashboardNav("settings")}${notice}${view.newApiKey ? newApiKeyNotice(view.newApiKey) : ""}<section class="card">
 <div class="row" style="justify-content:space-between">
 <div>${avatar}<strong>${escapeHtml(account.login)}</strong></div>
 <form method="post" action="/dashboard/logout"><input type="hidden" name="csrf" value="${escapeHtml(view.csrf)}"><button class="btn secondary small" title="Ends the dashboard session on every device">Sign out</button></form>
@@ -91,5 +92,6 @@ ${providerKeysCard(view.secrets, view.csrf)}
 ${r2SettingsCard(view.r2, view.csrf)}
 ${apiKeysCard(view.apiKeys, view.csrf, view.origin)}
 ${clientsCard(view)}`,
+    { wide: true },
   );
 }

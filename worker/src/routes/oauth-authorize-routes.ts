@@ -11,11 +11,19 @@
  */
 
 import { AuthorizationError, CimdFetchError } from "@cloudflare/workers-oauth-provider";
-import { type AppContext, oauthHelpers, sameOriginPost, signedInAccount } from "../app-context.js";
+import {
+  type AppContext,
+  type AppDeps,
+  oauthHelpers,
+  sameOriginPost,
+  signedInAccount,
+  usageLedgerFor,
+} from "../app-context.js";
 import { html, redirect, text } from "../http-responses.js";
 import { consentPage } from "../pages/consent-page.js";
 import { messagePage } from "../pages/page-layout.js";
 import { logEvent } from "../redaction.js";
+import { recordActivity } from "../usage/record-activity.js";
 
 export const AUTHORIZE_PATH = "/oauth/authorize";
 /** The one OAuth scope: full use of the MCP tools with the account's own keys. */
@@ -38,7 +46,11 @@ function authorizationFailure(error: unknown): Response {
   throw error;
 }
 
-export async function handleAuthorize(ctx: AppContext, request: Request): Promise<Response> {
+export async function handleAuthorize(
+  ctx: AppContext,
+  request: Request,
+  deps: AppDeps = {},
+): Promise<Response> {
   const oauth = oauthHelpers(ctx.env);
   try {
     if (request.method === "GET") {
@@ -83,6 +95,14 @@ export async function handleAuthorize(ctx: AppContext, request: Request): Promis
         props,
       });
       logEvent("info", "mcp_client_authorized", { user: account.id });
+      const clientId = approved.request.clientId;
+      const client = await oauth.lookupClient(clientId).catch(() => null);
+      await recordActivity(usageLedgerFor(ctx.env, deps, account.id), {
+        actor: `dashboard:${account.id}`,
+        kind: "client.connected",
+        target: clientId,
+        meta: { name: client?.clientName || clientId },
+      });
       approved.headers.set("location", redirectTo);
       return new Response(null, { status: 302, headers: approved.headers });
     }

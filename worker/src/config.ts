@@ -11,7 +11,6 @@
 
 import type { OAuthHelpers } from "@cloudflare/workers-oauth-provider";
 import type { AccountEventsNamespace } from "./events/account-events.js";
-import type { AccountUsageNamespace } from "./usage/account-usage.js";
 import {
   type JobCaps,
   type JobQuotaNamespace,
@@ -24,6 +23,7 @@ import {
   PROVIDER_SECRET_NAMES,
   type ProviderKeys,
 } from "./provider-secret-names.js";
+import type { AccountUsageNamespace } from "./usage/account-usage.js";
 
 export interface RateLimiter {
   limit(options: { key: string }): Promise<{ success: boolean }>;

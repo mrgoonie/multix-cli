@@ -121,10 +121,10 @@ async function handleDefault(request: Request, env: WorkerEnv, deps: AppDeps): P
   const app = await resolveAppContext(env, deps);
   if (!app) return notConfigured();
   if (isApi) return handleApi(app, deps, request);
-  if (pathname === AUTHORIZE_PATH) return handleAuthorize(app, request);
+  if (pathname === AUTHORIZE_PATH) return handleAuthorize(app, request, deps);
   if (pathname === GITHUB_CALLBACK_PATH) {
     if (request.method !== "GET") return text(405, "Method Not Allowed", { allow: "GET" });
-    return finishGithubSignIn(app, request);
+    return finishGithubSignIn(app, request, deps);
   }
   return handleDashboard(app, request, deps);
 }

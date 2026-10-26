@@ -59,6 +59,56 @@ details.provider .secret:first-of-type{border-top:0;padding-top:0}
 .copy-btn[data-state=copied] .i-copy{display:none}.copy-btn[data-state=copied] .i-done{display:inline}
 .copy-btn[data-state=failed]{color:var(--danger);border-color:var(--danger)}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+main.wide{max-width:1120px}
+nav.tabs{display:flex;gap:4px;overflow-x:auto;margin:0 0 16px;border-bottom:1px solid var(--border);scrollbar-width:thin}
+nav.tabs a{flex:0 0 auto;padding:8px 12px;color:var(--muted);text-decoration:none;border-bottom:2px solid transparent;margin-bottom:-1px;font-weight:600;font-size:14px}
+nav.tabs a:hover{color:var(--text)}
+nav.tabs a[aria-current=page]{color:var(--text);border-bottom-color:var(--accent)}
+a{color:var(--accent)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin-bottom:16px}
+.kpi{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px;min-width:0}
+.kpi .label{color:var(--muted);font-size:13px}
+.kpi .value{font-size:22px;font-weight:700;letter-spacing:-.01em;overflow-wrap:anywhere}
+.kpi .sub{color:var(--muted);font-size:12px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:16px}
+.grid2>.card{margin-bottom:0}
+.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table.data{font-size:14px}
+table.data th{text-align:left;font-size:12px;font-weight:600;color:var(--muted);padding:6px 8px 6px 0;border-bottom:1px solid var(--border);white-space:nowrap}
+table.data td{padding:6px 8px 6px 0;white-space:nowrap;vertical-align:top}
+table.data tr:first-child td{border-top:0}
+table.data td.wrap{white-space:normal;overflow-wrap:anywhere;min-width:160px}
+.num{text-align:right!important;font-variant-numeric:tabular-nums}
+.est{color:var(--warn);font-size:12px}
+.unknown{color:var(--warn);font-weight:600}
+.status-succeeded{color:var(--ok)}.status-failed,.status-timed_out,.status-rejected{color:var(--danger)}.status-canceled{color:var(--muted)}
+.chart{overflow-x:auto;margin:0 0 8px}
+.chart svg{display:block;width:100%;min-width:560px;height:auto}
+.chart text{fill:var(--muted);font:11px system-ui,sans-serif}
+.chart .grid{stroke:var(--border);stroke-width:1}
+.c-actual{fill:var(--accent)}.c-est{fill:var(--accent);fill-opacity:.4}.c-unknown{fill:var(--warn)}.c-span{fill:var(--accent)}.c-track{fill:var(--border)}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-bottom:8px}
+.swatch{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+.swatch.actual{background:var(--accent)}.swatch.est{background:var(--accent);opacity:.4}.swatch.unknown{background:var(--warn)}
+.bar{height:8px;border-radius:999px;background:var(--border);overflow:hidden;margin:6px 0}
+.bar>span{display:block;height:100%;background:var(--accent)}
+.bar.over>span{background:var(--danger)}.bar.near>span{background:var(--warn)}
+.filters{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;align-items:end}
+.filters label,.form-grid label{display:grid;gap:2px;font-size:13px;color:var(--muted)}
+.form-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:12px}
+input[type=date],input[type=number],input[type=search],select,textarea{width:100%;min-width:0;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:7px 9px;font:inherit}
+.filters input[type=text],.form-grid input[type=text]{width:100%;flex:none}
+textarea{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;min-height:160px}
+dl.facts{display:grid;grid-template-columns:minmax(120px,auto) 1fr;gap:4px 16px;margin:0}
+dl.facts dt{color:var(--muted);font-size:13px}dl.facts dd{margin:0;overflow-wrap:anywhere}
+.budget{border-top:1px solid var(--border);padding:12px 0}
+.budget:first-of-type{border-top:0;padding-top:0}
+.pager{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
+h1.mono{font-size:20px;overflow-wrap:anywhere}
+.budget-item+.budget-item{border-top:1px solid var(--border);padding-top:12px;margin-top:12px}
+.budget-item>.budget{padding:0;border:0}
+.budget-item details summary{cursor:pointer;font-size:14px}
+@media (max-width:480px){main{padding:20px 12px 48px}.card{padding:14px}.kpi .value{font-size:19px}dl.facts{grid-template-columns:1fr}dl.facts dd{margin-bottom:6px}}
 `;
 
 /** The copy script and its live region, only on pages that have a copy button. */
@@ -67,7 +117,12 @@ function copySupport(body: string): string {
   return `<div id="copy-status" class="sr-only" role="status" aria-live="polite"></div><script>${COPY_SCRIPT}</script>`;
 }
 
-export function page(title: string, body: string): string {
+export interface PageOptions {
+  /** Wider column for tables and charts (dashboard pages). */
+  wide?: boolean;
+}
+
+export function page(title: string, body: string, options: PageOptions = {}): string {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -77,7 +132,7 @@ export function page(title: string, body: string): string {
 <title>${escapeHtml(title)}</title>
 <style>${STYLES}</style>
 </head>
-<body><main>
+<body><main${options.wide ? ' class="wide"' : ""}>
 <header><div class="brand">multix <span>MCP</span></div></header>
 ${body}
 </main>${copySupport(body)}</body>
