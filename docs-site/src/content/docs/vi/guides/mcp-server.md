@@ -19,7 +19,7 @@ thay đổi cách `multix` chạy trên máy bạn.
 
 | Tool | Mục đích |
 |---|---|
-| `multix_catalog` | Các lệnh CLI mà `multix_run` chạy được. Không có `group`: mọi nhóm lệnh, các lệnh trong nhóm và bạn đã lưu key cho nhóm đó chưa (`has_keys`). Có `group`: positional và option của từng lệnh, option nào nhận file, và giá trị server bắt buộc. |
+| `multix_catalog` | Các lệnh CLI mà `multix_run` chạy được. Không có `group`: mọi nhóm lệnh, các lệnh trong nhóm và bạn đã lưu key cho nhóm đó chưa (`has_keys`). Có `group`: positional và option của từng lệnh, option nào nhận file, và giá trị server bắt buộc. Có `task` (như `speech`): chỉ các lệnh và model đã xác minh cho task đó; thêm `group` để giới hạn trong một nhóm. Có `model`: input, voice và định dạng đầu ra của một model đã xác minh cùng cách truyền nó cho `multix_run`, hoặc `verified: null` khi chưa biết input của model. |
 | `multix_run` | Chạy một lệnh CLI trong container riêng bằng key đã lưu của bạn. Chờ tối đa `wait_seconds` (mặc định 25, tối đa 40, tính cả thời gian khởi động container), sau đó trả về kết quả hoặc job ID để poll. Mặc định mỗi tài khoản chạy tối đa 2 job cùng lúc (`MULTIX_MAX_JOBS_PER_ACCOUNT`). |
 | `multix_job_status` | Đọc job `multix_run`: trạng thái, URL output, stdout và phần cuối của stderr. |
 | `multix_job_cancel` | Dừng job đang chạy cùng container của nó. |
@@ -44,6 +44,15 @@ thay đổi cách `multix` chạy trên máy bạn.
   làm giá trị.
 - `wait_seconds`: thời gian lệnh gọi chờ job, tính từ lúc gọi nên đã gồm cả
   thời gian khởi động container (0–40, mặc định 25).
+- `estimate`: `true` ước tính chi phí như `--estimate` của CLI và trả về
+  `{ estimate_only, command, estimate, budget? }` mà không khởi động job.
+- `max_cost_usd`: số ≥ 0. Job không khởi động trừ khi chi phí nằm trong giới
+  hạn, theo cùng quy tắc với `--max-cost` của CLI; khi bị từ chối, lệnh gọi trả
+  về lỗi của tool.
+- `cost_policy`: `"strict"` (mặc định, chỉ chấp nhận mức trần đã chứng minh)
+  hoặc `"estimate"` (chấp nhận mức cao ước tính). Xem
+  [Chi phí](/vi/reference/for-ai-agents/#chi-phí-ước-tính-giới-hạn-chi-tiêu-và-biên-nhận)
+  để biết lệnh nào có bảng giá.
 
 Gọi `multix_catalog` kèm group để xem chính xác lệnh nhận option nào và option
 nào là file. Ví dụ một lệnh gọi:
@@ -480,6 +489,8 @@ chung bộ đếm.
   độ phân giải video trên các option mà server biết cho từng lệnh (xem
   [Chạy lệnh CLI](#chạy-lệnh-cli)). Các input khác có thể làm đổi giá, như
   JSON `--input` thô của `replicate run` hoặc `atlas run`, không bị giới hạn.
+  Người gọi cũng có thể đặt `max_cost_usd` để từ chối lần chạy có thể tốn hơn
+  mức đó.
 - **Log và che thông tin nhạy cảm:** lệnh gọi thành công được log ở mức `info`,
   chỉ gồm tên tool, lệnh (hoặc group của catalog), kết quả và độ trễ. Prompt không bao giờ
   được log thành một trường riêng. Lệnh gọi thất bại được log ở mức `warn` (lỗi

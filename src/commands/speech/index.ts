@@ -82,7 +82,11 @@ function readText(opts: GenerateOpts): string {
     if (stat.size > MAX_TEXT_FILE_BYTES) {
       throw new ValidationError(`--text-file is larger than ${MAX_TEXT_FILE_BYTES} bytes`);
     }
-    text = fs.readFileSync(opts.textFile, "utf8");
+    // Speak the text the cost check priced, not a second read of a file that may have changed.
+    text =
+      run.textFile?.path === opts.textFile
+        ? run.textFile.text
+        : fs.readFileSync(opts.textFile, "utf8");
   }
   if (!text?.trim())
     throw new ValidationError("Text is required: --text <str> or --text-file <path>");

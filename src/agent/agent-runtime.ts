@@ -6,7 +6,10 @@
  * - `--dry-run`: local validation runs, then the first network request is
  *   reported instead of sent (local `media` commands stop before running);
  * - classified errors with hint and next steps, and exit codes by class;
- * - a history entry with outputs, usage (tokens, cost, credits, timings).
+ * - `--estimate` (price the run, send nothing) and `--max-cost` / `--cost-policy`
+ *   (refuse before sending when the cost cannot be kept under the limit);
+ * - a history entry with outputs, usage (tokens, cost, credits, timings) and
+ *   a reconciled cost receipt.
  * Commands that call process.exit() directly are covered by wrapping it.
  */
 
@@ -14,6 +17,8 @@ import fs from "node:fs";
 import type { Command } from "commander";
 import { type ErrorInfo, classifyError, classifyMessage } from "../core/error-classify.js";
 import { setExternalRunGuard } from "../core/external-run-guard.js";
+import { redactUrlsInText } from "../core/redact.js";
+import { costReceiptFor, formatEstimate, formatReceipt, preflightCost } from "./cost-preflight.js";
 import { type DryRunRequest, installFetchTelemetry, settleTelemetry } from "./fetch-telemetry.js";
 import { appendHistory, newHistoryId, redactArgv } from "./history-store.js";
 import { type OutputFile, type OutputWarning, inspectOutput } from "./output-file-inspect.js";
@@ -92,13 +97,32 @@ function setCommand(names: string[]): void {
 /** Groups where a dry run means nothing (no provider request, or their own flag). */
 const NO_DRY_RUN_GROUPS = new Set(["check", "models", "guide", "history", "rerun"]);
 
-/** Add --json to every command, and --dry-run to every command that can send a request. */
+/**
+ * Add --json to every command, and --dry-run plus the cost flags to every
+ * command that can send a provider request.
+ */
 function addGlobalFlags(cmd: Command, group = ""): void {
   const has = (flag: string) => cmd.options.some((o) => o.long === flag);
   if (!has("--json")) cmd.option("--json", "Print one multix.result/v1 JSON envelope on stdout");
+  const sendsRequests = Boolean(group) && !NO_DRY_RUN_GROUPS.has(group);
   if (has("--dry-run")) ownDryRun.add(cmd);
-  else if (group && !NO_DRY_RUN_GROUPS.has(group)) {
+  else if (sendsRequests) {
     cmd.option("--dry-run", "Validate and show the first provider request without sending it");
+  }
+  const billable = sendsRequests && !LOCAL_GROUPS.has(group) && !NON_PROVIDER_GROUPS.has(group);
+  if (billable && cmd.commands.length === 0) {
+    if (!has("--estimate")) {
+      cmd.option("--estimate", "Price the run (range, units, rate source) without sending it");
+    }
+    if (!has("--max-cost")) {
+      cmd.option("--max-cost <usd>", "Refuse to send unless the cost is at most this many USD");
+    }
+    if (!has("--cost-policy")) {
+      cmd.option(
+        "--cost-policy <policy>",
+        "With --max-cost: strict (proven ceiling only) or estimate (accept the estimated high end)",
+      );
+    }
   }
   for (const sub of cmd.commands) addGlobalFlags(sub, group || sub.name());
 }
@@ -106,6 +130,17 @@ function addGlobalFlags(cmd: Command, group = ""): void {
 /** Quote one argument for a POSIX shell when it needs it. */
 export function shellQuote(arg: string): string {
   return /^[\w@%+=:,./-]+$/.test(arg) ? arg : `'${arg.replace(/'/g, "'\\''")}'`;
+}
+
+/** argv without --max-cost / --cost-policy and their values. */
+function withoutCostLimit(argv: string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i] ?? "";
+    if (arg === "--max-cost" || arg === "--cost-policy") i++;
+    else if (!arg.startsWith("--max-cost=") && !arg.startsWith("--cost-policy=")) out.push(arg);
+  }
+  return out;
 }
 
 function captureStreams(): void {
@@ -165,6 +200,8 @@ interface FinalizeInput {
   error?: unknown;
   dryRunRequest?: DryRunRequest;
   dryRunLocal?: boolean;
+  /** `--estimate`: priced before the action, nothing sent. */
+  estimateOnly?: boolean;
 }
 
 /** Build the envelope, record history, print it (JSON) or the hint (text). Returns the exit code. */
@@ -172,7 +209,9 @@ export function finalizeRun(input: FinalizeInput): number {
   if (run.finalized) return input.exitCode;
   run.finalized = true;
   const dryRun = Boolean(input.dryRunRequest || input.dryRunLocal);
-  const failed = !dryRun && (input.exitCode !== 0 || input.error !== undefined);
+  const estimateOnly = Boolean(input.estimateOnly);
+  const notSent = dryRun || estimateOnly;
+  const failed = !notSent && (input.exitCode !== 0 || input.error !== undefined);
   let info: ErrorInfo | undefined;
   if (failed) {
     info =
@@ -189,7 +228,7 @@ export function finalizeRun(input: FinalizeInput): number {
 
   const warnings: OutputWarning[] = [];
   const extra = typeof run.options.output === "string" ? [run.options.output] : [];
-  const outputs: OutputFile[] = dryRun
+  const outputs: OutputFile[] = notSent
     ? []
     : producedFiles(extra).flatMap((file) => {
         try {
@@ -215,13 +254,20 @@ export function finalizeRun(input: FinalizeInput): number {
       }
     : undefined;
   const duration = Date.now() - run.startedAt;
+  const cost = costReceiptFor({ failed, notSent, historyId, model, usage });
 
   const next = [
     ...(info ? nextForError(info, run.command, run.group, historyId) : []),
     ...suggestedCommands([...run.stdout, ...run.stderr], run.command, knownGroups),
   ];
-  if (dryRun) {
-    const args = redactArgv(run.argv.filter((a) => a !== "--dry-run"));
+  if (info?.code === "BUDGET_EXCEEDED" || info?.code === "BUDGET_UNPROVEN") {
+    next.unshift(
+      `multix ${redactArgv(withoutCostLimit(run.argv)).map(shellQuote).join(" ")} --estimate`,
+    );
+  }
+  if (notSent) {
+    const flag = estimateOnly ? "--estimate" : "--dry-run";
+    const args = redactArgv(run.argv.filter((a) => a !== flag));
     next.unshift(`multix ${args.map(shellQuote).join(" ")}`);
   }
 
@@ -240,6 +286,7 @@ export function finalizeRun(input: FinalizeInput): number {
       ok: !failed,
       exit_code: exitCode,
       ...(dryRun ? { dry_run: true } : {}),
+      ...(estimateOnly ? { estimate_only: true } : {}),
       ...(info ? { error: { code: info.code, message: info.message.slice(0, 500) } } : {}),
       ...(outputs.length
         ? {
@@ -255,6 +302,7 @@ export function finalizeRun(input: FinalizeInput): number {
       ...(usage ? { usage } : {}),
       ...(http ? { http } : {}),
       ...(run.ids.length ? { provider_ids: run.ids } : {}),
+      ...(cost ? { cost } : {}),
     });
   }
 
@@ -268,6 +316,7 @@ export function finalizeRun(input: FinalizeInput): number {
       ...(run.group ? { provider: run.group } : {}),
       ...(model ? { model } : {}),
       ...(dryRun ? { dry_run: true } : {}),
+      ...(estimateOnly ? { estimate_only: true } : {}),
       duration_ms: duration,
       outputs,
       ...(allWarnings.length ? { warnings: allWarnings } : {}),
@@ -277,12 +326,15 @@ export function finalizeRun(input: FinalizeInput): number {
       ...(usage ? { usage } : {}),
       ...(http ? { http } : {}),
       ...(run.ids.length ? { provider_ids: run.ids } : {}),
+      ...(run.estimate ? { estimate: run.estimate } : {}),
+      ...(run.budget ? { budget: run.budget } : {}),
+      ...(cost ? { cost } : {}),
       ...(input.dryRunRequest ? { request: input.dryRunRequest } : {}),
       ...(historyId ? { history_id: historyId } : {}),
       next: [...new Set(next)],
       ...(failed
         ? {
-            log: stripAnsi(run.stderr.join(""))
+            log: redactUrlsInText(stripAnsi(run.stderr.join("")))
               .split("\n")
               .map((l) => l.trimEnd())
               .filter(Boolean)
@@ -301,7 +353,10 @@ export function finalizeRun(input: FinalizeInput): number {
     ];
     if (input.error !== undefined && !run.lastErrorLine) lines.unshift(`Error: ${info.message}`);
     for (const cmd of [...new Set(next)].slice(0, 3)) lines.push(`  next: ${cmd}`);
+    if (cost?.status === "uncertain") lines.push(`  cost: uncertain — ${cost.reason}`);
     realStderrWrite(`${lines.join("\n")}\n`);
+  } else if (estimateOnly && run.estimate) {
+    realStdoutWrite(formatEstimate(run.estimate, run.budget));
   } else if (dryRun) {
     const req = input.dryRunRequest;
     realStderrWrite(
@@ -309,6 +364,9 @@ export function finalizeRun(input: FinalizeInput): number {
         ? `Dry run: would send ${req.method} ${req.url}${req.body ? `\n${JSON.stringify(req.body, null, 2)}` : ""}\n`
         : `Dry run: ${run.command} runs locally; options are valid.\n`,
     );
+  } else if (cost) {
+    const line = formatReceipt(cost);
+    if (line) realStderrWrite(line);
   }
   return exitCode;
 }
@@ -329,7 +387,10 @@ export function installAgentRuntime(program: Command, cliVersion: string): void 
   );
   // Paid work outside fetch (the Codex image driver) stops here in a dry run.
   setExternalRunGuard(({ program: name, args }) => {
-    if (!run.dryRun) return;
+    if (!run.dryRun) {
+      run.externalRuns.push(name);
+      return;
+    }
     const body = args.map((a) => (a.length > 400 ? `<${a.length} chars>` : a));
     realExit(finalizeRun({ exitCode: 0, dryRunRequest: { method: "EXEC", url: name, body } }));
   });
@@ -348,6 +409,8 @@ export function installAgentRuntime(program: Command, cliVersion: string): void 
     if (run.dryRun && LOCAL_GROUPS.has(names[0] ?? "")) {
       realExit(finalizeRun({ exitCode: 0, dryRunLocal: true }));
     }
+    // Throws BudgetError (classified, nothing sent) when --max-cost refuses.
+    if (preflightCost()) realExit(finalizeRun({ exitCode: 0, estimateOnly: true }));
   });
   program.hook("postAction", async () => {
     await settleTelemetry();

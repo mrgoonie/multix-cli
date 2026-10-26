@@ -25,13 +25,28 @@ chỉ được đặt những biến mà chính `multix` đọc:
 - các thiết lập `MULTIX_*` có trong tài liệu: `MULTIX_OUTPUT_DIR` (nên project
   có thể chọn nơi ghi file được tạo), `MULTIX_IMAGE_FORMAT`,
   `MULTIX_MAX_DOWNLOAD_MB`, `MULTIX_UPLOAD_MIN_KBPS`, `MULTIX_OUTPUT` (`json`
-  cho envelope dành cho agent), `MULTIX_HISTORY` (`0` tắt ledger lịch sử chạy) và
-  `MULTIX_DISABLE_HOME_ENV` (không có tác dụng ở đó), cùng `NO_COLOR`.
+  cho envelope dành cho agent), `MULTIX_HISTORY` (`0` tắt ledger lịch sử chạy),
+  `MULTIX_MODELS_TTL` (số giây cache catalog của `multix models --live` còn
+  mới; mặc định `86400`, tối đa `604800`) và `MULTIX_DISABLE_HOME_ENV` (không
+  có tác dụng ở đó), cùng `NO_COLOR`.
 
 Hai biến opt-in `MULTIX_ALLOW_PROJECT_BASE_URL` và `MULTIX_LEGACY_CLAUDE_ENV`,
 cùng `MULTIX_HISTORY_FILE` (nơi ghi ledger lịch sử chạy), bị từ chối: repository
 không được nới rộng những gì nó có thể làm với key của bạn, chọn nơi ghi lịch sử
 chạy, hay kéo theo credential trong các file `.claude` ở thư mục home.
+
+`MULTIX_OPERATION_ID` cũng bị từ chối. Biến này đặt tên cho thao tác logic mà
+[biên nhận chi phí](/vi/reference/for-ai-agents/#biên-nhận-chi-phí) của lần chạy
+thuộc về, để nhiều lần chạy (submit, poll trạng thái, tải file, webhook gửi lại)
+chỉ được tính một lần; mặc định là `<provider>:<job id>` hoặc
+`run:<history id>`. Biến này dành cho từng lần chạy, nên hãy đặt trong shell cho
+lần chạy đó: một id cố định trong file của project sẽ gộp chi tiêu của mọi lần
+chạy vào một thao tác.
+
+`MULTIX_CACHE_DIR` (thư mục cache catalog của `multix models --live`, mặc định
+`~/.multix/cache`) cũng bị từ chối: repository không được chọn, hay gieo sẵn,
+cache catalog mà `multix models` dựa vào để báo cáo. Hãy đặt biến này trong
+shell hoặc `~/.multix/.env`.
 
 [`.env.example`](https://github.com/mrgoonie/multix-cli/blob/main/.env.example)
 liệt kê các biến này, cùng hai biến opt-in. Mọi tên khác, ví dụ `NODE_OPTIONS`, `npm_config_registry`,
@@ -145,7 +160,8 @@ Chỉ đặt override khi cần thay default. Các biến gồm `IMAGE_GEN_MODEL
 `VIDEO_GEN_MODEL`, `MULTIMODAL_MODEL`, `GEMINI_TTS_MODEL`,
 `OPENAI_IMAGE_MODEL`, `OPENAI_TTS_MODEL`, `OPENAI_STT_MODEL`,
 `OPENROUTER_IMAGE_MODEL`, `OPENROUTER_TTS_MODEL` (mặc định
-`google/gemini-3.8-flash-tts`), `LEONARDO_BASE_URL`, `BYTEPLUS_BASE_URL`,
+`google/gemini-3.8-flash-tts`), `OPENROUTER_STT_MODEL` (mặc định
+`openai/whisper-large-v3-turbo`), `LEONARDO_BASE_URL`, `BYTEPLUS_BASE_URL`,
 `BYTEPLUS_IMAGE_MODEL`, `BYTEPLUS_VIDEO_MODEL`, `BYTEPLUS_3D_MODEL`,
 `FAL_BASE_URL`, `FAL_IMAGE_MODEL`, `FAL_VIDEO_MODEL` và
 `FAL_VIDEO_IMAGE_MODEL` (default image-to-video của fal, dùng khi truyền

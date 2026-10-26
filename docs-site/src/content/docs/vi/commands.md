@@ -11,7 +11,7 @@ description: Chọn nhóm lệnh multix phù hợp với workflow media của b�
 | [Gemini](/vi/commands/gemini/) | Phân tích, transcript, extract, tạo ảnh, tạo/chỉnh sửa/nối dài video và Gemini TTS. |
 | [OpenAI](/vi/commands/openai/) | Tạo/chỉnh ảnh, Codex image driver, TTS và transcription. |
 | [MiniMax](/vi/commands/minimax/) | Ảnh/video, i2i giữ chủ thể, speech và music. |
-| [OpenRouter](/vi/commands/openrouter/) | Image generation/editing, image-to-video async và TTS qua routing. |
+| [OpenRouter](/vi/commands/openrouter/) | Image generation/editing, image-to-video async, TTS và STT qua routing. |
 | [Leonardo](/vi/commands/leonardo/) | Account, models, ảnh/video, upscale và trạng thái job. |
 | [BytePlus](/vi/commands/byteplus/) | Seedream, Seedance, reference video và 3D. |
 | [Cloudflare](/vi/commands/cloudflare/) | Workers AI image/speech và video job qua AI Gateway. |
@@ -22,6 +22,7 @@ description: Chọn nhóm lệnh multix phù hợp với workflow media của b�
 | [Runway](/vi/commands/runway/) | Video Gen-4.5 và Gen-4 Turbo, ảnh Gen-4, cùng status/cancel task. |
 | [HeyGen](/vi/commands/heygen/) | Video Agent tạo video từ prompt, video avatar theo kịch bản, dịch video, lipsync và TTS. |
 | [Speech](/vi/commands/speech/) | Text-to-speech trên Gemini, OpenAI, ElevenLabs, MiniMax hoặc Atlas Cloud với một bộ flag, kiểm tra khả năng của model và fallback phải tự bật. |
+| [Scene](/vi/commands/scene/) | Audio hội thoại nhiều nhân vật: voice profile, take được cache theo từng câu, duyệt take và xuất stem. |
 | `multix media` | Tối ưu, cắt và batch file bằng ffmpeg/ImageMagick. |
 | `multix doc` | Chuyển tài liệu sang Markdown qua Gemini. |
 | `multix update` | Tự cập nhật multix lên version mới nhất, hoặc một version cụ thể đã publish. |

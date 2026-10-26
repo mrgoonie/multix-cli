@@ -4,6 +4,7 @@
  */
 
 import { envDefault } from "../../core/env-default.js";
+import { TTS_MODEL_DEFAULT } from "./voices.js";
 
 /** Default image generation model (Nano Banana 2 — fastest, ~95% Pro quality). */
 export const IMAGE_MODEL_DEFAULT = "gemini-3.1-flash-image-preview";
@@ -36,8 +37,8 @@ export const TEXT_MODEL_DEFAULT = "gemini-3.6-flash";
 /** Default multimodal analysis/transcription model. */
 export const ANALYSIS_MODEL_DEFAULT = TEXT_MODEL_DEFAULT;
 
-/** Default TTS model. */
-export const TTS_MODEL_DEFAULT = "gemini-3.8-flash-lite-tts";
+/** Default TTS model (defined with the voices, which the runtime-neutral budget code reads). */
+export { TTS_MODEL_DEFAULT };
 
 /** Default document conversion model. */
 export const DOC_MODEL_DEFAULT = TEXT_MODEL_DEFAULT;

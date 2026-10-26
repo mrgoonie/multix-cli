@@ -21,7 +21,7 @@ import { fetchFollowingRedirects } from "../../core/redirect-fetch.js";
 import { type AudioContentType, parseAudioContentType } from "./speech-audio.js";
 
 export const OPENROUTER_API_BASE = "https://openrouter.ai/api/v1";
-export const DEFAULT_OPENROUTER_TTS_MODEL = "google/gemini-3.8-flash-tts";
+export { DEFAULT_OPENROUTER_TTS_MODEL } from "./speech-defaults.js";
 /** Error code of a request whose outcome (and billing) is unknown. */
 export const UNKNOWN_REMOTE_STATE = "UNKNOWN_REMOTE_STATE";
 
@@ -29,7 +29,7 @@ const ERROR_BODY_MAX = 64 * 1024;
 const SNIPPET_MAX = 500;
 const GENERATION_ID = /^[\w.:-]{1,128}$/;
 /** Connection failures that prove the request never reached OpenRouter. */
-const NOT_SENT_CODES = new Set(["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "ENETUNREACH"]);
+export const NOT_SENT_CODES = new Set(["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "ENETUNREACH"]);
 
 /** One turn of multi-speaker input (Gemini TTS, Fish Audio except S1). */
 export interface SpeechTurn {
@@ -76,7 +76,7 @@ export interface SpeechAudio {
 }
 
 /** True when the body is OpenRouter's own JSON error (`{"error": ...}`): a definite answer. */
-function isOpenRouterError(text: string): boolean {
+export function isOpenRouterError(text: string): boolean {
   try {
     const parsed = JSON.parse(text) as { error?: unknown };
     return parsed !== null && typeof parsed === "object" && parsed.error !== undefined;
@@ -85,7 +85,8 @@ function isOpenRouterError(text: string): boolean {
   }
 }
 
-function errorMessageOf(text: string): string {
+/** OpenRouter's error message from an error body, capped. */
+export function errorMessageOf(text: string): string {
   try {
     const parsed = JSON.parse(text) as {
       error?: { message?: unknown } | string;
@@ -101,7 +102,7 @@ function errorMessageOf(text: string): string {
 }
 
 /** Read at most `limit` bytes of a body as text (error bodies are small JSON). */
-async function readCappedText(response: Response, limit: number): Promise<string> {
+export async function readCappedText(response: Response, limit: number): Promise<string> {
   const reader = response.body?.getReader();
   if (!reader) return "";
   const chunks: Uint8Array[] = [];
@@ -134,7 +135,8 @@ function concat(chunks: Uint8Array[], size: number): Uint8Array {
   return out;
 }
 
-function errorCodes(err: unknown): string[] {
+/** Error codes of an error and its causes (undici nests them). */
+export function errorCodes(err: unknown): string[] {
   const codes: string[] = [];
   let current: unknown = err;
   for (let depth = 0; depth < 4 && current && typeof current === "object"; depth++) {
@@ -151,12 +153,19 @@ function errorCodes(err: unknown): string[] {
   return codes;
 }
 
-function unknownState(model: string, reason: string, generationId?: string, cause?: unknown) {
+/** A paid request cut off after it may have reached OpenRouter (`kind`: speech, transcription). */
+export function unknownState(
+  model: string,
+  reason: string,
+  generationId?: string,
+  cause?: unknown,
+  kind = "speech",
+) {
   const check = generationId
     ? `check it with \`multix openrouter generation ${generationId}\``
     : "check https://openrouter.ai/activity";
   return new MultixError(
-    `OpenRouter speech request for ${model} was cut off (${reason}) after it may have been accepted, so it may be billed: ${check} before sending it again.`,
+    `OpenRouter ${kind} request for ${model} was cut off (${reason}) after it may have been accepted, so it may be billed: ${check} before sending it again.`,
     UNKNOWN_REMOTE_STATE,
     cause === undefined ? undefined : { cause },
   );

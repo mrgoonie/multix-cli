@@ -5,6 +5,8 @@
  * the result envelope and the history entry.
  */
 
+import type { CostPolicy } from "../budget/command-cost.js";
+import type { CostEstimate } from "../budget/cost-estimate.js";
 import type { ResponseUsage, UsageTokens } from "../core/usage-extract.js";
 
 export interface HttpCall {
@@ -33,6 +35,8 @@ export interface RunState {
   postUsage: ResponseUsage[];
   getUsage: Map<string, ResponseUsage>;
   ids: string[];
+  /** Programs started for paid work outside fetch (the Codex image driver). */
+  externalRuns: string[];
   /** Model named by the first provider request that names one. */
   requestModel?: string;
   /** Structured result a command reports for the envelope's `data` (wins over parsed stdout). */
@@ -42,6 +46,23 @@ export interface RunState {
   stderr: string[];
   /** Last error line a command logged before exiting. */
   lastErrorLine?: string;
+  /** Pre-flight estimate (`--estimate`, `--max-cost`, or a priceable command). */
+  estimate?: CostEstimate;
+  maxCost?: number;
+  costPolicy?: CostPolicy;
+  /**
+   * `--text-file` as read by the pre-flight estimate; the command speaks this
+   * same text so a file changed in between cannot exceed a proven ceiling.
+   */
+  textFile?: { path: string; text: string };
+  /** Outcome of the --max-cost check. */
+  budget?: {
+    ok: boolean;
+    max_cost_usd: number;
+    policy: CostPolicy;
+    code?: string;
+    message?: string;
+  };
   /** True once a command action started (help and parse errors never get there). */
   actionStarted: boolean;
   finalized: boolean;
@@ -61,6 +82,7 @@ export const run: RunState = {
   postUsage: [],
   getUsage: new Map(),
   ids: [],
+  externalRuns: [],
   stdout: [],
   stderr: [],
   actionStarted: false,
@@ -92,18 +114,27 @@ export function summarizeUsage(state: RunState = run): UsageSummary | undefined 
   const metrics: Record<string, number> = {};
   let cost: number | undefined;
   let credits: number | undefined;
+  // A GET status read of the same job or generation reports the final charge, so
+  // the estimate on the POST that started it is not counted a second time.
+  const gets = [...state.getUsage.values()];
+  const charged = {
+    cost_usd: new Set(gets.filter((r) => r.cost_usd !== undefined).flatMap((r) => r.ids)),
+    credits: new Set(gets.filter((r) => r.credits !== undefined).flatMap((r) => r.ids)),
+  };
   const sources: { cost_usd?: string[]; credits?: string[] } = {};
   for (const [i, r] of records.entries()) {
+    const isPost = i < state.postUsage.length;
+    const settled = (key: "cost_usd" | "credits") =>
+      isPost && r.ids.some((id) => charged[key].has(id));
     for (const key of ["cost_usd", "credits"] as const) {
       const src = r.sources?.[key];
-      if (src && r[key] !== undefined && !sources[key]?.includes(src)) {
+      if (src && r[key] !== undefined && !settled(key) && !sources[key]?.includes(src)) {
         sources[key] = [...(sources[key] ?? []), src];
       }
     }
     addTokens(tokens, r.tokens);
-    if (r.cost_usd !== undefined) cost = (cost ?? 0) + r.cost_usd;
-    if (r.credits !== undefined) credits = (credits ?? 0) + r.credits;
-    const isPost = i < state.postUsage.length;
+    if (r.cost_usd !== undefined && !settled("cost_usd")) cost = (cost ?? 0) + r.cost_usd;
+    if (r.credits !== undefined && !settled("credits")) credits = (credits ?? 0) + r.credits;
     for (const [k, v] of Object.entries(r.metrics)) {
       metrics[k] = isPost && metrics[k] !== undefined ? (metrics[k] ?? 0) + v : v;
     }

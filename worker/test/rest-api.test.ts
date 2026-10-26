@@ -248,6 +248,14 @@ describe("REST API jobs", () => {
     });
     const catalog = await body(await api(browser, key, "/catalog?group=gemini"));
     expect(catalog.has_keys).toBe(true);
+    const speech = await body(await api(browser, key, "/catalog?task=speech&group=gemini"));
+    expect(speech.commands).toEqual([
+      expect.objectContaining({ command: "gemini generate-speech" }),
+    ]);
+    const model = await body(await api(browser, key, "/catalog?model=elevenlabs/tts/eleven-v4"));
+    expect(model.verified.inputs.text.required).toBe(true);
+    expect((await api(browser, key, "/catalog?task=telepathy")).status).toBe(400);
+    expect((await api(browser, key, "/catalog?model=bad%20id")).status).toBe(400);
 
     const run = await api(browser, key, "/jobs", {
       method: "POST",

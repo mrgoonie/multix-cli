@@ -5,7 +5,8 @@
  * exit code class.
  */
 
-import { HttpError, MultixError, ResponseTooLargeError } from "./errors.js";
+import { BudgetError, HttpError, MultixError, ResponseTooLargeError } from "./errors.js";
+import { redactUrlsInText } from "./redact.js";
 
 export type ErrorCode =
   | "USAGE"
@@ -26,6 +27,8 @@ export type ErrorCode =
   | "JOB_FAILED"
   | "RESPONSE_TOO_LARGE"
   | "BINARY_MISSING"
+  | "BUDGET_EXCEEDED"
+  | "BUDGET_UNPROVEN"
   | "UNKNOWN";
 
 /**
@@ -81,6 +84,10 @@ const HINTS: Record<ErrorCode, string> = {
   JOB_FAILED: "The provider reported the job failed; read the message, adjust inputs and retry.",
   RESPONSE_TOO_LARGE: "The response exceeded the size cap; request fewer or smaller outputs.",
   BINARY_MISSING: "Install the missing tool (ffmpeg, ImageMagick or cwebp) and put it on PATH.",
+  BUDGET_EXCEEDED:
+    "Nothing was sent: the estimate is over --max-cost. Raise the limit, shorten the input or pick a cheaper model (see --estimate).",
+  BUDGET_UNPROVEN:
+    "Nothing was sent: the cost cannot be bounded. Check --estimate; pass --cost-policy estimate to accept an estimated high end, or drop --max-cost.",
   UNKNOWN: "Read the message; rerun with --verbose for details.",
 };
 
@@ -103,6 +110,8 @@ const EXIT_BY_CODE: Record<ErrorCode, number> = {
   TIMEOUT: EXIT_CODES.timeout,
   UNKNOWN_REMOTE_STATE: EXIT_CODES.timeout,
   BINARY_MISSING: EXIT_CODES.config,
+  BUDGET_EXCEEDED: EXIT_CODES.usage,
+  BUDGET_UNPROVEN: EXIT_CODES.usage,
   UNKNOWN: EXIT_CODES.unknown,
 };
 
@@ -117,6 +126,9 @@ const ENV_NAME = /\b([A-Z][A-Z0-9]*_(?:API_KEY|API_TOKEN|API_SECRET|KEY|TOKEN|SE
 
 // Message patterns, checked in order; the first match wins.
 const TEXT_RULES: Array<[RegExp, ErrorCode]> = [
+  // Spend guard refusals (BudgetError) keep their code when only the message travels (MCP).
+  [/^Refusing to run: .*exceeds --max-cost/, "BUDGET_EXCEEDED"],
+  [/^Refusing to run: /, "BUDGET_UNPROVEN"],
   // A rejected flag value ("Invalid --wait-timeout: abc") is input, whatever the flag is named.
   [/^invalid --[\w-]+/i, "INVALID_INPUT"],
   [
@@ -164,11 +176,12 @@ const TEXT_RULES: Array<[RegExp, ErrorCode]> = [
   ],
 ];
 
+/** Messages leave here for the JSON envelope, stderr and the run ledger: redact URL query strings. */
 function build(code: ErrorCode, message: string, extra: Partial<ErrorInfo> = {}): ErrorInfo {
   const env = message.match(ENV_NAME)?.[1];
   return {
     code,
-    message,
+    message: redactUrlsInText(message),
     retryable: RETRYABLE.has(code),
     hint: HINTS[code],
     exit_code: EXIT_BY_CODE[code],
@@ -239,6 +252,7 @@ export function classifyError(error: unknown): ErrorInfo {
     }
     if (error.code === "POLL_TIMEOUT") return build("TIMEOUT", message);
     if (error.code === "UNKNOWN_REMOTE_STATE") return build("UNKNOWN_REMOTE_STATE", message);
+    if (error instanceof BudgetError) return build(error.code as ErrorCode, message);
   }
   return classifyMessage(message);
 }

@@ -4,7 +4,7 @@ AI multimodal CLI — generate images/video/speech/music, analyze and transcribe
 
 ![Isometric technical illustration of multix media workflows](docs-site/public/images/multix-isometric-banner.png)
 
-Supports **OpenAI** (image, image edits, TTS, STT, optional Codex image driver), **Gemini** (analyze, transcribe, generate, Omni Flash video generation and editing, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation, image-to-video, TTS), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), **Cloudflare** (Workers AI image and speech; AI Gateway-routed Replicate video), **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment), **fal.ai** (generic model runner, image, video, text-to-speech via the fal queue API), and **Atlas Cloud** (any model: image, image edit, video, audio, 3D, with resumable async predictions), **Replicate** (generic model runner, image, video, async prediction status/cancel via the direct Replicate API), **Runway** (Gen-4.5 and Gen-4 Turbo video, Gen-4 images, resumable task status/cancel), **HeyGen** (v3 Video Agent prompt-to-video, scripted avatar videos, video translation, lipsync, TTS).
+Supports **OpenAI** (image, image edits, TTS, STT, optional Codex image driver), **Gemini** (analyze, transcribe, generate, Omni Flash video generation and editing, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation, image-to-video, TTS, STT), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), **Cloudflare** (Workers AI image and speech; AI Gateway-routed Replicate video), **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment), **fal.ai** (generic model runner, image, video, text-to-speech via the fal queue API), and **Atlas Cloud** (any model: image, image edit, video, audio, 3D, with resumable async predictions), **Replicate** (generic model runner, image, video, async prediction status/cancel via the direct Replicate API), **Runway** (Gen-4.5 and Gen-4 Turbo video, Gen-4 images, resumable task status/cancel), **HeyGen** (v3 Video Agent prompt-to-video, scripted avatar videos, video translation, lipsync, TTS).
 
 ## Documentation
 
@@ -58,8 +58,12 @@ recover without trial and error:
 ```bash
 multix guide                                  # the agent protocol in one screen
 multix models --task video --ready            # which command and model serve a task, key set or not
+multix models --model google/gemini-3.8-flash-tts  # a verified model's inputs, voices, formats, how to run it
+multix models --task speech --live            # plus what fal and OpenRouter catalogs list now (cached)
 multix fal image "a red fox" --dry-run --json # validate; show the request instead of sending it
 multix fal image "a red fox" --json           # one-line multix.result/v1 envelope on stdout
+multix elevenlabs tts --text "Hi" --estimate  # price range, units, rate and source; nothing is sent
+multix elevenlabs tts --text "Hi" --max-cost 0.01  # refuse before sending unless the cost fits
 multix history stats --by model               # runs, success rate, p50/p90 time, cost, credits, tokens
 multix rerun last                             # repeat a recorded run
 ```
@@ -68,12 +72,32 @@ The envelope lists `outputs` (path, bytes, MIME, SHA-256, dimensions, duration),
 `warnings`, `usage` as the provider reports it (tokens, `cost_usd`, `credits`,
 metrics, and `sources` naming the header or body field each money number came
 from), `error` (`code`, `retryable`, `retry_after_s`, `hint`) and `next`
-commands. With `--json`, exit codes are `2` usage or input, `3` key or setup,
-`4` temporary (retry), `5` rejected (quota, safety, model), `6` timed out (job may
-still run), `1` unknown; plain runs keep exit 1 and print the code and hint on
+commands, plus a `cost` receipt (`multix.cost/v1`: estimate, provider-reported
+and actual cost, variance; unknown stays `null`, never $0). Only
+`gemini generate-speech`, `elevenlabs tts`, `openrouter tts`,
+`openrouter transcribe` (local files, measured with `ffprobe`) and
+`speech generate` on its Gemini and ElevenLabs routes (a `--fallback` plan at
+its most expensive route) are priced so far; `--max-cost`
+refuses anything it cannot price. With `--json`, exit codes are `2` usage or
+input (including a refused `--max-cost`), `3` key or setup, `4` temporary
+(retry), `5` rejected (quota, safety, model), `6` timed out (job may still run),
+`1` unknown; plain runs keep exit 1 and print the code and hint on
 stderr. Each run is recorded in `~/.multix/history.jsonl` without keys or signed
 URLs (`MULTIX_HISTORY=0` turns it off). Details:
 [For AI agents](https://multix.zuey.me/reference/for-ai-agents/).
+
+`multix models` reads a capability registry (`multix.capabilities/v1`): each
+command states its tasks and outputs, and generic runners (`fal run`,
+`replicate run`, OpenRouter, Atlas) are marked as passing any provider model id
+through unverified. Only models checked against the provider's own schema are
+*verified* and inspectable with `--model`; `fal run` warns (without failing)
+when its `--input` has fields such a model does not take, misses a required
+one, or uses a value outside its listed choices. `--live` (with `--task`) marks
+each catalog model verified or not, and a verified model the catalog no longer
+lists with status `missing` (unless the catalog was too long to read in full,
+`truncated`, when it stays unknown). Catalogs are cached for a day in `~/.multix/cache/models`
+(`--refresh` refetches); offline, a stale copy up to 7 days old is used, or the
+catalog is reported `unavailable` and nothing is claimed available.
 
 ## Environment variables
 
@@ -136,9 +160,12 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `MULTIX_OUTPUT` | No | `json` prints one `multix.result/v1` envelope per run, as `--json` does |
 | `MULTIX_HISTORY` | No | `0` stops recording runs in `~/.multix/history.jsonl` |
 | `MULTIX_HISTORY_FILE` | No | Run ledger path (shell or `~/.multix/.env` only) |
+| `MULTIX_CACHE_DIR` | No | Cache root for `multix models --live` catalogs (default `~/.multix/cache`; shell or `~/.multix/.env` only) |
+| `MULTIX_MODELS_TTL` | No | Seconds a cached catalog stays fresh (default `86400`, at most `604800`) |
 | `OPENROUTER_IMAGE_MODEL` | No | Default OpenRouter model |
 | `OPENROUTER_FALLBACK_MODELS` | No | Comma-separated fallback model ids |
 | `OPENROUTER_TTS_MODEL` | No | Default `multix openrouter tts` model (default `google/gemini-3.8-flash-tts`) |
+| `OPENROUTER_STT_MODEL` | No | Default `multix openrouter transcribe` model (default `openai/whisper-large-v3-turbo`) |
 | `OPENAI_IMAGE_MODEL` | No | Default OpenAI image model (default `gpt-image-2`) |
 | `OPENAI_TTS_MODEL` | No | Default OpenAI TTS model (default `gpt-4o-mini-tts`) |
 | `OPENAI_STT_MODEL` | No | Default OpenAI STT model (default `gpt-4o-transcribe`) |
@@ -153,7 +180,7 @@ Set extra keys as `GEMINI_API_KEY_2`, `GEMINI_API_KEY_3`, … (any numeric suffi
 
 Priority: `process.env` > `cwd/.env` > `~/.multix/.env`. A blank or whitespace-only value in a `.env` file does not count as set, so a project `.env` copied from `.env.example` does not hide `~/.multix/.env`; a shell variable wins even when blank. Set `MULTIX_LEGACY_CLAUDE_ENV=1` (shell or `~/.multix/.env`) to also read legacy AgentKit files (`.claude/skills/{ai-multimodal,ak-ai-multimodal}/.env`, `.claude/skills/.env`, `.claude/.env`, project first, then home) with the lowest priority (credential names only, never endpoint/proxy settings); `multix check -v` lists the env files that were loaded.
 
-A project `.env` may only set variables `multix` reads: provider keys, the provider settings in `.env.example` (`*_BASE_URL`, model overrides, Cloudflare IDs), the documented `MULTIX_*` settings (`MULTIX_OUTPUT_DIR`, so a project can choose where outputs go, `MULTIX_IMAGE_FORMAT`, `MULTIX_MAX_DOWNLOAD_MB`, `MULTIX_UPLOAD_MIN_KBPS`, `MULTIX_OUTPUT`, `MULTIX_HISTORY`) and `NO_COLOR`. The opt-ins `MULTIX_ALLOW_PROJECT_BASE_URL` and `MULTIX_LEGACY_CLAUDE_ENV`, and `MULTIX_HISTORY_FILE`, are refused there; set them in the shell or `~/.multix/.env`. Other names, such as `NODE_OPTIONS`, `npm_config_registry`, `LD_PRELOAD` or `HTTPS_PROXY`, are not loaded, so they never reach `multix` or the tools it starts (`npm` in `multix update`, ffmpeg, ImageMagick, cwebp); one warning on stderr lists the ignored names, never their values. The shell and `~/.multix/.env` are not filtered.
+A project `.env` may only set variables `multix` reads: provider keys, the provider settings in `.env.example` (`*_BASE_URL`, model overrides, Cloudflare IDs), the documented `MULTIX_*` settings (`MULTIX_OUTPUT_DIR`, so a project can choose where outputs go, `MULTIX_IMAGE_FORMAT`, `MULTIX_MAX_DOWNLOAD_MB`, `MULTIX_UPLOAD_MIN_KBPS`, `MULTIX_OUTPUT`, `MULTIX_HISTORY`, `MULTIX_MODELS_TTL`) and `NO_COLOR`. The opt-ins `MULTIX_ALLOW_PROJECT_BASE_URL` and `MULTIX_LEGACY_CLAUDE_ENV`, and `MULTIX_HISTORY_FILE` and `MULTIX_CACHE_DIR`, are refused there; set them in the shell or `~/.multix/.env`. Other names, such as `NODE_OPTIONS`, `npm_config_registry`, `LD_PRELOAD` or `HTTPS_PROXY`, are not loaded, so they never reach `multix` or the tools it starts (`npm` in `multix update`, ffmpeg, ImageMagick, cwebp); one warning on stderr lists the ignored names, never their values. The shell and `~/.multix/.env` are not filtered.
 
 `*_BASE_URL`, `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_AI_GATEWAY_ID` decide where your API key is sent. Values from the shell or `~/.multix/.env` are always used. A value from the project `.env` (or a legacy `.claude` file under it) is used only when every key the provider sends with it comes from that same project file (the repository's own key). That protects your key, not your data: a project `.env` that ships its own key and base URL routes that project's requests, including your prompts and any files you upload, to that host, and its key replaces yours from `~/.multix/.env`, so review a cloned repository's `.env` before running `multix` in it. If a key comes from anywhere else, the project value is ignored: the `~/.multix/.env` value is used with a warning (variable, file and key source named, never the value), or, if there is none, the command stops with an error instead of falling back to the vendor default. `multix check` shows whether each such setting is in effect or ignored. To use a project value for one command, run `MULTIX_ALLOW_PROJECT_BASE_URL=1 multix ...`; do not put the opt-in in `~/.multix/.env`, which disables the check for every directory. Non-default base URLs must be `https://` (plain `http://` only for `localhost`, `127.0.0.1`, `[::1]`), and `multix` warns once per variable on stderr with the provider and hostname only.
 ## Commands
@@ -300,9 +327,17 @@ multix openrouter tts --text "Xin chào" [--model google/gemini-3.8-flash-tts] -
 # List speech models (live catalog) or one model's voices; read a generation's cost later
 multix openrouter speech-models [--model <id>]
 multix openrouter generation <id>
+
+# Speech-to-text (POST /api/v1/audio/transcriptions); --input is a local file (≤ 25 MB) or a public http(s) URL
+multix openrouter transcribe --input meeting.mp3 [--model openai/whisper-large-v3-turbo] [--language en] [--audio-format <fmt>] [--cost-wait 20] [--timeout 300] [--output <path>] [--json] [-v]
+
+# List transcription models and prices (live catalog)
+multix openrouter transcription-models [--model <id>]
 ```
 
 **TTS:** the model and voice are checked against the live speech catalog before the paid request (`--no-model-check` skips it); Gemini and ElevenLabs models need `--voice`. `--format auto` writes WAV (pcm wrapped locally) for pcm-only models (Gemini, HeyGen) and MP3 otherwise; MiniMax returns MP3 only. The request is never retried; the cost is read from OpenRouter for up to `--cost-wait` seconds (max 120) and can be fetched later with `multix openrouter generation <id>`.
+
+**STT:** the model is checked against the live transcription catalog before the paid request (`--no-model-check` skips it); not every provider accepts a URL input. The transcript is saved as `openrouter_transcript_<stamp>.txt` in the output directory (copied to `--output` if given); text mode prints only the path, `--json` includes the text, cost and generation ID. The request is never retried; on `UNKNOWN_REMOTE_STATE` check `multix openrouter generation <id>` before resending.
 
 **Supported i2i model families:** Gemini (default) and OpenAI gpt-image return `text+image` (modalities `["image","text"]`); Recraft accepts `--strength` (init-image strength 0..1); Flux / Sourceful are image-only (`["image"]`). The CLI picks the right `modalities` automatically based on the model id prefix.
 
@@ -543,7 +578,7 @@ multix elevenlabs models   # live: capabilities, languages, text limit, credit m
 - Most generation endpoints (TTS, SFX, Music, Voice Changer, Isolation) return audio bytes synchronously.
 - Dubbing is async: submit → poll → download per-language tracks.
 - Output format strings combine codec + sample rate + bitrate, e.g. `mp3_44100_128`, `pcm_24000`, `ulaw_8000`. TTS also takes `wav_*`, `opus_48000_*`, `alaw_8000`, `mp3_24000_48`, `pcm_32000` and `pcm_48000` (`mp3_44100_192` needs Creator tier; 44.1 kHz PCM/WAV need Pro).
-- TTS options are checked against the model before anything is sent. v4, v4 Turbo, v3 and Flash/Turbo v2.x have no style control, so a non-zero `--style` is rejected rather than silently ignored, and `--style 0` or `--no-speaker-boost` on a model without that control is reported as a warning and not sent. `eleven_v3` rejects `--previous-text`/`--next-text`; text over the model's limit (v3 5,000, v4 and multilingual v2 10,000, Flash/Turbo v2.x 30,000–40,000) is rejected; bracketed audio tags such as `[whispering]` are performed by v3/v4 and trigger a warning on models that would read them aloud. Unsupported `--language-code` values are rejected by the API (nothing is billed); `eleven_multilingual_v2` accepts the codes on its list without enforcing them, so the CLI warns. `--clone-strength` (0–1, Professional Voice Clones fine-tuned for v4) is sent only to v4 and v4 Turbo and rejected on other models. SSML `<break>` on v3/v4 and `<phoneme>` on any model but `eleven_flash_v2` trigger a warning. `--voice` must be a voice ID (letters, digits, `_`, `-`), and text length is counted in Unicode code points, as the API bills it. An unknown `--model` id is passed through unchecked with a warning.
+- TTS options are checked against the model before anything is sent. v4, v4 Turbo, v3 and Flash/Turbo v2.x have no style control, so a non-zero `--style` is rejected rather than silently ignored, and `--style 0` or `--no-speaker-boost` on a model without that control is reported as a warning and not sent. `eleven_v3` rejects `--previous-text`/`--next-text`; text over the model's limit (v3 5,000, v4 and multilingual v2 10,000, Flash/Turbo v2.x 30,000–40,000) is rejected; bracketed audio tags such as `[whispering]` are performed by v3/v4 and trigger a warning on models that would read them aloud. Unsupported `--language-code` values are rejected by the API (nothing is billed); `eleven_multilingual_v2` accepts the codes on its list without enforcing them, so the CLI warns. `--clone-strength` (0–1, Professional Voice Clones fine-tuned for v4) is sent only to v4 and v4 Turbo and rejected on other models. SSML `<break>` on v3/v4 triggers a warning, and so does `<phoneme>` on multilingual v2, Flash v2.5 and Turbo v2.5, which drop the tagged word from the audio (v4, v4 Turbo, v3, v3 conversational, Flash v2 and Turbo v2 speak it). `--voice` must be a voice ID (letters, digits, `_`, `-`), and text length is counted in Unicode code points, as the API bills it. An unknown `--model` id is passed through unchecked with a warning.
 - `--timestamps` calls `/with-timestamps` and saves character timings next to the audio as `<audio>.timestamps.json`. If the response carries no audio, the raw body is saved as `elevenlabs_tts_raw_*` before the command fails, since the request may already be billed.
 - After each TTS run the CLI prints the credits ElevenLabs reports in its `character-cost` header (v4 Turbo bills 0.5 credits per character, see `multix elevenlabs models`). With `--json` the same number is `usage.credits`, attributed in `usage.sources.credits`. multix never prints an estimate as credits charged.
 
@@ -587,6 +622,7 @@ multix fal result <model> <requestId> [--download] [--output-dir <dir>] [--forma
 - `tts` maps flags to each model's schema (Gemini 3.8 Flash / Flash-Lite TTS: `prompt`, `voice`, `style_instructions`; ElevenLabs v4 / v4 Turbo: `text`, `voice`, `output_format`, `language_code`) and refuses a flag the model has no field for. Other fal TTS ids need `--text-field` (and `--voice-field`). Audio is saved under the extension its bytes have (raw `pcm_*`/`ulaw_8000`/`alaw_8000` from the requested format); empty, error-page or mislabelled downloads are refused.
 - `--file` / `fal upload` accept image, video and audio files only (up to `FAL_MAX_UPLOAD_MB`, default 1024). fal storage URLs are public to anyone with the link and fal controls retention; the key goes only to `https://rest.fal.ai`, never to the pre-signed upload URL.
 - Media URLs are extracted generically from the result JSON (any `url` field, recursively) and downloaded to `MULTIX_OUTPUT_DIR`.
+- For a verified model (`multix models --task speech` lists the fal speech endpoints), `run` warns about unknown, missing or out-of-choice `--input` fields; fal still validates. Other ids run unchecked.
 
 ### `multix atlas`
 
@@ -760,6 +796,26 @@ multix speech generate --provider minimax --language vi --emotion happy --text "
 - `--fallback` is opt-in and used only when the routes before it have no API key, so it is decided before any paid request; a paid request is never sent again elsewhere. Taking a fallback prints a warning with the voice, billing and format differences.
 - `--json` puts a `multix.speech.result/v1` object in `data` (`data.request` records the text as its length and SHA-256); `--dry-run` validates and shows the first request without sending it.
 - Remote MCP: `speech generate` requires `--provider`, and the job gets only the routed providers' keys. Full reference: [Speech commands](https://multix.zuey.me/commands/speech/).
+
+### `multix scene`
+
+Multi-character dialogue audio from plain-text scripts (`SPEAKER (direction): text`, one file per scene). Each character has a voice profile in `voices/<id>.json` (Gemini, OpenAI or ElevenLabs; no credentials stored). Each line is rendered as a separate take and cached by its exact request, so editing one line re-renders only that line.
+
+```bash
+multix scene voice add hiro --provider openai --model gpt-4o-mini-tts --voice cedar
+multix scene voice add mai --provider elevenlabs --model eleven_flash_v2_5 --voice <voiceId> --language vi-VN
+multix scene plan scripts/s01.txt scripts/s02.txt   # local, no cost
+multix scene render --dry-run                       # checks keys, shows the first request
+multix scene render [--scene s01] [--line s01/002 --new-take] [--limit 10] [--keep-going]
+multix scene status [--lines]
+multix scene approve s01/001 [--take <takeId>]
+multix scene export --out stems [--approved-only]
+```
+
+**Notes:**
+- One request per line. A failed request is never retried and never falls back to another provider. The keys of all providers a render needs are checked before the first request.
+- Every take records the `cost_usd`/`credits` the provider reported, or `null` when it reported nothing. `scene` has no pre-flight estimator yet: `plan` returns `estimated_cost_usd: null`, `render --estimate` reports unknown, and `--max-cost` refuses with `BUDGET_UNPROVEN`.
+- A cloned voice requires `--cloned --consent-by <name>`. Scene commands are not available through the remote MCP server. Full reference: [Scene commands](https://multix.zuey.me/commands/scene/).
 
 ### `multix media`
 

@@ -3,13 +3,19 @@
  * code): records each provider call (method, host, status, time) and the
  * usage its JSON response reports, and in --dry-run stops before the first
  * request leaves the machine. Bodies are read from a clone and only for
- * JSON responses under a size cap, so downloads are never buffered twice.
+ * JSON responses: whole under a size cap; above it (Gemini TTS returns its
+ * audio inline as base64) only a rolling tail is kept, where the usage block
+ * sits, so downloads are never buffered twice.
  */
 
 import { extractUsage, hasUsage } from "../core/usage-extract.js";
 import { run } from "./run-state.js";
 
 const MAX_JSON_BYTES = 2_000_000;
+/** Tail of an oversized JSON body searched for its trailing usage block. */
+const TAIL_BYTES = 64_000;
+/** Bodies larger than this are not scanned at all. */
+const MAX_SCAN_BYTES = 200_000_000;
 
 export interface DryRunRequest {
   method: string;
@@ -155,22 +161,63 @@ export async function settleTelemetry(timeoutMs = 2_000): Promise<void> {
 }
 
 /** Read at most `limit` bytes of a clone; undefined (and the clone cancelled) past it. */
-async function readCapped(response: Response, limit: number): Promise<string | undefined> {
+async function readCapped(
+  response: Response,
+  limit: number,
+): Promise<{ text?: string; tail?: string }> {
   const reader = response.clone().body?.getReader();
-  if (!reader) return undefined;
+  if (!reader) return {};
   const chunks: Uint8Array[] = [];
   let size = 0;
+  let tail: Buffer | undefined;
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
     size += value.byteLength;
-    if (size > limit) {
+    if (size > MAX_SCAN_BYTES) {
       await reader.cancel();
-      return undefined;
+      return {};
+    }
+    if (tail) {
+      tail = Buffer.concat([tail, value]);
+      if (tail.byteLength > TAIL_BYTES * 2) tail = tail.subarray(tail.byteLength - TAIL_BYTES);
+      continue;
     }
     chunks.push(value);
+    if (size > limit) {
+      tail = Buffer.concat(chunks);
+      tail = tail.subarray(Math.max(0, tail.byteLength - TAIL_BYTES));
+      chunks.length = 0;
+    }
   }
-  return Buffer.concat(chunks).toString("utf8");
+  if (tail) return { tail: tail.toString("utf8") };
+  return { text: Buffer.concat(chunks).toString("utf8") };
+}
+
+/**
+ * The last top-level-looking `"usageMetadata": {...}` or `"usage": {...}` in a
+ * JSON tail, parsed on its own. Strings in a usage block hold no braces, so
+ * counting braces finds its end.
+ */
+export function usageFromTail(tail: string): Record<string, unknown> | undefined {
+  for (const key of ["usageMetadata", "usage"]) {
+    const at = tail.lastIndexOf(`"${key}"`);
+    if (at < 0) continue;
+    const open = tail.indexOf("{", at);
+    if (open < 0 || !/^"\w+"\s*:\s*$/.test(tail.slice(at, open))) continue;
+    let depth = 0;
+    for (let i = open; i < tail.length; i++) {
+      if (tail[i] === "{") depth++;
+      else if (tail[i] === "}" && --depth === 0) {
+        try {
+          return { [key]: JSON.parse(tail.slice(open, i + 1)) };
+        } catch {
+          break;
+        }
+      }
+    }
+  }
+  return undefined;
 }
 
 async function recordUsage(
@@ -182,12 +229,14 @@ async function recordUsage(
   const type = response.headers.get("content-type") ?? "";
   const declared = Number(response.headers.get("content-length") ?? Number.NaN);
   let body: unknown;
-  if (response.ok && type.includes("json") && !(declared > MAX_JSON_BYTES)) {
-    const text = await readCapped(response, MAX_JSON_BYTES);
+  if (response.ok && type.includes("json") && !(declared > MAX_SCAN_BYTES)) {
+    const { text, tail } = await readCapped(response, MAX_JSON_BYTES);
     if (text !== undefined) {
       try {
         body = JSON.parse(text);
       } catch {}
+    } else if (tail !== undefined) {
+      body = usageFromTail(tail);
     }
   }
   const usage = extractUsage(body, response.headers);

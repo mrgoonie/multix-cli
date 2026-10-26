@@ -42,6 +42,10 @@ export const PROJECT_ENV_EXCLUDED: ReadonlySet<string> = new Set([
   "MULTIX_LEGACY_CLAUDE_ENV",
   // Would let a repository choose where the run ledger (argv, prompts) is written.
   "MULTIX_HISTORY_FILE",
+  // Would let a repository choose (or seed) the model catalog cache `multix models --live` reads.
+  "MULTIX_CACHE_DIR",
+  // Per-run: one id in a project file would merge every run's spend into one operation.
+  "MULTIX_OPERATION_ID",
 ]);
 
 /** The documented MULTIX_* settings a project may choose. */
@@ -51,6 +55,8 @@ const OWN_SETTINGS = [
   // Agent mode: `json` envelope output; `0` turns the run ledger off.
   "MULTIX_OUTPUT",
   "MULTIX_HISTORY",
+  // Seconds `multix models --live` reuses a cached provider catalog.
+  "MULTIX_MODELS_TTL",
   MAX_DOWNLOAD_ENV,
   UPLOAD_MIN_KBPS_ENV,
   // Read before the project file loads, so setting it there has no effect.
@@ -72,6 +78,7 @@ const INLINE_SETTINGS = [
   "OPENROUTER_IMAGE_MODEL",
   "OPENROUTER_VIDEO_MODEL",
   "OPENROUTER_TTS_MODEL",
+  "OPENROUTER_STT_MODEL",
   "OPENROUTER_FALLBACK_MODELS",
   "OPENROUTER_SITE_URL",
   "OPENROUTER_APP_NAME",

@@ -59,10 +59,31 @@ export interface GeminiSpeechOpts {
 }
 
 export async function generateGeminiSpeech(opts: GeminiSpeechOpts): Promise<GeminiSpeechResult> {
-  const { text, model, voice, speakers, outputFormat, output, logger } = opts;
+  const { model, outputFormat, output, logger } = opts;
+  let audio: GeminiSpeechAudio;
+  try {
+    audio = await synthesizeGeminiSpeech(opts);
+  } catch (e) {
+    return { status: "error", error: e instanceof Error ? e.message : String(e) };
+  }
+  const dest = saveSpeech(audio.bytes, outputFormat, output, logger);
+  return { status: "success", generatedAudio: dest, model, mimeType: audio.mimeType };
+}
+
+export interface GeminiSpeechAudio {
+  /** WAV or raw PCM bytes, as `outputFormat` asked. */
+  bytes: Buffer;
+  mimeType: string;
+}
+
+/** Call Gemini TTS and return the audio bytes without saving them. Throws on failure. */
+export async function synthesizeGeminiSpeech(
+  opts: Omit<GeminiSpeechOpts, "output">,
+): Promise<GeminiSpeechAudio> {
+  const { text, model, voice, speakers, outputFormat, logger } = opts;
 
   if (GEMINI_INTERACTIONS_TTS_MODELS.has(model)) {
-    return generateInteractionsSpeech(opts);
+    return synthesizeInteractionsSpeech(opts);
   }
 
   const speechConfig =
@@ -86,37 +107,30 @@ export async function generateGeminiSpeech(opts: GeminiSpeechOpts): Promise<Gemi
 
   logger?.debug(`Gemini TTS model=${model} mode=${speakers?.length ? "multi" : "single"}`);
 
-  let resp: Awaited<ReturnType<typeof generateContent>>;
-  try {
-    resp = await withGeminiKey(
-      (apiKey) =>
-        generateContent(
-          {
-            model,
-            contents: [{ parts: [{ text }] }],
-            generationConfig,
-          },
-          { apiKey, logger },
-        ),
-      { logger },
-    );
-  } catch (e) {
-    return { status: "error", error: e instanceof Error ? e.message : String(e) };
-  }
+  const resp = await withGeminiKey(
+    (apiKey) =>
+      generateContent(
+        {
+          model,
+          contents: [{ parts: [{ text }] }],
+          generationConfig,
+        },
+        { apiKey, logger },
+      ),
+    { logger },
+  );
 
   const audio = extractAudio(resp);
-  if (!audio) return { status: "error", error: "No audio in response" };
+  if (!audio) throw new Error("No audio in response");
 
   const pcmBytes = Buffer.from(audio.data, "base64");
   const sampleRate = parseSampleRate(audio.mimeType) ?? TTS_PCM_SAMPLE_RATE;
 
-  const outBytes =
+  const bytes =
     outputFormat === "wav"
       ? wrapPcmInWav(pcmBytes, sampleRate, TTS_PCM_CHANNELS, TTS_PCM_BITS_PER_SAMPLE)
       : pcmBytes;
-
-  const dest = saveSpeech(outBytes, outputFormat, output, logger);
-  return { status: "success", generatedAudio: dest, model, mimeType: audio.mimeType };
+  return { bytes, mimeType: audio.mimeType };
 }
 
 /** Build the Interactions request body for a Gemini 3.8 TTS model. */
@@ -138,8 +152,10 @@ export function buildInteractionsSpeechBody(
   };
 }
 
-async function generateInteractionsSpeech(opts: GeminiSpeechOpts): Promise<GeminiSpeechResult> {
-  const { model, speakers, outputFormat, output, logger, text, style } = opts;
+async function synthesizeInteractionsSpeech(
+  opts: Omit<GeminiSpeechOpts, "output">,
+): Promise<GeminiSpeechAudio> {
+  const { model, speakers, outputFormat, logger, text, style } = opts;
   logger?.debug(
     `Gemini TTS (interactions) model=${model} mode=${speakers?.length ? "multi" : "single"}`,
   );
@@ -150,25 +166,20 @@ async function generateInteractionsSpeech(opts: GeminiSpeechOpts): Promise<Gemin
     );
   }
 
-  let resp: unknown;
-  try {
-    resp = await withGeminiKey(
-      (apiKey) => createInteraction(buildInteractionsSpeechBody(opts), { apiKey, logger }),
-      { logger },
-    );
-  } catch (e) {
-    return { status: "error", error: e instanceof Error ? e.message : String(e) };
-  }
+  const resp = await withGeminiKey(
+    (apiKey) => createInteraction(buildInteractionsSpeechBody(opts), { apiKey, logger }),
+    { logger },
+  );
 
   const interaction = resp as { status?: unknown; error?: { message?: unknown } } | null;
   if (typeof interaction?.status === "string" && interaction.status !== "completed") {
     const detail =
       typeof interaction.error?.message === "string" ? `: ${interaction.error.message}` : "";
-    return { status: "error", error: `Interaction ${interaction.status}${detail}` };
+    throw new Error(`Interaction ${interaction.status}${detail}`);
   }
 
   const audio = extractInteractionAudio(resp);
-  if (!audio) return { status: "error", error: "No audio in response" };
+  if (!audio) throw new Error("No audio in response");
 
   const bytes = Buffer.from(audio.data, "base64");
   const isWav = bytes.subarray(0, 4).toString("ascii") === "RIFF";
@@ -185,9 +196,7 @@ async function generateInteractionsSpeech(opts: GeminiSpeechOpts): Promise<Gemin
   } else {
     outBytes = isWav ? extractWavData(bytes) : bytes;
   }
-
-  const dest = saveSpeech(outBytes, outputFormat, output, logger);
-  return { status: "success", generatedAudio: dest, model, mimeType: audio.mimeType };
+  return { bytes: outBytes, mimeType: audio.mimeType };
 }
 
 /** Return the `data` chunk payload of a RIFF/WAV buffer (raw PCM). */

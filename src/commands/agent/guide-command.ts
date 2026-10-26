@@ -13,10 +13,14 @@ export const GUIDE_TEXT = `multix agent protocol
 1. Discover: multix models --task <task> --ready   (tasks: image, image-edit, video, image-to-video,
    video-edit, speech, transcription, music, sfx, voice, 3d, analysis, document, avatar-video, any)
    Flags of one command: multix <group> <command> --help
+   One model's inputs/voices/formats: multix models --model <id>   (verified models only)
+   What provider catalogs list now: multix models --task <task> --live   (unverified unless marked)
 2. Validate for free: add --dry-run. Local checks run; the first provider request is shown, not sent.
+   Price first: --estimate (range, units, rate source; nothing sent). --max-cost <usd> refuses to run
+   unless the ceiling is proven under it (--cost-policy estimate accepts an estimated ceiling).
 3. Run with --json (or MULTIX_OUTPUT=json): stdout is ONE line, schema multix.result/v1:
    ok, outputs[{path,bytes,mime,sha256,width,height,duration_s}], warnings[], text|data,
-   error{code,retryable,retry_after_s,hint}, usage{tokens,cost_usd,credits,metrics,sources}, history_id, next[]
+   error{code,retryable,retry_after_s,hint}, usage{tokens,cost_usd,credits,metrics,sources}, cost{status,actual_usd}, history_id, next[]
 4. Check the result yourself: ok=true AND outputs non-empty AND no warnings (EMPTY_OUTPUT,
    CONTENT_MISMATCH, UNREADABLE_MEDIA). Look at images/video only when it matters.
 5. On failure follow error.hint and next[]; never resubmit a paid job blindly (exit codes with --json):

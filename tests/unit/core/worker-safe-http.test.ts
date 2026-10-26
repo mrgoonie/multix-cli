@@ -18,7 +18,7 @@ import {
 import { isNetworkFetchFailure, toFetchError } from "../../../src/core/fetch-error.js";
 import { fetchJson, parseRetryAfter } from "../../../src/core/fetch-json.js";
 import { parseJsonInput } from "../../../src/core/json-input.js";
-import { redactUrl } from "../../../src/core/redact.js";
+import { redactUrl, redactUrlsInText } from "../../../src/core/redact.js";
 import { findNodeOnlyUses, formatNodeOnlyUses } from "../../helpers/import-graph.js";
 
 const WORKER_SAFE_MODULES = [
@@ -97,6 +97,53 @@ describe("redactUrl", () => {
   });
 });
 
+describe("redactUrlsInText", () => {
+  it("redacts the query of every URL in free text and keeps the rest", () => {
+    expect(
+      redactUrlsInText(
+        "failed to download https://cdn.example.com/a.wav?sig=SECRET1 (see https://openrouter.ai/docs)",
+      ),
+    ).toBe(
+      "failed to download https://cdn.example.com/a.wav?[redacted] (see https://openrouter.ai/docs)",
+    );
+    // Opaque-origin schemes collapse whole, as with redactUrl.
+    expect(redactUrlsInText("gs://bucket/a.mp3?token=SECRET2 failed")).toBe("gs:[redacted] failed");
+  });
+
+  it("catches a query tail after a URL with a space, and is idempotent", () => {
+    const once = redactUrlsInText("bad url https://x.test/my file.wav?sig=SECRET3");
+    expect(once).toBe("bad url https://x.test/my file.wav?[redacted]");
+    expect(redactUrlsInText(once)).toBe(once);
+  });
+
+  it("redacts the whole query when a raw JSON body escapes & or /", () => {
+    const goStyle = String.raw`{"error":"cannot fetch https://s3.example.com/a.wav?X-Amz-Algorithm=A\u0026X-Amz-Signature=SECRET5"}`;
+    const phpStyle = String.raw`{"error":"cannot fetch https:\/\/s3.example.com\/a.wav?a=1\/2\u0026sig=SECRET6 now"}`;
+    for (const body of [goStyle, phpStyle]) {
+      const out = redactUrlsInText(body);
+      expect(out).not.toMatch(/SECRET/);
+      expect(() => JSON.parse(out)).not.toThrow();
+      expect(redactUrlsInText(out)).toBe(out);
+    }
+    expect(redactUrlsInText(phpStyle)).toContain("?[redacted] now");
+  });
+
+  it("leaves an already redacted message unchanged", () => {
+    const message = new HttpError(400, "bad input", "https://x.test/a?key=SECRET7").message;
+    expect(message).toBe("HTTP 400 from https://x.test/a?[redacted]: bad input");
+    expect(redactUrlsInText(message)).toBe(message);
+  });
+
+  it("keeps a JSON error body parseable", () => {
+    const body = JSON.stringify({
+      error: { message: 'cannot fetch "https://x.test/a.mp3?sig=SECRET4"' },
+    });
+    const out = redactUrlsInText(body);
+    expect(out).not.toContain("SECRET4");
+    expect(JSON.parse(out).error.message).toBe('cannot fetch "https://x.test/a.mp3?[redacted]"');
+  });
+});
+
 describe("HttpError", () => {
   it("never puts the query string in its message but keeps the raw url", () => {
     const e = new HttpError(500, "boom", "https://x.test/a?key=SECRET123");
@@ -105,6 +152,17 @@ describe("HttpError", () => {
     expect(e.url).toBe("https://x.test/a?[redacted]");
     expect(e.rawUrl).toBe("https://x.test/a?key=SECRET123");
     expect(JSON.stringify(e)).not.toContain("SECRET123");
+  });
+
+  it("redacts URL queries a provider echoes in the response snippet", () => {
+    const e = new HttpError(
+      400,
+      "Failed to download https://cdn.example.com/a.wav?X-Amz-Signature=SECRETSIG",
+      "https://openrouter.ai/api/v1/audio/transcriptions",
+    );
+    expect(e.snippet).toBe("Failed to download https://cdn.example.com/a.wav?[redacted]");
+    expect(e.message).not.toContain("SECRETSIG");
+    expect(JSON.stringify(e)).not.toContain("SECRETSIG");
   });
 });
 

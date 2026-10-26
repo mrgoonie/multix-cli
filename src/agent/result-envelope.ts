@@ -4,6 +4,8 @@
  * `error.code` and `next` instead of parsing provider-specific prose.
  */
 
+import type { CostEstimate } from "../budget/cost-estimate.js";
+import type { CostReceipt } from "../budget/cost-receipt.js";
 import type { ErrorInfo } from "../core/error-classify.js";
 import type { DryRunRequest } from "./fetch-telemetry.js";
 import type { OutputFile, OutputWarning } from "./output-file-inspect.js";
@@ -18,6 +20,8 @@ export interface ResultEnvelope {
   provider?: string;
   model?: string;
   dry_run?: boolean;
+  /** `--estimate`: priced only, nothing sent. */
+  estimate_only?: boolean;
   duration_ms: number;
   outputs: OutputFile[];
   warnings?: Array<OutputWarning | { code: "LOG_WARNING"; message: string }>;
@@ -31,6 +35,12 @@ export interface ResultEnvelope {
   usage?: UsageSummary;
   http?: { requests: number; errors: number; ms: number };
   provider_ids?: string[];
+  /** Pre-flight price of the run (range, units, rate and its source). */
+  estimate?: CostEstimate;
+  /** `--max-cost` verdict. */
+  budget?: { ok: boolean; max_cost_usd: number; policy: string; code?: string; message?: string };
+  /** Reconciled cost: estimate, provider-reported, actual, variance, operation id. */
+  cost?: CostReceipt;
   /** The first request a dry run would have sent (query strings and secrets removed). */
   request?: DryRunRequest;
   history_id?: string;

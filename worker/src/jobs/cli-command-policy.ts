@@ -72,6 +72,16 @@ export const EXCLUDED_COMMANDS: ReadonlySet<string> = new Set([
   "history show",
   "history stats",
   "rerun",
+  // Scene projects live in a local directory across runs; a job container is discarded after each run.
+  "scene voice add",
+  "scene voice list",
+  "scene voice validate",
+  "scene plan",
+  "scene render",
+  "scene approve",
+  "scene reject",
+  "scene status",
+  "scene export",
 ]);
 
 /** Options no remote command may use: stdin is not available in the container. */
@@ -144,6 +154,7 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
     caps: VIDEO_CAPS,
   },
   "openrouter tts": { fileOptions: { "text-file": "file", "turns-file": "file" } },
+  "openrouter transcribe": { fileOptions: { input: "file" } },
   "leonardo generate": { caps: { count: ["num"] } },
   "leonardo image-to-image": { caps: { count: ["num"] } },
   "leonardo video": { caps: { resolution: ["resolution"] } },

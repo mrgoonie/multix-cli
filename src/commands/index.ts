@@ -24,6 +24,7 @@ import { registerModelsCommand } from "./agent/models-command.js";
 import { registerCheckCommand } from "./check.js";
 import { registerDocCommands } from "./doc/index.js";
 import { registerMediaCommands } from "./media/index.js";
+import { registerSceneCommands } from "./scene/index.js";
 import { registerSpeechCommands } from "./speech/index.js";
 import { registerUpdateCommand } from "./update.js";
 
@@ -46,6 +47,7 @@ export function registerCommands(program: Command): void {
   registerHeygenCommands(program);
   registerSpeechCommands(program);
   registerMediaCommands(program);
+  registerSceneCommands(program);
   registerDocCommands(program);
   registerModelsCommand(program);
   registerGuideCommand(program);

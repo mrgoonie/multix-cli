@@ -5,6 +5,55 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.21.1](https://github.com/mrgoonie/multix-cli/compare/v1.21.0...v1.21.1) (2026-10-26)
+
+
+### Fixed
+
+* **models:** do not confirm models from a cache older than the TTL ceiling when offline ([#352](https://github.com/mrgoonie/multix-cli/issues/352)) ([4438372](https://github.com/mrgoonie/multix-cli/commit/4438372199bb9b8bad950d4f9a16b36d8d5e89ba)), closes [#349](https://github.com/mrgoonie/multix-cli/issues/349)
+
+## [1.21.0](https://github.com/mrgoonie/multix-cli/compare/v1.20.0...v1.21.0) (2026-10-26)
+
+
+### Added
+
+* **scene:** character voice profiles, scene manifests and selective take rendering ([#320](https://github.com/mrgoonie/multix-cli/issues/320)) ([0abb1ff](https://github.com/mrgoonie/multix-cli/commit/0abb1fffe55118c47e06cffce4086189a70f13af))
+
+## [1.20.0](https://github.com/mrgoonie/multix-cli/compare/v1.19.0...v1.20.0) (2026-10-26)
+
+
+### Added
+
+* **models:** truthful, task-aware capability registry for CLI and MCP agents ([#317](https://github.com/mrgoonie/multix-cli/issues/317)) ([635f2e6](https://github.com/mrgoonie/multix-cli/commit/635f2e69ba1aacfbfd5f8f94f2e93447d263864a)), closes [#293](https://github.com/mrgoonie/multix-cli/issues/293)
+
+## [1.19.0](https://github.com/mrgoonie/multix-cli/compare/v1.18.2...v1.19.0) (2026-10-26)
+
+
+### Added
+
+* **openrouter:** add speech-to-text via /audio/transcriptions ([#328](https://github.com/mrgoonie/multix-cli/issues/328)) ([795c756](https://github.com/mrgoonie/multix-cli/commit/795c7564ffa3cdc968089f3f40dae5e1aadbab14))
+
+## [1.18.2](https://github.com/mrgoonie/multix-cli/compare/v1.18.1...v1.18.2) (2026-10-26)
+
+
+### Fixed
+
+* **agent:** never report an account credit balance as credits spent ([#306](https://github.com/mrgoonie/multix-cli/issues/306)) ([218e57a](https://github.com/mrgoonie/multix-cli/commit/218e57a12e29e4e265c8a7548aa83019166ea850))
+
+## [1.18.1](https://github.com/mrgoonie/multix-cli/compare/v1.18.0...v1.18.1) (2026-10-26)
+
+
+### Fixed
+
+* **elevenlabs:** warn on SSML &lt;phoneme&gt; only for models that drop the word ([#331](https://github.com/mrgoonie/multix-cli/issues/331)) ([60505f4](https://github.com/mrgoonie/multix-cli/commit/60505f4140283578b0ab5779eb41b84b9e1d5cf4)), closes [#323](https://github.com/mrgoonie/multix-cli/issues/323)
+
+## [1.18.0](https://github.com/mrgoonie/multix-cli/compare/v1.17.1...v1.18.0) (2026-10-26)
+
+
+### Added
+
+* **budget:** price estimates, spend guards and reconciled cost receipts ([#327](https://github.com/mrgoonie/multix-cli/issues/327)) ([1a1e1b3](https://github.com/mrgoonie/multix-cli/commit/1a1e1b3d38101f936f125859ec7e86113b003c16)), closes [#295](https://github.com/mrgoonie/multix-cli/issues/295)
+
 ## [1.17.1](https://github.com/mrgoonie/multix-cli/compare/v1.17.0...v1.17.1) (2026-10-26)
 
 

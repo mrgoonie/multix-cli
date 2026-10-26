@@ -98,6 +98,11 @@ export default defineConfig({
             { label: "Runway", slug: "commands/runway" },
             { label: "HeyGen", slug: "commands/heygen" },
             {
+              label: "Scenes (dialogue audio)",
+              translations: { vi: "Scene (audio hội thoại)" },
+              slug: "commands/scene",
+            },
+            {
               label: "Provider directory",
               translations: { vi: "Danh mục provider" },
               slug: "commands/providers",

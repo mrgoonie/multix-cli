@@ -55,8 +55,10 @@ itself rejects a `--language-code` the model does not support; nothing is
 billed. `eleven_multilingual_v2` accepts the codes on its list but does not
 enforce them, so the CLI warns. `--clone-strength` (0 to 1, for Professional
 Voice Clones fine-tuned for v4) is sent only to `eleven_v4` and
-`eleven_v4_turbo`; other models reject it. SSML `<break>` tags on v3/v4 and
-`<phoneme>` tags on any model but `eleven_flash_v2` trigger a warning.
+`eleven_v4_turbo`; other models reject it. SSML `<break>` tags on v3/v4 trigger a
+warning, and so do `<phoneme>` tags on multilingual v2, Flash v2.5 and Turbo
+v2.5, which drop the tagged word from the audio (v4, v4 Turbo, v3, v3
+conversational, Flash v2 and Turbo v2 speak it).
 `--voice` must be a voice ID (letters, digits, `_`, `-`). Text length is
 counted in Unicode code points, as the API counts it. An unknown
 `--model` id is passed through unchecked with a warning.

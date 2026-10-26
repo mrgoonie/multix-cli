@@ -11,7 +11,7 @@ description: Choose the multix command group that matches your media workflow.
 | [Gemini](/commands/gemini/) | Analyze, transcribe, extract, generate images, generate/edit/extend video, image-to-video, and Gemini TTS. |
 | [OpenAI](/commands/openai/) | Image generation/editing, Codex image driver, TTS, and transcription. |
 | [MiniMax](/commands/minimax/) | Image/video, subject-preserving image-to-image, speech, and music. |
-| [OpenRouter](/commands/openrouter/) | Routed image generation/editing, async image-to-video, and TTS. |
+| [OpenRouter](/commands/openrouter/) | Routed image generation/editing, async image-to-video, TTS, and STT. |
 | [Leonardo](/commands/leonardo/) | Account, models, image/video, image-to-image, upscale, and job status. |
 | [BytePlus](/commands/byteplus/) | Seedream images, Seedance video, reference video, and 3D assets. |
 | [Cloudflare](/commands/cloudflare/) | Workers AI image/speech and AI Gateway video jobs. |
@@ -22,6 +22,7 @@ description: Choose the multix command group that matches your media workflow.
 | [Runway](/commands/runway/) | Gen-4.5 and Gen-4 Turbo video, Gen-4 images, and task status/cancel. |
 | [HeyGen](/commands/heygen/) | Video Agent prompt-to-video, scripted avatar videos, video translation, lipsync, and TTS. |
 | [Speech](/commands/speech/) | Text-to-speech on Gemini, OpenAI, ElevenLabs, MiniMax, or Atlas Cloud with one set of flags, capability checks, and opt-in fallback. |
+| [Scenes](/commands/scene/) | Multi-character dialogue audio: voice profiles, per-line cached takes, approval, and stem export. |
 | `multix media` | Optimize, split, and batch-process files with ffmpeg/ImageMagick. |
 | `multix doc` | Convert supported documents to Markdown through Gemini. |
 | `multix update` | Self-update multix to the latest, or a specific, published version. |

@@ -66,4 +66,17 @@ describe("createLogger", () => {
     }
     expect(err.mock.calls.map((c) => c[0])).toEqual(["  plain", "✗ plain"]);
   });
+
+  it("redacts URL query strings in warnings and errors", () => {
+    const { err, warn } = capture();
+    const logger = createLogger({ verbose: false });
+    logger.warn("Download failed for https://cdn.example.com/a.mp4?sig=SECRET1");
+    logger.error("Provider said: cannot read https://cdn.example.com/b.wav?sig=SECRET2");
+    expect(warn.mock.calls[0]?.[0]).toBe(
+      "⚠ Download failed for https://cdn.example.com/a.mp4?[redacted]",
+    );
+    expect(err.mock.calls[0]?.[0]).toBe(
+      "✗ Provider said: cannot read https://cdn.example.com/b.wav?[redacted]",
+    );
+  });
 });

@@ -121,6 +121,10 @@ function jobsContext(
 
 const env = fullEnv({ GEMINI_API_KEY: GEMINI_KEY });
 
+type JsonSchema = { properties: Record<string, unknown>; [key: string]: unknown };
+const pick = (obj: Record<string, unknown>, keys: string[]) =>
+  Object.fromEntries(keys.filter((k) => k in obj).map((k) => [k, obj[k]]));
+
 describe("CLI runner tools", () => {
   it("keeps the tool input schemas 2025 clients already know", async () => {
     const list = await rpc(
@@ -132,7 +136,16 @@ describe("CLI runner tools", () => {
     const schemas = Object.fromEntries(
       list.result.tools.map((t: { name: string; inputSchema: unknown }) => [t.name, t.inputSchema]),
     );
-    expect(schemas).toEqual(legacySchemas);
+    // New optional parameters are allowed; anything a 2025 client sends must
+    // still validate the same way.
+    expect(Object.keys(schemas).sort()).toEqual(Object.keys(legacySchemas).sort());
+    for (const [name, legacy] of Object.entries(legacySchemas) as [string, JsonSchema][]) {
+      const current = schemas[name] as JsonSchema;
+      const { properties: legacyProps, ...legacyRest } = legacy;
+      const { properties: currentProps, ...currentRest } = current;
+      expect(currentRest, name).toEqual(legacyRest);
+      expect(pick(currentProps, Object.keys(legacyProps)), name).toEqual(legacyProps);
+    }
   });
 
   it("lists the job tools only when the job backend is available", async () => {
@@ -174,6 +187,66 @@ describe("CLI runner tools", () => {
     expect(driver.forced).toBe("api");
     const unknown = await callTool(env, "multix_catalog", { group: "nope" }, { jobs });
     expect(unknown.isError).toBe(true);
+  });
+
+  it("multix_catalog filters by task and inspects verified models from the CLI registry", async () => {
+    const jobs = jobsContext(new FakeBackend(succeeded));
+    const speech = (await callTool(env, "multix_catalog", { task: "speech" }, { jobs }))
+      .structuredContent;
+    expect(speech.schema).toBe("multix.capabilities/v1");
+    const commands = speech.commands.map((c: { command: string }) => c.command);
+    expect(commands).toContain("gemini generate-speech");
+    expect(commands).not.toContain("fal run");
+    expect(commands).not.toContain("openrouter generate");
+    const models = speech.models as { model: string; command: string; has_keys: boolean }[];
+    expect(models.map((m) => m.model)).toContain("elevenlabs/tts/eleven-v4");
+    expect(models.every((m) => m.command.startsWith("fal ") && m.has_keys === false)).toBe(true);
+    expect(models.find((m) => m.model === "elevenlabs/tts/eleven-v4")?.command).toBe("fal tts");
+    const tts = speech.commands.find(
+      (c: { command: string }) => c.command === "gemini generate-speech",
+    );
+    expect(tts).toMatchObject({ has_keys: true, tasks: ["speech"], outputs: ["audio"] });
+
+    const inGroup = (
+      await callTool(env, "multix_catalog", { task: "speech", group: "gemini" }, { jobs })
+    ).structuredContent;
+    expect(inGroup.commands.map((c: { command: string }) => c.command)).toEqual([
+      "gemini generate-speech",
+    ]);
+    expect(inGroup.models).toEqual([]);
+
+    const model = (
+      await callTool(env, "multix_catalog", { model: "google/gemini-3.8-flash-tts" }, { jobs })
+    ).structuredContent;
+    expect(model.verified).toMatchObject({ provider: "fal", command: "fal tts" });
+    expect(model.verified.voices).toContain("Kore");
+    expect(model.usage).toContain('command "fal tts", args ["<text>"]');
+    // Typed fal tts flags set the endpoint fields; the rest go through input.
+    expect(model.usage).toContain('"voice": "<voice>"');
+    expect(model.usage).toContain('"style": "<style_instructions>"');
+    expect(model.usage).toMatch(/"input": "<JSON object with any of [^>]*turns/);
+    expect(model.usage).not.toContain("by long name");
+    expect(model.usage).not.toContain('"style_instructions":');
+
+    const eleven = (
+      await callTool(env, "multix_catalog", { model: "elevenlabs/tts/eleven-v4" }, { jobs })
+    ).structuredContent;
+    expect(eleven.usage).toContain('"format": "<output_format>"');
+    expect(eleven.usage).toContain('"language": "<language_code>"');
+    expect(eleven.usage).not.toContain('"stability":');
+
+    const runner = (
+      await callTool(env, "multix_catalog", { model: "fal-ai/minimax/speech-2.8-hd" }, { jobs })
+    ).structuredContent;
+    expect(runner.usage).toContain('command "fal run", args ["fal-ai/minimax/speech-2.8-hd"]');
+
+    const unknownModel = (
+      await callTool(env, "multix_catalog", { model: "someone/new-model" }, { jobs })
+    ).structuredContent;
+    expect(unknownModel.verified).toBeNull();
+
+    const badTask = await callTool(env, "multix_catalog", { task: "telepathy" }, { jobs });
+    expect(badTask.isError).toBe(true);
   });
 
   it("runs a job, waits for it, and scrubs keys from its output (no R2: note, no upload)", async () => {
@@ -385,5 +458,74 @@ describe("CLI runner tools", () => {
       retryable: false,
     });
     expect(backend.specs.size).toBe(0);
+  });
+
+  it("estimate returns a priced range and starts nothing", async () => {
+    const backend = new FakeBackend(succeeded);
+    const jobs = jobsContext(backend);
+    const result = await callTool(
+      env,
+      "multix_run",
+      {
+        command: "elevenlabs tts",
+        options: { text: "Xin chào thế giới", "previous-text": "Trước đó." },
+        estimate: true,
+        max_cost_usd: 0.0001,
+      },
+      { jobs },
+    );
+    expect(result.isError).toBeUndefined();
+    expect(result.structuredContent).toMatchObject({
+      estimate_only: true,
+      command: "elevenlabs tts",
+      estimate: {
+        status: "estimated",
+        upper_bound: "proven",
+        units: { characters: { low: 17, expected: 17, high: 26 } },
+      },
+      budget: { ok: false, code: "BUDGET_EXCEEDED", max_cost_usd: 0.0001 },
+    });
+    expect(backend.specs.size).toBe(0);
+  });
+
+  it("max_cost_usd refuses an unknown or unproven ceiling before starting a job", async () => {
+    const backend = new FakeBackend(succeeded);
+    const jobs = jobsContext(backend);
+    const unknown = await callTool(
+      env,
+      "multix_run",
+      { command: "gemini generate", options: { prompt: "a cat" }, max_cost_usd: 5 },
+      { jobs },
+    );
+    expect(unknown.isError).toBe(true);
+    expect(unknown.content[0].text).toMatch(/^Refusing to run: cost of gemini( \S+)? is unknown/);
+    const unproven = await callTool(
+      env,
+      "multix_run",
+      { command: "gemini generate-speech", options: { text: "hi" }, max_cost_usd: 5 },
+      { jobs },
+    );
+    expect(unproven.isError).toBe(true);
+    expect(unproven.content[0].text).toContain("--cost-policy estimate");
+    expect(backend.specs.size).toBe(0);
+  });
+
+  it("max_cost_usd with cost_policy estimate lets an estimated ceiling under the limit run", async () => {
+    const backend = new FakeBackend(succeeded, 0);
+    const jobs = jobsContext(backend);
+    const result = await callTool(
+      env,
+      "multix_run",
+      {
+        command: "gemini generate-speech",
+        options: { text: "hi" },
+        max_cost_usd: 5,
+        cost_policy: "estimate",
+        wait_seconds: 10,
+      },
+      { jobs },
+    );
+    expect(result.isError).toBeUndefined();
+    expect(backend.specs.size).toBe(1);
   });
 });

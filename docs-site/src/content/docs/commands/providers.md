@@ -10,7 +10,7 @@ description: Choose a source-backed command reference for any multix AI provider
 | Gemini | [Commands](/commands/gemini/) | Analysis, image/video, and TTS | Video uses Gemini Omni Flash and needs a billing-enabled key. |
 | OpenAI | [Commands](/commands/openai/) | Image, TTS, and STT | Codex is an experimental image-only driver. |
 | MiniMax | [Commands](/commands/minimax/) | Image, video, TTS, and music | `i2i` preserves a subject for a new scene; it does not edit an input image. |
-| OpenRouter | [Commands](/commands/openrouter/) | Routed image, image-to-video, and TTS models | i2v first/last frames are HTTPS URLs and jobs can be polled. |
+| OpenRouter | [Commands](/commands/openrouter/) | Routed image, image-to-video, TTS, and STT models | i2v first/last frames are HTTPS URLs and jobs can be polled. |
 | Leonardo | [Commands](/commands/leonardo/) | Image, video, upscaling, and account tools | i2i/i2v work with existing Leonardo image IDs. |
 | BytePlus | [Commands](/commands/byteplus/) | Seedream, Seedance, reference video, and 3D | Use `status` after an async submission. |
 | Cloudflare | [Commands](/commands/cloudflare/) | Workers AI image/speech and AI Gateway video | Video needs an AI Gateway ID and Replicate token. |

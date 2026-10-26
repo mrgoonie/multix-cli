@@ -67,7 +67,7 @@ All paths are relative to `/api/v1`.
 | `GET` | `/storage` | R2 settings without credentials, or `{ "configured": false }`. |
 | `PUT` | `/storage` | Check access to the bucket, then save the R2 settings. |
 | `DELETE` | `/storage` | Remove the R2 settings. |
-| `GET` | `/catalog[?group=]` | CLI commands the server can run; same payload as `multix_catalog`. |
+| `GET` | `/catalog[?group=&task=&model=]` | CLI commands the server can run; same payload and filters as `multix_catalog`. |
 | `POST` | `/jobs` | Run one CLI command; same input as `multix_run`. |
 | `GET` | `/jobs/{id}` | Job status, outputs, stdout and the tail of stderr. |
 | `POST` | `/jobs/{id}/cancel` | Stop a running job. |
@@ -190,7 +190,9 @@ whole setting, so leaving `prefix` out resets it to `multix`. The response, like
 `POST /jobs` takes the `multix_run` input (`command`, `options`, `args`,
 `inputs`, `wait_seconds`; see
 [Running CLI commands](/guides/mcp-server/#running-cli-commands)). Use
-`GET /catalog?group=gemini` to see a command's options and which take files.
+`GET /catalog?group=gemini` to see a command's options and which take files,
+`GET /catalog?task=speech` to find the commands and verified models for a
+task, and `GET /catalog?model=<id>` for a verified model's inputs.
 
 ```bash
 curl -s -X POST https://multix.zuey.me/api/v1/jobs \

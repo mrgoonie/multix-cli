@@ -54,10 +54,11 @@ hiện; model khác sẽ đọc thành tiếng nên CLI cảnh báo. Chính API 
 `eleven_multilingual_v2` nhận các mã trong danh sách của nó nhưng không áp
 dụng, nên CLI cảnh báo. `--clone-strength` (0 đến 1, cho Professional Voice
 Clone đã fine-tune cho v4) chỉ được gửi tới `eleven_v4` và `eleven_v4_turbo`;
-model khác từ chối. Thẻ SSML `<break>` trên v3/v4 và `<phoneme>` trên mọi
-model trừ `eleven_flash_v2` sẽ có cảnh báo. `--voice` phải là voice ID (chữ,
-số, `_`, `-`). Độ dài text được đếm theo Unicode code point, giống
-cách API tính. `--model` lạ được gửi nguyên trạng, không kiểm tra, kèm cảnh báo.
+model khác từ chối. Thẻ SSML `<break>` trên v3/v4 có cảnh báo; `<phoneme>` cũng
+có cảnh báo trên multilingual v2, Flash v2.5 và Turbo v2.5, vì các model này bỏ
+hẳn từ được gắn thẻ khỏi audio (v4, v4 Turbo, v3, v3 conversational, Flash v2
+và Turbo v2 vẫn đọc từ đó). `--voice` phải là voice ID (chữ, số, `_`, `-`).
+Độ dài text được đếm theo Unicode code point, giống cách API tính. `--model` lạ được gửi nguyên trạng, không kiểm tra, kèm cảnh báo.
 
 `--timestamps` lưu thời gian từng ký tự cạnh file audio thành
 `<audio>.timestamps.json`. Nếu response không có audio, body gốc được lưu thành

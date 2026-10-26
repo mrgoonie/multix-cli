@@ -5,7 +5,12 @@ import {
   classifyMessage,
   codeFromHttp,
 } from "../../../src/core/error-classify.js";
-import { ConfigError, HttpError, ValidationError } from "../../../src/core/errors.js";
+import {
+  ConfigError,
+  HttpError,
+  ProviderError,
+  ValidationError,
+} from "../../../src/core/errors.js";
 
 describe("codeFromHttp", () => {
   it("maps statuses to codes, refined by the body", () => {
@@ -63,6 +68,21 @@ describe("classifyError", () => {
       new HttpError(429, "slow down", "https://api.example.com/v1/x", 2500),
     );
     expect(info).toMatchObject({ code: "RATE_LIMITED", http_status: 429, retry_after_s: 3 });
+  });
+
+  it("redacts URL query strings in the message it hands to the envelope and ledger", () => {
+    const info = classifyError(
+      new ProviderError(
+        "OpenRouter returned no transcript text: could not fetch https://cdn.example.com/a.wav?sig=SECRETSIG",
+        "openrouter",
+      ),
+    );
+    expect(info.message).toBe(
+      "OpenRouter returned no transcript text: could not fetch https://cdn.example.com/a.wav?[redacted]",
+    );
+    expect(classifyMessage("HTTP 400: bad https://x.test/a?token=SECRET2").message).not.toContain(
+      "SECRET2",
+    );
   });
 
   it("maps multix error classes", () => {

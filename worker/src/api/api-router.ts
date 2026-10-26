@@ -11,7 +11,7 @@
  *   GET    /api/v1/storage                     R2 settings without credentials
  *   PUT    /api/v1/storage                     check access, then save R2 settings
  *   DELETE /api/v1/storage                     remove R2 settings
- *   GET    /api/v1/catalog[?group=]            CLI commands the server can run
+ *   GET    /api/v1/catalog[?group=&task=&model=] CLI commands, task routes, verified models
  *   POST   /api/v1/jobs                        run a CLI command (same input as multix_run)
  *   GET    /api/v1/jobs/{id}                   job status and outputs
  *   POST   /api/v1/jobs/{id}/cancel            stop a job

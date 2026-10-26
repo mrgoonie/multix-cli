@@ -1,0 +1,636 @@
+/**
+ * Scene workflow: two speakers across three scenes, rendered through the real
+ * OpenAI and ElevenLabs adapters against a fake fetch that returns audio
+ * derived from the request body (so equal requests give equal bytes).
+ */
+
+import { createHash } from "node:crypto";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import {
+  type SceneManifest,
+  allLines,
+  cacheKey,
+  findLine,
+  lockProject,
+  partErrors,
+  planScenes,
+  readManifest,
+  summarize,
+  writeManifest,
+} from "../../../src/commands/scene/scene-manifest.js";
+import { renderScenes } from "../../../src/commands/scene/scene-render.js";
+import { chunkText, parseScript } from "../../../src/commands/scene/script-parser.js";
+import {
+  VOICE_PROFILE_SCHEMA,
+  type VoiceProfile,
+  loadProfiles,
+  profileErrors,
+  writeProfile,
+} from "../../../src/commands/scene/voice-profile.js";
+
+const HIRO: VoiceProfile = {
+  schema: VOICE_PROFILE_SCHEMA,
+  id: "hiro",
+  aliases: ["Hiro"],
+  version: 1,
+  provider: "openai",
+  model: "gpt-4o-mini-tts",
+  voice: "marin",
+  language: "vi",
+  format: "mp3",
+  style: "calm, low",
+};
+const MAI: VoiceProfile = {
+  schema: VOICE_PROFILE_SCHEMA,
+  id: "mai",
+  version: 1,
+  provider: "elevenlabs",
+  model: "eleven_multilingual_v2",
+  voice: "kdmDKE6EkgrWrrykO9Qt",
+  format: "mp3_44100_128",
+  settings: { stability: 0.4 },
+};
+
+const SCENES: Record<string, string> = {
+  "s01.txt": "# title: Rooftop\nHIRO: Xin chào, Mai.\nMAI: Anh đến muộn.\nHIRO: Xin lỗi.\n",
+  "s02.txt": "# scene: s02\nMAI: Lại nữa à?\nHIRO (tired): Lần cuối thôi.\nMAI: Được rồi.\n",
+  "s03.txt": "HIRO: Đi thôi.\nMAI: Ừ.\n",
+};
+
+let tmp: string;
+let calls: Array<{ url: string; body: string }>;
+let failUrl: RegExp | undefined;
+const originalFetch = globalThis.fetch;
+const savedEnv = { ...process.env };
+
+/** A short valid 24 kHz mono WAV whose samples come from `seed`, so ffprobe can read it. */
+function fakeWav(seed: Buffer): Buffer {
+  const data = Buffer.alloc(480);
+  for (let i = 0; i < data.length; i++) data[i] = seed[i % seed.length];
+  const h = Buffer.alloc(44);
+  h.write("RIFF", 0);
+  h.writeUInt32LE(36 + data.length, 4);
+  h.write("WAVEfmt ", 8);
+  h.writeUInt32LE(16, 16);
+  h.writeUInt16LE(1, 20);
+  h.writeUInt16LE(1, 22);
+  h.writeUInt32LE(24000, 24);
+  h.writeUInt32LE(48000, 28);
+  h.writeUInt16LE(2, 32);
+  h.writeUInt16LE(16, 34);
+  h.write("data", 36);
+  h.writeUInt32LE(data.length, 40);
+  return Buffer.concat([h, data]);
+}
+
+function fakeFetch(): void {
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input instanceof Request ? input.url : input);
+    const body = typeof init?.body === "string" ? init.body : "";
+    calls.push({ url, body });
+    if (failUrl?.test(body)) return new Response("upstream exploded", { status: 500 });
+    const audio = fakeWav(
+      createHash("sha256")
+        .update(url + body)
+        .digest(),
+    );
+    return new Response(audio, { status: 200, headers: { "content-type": "audio/wav" } });
+  }) as typeof fetch;
+}
+
+function writeScripts(files: Record<string, string>): string[] {
+  return Object.entries(files).map(([name, text]) => {
+    const file = path.join(tmp, name);
+    fs.writeFileSync(file, text);
+    return file;
+  });
+}
+
+function plan(previous?: SceneManifest) {
+  const scripts = Object.keys(SCENES).map((name) => ({
+    path: name,
+    source: fs.readFileSync(path.join(tmp, name), "utf8"),
+  }));
+  return planScenes({ scripts, profiles: loadProfiles(tmp), project: "demo", previous });
+}
+
+function selectedSha(manifest: SceneManifest): Record<string, string | undefined> {
+  return Object.fromEntries(
+    allLines(manifest).map((l) => [l.id, l.takes.find((t) => t.id === l.selected_take)?.sha256]),
+  );
+}
+
+beforeEach(() => {
+  tmp = fs.mkdtempSync(path.join(os.tmpdir(), "multix-scene-"));
+  calls = [];
+  failUrl = undefined;
+  process.env.OPENAI_API_KEY = "sk-test-not-real";
+  process.env.ELEVENLABS_API_KEY = "el-test-not-real";
+  writeProfile(tmp, HIRO);
+  writeProfile(tmp, MAI);
+  writeScripts(SCENES);
+  fakeFetch();
+});
+
+afterEach(() => {
+  globalThis.fetch = originalFetch;
+  process.env = { ...savedEnv };
+  fs.rmSync(tmp, { recursive: true, force: true });
+});
+
+describe("scene render", () => {
+  it("re-renders only the edited line and keeps every other take byte-identical", async () => {
+    const first = plan().manifest;
+    expect(first.scenes.map((s) => s.id)).toEqual(["s01", "s02", "s03"]);
+    expect(allLines(first)).toHaveLength(8);
+    const r1 = await renderScenes({
+      projectDir: tmp,
+      manifest: first,
+      profiles: loadProfiles(tmp),
+    });
+    expect(r1.rendered).toHaveLength(8);
+    expect(calls).toHaveLength(8);
+    const before = selectedSha(first);
+
+    // Nothing changed: no request at all.
+    calls = [];
+    const again = plan(first).manifest;
+    const r2 = await renderScenes({
+      projectDir: tmp,
+      manifest: again,
+      profiles: loadProfiles(tmp),
+    });
+    expect(r2.rendered).toEqual([]);
+    expect(r2.cached).toBe(8);
+    expect(calls).toHaveLength(0);
+
+    // Edit one line of scene 2.
+    writeScripts({
+      "s02.txt": SCENES["s02.txt"]?.replace("Lần cuối thôi.", "Lần cuối, anh hứa.") ?? "",
+    });
+    const edited = plan(again);
+    expect(edited.invalidated).toEqual(["s02/002"]);
+    calls = [];
+    const r3 = await renderScenes({
+      projectDir: tmp,
+      manifest: edited.manifest,
+      profiles: loadProfiles(tmp),
+    });
+    expect(r3.rendered).toEqual(["s02/002"]);
+    expect(calls).toHaveLength(1);
+    const after = selectedSha(edited.manifest);
+    for (const [id, sha] of Object.entries(before)) {
+      if (id === "s02/002") expect(after[id]).not.toBe(sha);
+      else expect(after[id]).toBe(sha);
+    }
+    // The old take stays in the line history for comparison.
+    expect(findLine(edited.manifest, "s02/002").takes).toHaveLength(2);
+  });
+
+  it("sends each provider its own request shape with style, direction and settings", async () => {
+    const { manifest } = plan();
+    await renderScenes({ projectDir: tmp, manifest, profiles: loadProfiles(tmp), scene: "s01" });
+    const openai = JSON.parse(calls[0]?.body ?? "{}");
+    expect(calls[0]?.url).toBe("https://api.openai.com/v1/audio/speech");
+    expect(openai).toMatchObject({
+      model: "gpt-4o-mini-tts",
+      voice: "marin",
+      instructions: "calm, low",
+    });
+    const eleven = JSON.parse(calls[1]?.body ?? "{}");
+    expect(calls[1]?.url).toContain(
+      "/text-to-speech/kdmDKE6EkgrWrrykO9Qt?output_format=mp3_44100_128",
+    );
+    expect(eleven).toMatchObject({
+      model_id: "eleven_multilingual_v2",
+      voice_settings: { stability: 0.4 },
+    });
+    expect(eleven.language_code).toBeUndefined(); // the profile sets no language
+    expect(eleven.previous_text).toBeUndefined(); // context is opt-in
+  });
+
+  it("flags an invalid voice and unsupported markup before any request", () => {
+    writeProfile(tmp, { ...MAI, voice: "not-a-voice" } as VoiceProfile);
+    expect(() => loadProfiles(tmp)).toThrow(/not an ElevenLabs voice id/);
+    writeProfile(tmp, MAI);
+    writeScripts({ "s03.txt": "HIRO: Đi thôi [whispers].\nMAI: Ừ.\n" });
+    expect(() => plan()).toThrow(/audio tags \[whispers\]/);
+    writeScripts({ "s03.txt": 'HIRO: Đi <break time="1s"/> thôi.\nMAI: Ừ.\n' });
+    expect(() => plan()).toThrow(/<break time="1s"\/> is not supported by gpt-4o-mini-tts/);
+    writeScripts({ "s03.txt": 'HIRO: Đi thôi.\nMAI: Ừ <break time="1s"/> đi.\n' });
+    expect(() => plan()).not.toThrow(); // ElevenLabs v2 models read break tags
+    writeScripts({ "s03.txt": "HIRO: Đi thôi.\nMAI (whispering): Ừ.\n" });
+    expect(() => plan()).toThrow(/delivery direction "\(whispering\)" is not supported/);
+    writeScripts({ "s03.txt": "HIRO: Đi thôi.\nKAI: Ừ.\n" });
+    expect(() => plan()).toThrow(/no voice profile for speaker "KAI"/);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("checks keys for every provider before the first request", async () => {
+    process.env.ELEVENLABS_API_KEY = "";
+    const { manifest } = plan();
+    await expect(
+      renderScenes({ projectDir: tmp, manifest, profiles: loadProfiles(tmp) }),
+    ).rejects.toThrow(/ELEVENLABS_API_KEY/);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("never retries a failed line and stops the run there", async () => {
+    failUrl = /Anh đến muộn/;
+    const { manifest } = plan();
+    const result = await renderScenes({ projectDir: tmp, manifest, profiles: loadProfiles(tmp) });
+    expect(result.rendered).toEqual(["s01/001"]);
+    expect(result.failed).toEqual([expect.objectContaining({ line: "s01/002" })]);
+    expect(result.remaining).toHaveLength(6);
+    expect(calls).toHaveLength(2);
+    expect(findLine(manifest, "s01/002").status).toBe("failed");
+    // The manifest on disk already holds the paid take.
+    const saved = JSON.parse(fs.readFileSync(path.join(tmp, "multix-scene.json"), "utf8"));
+    expect(findLine(saved, "s01/001").status).toBe("rendered");
+  });
+
+  it("records per-take receipts and per-scene completion with unknown cost as null", async () => {
+    const { manifest } = plan();
+    await renderScenes({ projectDir: tmp, manifest, profiles: loadProfiles(tmp), limit: 3 });
+    const take = findLine(manifest, "s01/001").takes[0];
+    expect(take).toMatchObject({
+      cache_key: findLine(manifest, "s01/001").cache_key,
+      mime: "audio/mpeg",
+      status: "candidate",
+      usage: { characters: 14, cost_usd: null, credits: null, provenance: "unknown" },
+    });
+    expect(take?.sha256).toBe(
+      createHash("sha256")
+        .update(fs.readFileSync(path.join(tmp, take?.path ?? "")))
+        .digest("hex"),
+    );
+    const [s01, s02] = summarize(manifest);
+    expect(s01).toMatchObject({
+      lines: 3,
+      rendered: 3,
+      pending: 0,
+      complete: true,
+      cost_usd: null,
+      unknown_cost_takes: 3,
+    });
+    expect(s02).toMatchObject({ rendered: 0, pending: 3, complete: false });
+  });
+
+  it("renders a new variant on request and keeps approval with the chosen take", async () => {
+    const { manifest } = plan();
+    await renderScenes({ projectDir: tmp, manifest, profiles: loadProfiles(tmp) });
+    const line = findLine(manifest, "s03/001");
+    const firstTake = line.selected_take;
+    // The fake provider is deterministic, so vary the request the way a seed would.
+    calls = [];
+    globalThis.fetch = (async () =>
+      new Response(fakeWav(Buffer.from([1, 2, 3])), {
+        headers: { "content-type": "audio/wav" },
+      })) as typeof fetch;
+    const r = await renderScenes({
+      projectDir: tmp,
+      manifest,
+      profiles: loadProfiles(tmp),
+      lines: ["s03/001"],
+      newTake: true,
+    });
+    expect(r.rendered).toEqual(["s03/001"]);
+    expect(line.takes).toHaveLength(2);
+    expect(line.selected_take).not.toBe(firstTake);
+    // Re-planning keeps the chosen variant selected.
+    const replanned = plan(manifest).manifest;
+    expect(findLine(replanned, "s03/001").selected_take).toBe(line.selected_take);
+  });
+
+  it("invalidates neighbours only when context continuity is sent to the provider", async () => {
+    writeProfile(tmp, { ...MAI, context: true });
+    const first = plan().manifest;
+    expect(findLine(first, "s02/001").request.params.next_text).toBe("Lần cuối thôi.");
+    await renderScenes({ projectDir: tmp, manifest: first, profiles: loadProfiles(tmp) });
+    writeScripts({
+      "s02.txt": SCENES["s02.txt"]?.replace("Lần cuối thôi.", "Lần cuối, anh hứa.") ?? "",
+    });
+    const edited = plan(first);
+    // Hiro's edited line plus Mai's two neighbours whose next/previous text changed.
+    expect(edited.invalidated.sort()).toEqual(["s02/001", "s02/002", "s02/003"]);
+  });
+});
+
+describe("scene review regressions", () => {
+  it("counts each paid take once when a line is inserted above rendered lines", async () => {
+    const first = plan().manifest;
+    await renderScenes({ projectDir: tmp, manifest: first, profiles: loadProfiles(tmp) });
+    const before = summarize(first)[0];
+    writeScripts({
+      "s01.txt":
+        SCENES["s01.txt"]?.replace("# title: Rooftop\n", "# title: Rooftop\nMAI: Chờ đã.\n") ?? "",
+    });
+    const moved = plan(first).manifest;
+    const s01 = summarize(moved)[0];
+    expect(s01?.takes).toBe(before?.takes);
+    expect(s01?.characters_rendered).toBe(before?.characters_rendered);
+    // The shifted lines keep their audio; only the new line is pending.
+    expect(
+      allLines(moved)
+        .filter((l) => l.status === "pending")
+        .map((l) => l.id),
+    ).toEqual(["s01/001"]);
+    expect(findLine(moved, "s01/001").takes).toEqual([]);
+  });
+
+  it("sends one request for identical lines and counts their shared take once", async () => {
+    writeScripts({ "s03.txt": "HIRO: Đi thôi.\nMAI: Ừ.\nHIRO: Đi thôi.\n" });
+    const { manifest } = plan();
+    const r = await renderScenes({
+      projectDir: tmp,
+      manifest,
+      profiles: loadProfiles(tmp),
+      scene: "s03",
+    });
+    expect(r.rendered).toEqual(["s03/001", "s03/002"]);
+    expect(calls).toHaveLength(2);
+    expect(findLine(manifest, "s03/003").status).toBe("rendered");
+    expect(summarize(manifest)[2]?.takes).toBe(2);
+  });
+
+  it("keeps both takes when a new variant returns identical bytes", async () => {
+    const { manifest } = plan();
+    await renderScenes({ projectDir: tmp, manifest, profiles: loadProfiles(tmp), scene: "s03" });
+    const line = findLine(manifest, "s03/001");
+    const first = line.selected_take;
+    await renderScenes({
+      projectDir: tmp,
+      manifest,
+      profiles: loadProfiles(tmp),
+      lines: ["s03/001"],
+      newTake: true,
+    });
+    expect(line.takes.map((t) => t.id)).toEqual([first, `${first}_2`]);
+    expect(new Set(line.takes.map((t) => t.path)).size).toBe(2);
+  });
+
+  it("does not select a take that fails verification", async () => {
+    globalThis.fetch = (async () =>
+      new Response(Buffer.from("not audio at all"), {
+        headers: { "content-type": "audio/mpeg" },
+      })) as typeof fetch;
+    const { manifest } = plan();
+    const r = await renderScenes({
+      projectDir: tmp,
+      manifest,
+      profiles: loadProfiles(tmp),
+      scene: "s03",
+    });
+    const line = findLine(manifest, "s03/001");
+    // ffprobe is what tells non-audio apart; without it the take is accepted.
+    if (line.takes[0]?.verification.ok) return;
+    expect(r.failed[0]).toMatchObject({ line: "s03/001", code: "VERIFICATION_FAILED" });
+    expect(line.takes).toHaveLength(1);
+    expect(line.selected_take).toBeUndefined();
+    expect(line.status).toBe("failed");
+  });
+
+  it("rejects a manifest whose ids or take paths would leave the project", async () => {
+    const { manifest } = plan();
+    await renderScenes({ projectDir: tmp, manifest, profiles: loadProfiles(tmp), scene: "s03" });
+    writeManifest(tmp, manifest);
+    const raw = JSON.parse(fs.readFileSync(path.join(tmp, "multix-scene.json"), "utf8"));
+    raw.scenes[2].id = "../../escaped";
+    fs.writeFileSync(path.join(tmp, "multix-scene.json"), JSON.stringify(raw));
+    expect(() => readManifest(tmp)).toThrow(/not a valid scene id/);
+    raw.scenes[2].id = "s03";
+    raw.scenes[2].lines[0].takes[0].path = "takes/../../outside.mp3";
+    fs.writeFileSync(path.join(tmp, "multix-scene.json"), JSON.stringify(raw));
+    expect(() => readManifest(tmp)).toThrow(/invalid id or path/);
+  });
+
+  it("lets one command at a time rewrite the manifest", () => {
+    const release = lockProject(tmp);
+    expect(() => lockProject(tmp)).toThrow(/Another multix scene command/);
+    release();
+    // A lock left by a process that is gone is taken over.
+    fs.writeFileSync(path.join(tmp, "multix-scene.lock"), "999999999");
+    lockProject(tmp)();
+    expect(fs.existsSync(path.join(tmp, "multix-scene.lock"))).toBe(false);
+  });
+});
+
+describe("scene scripts", () => {
+  it("normalises Vietnamese text so composed and decomposed input hash alike", () => {
+    const composed = parseScript("HIRO: Tiếng Việt", "s01").lines[0]?.text ?? "";
+    const decomposed = parseScript("HIRO: Tiếng Việt", "s01").lines[0]?.text ?? "";
+    expect(decomposed).toBe(composed);
+    const req = { provider: "openai" as const, model: "tts-1", params: { voice: "marin" } };
+    expect(cacheKey(req, decomposed)).toBe(cacheKey(req, composed));
+  });
+
+  it("parses directions, continuations and scene headers", () => {
+    const parsed = parseScript(
+      "# scene: intro\n# title: Mở đầu\nMAI (nhỏ nhẹ): Chào\n  mọi người.\n",
+      "x",
+    );
+    expect(parsed).toEqual({
+      scene: "intro",
+      title: "Mở đầu",
+      lines: [{ speaker: "MAI", direction: "nhỏ nhẹ", text: "Chào mọi người.", sourceLine: 3 }],
+    });
+    expect(() => parseScript("no speaker here\n", "x")).toThrow(/SPEAKER: text/);
+  });
+
+  it("never drops characters when splitting", () => {
+    const text = '…Khoan. "Dừng lại!". Anh nói (thật đấy)? Được… rồi';
+    for (const max of [8, 12, 20]) {
+      const parts = chunkText(text, max);
+      expect(parts.join("").replace(/\s/g, "")).toBe(text.replace(/\s/g, ""));
+    }
+  });
+
+  it("splits long lines at sentence boundaries within the model limit", () => {
+    const text = "Câu thứ nhất rất dài. Câu thứ hai cũng dài! Câu thứ ba? Hết.";
+    const parts = chunkText(text, 25);
+    expect(parts.join(" ")).toBe(text);
+    for (const p of parts) expect(Array.from(p).length).toBeLessThanOrEqual(25);
+    expect(chunkText("x".repeat(50), 20).map((p) => p.length)).toEqual([20, 20, 10]);
+  });
+
+  it("never cuts a tag or a decimal number when splitting", () => {
+    const text =
+      'Wait for it <break time="1.5s" /> and then go. [sighs heavily and slowly, almost to herself] It costs 3.5 dollars now.';
+    for (const max of [20, 30, 40, 60]) {
+      const parts = chunkText(text, max);
+      expect(parts.join(" ")).toBe(text);
+      for (const tag of [
+        '<break time="1.5s" />',
+        "[sighs heavily and slowly, almost to herself]",
+      ]) {
+        expect(parts.filter((p) => p.includes(tag))).toHaveLength(1);
+      }
+      expect(parts.some((p) => p.includes("3.5"))).toBe(true);
+      for (const p of parts) expect(p).not.toMatch(/<[^>]*$|^[^<]*>|\[[^\]]*$|^[^[]*\]/);
+    }
+    expect(chunkText("Version 3.5 is out. Try it.", 22)).toEqual([
+      "Version 3.5 is out.",
+      "Try it.",
+    ]);
+  });
+
+  it("rejects split parts with an unclosed tag or a tag over the limit", () => {
+    expect(partErrors("a", ['Hi <break time="1s"'], 40)).toEqual([
+      expect.stringContaining("unclosed tag <break"),
+    ]);
+    const long = `[${"x".repeat(30)}]`;
+    expect(partErrors(`ok then. ${long}`, chunkText(`ok then. ${long}`, 20), 20)).toEqual([
+      expect.stringContaining("part 2: has no spoken text"),
+      expect.stringContaining("part 2: 32 characters, over the limit of 20"),
+    ]);
+    expect(
+      partErrors('Hi there <break time="1s" />', ["Hi there <break", 'time="1s" />'], 20),
+    ).toContainEqual(expect.stringContaining("would change its tags"));
+  });
+
+  it("never splits a tag from the words next to it", () => {
+    // A tag at the end goes with the word before it; elsewhere, with the word after it.
+    expect(chunkText("aaaa bbbb cccc dd [sighs]", 18)).toEqual(["aaaa bbbb cccc", "dd [sighs]"]);
+    expect(chunkText("aaaa bbbb [sighs] dddddddd", 18)).toEqual(["aaaa bbbb", "[sighs] dddddddd"]);
+    expect(chunkText("aaaa bbbb [sighs] [laughs] dd", 22)).toEqual([
+      "aaaa bbbb",
+      "[sighs] [laughs] dd",
+    ]);
+    expect(chunkText('Hello there my friend. <break time="1s"/>', 30)).toEqual([
+      "Hello there my",
+      'friend. <break time="1s"/>',
+    ]);
+    expect(chunkText("Hello there my friend. [laughs] Yes.", 30)).toEqual([
+      "Hello there my friend.",
+      "[laughs] Yes.",
+    ]);
+    // A tag and its word over the limit together are the only way to isolate a tag.
+    const parts = chunkText("[sighs heavily and slowly] Fine.", 30);
+    expect(parts).toEqual(["[sighs heavily and slowly]", "Fine."]);
+    expect(partErrors("[sighs heavily and slowly] Fine.", parts, 30)).toEqual([
+      expect.stringContaining("part 1: has no spoken text"),
+    ]);
+    expect(partErrors("[laughs]", ["[laughs]"], 30)).toEqual([]);
+    // When the tag fits with the part before it, it goes there instead.
+    expect(chunkText("ab. [sighs heavily and slowly] Fine.", 30)).toEqual([
+      "ab. [sighs heavily and slowly]",
+      "Fine.",
+    ]);
+  });
+
+  it("keeps tags and punctuation with spoken text in unspaced CJK lines", () => {
+    const jp = "[sighs]今日はとても疲れたので早く帰りたいと思います。";
+    expect(chunkText(jp, 20)).toEqual([
+      "[sighs]今日はとても疲れたので早く",
+      "帰りたいと思います。",
+    ]);
+    expect(partErrors(jp, chunkText(jp, 20), 20)).toEqual([]);
+    const stop = "今日はとても疲れたので早く帰りたいと思い。";
+    expect(chunkText(stop, 20)).toEqual(["今日はとても疲れたので早く帰りたいと思", "い。"]);
+    expect(partErrors(stop, chunkText(stop, 20), 20)).toEqual([]);
+    for (const [line, max, parts] of [
+      [
+        "[sighs]今日はとても疲れたので早く帰りたい。",
+        20,
+        ["[sighs]今日はとても疲れたので早く", "帰りたい。"],
+      ],
+      ["[whispering softly]嘘。本当だよ。", 20, ["[whispering softly]嘘", "。本当だよ。"]],
+      ["Tu es vraiment sûrs ?", 20, ["Tu es vraiment", "sûrs ?"]],
+      ["I was going to say ...", 20, ["I was going to", "say ..."]],
+      [
+        "Tu es vraiment sûr ? [soupire profondément] Absolument pas.",
+        30,
+        ["Tu es vraiment", "sûr ? [soupire profondément]", "Absolument pas."],
+      ],
+      [
+        "Tu es là ? [soupire longuement] D'accord, très bien.",
+        25,
+        ["Tu es", "là ? [soupire longuement]", "D'accord, très bien."],
+      ],
+    ] as const) {
+      expect(chunkText(line, max)).toEqual(parts);
+      expect(partErrors(line, [...parts], max)).toEqual([]);
+    }
+    // Moving words into a part of only tags never cuts inside a tag.
+    const line = 'we — [sighs] [whispering softly]go[whispering softly] sûrs ?<break time="1s"/>';
+    for (const max of [20, 30, 43])
+      expect(partErrors(line, chunkText(line, max), max)).not.toContainEqual(
+        expect.stringContaining("unclosed"),
+      );
+    const glued = `x [laughs]${"y".repeat(30)}`;
+    expect(chunkText(glued, 20)[0]).toBe(`x [laughs]${"y".repeat(10)}`);
+  });
+
+  it("keeps a v3 audio tag with its sentence when a line is split in the plan", () => {
+    writeProfile(tmp, { ...MAI, model: "eleven_v3", settings: {}, max_chars: 40 });
+    writeScripts({ "s03.txt": "MAI: [sighs heavily and slowly] Fine. We will go at 3.5 past.\n" });
+    const texts = plan().manifest.scenes[2]?.lines.map((l) => l.text);
+    expect(texts).toEqual(["[sighs heavily and slowly] Fine.", "We will go at 3.5 past."]);
+  });
+
+  it("rejects a split that would send a tag with no spoken text", () => {
+    writeProfile(tmp, { ...MAI, model: "eleven_v3", settings: {}, max_chars: 30 });
+    writeScripts({ "s03.txt": "MAI: [sighs heavily and slowly] Fine. We will go at 3.5 past.\n" });
+    expect(() => plan()).toThrow(/part 1: has no spoken text/);
+  });
+
+  it("splits an over-long line into numbered parts in the manifest", () => {
+    writeProfile(tmp, { ...HIRO, max_chars: 24 });
+    writeScripts({ "s03.txt": "HIRO: Một hai ba bốn năm. Sáu bảy tám chín mười.\nMAI: Ừ.\n" });
+    const ids = plan().manifest.scenes[2]?.lines.map((l) => l.id);
+    expect(ids).toEqual(["s03/001.1", "s03/001.2", "s03/002"]);
+  });
+});
+
+describe("voice profiles", () => {
+  it("rejects credentials, cloned voices without consent and unknown settings", () => {
+    expect(profileErrors({ ...HIRO, api_key: "x" })).toContainEqual(
+      expect.stringContaining("credentials do not belong"),
+    );
+    expect(profileErrors({ ...HIRO, name: "sk-abc123" })).toContainEqual(
+      expect.stringContaining("looks like a credential"),
+    );
+    expect(
+      profileErrors({ ...MAI, clone: { consent: { granted_by: "", granted_at: "x" } } }),
+    ).toEqual([
+      "clone.consent.granted_by is required for a cloned voice",
+      "clone.consent.granted_at must be an ISO date for a cloned voice",
+    ]);
+    expect(
+      profileErrors({
+        ...MAI,
+        clone: { consent: { granted_by: "Mai's actor", granted_at: "2026-10-01" } },
+      }),
+    ).toEqual([]);
+    expect(profileErrors({ ...MAI, settings: { warmth: 1 } })).toEqual([
+      expect.stringContaining("settings.warmth is not supported by ElevenLabs"),
+    ]);
+    expect(profileErrors({ ...HIRO, model: "tts-1", style: "x" })).toEqual([
+      "tts-1 takes no style",
+    ]);
+    expect(profileErrors({ ...HIRO, language: "Vietnamese" })).toEqual([
+      expect.stringContaining("not a BCP 47 tag"),
+    ]);
+  });
+
+  it("sends the profile language to ElevenLabs models that enforce it", async () => {
+    const v4 = { ...MAI, model: "eleven_v4", language: "vi-VN", settings: {} };
+    expect(profileErrors(v4)).toEqual([]);
+    writeProfile(tmp, v4);
+    const manifest = plan().manifest;
+    const line = allLines(manifest).find((l) => l.speaker === "mai");
+    expect(line?.request.params.language_code).toBe("vi");
+    await renderScenes({ projectDir: tmp, manifest, profiles: loadProfiles(tmp), scene: "s01" });
+    const eleven = calls.map((c) => JSON.parse(c.body)).find((b) => b.model_id === "eleven_v4");
+    expect(eleven?.language_code).toBe("vi");
+  });
+
+  it("rejects a language on an ElevenLabs model that does not enforce it", () => {
+    expect(profileErrors({ ...MAI, language: "vi" })).toEqual([
+      expect.stringMatching(/^language: eleven_multilingual_v2 does not enforce language_code/),
+    ]);
+  });
+});

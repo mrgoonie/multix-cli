@@ -4,6 +4,8 @@
  */
 
 import fs from "node:fs";
+import http from "node:http";
+import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -79,6 +81,40 @@ describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     expect(out.next[0]).toBe("multix fal image 'a cat' --json");
   });
 
+  it("dry run of openrouter transcribe shows the multipart upload or the URL body", async () => {
+    fs.writeFileSync(path.join(tmp, "talk.mp3"), new Uint8Array(2000));
+    const keyEnv = { OPENROUTER_API_KEY: "sk-or-not-real", HTTPS_PROXY: "http://127.0.0.1:9" };
+    const file = await run(
+      ["openrouter", "transcribe", "--input", "talk.mp3", "--dry-run", "--json"],
+      keyEnv,
+    );
+    expect(file.exitCode).toBe(0);
+    const upload = envelope(file.stdout);
+    expect(upload).toMatchObject({ ok: true, dry_run: true, outputs: [] });
+    expect(upload.request).toMatchObject({
+      method: "POST",
+      url: "https://openrouter.ai/api/v1/audio/transcriptions",
+      body: { file: "<file 2000 bytes>", model: "openai/whisper-large-v3-turbo" },
+    });
+    const url = await run(
+      [
+        "openrouter",
+        "transcribe",
+        "--input",
+        "https://cdn.example.com/talk.m4a",
+        "--dry-run",
+        "--json",
+      ],
+      keyEnv,
+    );
+    expect(url.exitCode).toBe(0);
+    expect(envelope(url.stdout).request.body.input_audio).toEqual({
+      url: "https://cdn.example.com/talk.m4a",
+      format: "m4a",
+    });
+    expect(file.stdout + url.stdout).not.toContain("sk-or-not-real");
+  });
+
   it("dry run never prints a URL query value from the request body", async () => {
     const image = "https://cdn.example.com/x/a.png?sig=SECRETSIG";
     const result = await run(
@@ -93,6 +129,35 @@ describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     expect(envelope(result.stdout).request.body.image_url).toBe(
       "https://cdn.example.com/x/a.png?[redacted]",
     );
+  });
+
+  it("redacts a signed URL a provider echoes in its error from the envelope and ledger", async () => {
+    const server = http.createServer((_req, res) => {
+      res.writeHead(400, { "content-type": "application/json" });
+      res.end(
+        JSON.stringify({
+          detail: "Failed to download https://cdn.example.com/a.png?X-Amz-Signature=SECRETSIG",
+        }),
+      );
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const { port } = server.address() as AddressInfo;
+    try {
+      const result = await run(["fal", "image", "a cat", "--json"], {
+        FAL_KEY: "test-key-not-real",
+        FAL_BASE_URL: `http://127.0.0.1:${port}`,
+      });
+      expect(result.exitCode).toBe(5);
+      expect(result.stdout + result.stderr).not.toContain("SECRETSIG");
+      const out = envelope(result.stdout);
+      expect(out.error).toMatchObject({ code: "PROVIDER_REJECTED", http_status: 400 });
+      expect(out.error.message).toContain("https://cdn.example.com/a.png?[redacted]");
+      const ledger = fs.readFileSync(path.join(tmp, "h.jsonl"), "utf8");
+      expect(ledger).toContain("[redacted]");
+      expect(ledger).not.toContain("SECRETSIG");
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
   });
 
   it("records runs in the ledger and shows them with history", async () => {
