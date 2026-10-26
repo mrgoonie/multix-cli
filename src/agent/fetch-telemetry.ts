@@ -31,7 +31,7 @@ export function safeUrl(url: string): string {
 }
 
 /** Query strings of http(s) URLs anywhere in a string (pre-signed URLs carry credentials). */
-const URL_QUERY = /(https?:\/\/[^\s?#"'<>]*)\?[^\s#"'<>]*/gi;
+const URL_QUERY = /(https?:\/\/[^\s?#]*)\?[^\s#]*/gi;
 
 function shorten(value: unknown, depth = 0): unknown {
   if (typeof value === "string") {

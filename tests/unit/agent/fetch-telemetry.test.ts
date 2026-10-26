@@ -96,6 +96,20 @@ describe("dry-run request body", () => {
     });
   });
 
+  it("redacts the whole query even when the URL holds quote characters", async () => {
+    const request = await dryRunBody(
+      JSON.stringify({
+        a: "https://cdn.example.com/it's.png?sig=QUOTESECRET",
+        b: "https://a.example/x?name=it's&sig=QUOTESECRET2",
+      }),
+    );
+    expect(JSON.stringify(request)).not.toContain("QUOTESECRET");
+    expect(request.body).toEqual({
+      a: "https://cdn.example.com/it's.png?[redacted]",
+      b: "https://a.example/x?[redacted]",
+    });
+  });
+
   it("redacts URL query strings in form fields", async () => {
     const form = new FormData();
     form.append("image_url", "https://cdn.example.com/a.png?sig=FORMSECRET");
