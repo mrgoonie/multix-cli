@@ -13,6 +13,8 @@ export const GUIDE_TEXT = `multix agent protocol
 1. Discover: multix models --task <task> --ready   (tasks: image, image-edit, video, image-to-video,
    video-edit, speech, transcription, music, sfx, voice, 3d, analysis, document, avatar-video, any)
    Flags of one command: multix <group> <command> --help
+   One model's inputs/voices/formats: multix models --model <id>   (verified models only)
+   What provider catalogs list now: multix models --task <task> --live   (unverified unless marked)
 2. Validate for free: add --dry-run. Local checks run; the first provider request is shown, not sent.
    Price first: --estimate (range, units, rate source; nothing sent). --max-cost <usd> refuses to run
    unless the ceiling is proven under it (--cost-policy estimate accepts an estimated ceiling).

@@ -6,7 +6,7 @@
 
 import type { Limits } from "../config.js";
 import { json } from "../http-responses.js";
-import { catalogPayload } from "../jobs/catalog-view.js";
+import { MODEL_ID_RE, catalogPayload } from "../jobs/catalog-view.js";
 import { type JobStatus, isTerminal } from "../jobs/job-protocol.js";
 import { DEFAULT_WAIT_SECONDS, JobRunner, MAX_WAIT_SECONDS } from "../jobs/job-runner.js";
 import type { JobToolsContext } from "../jobs/job-runner.js";
@@ -21,7 +21,12 @@ export function getCatalog(keys: ProviderKeys, url: URL): Response {
   if (group !== undefined && !GROUP_RE.test(group)) {
     throw new ApiError(400, "bad_request", "group must be a command group such as gemini");
   }
-  return json(200, catalogPayload(keys, group));
+  const task = url.searchParams.get("task") ?? undefined;
+  const model = url.searchParams.get("model") ?? undefined;
+  if (model !== undefined && !MODEL_ID_RE.test(model)) {
+    throw new ApiError(400, "bad_request", "model must be a provider model id");
+  }
+  return json(200, catalogPayload(keys, group, { task, model }));
 }
 
 function requireJobs(jobs: JobToolsContext | undefined): JobToolsContext {

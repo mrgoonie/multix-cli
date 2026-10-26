@@ -11997,11 +11997,11 @@
     },
     {
       "group": "models",
-      "description": "Find the command and model for a task: default models, key readiness, async support (agents: start here)",
+      "description": "Find the command and model for a task: default models, verified models, key readiness, async support (agents: start here)",
       "commands": [
         {
           "command": "models",
-          "description": "Find the command and model for a task: default models, key readiness, async support (agents: start here)",
+          "description": "Find the command and model for a task: default models, verified models, key readiness, async support (agents: start here)",
           "positionals": [],
           "options": [
             {
@@ -12030,6 +12030,36 @@
               "long": "--ready",
               "flags": "--ready",
               "description": "Only providers whose API key is set",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--model",
+              "flags": "--model <id>",
+              "description": "Inspect one model: inputs, voices, formats, how to run it",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--live",
+              "flags": "--live",
+              "description": "Also list models the provider catalogs serve for --task now (fal, openrouter; cached)",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--refresh",
+              "flags": "--refresh",
+              "description": "With --live: refetch the catalogs instead of using the cache",
               "required": false,
               "takesValue": false,
               "valueOptional": false,

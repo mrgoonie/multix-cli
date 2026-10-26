@@ -9,8 +9,9 @@
 
 import path from "node:path";
 import type { Command } from "commander";
+import { checkModelInput, findModelCapability } from "../../../capabilities/model-registry.js";
 import { ValidationError } from "../../../core/errors.js";
-import { createLogger } from "../../../core/logger.js";
+import { type Logger, createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import { createFalClient, requireFalKey } from "../client.js";
 import { applyFileFlags, parseFileFlags } from "../local-files.js";
@@ -36,6 +37,27 @@ interface RunFlags {
 }
 
 const collect = (value: string, previous: string[]) => [...previous, value];
+
+/**
+ * For a model in the verified registry, warn about input fields its schema
+ * does not have, missing required ones and values outside its listed choices.
+ * Warnings only: fal itself validates, and its schema may have grown since.
+ */
+function warnOnModelInput(model: string, input: Record<string, unknown>, logger: Logger): void {
+  const cap = findModelCapability(model, "fal");
+  if (!cap) return;
+  const check = checkModelInput(cap, input);
+  const inspect = `see multix models --model ${model}`;
+  if (check.unsupported.length) {
+    logger.warn(`${model} does not take: ${check.unsupported.join(", ")} (${inspect})`);
+  }
+  if (check.missing.length) logger.warn(`${model} needs: ${check.missing.join(", ")} (${inspect})`);
+  for (const bad of check.invalid) {
+    logger.warn(
+      `${model} ${bad.field}=${JSON.stringify(bad.value)} is not one of its listed values (${inspect})`,
+    );
+  }
+}
 
 export function registerFalRunCommand(parent: Command): void {
   parent
@@ -70,6 +92,7 @@ export function registerFalRunCommand(parent: Command): void {
       const fileFlags = parseFileFlags(opts.file);
       const client = createFalClient();
       await applyFileFlags(input, fileFlags, requireFalKey(), logger);
+      warnOnModelInput(model, input, logger);
 
       logger.info(`Submitting to ${model}...`);
       let receipt: FalReceipt | undefined;

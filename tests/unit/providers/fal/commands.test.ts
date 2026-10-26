@@ -267,6 +267,34 @@ describe("fal run --file --detach", () => {
   });
 });
 
+describe("fal run input checks for verified models", () => {
+  const TTS = "elevenlabs/tts/eleven-v4";
+  const ttsSubmit = {
+    [`POST https://queue.fal.run/${TTS}`]: [
+      { json: { request_id: REQUEST_ID, status: "IN_QUEUE", ...queueUrls(TTS) } },
+    ],
+  };
+
+  it("warns about unsupported, missing and unlisted fields but still submits", async () => {
+    const fake = stub(ttsSubmit);
+    await cli("run", TTS, "--input", '{"prompt":"hi","output_format":"wav"}', "--detach");
+    const warnings = stderr.join("\n");
+    expect(warnings).toContain(`${TTS} does not take: prompt`);
+    expect(warnings).toContain(`${TTS} needs: text`);
+    expect(warnings).toContain('output_format="wav" is not one of its listed values');
+    expect(warnings).toContain(`multix models --model ${TTS}`);
+    expect(fake.calls).toHaveLength(1);
+  });
+
+  it("stays quiet for valid input and for models it has not verified", async () => {
+    stub(ttsSubmit);
+    await cli("run", TTS, "--input", '{"text":"hi","voice":"Rachel"}', "--detach");
+    stub(submitRoute);
+    await cli("run", MODEL, "--input", '{"anything":1}', "--detach");
+    expect(stderr.join("\n")).not.toContain("multix models --model");
+  });
+});
+
 describe("resume after the submitting process is gone", () => {
   it("status and result --download only read; nothing is submitted again", async () => {
     stub({ ...submitRoute });

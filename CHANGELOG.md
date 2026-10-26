@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.20.0](https://github.com/mrgoonie/multix-cli/compare/v1.19.0...v1.20.0) (2026-10-26)
+
+
+### Added
+
+* **models:** truthful, task-aware capability registry for CLI and MCP agents ([#317](https://github.com/mrgoonie/multix-cli/issues/317)) ([635f2e6](https://github.com/mrgoonie/multix-cli/commit/635f2e69ba1aacfbfd5f8f94f2e93447d263864a)), closes [#293](https://github.com/mrgoonie/multix-cli/issues/293)
+
 ## [1.19.0](https://github.com/mrgoonie/multix-cli/compare/v1.18.2...v1.19.0) (2026-10-26)
 
 

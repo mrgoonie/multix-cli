@@ -25,8 +25,10 @@ chỉ được đặt những biến mà chính `multix` đọc:
 - các thiết lập `MULTIX_*` có trong tài liệu: `MULTIX_OUTPUT_DIR` (nên project
   có thể chọn nơi ghi file được tạo), `MULTIX_IMAGE_FORMAT`,
   `MULTIX_MAX_DOWNLOAD_MB`, `MULTIX_UPLOAD_MIN_KBPS`, `MULTIX_OUTPUT` (`json`
-  cho envelope dành cho agent), `MULTIX_HISTORY` (`0` tắt ledger lịch sử chạy) và
-  `MULTIX_DISABLE_HOME_ENV` (không có tác dụng ở đó), cùng `NO_COLOR`.
+  cho envelope dành cho agent), `MULTIX_HISTORY` (`0` tắt ledger lịch sử chạy),
+  `MULTIX_MODELS_TTL` (số giây cache catalog của `multix models --live` còn
+  mới; mặc định `86400`, tối đa `604800`) và `MULTIX_DISABLE_HOME_ENV` (không
+  có tác dụng ở đó), cùng `NO_COLOR`.
 
 Hai biến opt-in `MULTIX_ALLOW_PROJECT_BASE_URL` và `MULTIX_LEGACY_CLAUDE_ENV`,
 cùng `MULTIX_HISTORY_FILE` (nơi ghi ledger lịch sử chạy), bị từ chối: repository
@@ -40,6 +42,11 @@ chỉ được tính một lần; mặc định là `<provider>:<job id>` hoặc
 `run:<history id>`. Biến này dành cho từng lần chạy, nên hãy đặt trong shell cho
 lần chạy đó: một id cố định trong file của project sẽ gộp chi tiêu của mọi lần
 chạy vào một thao tác.
+
+`MULTIX_CACHE_DIR` (thư mục cache catalog của `multix models --live`, mặc định
+`~/.multix/cache`) cũng bị từ chối: repository không được chọn, hay gieo sẵn,
+cache catalog mà `multix models` dựa vào để báo cáo. Hãy đặt biến này trong
+shell hoặc `~/.multix/.env`.
 
 [`.env.example`](https://github.com/mrgoonie/multix-cli/blob/main/.env.example)
 liệt kê các biến này, cùng hai biến opt-in. Mọi tên khác, ví dụ `NODE_OPTIONS`, `npm_config_registry`,
