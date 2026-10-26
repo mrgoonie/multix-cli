@@ -76,7 +76,7 @@ describe("extractUsage", () => {
       { credits_remaining: 50 },
       { available_credits: 50 },
       { billing: { balance: { usd: 12 } } },
-      { data: { total_credits: 10, total_usage: 4 } },
+      { subscription: { credits: 300 } },
     ]) {
       const usage = extractUsage(body);
       expect(usage.credits).toBeUndefined();
@@ -91,6 +91,11 @@ describe("extractUsage", () => {
     });
     expect(usage.credits).toBe(8);
     expect(usage.metrics.remainingCredits).toBe(992);
+  });
+
+  it("matches balance parents by whole segment, not substring", () => {
+    expect(extractUsage({ subscription_job: { credits: 4 } }).credits).toBe(4);
+    expect(extractUsage({ job: { apiCreditCost: 3 } }).credits).toBe(3);
   });
 
   it("reads usage headers and request ids", () => {

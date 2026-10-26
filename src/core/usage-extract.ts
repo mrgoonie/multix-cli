@@ -31,12 +31,20 @@ const METRIC_KEY =
 const SKIP_KEY =
   /(_at$|stamp|date|created|updated|expire|limit|max_|min_|width|height|seed|fps|index|count_?max)/i;
 /**
- * Key paths that name what an account holds, not what a request spent: Leonardo
- * /me user_details[].apiCredit, HeyGen /v3/users/me wallet.remaining_balance and
- * usage_based.remaining_credits / included_credits, generic balance fields.
+ * Keys that name what an account holds, not what a request spent: Leonardo /me
+ * user_details[].apiCredit, HeyGen /v3/users/me usage_based.remaining_credits /
+ * included_credits, generic balance fields. Leaves match by name; the parents
+ * match whole segments so a spend leaf under e.g. subscription_job still counts.
  */
-const BALANCE_PATH =
-  /(balance|remaining|available|allowance|included|quota|wallet|subscription|user_details|granted|purchased|total_credits|(^|\.)api_?credits?$)/i;
+const BALANCE_LEAF =
+  /(balance|remaining|available|allowance|included|quota|granted|purchased|^api_?credits?$)/i;
+const BALANCE_PARENT = /^(wallet|subscription|user_details|balances?)$/i;
+
+function isBalancePath(path: string): boolean {
+  const segments = path.split(".").map((segment) => segment.replace(/\[\d+\]$/, ""));
+  const leaf = segments.pop() ?? "";
+  return BALANCE_LEAF.test(leaf) || segments.some((segment) => BALANCE_PARENT.test(segment));
+}
 const ID_KEYS = new Set([
   "id",
   "request_id",
@@ -146,8 +154,8 @@ export function extractUsage(body: unknown, headers?: Headers | null): ResponseU
   }
   for (const [path, value] of Object.entries(out.metrics)) {
     const leaf = path.split(".").pop() ?? path;
-    // Balances stay in metrics but are never reported as cost or credits spent.
-    if (BALANCE_PATH.test(path)) continue;
+    // Balances are never reported as cost or credits spent.
+    if (isBalancePath(path)) continue;
     if (
       out.cost_usd === undefined &&
       /^(cost|total_cost|cost_usd|usd)$/i.test(leaf) &&
