@@ -35,7 +35,7 @@ export interface FalSpeechModel {
   latency: "standard" | "low";
 }
 
-const GEMINI_VOICES = [
+export const GEMINI_VOICES = [
   "Achernar",
   "Achird",
   "Algenib",
@@ -68,7 +68,7 @@ const GEMINI_VOICES = [
   "Zubenelgenubi",
 ] as const;
 
-const ELEVENLABS_FORMATS = [
+export const ELEVENLABS_FORMATS = [
   "mp3_22050_32",
   "mp3_44100_32",
   "mp3_44100_64",
