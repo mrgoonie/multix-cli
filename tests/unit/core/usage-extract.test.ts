@@ -40,6 +40,59 @@ describe("extractUsage", () => {
     expect(usage.ids).toEqual(["t-1"]);
   });
 
+  it("keeps an account balance in metrics but never reports it as credits spent", () => {
+    // Leonardo GET /me: apiCredit is the remaining API credit balance.
+    const leonardo = extractUsage({
+      user_details: [{ user: { id: "u1" }, apiCredit: 1000, subscriptionTokens: 500 }],
+    });
+    expect(leonardo.metrics["user_details[0].apiCredit"]).toBe(1000);
+    expect(leonardo.credits).toBeUndefined();
+    expect(leonardo.cost_usd).toBeUndefined();
+
+    // HeyGen GET /v3/users/me: wallet, subscription and usage-based allowances.
+    const heygen = extractUsage({
+      data: {
+        billing_type: "usage_based",
+        wallet: { currency: "usd", remaining_balance: 42.5 },
+        subscription: {
+          plan: "pro",
+          credits: { premium_credits: { remaining: 300 }, add_on_credits: { remaining: 20 } },
+        },
+        usage_based: {
+          spending_current_usd: 3,
+          included_credits: 100,
+          remaining_credits: 97,
+        },
+      },
+    });
+    expect(heygen.metrics).toMatchObject({
+      "data.usage_based.included_credits": 100,
+      "data.usage_based.remaining_credits": 97,
+    });
+    expect(heygen.credits).toBeUndefined();
+    expect(heygen.cost_usd).toBeUndefined();
+
+    for (const body of [
+      { credits_remaining: 50 },
+      { available_credits: 50 },
+      { billing: { balance: { usd: 12 } } },
+      { data: { total_credits: 10, total_usage: 4 } },
+    ]) {
+      const usage = extractUsage(body);
+      expect(usage.credits).toBeUndefined();
+      expect(usage.cost_usd).toBeUndefined();
+    }
+  });
+
+  it("still reports credits spent next to a balance in the same response", () => {
+    const usage = extractUsage({
+      remainingCredits: 992,
+      sdGenerationJob: { generationId: "g-1", apiCreditCost: 8 },
+    });
+    expect(usage.credits).toBe(8);
+    expect(usage.metrics.remainingCredits).toBe(992);
+  });
+
   it("reads usage headers and request ids", () => {
     const headers = new Headers({ "x-request-id": "req_abc", "character-cost": "42" });
     const usage = extractUsage(undefined, headers);

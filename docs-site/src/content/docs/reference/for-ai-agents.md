@@ -68,7 +68,7 @@ https://multix.zuey.me/llms.txt
 | `warnings[]` | Problems found in the outputs, such as an empty file or content that does not match its extension. |
 | `data` / `text` | The command's stdout: parsed JSON, or text capped at 32 KB. |
 | `error` | `code`, `message`, `retryable`, `retry_after_s`, `hint`, `http_status`, `env` (the key name when one is missing). |
-| `usage` | What the provider reported: `tokens` (`input`, `output`, `total`, `thinking`), `cost_usd`, `credits`, and other numeric `metrics` by key path. Nothing is estimated. |
+| `usage` | What the provider reported: `tokens` (`input`, `output`, `total`, `thinking`), `cost_usd`, `credits`, and other numeric `metrics` by key path. Nothing is estimated. `cost_usd` and `credits` are what the run spent: an account balance (Leonardo `apiCredit` from `leonardo me`, HeyGen wallet or remaining credits from `heygen me`) stays in `metrics`. |
 | `http` | Provider request count, failed requests and total time. |
 | `provider_ids` | Request, job or prediction ids the provider returned. |
 | `request` | With `--dry-run`: the request that would have been sent. |

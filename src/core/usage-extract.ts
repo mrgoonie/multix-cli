@@ -30,6 +30,13 @@ const METRIC_KEY =
   /(token|cost|credit|price|usage|billing|duration|seconds|_time$|^time$|time_ms|latency|characters?_?(count|cost)|units?$|predict|inference)/i;
 const SKIP_KEY =
   /(_at$|stamp|date|created|updated|expire|limit|max_|min_|width|height|seed|fps|index|count_?max)/i;
+/**
+ * Key paths that name what an account holds, not what a request spent: Leonardo
+ * /me user_details[].apiCredit, HeyGen /v3/users/me wallet.remaining_balance and
+ * usage_based.remaining_credits / included_credits, generic balance fields.
+ */
+const BALANCE_PATH =
+  /(balance|remaining|available|allowance|included|quota|wallet|subscription|user_details|granted|purchased|total_credits|(^|\.)api_?credits?$)/i;
 const ID_KEYS = new Set([
   "id",
   "request_id",
@@ -139,6 +146,8 @@ export function extractUsage(body: unknown, headers?: Headers | null): ResponseU
   }
   for (const [path, value] of Object.entries(out.metrics)) {
     const leaf = path.split(".").pop() ?? path;
+    // Balances stay in metrics but are never reported as cost or credits spent.
+    if (BALANCE_PATH.test(path)) continue;
     if (
       out.cost_usd === undefined &&
       /^(cost|total_cost|cost_usd|usd)$/i.test(leaf) &&
