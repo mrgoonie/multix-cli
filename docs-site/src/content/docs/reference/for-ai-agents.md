@@ -40,8 +40,9 @@ https://multix.zuey.me/llms.txt
    `missing` for a verified model the catalog no longer lists (removed or
    renamed). Catalogs are cached for a day in `~/.multix/cache/models`
    (`--refresh` refetches; `MULTIX_CACHE_DIR` and `MULTIX_MODELS_TTL` override
-   the directory and TTL in seconds, up to 7 days). Offline, a stale copy is used; with no
-   copy the catalog is `unavailable` and nothing is claimed available.
+   the directory and TTL in seconds, up to 7 days). Offline, a stale copy up to 7 days
+   old is used; with no such copy the catalog is `unavailable` and nothing is
+   claimed available.
 2. **Validate for free.** Add `--dry-run` to any command: local checks run
    (flags, input files, keys), then the first provider request is shown
    (method, URL without query string, body with long values shortened, header

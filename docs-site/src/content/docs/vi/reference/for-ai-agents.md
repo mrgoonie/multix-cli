@@ -41,8 +41,8 @@ https://multix.zuey.me/llms.txt
    (đã bị gỡ hoặc đổi tên). Catalog được cache một ngày trong
    `~/.multix/cache/models` (`--refresh` để tải lại; `MULTIX_CACHE_DIR` và
    `MULTIX_MODELS_TTL` đổi thư mục và TTL tính bằng giây, tối đa 7 ngày). Khi offline, bản
-   cache cũ được dùng; không có bản nào thì catalog là `unavailable` và không
-   model nào được coi là có sẵn.
+   cache cũ (tối đa 7 ngày) được dùng; không có bản nào như vậy thì catalog là
+   `unavailable` và không model nào được coi là có sẵn.
 2. **Kiểm tra miễn phí.** Thêm `--dry-run` vào bất kỳ lệnh nào: các bước kiểm
    tra cục bộ vẫn chạy (flag, file đầu vào, key), rồi request đầu tiên tới
    provider được in ra (method, URL không có query string, body với giá trị dài

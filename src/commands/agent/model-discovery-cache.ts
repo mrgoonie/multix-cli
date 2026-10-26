@@ -1,8 +1,9 @@
 /**
  * Provider catalog reads for `multix models --live`, cached on disk with a
  * TTL so agents do not refetch on every call. A failed read falls back to the
- * last cached copy (state "stale"); with no copy the catalog is "unavailable"
- * and every model it would have confirmed stays unknown.
+ * last cached copy (state "stale") while it is younger than MAX_MODELS_TTL_S;
+ * with no such copy the catalog is "unavailable" and every model it would have
+ * confirmed stays unknown.
  *
  * Cache: ~/.multix/cache/models/<provider>-<task>.json (MULTIX_CACHE_DIR
  * overrides the directory, MULTIX_MODELS_TTL the TTL in seconds).
@@ -157,7 +158,15 @@ export async function discoverCatalog(
     };
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
-    if (cached) return fromCache(cached, "stale", error);
-    return { source: { provider, task, state: "unavailable", error }, models: [] };
+    // Past the TTL ceiling (or stamped in the future) a copy is too old to confirm anything.
+    if (cached && age >= 0 && age < MAX_MODELS_TTL_S * 1000) {
+      return fromCache(cached, "stale", error);
+    }
+    const why = age < 0 ? "is dated in the future" : "is too old to use";
+    const tooOld = cached ? `; cached copy from ${cached.fetched_at} ${why}` : "";
+    return {
+      source: { provider, task, state: "unavailable", error: `${error}${tooOld}` },
+      models: [],
+    };
   }
 }

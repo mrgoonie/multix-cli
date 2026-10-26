@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type FetchFn, readCatalog } from "../../../src/capabilities/model-discovery.js";
 import {
   DEFAULT_MODELS_TTL_S,
+  MAX_MODELS_TTL_S,
   discoverCatalog,
   modelsTtlSeconds,
 } from "../../../src/commands/agent/model-discovery-cache.js";
@@ -228,6 +229,54 @@ describe("catalog cache", () => {
       fetched_at: "2026-10-26T00:00:00.000Z",
     });
     expect(stale.models.map((m) => m.model)).toEqual(["a/tts"]);
+  });
+
+  it("does not confirm models offline from a copy older than the TTL ceiling", async () => {
+    const offline = () => fakeFetch([["api.fal.ai", new TypeError("fetch failed")]]).fn;
+    await discoverCatalog("fal", "speech", { dir, ttlSeconds, now, fetchFn: fal(["a/tts"]).fn });
+
+    clock += MAX_MODELS_TTL_S * 1000 - 1_000;
+    const lastDay = await discoverCatalog("fal", "speech", {
+      dir,
+      ttlSeconds,
+      now,
+      fetchFn: offline(),
+    });
+    expect(lastDay.source).toMatchObject({ state: "stale", error: "fetch failed" });
+    expect(lastDay.models.map((m) => m.model)).toEqual(["a/tts"]);
+
+    clock += 1_000; // exactly at the ceiling
+    const old = await discoverCatalog("fal", "speech", {
+      dir,
+      ttlSeconds,
+      now,
+      fetchFn: offline(),
+    });
+    expect(old).toEqual({
+      source: {
+        provider: "fal",
+        task: "speech",
+        state: "unavailable",
+        error: "fetch failed; cached copy from 2026-10-26T00:00:00.000Z is too old to use",
+      },
+      models: [],
+    });
+  });
+
+  it("does not confirm models offline from a copy stamped in the future", async () => {
+    await discoverCatalog("fal", "speech", { dir, ttlSeconds, now, fetchFn: fal(["a/tts"]).fn });
+    clock -= 86_400_000;
+    const result = await discoverCatalog("fal", "speech", {
+      dir,
+      ttlSeconds,
+      now,
+      fetchFn: fakeFetch([["api.fal.ai", new Error("down")]]).fn,
+    });
+    expect(result.source).toMatchObject({
+      state: "unavailable",
+      error: "down; cached copy from 2026-10-26T00:00:00.000Z is dated in the future",
+    });
+    expect(result.models).toEqual([]);
   });
 
   it("ignores a corrupt or mismatched cache file", async () => {

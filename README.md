@@ -93,8 +93,8 @@ one, or uses a value outside its listed choices. `--live` (with `--task`) marks
 each catalog model verified or not, and a verified model the catalog no longer
 lists with status `missing` (unless the catalog was too long to read in full,
 `truncated`, when it stays unknown). Catalogs are cached for a day in `~/.multix/cache/models`
-(`--refresh` refetches); offline, a stale copy is used, or the catalog is
-reported `unavailable` and nothing is claimed available.
+(`--refresh` refetches); offline, a stale copy up to 7 days old is used, or the
+catalog is reported `unavailable` and nothing is claimed available.
 
 ## Environment variables
 
