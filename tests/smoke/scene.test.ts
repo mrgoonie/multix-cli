@@ -7,14 +7,15 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { execa } from "execa";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { isolatedEnv } from "./child-env.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLI = path.resolve(__dirname, "../../dist/cli.js");
-const FAKE_FETCH = path.resolve(__dirname, "fixtures/fake-speech-fetch.mjs");
+// --import takes a URL; a bare Windows path (D:\...) reads as a URL scheme.
+const FAKE_FETCH = pathToFileURL(path.resolve(__dirname, "fixtures/fake-speech-fetch.mjs")).href;
 
 describe("scene workflow (smoke)", { timeout: 60_000 }, () => {
   let tmp: string;
@@ -27,6 +28,8 @@ describe("scene workflow (smoke)", { timeout: 60_000 }, () => {
       env,
       timeout: 15_000,
     });
+    if (!result.stdout.trim())
+      throw new Error(`no JSON output (exit ${result.exitCode}): ${result.stderr}`);
     return { exitCode: result.exitCode, out: JSON.parse(result.stdout.trim()) };
   };
   const fetchCount = () =>
@@ -34,7 +37,7 @@ describe("scene workflow (smoke)", { timeout: 60_000 }, () => {
       ? fs
           .readFileSync(env.FAKE_FETCH_LOG ?? "", "utf8")
           .trim()
-          .split("\n")
+          .split(/\r?\n/)
           .filter(Boolean).length
       : 0;
 
