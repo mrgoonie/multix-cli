@@ -1,15 +1,20 @@
 /**
  * multix fal result <model> <requestId> — fetch a completed job's result.
  * `--download` saves any media URLs found in the payload to MULTIX_OUTPUT_DIR
- * (or `--output-dir`). Only reads: it never submits the job again.
+ * (or `--output-dir`); for a verified speech model the audio is saved under
+ * the extension its bytes have (speech-output.ts). Only reads: it never
+ * submits the job again.
  */
 
 import path from "node:path";
 import type { Command } from "commander";
+import { ValidationError } from "../../../core/errors.js";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import { createFalClient, resultPath } from "../client.js";
 import { downloadResultMedia, extractMediaUrls } from "../run-helpers.js";
+import { expectedAudioExt, findSpeechModel } from "../speech-models.js";
+import { saveSpeechAudio } from "../speech-output.js";
 import type { FalResultResponse } from "../types.js";
 
 export function registerFalResultCommand(parent: Command): void {
@@ -21,13 +26,25 @@ export function registerFalResultCommand(parent: Command): void {
       "--output-dir <dir>",
       "Download media here (default MULTIX_OUTPUT_DIR or ./multix-output)",
     )
+    .option(
+      "--format <fmt>",
+      "Output format the speech job was submitted with (e.g. pcm_16000), to name raw audio correctly",
+    )
     .option("-v, --verbose", "Verbose logging")
     .action(
       async (
         model: string,
         requestId: string,
-        opts: { download?: boolean; outputDir?: string; verbose?: boolean },
+        opts: { download?: boolean; outputDir?: string; format?: string; verbose?: boolean },
       ) => {
+        const speech = findSpeechModel(model);
+        if (opts.format !== undefined && !speech?.formats?.includes(opts.format)) {
+          throw new ValidationError(
+            speech?.formats
+              ? `Unknown --format "${opts.format}" for ${model}. Formats: ${speech.formats.join(", ")}`
+              : "--format applies only to fal speech models with an output format (see multix fal voices)",
+          );
+        }
         // Progress goes to stderr so stdout stays the result JSON or the saved paths.
         const logger = createLogger({ verbose: opts.verbose ?? false, stderr: true });
         const client = createFalClient();
@@ -43,6 +60,19 @@ export function registerFalResultCommand(parent: Command): void {
 
         if (!opts.download) {
           console.log(JSON.stringify(result, null, 2));
+          return;
+        }
+
+        if (speech) {
+          const outDir = opts.outputDir ? path.resolve(opts.outputDir) : getOutputDir();
+          const saved = await saveSpeechAudio({
+            result,
+            outDir,
+            requestId,
+            ...(opts.format ? { expectedExt: expectedAudioExt(speech, opts.format) } : {}),
+            logger,
+          });
+          console.log(`\nDownloaded 1 file(s):\n  ${saved.path}`);
           return;
         }
 
