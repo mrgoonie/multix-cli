@@ -37,7 +37,7 @@ function formatPrice(pricing: { prompt?: string; completion?: string }): string 
   const output = Number(pricing.completion);
   if (!Number.isFinite(input)) return "price not listed";
   if (input === 0 && !(output > 0)) return "free";
-  const parts = [`input $${pricing.prompt}/unit`];
+  const parts = [`input $${pricing.prompt}/unit (second or token, by model)`];
   if (Number.isFinite(output) && output > 0) parts.push(`output $${pricing.completion}/token`);
   return parts.join(", ");
 }

@@ -88,8 +88,9 @@ multix openrouter generation <generation-id>        # cost recorded later
 The default model is `openai/whisper-large-v3-turbo` (override with `--model`
 or `OPENROUTER_STT_MODEL`). `--input` is a local audio file, uploaded as
 multipart (at most 25 MB), or a public http(s) URL that the provider downloads;
-not every provider accepts URLs. The format comes from the file extension or
-`--audio-format`.
+not every provider accepts URLs. Through the remote MCP server a URL input is
+downloaded by the server and uploaded as a file, so the 25 MB limit applies.
+The format comes from the file extension or `--audio-format`.
 
 ```bash
 multix openrouter transcribe --input meeting.mp3 --language en --json
@@ -102,13 +103,16 @@ multix openrouter transcription-models --model google/gemini-3.5-transcribe
   transcribe, Gemini Transcribe, ElevenLabs Scribe, Voxtral, Deepgram,
   AssemblyAI, ...) before the paid request; `--no-model-check` skips it.
   `multix models --task transcription` lists these models as well.
-- `--language` takes an ISO-639-1 code; without it the language is detected.
+- `--language` takes an ISO-639 code (`en`, `ja`) or a tag like `en-US`;
+  without it the language is detected.
 - The transcript is saved as `openrouter_transcript_<stamp>.txt` in the output
   directory and copied to `--output` if given. Text mode prints only the path,
   never the transcript.
-- The request is never retried. A connection cut off after sending fails with
-  `UNKNOWN_REMOTE_STATE`; check `multix openrouter generation <id>` before
-  sending it again.
+- The request is never retried. A connection cut off after sending, a gateway
+  5xx page, or no answer within `--timeout` seconds (default 300, up to 3600)
+  fails with `UNKNOWN_REMOTE_STATE`. Before sending it again, check
+  `multix openrouter generation <id>` when the error names a generation, or
+  openrouter.ai/activity otherwise. Raise `--timeout` for long audio.
 - `--cost-wait` and `--no-cost` work as for `tts`. With `--json`, the result
   includes the text, detected language, audio duration, generation ID, cost
   and its source, and the input's size and SHA-256 (a URL input is shown

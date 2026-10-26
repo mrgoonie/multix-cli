@@ -2819,7 +2819,7 @@
             {
               "long": "--language",
               "flags": "--language <code>",
-              "description": "ISO-639-1 language of the audio (auto-detected when omitted)",
+              "description": "Language of the audio: ISO-639 code (en, ja) or a tag like en-US (auto-detected when omitted)",
               "required": false,
               "takesValue": true,
               "valueOptional": false,
@@ -2866,6 +2866,17 @@
               "variadic": false,
               "negatable": false,
               "default": "20"
+            },
+            {
+              "long": "--timeout",
+              "flags": "--timeout <s>",
+              "description": "Seconds to wait for the transcript (10-3600); a timeout after sending may still be billed",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "300"
             },
             {
               "long": "--output",

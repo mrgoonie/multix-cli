@@ -156,6 +156,8 @@ describe("createTranscription", () => {
     expect((await failure(transcribe(malformed))).message).toContain("malformed");
     const noText = async () => jsonResponse(200, { usage: { cost: 0.1 } });
     expect((await failure(transcribe(noText))).message).toContain("no transcript text");
+    const errorBody = async () => jsonResponse(200, { error: { message: "Audio too long" } });
+    expect((await failure(transcribe(errorBody))).message).toContain("Audio too long");
   });
 
   it("refuses audio over the 25 MB upload cap before any request", async () => {

@@ -92,24 +92,25 @@ export function summarizeUsage(state: RunState = run): UsageSummary | undefined 
   let credits: number | undefined;
   // A GET status read of the same job or generation reports the final charge, so
   // the estimate on the POST that started it is not counted a second time.
-  const charged = new Set(
-    [...state.getUsage.values()]
-      .filter((r) => r.cost_usd !== undefined || r.credits !== undefined)
-      .flatMap((r) => r.ids),
-  );
+  const gets = [...state.getUsage.values()];
+  const charged = {
+    cost_usd: new Set(gets.filter((r) => r.cost_usd !== undefined).flatMap((r) => r.ids)),
+    credits: new Set(gets.filter((r) => r.credits !== undefined).flatMap((r) => r.ids)),
+  };
   const sources: { cost_usd?: string[]; credits?: string[] } = {};
   for (const [i, r] of records.entries()) {
-    const settled = i < state.postUsage.length && r.ids.some((id) => charged.has(id));
+    const isPost = i < state.postUsage.length;
+    const settled = (key: "cost_usd" | "credits") =>
+      isPost && r.ids.some((id) => charged[key].has(id));
     for (const key of ["cost_usd", "credits"] as const) {
       const src = r.sources?.[key];
-      if (src && r[key] !== undefined && !settled && !sources[key]?.includes(src)) {
+      if (src && r[key] !== undefined && !settled(key) && !sources[key]?.includes(src)) {
         sources[key] = [...(sources[key] ?? []), src];
       }
     }
     addTokens(tokens, r.tokens);
-    if (r.cost_usd !== undefined && !settled) cost = (cost ?? 0) + r.cost_usd;
-    if (r.credits !== undefined && !settled) credits = (credits ?? 0) + r.credits;
-    const isPost = i < state.postUsage.length;
+    if (r.cost_usd !== undefined && !settled("cost_usd")) cost = (cost ?? 0) + r.cost_usd;
+    if (r.credits !== undefined && !settled("credits")) credits = (credits ?? 0) + r.credits;
     for (const [k, v] of Object.entries(r.metrics)) {
       metrics[k] = isPost && metrics[k] !== undefined ? (metrics[k] ?? 0) + v : v;
     }

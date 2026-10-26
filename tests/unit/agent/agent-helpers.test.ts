@@ -101,6 +101,17 @@ describe("telemetry helpers", () => {
     expect(summarizeUsage(state)?.cost_usd).toBe(0.010018);
   });
 
+  it("settles a POST only in the unit the GET read reports", () => {
+    const state = {
+      ...run,
+      postUsage: [{ tokens: {}, cost_usd: 0.5, credits: 4, metrics: {}, ids: ["j1"] }],
+      getUsage: new Map([
+        ["host/status/:id", { tokens: {}, credits: 10, metrics: {}, ids: ["j1"] }],
+      ]),
+    } as RunState;
+    expect(summarizeUsage(state)).toMatchObject({ cost_usd: 0.5, credits: 10 });
+  });
+
   it("keeps where each provider reported its credits", () => {
     const src = { credits: "api.elevenlabs.io header.character-cost" };
     const state = {

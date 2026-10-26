@@ -303,7 +303,7 @@ multix openrouter speech-models [--model <id>]
 multix openrouter generation <id>
 
 # Speech-to-text (POST /api/v1/audio/transcriptions); --input is a local file (≤ 25 MB) or a public http(s) URL
-multix openrouter transcribe --input meeting.mp3 [--model openai/whisper-large-v3-turbo] [--language en] [--audio-format <fmt>] [--cost-wait 20] [--output <path>] [--json] [-v]
+multix openrouter transcribe --input meeting.mp3 [--model openai/whisper-large-v3-turbo] [--language en] [--audio-format <fmt>] [--cost-wait 20] [--timeout 300] [--output <path>] [--json] [-v]
 
 # List transcription models and prices (live catalog)
 multix openrouter transcription-models [--model <id>]

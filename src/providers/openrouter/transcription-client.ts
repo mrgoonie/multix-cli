@@ -151,8 +151,12 @@ export function parseTranscription(
   const data = body as Record<string, unknown> | null;
   const gen = generationId ? ` (generation ${generationId})` : "";
   if (!data || typeof data !== "object" || typeof data.text !== "string") {
+    const detail =
+      data && typeof data === "object" && data.error !== undefined
+        ? `: ${errorMessageOf(JSON.stringify(data))}`
+        : "";
     throw new ProviderError(
-      `OpenRouter returned no transcript text for ${model}${gen}`,
+      `OpenRouter returned no transcript text for ${model}${gen}${detail}`,
       "openrouter",
     );
   }

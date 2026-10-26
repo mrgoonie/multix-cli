@@ -299,9 +299,10 @@ describe("openrouter transcribe", () => {
       [["--input", "https://cdn.example.com/stream"], /--audio-format/],
       [["--input", "ftp://cdn.example.com/a.mp3"], /not found/],
       [["--input", audioFile, "--audio-format", "../x"], /not valid/],
-      [["--input", audioFile, "--language", "english!"], /ISO-639-1/],
+      [["--input", audioFile, "--language", "english!"], /ISO-639/],
       [["--input", audioFile, "--model", "whisper-1"], /provider\/name/],
       [["--input", audioFile, "--cost-wait", "500"], /cost-wait/],
+      [["--input", audioFile, "--timeout", "5"], /--timeout/],
     ];
     for (const [args, message] of cases) {
       expect((await failure(run("transcribe", ...args))).message).toMatch(message);

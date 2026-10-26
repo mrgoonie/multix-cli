@@ -88,8 +88,9 @@ multix openrouter generation <generation-id>        # chi phí ghi nhận sau
 OpenRouter. Model mặc định là `openai/whisper-large-v3-turbo` (đổi bằng
 `--model` hoặc `OPENROUTER_STT_MODEL`). `--input` là file audio local, được
 upload dạng multipart (tối đa 25 MB), hoặc một URL http(s) công khai để
-provider tự tải; không phải provider nào cũng nhận URL. Định dạng lấy từ phần
-mở rộng của file hoặc `--audio-format`.
+provider tự tải; không phải provider nào cũng nhận URL. Khi chạy qua remote MCP server, URL
+được server tải về rồi upload dạng file, nên giới hạn 25 MB vẫn áp dụng. Định
+dạng lấy từ phần mở rộng của file hoặc `--audio-format`.
 
 ```bash
 multix openrouter transcribe --input meeting.mp3 --language en --json
@@ -102,13 +103,16 @@ multix openrouter transcription-models --model google/gemini-3.5-transcribe
   transcribe, Gemini Transcribe, ElevenLabs Scribe, Voxtral, Deepgram,
   AssemblyAI, ...) trước request trả phí; `--no-model-check` bỏ qua bước này.
   `multix models --task transcription` cũng liệt kê các model này.
-- `--language` nhận mã ISO-639-1; nếu bỏ trống, ngôn ngữ được tự nhận diện.
+- `--language` nhận mã ISO-639 (`en`, `ja`) hoặc tag như `en-US`; nếu bỏ
+  trống, ngôn ngữ được tự nhận diện.
 - Transcript được lưu thành `openrouter_transcript_<stamp>.txt` trong thư mục
   output và sao chép tới `--output` nếu có. Chế độ text chỉ in đường dẫn,
   không bao giờ in nội dung transcript.
-- Request không bao giờ được thử lại. Kết nối bị ngắt sau khi đã gửi sẽ báo
-  `UNKNOWN_REMOTE_STATE`; kiểm tra `multix openrouter generation <id>` trước
-  khi gửi lại.
+- Request không bao giờ được thử lại. Kết nối bị ngắt sau khi đã gửi, trang
+  lỗi 5xx của gateway, hoặc không có phản hồi trong `--timeout` giây (mặc định
+  300, tối đa 3600) sẽ báo `UNKNOWN_REMOTE_STATE`. Trước khi gửi lại, kiểm tra
+  `multix openrouter generation <id>` nếu lỗi có nêu generation, nếu không thì
+  xem openrouter.ai/activity. Tăng `--timeout` cho audio dài.
 - `--cost-wait` và `--no-cost` hoạt động như với `tts`. Với `--json`, kết quả
   gồm văn bản, ngôn ngữ nhận diện được, thời lượng audio, generation ID, chi
   phí và nguồn của chi phí, cùng kích thước và SHA-256 của input (URL được

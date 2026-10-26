@@ -49,6 +49,7 @@ interface TranscribeOptions {
   modelCheck: boolean;
   cost: boolean;
   costWait: string;
+  timeout: string;
   output?: string;
   verbose?: boolean;
 }
@@ -141,7 +142,10 @@ export function registerOpenRouterTranscribeCommand(parent: Command): void {
       `Transcription model (env ${OPENROUTER_STT_MODEL_ENV}), e.g. openai/whisper-large-v3-turbo, google/gemini-3.5-transcribe, elevenlabs/scribe-v2, mistralai/voxtral-mini-transcribe-3-0`,
       envDefault(OPENROUTER_STT_MODEL_ENV, DEFAULT_OPENROUTER_STT_MODEL),
     )
-    .option("--language <code>", "ISO-639-1 language of the audio (auto-detected when omitted)")
+    .option(
+      "--language <code>",
+      "Language of the audio: ISO-639 code (en, ja) or a tag like en-US (auto-detected when omitted)",
+    )
     .option(
       "--audio-format <fmt>",
       "Audio format when the input has no extension (mp3, wav, m4a, ogg, webm, flac, ...)",
@@ -155,6 +159,11 @@ export function registerOpenRouterTranscribeCommand(parent: Command): void {
       "Skip reading the resolved model and cost from OpenRouter's generation record",
     )
     .option("--cost-wait <s>", "Seconds to wait for OpenRouter to record the generation", "20")
+    .option(
+      "--timeout <s>",
+      "Seconds to wait for the transcript (10-3600); a timeout after sending may still be billed",
+      "300",
+    )
     .option("--output <path>", "Copy the transcript to this path")
     .option("-v, --verbose", "Verbose logging")
     .action(async (opts: TranscribeOptions) => {
@@ -168,12 +177,16 @@ export function registerOpenRouterTranscribeCommand(parent: Command): void {
       const language = opts.language?.trim() || undefined;
       if (language && !LANGUAGE.test(language)) {
         throw new ValidationError(
-          `--language must be an ISO-639-1 code like en or ja, got "${language}"`,
+          `--language must be an ISO-639 code like en or ja, or a tag like en-US, got "${language}"`,
         );
       }
       const costWait = Number(opts.costWait);
       if (!Number.isFinite(costWait) || costWait < 0 || costWait > 120) {
         throw new ValidationError("--cost-wait must be between 0 and 120 seconds");
+      }
+      const timeout = Number(opts.timeout);
+      if (!Number.isFinite(timeout) || timeout < 10 || timeout > 3600) {
+        throw new ValidationError("--timeout must be between 10 and 3600 seconds");
       }
       const input = resolveInput(opts.input, opts.audioFormat);
       const headers = buildOpenRouterHeaders(requireOpenRouterKey());
@@ -197,6 +210,7 @@ export function registerOpenRouterTranscribeCommand(parent: Command): void {
         audio: input.audio,
         ...(language ? { language } : {}),
         headers,
+        timeoutMs: timeout * 1000,
       });
       const dest = writeTranscript(result.text, opts.output);
 
