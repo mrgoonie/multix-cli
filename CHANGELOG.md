@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.18.1](https://github.com/mrgoonie/multix-cli/compare/v1.18.0...v1.18.1) (2026-10-26)
+
+
+### Fixed
+
+* **elevenlabs:** warn on SSML &lt;phoneme&gt; only for models that drop the word ([#331](https://github.com/mrgoonie/multix-cli/issues/331)) ([60505f4](https://github.com/mrgoonie/multix-cli/commit/60505f4140283578b0ab5779eb41b84b9e1d5cf4)), closes [#323](https://github.com/mrgoonie/multix-cli/issues/323)
+
 ## [1.18.0](https://github.com/mrgoonie/multix-cli/compare/v1.17.1...v1.18.0) (2026-10-26)
 
 
