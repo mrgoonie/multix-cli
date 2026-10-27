@@ -20,6 +20,7 @@ import type { CostEstimate } from "../budget/cost-estimate.js";
 import { type CostReceipt, buildCostReceipt, operationIdFor } from "../budget/cost-receipt.js";
 import { envDefault } from "../core/env-default.js";
 import { BudgetError } from "../core/errors.js";
+import { FAL_DEFAULTS } from "../providers/fal/models.js";
 import { DEFAULT_FISH_TTS_MODEL, FISH_TTS_MODEL_ENV } from "../providers/fish/models.js";
 import { turnsToSpeakerText } from "../providers/fish/tts-request.js";
 import { getDefaultModel } from "../providers/gemini/models.js";
@@ -108,6 +109,7 @@ function runtimeDefaults(command: string, options: Record<string, unknown>): Com
         gemini: getDefaultModel("generate-speech"),
         fish: envDefault(FISH_TTS_MODEL_ENV, DEFAULT_FISH_TTS_MODEL),
         openrouter: envDefault(OPENROUTER_TTS_MODEL_ENV, DEFAULT_OPENROUTER_TTS_MODEL),
+        fal: FAL_DEFAULTS.ttsModel,
       },
       ...(text !== undefined ? { text } : {}),
     };

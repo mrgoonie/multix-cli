@@ -206,6 +206,12 @@ function registerGenerate(parent: Command): void {
         }
       }
       if (!chosen) throw new ValidationError("No speech route left to try");
+      if (chosen.provider === "fal" && input.async && opts.output) {
+        // `fal result` saves under --output-dir with the request id as the name; --output would be lost.
+        throw new ValidationError(
+          "--output cannot be combined with --async on fal; fetch the audio later with the printed `multix fal result` command",
+        );
+      }
       const primary = routes[0] as SpeechRoute;
       const fallback =
         chosen === primary

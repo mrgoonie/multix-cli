@@ -13,6 +13,7 @@ import { findSpeechModel as findFalSpeechModel } from "../providers/fal/speech-m
 import { FISH_PUBLIC_VOICES } from "../providers/fish/models.js";
 import { GEMINI_TTS_VOICES, isVoiceAllowedForModel } from "../providers/gemini/voices.js";
 import { OPENAI_TTS_VOICES } from "../providers/openai/models.js";
+import { OPENROUTER_MAX_SPEED } from "../providers/openrouter/speech-defaults.js";
 import {
   SPEECH_FORMATS,
   SPEECH_PROVIDERS,
@@ -319,6 +320,15 @@ export function buildRoute(
       `${label} does not list language "${input.language}" (documented: ${capability.languages.join(", ") || "none"})`,
     );
   }
+  // The gateways name no language list and send none to a model without a language field,
+  // so the flag would be dropped without a word.
+  if (
+    input.language &&
+    (provider === "openrouter" || provider === "fal") &&
+    !capability.language_param
+  ) {
+    problems.push(`${label} takes no language parameter; drop --language`);
+  }
   if (input.style && !capability.style) {
     problems.push(
       `${label} takes no delivery style; drop --style or pick a model with style support`,
@@ -347,6 +357,16 @@ export function buildRoute(
     extras = extrasFor(provider, input.extras);
   } catch (error) {
     problems.push((error as Error).message);
+  }
+  const speed = extras.speed;
+  if (
+    provider === "openrouter" &&
+    typeof speed === "number" &&
+    (speed <= 0 || speed > OPENROUTER_MAX_SPEED)
+  ) {
+    problems.push(
+      `--extra openrouter.speed must be greater than 0 and at most ${OPENROUTER_MAX_SPEED} (got ${speed})`,
+    );
   }
   if (problems.length > 0) throw new ValidationError(problems.join("; "));
   return {

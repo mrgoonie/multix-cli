@@ -303,6 +303,13 @@ describe("openrouter route", () => {
     ["--speaker", ["--speaker", "A:Kore", "--speaker", "B:Puck"], /speaks with one voice/],
     ["an unknown extra", ["--extra", "openrouter.temperature=1"], /not a openrouter option/],
     ["a mistyped extra value", ["--extra", "openrouter.zdr=yes"], /must be true or false/],
+    [
+      "a speed above 4",
+      ["--extra", "openrouter.speed=9"],
+      /speed must be greater than 0 and at most 4/,
+    ],
+    ["a negative speed", ["--extra", "openrouter.speed=-3"], /speed must be greater than 0/],
+    ["--language", ["--language", "vi"], /takes no language parameter; drop --language/],
   ])("rejects %s before any request", async (_label, extra, message) => {
     useEnv({ OPENROUTER_API_KEY: OR_KEY });
     await expect(
@@ -461,6 +468,12 @@ describe("fal route", () => {
       /fal has no speech model "fal-ai\/some-tts"/,
     ],
     ["any extra", ["--extra", "fal.seed=1"], /fal takes no extras/],
+    ["--language on Gemini", ["--language", "vi"], /takes no language parameter/],
+    [
+      "--output with --async",
+      ["--async", "--output", "later.wav"],
+      /--output cannot be combined with --async on fal/,
+    ],
   ])("rejects %s before any request", async (_label, extra, message) => {
     useEnv({ FAL_KEY });
     const args = ["generate", "--provider", "fal", ...extra];

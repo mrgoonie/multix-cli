@@ -10,7 +10,6 @@ import path from "node:path";
 import { envDefault } from "../../core/env-default.js";
 import { ConfigError, ProviderError } from "../../core/errors.js";
 import type { Logger } from "../../core/logger.js";
-import { getOutputDir } from "../../core/output-dir.js";
 import { atlasDefaultModel, requireAtlasKey } from "../../providers/atlascloud/commands/env.js";
 import { runGenerationCommand } from "../../providers/atlascloud/commands/generation-command.js";
 import { resumeCommand } from "../../providers/atlascloud/commands/prediction-runner.js";
@@ -319,7 +318,6 @@ const fal: SpeechAdapter = {
       {
         detach: input.async,
         download: true,
-        outDir: getOutputDir(),
         waitTimeoutMs: FAL_WAIT_MS,
         logger: ctx.logger,
       },

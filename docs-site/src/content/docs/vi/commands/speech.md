@@ -117,8 +117,9 @@ Route này gửi đúng request như
 dạng và voice; id khác lấy từ `multix openrouter speech-models` cũng được nhận.
 Trước request tính phí, route đọc danh sách model speech trực tiếp của
 OpenRouter và dừng nếu model hoặc voice không có trong đó. Voice là id riêng
-của từng model trên OpenRouter (`Kore` cho Gemini, `sarah` cho ElevenLabs); không
-có `--voice` thì dùng voice mặc định của model. `--extra` nhận
+của từng model trên OpenRouter. Không có `--voice` thì route gửi voice được ghi
+cho model trong `speech models` (`Kore` cho Gemini, `sarah` cho ElevenLabs); với
+model không có dòng trong catalog thì route không gửi voice và OpenRouter tự chọn. `--extra` nhận
 `openrouter.speed`, `openrouter.zdr` và `openrouter.deny_data_collection`. Model
 Gemini trả về PCM thô, được lưu thành WAV trừ khi bạn chọn `--format pcm`.
 
@@ -136,8 +137,13 @@ mà `speech models -p fal` liệt kê (Gemini 3.8 Flash và Flash-Lite TTS,
 ElevenLabs v4 và v4 Turbo); voice là tên riêng của từng endpoint
 (`multix fal voices`). Không có `--async` thì lệnh chờ kết quả và lưu audio; có
 `--async` thì lệnh in request id cùng lệnh `multix fal result` để tiếp tục, và
-giữ receipt trong `~/.multix/fal/requests`. Lần submit không rõ kết quả được báo
+giữ receipt trong `~/.multix/fal/requests` (`--output` bị từ chối khi dùng
+`--async`; lệnh tiếp tục sẽ lưu file). Lần submit không rõ kết quả được báo
 lại, không bao giờ gửi lần nữa.
+
+`--language` chỉ được gửi tới model có trường ngôn ngữ (các endpoint ElevenLabs
+trên fal, dưới dạng `language_code`); với các model OpenRouter và fal khác, flag
+này bị từ chối thay vì bị bỏ qua.
 
 `google/gemini-3.8-flash-tts` có trên cả `openrouter` và `fal`, nên model này cần
 `--provider`. `--estimate` tính giá được route OpenRouter; route fal chưa có bảng

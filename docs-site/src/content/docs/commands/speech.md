@@ -118,8 +118,9 @@ The route sends the same request as
 were checked; any other id from `multix openrouter speech-models` is accepted
 too. Before the paid request, the route reads OpenRouter's live speech model
 list and stops if the model or voice is not on it. Voices are OpenRouter's
-per-model ids (`Kore` for Gemini, `sarah` for ElevenLabs); without `--voice` the
-model's default is used. `--extra` takes `openrouter.speed`, `openrouter.zdr`,
+per-model ids. Without `--voice` the route sends the voice listed for the model
+in `speech models` (`Kore` for Gemini, `sarah` for ElevenLabs); for a model with
+no row it sends none and OpenRouter picks one. `--extra` takes `openrouter.speed`, `openrouter.zdr`,
 and `openrouter.deny_data_collection`. Gemini models return raw PCM, which is
 saved as WAV unless you ask for `--format pcm`.
 
@@ -137,8 +138,13 @@ listed by `speech models -p fal` (Gemini 3.8 Flash and Flash-Lite TTS,
 ElevenLabs v4 and v4 Turbo); voices are each endpoint's own names
 (`multix fal voices`). Without `--async` it waits for the result and saves the
 audio; with `--async` it prints the request id and the `multix fal result`
-command that resumes it, and keeps a receipt in `~/.multix/fal/requests`. A
+command that resumes it, and keeps a receipt in `~/.multix/fal/requests`
+(`--output` is refused with `--async`; the resume command saves the file). A
 submit whose outcome is unknown is reported, never sent again.
+
+`--language` is sent only to models with a language field (the fal ElevenLabs
+endpoints, as `language_code`); on the other OpenRouter and fal models it is
+rejected rather than dropped.
 
 `google/gemini-3.8-flash-tts` is served by both `openrouter` and `fal`, so that
 model needs `--provider`. `--estimate` prices the OpenRouter route; the fal

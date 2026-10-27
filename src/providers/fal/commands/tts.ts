@@ -72,7 +72,8 @@ export interface FalTtsRun {
   /** Save the receipt here (a detached run saves it to the default directory otherwise). */
   receiptFile?: string;
   download: boolean;
-  outDir: string;
+  /** Download directory; without it the default output directory, resolved only when downloading. */
+  outDir?: string;
   waitTimeoutMs: number;
   logger: Logger;
 }
@@ -128,7 +129,7 @@ export async function runFalTts(flags: SpeechFlags, opts: FalTtsRun): Promise<Fa
   if (!opts.download) return done;
   const saved = await saveSpeechAudio({
     result,
-    outDir: opts.outDir,
+    outDir: opts.outDir ?? getOutputDir(),
     requestId: submit.request_id,
     // Only a requested format is a promise about the bytes; a model default may change.
     ...(request.format ? { expectedExt: expectedAudioExt(request.profile, request.format) } : {}),
@@ -190,7 +191,7 @@ export function registerFalTtsCommand(parent: Command): void {
           detach: Boolean(opts.detach),
           receiptFile: opts.receipt,
           download: opts.download !== false,
-          outDir: opts.outputDir ? path.resolve(opts.outputDir) : getOutputDir(),
+          ...(opts.outputDir ? { outDir: path.resolve(opts.outputDir) } : {}),
           waitTimeoutMs: Number.parseInt(opts.waitTimeout, 10) || 480_000,
           logger,
         },

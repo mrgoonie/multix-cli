@@ -47,7 +47,7 @@ import {
   listSpeechModels,
   matchVoice,
 } from "../speech-client.js";
-import { OPENROUTER_TTS_MODEL_ENV } from "../speech-defaults.js";
+import { OPENROUTER_MAX_SPEED, OPENROUTER_TTS_MODEL_ENV } from "../speech-defaults.js";
 import { waitForGeneration } from "./generation.js";
 
 export { OPENROUTER_TTS_MODEL_ENV } from "../speech-defaults.js";
@@ -444,6 +444,7 @@ export function registerOpenRouterTtsCommand(parent: Command): void {
     .option("-v, --verbose", "Verbose logging")
     .action(async (opts: TtsOptions) => {
       const logger = createLogger({ verbose: opts.verbose ?? false });
+      const formatFlag = parseSpeechFormat(opts.format);
       const costWait = Number(opts.costWait);
       if (!Number.isFinite(costWait) || costWait < 0 || costWait > 120) {
         throw new ValidationError("--cost-wait must be between 0 and 120 seconds");
@@ -454,11 +455,13 @@ export function registerOpenRouterTtsCommand(parent: Command): void {
           input: inputText(opts),
           voice: opts.voice,
           instructions: opts.instructions,
-          format: parseSpeechFormat(opts.format),
+          format: formatFlag,
           sampleRate: opts.sampleRate
             ? Math.round(positiveNumber(opts.sampleRate, "--sample-rate", 384_000))
             : undefined,
-          speed: opts.speed ? positiveNumber(opts.speed, "--speed", 4) : undefined,
+          speed: opts.speed
+            ? positiveNumber(opts.speed, "--speed", OPENROUTER_MAX_SPEED)
+            : undefined,
           providerOptions: opts.providerOptions
             ? parseProviderOptions(opts.providerOptions)
             : undefined,
