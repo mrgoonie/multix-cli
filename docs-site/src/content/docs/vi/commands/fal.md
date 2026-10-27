@@ -155,8 +155,21 @@ in input có kiểu dạng JSON):
 - Flag mà model không có field tương ứng (`--style` với ElevenLabs, `--format`
   với Gemini), giọng ngoài danh sách của model, hoặc định dạng ngoài enum sẽ
   lỗi `INVALID_INPUT` trước khi gửi bất cứ gì. `--input` thêm field khác
-  (`stability`, `seed`, `turns` của Gemini cho hội thoại nhiều người nói, ...);
-  một field được đặt bởi cả flag và `--input` là lỗi.
+  (`stability`, `seed`, ...); một field được đặt bởi cả flag và `--input` là
+  lỗi. Giá trị truyền qua `--input` được kiểm tra như flag: độ dài văn bản (đếm
+  theo ký tự), danh sách giọng, enum `output_format` và mã ngôn ngữ (`en`, `vi`,
+  `pt-BR`).
+- Hội thoại nhiều người nói của Gemini truyền qua `--input` thay cho văn bản:
+  đúng hai `speakers` với `speaker_id` khác nhau và giọng thuộc danh sách, cùng
+  một hoặc nhiều `turns`, mỗi lượt gọi tên một trong hai người nói và có `text`
+  không rỗng. `--voice` và văn bản bị từ chối khi có hội thoại. Hội thoại sai
+  cấu trúc bị từ chối trước khi vào hàng đợi nên không tốn phí; hiện fal vẫn
+  trả HTTP 422 cho cả hội thoại đúng cấu trúc sau khi đã xếp hàng
+  ([#310](https://github.com/mrgoonie/multix-cli/issues/310)).
+
+  ```bash
+  multix fal tts --input '{"speakers":[{"speaker_id":"A","voice":"Kore"},{"speaker_id":"B","voice":"Puck"}],"turns":[{"speaker_id":"A","text":"Xin chào!"},{"speaker_id":"B","text":"Chào bạn."}]}'
+  ```
 - Đặt model mặc định bằng `FAL_TTS_MODEL`.
 - Endpoint TTS khác của fal dùng được khi bạn chỉ rõ field:
   `multix fal tts "hi" -m <model> --text-field input [--voice-field speaker --voice anna]`.
@@ -167,8 +180,8 @@ Audio được lưu thành `fal-<request_id>-01.<ext>`, phần mở rộng lấy
 các byte: WAV, MP3, Ogg/Opus, FLAC, M4A, AAC, WebM và AIFF được nhận ra qua
 header, bất kể URL hay Content-Type ghi gì. Định dạng thô không có header
 (`pcm_*` → `.pcm`, `ulaw_8000` → `.ulaw`, `alaw_8000` → `.alaw`) được đặt tên
-theo định dạng đã yêu cầu. File rỗng, trang lỗi, hoặc byte không đúng container
-fal khai báo sẽ bị từ chối và không để lại file nào. `fal result <model> <id>
+theo định dạng đã yêu cầu. File rỗng, trang lỗi, WAV chỉ có header mà không có
+mẫu âm thanh, hoặc byte không đúng container fal khai báo sẽ bị từ chối và không để lại file nào. `fal result <model> <id>
 --download` áp dụng cùng các kiểm tra cho job giọng nói; với định dạng thô hãy
 thêm `--format <fmt>` (`result_command` trong receipt của `--detach` đã có sẵn),
 nếu không thì không thể đặt tên cho các byte không có header.

@@ -171,6 +171,7 @@ export async function listFalSpeechCatalog(
   const clean = (v: unknown) => (typeof v === "string" ? v.replace(/\p{Cc}/gu, "") : undefined);
   const out: FalCatalogModel[] = [];
   let cursor: string | undefined;
+  const seenCursors = new Set<string>();
   for (let page = 0; page < (opts.maxPages ?? 5); page++) {
     const url = new URL(opts.baseUrl ?? FAL_CATALOG_URL);
     url.searchParams.set("category", "text-to-speech");
@@ -186,7 +187,8 @@ export async function listFalSpeechCatalog(
       has_more?: boolean;
       next_cursor?: string | null;
     };
-    for (const m of body.models ?? []) {
+    const models = body.models ?? [];
+    for (const m of models) {
       const id = clean(m.endpoint_id);
       if (!id) continue;
       const meta = m.metadata ?? {};
@@ -200,7 +202,10 @@ export async function listFalSpeechCatalog(
         ...(status ? { status } : {}),
       });
     }
-    if (!body.has_more || !body.next_cursor) break;
+    // An empty page or a cursor seen before would only repeat requests.
+    if (!body.has_more || !body.next_cursor || models.length === 0) break;
+    if (seenCursors.has(body.next_cursor)) break;
+    seenCursors.add(body.next_cursor);
     cursor = body.next_cursor;
   }
   return out;

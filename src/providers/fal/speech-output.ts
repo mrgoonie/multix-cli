@@ -76,7 +76,8 @@ function extOfUrl(url: string): string | undefined {
 function readHead(file: string): Buffer {
   const fd = fs.openSync(file, "r");
   try {
-    const buf = Buffer.alloc(64);
+    // Enough to find the WAV `data` chunk past a typical LIST/fact chunk.
+    const buf = Buffer.alloc(512);
     const n = fs.readSync(fd, buf, 0, buf.length, 0);
     return buf.subarray(0, n);
   } finally {
@@ -84,10 +85,29 @@ function readHead(file: string): Buffer {
   }
 }
 
-/** Pick the extension for downloaded bytes; throws when they cannot be the audio they claim. */
+/**
+ * Byte offset where a WAV's sample data starts, or undefined when the `data`
+ * chunk header lies beyond `head`.
+ */
+function wavDataOffset(head: Uint8Array): number | undefined {
+  const view = new DataView(head.buffer, head.byteOffset, head.byteLength);
+  let at = 12;
+  while (at + 8 <= head.length) {
+    const id = String.fromCharCode(...head.subarray(at, at + 4));
+    const size = view.getUint32(at + 4, true);
+    if (id === "data") return at + 8;
+    at += 8 + size + (size % 2);
+  }
+  return undefined;
+}
+
+/**
+ * Pick the extension for downloaded bytes; throws when they cannot be the
+ * audio they claim. `size` is the whole file's length, when known.
+ */
 export function resolveAudioExt(
   head: Uint8Array,
-  hints: { expected?: string; ref: AudioRef; responseType?: string },
+  hints: { expected?: string; ref: AudioRef; responseType?: string; size?: number },
 ): { ext: string; verified: boolean; declared?: string } {
   if (head.length === 0) throw new ProviderError("fal returned an empty audio file", "fal");
   const declared =
@@ -102,6 +122,14 @@ export function resolveAudioExt(
     throw new ProviderError("fal returned text (an error page or JSON), not audio", "fal");
   }
   const sniffed = sniffAudioKind(head, { frameSync: !raw });
+  if (sniffed === "wav") {
+    // Streaming writers may leave the data size at 0, so count the bytes after
+    // the header; 44 is the smallest canonical header when the chunk is not found.
+    const size = hints.size ?? head.length;
+    if (size <= (wavDataOffset(head) ?? 44)) {
+      throw new ProviderError("fal returned a WAV with a header but no audio samples", "fal");
+    }
+  }
   if (sniffed) return { ext: sniffed, verified: true, ...(declared ? { declared } : {}) };
   if (declared && SNIFFABLE.has(declared)) {
     throw new ProviderError(
@@ -160,6 +188,7 @@ export async function saveSpeechAudio(opts: {
       ...(opts.expectedExt ? { expected: opts.expectedExt } : {}),
       ref,
       ...(downloaded.contentType ? { responseType: downloaded.contentType } : {}),
+      size: downloaded.bytes,
     });
   } catch (e) {
     fs.rmSync(tmp, { force: true });
