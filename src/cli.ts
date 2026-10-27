@@ -2,6 +2,7 @@
 import { createRequire } from "node:module";
 import { Command } from "commander";
 import { exitWithError, installAgentRuntime } from "./agent/agent-runtime.js";
+import { settleTelemetry } from "./agent/fetch-telemetry.js";
 import { registerCommands } from "./commands/index.js";
 import { loadEnv } from "./core/index.js";
 import { isProjectEnvName } from "./project-env-names.js";
@@ -27,4 +28,8 @@ registerCommands(program);
 // --json, --dry-run, classified errors and the run history for every command.
 installAgentRuntime(program, pkg.version as string);
 
-program.parseAsync(process.argv).catch((err: unknown) => exitWithError(err));
+program.parseAsync(process.argv).catch(async (err: unknown) => {
+  // A failure right after a response still reports the usage, model and job it carried.
+  await settleTelemetry();
+  exitWithError(err);
+});

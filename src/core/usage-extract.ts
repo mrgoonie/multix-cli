@@ -93,7 +93,12 @@ const ID_KEYS = new Set([
   "video_id",
   "job_id",
   "jobId",
+  // ElevenLabs dubbing and HeyGen lipsync jobs.
+  "dubbing_id",
+  "lipsync_id",
 ]);
+/** A Gemini long-running operation name (Veo): `models/<model>/operations/<id>`. */
+const OPERATION_NAME = /^[\w./-]+\/operations\/[\w-]+$/;
 const USAGE_HEADERS = [
   "x-request-id",
   "request-id",
@@ -210,6 +215,9 @@ export function extractUsage(body: unknown, headers?: Headers | null): ResponseU
   const obj = asRecord(body);
   if (obj) {
     tokensFrom(obj, out.tokens);
+    if (typeof obj.name === "string" && obj.name.length <= 200 && OPERATION_NAME.test(obj.name)) {
+      out.ids.push(obj.name);
+    }
     walk(obj, "", 0, out);
   }
   for (const kind of ["plain", "spend-in-balance"] as const) {

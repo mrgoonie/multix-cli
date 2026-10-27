@@ -149,11 +149,14 @@ export function installFetchTelemetry(onDryRun: (request: DryRunRequest) => neve
 
 /**
  * The model a request names: a JSON body's `model`/`model_id`/`modelId`
- * (OpenAI, OpenRouter, BytePlus, MiniMax, Leonardo, ...) or a Gemini-style
- * `/models/<name>:method` path.
+ * (OpenAI, OpenRouter, BytePlus, MiniMax, Leonardo, ...), a Gemini-style
+ * `/models/<name>:method` path or a Replicate `/models/<owner>/<name>/predictions` path.
  */
 export function modelFromRequest(path: string, body: unknown): string | undefined {
-  const fromPath = path.match(/\/models\/([^/:]+):/)?.[1];
+  const fromPath =
+    path.match(/\/models\/([^/:]+):/)?.[1] ??
+    // Replicate: POST /v1/models/<owner>/<name>/predictions
+    path.match(/\/models\/([^/]+\/[^/]+)\/predictions$/)?.[1];
   if (fromPath) return decodeURIComponent(fromPath);
   if (typeof body !== "string" || body.length > 5_000_000) return undefined;
   try {
@@ -309,8 +312,10 @@ async function recordUsage(
   }
   const usage = extractUsage(body, response.headers);
   for (const id of usage.ids) if (!run.ids.includes(id) && run.ids.length < 10) run.ids.push(id);
-  // The job is the latest submit the provider accepted; uploads before it return ids too.
-  const jobId = usage.ids[0];
+  // The job is the latest submit the provider accepted (uploads before it return ids
+  // too); within a response a body id names the job better than a request-id header.
+  const headerValues = new Set(response.headers.values());
+  const jobId = usage.ids.find((id) => !headerValues.has(id)) ?? usage.ids[0];
   if (
     response.ok &&
     method !== "GET" &&
@@ -318,7 +323,7 @@ async function recordUsage(
     jobId &&
     (run.job?.call ?? -1) < call.index
   ) {
-    run.job = { id: jobId, attempt: call.attempt, call: call.index };
+    run.job = { id: jobId, attempt: call.attempt, host, call: call.index };
   }
   if (!hasUsage(usage)) return;
   if (usage.sources) {

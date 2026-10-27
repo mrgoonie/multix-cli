@@ -209,10 +209,52 @@ function logWarnings(): Array<{ code: "LOG_WARNING"; message: string }> {
  * Undefined when no provider returned an id.
  */
 function jobIdentity(): JobIdentity | undefined {
-  const id = run.inFlight?.id ?? run.job?.id;
-  if (!id) return undefined;
-  const attempt = run.job?.id === id ? run.job.attempt : 1;
-  return { provider: run.group, id, attempt };
+  if (run.inFlight) {
+    const tracked = run.job?.id === run.inFlight.id ? run.job : undefined;
+    return {
+      provider: providerOfHost(tracked?.host) ?? run.group,
+      id: run.inFlight.id,
+      attempt: tracked?.attempt ?? 1,
+    };
+  }
+  const job = run.job;
+  if (!job) return undefined;
+  // A submit that failed after it (an upload's id followed by a rejected create) means
+  // the id names an input, not a job the provider accepted.
+  const laterSubmitFailed = run.calls.some(
+    (c, i) =>
+      i > job.call &&
+      c.method !== "GET" &&
+      c.method !== "HEAD" &&
+      (c.status === 0 || c.status >= 400),
+  );
+  if (laterSubmitFailed) return undefined;
+  return { provider: providerOfHost(job.host) ?? run.group, id: job.id, attempt: job.attempt };
+}
+
+/** API domains by provider, for commands that route to several (`speech`, `scene`). */
+const PROVIDER_DOMAINS: Array<[RegExp, string]> = [
+  [/(^|\.)atlascloud\.ai$/, "atlascloud"],
+  [/(^|\.)(byteplus|bytepluses)\.com$/, "byteplus"],
+  [/(^|\.)cloudflare\.com$/, "cloudflare"],
+  [/(^|\.)elevenlabs\.io$/, "elevenlabs"],
+  [/(^|\.)(fal\.run|fal\.ai|fal\.media)$/, "fal"],
+  [/(^|\.)fish\.audio$/, "fish"],
+  [/^generativelanguage\.googleapis\.com$/, "gemini"],
+  [/(^|\.)heygen\.com$/, "heygen"],
+  [/(^|\.)leonardo\.ai$/, "leonardo"],
+  [/(^|\.)(minimax\.io|minimaxi\.com|minimax\.chat|minimaxi\.chat)$/, "minimax"],
+  [/(^|\.)openai\.com$/, "openai"],
+  [/(^|\.)openrouter\.ai$/, "openrouter"],
+  [/(^|\.)replicate\.com$/, "replicate"],
+  [/(^|\.)runwayml\.com$/, "runway"],
+];
+
+/** Provider that owns an API host; undefined for an unknown host (a base URL override). */
+export function providerOfHost(host: string | undefined): string | undefined {
+  const name = host?.replace(/:\d+$/, "").toLowerCase();
+  if (!name) return undefined;
+  return PROVIDER_DOMAINS.find(([re]) => re.test(name))?.[1];
 }
 
 interface FinalizeInput {
@@ -278,9 +320,13 @@ export function finalizeRun(input: FinalizeInput): number {
   const optionModel = typeof run.options.model === "string" ? run.options.model : undefined;
   const model = run.requestModel ?? optionModel;
   // `model` stays for compatibility; the pair says what was asked and what the provider served.
-  const models = model
-    ? { model_requested: model, model_resolved: notSent ? null : (run.resolvedModel ?? null) }
-    : {};
+  const models =
+    model || (run.group && run.requestsStarted > 0)
+      ? {
+          model_requested: model ?? null,
+          model_resolved: notSent ? null : (run.resolvedModel ?? null),
+        }
+      : {};
   const job = notSent ? undefined : jobIdentity();
   const usage = SPEND_LOOKUPS.test(run.command) ? undefined : summarizeUsage();
   const httpErrors = run.calls.filter((c) => c.status === 0 || c.status >= 400).length;

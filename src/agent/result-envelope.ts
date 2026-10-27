@@ -27,8 +27,8 @@ export interface ResultEnvelope {
   provider?: string;
   /** Same as `model_requested`; kept for compatibility. */
   model?: string;
-  /** Model the run asked for (first request that names one, else `--model`). */
-  model_requested?: string;
+  /** Model the run asked for (first request that names one, else `--model`); null when none was named. */
+  model_requested?: string | null;
   /** Model the provider reported serving; null when it reported none or nothing was sent. */
   model_resolved?: string | null;
   /** Present when a provider returned a job or request id. */

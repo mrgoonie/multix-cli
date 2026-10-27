@@ -24,7 +24,7 @@ export interface HistoryEntry {
   command: string;
   provider: string;
   model?: string;
-  model_requested?: string;
+  model_requested?: string | null;
   model_resolved?: string | null;
   job?: JobIdentity;
   argv: string[];

@@ -49,10 +49,10 @@ export interface RunState {
   resolvedModel?: string;
   /**
    * Provider job or request id from the latest successful submit (non-GET)
-   * response, with how many sends of that request it took and the index of
-   * its call in `calls`.
+   * response: how many sends of that request it took, the host that returned
+   * it and the index of its call in `calls`.
    */
-  job?: { id: string; attempt: number; call: number };
+  job?: { id: string; attempt: number; host: string; call: number };
   /** Structured result a command reports for the envelope's `data` (wins over parsed stdout). */
   data?: unknown;
   /** stdout/stderr text captured in JSON mode. */
