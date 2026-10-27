@@ -18,7 +18,7 @@ export interface ReceiptCheck {
   receipt_sha256: string;
   file_sha256: string;
   profile: { id: string; version: number };
-  /** The verify engine that made the receipt; an older one may miss defects the current one finds. */
+  /** The verify engine that made the receipt; a different (e.g. older) one may miss defects the current one finds. */
   engine: { receipt: string | null; current: string; current_matches: boolean };
   reason?: string;
   warnings: string[];
@@ -54,7 +54,10 @@ export async function checkReceipt(receiptFile: string, mediaFile: string): Prom
   const hashMatches = src.sha256 === receipt.source.sha256;
   const ok = hashMatches && receipt.status === "pass";
   // An older engine's verdict still stands as a record of its run, so it is reported, not failed.
-  const receiptEngine = typeof receipt.engine?.id === "string" ? receipt.engine.id : null;
+  // The id is echoed into the warning, so only a short engine-like token is taken as one.
+  const engineId = receipt.engine?.id;
+  const receiptEngine =
+    typeof engineId === "string" && /^[\w./-]{1,64}$/.test(engineId) ? engineId : null;
   const engineMatches = receiptEngine === VERIFY_ENGINE;
   return {
     ok,

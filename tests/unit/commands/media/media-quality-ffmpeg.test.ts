@@ -611,6 +611,16 @@ setTimeout(() => {}, 60000);
         engine: { receipt: "multix-media-verify/1", current_matches: false },
       });
       expect(aged.warnings[0]).toMatch(/multix-media-verify\/1, current is .*rerun media verify/);
+      // A missing, null or unreadable engine id is reported as unknown, not echoed.
+      for (const engine of [undefined, null, { id: 7 }, { id: "x\n".repeat(50) }]) {
+        fs.writeFileSync(old, JSON.stringify({ ...r, engine }));
+        const unknown = await checkReceipt(old, f("t.mp4"));
+        expect(unknown).toMatchObject({
+          ok: true,
+          engine: { receipt: null, current_matches: false },
+        });
+        expect(unknown.warnings[0]).toMatch(/verify engine \(unknown\), current is/);
+      }
       for (const bad of [null, { schema: "multix.media-verify/v1", status: "pass" }]) {
         fs.writeFileSync(f("bad-receipt.json"), JSON.stringify(bad));
         await expect(checkReceipt(f("bad-receipt.json"), f("t.mp4"))).rejects.toThrow(
