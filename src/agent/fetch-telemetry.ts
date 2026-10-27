@@ -125,11 +125,15 @@ export function installFetchTelemetry(onDryRun: (request: DryRunRequest) => neve
     if (!run.requestModel) run.requestModel = modelFromRequest(path, init?.body);
     let response: Response;
     run.requestsStarted++;
+    const unanswered = { method, host, path, started };
+    inFlightCalls.add(unanswered);
     try {
       response = await original(input, init);
     } catch (error) {
       run.calls.push({ method, host, path, status: 0, ms: Date.now() - started });
       throw error;
+    } finally {
+      inFlightCalls.delete(unanswered);
     }
     run.calls.push({ method, host, path, status: response.status, ms: Date.now() - started });
     // Read in the background: the caller keeps its own size caps and stall detection.
@@ -162,6 +166,25 @@ export function modelFromRequest(path: string, body: unknown): string | undefine
 }
 
 const pendingReads = new Set<Promise<void>>();
+/** Requests sent but not yet answered. */
+const inFlightCalls = new Set<{ method: string; host: string; path: string; started: number }>();
+
+/**
+ * Record requests still unanswered when the run ends (a signal cut them off)
+ * as status 0, like a broken connection: the provider may have done the work.
+ */
+export function recordUnansweredCalls(): void {
+  for (const c of inFlightCalls) {
+    run.calls.push({
+      method: c.method,
+      host: c.host,
+      path: c.path,
+      status: 0,
+      ms: Date.now() - c.started,
+    });
+  }
+  inFlightCalls.clear();
+}
 
 /** Wait (bounded) for background usage reads, so the summary includes them. */
 export async function settleTelemetry(timeoutMs = 2_000): Promise<void> {

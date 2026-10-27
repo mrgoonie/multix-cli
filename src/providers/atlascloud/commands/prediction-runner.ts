@@ -225,7 +225,7 @@ export function beforeSubmit<T>(work: () => Promise<T>, exit?: (code: number) =>
 }
 
 const SUBMIT_UNKNOWN_HINT =
-  "The submit request reached Atlas Cloud before the run stopped, so a paid prediction may exist that multix cannot name. Check the Atlas Cloud dashboard before resubmitting, or you may pay twice.";
+  "The submit request may have reached Atlas Cloud before the run stopped, so a paid prediction may exist that multix cannot name. Check the Atlas Cloud dashboard before resubmitting, or you may pay twice.";
 
 /** Submit, then either exit with the id (--async) or wait, verify, and deliver outputs. */
 export async function executePrediction(o: ExecuteOptions): Promise<ExecuteResult> {

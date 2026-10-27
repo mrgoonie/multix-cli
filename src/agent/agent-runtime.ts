@@ -24,7 +24,12 @@ import {
 import { setExternalRunGuard } from "../core/external-run-guard.js";
 import { redactUrlsInText } from "../core/redact.js";
 import { costReceiptFor, formatEstimate, formatReceipt, preflightCost } from "./cost-preflight.js";
-import { type DryRunRequest, installFetchTelemetry, settleTelemetry } from "./fetch-telemetry.js";
+import {
+  type DryRunRequest,
+  installFetchTelemetry,
+  recordUnansweredCalls,
+  settleTelemetry,
+} from "./fetch-telemetry.js";
 import { appendHistory, newHistoryId, redactArgv } from "./history-store.js";
 import { type OutputFile, type OutputWarning, inspectOutput } from "./output-file-inspect.js";
 import { installOutputFileTracker, producedFiles } from "./output-file-tracker.js";
@@ -215,6 +220,7 @@ interface FinalizeInput {
 export function finalizeRun(input: FinalizeInput): number {
   if (run.finalized) return input.exitCode;
   run.finalized = true;
+  recordUnansweredCalls();
   const dryRun = Boolean(input.dryRunRequest || input.dryRunLocal);
   const estimateOnly = Boolean(input.estimateOnly);
   const notSent = dryRun || estimateOnly;
@@ -243,6 +249,11 @@ export function finalizeRun(input: FinalizeInput): number {
   } else if (info && signalled && run.submit?.state === "pending") {
     // The submit went out unanswered: a paid job may exist that no output names.
     info = { ...info, retryable: false, hint: run.submit.hint };
+  } else if (info && signalled && run.submit?.state === "unsent") {
+    info = {
+      ...info,
+      hint: "The run stopped before it submitted its paid job, so nothing was billed. Rerun the command.",
+    };
   }
   // Exit classes (2-6) are part of agent mode; plain runs keep the historical exit 1.
   // An unclassified failure keeps the command's own status in both modes.

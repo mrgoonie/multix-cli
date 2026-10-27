@@ -16,6 +16,7 @@ import {
 import {
   availableOutputPath,
   claimOutputPath,
+  downloadClaimed,
   handleInterrupt,
   releaseClaim,
   savedOutput,
@@ -84,6 +85,10 @@ afterEach(() => {
   process.env = { ...originalEnv };
   _resetOutputDir();
   fs.rmSync(tmp, { recursive: true, force: true });
+  // Module-level run state the signal tests set; reset even when an assertion failed.
+  run.inFlight = undefined;
+  run.submit = undefined;
+  run.ids = [];
 });
 
 describe("executePrediction (mocked submit -> poll -> saved output)", () => {
@@ -256,8 +261,6 @@ describe("executePrediction (mocked submit -> poll -> saved output)", () => {
     expect(calls.filter((c) => c.method === "POST")).toHaveLength(1);
     // The handlers are removed once the wait ends, so a later signal is not swallowed.
     expect(signals.map((s) => process.listenerCount(s))).toEqual(before);
-    run.inFlight = undefined;
-    run.ids = [];
   });
 
   it("Ctrl-C during the submit exits 130 and records that a paid prediction may exist", async () => {
@@ -292,7 +295,6 @@ describe("executePrediction (mocked submit -> poll -> saved output)", () => {
     expect(run.inFlight).toBeUndefined();
     expect(run.submit).toMatchObject({ state: "pending" });
     expect(stderr).toHaveBeenCalledWith(expect.stringContaining("Atlas Cloud dashboard"));
-    run.submit = undefined;
   });
 
   it("a signal before the submit (schema, uploads) is recorded as a clean cancel", async () => {
@@ -311,7 +313,6 @@ describe("executePrediction (mocked submit -> poll -> saved output)", () => {
     ).rejects.toThrow("exited");
     expect(exits).toEqual([143]);
     expect(run.submit).toEqual({ state: "unsent" });
-    run.submit = undefined;
   });
 
   it("resumeCommand adds --output only when given, quoting it when needed", () => {
@@ -726,6 +727,43 @@ describe("download hardening", () => {
     handleInterrupt("SIGTERM", exit);
     expect(exit).toHaveBeenLastCalledWith(143);
     expect(fs.readdirSync(tmp)).toEqual(["keep.mp4"]);
+  });
+
+  it("a signal mid-download to a single-file --output removes this run's temp file", async () => {
+    const dest = path.join(tmp, "clip.mp4");
+    fs.writeFileSync(dest, "OLD");
+    const exit = vi.spyOn(process, "exit").mockImplementation((() => undefined) as never);
+    let duringSignal: string[] = [];
+    try {
+      // Signal mid-body, once downloadToFile created its temp file. A real exit never
+      // returns, so what the handler alone removed is checked right after it ran.
+      vi.stubGlobal(
+        "fetch",
+        async () =>
+          new Response(
+            new ReadableStream({
+              start(c) {
+                c.enqueue(new TextEncoder().encode("PART"));
+              },
+              async pull(c) {
+                await new Promise((r) => setTimeout(r, 20));
+                expect(fs.readdirSync(tmp).some((n) => n.endsWith(".part"))).toBe(true);
+                (process.listeners("SIGINT").at(-1) as (s: string) => void)("SIGINT");
+                duringSignal = fs.readdirSync(tmp);
+                c.error(new Error("stopped"));
+              },
+            }),
+          ),
+      );
+      await expect(
+        downloadClaimed("https://m.test/v.mp4", () => dest, "overwrite", { maxBytes: 1024 }),
+      ).rejects.toThrow();
+      expect(exit).toHaveBeenCalledWith(130);
+      expect(duringSignal).toEqual(["clip.mp4"]);
+      expect(fs.readFileSync(dest, "utf8")).toBe("OLD");
+    } finally {
+      exit.mockRestore();
+    }
   });
 
   it("a closed terminal (SIGHUP) mid-download cleans up like Ctrl-C, then exits 129", () => {

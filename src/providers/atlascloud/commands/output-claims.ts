@@ -146,6 +146,8 @@ function isStaleLock(lock: string): boolean {
 
 /** Dests this run holds a lock for, so an interrupt can clean them up. */
 const activeClaims = new Set<string>();
+/** Single-file `--output` destinations this run is downloading to without a lock. */
+const activeOverwrites = new Set<string>();
 
 /** Create `<dest>.part` exclusively, taking over a stale one; false when a live run holds it. */
 function tryLock(dest: string): boolean {
@@ -190,17 +192,26 @@ export function releaseClaim(dest: string): void {
   removeQuietly(`${dest}${PART}`);
 }
 
+/** Delete this process's in-flight download temp files for `dest`. */
+function removeOwnTemps(dest: string): void {
+  const base = path.basename(dest);
+  const dir = path.dirname(dest);
+  for (const n of listDir(dir)) {
+    if (!n.startsWith(base)) continue;
+    const m = TEMP_TAIL.exec(n.slice(base.length));
+    if (m?.[1] && Number(m[1]) === process.pid) removeQuietly(path.join(dir, n));
+  }
+}
+
 /** Remove this run's locks and its in-flight download temp files. */
 export function cleanupActiveClaims(): void {
   for (const dest of [...activeClaims]) {
-    const base = path.basename(dest);
-    const dir = path.dirname(dest);
-    for (const n of listDir(dir)) {
-      if (!n.startsWith(base)) continue;
-      const m = TEMP_TAIL.exec(n.slice(base.length));
-      if (m?.[1] && Number(m[1]) === process.pid) removeQuietly(path.join(dir, n));
-    }
+    removeOwnTemps(dest);
     releaseClaim(dest);
+  }
+  for (const dest of [...activeOverwrites]) {
+    removeOwnTemps(dest);
+    activeOverwrites.delete(dest);
   }
 }
 
@@ -217,7 +228,12 @@ export function handleInterrupt(
 
 let interruptCleanupInstalled = false;
 
-function installInterruptCleanup(): void {
+/**
+ * Make a signal during a download clean up and exit 128+n through the agent
+ * runtime (envelope, resume command) instead of Node's default kill. Installed
+ * before the first connection, whatever the naming policy.
+ */
+export function installInterruptCleanup(): void {
   if (interruptCleanupInstalled) return;
   interruptCleanupInstalled = true;
   for (const signal of Object.keys(INTERRUPT_EXIT_CODES) as Array<
@@ -242,7 +258,11 @@ function heldMessage(dest: string): string {
  * are removed once it is held. Release with `releaseClaim`.
  */
 export function claimOutputPath(file: string, policy: NamingPolicy): string {
-  if (policy === "overwrite") return file;
+  if (policy === "overwrite") {
+    // No lock (the user chose this file), but a signal still removes the temp file.
+    activeOverwrites.add(file);
+    return file;
+  }
   fs.mkdirSync(path.dirname(file), { recursive: true });
   if (policy === "reuse") {
     if (!tryLock(file)) throw new ProviderError(heldMessage(file), ATLAS_PROVIDER);
@@ -284,18 +304,21 @@ export async function downloadClaimed(
   policy: NamingPolicy,
   opts: { maxBytes: number; validateUrl?: UrlValidator },
 ): Promise<string> {
+  installInterruptCleanup();
   let claimed: string | undefined;
   try {
     const { dest } = await downloadToFile(url, {
       ...opts,
       dest: (response) => {
-        const dest = claimOutputPath(choose(response), policy);
-        if (policy !== "overwrite") claimed = dest;
-        return dest;
+        claimed = claimOutputPath(choose(response), policy);
+        return claimed;
       },
     });
     return dest;
   } finally {
-    if (claimed) releaseClaim(claimed);
+    if (claimed) {
+      releaseClaim(claimed);
+      activeOverwrites.delete(claimed);
+    }
   }
 }

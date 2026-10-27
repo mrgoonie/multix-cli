@@ -297,6 +297,8 @@ describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
         expect(out.error.hint).toContain("Check the Atlas Cloud dashboard before resubmitting");
         expect(out.error.hint).not.toMatch(/nothing was left behind/i);
         expect(out.next).not.toContain(resume);
+        // The cut-off submit may have been billed: never a settled $0.
+        expect(out.cost).toMatchObject({ status: "uncertain" });
         expect(seen.posts).toBe(1);
       }, "submit");
     });
@@ -332,7 +334,7 @@ describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
         const out = envelope(result.stdout);
         expect(out).toMatchObject({ ok: false, command: "atlas image-to-image", exit_code: 130 });
         expect(out.error).toMatchObject({ code: "CANCELLED" });
-        expect(out.error.hint).toMatch(/nothing was left behind/i);
+        expect(out.error.hint).toContain("before it submitted its paid job");
         expect(seen.uploads).toBe(1);
         expect(seen.posts).toBe(0);
       }, "upload");
