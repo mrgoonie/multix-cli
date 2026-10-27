@@ -40,3 +40,22 @@ EN và VI khớp nhau và khớp code (129/130/143, CANCELLED, giữ exit ở c�
 
 ## Test
 Test unit bao phủ cả mã âm (0,1,2,6,128,131,137). Smoke SIGTERM kiểm tra envelope, exit, và dọn thư mục staging: test thật, không phải phantom. Thiếu test cho SIGHUP qua finalizeRun và cho dòng text UNKNOWN mới (exit N != 1); không chặn.
+
+## Re-review: commit fa78500
+
+Phạm vi: `run.requestsStarted` (run-state.ts, fetch-telemetry.ts), `classifySignalExit(exitCode, providerContacted)`, wiring trong `finalizeRun`, dòng guide, docs EN/VI, SKILL.md, test mới `tests/unit/agent/finalize-run-cancel.test.ts`.
+
+Kiểm chứng: typecheck pass, lint sạch (595 file), build pass, 8 file test liên quan 58/58 pass, `npm test` đầy đủ 2251 pass / 22 skip / 0 fail.
+
+- Finding 1 đã xử lý. `requestsStarted++` đặt sau nhánh dry-run (dry-run không bị đếm) và trước `await original(...)`, nên tính cả request đang bay hoặc thất bại. Đây là hướng an toàn cho một POST bị ngắt giữa chừng. `run.externalRuns` phủ Codex driver. Không có client nào gọi HTTP qua `node:http(s)` hay giữ `fetch` từ lúc import, nên không có đường bỏ sót bộ đếm (đã grep).
+- Finding 2 đã xử lý: guide có dòng `exit 129/130/143 CANCELLED ...`.
+- Finding 3 đã xử lý: comment `Default only` trên `EXIT_CODES.cancelled`.
+- Docs EN/VI và SKILL.md khớp với code và khớp nhau.
+- Test mới là test thật: nạp lại module, chặn `fs.writeSync` trên fd 1 và kiểm tra cả hai nhánh hint qua `finalizeRun`.
+
+Nit (không chặn):
+- Bộ đếm tính mọi fetch, kể cả GET không tính phí (vd đọc catalog model trước khi submit), nên có thể hiện hint "pay twice" thừa. Thừa theo hướng an toàn thì chấp nhận được.
+- Hint bảo "check provider_ids", nhưng nếu signal đến khi POST submit còn đang bay thì `provider_ids` rỗng. Hint đã có vế "or the provider's request list" nên vẫn dùng được.
+- Commit fa78500 đã đưa file report này vào git; phần Re-review này sẽ là thay đổi chưa commit.
+
+Kết luận re-review: không có finding chặn.
