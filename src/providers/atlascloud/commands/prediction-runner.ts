@@ -223,10 +223,10 @@ export async function exitOnInterrupt<T>(
   }
 }
 
-/** A signal before the submit leaves no prediction behind. */
+/** A signal before the submit leaves no prediction behind; the user stopped it, so no automatic retry. */
 export const NOTHING_SUBMITTED = {
   hint: "The run stopped before the prediction was submitted, so no prediction was created or billed. Rerun the command.",
-  retryable: true,
+  retryable: false,
 };
 
 /** Submit, then either exit with the id (--async) or wait, verify, and deliver outputs. */

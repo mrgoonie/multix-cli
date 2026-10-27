@@ -324,7 +324,7 @@ describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
         expect(result.exitCode).toBe(143);
         const out = envelope(result.stdout);
         expect(out).toMatchObject({ ok: false, command: "atlas image-to-image", exit_code: 143 });
-        expect(out.error).toMatchObject({ code: "CANCELLED", retryable: true });
+        expect(out.error).toMatchObject({ code: "CANCELLED", retryable: false });
         expect(out.error.hint).toContain("no prediction was created or billed");
         expect(seen.requests.some((r) => r.includes("/model/generate"))).toBe(false);
       });

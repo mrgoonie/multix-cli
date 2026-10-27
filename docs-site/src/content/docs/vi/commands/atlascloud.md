@@ -118,8 +118,8 @@ vì chạy lại lệnh. Với `--json`, envelope ghi id trong `provider_ids` v�
 tiếp tục đầu tiên trong `next`. Tín hiệu đến khi yêu cầu submit còn đang gửi thì
 không thể biết Atlas Cloud đã nhận hay chưa, và id chưa có: envelope nói rõ điều
 này (`retryable: false`), nên hãy kiểm tra danh sách prediction trong Atlas Cloud
-console trước khi gửi lại. Tín hiệu đến trong lúc đang tải các file `--ref` cục bộ
-lên thì hủy sạch; chưa có gì được submit. Prediction kết thúc ở trạng thái `failed` làm lệnh thoát
+console trước khi gửi lại. Tín hiệu đến trong lúc đang tải các file `--ref` hoặc
+`--audio` cục bộ lên thì hủy sạch; chưa có gì được submit. Prediction kết thúc ở trạng thái `failed` làm lệnh thoát
 với mã khác 0. Atlas Cloud không có endpoint hủy, nên multix không cung cấp lệnh
 hủy.
 

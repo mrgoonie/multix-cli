@@ -50,7 +50,7 @@ export async function runGenerationCommand(cfg: GenerationCommandConfig): Promis
   const refUrls =
     refs.length > 0
       ? await exitOnInterrupt(() => resolveMediaRefs(client, refs, logger), {
-          message: "Cancelled while uploading references; no prediction was submitted.",
+          message: "Cancelled while uploading reference files; no prediction was submitted.",
           outcome: NOTHING_SUBMITTED,
         })
       : [];
