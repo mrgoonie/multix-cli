@@ -134,7 +134,9 @@ export function installFetchTelemetry(onDryRun: (request: DryRunRequest) => neve
     }
     run.calls.push({ method, host, path, status: response.status, ms: Date.now() - started, seq });
     // Read in the background: the caller keeps its own size caps and stall detection.
-    const call = { method, host, path, seq, named: named ?? modelInPath(path) };
+    // A GET is a poll or lookup (fal status/result paths carry the model too), never the generation.
+    const generation = named ?? (method === "GET" ? undefined : modelInPath(path));
+    const call = { method, host, path, seq, named: generation };
     const pending = recordUsage(response, call).catch(() => {
       // Telemetry never breaks a command.
     });
@@ -298,7 +300,7 @@ function recordIdentity(
   headers: Headers,
 ): void {
   const base = call.named ? 0 : call.method === "GET" ? 4 : 2;
-  if (model && call.named) {
+  if (model && call.named && call.method !== "GET") {
     run.resolvedModel = preferRanked(run.resolvedModel, {
       seq: call.seq,
       rank: 0,

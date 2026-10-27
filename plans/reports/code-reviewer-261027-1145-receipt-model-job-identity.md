@@ -68,3 +68,22 @@ Base: `origin/dev...HEAD` (10 files, +462/-17). Reviewer did not write the code.
 2. Fix or explicitly document M1 and M2 before the docs promise a lookup-able `{provider, id}` and a same-request model pair.
 3. Decide on Gemini job ids (M3) and replace the fabricated fixture.
 4. Tighten or reword `attempt` (M4/L6).
+
+## Re-review: 776c4e3 (`git diff da1323e..HEAD`)
+
+Verification: `npx vitest run tests/unit/agent` 46/46 pass; `npm run typecheck` clean; `biome check src/agent tests/unit/agent` clean. I also ran a scratch probe outside the repo against the real `installFetchTelemetry` + `jobIdentity`.
+
+| Finding | Status | Evidence |
+|---|---|---|
+| H1 upload id taken as the job | Fixed | `modelInPath` (`fetch-telemetry.ts:262-268`) marks `/v1/models/<owner>/<name>/predictions` as the generation request. The probe now returns `pred-xyz`, not `file-abc`. A regression test was added. |
+| M1 `job.provider` = group for speech/scene | Fixed (documented) | `run-state.ts:131,161-162`: `speech`/`scene` report the API host (for example `openrouter.ai`). The value is a host, not a provider name, and the docs say so. |
+| M2 model pair from different requests | Fixed | `resolvedModel.requested` is set from the same call, and `model_requested` prefers it (`agent-runtime.ts:275-280`). Residual nit: the legacy `model` field still uses `requestModel` (the first request, possibly the failed route), so on a fallback run `model` and `model_requested` can differ even though the docs say `model` "keeps the requested value". Optional: set `model` from `modelRequested`, or reword the docs. |
+| M3 Gemini has no job / invented fixture | Fixed | `operationName()` accepts `.../operations/<id>`. The tests now use the real Veo and generateContent shapes. generateContent still has no job (`responseId` is not read), which is acceptable. |
+| M4 attempt counts unrelated failures | Partly fixed | It now counts only consecutive failures back to the endpoint's previous success. The probe shows that two concurrent POSTs to the same endpoint (the first gets 429 and is not retried, the second succeeds) still give `attempt: 2`. This is low risk, since it only matters for parallel batches. A full fix needs per-call start/end times (count only failures that ended before the winning request started). |
+| L1 served model from poll/result payloads | Partly fixed; docs overclaim | `modelInPath` also marks fal GETs whose path contains the model. For fal models whose id equals the app id (two segments, for example `fal-ai/any-llm` or `fal-ai/recraft-v3`), the status and result GET paths `/<model>/requests/<id>` match. A result payload's top-level `model` is then recorded as the served model; the probe confirmed `served: "payload-field"`. The docs now state "polls and result payloads are not read", which is false for these models. The new test passes only because it uses a three-segment model (`fal-ai/flux/dev`) and sets no `positionalModel`. Fix: record the served model only for named non-GET calls (for example `call.named && call.method !== "GET"`), or build `named` from `modelInPath` only for POST. Add a test with `run.positionalModel = "fal-ai/recraft-v3"`. |
+| L2/L3/L5 | Left as is, by decision | |
+| L4 | To be noted in the PR | |
+
+Remaining before merge: the L1 residual. It is low severity, but it contradicts the newly written docs and the "never a guess" requirement. The M4 residual and the `model` versus `model_requested` nit are optional.
+
+Note: this report file was committed in 776c4e3 under `plans/reports/`, which matches the AGENTS.md location.

@@ -185,6 +185,17 @@ describe("resolved model and job from provider responses", () => {
     expect(run.resolvedModel).toBeUndefined();
   });
 
+  it("does not take a served model from a two-segment fal model's result path", async () => {
+    run.group = "fal";
+    run.positionalModel = "fal-ai/recraft-v3";
+    serve(json({ request_id: "r-2" }), json({ model: "payload-field", images: [] }));
+    await fetch("https://queue.fal.run/fal-ai/recraft-v3", { method: "POST", body: "{}" });
+    await fetch("https://queue.fal.run/fal-ai/recraft-v3/requests/r-2");
+    await settleTelemetry();
+    expect(run.resolvedModel).toBeUndefined();
+    expect(jobIdentity()).toEqual({ provider: "fal", id: "r-2", attempt: 1 });
+  });
+
   it("pairs the served model with the request that succeeded and names the routed host", async () => {
     run.group = "speech";
     serve(
