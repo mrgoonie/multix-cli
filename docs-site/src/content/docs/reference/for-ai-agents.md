@@ -109,10 +109,12 @@ https://multix.zuey.me/llms.txt
 | 4 | temporary | `RATE_LIMITED`, `PROVIDER_UNAVAILABLE`, `NETWORK_ERROR` | Wait `retry_after_s`, then `multix rerun <id>`. |
 | 5 | rejected | `QUOTA_EXCEEDED`, `CONTENT_BLOCKED`, `MODEL_NOT_FOUND`, `NOT_FOUND`, `PROVIDER_REJECTED`, `JOB_FAILED`, `RESPONSE_TOO_LARGE` | Change the input, model or provider. |
 | 6 | timed out or unknown | `TIMEOUT`, `UNKNOWN_REMOTE_STATE` | The job may still run: use the status command in `next[]`. `UNKNOWN_REMOTE_STATE`: the submit failed without proof that the provider rejected it (cut off, 5xx gateway error), so it may have been queued; check the provider's request list before resubmitting. |
+| 129, 130, 143 | cancelled | `CANCELLED` | The run was stopped by SIGHUP, Ctrl-C (SIGINT) or SIGTERM after cleaning up; nothing was left behind. Rerun the command. |
 | 1 | unknown | `UNKNOWN` | Read `log[]` (last stderr lines). |
 
 These exit classes apply in agent mode (`--json` or `MULTIX_OUTPUT=json`).
-Without it a failed command still exits 1, as in earlier versions, and prints
+Without it a failed command still exits 1, as in earlier versions (a cancelled
+run keeps its 128 + signal status in both modes), and prints
 `code:`, `hint:` and `next:` lines on stderr. The history ledger records the
 error code either way.
 

@@ -109,10 +109,12 @@ https://multix.zuey.me/llms.txt
 | 4 | tạm thời | `RATE_LIMITED`, `PROVIDER_UNAVAILABLE`, `NETWORK_ERROR` | Chờ `retry_after_s`, rồi `multix rerun <id>`. |
 | 5 | bị từ chối | `QUOTA_EXCEEDED`, `CONTENT_BLOCKED`, `MODEL_NOT_FOUND`, `NOT_FOUND`, `PROVIDER_REJECTED`, `JOB_FAILED`, `RESPONSE_TOO_LARGE` | Đổi input, model hoặc provider. |
 | 6 | hết thời gian hoặc không rõ | `TIMEOUT`, `UNKNOWN_REMOTE_STATE` | Job có thể vẫn đang chạy: dùng lệnh status trong `next[]`. `UNKNOWN_REMOTE_STATE`: lần submit thất bại mà không chứng minh được provider đã từ chối (bị cắt kết nối, lỗi gateway 5xx) nên job có thể đã vào hàng đợi; kiểm tra danh sách request của provider trước khi submit lại. |
+| 129, 130, 143 | đã hủy | `CANCELLED` | Lần chạy bị dừng bởi SIGHUP, Ctrl-C (SIGINT) hoặc SIGTERM sau khi đã dọn dẹp; không để lại gì. Chạy lại lệnh. |
 | 1 | không rõ | `UNKNOWN` | Đọc `log[]` (các dòng stderr cuối). |
 
 Các nhóm exit code này áp dụng ở agent mode (`--json` hoặc `MULTIX_OUTPUT=json`).
-Không có chế độ đó, lệnh lỗi vẫn exit 1 như các phiên bản trước và in thêm các
+Không có chế độ đó, lệnh lỗi vẫn exit 1 như các phiên bản trước (lần chạy bị hủy
+giữ exit 128 + số hiệu signal ở cả hai chế độ) và in thêm các
 dòng `code:`, `hint:` và `next:` ra stderr. Ledger lịch sử luôn ghi mã lỗi.
 
 ## Chi phí: ước tính, giới hạn chi tiêu và biên nhận

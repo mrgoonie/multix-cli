@@ -29,13 +29,15 @@ export type ErrorCode =
   | "BINARY_MISSING"
   | "BUDGET_EXCEEDED"
   | "BUDGET_UNPROVEN"
+  | "CANCELLED"
   | "UNKNOWN";
 
 /**
  * Process exit codes by class: 0 ok, 1 unknown, 2 usage or invalid input,
  * 3 missing/invalid key or config, 4 temporary (retry may succeed),
  * 5 rejected by the provider (do not retry unchanged), 6 timed out while the
- * job may still be running (resume it, do not resubmit).
+ * job may still be running (resume it, do not resubmit). A run cancelled by a
+ * signal keeps the shell's 128 + signal number (129 SIGHUP, 130 SIGINT, 143 SIGTERM).
  */
 export const EXIT_CODES = {
   ok: 0,
@@ -45,7 +47,11 @@ export const EXIT_CODES = {
   retryable: 4,
   rejected: 5,
   timeout: 6,
+  cancelled: 130,
 } as const;
+
+/** Exit statuses of a run stopped by a signal, as a shell reports them (128 + the signal number). */
+const SIGNAL_BY_EXIT: Record<number, string> = { 129: "SIGHUP", 130: "SIGINT", 143: "SIGTERM" };
 
 export interface ErrorInfo {
   code: ErrorCode;
@@ -88,6 +94,7 @@ const HINTS: Record<ErrorCode, string> = {
     "Nothing was sent: the estimate is over --max-cost. Raise the limit, shorten the input or pick a cheaper model (see --estimate).",
   BUDGET_UNPROVEN:
     "Nothing was sent: the cost cannot be bounded. Check --estimate; pass --cost-policy estimate to accept an estimated high end, or drop --max-cost.",
+  CANCELLED: "The run was cancelled; nothing was left behind. Rerun the command.",
   UNKNOWN: "Read the message; rerun with --verbose for details.",
 };
 
@@ -112,6 +119,7 @@ const EXIT_BY_CODE: Record<ErrorCode, number> = {
   BINARY_MISSING: EXIT_CODES.config,
   BUDGET_EXCEEDED: EXIT_CODES.usage,
   BUDGET_UNPROVEN: EXIT_CODES.usage,
+  CANCELLED: EXIT_CODES.cancelled,
   UNKNOWN: EXIT_CODES.unknown,
 };
 
@@ -212,6 +220,13 @@ export function codeFromHttp(status: number, body: string): ErrorCode {
   if (fromText === "CONTENT_BLOCKED" || fromText === "QUOTA_EXCEEDED") return fromText;
   if (fromText === "MODEL_NOT_FOUND") return fromText;
   return "PROVIDER_REJECTED";
+}
+
+/** Classify a run that exited with a signal's status (129, 130 or 143); undefined for any other code. */
+export function classifySignalExit(exitCode: number): ErrorInfo | undefined {
+  const signal = SIGNAL_BY_EXIT[exitCode];
+  if (!signal) return undefined;
+  return build("CANCELLED", `Cancelled by ${signal} (exit ${exitCode})`, { exit_code: exitCode });
 }
 
 /** Classify a log line or error message alone (no error object). */

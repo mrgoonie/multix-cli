@@ -3,6 +3,7 @@ import {
   EXIT_CODES,
   classifyError,
   classifyMessage,
+  classifySignalExit,
   codeFromHttp,
 } from "../../../src/core/error-classify.js";
 import {
@@ -105,5 +106,24 @@ describe("classifyError", () => {
     expect(
       classifyError(new ValidationError("Profile file not found: ffmpeg-missing.json")).code,
     ).toBe("INVALID_INPUT");
+  });
+
+  it("reports a signal's exit status as CANCELLED and keeps that status", () => {
+    for (const [status, signal] of [
+      [129, "SIGHUP"],
+      [130, "SIGINT"],
+      [143, "SIGTERM"],
+    ] as const) {
+      expect(classifySignalExit(status)).toMatchObject({
+        code: "CANCELLED",
+        message: `Cancelled by ${signal} (exit ${status})`,
+        retryable: false,
+        hint: "The run was cancelled; nothing was left behind. Rerun the command.",
+        exit_code: status,
+      });
+    }
+    for (const status of [0, 1, 2, 6, 128, 131, 137]) {
+      expect(classifySignalExit(status)).toBeUndefined();
+    }
   });
 });
