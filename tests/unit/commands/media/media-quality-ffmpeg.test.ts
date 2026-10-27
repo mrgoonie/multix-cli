@@ -11,7 +11,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { extractFrames } from "../../../../src/commands/media/media-frames.js";
 import { inspectMedia } from "../../../../src/commands/media/media-inspect.js";
 import { checkReceipt } from "../../../../src/commands/media/media-receipt.js";
-import { type VerifyReceipt, verifyMedia } from "../../../../src/commands/media/media-verify.js";
+import {
+  VERIFY_ENGINE,
+  type VerifyReceipt,
+  verifyMedia,
+} from "../../../../src/commands/media/media-verify.js";
 import { builtinProfile, loadProfileFile } from "../../../../src/commands/media/verify-profiles.js";
 
 const hasFfmpeg =
@@ -592,7 +596,31 @@ setTimeout(() => {}, 60000);
         ok: true,
         hash_matches: true,
         receipt_status: "pass",
+        engine: { receipt: VERIFY_ENGINE, current: VERIFY_ENGINE, current_matches: true },
+        warnings: [],
       });
+      // A receipt from an older engine still vouches, but says its checks are out of date.
+      const old = f("old-receipt.json");
+      fs.writeFileSync(
+        old,
+        JSON.stringify({ ...r, engine: { ...r.engine, id: "multix-media-verify/1" } }),
+      );
+      const aged = await checkReceipt(old, f("t.mp4"));
+      expect(aged).toMatchObject({
+        ok: true,
+        engine: { receipt: "multix-media-verify/1", current_matches: false },
+      });
+      expect(aged.warnings[0]).toMatch(/multix-media-verify\/1, current is .*rerun media verify/);
+      // A missing, null or unreadable engine id is reported as unknown, not echoed.
+      for (const engine of [undefined, null, { id: 7 }, { id: "x\n".repeat(50) }]) {
+        fs.writeFileSync(old, JSON.stringify({ ...r, engine }));
+        const unknown = await checkReceipt(old, f("t.mp4"));
+        expect(unknown).toMatchObject({
+          ok: true,
+          engine: { receipt: null, current_matches: false },
+        });
+        expect(unknown.warnings[0]).toMatch(/verify engine \(unknown\), current is/);
+      }
       for (const bad of [null, { schema: "multix.media-verify/v1", status: "pass" }]) {
         fs.writeFileSync(f("bad-receipt.json"), JSON.stringify(bad));
         await expect(checkReceipt(f("bad-receipt.json"), f("t.mp4"))).rejects.toThrow(

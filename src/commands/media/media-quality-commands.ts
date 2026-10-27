@@ -10,6 +10,7 @@ import path from "node:path";
 import type { Command } from "commander";
 import { run } from "../../agent/run-state.js";
 import { ValidationError } from "../../core/errors.js";
+import { defaultLogger as logger } from "../../core/logger.js";
 import { MAX_FRAMES, extractFrames } from "./media-frames.js";
 import { type InspectReport, inspectMedia } from "./media-inspect.js";
 import { checkReceipt } from "./media-receipt.js";
@@ -349,6 +350,8 @@ export function registerMediaQualityCommands(media: Command): void {
     )
     .action(async (receiptFile: string, file: string) => {
       const result = await checkReceipt(receiptFile, file);
+      // On stderr, so the --json envelope lists them in its top-level warnings too.
+      for (const w of result.warnings) logger.warn(w);
       emit(result, () =>
         result.ok
           ? `OK  receipt (${result.profile.id}@${result.profile.version}) matches ${file}`

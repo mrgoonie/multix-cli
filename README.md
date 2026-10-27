@@ -704,7 +704,7 @@ multix atlas upload ./photo.png
 - Inputs are model-specific. multix reads each model's published schema, maps flags onto that model's field names, and rejects unsupported flags or invalid values before submitting. Use `--no-validate` to skip this check.
 - `--async` prints only the prediction id on stdout and `upload` prints only the URL; progress goes to stderr, so `id=$(multix atlas video "waves" --async)` works.
 - `--ref` takes one value per flag; repeat it for several references. Local `--ref` / `--audio` files are uploaded first: only image, video and audio files, up to 200 MB (`ATLASCLOUD_MAX_UPLOAD_MB`).
-- Text outputs (transcripts, lyrics) are printed instead of downloaded. A failed prediction, or a download where some outputs fail, exits non-zero with the resume command (including your `--output`). Atlas Cloud has no cancel endpoint.
+- Text outputs (transcripts, lyrics) are printed instead of downloaded. A failed prediction, or a download where some outputs fail, exits non-zero with the resume command (including your `--output`). Ctrl-C or SIGTERM while waiting exits 130 or 143 with that resume command (first in `next` with `--json`, the id in `provider_ids`): the prediction keeps running and is billed, so resume it rather than rerunning. Atlas Cloud has no cancel endpoint.
 - `run --no-validate` skips the schema, so pass `--type` with it.
 
 ### `multix replicate`
@@ -903,7 +903,7 @@ multix media check-receipt <receipt> <file>                    # same bytes as t
 - Custom profile JSON: `{id, version, description?, extends?, media?, checks}`; `extends` names a built-in profile and `null` disables a check. A `--rule` script reads `multix.media-rule-input/v1` JSON on stdin and prints `{id, version, status, message?, findings?}`; it runs without a shell, with only `PATH` in its environment, in an empty temp directory.
 - `--cache-dir` reuses passing and failing receipts keyed by source sha256, profile, expectations, rules and ffmpeg version; delete the directory to clear it (also after changing a module a rule imports: only the rule's own file is hashed). Receipts are unsigned records of a local run.
 - `frames` only extracts frames (manifest `frames.json`, `model_reviewed: false`). To have a model look at them, pass them to `multix gemini analyze`.
-- A transcoded or remuxed file has new bytes: run `verify` on the final file, then `check-receipt` before shipping it.
+- A transcoded or remuxed file has new bytes: run `verify` on the final file, then `check-receipt` before shipping it. `check-receipt` reports the receipt's verify `engine`; a receipt from a different (e.g. older) engine still passes, with a warning (stderr, and `warnings` in `--json`) to rerun `verify` and apply the current checks.
 - Remote MCP: `--rule`, `--cache-dir` and `--receipt-out` are not supported. Full reference: [Media and documents](https://multix.zuey.me/commands/media-and-documents/).
 
 ### `multix doc`

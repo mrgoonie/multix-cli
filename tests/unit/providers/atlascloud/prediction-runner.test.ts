@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { run } from "../../../../src/agent/run-state.js";
 import { _resetEnvLoader } from "../../../../src/core/env-loader.js";
 import { ConfigError, ProviderError, ValidationError } from "../../../../src/core/errors.js";
 import { _resetOutputDir } from "../../../../src/core/output-dir.js";
@@ -212,6 +213,50 @@ describe("executePrediction (mocked submit -> poll -> saved output)", () => {
     expect(console.error).toHaveBeenCalledWith(
       expect.stringContaining('multix atlas status async01 --wait --download --output "my clips"'),
     );
+  });
+
+  it("Ctrl-C while polling exits 130 with the id and resume command, without resubmitting", async () => {
+    const { client, calls } = createFakeAtlas({
+      "POST /model/generateImage": { body: prediction("wait01", "processing") },
+      "GET /model/prediction/wait01": { body: prediction("wait01", "processing") },
+    });
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const exits: number[] = [];
+    const signals = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
+    const before = signals.map((s) => process.listenerCount(s));
+    let polls = 0;
+    const res = executePrediction({
+      client,
+      logger,
+      kind: "image",
+      model: "m/x",
+      body: { prompt: "x" },
+      opts: { output: "my clips" },
+      defaultWaitTimeoutMs: 60_000,
+      pollIntervalMs: 1,
+      exit: (code) => {
+        exits.push(code);
+        throw new Error("exited");
+      },
+    });
+    // Signal from inside the first poll, as a real Ctrl-C would arrive mid-wait. Only the
+    // newest listener is called: earlier download tests leave output-claims' own handler.
+    const origGet = client.getPrediction.bind(client);
+    vi.spyOn(client, "getPrediction").mockImplementation(async (...a) => {
+      if (++polls === 1) (process.listeners("SIGINT").at(-1) as (s: string) => void)("SIGINT");
+      return origGet(...a);
+    });
+    await expect(res).rejects.toThrow("exited");
+    expect(exits).toEqual([130]);
+    const resume = 'multix atlas status wait01 --wait --download --output "my clips"';
+    expect(run.inFlight).toEqual({ id: "wait01", resume });
+    expect(run.ids).toContain("wait01");
+    expect(stderr).toHaveBeenCalledWith(expect.stringContaining(`Resume with: ${resume}`));
+    expect(calls.filter((c) => c.method === "POST")).toHaveLength(1);
+    // The handlers are removed once the wait ends, so a later signal is not swallowed.
+    expect(signals.map((s) => process.listenerCount(s))).toEqual(before);
+    run.inFlight = undefined;
+    run.ids = [];
   });
 
   it("resumeCommand adds --output only when given, quoting it when needed", () => {

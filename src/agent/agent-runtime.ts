@@ -44,6 +44,8 @@ const UNRECORDED = /^(history|models|guide|rerun|check|update)\b/;
 const SPEND_LOOKUPS = /^openrouter generation\b/;
 /** Groups that run locally (ffmpeg/ImageMagick): dry run stops before the action. */
 const LOCAL_GROUPS = new Set(["media"]);
+/** Exit statuses of a run stopped by SIGHUP, SIGINT or SIGTERM (128 + the signal number). */
+const SIGNAL_EXITS = new Set([129, 130, 143]);
 
 let version = "0.0.0";
 /** Top-level command names, so printed prose is not mistaken for a command. */
@@ -227,6 +229,18 @@ export function finalizeRun(input: FinalizeInput): number {
             run.requestsStarted > 0 || run.externalRuns.length > 0,
           ) ?? classifyMessage(run.lastErrorLine ?? `Command exited with code ${input.exitCode}`));
   }
+  // A job submitted before the signal keeps running and is billed: resume it, never rerun.
+  const inFlight =
+    info && input.error === undefined && SIGNAL_EXITS.has(input.exitCode)
+      ? run.inFlight
+      : undefined;
+  if (info && inFlight) {
+    info = {
+      ...info,
+      retryable: false,
+      hint: `Job ${inFlight.id} was submitted before the run stopped; it runs on (or has finished) and is billed. Do not rerun; resume it with the next command.`,
+    };
+  }
   // Exit classes (2-6) are part of agent mode; plain runs keep the historical exit 1.
   // An unclassified failure keeps the command's own status in both modes.
   const jsonExitCode = info?.code === "UNKNOWN" ? input.exitCode || 1 : (info?.exit_code ?? 1);
@@ -263,6 +277,7 @@ export function finalizeRun(input: FinalizeInput): number {
   const cost = costReceiptFor({ failed, notSent, historyId, model, usage });
 
   const next = [
+    ...(inFlight ? [inFlight.resume] : []),
     ...(info ? nextForError(info, run.command, run.group, historyId) : []),
     ...suggestedCommands([...run.stdout, ...run.stderr], run.command, knownGroups),
   ];
