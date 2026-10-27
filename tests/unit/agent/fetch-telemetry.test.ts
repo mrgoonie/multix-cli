@@ -116,4 +116,24 @@ describe("dry-run request body", () => {
     const request = await dryRunBody(form);
     expect(request.body).toEqual({ image_url: "https://cdn.example.com/a.png?[redacted]" });
   });
+
+  it("shows the value of a model-selecting header but never the Authorization value", async () => {
+    globalThis.fetch = vi.fn() as unknown as typeof fetch;
+    let seen: DryRunRequest | undefined;
+    installFetchTelemetry((request) => {
+      seen = request;
+      throw new Error("dry run stop");
+    });
+    run.dryRun = true;
+    await expect(
+      fetch("https://api.fish.audio/v1/tts", {
+        method: "POST",
+        headers: { Authorization: "Bearer FISHSECRET", model: "drama-3" },
+        body: JSON.stringify({ text: "Hi", format: "mp3" }),
+      }),
+    ).rejects.toThrow("dry run stop");
+    expect(seen?.headers).toEqual(expect.arrayContaining(["authorization", "model"]));
+    expect(seen?.header_values).toEqual({ model: "drama-3" });
+    expect(JSON.stringify(seen)).not.toContain("FISHSECRET");
+  });
 });

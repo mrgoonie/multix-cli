@@ -75,6 +75,7 @@ Windows, việc kiểm tra không phân biệt hoa thường, giống hệ đi�
 | `CLOUDFLARE_ACCOUNT_ID` và `CLOUDFLARE_API_TOKEN` | Cloudflare Workers AI |
 | `CLOUDFLARE_AI_GATEWAY_ID` và `REPLICATE_API_TOKEN` | Cloudflare AI Gateway video |
 | `ELEVENLABS_API_KEY` | ElevenLabs |
+| `FISH_API_KEY` | Fish Audio (API gốc) |
 | `FAL_KEY` | fal.ai |
 | `ATLASCLOUD_API_KEY` | Atlas Cloud |
 | `REPLICATE_API_TOKEN` hoặc `REPLICATE_API_KEY` | Replicate (API trực tiếp) |
@@ -196,6 +197,10 @@ mặc định cho mỗi lệnh: `ATLASCLOUD_IMAGE_MODEL`, `ATLASCLOUD_IMAGE_EDIT
 và `ATLASCLOUD_IMAGE_TO_3D_MODEL`. Xem [Atlas Cloud](/vi/commands/atlascloud/)
 để biết các model mặc định. `ATLASCLOUD_MAX_UPLOAD_MB` đặt giới hạn dung lượng
 cho file cục bộ upload lên Atlas Cloud (mặc định 200).
+
+`FISH_TTS_MODEL` đặt model mặc định của `multix fish tts` và
+`speech generate --provider fish` (mặc định `drama-3`). Giá trị phải là một
+trong các model liệt kê ở [Fish Audio](/vi/commands/fish/#model), viết chính xác.
 
 `HEYGEN_BASE_URL` ghi đè API base của HeyGen (mặc định
 `https://api.heygen.com`) cho proxy và test. Giá trị phải là `https://`;

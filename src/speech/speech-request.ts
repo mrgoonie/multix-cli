@@ -9,6 +9,7 @@
 
 import { ValidationError } from "../core/errors.js";
 import { ELEVENLABS_RECOMMENDED_VOICES } from "../providers/elevenlabs/models.js";
+import { FISH_PUBLIC_VOICES } from "../providers/fish/models.js";
 import { GEMINI_TTS_VOICES, isVoiceAllowedForModel } from "../providers/gemini/voices.js";
 import { OPENAI_TTS_VOICES } from "../providers/openai/models.js";
 import {
@@ -192,6 +193,12 @@ export function voiceProblem(
         /^[A-Za-z0-9]{20}$/.test(voice)
         ? undefined
         : `"${voice}" is not an ElevenLabs voice id${elsewhere()}. List ElevenLabs voices with: multix elevenlabs voices list, or use one of: ${Object.keys(ELEVENLABS_RECOMMENDED_VOICES).join(", ")}`;
+    case "fish":
+      if (Object.hasOwn(FISH_PUBLIC_VOICES, voice.toLowerCase())) return undefined;
+      if (!/^[A-Za-z0-9_-]{1,128}$/.test(voice) || elsewhere() !== "") {
+        return `"${voice}" is not a Fish Audio voice id${elsewhere()}. Fish voice ids look like ${FISH_PUBLIC_VOICES.adrian}; list yours with: multix fish voices list`;
+      }
+      return undefined;
     case "minimax":
       return elsewhere() !== ""
         ? `"${voice}" is not a MiniMax voice id${elsewhere()}. MiniMax voice ids look like English_expressive_narrator`
@@ -206,6 +213,7 @@ function canonicalVoice(provider: SpeechProvider, voice: string): string {
   if (provider === "elevenlabs" && Object.hasOwn(ELEVENLABS_RECOMMENDED_VOICES, voice)) {
     return ELEVENLABS_RECOMMENDED_VOICES[voice as keyof typeof ELEVENLABS_RECOMMENDED_VOICES];
   }
+  if (provider === "fish") return FISH_PUBLIC_VOICES[voice.toLowerCase()] ?? voice;
   return voice;
 }
 

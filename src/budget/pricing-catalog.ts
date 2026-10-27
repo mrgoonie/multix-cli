@@ -468,6 +468,19 @@ export const PRICING_CATALOG: PriceEntry[] = [
     verified: true,
   },
   {
+    id: "fish/s2.1-pro-free@api",
+    provider: "fish",
+    models: ["s2.1-pro-free"],
+    tier: "api-usage",
+    currency: "USD",
+    region: "global",
+    // Listed at $0 on the pricing page; the free model's limits are not modelled.
+    windows: [{ components: [perM("utf8_bytes", 0)] }],
+    last_checked: "2026-10-27",
+    source: FISH_PRICING,
+    verified: true,
+  },
+  {
     id: "fish/s1@api",
     provider: "fish",
     models: ["s1"],

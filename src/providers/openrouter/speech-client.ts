@@ -18,18 +18,22 @@ import { HttpError, MultixError, ProviderError, ResponseTooLargeError } from "..
 import { toFetchError } from "../../core/fetch-error.js";
 import { type FetchLike, fetchJson, parseRetryAfter } from "../../core/fetch-json.js";
 import { fetchFollowingRedirects } from "../../core/redirect-fetch.js";
+import {
+  NOT_SENT_CODES,
+  UNKNOWN_REMOTE_STATE,
+  errorCodes,
+  readCappedBytes,
+  readCappedText,
+} from "../../core/response-read.js";
 import { type AudioContentType, parseAudioContentType } from "./speech-audio.js";
 
+export { NOT_SENT_CODES, UNKNOWN_REMOTE_STATE, errorCodes, readCappedText };
 export const OPENROUTER_API_BASE = "https://openrouter.ai/api/v1";
 export { DEFAULT_OPENROUTER_TTS_MODEL } from "./speech-defaults.js";
-/** Error code of a request whose outcome (and billing) is unknown. */
-export const UNKNOWN_REMOTE_STATE = "UNKNOWN_REMOTE_STATE";
 
 const ERROR_BODY_MAX = 64 * 1024;
 const SNIPPET_MAX = 500;
 const GENERATION_ID = /^[\w.:-]{1,128}$/;
-/** Connection failures that prove the request never reached OpenRouter. */
-export const NOT_SENT_CODES = new Set(["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "ENETUNREACH"]);
 
 /** One turn of multi-speaker input (Gemini TTS, Fish Audio except S1). */
 export interface SpeechTurn {
@@ -101,58 +105,6 @@ export function errorMessageOf(text: string): string {
   return text.slice(0, SNIPPET_MAX);
 }
 
-/** Read at most `limit` bytes of a body as text (error bodies are small JSON). */
-export async function readCappedText(response: Response, limit: number): Promise<string> {
-  const reader = response.body?.getReader();
-  if (!reader) return "";
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value);
-      size += value.byteLength;
-      if (size >= limit) {
-        await reader.cancel().catch(() => {});
-        break;
-      }
-    }
-  } catch {
-    return "(could not read body)";
-  }
-  return new TextDecoder().decode(concat(chunks, size).subarray(0, limit));
-}
-
-function concat(chunks: Uint8Array[], size: number): Uint8Array {
-  const out = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) {
-    out.set(chunk.subarray(0, size - offset), offset);
-    offset += chunk.byteLength;
-    if (offset >= size) break;
-  }
-  return out;
-}
-
-/** Error codes of an error and its causes (undici nests them). */
-export function errorCodes(err: unknown): string[] {
-  const codes: string[] = [];
-  let current: unknown = err;
-  for (let depth = 0; depth < 4 && current && typeof current === "object"; depth++) {
-    const e = current as { code?: unknown; cause?: unknown; errors?: unknown };
-    if (typeof e.code === "string") codes.push(e.code);
-    if (Array.isArray(e.errors)) {
-      for (const m of e.errors) {
-        const code = (m as { code?: unknown } | null)?.code;
-        if (typeof code === "string") codes.push(code);
-      }
-    }
-    current = e.cause;
-  }
-  return codes;
-}
-
 /** A paid request cut off after it may have reached OpenRouter (`kind`: speech, transcription). */
 export function unknownState(
   model: string,
@@ -169,50 +121,6 @@ export function unknownState(
     UNKNOWN_REMOTE_STATE,
     cause === undefined ? undefined : { cause },
   );
-}
-
-/** Read the audio body under a byte cap and an idle timeout. */
-async function readAudio(
-  response: Response,
-  maxBytes: number,
-  idleTimeoutMs: number,
-  url: string,
-): Promise<Uint8Array> {
-  const declared = Number(response.headers.get("content-length") ?? Number.NaN);
-  if (Number.isFinite(declared) && declared > maxBytes) {
-    await response.body?.cancel().catch(() => {});
-    throw new ResponseTooLargeError(maxBytes, url);
-  }
-  const reader = response.body?.getReader();
-  if (!reader) return new Uint8Array(0);
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  for (;;) {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const idle = new Promise<never>((_, reject) => {
-      timer = setTimeout(
-        () => reject(new Error(`no audio bytes for ${Math.round(idleTimeoutMs / 1000)} s`)),
-        idleTimeoutMs,
-      );
-    });
-    let step: Awaited<ReturnType<typeof reader.read>>;
-    try {
-      step = await Promise.race([reader.read(), idle]);
-    } catch (err) {
-      await reader.cancel().catch(() => {});
-      throw err;
-    } finally {
-      clearTimeout(timer);
-    }
-    if (step.done) break;
-    size += step.value.byteLength;
-    if (size > maxBytes) {
-      await reader.cancel().catch(() => {});
-      throw new ResponseTooLargeError(maxBytes, url);
-    }
-    chunks.push(step.value);
-  }
-  return concat(chunks, size);
 }
 
 /**
@@ -277,7 +185,7 @@ export async function createSpeech(opts: CreateSpeechOptions): Promise<SpeechAud
 
   let audio: Uint8Array;
   try {
-    audio = await readAudio(response, opts.maxBytes, opts.idleTimeoutMs ?? 60_000, url);
+    audio = await readCappedBytes(response, opts.maxBytes, opts.idleTimeoutMs ?? 60_000, url);
   } catch (err) {
     if (err instanceof ResponseTooLargeError) {
       // The generation is done (and billed) even though its audio was dropped.

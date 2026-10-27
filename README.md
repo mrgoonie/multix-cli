@@ -4,7 +4,7 @@ AI multimodal CLI — generate images/video/speech/music, analyze and transcribe
 
 ![Isometric technical illustration of multix media workflows](docs-site/public/images/multix-isometric-banner.png)
 
-Supports **OpenAI** (image, image edits, TTS, STT, optional Codex image driver), **Gemini** (analyze, transcribe, generate, Omni Flash video generation and editing, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation, image-to-video, TTS, STT), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), **Cloudflare** (Workers AI image and speech; AI Gateway-routed Replicate video), **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment), **fal.ai** (generic model runner, image, video, text-to-speech via the fal queue API), and **Atlas Cloud** (any model: image, image edit, video, audio, 3D, with resumable async predictions), **Replicate** (generic model runner, image, video, async prediction status/cancel via the direct Replicate API), **Runway** (Gen-4.5 and Gen-4 Turbo video, Gen-4 images, resumable task status/cancel), **HeyGen** (v3 Video Agent prompt-to-video, scripted avatar videos, video translation, lipsync, TTS).
+Supports **OpenAI** (image, image edits, TTS, STT, optional Codex image driver), **Gemini** (analyze, transcribe, generate, Omni Flash video generation and editing, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation, image-to-video, TTS, STT), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), **Cloudflare** (Workers AI image and speech; AI Gateway-routed Replicate video), **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment), **Fish Audio** (native Drama 3 TTS, multi-speaker turns, pronunciation dictionaries, voice models), **fal.ai** (generic model runner, image, video, text-to-speech via the fal queue API), and **Atlas Cloud** (any model: image, image edit, video, audio, 3D, with resumable async predictions), **Replicate** (generic model runner, image, video, async prediction status/cancel via the direct Replicate API), **Runway** (Gen-4.5 and Gen-4 Turbo video, Gen-4 images, resumable task status/cancel), **HeyGen** (v3 Video Agent prompt-to-video, scripted avatar videos, video translation, lipsync, TTS).
 
 ## Documentation
 
@@ -74,9 +74,9 @@ metrics, and `sources` naming the header or body field each money number came
 from), `error` (`code`, `retryable`, `retry_after_s`, `hint`) and `next`
 commands, plus a `cost` receipt (`multix.cost/v1`: estimate, provider-reported
 and actual cost, variance; unknown stays `null`, never $0). Only
-`gemini generate-speech`, `elevenlabs tts`, `openrouter tts`,
+`gemini generate-speech`, `elevenlabs tts`, `fish tts`, `openrouter tts`,
 `openrouter transcribe` (local files, measured with `ffprobe`) and
-`speech generate` on its Gemini and ElevenLabs routes (a `--fallback` plan at
+`speech generate` on its Gemini, ElevenLabs and Fish routes (a `--fallback` plan at
 its most expensive route) are priced so far; `--max-cost`
 refuses anything it cannot price. With `--json`, exit codes are `2` usage or
 input (including a refused `--max-cost`), `3` key or setup, `4` temporary
@@ -116,6 +116,8 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `LEONARDO_VIDEO_MODEL` | No | Default Leonardo video model (default `MOTION2`) |
 | `BYTEPLUS_API_KEY` | For BytePlus | [BytePlus](https://console.byteplus.com/auth/api-keys) |
 | `ELEVENLABS_API_KEY` | For ElevenLabs | [ElevenLabs](https://elevenlabs.io/app/settings/api-keys) |
+| `FISH_API_KEY` | For Fish Audio | [Fish Audio](https://fish.audio/app/api-keys/) (native API; separate from OpenRouter's `fish-audio/*` models) |
+| `FISH_TTS_MODEL` | No | Default `multix fish tts` / `speech generate --provider fish` model, sent as the exact `model` header: `drama-3` (default), `s2.1-pro`, `s2.1-pro-free`, `s2-pro`, `s1` |
 | `FAL_KEY` | For fal.ai | [fal.ai](https://fal.ai/dashboard/keys) |
 | `FAL_BASE_URL` | No | Override fal queue base (default `https://queue.fal.run`) |
 | `FAL_IMAGE_MODEL` | No | Default fal image model (default `fal-ai/flux/schnell`) |
@@ -582,6 +584,35 @@ multix elevenlabs models   # live: capabilities, languages, text limit, credit m
 - `--timestamps` calls `/with-timestamps` and saves character timings next to the audio as `<audio>.timestamps.json`. If the response carries no audio, the raw body is saved as `elevenlabs_tts_raw_*` before the command fails, since the request may already be billed.
 - After each TTS run the CLI prints the credits ElevenLabs reports in its `character-cost` header (v4 Turbo bills 0.5 credits per character, see `multix elevenlabs models`). With `--json` the same number is `usage.credits`, attributed in `usage.sources.credits`. multix never prints an estimate as credits charged.
 
+### `multix fish`
+
+Native [Fish Audio](https://fish.audio) API (`FISH_API_KEY`). Drama 3 by default.
+
+```bash
+# Text-to-speech; input: --text (alias --prompt) | --text-file | --turns-file (multi-speaker JSON)
+multix fish tts --text "Welcome to multix." [--model drama-3|s2.1-pro|s2.1-pro-free|s2-pro|s1] [--voice <voice-id>|adrian|delia|sheila] \
+  [--format mp3|wav|pcm|opus] [--sample-rate <hz>] [--mp3-bitrate 64|128|192] [--opus-bitrate <bps>] \
+  [--temperature <0-1>] [--top-p <0-1>] [--speed <0.5-2>] [--volume <db>] [--no-normalize-loudness] \
+  [--chunk-length <100-300>] [--no-normalize] [--language <bcp47>] [--latency low|normal|balanced] \
+  [--dictionary <id@version> ...|--dictionary-file <path>] [--output <path>] [-v]
+
+# Multi-speaker: <|speaker:N|> tags and one --voice per speaker, in index order (not on s1)
+multix fish tts --voice adrian --voice sheila --text "<|speaker:0|>Did you hear that?<|speaker:1|>[whispering] Stay quiet."
+multix fish tts --turns-file scene.json   # [{"text": "...", "voice": "<voice-id>|adrian|delia|sheila"}]
+
+# Voice models (free reads): your own, or the public library
+multix fish voices list [--public] [--title <text>] [--language <code>] [--page-size 20] [--page 1]
+multix fish voices get <voice-id>
+```
+
+**Notes:**
+- Fish picks the model from the exact `model` HTTP header and serves a missing or misspelled header as `s2.1-pro` with a normal 200; the audio response does not name the model. multix only sends the allowlisted values above and reports `model_header_sent` with `model_confirmed_by_response: false`. `--dry-run` shows the `model` header value (other header values stay hidden).
+- Billed per UTF-8 byte of the text as sent, tags included; `--estimate` and `--max-cost` work, including for `--text-file` and `--turns-file`. Prices: [pricing catalog](https://multix.zuey.me/reference/for-ai-agents/#pricing-catalog).
+- Direction tags (`[whispering]`) and phoneme tags are sent unchanged. Fish documents phonemes for English (Arpabet), Chinese (pinyin) and Japanese (romaji) only.
+- Pronunciation dictionaries: up to 3, either all `--dictionary id@version` (a pinned version id, not `latest` or `V1`) or one inline `--dictionary-file`, never mixed; no phoneme markers in keys or values. Fish silently skips a reference it cannot resolve, so multix warns.
+- The paid POST is never retried; a cut-off request ends with `UNKNOWN_REMOTE_STATE`. The audio is checked (container signature, sample rate, duration, SHA-256); a 200 whose body is not the requested audio fails, after saving the bytes for inspection (unless Fish labelled them JSON or HTML).
+- Native Fish and OpenRouter's `fish-audio/*` models are separate routes with separate prices; multix never falls back between them. Full reference: [Fish Audio commands](https://multix.zuey.me/commands/fish/).
+
 ### `multix fal`
 
 Generic runner plus convenience commands for [fal.ai](https://fal.ai)'s queue REST API. Any model id works with `run`; `image`/`video` set sensible defaults and download media automatically.
@@ -772,14 +803,14 @@ multix heygen me
 
 ### `multix speech`
 
-One text-to-speech interface over Gemini, OpenAI, ElevenLabs, MiniMax and Atlas Cloud. The provider commands above are unchanged; `speech` adds one set of flags, checks the request against the chosen model's documented capabilities before calling it, and never switches provider on its own.
+One text-to-speech interface over Gemini, OpenAI, ElevenLabs, MiniMax, Atlas Cloud and Fish Audio. The provider commands above are unchanged; `speech` adds one set of flags, checks the request against the chosen model's documented capabilities before calling it, and never switches provider on its own.
 
 ```bash
 # Models with their languages, formats, style/emotion support, speakers, voices, billing and key readiness
 multix speech models [-p <provider>] [-l <iso-639-1>] [--ready] [--json]
 
 # Generate on an explicit provider (model defaults to the provider's TTS default)
-multix speech generate --provider <gemini|openai|elevenlabs|minimax|atlas> [--model <id>] (--text <str>|--text-file <path>) \
+multix speech generate --provider <gemini|openai|elevenlabs|minimax|atlas|fish> [--model <id>] (--text <str>|--text-file <path>) \
   [--voice <id>] [--speaker <name:voice> ...] [--language <code>] [--style <text>] [--emotion <name>] \
   [--format mp3|wav|pcm|flac|opus|aac] [--output <path>] [--async] \
   [--fallback <route> ...] [--extra <provider.key=value> ...] [-v]
@@ -793,6 +824,7 @@ multix speech generate --provider minimax --language vi --emotion happy --text "
 ```
 
 - `--model` without `--provider` works only when exactly one provider serves that model.
+- `--provider fish` (default model `drama-3`, default voice Adrian) sends one voice; use `multix fish tts --turns-file` for multi-speaker dialogue. Fish `--extra` keys: `fish.temperature`, `fish.top_p`, `fish.speed`, `fish.volume`, `fish.chunk_length`, `fish.normalize`, `fish.latency`.
 - `--fallback` is opt-in and used only when the routes before it have no API key, so it is decided before any paid request; a paid request is never sent again elsewhere. Taking a fallback prints a warning with the voice, billing and format differences.
 - `--json` puts a `multix.speech.result/v1` object in `data` (`data.request` records the text as its length and SHA-256); `--dry-run` validates and shows the first request without sending it.
 - Remote MCP: `speech generate` requires `--provider`, and the job gets only the routed providers' keys. Full reference: [Speech commands](https://multix.zuey.me/commands/speech/).

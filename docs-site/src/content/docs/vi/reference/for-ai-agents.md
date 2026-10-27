@@ -46,7 +46,8 @@ https://multix.zuey.me/llms.txt
 2. **Kiểm tra miễn phí.** Thêm `--dry-run` vào bất kỳ lệnh nào: các bước kiểm
    tra cục bộ vẫn chạy (flag, file đầu vào, key), rồi request đầu tiên tới
    provider được in ra (method, URL không có query string, body với giá trị dài
-   đã rút gọn, chỉ tên header) thay vì gửi đi. Lệnh `media` cục bộ dừng trước
+   đã rút gọn, chỉ tên header, trừ giá trị header `model` của Fish Audio) thay
+   vì gửi đi. Lệnh `media` cục bộ dừng trước
    khi chạy. Thêm `--estimate` để ước tính chi phí, và `--max-cost <usd>` để
    đặt trần chi phí; xem [Chi phí](#chi-phí-ước-tính-giới-hạn-chi-tiêu-và-biên-nhận).
 3. **Chạy với `--json`** (hoặc `MULTIX_OUTPUT=json`). stdout đúng một dòng, là
@@ -92,7 +93,7 @@ https://multix.zuey.me/llms.txt
 | `usage` | Số liệu provider trả về: `tokens` (`input`, `output`, `total`, `thinking`), `cost_usd`, `credits` và các `metrics` dạng số khác theo key path. `sources.cost_usd` / `sources.credits` ghi nguồn của từng số (ví dụ `api.elevenlabs.io header.character-cost`). Không ước tính: số ước tính hoặc báo giá của provider (như `estimatedCost` của Runway) chỉ nằm trong `metrics`, không bao giờ được báo là `cost_usd` hay `credits`. `cost_usd` và `credits` là số đã tiêu cho lần chạy: số dư tài khoản (`apiCredit` của Leonardo từ `leonardo me`, credit còn lại hoặc credit đi kèm gói của HeyGen từ `heygen me`) không bao giờ được tính vào `credits` hay `cost_usd`. |
 | `http` | Số request tới provider, số request lỗi và tổng thời gian. |
 | `provider_ids` | Request id, job id hoặc prediction id provider trả về. |
-| `request` | Với `--dry-run`: request lẽ ra đã được gửi. Giá trị header, các trường có tên dạng secret và query string của URL (URL đã ký) đều bị che. |
+| `request` | Với `--dry-run`: request lẽ ra đã được gửi. Giá trị header, các trường có tên dạng secret và query string của URL (URL đã ký) đều bị che; giá trị header duy nhất được hiển thị là `model` của Fish Audio (trong `header_values`), vì nó quyết định model nào chạy và bị tính phí, và không chứa secret. |
 | `estimate` | Giá ước tính trước khi chạy (với `--estimate`, `--max-cost`, hoặc với lệnh có bảng giá). `estimate_only: true` đánh dấu lần chạy `--estimate`. |
 | `budget` | Với `--max-cost`: `ok`, `max_cost_usd`, `policy`, cùng `code` và `message` khi bị từ chối. |
 | `cost` | Biên nhận chi phí của lần chạy (`multix.cost/v1`); xem [Biên nhận chi phí](#biên-nhận-chi-phí). |
@@ -146,8 +147,9 @@ Estimate: $0.00136 expected, $0.00136–$0.00136 range (proven ceiling)
 | `gemini generate-speech` | Token văn bản đầu vào, token âm thanh đầu ra (25 token mỗi giây âm thanh) | Ước tính: model quyết định độ dài âm thanh, nên `--max-cost` cần `--cost-policy estimate`. |
 | `elevenlabs tts` | Ký tự (Unicode code point đúng như khi gửi) | Đã chứng minh. `--previous-text` và `--next-text` chỉ được tính vào mức cao. |
 | `openrouter tts` | Giá OpenRouter của model: ký tự với đa số model, byte UTF-8 với Fish Audio, token với Gemini TTS, giây âm thanh đầu ra với Seed Audio | Đã chứng minh với giá theo ký tự và byte (`--instructions` chỉ được tính vào mức cao); ước tính với giá theo token và theo giây đầu ra. Văn bản phải truyền qua `--text`. |
+| `fish tts` | Byte UTF-8 của văn bản đúng như khi gửi, kể cả tag; văn bản từ `--text`, hoặc khi chạy CLI là `--text-file` hay `--turns-file` đọc được (văn bản đã gắn tag do multix tạo) | Đã chứng minh. Qua MCP, văn bản từ file không được tính giá. |
 | `openrouter transcribe` | Số giây âm thanh đầu vào, đo bằng `ffprobe` từ file `--input` cục bộ | Đã chứng minh. Mức cao cộng thêm 5% vào độ dài đo được và làm tròn lên tròn phút. Đầu vào là URL, file mà `ffprobe` không đọc được, hoặc model tính giá theo token sẽ là `unknown`. |
-| `speech generate` | Giá của từng route, tính như `gemini generate-speech` hoặc `elevenlabs tts`; văn bản từ `--text` hoặc `--text-file` | Như provider đó. Với Gemini, `--style` được tính vào mức cao; với ElevenLabs, `--extra elevenlabs.previous_text`/`next_text` được tính vào mức cao. Kế hoạch có `--fallback` được tính theo route đắt nhất và chỉ được chứng minh khi mọi route đều được chứng minh. Một route trên provider khác (OpenAI, MiniMax, Atlas) hoặc model ElevenLabs chưa có giá (`eleven_v3_conversational`) khiến cả lần chạy là `unknown`. Qua MCP, `text-file` không được tính giá. |
+| `speech generate` | Giá của từng route, tính như `gemini generate-speech`, `elevenlabs tts` hoặc `fish tts`; văn bản từ `--text` hoặc `--text-file` | Như provider đó. Với Gemini, `--style` được tính vào mức cao; với ElevenLabs, `--extra elevenlabs.previous_text`/`next_text` được tính vào mức cao. Kế hoạch có `--fallback` được tính theo route đắt nhất và chỉ được chứng minh khi mọi route đều được chứng minh. Một route trên provider khác (OpenAI, MiniMax, Atlas) hoặc model ElevenLabs chưa có giá (`eleven_v3_conversational`) khiến cả lần chạy là `unknown`. Qua MCP, `text-file` không được tính giá. |
 
 Mọi lệnh hoặc model khác có trạng thái ước tính `unknown`, không bao giờ là $0,
 và `--max-cost` từ chối chạy.
@@ -174,6 +176,7 @@ Giá được kiểm tra ngày 2026-10-26 (`--estimate` hiển thị giá đang 
 | `elevenlabs/multilingual@api` | `eleven_v4`, `eleven_v3`, `eleven_multilingual_v2` | $0,08 / 1.000 ký tự |
 | `elevenlabs/flash-turbo@api` | `eleven_v4_turbo`, `eleven_flash_v2_5`, `eleven_flash_v2`, `eleven_turbo_v2_5`, `eleven_turbo_v2` | $0,04 / 1.000 ký tự |
 | `fish/s2-pro@api` | `s2.1-pro`, `s2-pro` | $15 / 1 triệu byte UTF-8 |
+| `fish/s2.1-pro-free@api` | `s2.1-pro-free` | $0 (giới hạn của model miễn phí không được mô hình hóa) |
 | `fish/s1@api` | `s1` | $15 / 1 triệu byte UTF-8 |
 | `fish/drama-3@api` | `drama-3` | $10 / 1 triệu byte UTF-8 (khuyến mãi đến 2026-11-12T17:00Z), sau đó $50 |
 
@@ -195,8 +198,10 @@ Fish Audio Drama 3 và Gemini 3.8 TTS kết thúc cùng lúc giá API gốc thay
 (2026-11-12 và 2027-01-01) và thành `unknown` cho đến khi được kiểm tra lại.
 
 Giá Gemini là tier Standard trả phí; tier miễn phí không tốn tiền. Gói thuê bao
-ElevenLabs trừ credit thay vì USD. Giá Fish Audio được giữ sẵn cho provider Fish
-sắp có; chưa lệnh nào dùng đến.
+ElevenLabs trừ credit thay vì USD. Các rate `fish/*` tính giá cho API gốc của
+Fish Audio (`fish tts`, `speech generate --provider fish`); model `fish-audio/*`
+của OpenRouter có rate `openrouter/*` riêng, và multix không bao giờ fallback
+giữa hai route.
 
 ### Biên nhận chi phí
 
@@ -268,6 +273,7 @@ shell hoặc `~/.multix/.env`, không nhận từ `.env` của project).
 | Seedream, Seedance, reference video hoặc 3D | [BytePlus](/vi/commands/byteplus/) |
 | Workers AI image/speech hoặc AI Gateway video | [Cloudflare](/vi/commands/cloudflare/) |
 | Voice workflow, dubbing hoặc audio generation | [ElevenLabs](/vi/commands/elevenlabs/) |
+| Speech qua API gốc của Fish Audio: Drama 3, hội thoại nhiều giọng, từ điển phát âm | [Fish Audio](/vi/commands/fish/) |
 | Bất kỳ model queue fal.ai, ảnh hoặc video | [fal.ai](/vi/commands/fal/) |
 | Bất kỳ model Atlas Cloud nào, hoặc job ảnh/video/âm thanh/3D bất đồng bộ cần tiếp tục sau | [Atlas Cloud](/vi/commands/atlascloud/) |
 | Bất kỳ model Replicate, ảnh hoặc video; tiếp tục/hủy theo prediction ID | [Replicate](/vi/commands/replicate/) |

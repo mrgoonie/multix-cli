@@ -71,6 +71,12 @@ export const PROVIDER_KEYS: readonly ProviderEntry[] = [
     link: "https://elevenlabs.io/app/settings/api-keys",
   },
   {
+    name: "Fish Audio",
+    envPrimary: "FISH_API_KEY",
+    optional: true,
+    link: "https://fish.audio/app/api-keys/",
+  },
+  {
     name: "fal.ai",
     ...keyNames(FAL_ROUTING),
     optional: true,

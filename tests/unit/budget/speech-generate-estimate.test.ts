@@ -121,7 +121,7 @@ describe("speech generate estimates", () => {
   });
 
   it("prices the default model each priced provider's adapter runs", () => {
-    for (const provider of ["gemini", "elevenlabs"] as const) {
+    for (const provider of ["gemini", "elevenlabs", "fish"] as const) {
       expect(speech({ provider, text: TEXT }).model).toBe(SPEECH_ADAPTERS[provider].defaultModel());
     }
   });
@@ -142,5 +142,41 @@ describe("speech generate estimates", () => {
   it("names no empty model in the refusal of an unresolvable route", () => {
     const unknown = speech({ text: TEXT });
     expect(() => checkBudget(unknown, 1, "strict")).toThrow(/cost of speech is unknown/);
+  });
+});
+
+describe("fish tts estimates", () => {
+  const PROMO = new Date("2026-11-01T12:00:00Z");
+  const LIST = new Date("2026-12-01T12:00:00Z");
+  const bytes = new TextEncoder().encode(TEXT).byteLength;
+
+  it("prices UTF-8 bytes, not characters, at the Drama 3 promotion and list price", () => {
+    expect(bytes).toBeGreaterThan(TEXT.length);
+    const promo = estimateCommand("fish tts", { text: TEXT }, { at: PROMO });
+    expect(promo).toMatchObject({ status: "estimated", provider: "fish", model: "drama-3" });
+    expect(promo.expected_usd).toBeCloseTo((bytes * 10) / 1_000_000, 12);
+    const list = estimateCommand("fish tts", { text: TEXT }, { at: LIST });
+    expect(list.expected_usd).toBeCloseTo((bytes * 50) / 1_000_000, 12);
+  });
+
+  it("follows --model, the caller's default model and text read from a file", () => {
+    const s2 = estimateCommand("fish tts", { text: TEXT, model: "s2.1-pro" }, { at: PROMO });
+    expect(s2.expected_usd).toBeCloseTo((bytes * 15) / 1_000_000, 12);
+    const free = estimateCommand("fish tts", {}, { at: PROMO, text: TEXT, model: "s2.1-pro-free" });
+    expect(free).toMatchObject({ status: "estimated", expected_usd: 0 });
+  });
+
+  it("is unknown for a model with no price, so --max-cost fails closed instead of pricing it at $0", () => {
+    const unknown = estimateCommand("fish tts", { text: TEXT, model: "drama-4" }, { at: PROMO });
+    expect(unknown.status).not.toBe("estimated");
+    expect(() => checkBudget(unknown, 1, "strict")).toThrow(BudgetError);
+  });
+
+  it("prices speech generate --provider fish like fish tts", () => {
+    const viaSpeech = speech({ provider: "fish", text: TEXT });
+    const direct = estimateCommand("fish tts", { text: TEXT }, { at: AT });
+    expect(viaSpeech).toMatchObject({ status: "estimated", provider: "fish", model: "drama-3" });
+    expect(viaSpeech.high_usd).toBe(direct.high_usd);
+    expect(pricedCommands()).toContain("fish tts");
   });
 });

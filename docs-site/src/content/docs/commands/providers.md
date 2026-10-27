@@ -15,6 +15,7 @@ description: Choose a source-backed command reference for any multix AI provider
 | BytePlus | [Commands](/commands/byteplus/) | Seedream, Seedance, reference video, and 3D | Use `status` after an async submission. |
 | Cloudflare | [Commands](/commands/cloudflare/) | Workers AI image/speech and AI Gateway video | Video needs an AI Gateway ID and Replicate token. |
 | ElevenLabs | [Commands](/commands/elevenlabs/) | Voice, speech, audio, and dubbing | Dubbing has a job/status workflow. |
+| Fish Audio | [Commands](/commands/fish/) | Native TTS (Drama 3 by default), multi-speaker turns, pronunciation dictionaries, voice models | The model is the exact `model` header; separate from OpenRouter's `fish-audio/*` models and their prices. |
 | fal.ai | [Commands](/commands/fal/) | Any queue model, plus image/video convenience commands | Status/result use the model's app id (first two path segments), not the full model id. |
 | Atlas Cloud | [Commands](/commands/atlascloud/) | Any model: image, image edit, video, audio, and 3D | Inputs are validated against each model's schema; `--async` plus `status --wait --download` resumes a job. |
 | Replicate | [Commands](/commands/replicate/) | Any model via the direct API, plus image/video convenience commands | Community models need a version; resume or cancel jobs by prediction ID. |

@@ -16,12 +16,13 @@ description: Chọn nhóm lệnh multix phù hợp với workflow media của b�
 | [BytePlus](/vi/commands/byteplus/) | Seedream, Seedance, reference video và 3D. |
 | [Cloudflare](/vi/commands/cloudflare/) | Workers AI image/speech và video job qua AI Gateway. |
 | [ElevenLabs](/vi/commands/elevenlabs/) | Voice, TTS, clone, STT, music, SFX, dubbing và isolation. |
+| [Fish Audio](/vi/commands/fish/) | TTS qua API gốc của Fish Audio (mặc định Drama 3), hội thoại nhiều giọng, từ điển phát âm và voice model. |
 | [fal.ai](/vi/commands/fal/) | Bất kỳ model queue nào của fal, cộng lệnh tiện lợi image/video. |
 | [Atlas Cloud](/vi/commands/atlascloud/) | Bất kỳ model Atlas Cloud nào: ảnh, chỉnh sửa ảnh, video, âm thanh, 3D và prediction bất đồng bộ có thể tiếp tục. |
 | [Replicate](/vi/commands/replicate/) | Bất kỳ model Replicate nào qua API trực tiếp, lệnh tiện lợi image/video, cùng status/cancel prediction. |
 | [Runway](/vi/commands/runway/) | Video Gen-4.5 và Gen-4 Turbo, ảnh Gen-4, cùng status/cancel task. |
 | [HeyGen](/vi/commands/heygen/) | Video Agent tạo video từ prompt, video avatar theo kịch bản, dịch video, lipsync và TTS. |
-| [Speech](/vi/commands/speech/) | Text-to-speech trên Gemini, OpenAI, ElevenLabs, MiniMax hoặc Atlas Cloud với một bộ flag, kiểm tra khả năng của model và fallback phải tự bật. |
+| [Speech](/vi/commands/speech/) | Text-to-speech trên Gemini, OpenAI, ElevenLabs, MiniMax, Atlas Cloud hoặc Fish Audio với một bộ flag, kiểm tra khả năng của model và fallback phải tự bật. |
 | [Scene](/vi/commands/scene/) | Audio hội thoại nhiều nhân vật: voice profile, take được cache theo từng câu, duyệt take và xuất stem. |
 | `multix media` | Tối ưu, cắt và batch file bằng ffmpeg/ImageMagick. |
 | `multix doc` | Chuyển tài liệu sang Markdown qua Gemini. |

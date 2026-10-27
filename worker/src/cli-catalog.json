@@ -7033,6 +7033,323 @@
       ]
     },
     {
+      "group": "fish",
+      "description": "Fish Audio (native API): Drama 3 text-to-speech and voice models",
+      "commands": [
+        {
+          "command": "fish tts",
+          "description": "Text-to-speech with the native Fish Audio API (Drama 3 by default; direction tags, phoneme tags, multi-speaker, pronunciation dictionaries)",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--text",
+              "flags": "--text <str>",
+              "description": "Text to speak (Fish tags such as [whispering] are sent as written)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--prompt",
+              "flags": "--prompt <str>",
+              "description": "Alias for --text",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--text-file",
+              "flags": "--text-file <path>",
+              "description": "Read the text to speak from a UTF-8 file",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--turns-file",
+              "flags": "--turns-file <path>",
+              "description": "Multi-speaker input: JSON array of {\"text\", \"voice\"}, sent as <|speaker:N|> turns",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--model",
+              "flags": "--model <id>",
+              "description": "Fish TTS model, sent as the exact model header: drama-3, s2.1-pro, s2.1-pro-free, s2-pro, s1 (env FISH_TTS_MODEL)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--voice",
+              "flags": "--voice <id>",
+              "description": "Voice model id (reference_id) or adrian, delia, sheila; repeat once per <|speaker:N|> in index order",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--format",
+              "flags": "--format <fmt>",
+              "description": "Output mp3|wav|pcm|opus",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "mp3"
+            },
+            {
+              "long": "--sample-rate",
+              "flags": "--sample-rate <hz>",
+              "description": "Sample rate: wav/pcm 8000-44100, mp3 32000|44100 (default 44100; opus is always 48000)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--mp3-bitrate",
+              "flags": "--mp3-bitrate <kbps>",
+              "description": "MP3 bitrate: 64, 128 or 192",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--opus-bitrate",
+              "flags": "--opus-bitrate <bps>",
+              "description": "Opus bitrate: -1000 (auto), 24000, 32000, 48000, 64000",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--temperature",
+              "flags": "--temperature <n>",
+              "description": "Sampling temperature, 0 to 1",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--top-p",
+              "flags": "--top-p <n>",
+              "description": "Nucleus sampling, 0 to 1",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--speed",
+              "flags": "--speed <n>",
+              "description": "Speaking rate, 0.5 to 2",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--volume",
+              "flags": "--volume <db>",
+              "description": "Volume change in dB (0 = unchanged)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--no-normalize-loudness",
+              "flags": "--no-normalize-loudness",
+              "description": "Turn off loudness normalization (S2 family)",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": true
+            },
+            {
+              "long": "--chunk-length",
+              "flags": "--chunk-length <n>",
+              "description": "Characters per synthesis chunk, 100 to 300",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--no-normalize",
+              "flags": "--no-normalize",
+              "description": "Turn off text normalization (numbers, dates)",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": true
+            },
+            {
+              "long": "--language",
+              "flags": "--language <bcp47>",
+              "description": "Language hint for text normalization (en, vi, es-MX, ...)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--latency",
+              "flags": "--latency <mode>",
+              "description": "Latency mode: low, normal, balanced",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--dictionary",
+              "flags": "--dictionary <id@version>",
+              "description": "Published pronunciation dictionary, pinned to a version id (repeat up to 3)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--dictionary-file",
+              "flags": "--dictionary-file <path>",
+              "description": "Pronunciation dictionaries as JSON: inline [{\"items\":[{\"key\",\"value\",\"case_sensitive\"?}]}] or published [{\"id\",\"version\"}]",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--output",
+              "flags": "--output <path>",
+              "description": "Copy the generated audio to this path",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        },
+        {
+          "command": "fish voices list",
+          "description": "List your Fish Audio voice models (or public ones with --public)",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--public",
+              "flags": "--public",
+              "description": "Search public voices instead of your own",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--title",
+              "flags": "--title <text>",
+              "description": "Filter by title",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--language",
+              "flags": "--language <code>",
+              "description": "Filter by language (en, zh, ja, vi, ...)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--page-size",
+              "flags": "--page-size <n>",
+              "description": "Results per page, 1 to 100",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "20"
+            },
+            {
+              "long": "--page",
+              "flags": "--page <n>",
+              "description": "Page number",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "1"
+            }
+          ]
+        },
+        {
+          "command": "fish voices get",
+          "description": "Show one Fish Audio voice model (state, visibility, languages)",
+          "positionals": [
+            {
+              "name": "id",
+              "description": "",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": []
+        }
+      ]
+    },
+    {
       "group": "atlas",
       "description": "Atlas Cloud: image, image-to-image, video, image-to-video, audio (TTS/STT/music), 3D, generic model runner, async status",
       "commands": [
@@ -11194,7 +11511,7 @@
             {
               "long": "--provider",
               "flags": "-p, --provider <name>",
-              "description": "Only this provider (gemini|openai|elevenlabs|minimax|atlas)",
+              "description": "Only this provider (gemini|openai|elevenlabs|minimax|atlas|fish)",
               "required": false,
               "takesValue": true,
               "valueOptional": false,
@@ -11233,7 +11550,7 @@
             {
               "long": "--provider",
               "flags": "--provider <name>",
-              "description": "Speech provider (gemini|openai|elevenlabs|minimax|atlas)",
+              "description": "Speech provider (gemini|openai|elevenlabs|minimax|atlas|fish)",
               "required": false,
               "takesValue": true,
               "valueOptional": false,

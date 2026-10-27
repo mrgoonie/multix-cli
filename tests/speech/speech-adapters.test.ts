@@ -96,7 +96,7 @@ afterEach(() => {
 });
 
 describe("requireKey sends nothing", () => {
-  it.each<SpeechProvider>(["gemini", "openai", "elevenlabs", "minimax", "atlas"])(
+  it.each<SpeechProvider>(["gemini", "openai", "elevenlabs", "minimax", "atlas", "fish"])(
     "%s throws ConfigError without a key and makes no request",
     (provider) => {
       useEnv();
@@ -161,6 +161,64 @@ describe("openai adapter", () => {
 
     await expect(
       SPEECH_ADAPTERS.openai.generate(plan("openai", undefined), input(), ctx()),
+    ).rejects.toBeInstanceOf(HttpError);
+    expect(posts()).toHaveLength(1);
+  });
+});
+
+describe("fish adapter", () => {
+  /** Two MPEG-1 Layer III frames: enough for the audio check to accept the bytes as mp3. */
+  const MP3 = Buffer.alloc(834);
+  MP3.set([0xff, 0xfb, 0x90, 0x64], 0);
+  MP3.set([0xff, 0xfb, 0x90, 0x64], 417);
+
+  it("posts to /v1/tts with the drama-3 header, a public voice id and the mapped extras", async () => {
+    useEnv({ FISH_API_KEY: "fish-test-key" });
+    useFetch(() => audioReply(MP3));
+    const over = {
+      voice: "sheila",
+      language: "vi",
+      extras: { "fish.speed": "1.25", "fish.normalize": "false", "fish.latency": "balanced" },
+    };
+
+    const out = await SPEECH_ADAPTERS.fish.generate(
+      plan("fish", undefined, over),
+      input(over),
+      ctx(),
+    );
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      method: "POST",
+      url: "https://api.fish.audio/v1/tts",
+      body: {
+        text: "Hello there.",
+        format: "mp3",
+        reference_id: "f3a2b90078d54a65af4b95f63bc7798e",
+        prosody: { speed: 1.25 },
+        normalize: false,
+        language: "vi",
+        latency: "balanced",
+      },
+    });
+    expect(calls[0]?.headers.model).toBe("drama-3");
+    expect(calls[0]?.headers.authorization).toBe("Bearer fish-test-key");
+    expect(path.basename(out.files[0] as string)).toMatch(/^fish_tts_.+\.mp3$/);
+    expect(sha256(fs.readFileSync(out.files[0] as string))).toBe(sha256(MP3));
+  });
+
+  it("uses FISH_TTS_MODEL as the default model header", async () => {
+    useEnv({ FISH_API_KEY: "fish-test-key", FISH_TTS_MODEL: "s2.1-pro" });
+    useFetch(() => audioReply(MP3));
+    await SPEECH_ADAPTERS.fish.generate(plan("fish", undefined), input(), ctx());
+    expect(calls[0]?.headers.model).toBe("s2.1-pro");
+  });
+
+  it("a 500 JSON error is one POST and surfaces as HttpError", async () => {
+    useEnv({ FISH_API_KEY: "fish-test-key" });
+    useFetch(() => jsonReply({ status: 500, message: "boom" }, 500));
+    await expect(
+      SPEECH_ADAPTERS.fish.generate(plan("fish", undefined), input(), ctx()),
     ).rejects.toBeInstanceOf(HttpError);
     expect(posts()).toHaveLength(1);
   });

@@ -1,6 +1,6 @@
 ---
 name: multix
-description: AI multimodal CLI — generate and edit images (OpenAI, Codex driver, Gemini Nano Banana, Imagen, MiniMax, OpenRouter, Leonardo, BytePlus Seedream, Cloudflare Workers AI FLUX.1 Schnell, fal.ai FLUX, Replicate FLUX, Runway Gen-4 Image), generate, edit and extend video (Gemini Omni Flash, plus legacy Gemini Veo), generate video (MiniMax Hailuo, OpenRouter via Veo/Seedance/Kling, Leonardo via Motion/Veo/Kling/Hailuo/Seedance/LTX, BytePlus Seedance, Cloudflare AI Gateway via Replicate, fal.ai queue models, Replicate direct API models incl. P-Video, Runway Gen-4.5 and Gen-4 Turbo, HeyGen Video Agent and scripted avatar videos), video translation and lipsync (HeyGen), TTS/STT/music (OpenAI, Gemini Flash TTS incl. Gemini 3.8 with delivery-style control, OpenRouter TTS (Gemini, ElevenLabs, Fish Audio, MiniMax routed) and STT (Whisper, GPT-4o transcribe, Gemini Transcribe, ElevenLabs Scribe, Voxtral, Deepgram, AssemblyAI routed), MiniMax, Cloudflare Workers AI MeloTTS, ElevenLabs), multi-character dialogue audio with per-character voice profiles, cached per-line takes and stem export (multix scene), 3D models (BytePlus Hyper3D/Hitem3d), analyze/transcribe media, convert documents to Markdown, optimize media via ffmpeg/ImageMagick, and self-update the CLI. Use whenever the user wants to create, edit, or transform images/video/audio/3D/documents from a CLI, mentions any of: OpenAI, Codex image driver, image-to-image, i2i, image edit, watercolor/cyberpunk style transfer, reference image, OpenRouter, Nano Banana, Flux, Seedream, Gemini Omni, Omni Flash, Veo, Hailuo, Seedance, Kling, Cloudflare Workers AI, AI Gateway, fal.ai, Atlas Cloud, Replicate, replicate.com models, Replicate predictions, Runway, Gen-4.5, Gen-4 Turbo, Gen-4 Image, HeyGen, avatar video, talking head, Video Agent, video translation, dubbing, lipsync, video generation, text-to-video, image-to-video, i2v, ElevenLabs voice cloning, updating/upgrading multix, or asks for batch media optimization.
+description: AI multimodal CLI — generate and edit images (OpenAI, Codex driver, Gemini Nano Banana, Imagen, MiniMax, OpenRouter, Leonardo, BytePlus Seedream, Cloudflare Workers AI FLUX.1 Schnell, fal.ai FLUX, Replicate FLUX, Runway Gen-4 Image), generate, edit and extend video (Gemini Omni Flash, plus legacy Gemini Veo), generate video (MiniMax Hailuo, OpenRouter via Veo/Seedance/Kling, Leonardo via Motion/Veo/Kling/Hailuo/Seedance/LTX, BytePlus Seedance, Cloudflare AI Gateway via Replicate, fal.ai queue models, Replicate direct API models incl. P-Video, Runway Gen-4.5 and Gen-4 Turbo, HeyGen Video Agent and scripted avatar videos), video translation and lipsync (HeyGen), TTS/STT/music (OpenAI, Gemini Flash TTS incl. Gemini 3.8 with delivery-style control, OpenRouter TTS (Gemini, ElevenLabs, Fish Audio, MiniMax routed) and STT (Whisper, GPT-4o transcribe, Gemini Transcribe, ElevenLabs Scribe, Voxtral, Deepgram, AssemblyAI routed), MiniMax, Cloudflare Workers AI MeloTTS, ElevenLabs, native Fish Audio Drama 3 TTS with multi-speaker turns and pronunciation dictionaries), multi-character dialogue audio with per-character voice profiles, cached per-line takes and stem export (multix scene), 3D models (BytePlus Hyper3D/Hitem3d), analyze/transcribe media, convert documents to Markdown, optimize media via ffmpeg/ImageMagick, and self-update the CLI. Use whenever the user wants to create, edit, or transform images/video/audio/3D/documents from a CLI, mentions any of: OpenAI, Codex image driver, image-to-image, i2i, image edit, watercolor/cyberpunk style transfer, reference image, OpenRouter, Nano Banana, Flux, Seedream, Gemini Omni, Omni Flash, Veo, Hailuo, Seedance, Kling, Cloudflare Workers AI, AI Gateway, fal.ai, Atlas Cloud, Replicate, replicate.com models, Replicate predictions, Runway, Gen-4.5, Gen-4 Turbo, Gen-4 Image, HeyGen, Fish Audio, Drama 3, avatar video, talking head, Video Agent, video translation, dubbing, lipsync, video generation, text-to-video, image-to-video, i2v, ElevenLabs voice cloning, updating/upgrading multix, or asks for batch media optimization.
 version: 1.22.0-beta # x-release-please-version
 ---
 
@@ -21,7 +21,7 @@ multix <group> <cmd> ... --json         # stdout = ONE line, schema multix.resul
 - Success = `ok: true` AND `outputs[]` non-empty (path, bytes, mime, sha256, width/height, duration_s) AND no `warnings` (`EMPTY_OUTPUT`, `CONTENT_MISMATCH`, `UNREADABLE_MEDIA`).
 - Failure: read `error.code`, `error.hint`, `next[]`. Exit codes (with `--json`; plain runs exit 1): 2 fix flags/input · 3 key/setup (`multix check`, key named in `error.env`) · 4 temporary (wait `retry_after_s`, `multix rerun <history_id>`) · 5 rejected: quota, safety, model (change input/provider) · 6 timed out, job may still run (status command in `next[]`, do not resubmit) · 1 unknown (`log[]`).
 - `usage` = what the provider reported (tokens, `cost_usd`, `credits`, metrics; `sources` names the header/body field each money number came from); `history_id` names the run.
-- Cost: `--estimate` prices a run without sending it (USD range, units, rate source; exit 0). `--max-cost <usd>` refuses before sending (exit 2: `BUDGET_EXCEEDED`, or `BUDGET_UNPROVEN` when the price is unknown or the ceiling only estimated; `--cost-policy estimate` accepts an estimated ceiling). Priced: `gemini generate-speech`, `elevenlabs tts`, `openrouter tts` (`--text` only), `openrouter transcribe` (local `--input` measured with `ffprobe`; URLs and token-priced models stay unknown), `speech generate` (gemini/elevenlabs routes only; `--fallback` plans priced at the most expensive route, unknown if any route is unpriced). Receipt `cost` (`multix.cost/v1`): `status` settled|computed|uncertain|unknown, `actual_usd` (`null` = unknown, not $0). `MULTIX_OPERATION_ID` (shell) groups submit/poll/download runs into one operation.
+- Cost: `--estimate` prices a run without sending it (USD range, units, rate source; exit 0). `--max-cost <usd>` refuses before sending (exit 2: `BUDGET_EXCEEDED`, or `BUDGET_UNPROVEN` when the price is unknown or the ceiling only estimated; `--cost-policy estimate` accepts an estimated ceiling). Priced: `gemini generate-speech`, `elevenlabs tts`, `fish tts` (UTF-8 bytes; `--text`, `--text-file` or `--turns-file`), `openrouter tts` (`--text` only), `openrouter transcribe` (local `--input` measured with `ffprobe`; URLs and token-priced models stay unknown), `speech generate` (gemini/elevenlabs/fish routes only; `--fallback` plans priced at the most expensive route, unknown if any route is unpriced). Receipt `cost` (`multix.cost/v1`): `status` settled|computed|uncertain|unknown, `actual_usd` (`null` = unknown, not $0). `MULTIX_OPERATION_ID` (shell) groups submit/poll/download runs into one operation.
 - History: `multix history [--failed] [--since 1d]`, `multix history show last`, `multix history stats --by model|provider|command`, `multix rerun <id|last>`. Ledger `~/.multix/history.jsonl` has no keys or signed URLs; `MULTIX_HISTORY=0` disables it.
 
 ## When to use
@@ -38,6 +38,7 @@ Activate this skill when the user asks to:
 - **Generate video via Leonardo** (Motion, Veo, Kling, Hailuo, Seedance, LTX models)
 - Generate images or speech with Cloudflare Workers AI, or video through Cloudflare AI Gateway's Replicate route
 - Generate speech on any TTS provider with one flag set, or pick a TTS model by language (`multix speech`)
+- **Text-to-speech on the native Fish Audio API** (Drama 3 by default, multi-speaker `<|speaker:N|>` turns, pronunciation dictionaries; `multix fish tts`, voices via `multix fish voices list`)
 - Generate or clone a voice, run STT, generate music or sound effects
 - Generate 3D models (BytePlus Hyper3D / Hitem3d)
 - Analyze, transcribe, or extract structured data from media/docs
@@ -69,6 +70,7 @@ MINIMAX_API_KEY       # MiniMax (image/video/speech/music)
 LEONARDO_API_KEY      # Leonardo.Ai (image/video/upscale)
 BYTEPLUS_API_KEY      # BytePlus / Volcengine ARK (Seedream/Seedance/Hyper3D)
 ELEVENLABS_API_KEY    # ElevenLabs (TTS, cloning, STT, music, dubbing)
+FISH_API_KEY          # Fish Audio native API (Drama 3 TTS, voice models); https://fish.audio/app/api-keys/
 FAL_KEY                # fal.ai (generic queue-API model runner, image/video/TTS, local media upload)
 ATLASCLOUD_API_KEY    # Atlas Cloud (any model: image, edit, video, audio, 3D)
 REPLICATE_API_TOKEN   # Replicate direct API (REPLICATE_API_KEY accepted as fallback)
@@ -436,7 +438,7 @@ Discover, then generate on an explicit provider. The request is checked against 
 
 ```bash
 multix speech models --language vi --json      # models documenting Vietnamese: formats, style, emotions, max_speakers, async, voices, extras, billing, ready
-multix speech generate --provider <gemini|openai|elevenlabs|minimax|atlas> [--model <id>] --text-file scene.txt --output <file.ext> --dry-run --json
+multix speech generate --provider <gemini|openai|elevenlabs|minimax|atlas|fish> [--model <id>] --text-file scene.txt --output <file.ext> --dry-run --json
 multix speech generate --provider <...> [--model <id>] --text-file scene.txt --output <file.ext> --json
 
 # Vietnamese two-speaker dialogue (Gemini, max 2 speakers); scene.txt:
@@ -451,6 +453,7 @@ multix speech generate --provider minimax --language vi --emotion happy --text "
 - Never switches provider silently: pass `--provider` (a bare `--model` works only if exactly one provider serves it).
 - `--fallback provider[:model[:voice]]` (repeatable) is opt-in, used only when earlier routes lack an API key, before any paid request; a paid request is never resent. A fallback prints a warning with voice/billing/format differences (`data.fallback` in JSON).
 - `--voice` must belong to the chosen provider; `--extra <provider.key=value>` for provider options (keys listed in `speech models`).
+- `--provider fish` (default `drama-3`, voice Adrian) sends one voice; dialogue goes through `multix fish tts --turns-file`.
 - JSON `data` = `multix.speech.result/v1`: `request` (text recorded as `text_chars` + `text_sha256`), `route`, files or async `job`.
 - Remote MCP: `--provider` required; `--text-file` is an `inputs` URL; `speech models --ready` unavailable.
 
@@ -476,6 +479,20 @@ multix openrouter generation <generation-id>         # cost, if it was not repor
 # --clone-strength 0..1 only on v4/v4 Turbo (PVC fine-tuned for v4); multilingual_v2 ignores --language-code (warned).
 multix elevenlabs tts --model eleven_v4 --text "[warmly] Xin chào!" --language-code vi [--timestamps]
 multix elevenlabs models   # live capabilities per model
+# Fish Audio native (default drama-3; FISH_TTS_MODEL). Model = exact `model` header, allowlist only:
+# drama-3, s2.1-pro, s2.1-pro-free, s2-pro, s1. Fish serves a missing/misspelled header as s2.1-pro with a 200 and
+# the audio does not name the model: result has model_header_sent + model_confirmed_by_response: false.
+# Billed per UTF-8 byte (tags included). Never retried: UNKNOWN_REMOTE_STATE = check fish.audio usage before resending.
+# Audio is checked (signature, sample rate, duration, sha256). Tags like [whispering] and phoneme tags are sent unchanged;
+# Fish documents phonemes only for English (Arpabet), Chinese (pinyin), Japanese (romaji).
+multix fish tts --text "Welcome to multix." --voice adrian --output welcome.mp3   # public voices: adrian, delia, sheila
+multix fish tts --voice adrian --voice sheila --text "<|speaker:0|>Hi.<|speaker:1|>Hello."   # one --voice per speaker, index order; not s1
+multix fish tts --turns-file scene.json   # [{"text": "...", "voice": "<voice-id>|adrian|delia|sheila"}], no --voice
+# Pronunciation dictionaries: up to 3, all --dictionary <id>@<pinned-version> (not latest/V1) OR one --dictionary-file, never mixed;
+# Fish silently skips an unresolved reference (warned).
+multix fish voices list [--public] [--language vi] [--title <text>]   # free; your voices by default
+multix fish voices get <voice-id>
+# Native Fish and OpenRouter fish-audio/* are separate routes and prices; multix never falls back between them.
 
 # Voice cloning + STT
 multix openai transcribe --input audio.mp3 [--format text|json|diarized_json] [--language vi]
@@ -535,6 +552,7 @@ Requires `cwebp` (libwebp: `brew install webp`, `apt install webp`) on `PATH`.
 | `OPENROUTER_FALLBACK_MODELS` | CSV; applies to `generate` AND `i2i` |
 | `OPENROUTER_VIDEO_MODEL` | Default OpenRouter video model (default `google/veo-3.1`) |
 | `OPENROUTER_TTS_MODEL` | Default `openrouter tts` model (default `google/gemini-3.8-flash-tts`) |
+| `FISH_TTS_MODEL` | Default `fish tts` / `speech generate --provider fish` model (default `drama-3`; exact header value from the allowlist) |
 | `OPENROUTER_STT_MODEL` | Default `openrouter transcribe` model (default `openai/whisper-large-v3-turbo`) |
 | `OPENROUTER_SITE_URL` / `OPENROUTER_APP_NAME` | HTTP-Referer / X-Title headers |
 | `GEMINI_MODEL` / `MULTIMODAL_MODEL` | Override Gemini analyze/transcribe/extract defaults (doc convert uses `--model`; default `gemini-3.6-flash`) |

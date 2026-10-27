@@ -17,6 +17,7 @@ export const GROUP_KEY_ROWS: Readonly<Record<string, readonly (readonly string[]
   cloudflare: [["CLOUDFLARE_ACCOUNT_ID"], ["CLOUDFLARE_API_TOKEN"]],
   elevenlabs: [["ELEVENLABS_API_KEY"]],
   fal: [["FAL_KEY"]],
+  fish: [["FISH_API_KEY"]],
   atlas: [["ATLASCLOUD_API_KEY"]],
   replicate: [["REPLICATE_API_TOKEN", "REPLICATE_API_KEY"]],
   runway: [["RUNWAYML_API_SECRET"]],
@@ -29,6 +30,7 @@ export const GROUP_KEY_ROWS: Readonly<Record<string, readonly (readonly string[]
       "ELEVENLABS_API_KEY",
       "MINIMAX_API_KEY",
       "ATLASCLOUD_API_KEY",
+      "FISH_API_KEY",
     ],
   ],
   // A scene renders through the providers its voice profiles name; `scene

@@ -75,6 +75,7 @@ not filtered. On Windows the check ignores case, as the OS does.
 | `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` | Cloudflare Workers AI |
 | `CLOUDFLARE_AI_GATEWAY_ID` and `REPLICATE_API_TOKEN` | Cloudflare AI Gateway video |
 | `ELEVENLABS_API_KEY` | ElevenLabs |
+| `FISH_API_KEY` | Fish Audio (native API) |
 | `FAL_KEY` | fal.ai |
 | `ATLASCLOUD_API_KEY` | Atlas Cloud |
 | `REPLICATE_API_TOKEN` or `REPLICATE_API_KEY` | Replicate (direct API) |
@@ -196,6 +197,10 @@ override per command:
 and `ATLASCLOUD_IMAGE_TO_3D_MODEL`. See [Atlas Cloud](/commands/atlascloud/)
 for the built-in defaults. `ATLASCLOUD_MAX_UPLOAD_MB` sets the size limit for
 local files uploaded to Atlas Cloud (default 200).
+
+`FISH_TTS_MODEL` sets the `multix fish tts` and `speech generate --provider fish`
+default model (default `drama-3`). It must be one of the models listed on
+[Fish Audio](/commands/fish/#models), spelled exactly.
 
 `HEYGEN_BASE_URL` overrides the HeyGen API base (default
 `https://api.heygen.com`) for proxies and tests. It must be `https://`; plain

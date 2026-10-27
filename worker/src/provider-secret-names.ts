@@ -27,6 +27,7 @@ const CLI_KEY_NAMES = [
   "BYTEPLUS_API_KEY",
   "ARK_API_KEY",
   "ELEVENLABS_API_KEY",
+  "FISH_API_KEY",
   "FAL_KEY",
   "ATLASCLOUD_API_KEY",
   "REPLICATE_API_TOKEN",
@@ -77,6 +78,7 @@ export const CLI_PROVIDER_KEY_GROUPS: readonly ProviderKeyGroup[] = [
     link: "https://elevenlabs.io/app/settings/api-keys",
     names: ["ELEVENLABS_API_KEY"],
   },
+  { provider: "Fish Audio", link: "https://fish.audio/app/api-keys/", names: ["FISH_API_KEY"] },
   { provider: "fal.ai", link: "https://fal.ai/dashboard/keys", names: ["FAL_KEY"] },
   {
     provider: "Atlas Cloud",

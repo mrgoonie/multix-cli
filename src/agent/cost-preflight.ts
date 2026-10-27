@@ -18,7 +18,10 @@ import {
 } from "../budget/command-cost.js";
 import type { CostEstimate } from "../budget/cost-estimate.js";
 import { type CostReceipt, buildCostReceipt, operationIdFor } from "../budget/cost-receipt.js";
+import { envDefault } from "../core/env-default.js";
 import { BudgetError } from "../core/errors.js";
+import { DEFAULT_FISH_TTS_MODEL, FISH_TTS_MODEL_ENV } from "../providers/fish/models.js";
+import { turnsToSpeakerText } from "../providers/fish/tts-request.js";
 import { getDefaultModel } from "../providers/gemini/models.js";
 import { probeDuration } from "./output-file-inspect.js";
 import { run } from "./run-state.js";
@@ -47,8 +50,27 @@ function textFileContent(path: unknown): string | undefined {
   try {
     const stat = fs.statSync(path);
     if (!stat.isFile() || stat.size > MAX_SPEECH_TEXT_FILE_BYTES) return undefined;
-    const text = fs.readFileSync(path, "utf8");
+    // The command strips a leading BOM before sending, so price (and keep) the text without it.
+    const text = fs.readFileSync(path, "utf8").replace(/^\uFEFF/, "");
     run.textFile = { path, text };
+    return text;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The tagged text `fish tts --turns-file` will send; an unreadable or invalid file stays unpriced. */
+function fishTurnsText(path: unknown): string | undefined {
+  if (typeof path !== "string") return undefined;
+  try {
+    const stat = fs.statSync(path);
+    if (!stat.isFile() || stat.size > MAX_SPEECH_TEXT_FILE_BYTES) return undefined;
+    const raw = fs.readFileSync(path, "utf8").replace(/^\uFEFF/, "");
+    const turns = JSON.parse(raw) as unknown;
+    if (!Array.isArray(turns)) return undefined;
+    const text = turnsToSpeakerText(turns as Array<{ text: string; voice: string }>).text;
+    // The command sends the turns read here, not a second read of a file that may have changed.
+    run.textFile = { path, text: raw };
     return text;
   } catch {
     return undefined;
@@ -62,10 +84,26 @@ function runtimeDefaults(command: string, options: Record<string, unknown>): Com
     const audioSeconds = localAudioSeconds(options.input);
     return audioSeconds !== undefined ? { audioSeconds } : {};
   }
+  if (command === "fish tts") {
+    const inline = options.text ?? options.prompt;
+    const text =
+      inline !== undefined
+        ? undefined
+        : options.textFile !== undefined
+          ? textFileContent(options.textFile)
+          : fishTurnsText(options.turnsFile);
+    return {
+      model: envDefault(FISH_TTS_MODEL_ENV, DEFAULT_FISH_TTS_MODEL),
+      ...(text !== undefined ? { text } : {}),
+    };
+  }
   if (command === "speech generate") {
     const text = options.text === undefined ? textFileContent(options.textFile) : undefined;
     return {
-      speechModels: { gemini: getDefaultModel("generate-speech") },
+      speechModels: {
+        gemini: getDefaultModel("generate-speech"),
+        fish: envDefault(FISH_TTS_MODEL_ENV, DEFAULT_FISH_TTS_MODEL),
+      },
       ...(text !== undefined ? { text } : {}),
     };
   }
