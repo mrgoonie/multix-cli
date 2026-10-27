@@ -113,7 +113,8 @@ const KIND_COMMAND: Record<AtlasMediaKind, string> = {
 
 /**
  * Load the model's published schema for validation. Never fatal: when the
- * schema is unavailable the request is sent as built, with a warning.
+ * schema is unavailable the request is sent as built, with a warning. A signal
+ * meanwhile is a clean cancel: nothing has been submitted yet.
  */
 export async function loadModelSpec(
   client: AtlasCloudClient,
@@ -122,20 +123,28 @@ export async function loadModelSpec(
   validate: boolean | undefined,
 ): Promise<AtlasModelSpec | undefined> {
   if (validate === false) return undefined;
-  try {
-    const spec = await client.getModelSpec(model);
-    if (!spec) {
-      logger.warn(
-        `Model ${model} is not in the Atlas Cloud public catalog or has no published schema; sending without validation.`,
-      );
-    }
-    return spec;
-  } catch (e) {
-    logger.warn(
-      `Could not load the schema for ${model} (${e instanceof Error ? e.message : String(e)}); sending without validation.`,
-    );
-    return undefined;
-  }
+  return exitOnInterrupt(
+    async () => {
+      try {
+        const spec = await client.getModelSpec(model);
+        if (!spec) {
+          logger.warn(
+            `Model ${model} is not in the Atlas Cloud public catalog or has no published schema; sending without validation.`,
+          );
+        }
+        return spec;
+      } catch (e) {
+        logger.warn(
+          `Could not load the schema for ${model} (${e instanceof Error ? e.message : String(e)}); sending without validation.`,
+        );
+        return undefined;
+      }
+    },
+    {
+      message: `Cancelled while loading the schema for ${model}; no prediction was submitted.`,
+      outcome: NOTHING_SUBMITTED,
+    },
+  );
 }
 
 /** Reject a model whose schema says it is served by a different endpoint. */

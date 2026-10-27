@@ -119,8 +119,8 @@ lists the id in `provider_ids` and the resume command first in `next`. A signal
 while the submit request is still in flight cannot tell whether Atlas Cloud
 accepted it, and the id is unknown: the envelope says so (`retryable: false`),
 so check your predictions in the Atlas Cloud console before submitting again. A
-signal while local `--ref` or `--audio` files are uploading cancels cleanly;
-nothing was submitted. A
+signal before the submit, while the model schema loads or local `--ref` or
+`--audio` files upload, cancels cleanly; nothing was submitted. A
 prediction that ends in `failed` makes the command exit with a non-zero status.
 Atlas Cloud has no cancel endpoint, so multix does not offer one.
 

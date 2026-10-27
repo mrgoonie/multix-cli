@@ -243,7 +243,7 @@ describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
 
   describe("a signal before or outside the wait on an atlas prediction", () => {
     /**
-     * Fake Atlas API: uploads and submits hang until the run is killed, polls
+     * Fake Atlas API: the catalog, uploads and submits hang until the run is killed, polls
      * return a prediction that never finishes. `seen.hit` resolves on the first
      * request whose path ends with `stage`.
      */
@@ -262,7 +262,8 @@ describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
         const route = `${req.method} ${req.url}`;
         seen.requests.push(route);
         if (req.url?.endsWith(stage)) markHit();
-        if (req.method === "POST") return; // never answered: the signal comes first
+        // Never answered: the signal comes first.
+        if (req.method === "POST" || req.url?.endsWith("/models")) return;
         res.writeHead(200, { "content-type": "application/json" });
         res.end(
           JSON.stringify({
@@ -304,6 +305,24 @@ describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
         expect(out.error.hint).toContain("before resubmitting");
         expect(out.error.hint).not.toMatch(/nothing was left behind/i);
         expect(seen.requests.filter((r) => r.startsWith("POST"))).toHaveLength(1);
+      });
+    });
+
+    it.each([
+      ["image", "a cat"],
+      ["run", "m/x", "--input", '{"prompt":"a cat"}'],
+    ])("a signal while atlas %s loads the schema is a clean cancel", async (...args) => {
+      await withHangingAtlas("/models", async (baseUrl, seen) => {
+        const child = start(baseUrl, args);
+        await seen.hit;
+        child.kill("SIGINT");
+        const result = await child;
+        expect(result.exitCode).toBe(130);
+        const out = envelope(result.stdout);
+        expect(out).toMatchObject({ ok: false, command: `atlas ${args[0]}`, exit_code: 130 });
+        expect(out.error).toMatchObject({ code: "CANCELLED", retryable: false });
+        expect(out.error.hint).toContain("no prediction was created or billed");
+        expect(seen.requests.some((r) => r.startsWith("POST"))).toBe(false);
       });
     });
 
