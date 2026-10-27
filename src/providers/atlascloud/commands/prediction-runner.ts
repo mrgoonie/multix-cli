@@ -13,7 +13,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Command } from "commander";
-import { trackInFlight } from "../../../agent/run-state.js";
+import { run, trackInFlight } from "../../../agent/run-state.js";
 import { ProviderError, ValidationError } from "../../../core/errors.js";
 import { maxDownloadBytes } from "../../../core/http-client.js";
 import {
@@ -166,7 +166,7 @@ export interface ExecuteOptions {
   hint?: OutputCategory;
   defaultWaitTimeoutMs: number;
   pollIntervalMs?: number;
-  /** Ends the process on Ctrl-C/SIGTERM/SIGHUP while waiting (tests inject it). */
+  /** Ends the process on Ctrl-C/SIGTERM/SIGHUP while submitting or waiting (tests inject it). */
   exit?: (code: number) => void;
 }
 
@@ -192,35 +192,59 @@ function shellQuote(value: string): string {
 /** Shell exit status for a run stopped by each signal: 128 + the signal number. */
 const SIGNAL_EXIT = { SIGHUP: 129, SIGINT: 130, SIGTERM: 143 } as const;
 
+export interface InterruptOptions {
+  /** Printed to stderr before exiting. */
+  message: string;
+  /** What the envelope says the signal left behind (its hint and retryable). */
+  outcome?: { hint: string; retryable: boolean };
+  exit?: (code: number) => void;
+}
+
 /**
- * Run `wait` so that Ctrl-C, SIGTERM or a closed terminal stops polling and
- * exits with 128 + the signal number through the agent runtime (envelope,
- * history), after printing `message`. Nothing local needs cleanup while polling.
+ * Run `work` so that Ctrl-C, SIGTERM or a closed terminal stops it and exits
+ * with 128 + the signal number through the agent runtime (envelope, history),
+ * after printing the message. Nothing local needs cleanup in these phases.
  */
-async function exitOnInterrupt<T>(
-  wait: () => Promise<T>,
-  message: string,
-  exit: (code: number) => void = (code) => process.exit(code),
+export async function exitOnInterrupt<T>(
+  work: () => Promise<T>,
+  { message, outcome, exit = (code) => process.exit(code) }: InterruptOptions,
 ): Promise<T> {
   const signals = Object.keys(SIGNAL_EXIT) as Array<keyof typeof SIGNAL_EXIT>;
   const stop = (signal: keyof typeof SIGNAL_EXIT) => {
+    if (outcome) run.interrupted = outcome;
     process.stderr.write(`${message}\n`);
     exit(SIGNAL_EXIT[signal]);
   };
   for (const signal of signals) process.on(signal, stop);
   try {
-    return await wait();
+    return await work();
   } finally {
     for (const signal of signals) process.off(signal, stop);
   }
 }
+
+/** A signal before the submit leaves no prediction behind. */
+export const NOTHING_SUBMITTED = {
+  hint: "The run stopped before the prediction was submitted, so no prediction was created or billed. Rerun the command.",
+  retryable: true,
+};
 
 /** Submit, then either exit with the id (--async) or wait, verify, and deliver outputs. */
 export async function executePrediction(o: ExecuteOptions): Promise<ExecuteResult> {
   const { client, logger, opts } = o;
   const timeoutMs = parseTimeoutMs(opts.waitTimeout, o.defaultWaitTimeoutMs);
   logger.info(`Submitting to ${o.model} (generate${capitalize(o.kind)})...`);
-  const submitted = await client.submit(o.kind, { ...o.body, model: o.model });
+  const submitted = await exitOnInterrupt(
+    () => client.submit(o.kind, { ...o.body, model: o.model }),
+    {
+      message: `Cancelled while submitting to ${o.model}; Atlas Cloud may already have accepted the prediction.`,
+      outcome: {
+        hint: "The run stopped while the submit request was in flight, so Atlas Cloud may have accepted (and will bill) a prediction whose id the run never received. Check the predictions in the Atlas Cloud console before resubmitting, or you may pay twice.",
+        retryable: false,
+      },
+      exit: o.exit,
+    },
+  );
   const id = submitted.id;
 
   if (opts.async) {
@@ -243,8 +267,10 @@ export async function executePrediction(o: ExecuteOptions): Promise<ExecuteResul
             resumeHint: `Resume with: ${resume}`,
             onPoll: (p, n) => logger.debug(`poll ${n}: ${p.status}`),
           }),
-        `Cancelled while waiting on prediction ${id}; it keeps running and is billed. Resume with: ${resume}`,
-        o.exit,
+        {
+          message: `Cancelled while waiting on prediction ${id}; it keeps running and is billed. Resume with: ${resume}`,
+          exit: o.exit,
+        },
       );
   assertPredictionSucceeded(final);
   // File names come from the submit-time id, which a resume also uses.

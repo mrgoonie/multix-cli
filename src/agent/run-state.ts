@@ -72,6 +72,12 @@ export interface RunState {
    * signal reports how to resume it instead of a rerun that would pay twice.
    */
   inFlight?: { id: string; resume: string };
+  /**
+   * What a signal left behind, recorded by the handler of a phase that knows better
+   * than request counting: an upload before submit billed nothing, while a submit
+   * still in flight may have been accepted under an id the run never saw.
+   */
+  interrupted?: { hint: string; retryable: boolean };
   /** True once a command action started (help and parse errors never get there). */
   actionStarted: boolean;
   finalized: boolean;

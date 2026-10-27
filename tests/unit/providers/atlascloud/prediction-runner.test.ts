@@ -656,7 +656,7 @@ describe("download hardening", () => {
     expect(savedOutput(path.join(tmp, "missing.mp4"))).toBeUndefined();
   });
 
-  it("the interrupt handler removes this run's locks and temp files, then exits 130/143", () => {
+  it("the interrupt handler removes this run's locks and temp files, then exits 129/130/143", () => {
     const file = path.join(tmp, "atlas-int01-01.mp4");
     expect(claimOutputPath(file, "reuse")).toBe(file);
     const temp = `${file}.${process.pid}-1700000000000-k3x9qa.part`;
@@ -670,6 +670,13 @@ describe("download hardening", () => {
     claimOutputPath(file, "reuse");
     handleInterrupt("SIGTERM", exit);
     expect(exit).toHaveBeenLastCalledWith(143);
+    expect(fs.readdirSync(tmp)).toEqual(["keep.mp4"]);
+
+    // A closed terminal (SIGHUP) cleans up the same way.
+    claimOutputPath(file, "reuse");
+    expect(process.listenerCount("SIGHUP")).toBeGreaterThan(0);
+    handleInterrupt("SIGHUP", exit);
+    expect(exit).toHaveBeenLastCalledWith(129);
     expect(fs.readdirSync(tmp)).toEqual(["keep.mp4"]);
   });
 
