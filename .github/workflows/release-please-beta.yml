@@ -5,8 +5,8 @@ on:
     branches: [dev]
 
 permissions:
+  actions: write
   contents: write
-  id-token: write
   pull-requests: write
 
 # Beta releases are prepared from dev. release-please opens/updates a Release PR
@@ -24,41 +24,12 @@ jobs:
           config-file: release-please-beta-config.json
           manifest-file: .release-please-manifest.json
 
-      - uses: actions/checkout@v4
+      # npm accepts an OIDC trusted-publishing upload only from the workflow file
+      # registered on npmjs.com, which is publish.yml, so hand the new tag to it
+      # instead of publishing here. GITHUB_TOKEN may trigger workflow_dispatch.
+      - name: Publish beta to npm via publish.yml
         if: ${{ steps.release.outputs.release_created }}
-
-      - uses: actions/setup-node@v4
-        if: ${{ steps.release.outputs.release_created }}
-        with:
-          node-version: "24"
-          cache: npm
-          registry-url: "https://registry.npmjs.org"
-
-      - name: Install dependencies
-        if: ${{ steps.release.outputs.release_created }}
-        run: npm ci
-
-      - name: Lint
-        if: ${{ steps.release.outputs.release_created }}
-        run: npm run lint
-
-      - name: Type-check
-        if: ${{ steps.release.outputs.release_created }}
-        run: npm run typecheck
-
-      - name: Build
-        if: ${{ steps.release.outputs.release_created }}
-        run: npm run build
-
-      - name: Test
-        if: ${{ steps.release.outputs.release_created }}
-        run: npm test
         env:
-          MULTIX_DISABLE_HOME_ENV: "1"
-
-      - name: Publish beta to npm
-        if: ${{ steps.release.outputs.release_created }}
-        # Trusted publishing (OIDC): npm >= 11.5.1, no NPM_TOKEN.
-        run: |
-          npm install -g npm@latest
-          npm publish --access public --tag beta
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ steps.release.outputs.tag_name }}
+        run: gh workflow run publish.yml --repo "$GITHUB_REPOSITORY" --ref "$TAG_NAME" -f tag=beta
