@@ -17,6 +17,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLI = path.resolve(__dirname, "../../dist/cli.js");
 const SPAWN_TIMEOUT = 15_000;
 
+// Windows cannot deliver POSIX signals to a child process: kill() ends it outright.
+const describeSignals = process.platform === "win32" ? describe.skip : describe;
+
 describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
   let tmp: string;
   let env: NodeJS.ProcessEnv;
@@ -160,7 +163,7 @@ describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     }
   });
 
-  describe("a signal while atlas waits on a submitted prediction", () => {
+  describeSignals("a signal while atlas waits on a submitted prediction", () => {
     /** Fake Atlas API: submit returns a processing prediction that never finishes. */
     async function withPendingAtlas(
       fn: (baseUrl: string, seen: { posts: number; polled: Promise<void> }) => Promise<void>,
@@ -246,7 +249,7 @@ describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     });
   });
 
-  describe("a signal before or outside the wait on an atlas prediction", () => {
+  describeSignals("a signal before or outside the wait on an atlas prediction", () => {
     /**
      * Fake Atlas API: uploads and submits hang until the run is killed, polls
      * return a prediction that never finishes. `seen.hit` resolves on the first
