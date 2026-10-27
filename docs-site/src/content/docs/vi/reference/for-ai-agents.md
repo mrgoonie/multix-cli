@@ -93,6 +93,8 @@ https://multix.zuey.me/llms.txt
 | `usage` | Số liệu provider trả về: `tokens` (`input`, `output`, `total`, `thinking`), `cost_usd`, `credits` và các `metrics` dạng số khác theo key path. `sources.cost_usd` / `sources.credits` ghi nguồn của từng số (ví dụ `api.elevenlabs.io header.character-cost`). Không ước tính: số ước tính hoặc báo giá của provider (như `estimatedCost` của Runway) chỉ nằm trong `metrics`, không bao giờ được báo là `cost_usd` hay `credits`. `cost_usd` và `credits` là số đã tiêu cho lần chạy: số dư tài khoản (`apiCredit` của Leonardo từ `leonardo me`, credit còn lại hoặc credit đi kèm gói của HeyGen từ `heygen me`) không bao giờ được tính vào `credits` hay `cost_usd`. |
 | `http` | Số request tới provider, số request lỗi và tổng thời gian. |
 | `provider_ids` | Request id, job id hoặc prediction id provider trả về. |
+| `model_requested` / `model_resolved` | Model mà lần chạy yêu cầu (từ body hoặc path của request, nếu không có thì từ `--model` hoặc đối số `<model>`) và model mà provider báo đã phục vụ (`model` hoặc `modelVersion` ở cấp cao nhất của response, ví dụ một snapshot có ngày hoặc model được định tuyến). `model_resolved` là `null` khi không response nào nêu model; không bao giờ đoán. Hai trường có mặt khi biết ít nhất một trong hai; `model` giữ giá trị được yêu cầu để tương thích. |
+| `job` | `{ provider, id, attempt }` khi provider trả về job id hoặc request id: id từ response của request nêu model (id trong body được ưu tiên hơn header request-id), hoặc job đang được chờ. `attempt` là 1, cộng số lần gọi lỗi tới cùng endpoint mà lệnh đã thử lại trước đó. |
 | `request` | Với `--dry-run`: request lẽ ra đã được gửi. Giá trị header, các trường có tên dạng secret và query string của URL (URL đã ký) đều bị che; giá trị header duy nhất được hiển thị là `model` của Fish Audio (trong `header_values`), vì nó quyết định model nào chạy và bị tính phí, và không chứa secret. |
 | `estimate` | Giá ước tính trước khi chạy (với `--estimate`, `--max-cost`, hoặc với lệnh có bảng giá). `estimate_only: true` đánh dấu lần chạy `--estimate`. |
 | `budget` | Với `--max-cost`: `ok`, `max_cost_usd`, `policy`, cùng `code` và `message` khi bị từ chối. |
@@ -240,7 +242,7 @@ Mỗi lệnh provider ghi thêm một dòng vào `~/.multix/history.jsonl` (quy�
 0600, xoay vòng ở 20 MB): id, thời điểm, thời lượng, lệnh, provider, model,
 argv (giá trị của option có tên kiểu key, token, secret hoặc password bị che),
 kết quả và mã lỗi, output kèm kích thước và hash, usage của provider (tokens,
-cost, credits, metrics), số liệu HTTP và id phía provider. Key và signed URL
+cost, credits, metrics), số liệu HTTP, id phía provider, `model_requested` / `model_resolved` và `job` (như trong envelope). Key và signed URL
 không bao giờ được ghi.
 
 ```bash

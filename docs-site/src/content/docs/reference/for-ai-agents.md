@@ -93,6 +93,8 @@ https://multix.zuey.me/llms.txt
 | `usage` | What the provider reported: `tokens` (`input`, `output`, `total`, `thinking`), `cost_usd`, `credits`, and other numeric `metrics` by key path. `sources.cost_usd` / `sources.credits` name where each number came from (for example `api.elevenlabs.io header.character-cost`). Nothing is estimated: a provider's own estimate or quote (such as Runway `estimatedCost`) stays in `metrics` and is never reported as `cost_usd` or `credits`. `cost_usd` and `credits` are what the run spent: an account balance (Leonardo `apiCredit` from `leonardo me`, HeyGen remaining or included credits from `heygen me`) is never reported as `credits` or `cost_usd`. |
 | `http` | Provider request count, failed requests and total time. |
 | `provider_ids` | Request, job or prediction ids the provider returned. |
+| `model_requested` / `model_resolved` | The model the run asked for (request body or path, else `--model` or a `<model>` argument) and the model the provider reported serving (a response's top-level `model` or `modelVersion`, such as a dated snapshot or a routed model). `model_resolved` is `null` when no response named one; it is never guessed. Both are present when either is known; `model` keeps the requested value for compatibility. |
+| `job` | `{ provider, id, attempt }` when a provider returned a job or request id: the id from the response to the request that named the model (a body id before a request-id header), or the job being waited on. `attempt` is 1, plus the failed calls to the same endpoint the command retried before it. |
 | `request` | With `--dry-run`: the request that would have been sent. Header values, secret-named fields and URL query strings (pre-signed URLs) are redacted; the one header value shown is Fish Audio's `model` (in `header_values`), because it chooses what runs and is billed and holds no secret. |
 | `estimate` | Pre-flight price of the run (with `--estimate`, `--max-cost`, or on a priced command). `estimate_only: true` marks an `--estimate` run. |
 | `budget` | With `--max-cost`: `ok`, `max_cost_usd`, `policy`, and the refusal `code` and `message`. |
@@ -241,7 +243,7 @@ Each provider command appends one line to `~/.multix/history.jsonl` (file mode
 0600, rotated at 20 MB): id, time, duration, command, provider, model, argv
 (values of options named like key, token, secret or password are redacted),
 outcome and error code, outputs with size and hash, provider usage (tokens,
-cost, credits, metrics), HTTP counts and provider ids. Keys and signed URLs are
+cost, credits, metrics), HTTP counts, provider ids, `model_requested` / `model_resolved` and `job` (as in the envelope). Keys and signed URLs are
 never written.
 
 ```bash

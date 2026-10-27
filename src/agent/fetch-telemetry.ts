@@ -9,7 +9,7 @@
  */
 
 import { extractUsage, hasUsage } from "../core/usage-extract.js";
-import { run } from "./run-state.js";
+import { preferRanked, run } from "./run-state.js";
 
 const MAX_JSON_BYTES = 2_000_000;
 /** Tail of an oversized JSON body searched for its trailing usage block. */
@@ -122,18 +122,20 @@ export function installFetchTelemetry(onDryRun: (request: DryRunRequest) => neve
       host = u.host;
       path = u.pathname;
     } catch {}
-    if (!run.requestModel) run.requestModel = modelFromRequest(path, init?.body);
+    const named = modelFromRequest(path, init?.body);
+    if (!run.requestModel) run.requestModel = named;
     let response: Response;
-    run.requestsStarted++;
+    const seq = ++run.requestsStarted;
     try {
       response = await original(input, init);
     } catch (error) {
-      run.calls.push({ method, host, path, status: 0, ms: Date.now() - started });
+      run.calls.push({ method, host, path, status: 0, ms: Date.now() - started, seq });
       throw error;
     }
-    run.calls.push({ method, host, path, status: response.status, ms: Date.now() - started });
+    run.calls.push({ method, host, path, status: response.status, ms: Date.now() - started, seq });
     // Read in the background: the caller keeps its own size caps and stall detection.
-    const pending = recordUsage(response, method, host, path).catch(() => {
+    const call = { method, host, path, seq, named: named !== undefined };
+    const pending = recordUsage(response, call).catch(() => {
       // Telemetry never breaks a command.
     });
     pendingReads.add(pending);
@@ -232,27 +234,87 @@ export function usageFromTail(tail: string): Record<string, unknown> | undefined
   return undefined;
 }
 
-async function recordUsage(
-  response: Response,
-  method: string,
-  host: string,
-  path: string,
-): Promise<void> {
+/** Top-level response keys that name the model a provider served. */
+const RESOLVED_MODEL_KEYS = ["model", "modelVersion", "model_version"];
+
+/** The model a JSON response says it served, from its top-level keys only. */
+export function modelFromResponse(body: unknown): string | undefined {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return undefined;
+  for (const key of RESOLVED_MODEL_KEYS) {
+    const value = (body as Record<string, unknown>)[key];
+    if (typeof value === "string" && value.length > 0 && value.length <= 200) return value;
+  }
+  return undefined;
+}
+
+/** Gemini's trailing `"modelVersion": "..."` in the tail of an oversized body. */
+export function modelFromTail(tail: string): string | undefined {
+  const matches = [...tail.matchAll(/"modelVersion"\s*:\s*"([^"\\]{1,200})"/g)];
+  return matches.at(-1)?.[1];
+}
+
+interface CallInfo {
+  method: string;
+  host: string;
+  path: string;
+  seq: number;
+  /** The request body or path named a model: the generation request, not an upload or poll. */
+  named: boolean;
+}
+
+/**
+ * Remember the served model and the job id this response reports. The request
+ * that named a model outranks the rest, a body id outranks a request-id header,
+ * and a GET that named no model (a poll or lookup) ranks last.
+ */
+function recordIdentity(
+  call: CallInfo,
+  model: string | undefined,
+  ids: string[],
+  headers: Headers,
+): void {
+  const base = call.named ? 0 : call.method === "GET" ? 4 : 2;
+  if (model) {
+    run.resolvedModel = preferRanked(run.resolvedModel, { seq: call.seq, rank: base, model });
+  }
+  const headerIds = new Set<string>();
+  headers.forEach((value, name) => {
+    if (/(request|generation)-?id/i.test(name)) headerIds.add(value);
+  });
+  const fromBody = ids.find((id) => !headerIds.has(id));
+  const id = fromBody ?? ids[0];
+  if (!id) return;
+  run.job = preferRanked(run.job, {
+    seq: call.seq,
+    rank: base + (fromBody ? 0 : 1),
+    id,
+    method: call.method,
+    host: call.host,
+    path: call.path,
+  });
+}
+
+async function recordUsage(response: Response, call: CallInfo): Promise<void> {
+  const { method, host, path } = call;
   const type = response.headers.get("content-type") ?? "";
   const declared = Number(response.headers.get("content-length") ?? Number.NaN);
   let body: unknown;
+  let model: string | undefined;
   if (response.ok && type.includes("json") && !(declared > MAX_SCAN_BYTES)) {
     const { text, tail } = await readCapped(response, MAX_JSON_BYTES);
     if (text !== undefined) {
       try {
         body = JSON.parse(text);
       } catch {}
+      model = modelFromResponse(body);
     } else if (tail !== undefined) {
       body = usageFromTail(tail);
+      model = modelFromTail(tail);
     }
   }
   const usage = extractUsage(body, response.headers);
   for (const id of usage.ids) if (!run.ids.includes(id) && run.ids.length < 10) run.ids.push(id);
+  if (response.ok) recordIdentity(call, model, usage.ids, response.headers);
   if (!hasUsage(usage)) return;
   if (usage.sources) {
     usage.sources = Object.fromEntries(

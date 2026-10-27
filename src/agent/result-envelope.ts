@@ -11,6 +11,13 @@ import type { DryRunRequest } from "./fetch-telemetry.js";
 import type { OutputFile, OutputWarning } from "./output-file-inspect.js";
 import type { UsageSummary } from "./run-state.js";
 
+export interface JobIdentity {
+  provider: string;
+  id: string;
+  /** 1, or 1 plus the failed calls to the same endpoint the command retried first. */
+  attempt: number;
+}
+
 export const ENVELOPE_SCHEMA = "multix.result/v1";
 
 export interface ResultEnvelope {
@@ -18,7 +25,14 @@ export interface ResultEnvelope {
   ok: boolean;
   command: string;
   provider?: string;
+  /** The requested model (kept for compatibility; same value as `model_requested`). */
   model?: string;
+  /** Model the run asked for: from the request body or path, else `--model`. */
+  model_requested?: string | null;
+  /** Model the provider reported serving; `null` when no response named one. */
+  model_resolved?: string | null;
+  /** Provider job or request id behind the run's outputs. */
+  job?: JobIdentity;
   dry_run?: boolean;
   /** `--estimate`: priced only, nothing sent. */
   estimate_only?: boolean;

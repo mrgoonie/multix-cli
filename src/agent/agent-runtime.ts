@@ -36,7 +36,7 @@ import {
   stripAnsi,
   suggestedCommands,
 } from "./result-envelope.js";
-import { run, summarizeUsage } from "./run-state.js";
+import { jobIdentity, run, summarizeUsage } from "./run-state.js";
 
 /** Commands that are themselves agent tooling or setup: not recorded in history. */
 const UNRECORDED = /^(history|models|guide|rerun|check|update)\b/;
@@ -132,6 +132,13 @@ function addGlobalFlags(cmd: Command, group = ""): void {
     }
   }
   for (const sub of cmd.commands) addGlobalFlags(sub, group || sub.name());
+}
+
+/** The `<model>` argument of commands such as `fal run <model>` and `replicate run <model>`. */
+function positionalModel(action: Command): string | undefined {
+  const at = action.registeredArguments.findIndex((a) => a.name() === "model");
+  const value = at === -1 ? undefined : action.processedArgs[at];
+  return typeof value === "string" && value.length > 0 && value.length <= 200 ? value : undefined;
 }
 
 /** Quote one argument for a POSIX shell when it needs it. */
@@ -262,8 +269,16 @@ export function finalizeRun(input: FinalizeInput): number {
   const recorded =
     Boolean(run.command) && !UNRECORDED.test(run.command) && (run.actionStarted || failed);
   const historyId = recorded ? newHistoryId(run.startedAt) : undefined;
-  const optionModel = typeof run.options.model === "string" ? run.options.model : undefined;
+  const optionModel =
+    typeof run.options.model === "string" ? run.options.model : run.positionalModel;
   const model = run.requestModel ?? optionModel;
+  const modelResolved = notSent ? undefined : run.resolvedModel?.model;
+  // Requested and served model, both named whenever either is known; never a guess.
+  const models =
+    model || modelResolved
+      ? { model_requested: model ?? null, model_resolved: modelResolved ?? null }
+      : {};
+  const job = notSent ? undefined : jobIdentity();
   const usage = SPEND_LOOKUPS.test(run.command) ? undefined : summarizeUsage();
   const httpErrors = run.calls.filter((c) => c.status === 0 || c.status >= 400).length;
   const http = run.calls.length
@@ -303,6 +318,8 @@ export function finalizeRun(input: FinalizeInput): number {
       command: run.command,
       provider: run.group,
       ...(model ? { model } : {}),
+      ...models,
+      ...(job ? { job } : {}),
       argv: redactArgv(run.argv),
       ok: !failed,
       exit_code: exitCode,
@@ -336,6 +353,8 @@ export function finalizeRun(input: FinalizeInput): number {
       command: run.command,
       ...(run.group ? { provider: run.group } : {}),
       ...(model ? { model } : {}),
+      ...models,
+      ...(job ? { job } : {}),
       ...(dryRun ? { dry_run: true } : {}),
       ...(estimateOnly ? { estimate_only: true } : {}),
       duration_ms: duration,
@@ -426,6 +445,7 @@ export function installAgentRuntime(program: Command, cliVersion: string): void 
     setCommand(names);
     run.actionStarted = true;
     run.options = action.opts();
+    run.positionalModel = positionalModel(action);
     run.dryRun = Boolean(run.options.dryRun) && !ownDryRun.has(action);
     if (run.dryRun && LOCAL_GROUPS.has(names[0] ?? "")) {
       realExit(finalizeRun({ exitCode: 0, dryRunLocal: true }));

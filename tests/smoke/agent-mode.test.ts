@@ -131,6 +131,45 @@ describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     );
   });
 
+  it("records the requested and served model and the job in the envelope and ledger", async () => {
+    const server = http.createServer((_req, res) => {
+      res.writeHead(201, { "content-type": "application/json" });
+      res.end(
+        JSON.stringify({
+          id: "pred9abc",
+          model: "acme/flux-pro",
+          version: "v-abc123",
+          status: "succeeded",
+          output: "https://example.invalid/out.png",
+          urls: {},
+        }),
+      );
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const { port } = server.address() as AddressInfo;
+    try {
+      const result = await run(
+        ["replicate", "run", "acme/flux", "--input", '{"prompt":"cat"}', "--no-download", "--json"],
+        {
+          REPLICATE_API_TOKEN: "test-key-not-real",
+          REPLICATE_BASE_URL: `http://127.0.0.1:${port}/v1`,
+        },
+      );
+      expect(result.exitCode).toBe(0);
+      const identity = {
+        model: "acme/flux",
+        model_requested: "acme/flux",
+        model_resolved: "acme/flux-pro",
+        job: { provider: "replicate", id: "pred9abc", attempt: 1 },
+      };
+      expect(envelope(result.stdout)).toMatchObject(identity);
+      const ledger = JSON.parse(fs.readFileSync(path.join(tmp, "h.jsonl"), "utf8").trim());
+      expect(ledger).toMatchObject(identity);
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
+  });
+
   it("redacts a signed URL a provider echoes in its error from the envelope and ledger", async () => {
     const server = http.createServer((_req, res) => {
       res.writeHead(400, { "content-type": "application/json" });

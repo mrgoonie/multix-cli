@@ -15,6 +15,22 @@ export interface HttpCall {
   path: string;
   status: number;
   ms: number;
+  /** Order the request was handed to fetch (1-based). */
+  seq: number;
+}
+
+/** Where a value came from: lower rank wins, then the earlier request. */
+interface Ranked {
+  seq: number;
+  rank: number;
+}
+
+/** A job or request id a provider returned, with the request that returned it. */
+export interface JobCandidate extends Ranked {
+  id: string;
+  method: string;
+  host: string;
+  path: string;
 }
 
 export interface RunState {
@@ -25,6 +41,8 @@ export interface RunState {
   group: string;
   /** Resolved options of the action command (defaults included). */
   options: Record<string, unknown>;
+  /** The action's `<model>` argument, when it takes one. */
+  positionalModel?: string;
   json: boolean;
   dryRun: boolean;
   verbose: boolean;
@@ -41,6 +59,10 @@ export interface RunState {
   externalRuns: string[];
   /** Model named by the first provider request that names one. */
   requestModel?: string;
+  /** Model a provider response reported serving (`model`, `modelVersion`). */
+  resolvedModel?: Ranked & { model: string };
+  /** Best id for the run's job: from the request that named the model, body over header. */
+  job?: JobCandidate;
   /** Structured result a command reports for the envelope's `data` (wins over parsed stdout). */
   data?: unknown;
   /** stdout/stderr text captured in JSON mode. */
@@ -98,6 +120,37 @@ export const run: RunState = {
   actionStarted: false,
   finalized: false,
 };
+
+/** Keep `next` when it ranks better than `current` (lower rank, then earlier request). */
+export function preferRanked<T extends Ranked>(current: T | undefined, next: T): T {
+  if (!current) return next;
+  if (next.rank !== current.rank) return next.rank < current.rank ? next : current;
+  return next.seq < current.seq ? next : current;
+}
+
+/**
+ * The run's provider job: id, and the attempt that created it (1 plus the
+ * failed calls to the same endpoint before it). A tracked in-flight job wins.
+ */
+export function jobIdentity(
+  state: RunState = run,
+): { provider: string; id: string; attempt: number } | undefined {
+  const best = state.job;
+  const id = state.inFlight?.id ?? best?.id;
+  if (!id) return undefined;
+  let attempt = 1;
+  if (best && best.id === id) {
+    attempt += state.calls.filter(
+      (c) =>
+        c.seq < best.seq &&
+        c.method === best.method &&
+        c.host === best.host &&
+        c.path === best.path &&
+        (c.status === 0 || c.status >= 400),
+    ).length;
+  }
+  return { provider: state.group || best?.host || "", id, attempt };
+}
 
 /** Record a submitted job that keeps running if the run stops; its id goes in provider_ids. */
 export function trackInFlight(id: string, resume: string, state: RunState = run): void {
