@@ -137,6 +137,17 @@ describe("media inspect/verify (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
       const bad = await run(["media", "check-receipt", "receipt.json", "note.mp4", "--json"]);
       expect(bad.exitCode).not.toBe(0);
       expect(envelope(bad.stdout).data).toMatchObject({ ok: false, hash_matches: false });
+      // A receipt from an older verify engine still vouches, with a warning in text mode.
+      const receipt = JSON.parse(fs.readFileSync(path.join(tmp, "receipt.json"), "utf8"));
+      const data = receipt.data ?? receipt;
+      data.engine.id = "multix-media-verify/1";
+      fs.writeFileSync(path.join(tmp, "old-receipt.json"), JSON.stringify(receipt));
+      const aged = await run(["media", "check-receipt", "old-receipt.json", "clip.mp4"]);
+      expect(aged.exitCode).toBe(0);
+      expect(aged.stdout).toMatch(/OK {2}receipt/);
+      expect(aged.stdout).toMatch(
+        /warning: the receipt was made by verify engine multix-media-verify\/1/,
+      );
     });
 
     it("reads an empty number flag as invalid, not 0", async () => {

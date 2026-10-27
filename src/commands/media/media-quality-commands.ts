@@ -335,9 +335,12 @@ export function registerMediaQualityCommands(media: Command): void {
     .action(async (receiptFile: string, file: string) => {
       const result = await checkReceipt(receiptFile, file);
       emit(result, () =>
-        result.ok
-          ? `OK  receipt (${result.profile.id}@${result.profile.version}) matches ${file}`
-          : `NOT OK  ${result.reason}`,
+        [
+          result.ok
+            ? `OK  receipt (${result.profile.id}@${result.profile.version}) matches ${file}`
+            : `NOT OK  ${result.reason}`,
+          ...result.warnings.map((w) => `  warning: ${w}`),
+        ].join("\n"),
       );
       if (!result.ok) {
         console.error(`media check-receipt: ${result.reason}`);

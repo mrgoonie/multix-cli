@@ -192,7 +192,11 @@ model look at them, pass them to `multix gemini analyze` yourself.
 it is the exact bytes the receipt judged and the receipt passed. It accepts a
 bare receipt or a `--json` envelope. A transcoded, remuxed or finalized file
 has new bytes, so verify the final file itself before checking its receipt.
-Receipts are not signed: they record a local run, so trust one only as far as
+The result names the verify engine that made the receipt and the current one
+(`engine.receipt`, `engine.current`, `engine.current_matches`). A receipt from
+an older engine still succeeds, since it records that run, but `warnings`
+says so: rerun `media verify` to apply the current checks, which may catch
+defects the older engine missed. Receipts are not signed: they record a local run, so trust one only as far as
 you trust where it came from.
 
 On the [remote MCP server](/guides/mcp-server/), `--rule`, `--cache-dir` and

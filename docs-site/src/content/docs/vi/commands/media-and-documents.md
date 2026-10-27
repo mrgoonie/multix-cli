@@ -191,7 +191,11 @@ model xem chúng, hãy tự truyền chúng vào `multix gemini analyze`.
 đúng là các byte mà biên nhận đã đánh giá và biên nhận có trạng thái `pass`.
 Lệnh nhận biên nhận thuần hoặc envelope `--json`. File đã transcode, remux hoặc
 finalize có byte mới, nên hãy verify chính file cuối cùng trước khi kiểm tra
-biên nhận của nó. Biên nhận không được ký: nó ghi lại một lần chạy cục bộ, nên
+biên nhận của nó. Kết quả ghi engine verify đã tạo biên nhận và engine hiện
+tại (`engine.receipt`, `engine.current`, `engine.current_matches`). Biên nhận
+từ engine cũ vẫn thành công vì nó ghi lại lần chạy đó, nhưng `warnings` sẽ nêu
+rõ: hãy chạy lại `media verify` để áp dụng các check hiện tại, vốn có thể bắt
+được lỗi mà engine cũ bỏ sót. Biên nhận không được ký: nó ghi lại một lần chạy cục bộ, nên
 chỉ tin nó ở mức bạn tin nguồn gốc của nó.
 
 Trên [remote MCP server](/vi/guides/mcp-server/), `--rule`, `--cache-dir` và
