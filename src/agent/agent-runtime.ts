@@ -226,20 +226,23 @@ export function finalizeRun(input: FinalizeInput): number {
         ? classifyError(input.error)
         : (classifySignalExit(
             input.exitCode,
-            run.requestsStarted > 0 || run.externalRuns.length > 0,
+            // Schema reads and uploads before a submit create no paid job.
+            run.submit?.state !== "unsent" &&
+              (run.requestsStarted > 0 || run.externalRuns.length > 0),
           ) ?? classifyMessage(run.lastErrorLine ?? `Command exited with code ${input.exitCode}`));
   }
+  const signalled = info && input.error === undefined && SIGNAL_EXITS.has(input.exitCode);
   // A job submitted before the signal keeps running and is billed: resume it, never rerun.
-  const inFlight =
-    info && input.error === undefined && SIGNAL_EXITS.has(input.exitCode)
-      ? run.inFlight
-      : undefined;
+  const inFlight = signalled ? run.inFlight : undefined;
   if (info && inFlight) {
     info = {
       ...info,
       retryable: false,
       hint: `Job ${inFlight.id} was submitted before the run stopped; it runs on (or has finished) and is billed. Do not rerun; resume it with the next command.`,
     };
+  } else if (info && signalled && run.submit?.state === "pending") {
+    // The submit went out unanswered: a paid job may exist that no output names.
+    info = { ...info, retryable: false, hint: run.submit.hint };
   }
   // Exit classes (2-6) are part of agent mode; plain runs keep the historical exit 1.
   // An unclassified failure keeps the command's own status in both modes.

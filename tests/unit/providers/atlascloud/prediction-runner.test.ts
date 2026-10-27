@@ -22,6 +22,7 @@ import {
 } from "../../../../src/providers/atlascloud/commands/output-claims.js";
 import {
   assertEndpoint,
+  beforeSubmit,
   executePrediction,
   loadModelSpec,
   planOutputPaths,
@@ -257,6 +258,60 @@ describe("executePrediction (mocked submit -> poll -> saved output)", () => {
     expect(signals.map((s) => process.listenerCount(s))).toEqual(before);
     run.inFlight = undefined;
     run.ids = [];
+  });
+
+  it("Ctrl-C during the submit exits 130 and records that a paid prediction may exist", async () => {
+    const { client } = createFakeAtlas({
+      "POST /model/generateImage": { body: prediction("sub01", "processing") },
+    });
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const exits: number[] = [];
+    // Signal while the submit POST is in flight, before Atlas answers.
+    const origSubmit = client.submit.bind(client);
+    vi.spyOn(client, "submit").mockImplementation(async (...a) => {
+      (process.listeners("SIGINT").at(-1) as (s: string) => void)("SIGINT");
+      return origSubmit(...a);
+    });
+    await expect(
+      executePrediction({
+        client,
+        logger,
+        kind: "image",
+        model: "m/x",
+        body: { prompt: "x" },
+        opts: {},
+        defaultWaitTimeoutMs: 60_000,
+        pollIntervalMs: 1,
+        exit: (code) => {
+          exits.push(code);
+          throw new Error("exited");
+        },
+      }),
+    ).rejects.toThrow("exited");
+    expect(exits).toEqual([130]);
+    expect(run.inFlight).toBeUndefined();
+    expect(run.submit).toMatchObject({ state: "pending" });
+    expect(stderr).toHaveBeenCalledWith(expect.stringContaining("Atlas Cloud dashboard"));
+    run.submit = undefined;
+  });
+
+  it("a signal before the submit (schema, uploads) is recorded as a clean cancel", async () => {
+    const exits: number[] = [];
+    vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    await expect(
+      beforeSubmit(
+        async () => {
+          (process.listeners("SIGTERM").at(-1) as (s: string) => void)("SIGTERM");
+        },
+        (code) => {
+          exits.push(code);
+          throw new Error("exited");
+        },
+      ),
+    ).rejects.toThrow("exited");
+    expect(exits).toEqual([143]);
+    expect(run.submit).toEqual({ state: "unsent" });
+    run.submit = undefined;
   });
 
   it("resumeCommand adds --output only when given, quoting it when needed", () => {
@@ -671,6 +726,21 @@ describe("download hardening", () => {
     handleInterrupt("SIGTERM", exit);
     expect(exit).toHaveBeenLastCalledWith(143);
     expect(fs.readdirSync(tmp)).toEqual(["keep.mp4"]);
+  });
+
+  it("a closed terminal (SIGHUP) mid-download cleans up like Ctrl-C, then exits 129", () => {
+    const file = path.join(tmp, "atlas-hup01-01.mp4");
+    expect(claimOutputPath(file, "reuse")).toBe(file);
+    fs.writeFileSync(`${file}.${process.pid}-1700000000000-k3x9qa.part`, "PARTIAL");
+    const exit = vi.spyOn(process, "exit").mockImplementation((() => undefined) as never);
+    try {
+      // The handler a claim installs; the newest listener, as earlier tests may add others.
+      (process.listeners("SIGHUP").at(-1) as (s: string) => void)("SIGHUP");
+      expect(exit).toHaveBeenCalledWith(129);
+      expect(fs.readdirSync(tmp)).toEqual([]);
+    } finally {
+      exit.mockRestore();
+    }
   });
 
   it("overwrites an explicit single-file --output as asked", async () => {

@@ -110,11 +110,16 @@ multix atlas status <predictionId> --download [--output <path>]
 `id=$(multix atlas video "waves" --async)`. Các dòng tiến trình và lệnh tiếp tục
 được in ra stderr. Khi việc chờ bị hết thời gian, dù trong lệnh tạo nội dung hay
 `status --wait`, thông báo lỗi kèm cùng lệnh tiếp tục đó, có cả `--output` nếu bạn
-đã truyền, để file được lưu vào đúng chỗ cũ. Nhấn Ctrl-C hoặc gửi SIGTERM trong
-lúc lệnh đang chờ sẽ dừng việc thăm dò và thoát với mã 130 hoặc 143 sau khi in lệnh
-tiếp tục đó; prediction vẫn chạy và vẫn bị tính phí, nên hãy tiếp tục nó thay vì
-chạy lại lệnh. Với `--json`, envelope ghi id trong `provider_ids` và đặt lệnh tiếp
-tục đầu tiên trong `next`. Prediction kết thúc ở trạng thái `failed` làm lệnh thoát
+đã truyền, để file được lưu vào đúng chỗ cũ. Nhấn Ctrl-C, gửi SIGTERM hoặc đóng
+terminal (SIGHUP) trong lúc lệnh đang chờ hoặc đang tải xuống, dù trong lệnh tạo
+nội dung hay `status --wait`, sẽ dừng lệnh và thoát với mã 130, 143 hoặc 129 sau
+khi in lệnh tiếp tục đó; prediction vẫn chạy và vẫn bị tính phí, nên hãy tiếp tục
+nó thay vì chạy lại lệnh. Với `--json`, envelope ghi id trong `provider_ids` và
+đặt lệnh tiếp tục đầu tiên trong `next`. Tín hiệu dừng trong lúc tải lên các file
+`--ref` cục bộ là một lần hủy sạch: chưa có gì được gửi. Tín hiệu dừng khi yêu cầu
+submit chưa được trả lời thì không thể nêu tên prediction, nhưng Atlas có thể đã
+nhận và tính phí nó, nên lệnh sẽ báo rõ: hãy kiểm tra dashboard của Atlas Cloud
+trước khi gửi lại. Prediction kết thúc ở trạng thái `failed` làm lệnh thoát
 với mã khác 0. Atlas Cloud không có endpoint hủy, nên multix không cung cấp lệnh
 hủy.
 

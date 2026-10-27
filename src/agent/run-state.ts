@@ -72,6 +72,14 @@ export interface RunState {
    * signal reports how to resume it instead of a rerun that would pay twice.
    */
   inFlight?: { id: string; resume: string };
+  /**
+   * Where the run stands on submitting that paid job, for a run stopped by a
+   * signal before its id is known: `unsent` (only free requests such as schema
+   * reads and uploads went out, so the cancel is clean) or `pending` (the submit
+   * request went out unanswered, so a paid job may exist; `hint` says where to
+   * look before resubmitting). Cleared once the id is known.
+   */
+  submit?: { state: "unsent" } | { state: "pending"; hint: string };
   /** True once a command action started (help and parse errors never get there). */
   actionStarted: boolean;
   finalized: boolean;
@@ -101,8 +109,14 @@ export const run: RunState = {
 
 /** Record a submitted job that keeps running if the run stops; its id goes in provider_ids. */
 export function trackInFlight(id: string, resume: string, state: RunState = run): void {
+  state.submit = undefined;
   state.inFlight = { id, resume };
   if (!state.ids.includes(id)) state.ids.unshift(id);
+}
+
+/** Record where the run stands on submitting its paid job (see `RunState.submit`). */
+export function trackSubmit(submit: RunState["submit"], state: RunState = run): void {
+  state.submit = submit;
 }
 
 export interface UsageSummary {

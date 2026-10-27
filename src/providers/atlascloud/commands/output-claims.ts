@@ -5,7 +5,7 @@
  * A name is reserved by the lock file `<dest>.part`, created exclusively and
  * holding `{ pid, host, startedAt }`. A lock whose process is gone (Ctrl+C, a
  * killed shell, a crash) is stale and is taken over by the next run, which
- * also deletes that run's orphaned download temp files. On SIGINT/SIGTERM the
+ * also deletes that run's orphaned download temp files. On SIGINT/SIGTERM/SIGHUP the
  * current run removes its own locks and temp files before exiting.
  */
 
@@ -204,7 +204,7 @@ export function cleanupActiveClaims(): void {
   }
 }
 
-const INTERRUPT_EXIT_CODES = { SIGINT: 130, SIGTERM: 143 } as const;
+const INTERRUPT_EXIT_CODES = { SIGHUP: 129, SIGINT: 130, SIGTERM: 143 } as const;
 
 /** Clean up, then exit with the conventional 128+signal code. */
 export function handleInterrupt(
@@ -220,8 +220,11 @@ let interruptCleanupInstalled = false;
 function installInterruptCleanup(): void {
   if (interruptCleanupInstalled) return;
   interruptCleanupInstalled = true;
-  process.once("SIGINT", () => handleInterrupt("SIGINT"));
-  process.once("SIGTERM", () => handleInterrupt("SIGTERM"));
+  for (const signal of Object.keys(INTERRUPT_EXIT_CODES) as Array<
+    keyof typeof INTERRUPT_EXIT_CODES
+  >) {
+    process.once(signal, () => handleInterrupt(signal));
+  }
 }
 
 function heldMessage(dest: string): string {

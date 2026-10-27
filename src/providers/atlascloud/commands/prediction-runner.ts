@@ -13,7 +13,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Command } from "commander";
-import { trackInFlight } from "../../../agent/run-state.js";
+import { trackInFlight, trackSubmit } from "../../../agent/run-state.js";
 import { ProviderError, ValidationError } from "../../../core/errors.js";
 import { maxDownloadBytes } from "../../../core/http-client.js";
 import {
@@ -166,7 +166,7 @@ export interface ExecuteOptions {
   hint?: OutputCategory;
   defaultWaitTimeoutMs: number;
   pollIntervalMs?: number;
-  /** Ends the process on Ctrl-C/SIGTERM/SIGHUP while waiting (tests inject it). */
+  /** Ends the process on Ctrl-C/SIGTERM/SIGHUP while submitting or waiting (tests inject it). */
   exit?: (code: number) => void;
 }
 
@@ -193,11 +193,11 @@ function shellQuote(value: string): string {
 const SIGNAL_EXIT = { SIGHUP: 129, SIGINT: 130, SIGTERM: 143 } as const;
 
 /**
- * Run `wait` so that Ctrl-C, SIGTERM or a closed terminal stops polling and
- * exits with 128 + the signal number through the agent runtime (envelope,
- * history), after printing `message`. Nothing local needs cleanup while polling.
+ * Run `wait` so that Ctrl-C, SIGTERM or a closed terminal stops it and exits
+ * with 128 + the signal number through the agent runtime (envelope, history),
+ * after printing `message`. Nothing local needs cleanup while it runs.
  */
-async function exitOnInterrupt<T>(
+export async function exitOnInterrupt<T>(
   wait: () => Promise<T>,
   message: string,
   exit: (code: number) => void = (code) => process.exit(code),
@@ -215,15 +215,34 @@ async function exitOnInterrupt<T>(
   }
 }
 
+/**
+ * Run the work before a submit (schema read, validation, uploads): a signal
+ * there is a clean cancel, since nothing billable was sent.
+ */
+export function beforeSubmit<T>(work: () => Promise<T>, exit?: (code: number) => void): Promise<T> {
+  trackSubmit({ state: "unsent" });
+  return exitOnInterrupt(work, "Cancelled before submitting; no prediction was created.", exit);
+}
+
+const SUBMIT_UNKNOWN_HINT =
+  "The submit request reached Atlas Cloud before the run stopped, so a paid prediction may exist that multix cannot name. Check the Atlas Cloud dashboard before resubmitting, or you may pay twice.";
+
 /** Submit, then either exit with the id (--async) or wait, verify, and deliver outputs. */
 export async function executePrediction(o: ExecuteOptions): Promise<ExecuteResult> {
   const { client, logger, opts } = o;
   const timeoutMs = parseTimeoutMs(opts.waitTimeout, o.defaultWaitTimeoutMs);
   logger.info(`Submitting to ${o.model} (generate${capitalize(o.kind)})...`);
-  const submitted = await client.submit(o.kind, { ...o.body, model: o.model });
+  // Atlas may accept the POST and bill it before the answer arrives.
+  trackSubmit({ state: "pending", hint: SUBMIT_UNKNOWN_HINT });
+  const submitted = await exitOnInterrupt(
+    () => client.submit(o.kind, { ...o.body, model: o.model }),
+    `Cancelled while submitting to ${o.model}. ${SUBMIT_UNKNOWN_HINT}`,
+    o.exit,
+  );
   const id = submitted.id;
 
   if (opts.async) {
+    trackSubmit(undefined);
     console.log(id);
     console.error(`Prediction submitted. Resume with: ${resumeCommand(id, opts.output)}`);
     return { predictionId: id, files: [], texts: [] };

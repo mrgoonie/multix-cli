@@ -12,6 +12,7 @@ import {
   type ExecuteResult,
   type RunCliOpts,
   assertEndpoint,
+  beforeSubmit,
   executePrediction,
   loadModelSpec,
 } from "./prediction-runner.js";
@@ -38,16 +39,19 @@ export async function runGenerationCommand(cfg: GenerationCommandConfig): Promis
     stdoutReserved: cfg.opts.async,
   });
   const client = createAtlasClientFromEnv();
-  const spec = await loadModelSpec(client, cfg.model, logger, cfg.opts.validate);
-  const kind = cfg.endpointFromSchema ? (spec?.endpoint ?? cfg.kind) : cfg.kind;
-  assertEndpoint(spec, kind, cfg.model);
+  const { kind, body } = await beforeSubmit(async () => {
+    const spec = await loadModelSpec(client, cfg.model, logger, cfg.opts.validate);
+    const kind = cfg.endpointFromSchema ? (spec?.endpoint ?? cfg.kind) : cfg.kind;
+    assertEndpoint(spec, kind, cfg.model);
 
-  const refs = cfg.refs ?? [];
-  // Validate with the raw refs first so a bad flag never costs an upload.
-  buildModelInput(spec, cfg.requests(refs));
-  const refUrls = refs.length > 0 ? await resolveMediaRefs(client, refs, logger) : [];
-  const body = buildModelInput(spec, cfg.requests(refUrls));
-  logger.debug(`Request fields: ${Object.keys(body).join(", ")}`);
+    const refs = cfg.refs ?? [];
+    // Validate with the raw refs first so a bad flag never costs an upload.
+    buildModelInput(spec, cfg.requests(refs));
+    const refUrls = refs.length > 0 ? await resolveMediaRefs(client, refs, logger) : [];
+    const body = buildModelInput(spec, cfg.requests(refUrls));
+    logger.debug(`Request fields: ${Object.keys(body).join(", ")}`);
+    return { kind, body };
+  });
 
   return executePrediction({
     client,

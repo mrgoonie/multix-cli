@@ -160,26 +160,42 @@ describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     }
   });
 
-  describe("a signal while atlas waits on a submitted prediction", () => {
-    /** Fake Atlas API: submit returns a processing prediction that never finishes. */
+  describe("a signal while atlas uploads, submits or waits", () => {
+    /**
+     * Fake Atlas API: submit returns a processing prediction that never finishes.
+     * `hold` leaves that request unanswered (a slow upload or submit); `seen.reached`
+     * resolves once the held request, or else the first poll, arrives.
+     */
     async function withPendingAtlas(
-      fn: (baseUrl: string, seen: { posts: number; polled: Promise<void> }) => Promise<void>,
+      fn: (
+        baseUrl: string,
+        seen: { posts: number; uploads: number; reached: Promise<void> },
+      ) => Promise<void>,
+      hold?: "upload" | "submit",
     ) {
-      let markPolled: () => void = () => {};
+      let markReached: () => void = () => {};
       const seen = {
         posts: 0,
-        polled: new Promise<void>((r) => {
-          markPolled = r;
+        uploads: 0,
+        reached: new Promise<void>((r) => {
+          markReached = r;
         }),
       };
       const server = http.createServer((req, res) => {
-        if (req.method === "POST") seen.posts++;
-        else markPolled();
+        const upload = req.url?.endsWith("/model/uploadMedia") ?? false;
+        if (upload) seen.uploads++;
+        else if (req.method === "POST") seen.posts++;
+        const held =
+          (hold === "upload" && upload) || (hold === "submit" && req.method === "POST" && !upload);
+        if (held || (!hold && req.method === "GET")) markReached();
+        if (held) return; // never answered: the client stays mid-request
         res.writeHead(200, { "content-type": "application/json" });
         res.end(
           JSON.stringify({
             code: 200,
-            data: { id: "pred_sig01", status: "processing", outputs: null },
+            data: upload
+              ? { download_url: "https://cdn.atlas.test/ref.png" }
+              : { id: "pred_sig01", status: "processing", outputs: null },
           }),
         );
       });
@@ -193,18 +209,15 @@ describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
       }
     }
 
-    const start = (baseUrl: string, extraArgs: string[]) =>
-      execa(
-        "node",
-        [CLI, "atlas", "image", "a cat", "--no-validate", "--output", "my clips", ...extraArgs],
-        {
-          reject: false,
-          cwd: tmp,
-          extendEnv: false,
-          env: { ...env, ATLASCLOUD_API_KEY: "test-key-not-real", ATLASCLOUD_BASE_URL: baseUrl },
-          timeout: SPAWN_TIMEOUT - 1_000,
-        },
-      );
+    const start = (baseUrl: string, args: string[]) =>
+      execa("node", [CLI, "atlas", ...args], {
+        reject: false,
+        cwd: tmp,
+        extendEnv: false,
+        env: { ...env, ATLASCLOUD_API_KEY: "test-key-not-real", ATLASCLOUD_BASE_URL: baseUrl },
+        timeout: SPAWN_TIMEOUT - 1_000,
+      });
+    const generate = ["image", "a cat", "--no-validate", "--output", "my clips"];
     const resume = 'multix atlas status pred_sig01 --wait --download --output "my clips"';
 
     it.each([
@@ -212,8 +225,8 @@ describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
       ["SIGTERM", 143],
     ] as const)("%s exits %i with the id and resume command, not a rerun", async (signal, code) => {
       await withPendingAtlas(async (baseUrl, seen) => {
-        const child = start(baseUrl, ["--json"]);
-        await seen.polled;
+        const child = start(baseUrl, [...generate, "--json"]);
+        await seen.reached;
         child.kill(signal);
         const result = await child;
         expect(result.exitCode).toBe(code);
@@ -230,14 +243,99 @@ describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
 
     it("prints the resume command in text mode", async () => {
       await withPendingAtlas(async (baseUrl, seen) => {
-        const child = start(baseUrl, []);
-        await seen.polled;
+        const child = start(baseUrl, generate);
+        await seen.reached;
         child.kill("SIGINT");
         const result = await child;
         expect(result.exitCode).toBe(130);
         expect(result.stderr).toContain(`next: ${resume}`);
         expect(seen.posts).toBe(1);
       });
+    });
+
+    it.each([
+      ["SIGINT", 130],
+      ["SIGTERM", 143],
+      ["SIGHUP", 129],
+    ] as const)(
+      "%s during status --wait exits %i with the resume command first",
+      async (signal, code) => {
+        await withPendingAtlas(async (baseUrl, seen) => {
+          const child = start(baseUrl, [
+            "status",
+            "pred_sig01",
+            "--wait",
+            "--output",
+            "my clips",
+            "--json",
+          ]);
+          await seen.reached;
+          child.kill(signal);
+          const result = await child;
+          expect(result.exitCode).toBe(code);
+          const out = envelope(result.stdout);
+          expect(out).toMatchObject({ ok: false, command: "atlas status", exit_code: code });
+          expect(out.provider_ids).toContain("pred_sig01");
+          expect(out.next[0]).toBe(resume);
+          expect(out.error).toMatchObject({ code: "CANCELLED", retryable: false });
+          expect(out.error.hint).toContain("Do not rerun; resume it");
+          expect(seen.posts).toBe(0);
+        });
+      },
+    );
+
+    it("a signal during the submit says a paid prediction may exist, not a clean cancel", async () => {
+      await withPendingAtlas(async (baseUrl, seen) => {
+        const child = start(baseUrl, [...generate, "--json"]);
+        await seen.reached;
+        child.kill("SIGINT");
+        const result = await child;
+        expect(result.exitCode).toBe(130);
+        const out = envelope(result.stdout);
+        expect(out).toMatchObject({ ok: false, command: "atlas image", exit_code: 130 });
+        expect(out.error).toMatchObject({ code: "CANCELLED", retryable: false });
+        expect(out.error.hint).toContain("Check the Atlas Cloud dashboard before resubmitting");
+        expect(out.error.hint).not.toMatch(/nothing was left behind/i);
+        expect(out.next).not.toContain(resume);
+        expect(seen.posts).toBe(1);
+      }, "submit");
+    });
+
+    it("prints the submit warning in text mode", async () => {
+      await withPendingAtlas(async (baseUrl, seen) => {
+        const child = start(baseUrl, generate);
+        await seen.reached;
+        child.kill("SIGTERM");
+        const result = await child;
+        expect(result.exitCode).toBe(143);
+        expect(result.stderr).toContain("Cancelled while submitting");
+        expect(result.stderr).toContain("Atlas Cloud dashboard");
+      }, "submit");
+    });
+
+    it("a signal during a --ref upload is a clean cancel: nothing was submitted", async () => {
+      fs.writeFileSync(path.join(tmp, "ref.png"), Buffer.from("89504e470d0a1a0a", "hex"));
+      await withPendingAtlas(async (baseUrl, seen) => {
+        const child = start(baseUrl, [
+          "image-to-image",
+          "--prompt",
+          "make it blue",
+          "--ref",
+          "ref.png",
+          "--no-validate",
+          "--json",
+        ]);
+        await seen.reached;
+        child.kill("SIGINT");
+        const result = await child;
+        expect(result.exitCode).toBe(130);
+        const out = envelope(result.stdout);
+        expect(out).toMatchObject({ ok: false, command: "atlas image-to-image", exit_code: 130 });
+        expect(out.error).toMatchObject({ code: "CANCELLED" });
+        expect(out.error.hint).toMatch(/nothing was left behind/i);
+        expect(seen.uploads).toBe(1);
+        expect(seen.posts).toBe(0);
+      }, "upload");
     });
   });
 
