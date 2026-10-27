@@ -220,6 +220,43 @@ describe("media inspect/verify (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
       },
     );
 
+    it.skipIf(process.platform === "win32")(
+      "dies by the signal on a second Ctrl-C instead of reporting a clean cancel",
+      async () => {
+        const out = path.join(tmp, "interrupted-twice");
+        const child = execa(
+          "node",
+          [CLI, "media", "frames", "clip.mp4", "--output-dir", out, "--count", "100", "--json"],
+          {
+            cwd: tmp,
+            env: isolatedEnv(tmp),
+            extendEnv: false,
+            reject: false,
+            timeout: SPAWN_TIMEOUT - 1_000,
+          },
+        );
+        const staged = () =>
+          fs.existsSync(out) ? fs.readdirSync(out).filter((n) => n.startsWith(".frames-")) : [];
+        const deadline = Date.now() + 10_000;
+        while (staged().length === 0 && Date.now() < deadline)
+          await new Promise((r) => setTimeout(r, 25));
+        expect(staged()).toHaveLength(1);
+        child.kill("SIGINT");
+        // Two pending SIGINTs merge into one, so let the first be taken before the second.
+        await new Promise((r) => setTimeout(r, 2));
+        child.kill("SIGINT");
+        const res = await child;
+        if (res.signal === "SIGINT") {
+          // The second signal landed before cleanup finished: no result may be printed.
+          expect(res.stdout).toBe("");
+        } else {
+          // Cleanup won the race: a clean cancel is true only when nothing is left behind.
+          expect(envelope(res.stdout).error.code).toBe("CANCELLED");
+          expect(staged()).toEqual([]);
+        }
+      },
+    );
+
     it("prints a readable inspect summary without --json", async () => {
       const res = await run(["media", "inspect", "clip.mp4"]);
       expect(res.exitCode).toBe(0);
