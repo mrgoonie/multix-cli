@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.22.0-beta.1](https://github.com/mrgoonie/multix-cli/compare/v1.22.0-beta...v1.22.0-beta.1) (2026-10-27)
+
+
+### Added
+
+* **fish:** add native Fish Audio TTS with Drama 3, multi-speaker and dictionaries ([c955217](https://github.com/mrgoonie/multix-cli/commit/c9552173963d5bcef83c19ae17db5bb1124809f4)), closes [#357](https://github.com/mrgoonie/multix-cli/issues/357)
+* **fish:** add voice design, voice cloning and voice deletion ([#360](https://github.com/mrgoonie/multix-cli/issues/360)) ([c3cc2fb](https://github.com/mrgoonie/multix-cli/commit/c3cc2fbe13d7e61c116704eab2c36f8b19635035))
+
+
+### Fixed
+
+* **openrouter:** price Fish Audio TTS models per UTF-8 byte ([6a96c42](https://github.com/mrgoonie/multix-cli/commit/6a96c427f36d5adaa5b4262637571311bdf969e0)), closes [#357](https://github.com/mrgoonie/multix-cli/issues/357)
+
 ## [1.22.0-beta](https://github.com/mrgoonie/multix-cli/compare/v1.21.1...v1.22.0-beta) (2026-10-26)
 
 
