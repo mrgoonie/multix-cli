@@ -114,7 +114,11 @@ multix atlas status <predictionId> --download [--output <path>]
 lúc lệnh đang chờ sẽ dừng việc thăm dò và thoát với mã 130 hoặc 143 sau khi in lệnh
 tiếp tục đó; prediction vẫn chạy và vẫn bị tính phí, nên hãy tiếp tục nó thay vì
 chạy lại lệnh. Với `--json`, envelope ghi id trong `provider_ids` và đặt lệnh tiếp
-tục đầu tiên trong `next`. Prediction kết thúc ở trạng thái `failed` làm lệnh thoát
+tục đầu tiên trong `next`. `status --wait` cũng hoạt động như vậy, và khi terminal
+bị đóng (SIGHUP) lệnh thoát với mã 129. Tín hiệu đến trước khi submit (lúc đang tải
+schema hoặc upload file) là một lần hủy sạch: chưa có prediction nào được tạo, nên chạy lại là an
+toàn. Tín hiệu đến khi yêu cầu submit đang mở sẽ cảnh báo rằng Atlas Cloud có thể đã
+nhận prediction: hãy kiểm tra lịch sử yêu cầu trước khi submit lại. Prediction kết thúc ở trạng thái `failed` làm lệnh thoát
 với mã khác 0. Atlas Cloud không có endpoint hủy, nên multix không cung cấp lệnh
 hủy.
 

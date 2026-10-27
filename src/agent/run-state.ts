@@ -72,6 +72,11 @@ export interface RunState {
    * signal reports how to resume it instead of a rerun that would pay twice.
    */
   inFlight?: { id: string; resume: string };
+  /**
+   * True while the command has sent only requests that cannot start paid work
+   * (schema reads, uploads), so a cancel then is clean although a provider was contacted.
+   */
+  preSubmit?: boolean;
   /** True once a command action started (help and parse errors never get there). */
   actionStarted: boolean;
   finalized: boolean;

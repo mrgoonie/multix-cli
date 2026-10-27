@@ -226,7 +226,7 @@ export function finalizeRun(input: FinalizeInput): number {
         ? classifyError(input.error)
         : (classifySignalExit(
             input.exitCode,
-            run.requestsStarted > 0 || run.externalRuns.length > 0,
+            !run.preSubmit && (run.requestsStarted > 0 || run.externalRuns.length > 0),
           ) ?? classifyMessage(run.lastErrorLine ?? `Command exited with code ${input.exitCode}`));
   }
   // A job submitted before the signal keeps running and is billed: resume it, never rerun.

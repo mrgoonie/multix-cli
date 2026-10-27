@@ -241,6 +241,108 @@ describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     });
   });
 
+  describe("a signal before or during submit, or while status waits", () => {
+    /** Fake Atlas API: `respond` decides per request; returning false leaves the request hanging. */
+    async function withAtlas(
+      respond: (req: http.IncomingMessage) => object | false,
+      fn: (baseUrl: string, seen: { requests: string[]; first: Promise<void> }) => Promise<void>,
+    ) {
+      let markFirst: () => void = () => {};
+      const seen = {
+        requests: [] as string[],
+        first: new Promise<void>((r) => {
+          markFirst = r;
+        }),
+      };
+      const server = http.createServer((req, res) => {
+        seen.requests.push(`${req.method} ${req.url}`);
+        markFirst();
+        const body = respond(req);
+        if (body === false) return;
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify(body));
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      const { port } = server.address() as AddressInfo;
+      try {
+        await fn(`http://127.0.0.1:${port}/api/v1`, seen);
+      } finally {
+        server.closeAllConnections();
+        await new Promise((resolve) => server.close(resolve));
+      }
+    }
+
+    const atlas = (baseUrl: string, args: string[]) =>
+      execa("node", [CLI, "atlas", ...args, "--json"], {
+        reject: false,
+        cwd: tmp,
+        extendEnv: false,
+        env: { ...env, ATLASCLOUD_API_KEY: "test-key-not-real", ATLASCLOUD_BASE_URL: baseUrl },
+        timeout: SPAWN_TIMEOUT - 1_000,
+      });
+    const processing = { code: 200, data: { id: "pred_sig02", status: "processing" } };
+
+    it("SIGINT while status --wait polls exits 130 with the id and resume command", async () => {
+      await withAtlas(
+        () => processing,
+        async (baseUrl, seen) => {
+          const child = atlas(baseUrl, ["status", "pred_sig02", "--wait", "--output", "out"]);
+          await seen.first;
+          child.kill("SIGINT");
+          const result = await child;
+          expect(result.exitCode).toBe(130);
+          const out = envelope(result.stdout);
+          expect(out).toMatchObject({ ok: false, command: "atlas status", exit_code: 130 });
+          expect(out.provider_ids).toContain("pred_sig02");
+          expect(out.next[0]).toBe("multix atlas status pred_sig02 --wait --download --output out");
+          expect(out.error).toMatchObject({ code: "CANCELLED", retryable: false });
+          expect(out.log.join("\n")).toContain("Cancelled while waiting on prediction pred_sig02");
+          expect(seen.requests.every((r) => r.startsWith("GET "))).toBe(true);
+        },
+      );
+    });
+
+    it("SIGTERM while the submit request is open warns that a paid job may exist", async () => {
+      await withAtlas(
+        (req) => (req.method === "POST" ? false : processing),
+        async (baseUrl, seen) => {
+          const child = atlas(baseUrl, ["image", "a cat", "--no-validate"]);
+          await seen.first;
+          child.kill("SIGTERM");
+          const result = await child;
+          expect(result.exitCode).toBe(143);
+          const out = envelope(result.stdout);
+          expect(out.error.code).toBe("CANCELLED");
+          expect(out.error.hint).toMatch(/paid job may already exist/);
+          expect(out.error.hint).not.toMatch(/nothing was left behind/i);
+          expect(out.log.join("\n")).toContain("Atlas Cloud may have accepted the prediction");
+          expect(seen.requests).toEqual(["POST /api/v1/model/generateImage"]);
+        },
+      );
+    });
+
+    it("SIGINT while the schema loads is a clean cancel with nothing submitted", async () => {
+      await withAtlas(
+        () => false,
+        async (baseUrl, seen) => {
+          const child = atlas(baseUrl, ["image", "a cat"]);
+          await seen.first;
+          child.kill("SIGINT");
+          const result = await child;
+          expect(result.exitCode).toBe(130);
+          const out = envelope(result.stdout);
+          expect(out.error.code).toBe("CANCELLED");
+          expect(out.error.hint).toMatch(/nothing was left behind/);
+          expect(out.provider_ids ?? []).toEqual([]);
+          expect(out.log.join("\n")).toContain(
+            "Cancelled before submit; no prediction was created.",
+          );
+          expect(seen.requests.some((r) => r.startsWith("POST "))).toBe(false);
+        },
+      );
+    });
+  });
+
   it("records runs in the ledger and shows them with history", async () => {
     await run(["fal", "image", "--help"]); // help is not a run
     await run(["fal", "image", "a cat"], { FAL_KEY: "" });

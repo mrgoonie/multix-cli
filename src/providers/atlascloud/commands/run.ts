@@ -15,6 +15,7 @@ import {
   type RunCliOpts,
   addRunOptions,
   assertEndpoint,
+  beforeSubmit,
   executePrediction,
   loadModelSpec,
 } from "./prediction-runner.js";
@@ -55,7 +56,7 @@ export function registerAtlasRunCommand(parent: Command): void {
       }
       const explicit = parseMediaKind(opts.type);
       const client = createAtlasClientFromEnv();
-      const spec = await loadModelSpec(client, modelId, logger, opts.validate);
+      const spec = await beforeSubmit(() => loadModelSpec(client, modelId, logger, opts.validate));
       const kind = explicit ?? spec?.endpoint;
       if (!kind) {
         throw new ValidationError(
