@@ -37,10 +37,14 @@ export interface RunState {
   postUsage: ResponseUsage[];
   getUsage: Map<string, ResponseUsage>;
   ids: string[];
+  /** Index in calls[] of the response that first returned each id in ids. */
+  idCalls: Map<string, number>;
   /** Programs started for paid work outside fetch (the Codex image driver). */
   externalRuns: string[];
   /** Model named by the first provider request that names one. */
   requestModel?: string;
+  /** Model the first provider response that reports one names as served (alias or route resolved). */
+  resolvedModel?: string;
   /** Structured result a command reports for the envelope's `data` (wins over parsed stdout). */
   data?: unknown;
   /** stdout/stderr text captured in JSON mode. */
@@ -92,6 +96,7 @@ export const run: RunState = {
   postUsage: [],
   getUsage: new Map(),
   ids: [],
+  idCalls: new Map(),
   externalRuns: [],
   stdout: [],
   stderr: [],
@@ -120,6 +125,48 @@ function addTokens(into: UsageTokens, from: UsageTokens): void {
     const v = from[key];
     if (v !== undefined) into[key] = (into[key] ?? 0) + v;
   }
+}
+
+export interface JobIdentity {
+  provider: string;
+  id: string;
+  /** 1, or one more per failed send of the same request before the one that returned the id. */
+  attempt: number;
+}
+
+/**
+ * The provider job or request this run is about: the in-flight job when one
+ * was tracked, else the first id a successful submit (non-GET) returned, else
+ * the first id any response returned.
+ */
+export function jobIdentity(state: RunState = run): JobIdentity | undefined {
+  if (!state.group) return undefined;
+  const ok = (id: string, submit: boolean) => {
+    const call = state.calls[state.idCalls.get(id) ?? -1];
+    return Boolean(
+      call && call.status > 0 && call.status < 400 && (!submit || call.method !== "GET"),
+    );
+  };
+  const id =
+    state.inFlight?.id ??
+    state.ids.find((i) => ok(i, true)) ??
+    state.ids.find((i) => ok(i, false)) ??
+    state.ids[0];
+  if (!id) return undefined;
+  const at = state.idCalls.get(id);
+  const call = at === undefined ? undefined : state.calls[at];
+  const failedBefore = call
+    ? state.calls
+        .slice(0, at)
+        .filter(
+          (c) =>
+            c.method === call.method &&
+            c.host === call.host &&
+            c.path === call.path &&
+            (c.status === 0 || c.status >= 400),
+        ).length
+    : 0;
+  return { provider: state.group, id, attempt: 1 + failedBefore };
 }
 
 /** Combine every response's usage into one summary. */

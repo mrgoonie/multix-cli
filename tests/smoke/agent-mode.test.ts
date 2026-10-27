@@ -220,6 +220,11 @@ describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
         const out = envelope(result.stdout);
         expect(out).toMatchObject({ ok: false, command: "atlas image", exit_code: code });
         expect(out.provider_ids).toContain("pred_sig01");
+        expect(out.job).toEqual({ provider: "atlas", id: "pred_sig01", attempt: 1 });
+        const entry = JSON.parse(fs.readFileSync(path.join(tmp, "h.jsonl"), "utf8").trim());
+        expect(entry.job).toEqual(out.job);
+        expect(entry.model_requested).toBe(out.model_requested);
+        expect(entry.model_resolved).toBe(out.model_resolved);
         expect(out.next[0]).toBe(resume);
         expect(out.error).toMatchObject({ code: "CANCELLED", retryable: false });
         expect(out.error.hint).toContain("Do not rerun; resume it");

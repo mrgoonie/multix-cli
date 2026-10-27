@@ -131,9 +131,10 @@ export function installFetchTelemetry(onDryRun: (request: DryRunRequest) => neve
       run.calls.push({ method, host, path, status: 0, ms: Date.now() - started });
       throw error;
     }
-    run.calls.push({ method, host, path, status: response.status, ms: Date.now() - started });
+    const callIndex =
+      run.calls.push({ method, host, path, status: response.status, ms: Date.now() - started }) - 1;
     // Read in the background: the caller keeps its own size caps and stall detection.
-    const pending = recordUsage(response, method, host, path).catch(() => {
+    const pending = recordUsage(response, method, host, path, callIndex).catch(() => {
       // Telemetry never breaks a command.
     });
     pendingReads.add(pending);
@@ -159,6 +160,31 @@ export function modelFromRequest(path: string, body: unknown): string | undefine
     }
   } catch {}
   return undefined;
+}
+
+const MODEL_KEYS = ["model", "modelVersion", "model_version"];
+
+/**
+ * The model a successful response names as the one that served it: a
+ * top-level `model` (OpenAI, OpenRouter, Replicate), Gemini's `modelVersion`,
+ * or the same keys under a `data` object (Atlas Cloud). Never a guess.
+ */
+export function modelFromResponse(body: unknown): string | undefined {
+  const levels = [body, (body as Record<string, unknown> | undefined)?.data];
+  for (const level of levels) {
+    if (!level || typeof level !== "object" || Array.isArray(level)) continue;
+    for (const key of MODEL_KEYS) {
+      const value = (level as Record<string, unknown>)[key];
+      if (typeof value === "string" && value.length > 0 && value.length <= 200) return value;
+    }
+  }
+  return undefined;
+}
+
+/** Gemini's `modelVersion` in the tail of an oversized body (inline TTS audio). */
+function modelFromTail(tail: string): string | undefined {
+  const value = tail.match(/"modelVersion"\s*:\s*"([^"\\]{1,200})"/)?.[1];
+  return value || undefined;
 }
 
 const pendingReads = new Set<Promise<void>>();
@@ -237,6 +263,7 @@ async function recordUsage(
   method: string,
   host: string,
   path: string,
+  callIndex: number,
 ): Promise<void> {
   const type = response.headers.get("content-type") ?? "";
   const declared = Number(response.headers.get("content-length") ?? Number.NaN);
@@ -247,12 +274,18 @@ async function recordUsage(
       try {
         body = JSON.parse(text);
       } catch {}
+      run.resolvedModel ??= modelFromResponse(body);
     } else if (tail !== undefined) {
       body = usageFromTail(tail);
+      run.resolvedModel ??= modelFromTail(tail);
     }
   }
   const usage = extractUsage(body, response.headers);
-  for (const id of usage.ids) if (!run.ids.includes(id) && run.ids.length < 10) run.ids.push(id);
+  for (const id of usage.ids) {
+    if (run.ids.includes(id) || run.ids.length >= 10) continue;
+    run.ids.push(id);
+    run.idCalls.set(id, callIndex);
+  }
   if (!hasUsage(usage)) return;
   if (usage.sources) {
     usage.sources = Object.fromEntries(

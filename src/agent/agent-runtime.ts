@@ -36,7 +36,7 @@ import {
   stripAnsi,
   suggestedCommands,
 } from "./result-envelope.js";
-import { run, summarizeUsage } from "./run-state.js";
+import { jobIdentity, run, summarizeUsage } from "./run-state.js";
 
 /** Commands that are themselves agent tooling or setup: not recorded in history. */
 const UNRECORDED = /^(history|models|guide|rerun|check|update)\b/;
@@ -264,7 +264,11 @@ export function finalizeRun(input: FinalizeInput): number {
   const historyId = recorded ? newHistoryId(run.startedAt) : undefined;
   const optionModel = typeof run.options.model === "string" ? run.options.model : undefined;
   const model = run.requestModel ?? optionModel;
-  const usage = SPEND_LOOKUPS.test(run.command) ? undefined : summarizeUsage();
+  const spendLookup = SPEND_LOOKUPS.test(run.command);
+  // A spend lookup reads another run's generation: its model and id are not this run's.
+  const modelResolved = notSent || spendLookup ? null : (run.resolvedModel ?? null);
+  const job = notSent || spendLookup ? undefined : jobIdentity();
+  const usage = spendLookup ? undefined : summarizeUsage();
   const httpErrors = run.calls.filter((c) => c.status === 0 || c.status >= 400).length;
   const http = run.calls.length
     ? {
@@ -303,6 +307,10 @@ export function finalizeRun(input: FinalizeInput): number {
       command: run.command,
       provider: run.group,
       ...(model ? { model } : {}),
+      ...(model || modelResolved
+        ? { model_requested: model ?? null, model_resolved: modelResolved }
+        : {}),
+      ...(job ? { job } : {}),
       argv: redactArgv(run.argv),
       ok: !failed,
       exit_code: exitCode,
@@ -336,6 +344,9 @@ export function finalizeRun(input: FinalizeInput): number {
       command: run.command,
       ...(run.group ? { provider: run.group } : {}),
       ...(model ? { model } : {}),
+      model_requested: model ?? null,
+      model_resolved: modelResolved,
+      ...(job ? { job } : {}),
       ...(dryRun ? { dry_run: true } : {}),
       ...(estimateOnly ? { estimate_only: true } : {}),
       duration_ms: duration,

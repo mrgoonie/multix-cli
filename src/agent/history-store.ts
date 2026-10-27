@@ -11,7 +11,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { CostReceipt } from "../budget/cost-receipt.js";
-import type { UsageSummary } from "./run-state.js";
+import type { JobIdentity, UsageSummary } from "./run-state.js";
 
 export interface HistoryEntry {
   v: 1;
@@ -23,6 +23,10 @@ export interface HistoryEntry {
   command: string;
   provider: string;
   model?: string;
+  /** Present when a model was requested or reported; absent on entries before they existed. */
+  model_requested?: string | null;
+  model_resolved?: string | null;
+  job?: JobIdentity;
   argv: string[];
   ok: boolean;
   exit_code: number;
