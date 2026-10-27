@@ -137,6 +137,23 @@ describe("media inspect/verify (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
       const bad = await run(["media", "check-receipt", "receipt.json", "note.mp4", "--json"]);
       expect(bad.exitCode).not.toBe(0);
       expect(envelope(bad.stdout).data).toMatchObject({ ok: false, hash_matches: false });
+      // A receipt from an older verify engine still vouches, with a warning on stderr and in the envelope.
+      const receipt = JSON.parse(fs.readFileSync(path.join(tmp, "receipt.json"), "utf8"));
+      const data = receipt.data ?? receipt;
+      data.engine.id = "multix-media-verify/1";
+      fs.writeFileSync(path.join(tmp, "old-receipt.json"), JSON.stringify(receipt));
+      const warning = /the receipt was made by verify engine multix-media-verify\/1/;
+      const aged = await run(["media", "check-receipt", "old-receipt.json", "clip.mp4"]);
+      expect(aged.exitCode).toBe(0);
+      expect(aged.stdout).toMatch(/OK {2}receipt/);
+      expect(aged.stderr).toMatch(warning);
+      const agedJson = await run([
+        ...["media", "check-receipt", "old-receipt.json", "clip.mp4", "--json"],
+      ]);
+      const out = envelope(agedJson.stdout);
+      expect(out.ok).toBe(true);
+      expect(out.data.engine.current_matches).toBe(false);
+      expect(JSON.stringify(out.warnings)).toMatch(warning);
     });
 
     it("reads an empty number flag as invalid, not 0", async () => {
@@ -217,6 +234,43 @@ describe("media inspect/verify (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
           hint: "The run was cancelled; nothing was left behind. Rerun the command.",
         });
         expect(staged()).toEqual([]);
+      },
+    );
+
+    it.skipIf(process.platform === "win32")(
+      "dies by the signal on a second Ctrl-C instead of reporting a clean cancel",
+      async () => {
+        const out = path.join(tmp, "interrupted-twice");
+        const child = execa(
+          "node",
+          [CLI, "media", "frames", "clip.mp4", "--output-dir", out, "--count", "100", "--json"],
+          {
+            cwd: tmp,
+            env: isolatedEnv(tmp),
+            extendEnv: false,
+            reject: false,
+            timeout: SPAWN_TIMEOUT - 1_000,
+          },
+        );
+        const staged = () =>
+          fs.existsSync(out) ? fs.readdirSync(out).filter((n) => n.startsWith(".frames-")) : [];
+        const deadline = Date.now() + 10_000;
+        while (staged().length === 0 && Date.now() < deadline)
+          await new Promise((r) => setTimeout(r, 25));
+        expect(staged()).toHaveLength(1);
+        child.kill("SIGINT");
+        // Two pending SIGINTs can merge into one, so let the first be taken before the second.
+        await new Promise((r) => setTimeout(r, 2));
+        child.kill("SIGINT");
+        const res = await child;
+        if (res.stdout) {
+          // Cleanup won the race: a clean cancel is true only when nothing is left behind.
+          expect(envelope(res.stdout).error.code).toBe("CANCELLED");
+          expect(staged()).toEqual([]);
+        } else {
+          // The second signal landed before cleanup finished: the run died by it.
+          expect(res.signal).toBe("SIGINT");
+        }
       },
     );
 

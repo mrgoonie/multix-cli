@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { run } from "../../../../src/agent/run-state.js";
 import { _resetEnvLoader } from "../../../../src/core/env-loader.js";
 import { ConfigError, ProviderError, ValidationError } from "../../../../src/core/errors.js";
 import { _resetOutputDir } from "../../../../src/core/output-dir.js";
@@ -212,6 +213,86 @@ describe("executePrediction (mocked submit -> poll -> saved output)", () => {
     expect(console.error).toHaveBeenCalledWith(
       expect.stringContaining('multix atlas status async01 --wait --download --output "my clips"'),
     );
+  });
+
+  it("Ctrl-C while polling exits 130 with the id and resume command, without resubmitting", async () => {
+    const { client, calls } = createFakeAtlas({
+      "POST /model/generateImage": { body: prediction("wait01", "processing") },
+      "GET /model/prediction/wait01": { body: prediction("wait01", "processing") },
+    });
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const exits: number[] = [];
+    const signals = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
+    const before = signals.map((s) => process.listenerCount(s));
+    let polls = 0;
+    const res = executePrediction({
+      client,
+      logger,
+      kind: "image",
+      model: "m/x",
+      body: { prompt: "x" },
+      opts: { output: "my clips" },
+      defaultWaitTimeoutMs: 60_000,
+      pollIntervalMs: 1,
+      exit: (code) => {
+        exits.push(code);
+        throw new Error("exited");
+      },
+    });
+    // Signal from inside the first poll, as a real Ctrl-C would arrive mid-wait. Only the
+    // newest listener is called: earlier download tests leave output-claims' own handler.
+    const origGet = client.getPrediction.bind(client);
+    vi.spyOn(client, "getPrediction").mockImplementation(async (...a) => {
+      if (++polls === 1) (process.listeners("SIGINT").at(-1) as (s: string) => void)("SIGINT");
+      return origGet(...a);
+    });
+    await expect(res).rejects.toThrow("exited");
+    expect(exits).toEqual([130]);
+    const resume = 'multix atlas status wait01 --wait --download --output "my clips"';
+    expect(run.inFlight).toEqual({ id: "wait01", resume });
+    expect(run.ids).toContain("wait01");
+    expect(stderr).toHaveBeenCalledWith(expect.stringContaining(`Resume with: ${resume}`));
+    expect(calls.filter((c) => c.method === "POST")).toHaveLength(1);
+    // The handlers are removed once the wait ends, so a later signal is not swallowed.
+    expect(signals.map((s) => process.listenerCount(s))).toEqual(before);
+    run.inFlight = undefined;
+    run.ids = [];
+  });
+
+  it("a signal during the submit records that the prediction may exist, then exits", async () => {
+    const { client, calls } = createFakeAtlas({
+      "POST /model/generateImage": { body: prediction("sub01", "processing") },
+    });
+    vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const exits: number[] = [];
+    const signals = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
+    const before = signals.map((s) => process.listenerCount(s));
+    const origSubmit = client.submit.bind(client);
+    vi.spyOn(client, "submit").mockImplementation(async (...a) => {
+      (process.listeners("SIGTERM").at(-1) as (s: string) => void)("SIGTERM");
+      return origSubmit(...a);
+    });
+    const res = executePrediction({
+      client,
+      logger,
+      kind: "image",
+      model: "m/x",
+      body: { prompt: "x" },
+      opts: {},
+      defaultWaitTimeoutMs: 60_000,
+      exit: (code) => {
+        exits.push(code);
+        throw new Error("exited");
+      },
+    });
+    await expect(res).rejects.toThrow("exited");
+    expect(exits).toEqual([143]);
+    expect(run.interrupted).toMatchObject({ retryable: false });
+    expect(run.interrupted?.hint).toContain("may have accepted");
+    expect(run.inFlight).toBeUndefined();
+    expect(calls.filter((c) => c.method === "POST")).toHaveLength(0);
+    expect(signals.map((s) => process.listenerCount(s))).toEqual(before);
+    run.interrupted = undefined;
   });
 
   it("resumeCommand adds --output only when given, quoting it when needed", () => {
@@ -611,7 +692,7 @@ describe("download hardening", () => {
     expect(savedOutput(path.join(tmp, "missing.mp4"))).toBeUndefined();
   });
 
-  it("the interrupt handler removes this run's locks and temp files, then exits 130/143", () => {
+  it("the interrupt handler removes this run's locks and temp files, then exits 129/130/143", () => {
     const file = path.join(tmp, "atlas-int01-01.mp4");
     expect(claimOutputPath(file, "reuse")).toBe(file);
     const temp = `${file}.${process.pid}-1700000000000-k3x9qa.part`;
@@ -625,6 +706,13 @@ describe("download hardening", () => {
     claimOutputPath(file, "reuse");
     handleInterrupt("SIGTERM", exit);
     expect(exit).toHaveBeenLastCalledWith(143);
+    expect(fs.readdirSync(tmp)).toEqual(["keep.mp4"]);
+
+    // A closed terminal (SIGHUP) cleans up the same way.
+    claimOutputPath(file, "reuse");
+    expect(process.listenerCount("SIGHUP")).toBeGreaterThan(0);
+    handleInterrupt("SIGHUP", exit);
+    expect(exit).toHaveBeenLastCalledWith(129);
     expect(fs.readdirSync(tmp)).toEqual(["keep.mp4"]);
   });
 

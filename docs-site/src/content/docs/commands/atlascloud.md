@@ -110,9 +110,19 @@ multix atlas status <predictionId> --download [--output <path>]
 with `id=$(multix atlas video "waves" --async)`. Progress lines and a resume
 command go to stderr. When a wait times out, in a generation command or in
 `status --wait`, the error includes the same resume command, with your
-`--output` if you gave one, so the files land in the same place. A prediction that
-ends in `failed` makes the command exit with a non-zero status. Atlas Cloud has
-no cancel endpoint, so multix does not offer one.
+`--output` if you gave one, so the files land in the same place. Ctrl-C,
+SIGTERM or a closed terminal (SIGHUP) while the command waits, in a generation
+command or in `status --wait`, stops polling and exits with 130, 143 or 129 after
+printing that resume command; the prediction keeps running and is billed, so
+resume it instead of running the command again. With `--json`, the envelope
+lists the id in `provider_ids` and the resume command first in `next`. A signal
+while the submit request is still in flight cannot tell whether Atlas Cloud
+accepted it, and the id is unknown: the envelope says so (`retryable: false`),
+so check your predictions in the Atlas Cloud console before submitting again. A
+signal while local `--ref` or `--audio` files are uploading cancels cleanly;
+nothing was submitted. A
+prediction that ends in `failed` makes the command exit with a non-zero status.
+Atlas Cloud has no cancel endpoint, so multix does not offer one.
 
 ## Upload
 

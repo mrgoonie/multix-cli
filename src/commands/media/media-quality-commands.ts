@@ -10,6 +10,7 @@ import path from "node:path";
 import type { Command } from "commander";
 import { run } from "../../agent/run-state.js";
 import { ValidationError } from "../../core/errors.js";
+import { defaultLogger as logger } from "../../core/logger.js";
 import { MAX_FRAMES, extractFrames } from "./media-frames.js";
 import { type InspectReport, inspectMedia } from "./media-inspect.js";
 import { checkReceipt } from "./media-receipt.js";
@@ -56,17 +57,32 @@ const SIGNAL_EXIT: Partial<Record<NodeJS.Signals, number>> = {
  * before it exits with 128 + the signal number, as a shell reports a killed command.
  * The listeners stay registered for the whole run: a once-listener would be gone by the
  * time execa's exit handler looks, and it would then re-raise the signal and skip that
- * cleanup. A second signal exits at once.
+ * cleanup. A second signal skips the cleanup: it re-raises the signal so the process dies
+ * as a killed command does, without a result claiming nothing was left behind. Where the
+ * re-raise cannot kill (node as PID 1 in a container, Windows), it exits with the signal's
+ * status and still prints no result.
  */
 async function cancellable<T>(fn: (signal: AbortSignal) => Promise<T>): Promise<T> {
   const ac = new AbortController();
   let caught: NodeJS.Signals | undefined;
+  const signals = Object.keys(SIGNAL_EXIT) as NodeJS.Signals[];
   const stop = (signal: NodeJS.Signals) => {
-    if (caught) process.exit(SIGNAL_EXIT[signal] ?? 1);
+    if (caught) {
+      for (const s of signals) process.off(s, stop);
+      try {
+        process.kill(process.pid, signal);
+      } catch {
+        // Windows has no SIGHUP to raise; the fallback below exits.
+      }
+      setImmediate(() => {
+        run.finalized = true; // no envelope: the cleanup did not run
+        process.exit(SIGNAL_EXIT[signal] ?? 1);
+      });
+      return;
+    }
     caught = signal;
     ac.abort();
   };
-  const signals = Object.keys(SIGNAL_EXIT) as NodeJS.Signals[];
   for (const signal of signals) process.on(signal, stop);
   let result: T | undefined;
   try {
@@ -334,6 +350,8 @@ export function registerMediaQualityCommands(media: Command): void {
     )
     .action(async (receiptFile: string, file: string) => {
       const result = await checkReceipt(receiptFile, file);
+      // On stderr, so the --json envelope lists them in its top-level warnings too.
+      for (const w of result.warnings) logger.warn(w);
       emit(result, () =>
         result.ok
           ? `OK  receipt (${result.profile.id}@${result.profile.version}) matches ${file}`

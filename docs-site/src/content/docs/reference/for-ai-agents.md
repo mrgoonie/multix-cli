@@ -71,6 +71,8 @@ https://multix.zuey.me/llms.txt
   "command": "gemini generate",
   "provider": "gemini",
   "model": "gemini-2.5-flash-image",
+  "model_requested": "gemini-2.5-flash-image",
+  "model_resolved": "gemini-2.5-flash-image",
   "duration_ms": 8120,
   "outputs": [
     { "path": "gemini-image-1.webp", "bytes": 184220, "mime": "image/webp",
@@ -92,6 +94,8 @@ https://multix.zuey.me/llms.txt
 | `error` | `code`, `message`, `retryable`, `retry_after_s`, `hint`, `http_status`, `env` (the key name when one is missing). URL query strings in `message` and `log` are redacted, including a pre-signed input URL a provider echoes back in its error. |
 | `usage` | What the provider reported: `tokens` (`input`, `output`, `total`, `thinking`), `cost_usd`, `credits`, and other numeric `metrics` by key path. `sources.cost_usd` / `sources.credits` name where each number came from (for example `api.elevenlabs.io header.character-cost`). Nothing is estimated: a provider's own estimate or quote (such as Runway `estimatedCost`) stays in `metrics` and is never reported as `cost_usd` or `credits`. `cost_usd` and `credits` are what the run spent: an account balance (Leonardo `apiCredit` from `leonardo me`, HeyGen remaining or included credits from `heygen me`) is never reported as `credits` or `cost_usd`. |
 | `http` | Provider request count, failed requests and total time. |
+| `model_requested` / `model_resolved` | The model the run asked for (named in the provider request, else `--model`) and the one the provider response reported serving (a top-level `model`, Gemini `modelVersion`, or the same keys under `data`). `model_resolved` is `null` when the provider reported none, and always on a dry run or estimate; it is never guessed. `model` is kept and equals `model_requested`. |
+| `job` | `{ provider, id, attempt }` when a successful provider response returned an id: the in-flight job (an Atlas prediction), else the first id a successful submit returned (file uploads excluded), else the first id a successful status read returned. Ids of failed requests stay in `provider_ids` only. `attempt` is 1, plus one for each failed send of the same submit before it (for example a Gemini call retried on another key after a 429); failed status reads do not count. |
 | `provider_ids` | Request, job or prediction ids the provider returned. |
 | `request` | With `--dry-run`: the request that would have been sent. Header values, secret-named fields and URL query strings (pre-signed URLs) are redacted; the one header value shown is Fish Audio's `model` (in `header_values`), because it chooses what runs and is billed and holds no secret. |
 | `estimate` | Pre-flight price of the run (with `--estimate`, `--max-cost`, or on a priced command). `estimate_only: true` marks an `--estimate` run. |
@@ -109,7 +113,7 @@ https://multix.zuey.me/llms.txt
 | 4 | temporary | `RATE_LIMITED`, `PROVIDER_UNAVAILABLE`, `NETWORK_ERROR` | Wait `retry_after_s`, then `multix rerun <id>`. |
 | 5 | rejected | `QUOTA_EXCEEDED`, `CONTENT_BLOCKED`, `MODEL_NOT_FOUND`, `NOT_FOUND`, `PROVIDER_REJECTED`, `JOB_FAILED`, `RESPONSE_TOO_LARGE` | Change the input, model or provider. |
 | 6 | timed out or unknown | `TIMEOUT`, `UNKNOWN_REMOTE_STATE` | The job may still run: use the status command in `next[]`. `UNKNOWN_REMOTE_STATE`: the submit failed without proof that the provider rejected it (cut off, 5xx gateway error), so it may have been queued; check the provider's request list before resubmitting. |
-| 129, 130, 143 | cancelled | `CANCELLED` | The run was stopped by SIGHUP, Ctrl-C (SIGINT) or SIGTERM after cleaning up; nothing was left behind. Rerun the command. If a provider request was already sent, the hint says so instead: fetch the result by `provider_ids` before rerunning, or you may pay twice. |
+| 129, 130, 143 | cancelled | `CANCELLED` | The run was stopped by SIGHUP, Ctrl-C (SIGINT) or SIGTERM after cleaning up; nothing was left behind. Rerun the command. If a provider request was already sent, the hint says so instead: fetch the result by `provider_ids` before rerunning, or you may pay twice. When the command knows more, the hint is specific: a job it submitted and was waiting on is resumed with `next[0]` (never rerun); a submit stopped in flight may have been accepted under an unknown id (check the provider's console first); a stop before the submit left nothing billed. A second signal stops the run before its cleanup: it then ends with the same status but no envelope, and temporary files may remain. |
 | 1 | unknown | `UNKNOWN` | Read `log[]` (last stderr lines). |
 
 These exit classes apply in agent mode (`--json` or `MULTIX_OUTPUT=json`).
@@ -238,7 +242,7 @@ Set it in the shell for the run; a project `.env` cannot set it.
 ## Run history
 
 Each provider command appends one line to `~/.multix/history.jsonl` (file mode
-0600, rotated at 20 MB): id, time, duration, command, provider, model, argv
+0600, rotated at 20 MB): id, time, duration, command, provider, model (`model_requested`, `model_resolved`, `job`), argv
 (values of options named like key, token, secret or password are redacted),
 outcome and error code, outputs with size and hash, provider usage (tokens,
 cost, credits, metrics), HTTP counts and provider ids. Keys and signed URLs are
