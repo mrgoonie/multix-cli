@@ -237,6 +237,7 @@ export function finalizeRun(input: FinalizeInput): number {
   if (info && inFlight) {
     info = {
       ...info,
+      retryable: false,
       hint: `Job ${inFlight.id} was submitted before the run stopped; it runs on (or has finished) and is billed. Do not rerun; resume it with the next command.`,
     };
   }

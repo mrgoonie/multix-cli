@@ -221,6 +221,7 @@ describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
         expect(out).toMatchObject({ ok: false, command: "atlas image", exit_code: code });
         expect(out.provider_ids).toContain("pred_sig01");
         expect(out.next[0]).toBe(resume);
+        expect(out.error).toMatchObject({ code: "CANCELLED", retryable: false });
         expect(out.error.hint).toContain("Do not rerun; resume it");
         expect(out.error.hint).not.toMatch(/nothing was left behind/i);
         expect(seen.posts).toBe(1);
