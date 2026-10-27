@@ -24,7 +24,12 @@ import {
 import { setExternalRunGuard } from "../core/external-run-guard.js";
 import { redactUrlsInText } from "../core/redact.js";
 import { costReceiptFor, formatEstimate, formatReceipt, preflightCost } from "./cost-preflight.js";
-import { type DryRunRequest, installFetchTelemetry, settleTelemetry } from "./fetch-telemetry.js";
+import {
+  type DryRunRequest,
+  installFetchTelemetry,
+  recordUnfinishedCalls,
+  settleTelemetry,
+} from "./fetch-telemetry.js";
 import { appendHistory, newHistoryId, redactArgv } from "./history-store.js";
 import { type OutputFile, type OutputWarning, inspectOutput } from "./output-file-inspect.js";
 import { installOutputFileTracker, producedFiles } from "./output-file-tracker.js";
@@ -215,6 +220,7 @@ interface FinalizeInput {
 export function finalizeRun(input: FinalizeInput): number {
   if (run.finalized) return input.exitCode;
   run.finalized = true;
+  recordUnfinishedCalls();
   const dryRun = Boolean(input.dryRunRequest || input.dryRunLocal);
   const estimateOnly = Boolean(input.estimateOnly);
   const notSent = dryRun || estimateOnly;
@@ -242,13 +248,19 @@ export function finalizeRun(input: FinalizeInput): number {
     // The command knows better than "a request was sent": free requests (uploads)
     // leave nothing billed, a submit cut off before its answer may have been accepted.
     const { sent, check } = run.submit;
-    info = classifySignalExit(input.exitCode);
-    if (info && sent) {
-      info = {
-        ...info,
-        retryable: false,
-        hint: `The run stopped while the submit was in flight, so the provider may have accepted it and will bill it: check ${check} before resubmitting, or you may pay twice.`,
-      };
+    const signal = classifySignalExit(input.exitCode);
+    if (signal) {
+      info = sent
+        ? {
+            ...signal,
+            retryable: false,
+            hint: `The run stopped while the submit was in flight, so the provider may have accepted it and will bill it: check ${check} before resubmitting, or you may pay twice.`,
+          }
+        : {
+            ...signal,
+            // Uploaded reference files may stay in provider storage; they are not billed work.
+            hint: "The run stopped before the submit: no job was created and nothing was billed. Rerun the command.",
+          };
     }
   }
   // Exit classes (2-6) are part of agent mode; plain runs keep the historical exit 1.
