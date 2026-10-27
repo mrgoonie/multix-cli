@@ -15,7 +15,6 @@ import type { AtlasPrediction } from "../types.js";
 import { createAtlasClientFromEnv } from "./env.js";
 import {
   type RunCliOpts,
-  cancelledWithResume,
   deliverPrediction,
   exitOnInterrupt,
   parseTimeoutMs,
@@ -23,12 +22,6 @@ import {
 } from "./prediction-runner.js";
 
 const STATUS_WAIT_MS = 600_000;
-
-/** Print the prediction; a failed one exits non-zero. */
-function report(prediction: AtlasPrediction): void {
-  console.log(JSON.stringify(prediction, null, 2));
-  if (isFailureStatus(prediction.status)) throw new AtlasPredictionFailedError(prediction);
-}
 
 interface StatusFlags extends RunCliOpts {
   wait?: boolean;
@@ -50,32 +43,36 @@ export function registerAtlasStatusCommand(parent: Command): void {
       const logger = createLogger({ verbose: opts.verbose ?? false });
       const client = createAtlasClientFromEnv();
       const wait = Boolean(opts.wait || opts.download);
-      if (!wait) {
-        report(await client.getPrediction(predictionId));
+      let prediction: AtlasPrediction;
+      if (wait) {
+        const resume = resumeCommand(predictionId, opts.output);
+        // A stopped wait leaves the prediction running: report how to resume it.
+        trackInFlight(predictionId, resume);
+        prediction = await exitOnInterrupt(
+          () =>
+            client.waitForPrediction(predictionId, {
+              timeoutMs: parseTimeoutMs(opts.waitTimeout, STATUS_WAIT_MS),
+              resumeHint: `Resume with: ${resume}`,
+              onPoll: (p, n) => logger.debug(`poll ${n}: ${p.status}`),
+            }),
+          {
+            message: `Cancelled while waiting on prediction ${predictionId}; it keeps running. Resume with: ${resume}`,
+          },
+        );
+      } else {
+        prediction = await client.getPrediction(predictionId);
+      }
+
+      if (!opts.download) {
+        console.log(JSON.stringify(prediction, null, 2));
+        if (isFailureStatus(prediction.status)) throw new AtlasPredictionFailedError(prediction);
         return;
       }
-      const resume = resumeCommand(predictionId, opts.output);
-      // The id is known: a signal while waiting or saving reports how to resume, not a rerun.
-      trackInFlight(predictionId, resume);
-      await exitOnInterrupt(
-        async () => {
-          const prediction = await client.waitForPrediction(predictionId, {
-            timeoutMs: parseTimeoutMs(opts.waitTimeout, STATUS_WAIT_MS),
-            resumeHint: `Resume with: ${resume}`,
-            onPoll: (p, n) => logger.debug(`poll ${n}: ${p.status}`),
-          });
-          if (!opts.download) {
-            report(prediction);
-            return;
-          }
-          assertPredictionSucceeded(prediction);
-          await deliverPrediction(prediction, {
-            logger,
-            opts: { ...opts, download: true },
-            predictionId,
-          });
-        },
-        () => cancelledWithResume(predictionId, resume),
-      );
+      assertPredictionSucceeded(prediction);
+      await deliverPrediction(prediction, {
+        logger,
+        opts: { ...opts, download: true },
+        predictionId,
+      });
     });
 }

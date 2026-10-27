@@ -10,9 +10,11 @@ import type { AtlasMediaKind } from "../types.js";
 import { createAtlasClientFromEnv, createAtlasLogger, resolveMediaRefs } from "./env.js";
 import {
   type ExecuteResult,
+  NOTHING_SUBMITTED,
   type RunCliOpts,
   assertEndpoint,
   executePrediction,
+  exitOnInterrupt,
   loadModelSpec,
 } from "./prediction-runner.js";
 
@@ -45,19 +47,22 @@ export async function runGenerationCommand(cfg: GenerationCommandConfig): Promis
   const refs = cfg.refs ?? [];
   // Validate with the raw refs first so a bad flag never costs an upload.
   buildModelInput(spec, cfg.requests(refs));
+  const refUrls =
+    refs.length > 0
+      ? await exitOnInterrupt(() => resolveMediaRefs(client, refs, logger), {
+          message: "Cancelled while uploading reference files; no prediction was submitted.",
+          outcome: NOTHING_SUBMITTED,
+        })
+      : [];
+  const body = buildModelInput(spec, cfg.requests(refUrls));
+  logger.debug(`Request fields: ${Object.keys(body).join(", ")}`);
 
   return executePrediction({
     client,
     logger,
     kind,
     model: cfg.model,
-    // Uploads run inside executePrediction, so a signal during one is reported as a clean cancel.
-    body: async () => {
-      const refUrls = refs.length > 0 ? await resolveMediaRefs(client, refs, logger) : [];
-      const body = buildModelInput(spec, cfg.requests(refUrls));
-      logger.debug(`Request fields: ${Object.keys(body).join(", ")}`);
-      return body;
-    },
+    body,
     opts: cfg.opts,
     hint: cfg.hint,
     defaultWaitTimeoutMs: cfg.defaultWaitTimeoutMs,

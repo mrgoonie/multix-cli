@@ -243,42 +243,34 @@ describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     });
   });
 
-  describe("a signal before the prediction id is known, or while status resumes it", () => {
-    type Reply = { status: string; outputs?: string[] | null } | "hold";
+  describe("a signal before or outside the wait on an atlas prediction", () => {
     /**
-     * Fake Atlas API on loopback. `routes` maps "METHOD /path" to the prediction it
-     * answers, or "hold" to never answer (the request is in flight when the signal
-     * arrives). `reached(route)` resolves once a request for that route arrived.
+     * Fake Atlas API: uploads and submits hang until the run is killed, polls
+     * return a prediction that never finishes. `seen.hit` resolves on the first
+     * request whose path ends with `stage`.
      */
-    async function withAtlas(
-      routes: Record<string, Reply>,
-      fn: (
-        baseUrl: string,
-        seen: { routes: string[]; reached: (route: string) => Promise<void> },
-      ) => Promise<void>,
+    async function withHangingAtlas(
+      stage: string,
+      fn: (baseUrl: string, seen: { requests: string[]; hit: Promise<void> }) => Promise<void>,
     ) {
-      const waiting = new Map<string, () => void>();
+      let markHit: () => void = () => {};
       const seen = {
-        routes: [] as string[],
-        reached: (route: string) =>
-          seen.routes.includes(route)
-            ? Promise.resolve()
-            : new Promise<void>((r) => waiting.set(route, r)),
+        requests: [] as string[],
+        hit: new Promise<void>((r) => {
+          markHit = r;
+        }),
       };
       const server = http.createServer((req, res) => {
-        const route = `${req.method} ${(req.url ?? "").replace(/^\/api\/v1/, "")}`;
-        seen.routes.push(route);
-        waiting.get(route)?.();
-        req.resume();
-        const reply = routes[route];
-        if (reply === "hold") return;
-        res.writeHead(reply ? 200 : 404, { "content-type": "application/json" });
+        const route = `${req.method} ${req.url}`;
+        seen.requests.push(route);
+        if (req.url?.endsWith(stage)) markHit();
+        if (req.method === "POST") return; // never answered: the signal comes first
+        res.writeHead(200, { "content-type": "application/json" });
         res.end(
-          JSON.stringify(
-            reply
-              ? { code: 200, data: { id: "pred_sig02", outputs: null, ...reply } }
-              : { code: 404, msg: "not found" },
-          ),
+          JSON.stringify({
+            code: 200,
+            data: { id: "pred_sig02", status: "processing", outputs: null },
+          }),
         );
       });
       await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -291,26 +283,93 @@ describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
       }
     }
 
-    const start = (baseUrl: string, args: string[], preload?: string) =>
-      execa("node", [...(preload ? ["--import", preload] : []), CLI, ...args, "--json"], {
+    const start = (baseUrl: string, args: string[]) =>
+      execa("node", [CLI, "atlas", ...args, "--json"], {
         reject: false,
         cwd: tmp,
         extendEnv: false,
-        env: {
-          ...env,
-          ATLASCLOUD_API_KEY: "test-key-not-real",
-          ATLASCLOUD_BASE_URL: baseUrl,
-          FAKE_CDN_MARKER: path.join(tmp, "cdn-started"),
-        },
+        env: { ...env, ATLASCLOUD_API_KEY: "test-key-not-real", ATLASCLOUD_BASE_URL: baseUrl },
         timeout: SPAWN_TIMEOUT - 1_000,
       });
-    const resume = "multix atlas status pred_sig02 --wait --download";
 
-    it("a signal while uploading a --ref is a clean cancel: nothing was submitted", async () => {
-      fs.writeFileSync(path.join(tmp, "ref.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
-      await withAtlas({ "POST /model/uploadMedia": "hold" }, async (baseUrl, seen) => {
+    it("a signal during the submit says the prediction may exist, not a clean cancel", async () => {
+      await withHangingAtlas("/model/generateImage", async (baseUrl, seen) => {
+        const child = start(baseUrl, ["image", "a cat", "--no-validate"]);
+        await seen.hit;
+        child.kill("SIGINT");
+        const result = await child;
+        expect(result.exitCode).toBe(130);
+        const out = envelope(result.stdout);
+        expect(out).toMatchObject({ ok: false, command: "atlas image", exit_code: 130 });
+        expect(out.error).toMatchObject({ code: "CANCELLED", retryable: false });
+        expect(out.error.hint).toContain("Atlas Cloud may have accepted");
+        expect(out.error.hint).toContain("before resubmitting");
+        expect(out.error.hint).not.toMatch(/nothing was left behind/i);
+        expect(seen.requests.filter((r) => r.startsWith("POST"))).toHaveLength(1);
+        // The unanswered submit counts as sent and cut off: the cost is not settled at $0.
+        expect(out.cost).toMatchObject({ status: "uncertain" });
+        expect(out.http).toMatchObject({ requests: 1, errors: 1 });
+      });
+    });
+
+    it("SIGHUP mid-download removes the lock and temp file and exits 129 with the resume command", async () => {
+      const server = http.createServer((req, res) => {
+        req.resume();
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            code: 200,
+            data: {
+              id: "pred_sig02",
+              status: "completed",
+              outputs: ["https://cdn.atlas.example/out.png"],
+            },
+          }),
+        );
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      const { port } = server.address() as AddressInfo;
+      const marker = path.join(tmp, "cdn-started");
+      try {
+        const child = execa(
+          "node",
+          ["--import", FAKE_CDN, CLI, "atlas", "status", "pred_sig02", "--download", "--json"],
+          {
+            reject: false,
+            cwd: tmp,
+            extendEnv: false,
+            env: {
+              ...env,
+              ATLASCLOUD_API_KEY: "test-key-not-real",
+              ATLASCLOUD_BASE_URL: `http://127.0.0.1:${port}/api/v1`,
+              FAKE_CDN_MARKER: marker,
+            },
+            timeout: SPAWN_TIMEOUT - 1_000,
+          },
+        );
+        const deadline = Date.now() + SPAWN_TIMEOUT - 3_000;
+        while (!fs.existsSync(marker) && Date.now() < deadline) {
+          await new Promise((r) => setTimeout(r, 25));
+        }
+        // The lock and the temp file exist while the download runs.
+        expect(fs.readdirSync(tmp).filter((n) => n.endsWith(".part")).length).toBeGreaterThan(0);
+        child.kill("SIGHUP");
+        const result = await child;
+        expect(result.exitCode).toBe(129);
+        const out = envelope(result.stdout);
+        expect(out.next[0]).toBe("multix atlas status pred_sig02 --wait --download");
+        expect(out.provider_ids).toContain("pred_sig02");
+        expect(fs.readdirSync(tmp).filter((n) => n.endsWith(".part"))).toEqual([]);
+      } finally {
+        server.closeAllConnections();
+        await new Promise((resolve) => server.close(resolve));
+      }
+    });
+
+    it("a signal during a reference upload is a clean cancel with nothing submitted", async () => {
+      fs.writeFileSync(path.join(tmp, "ref.png"), "PNGDATA");
+      await withHangingAtlas("/model/uploadMedia", async (baseUrl, seen) => {
         const child = start(baseUrl, [
-          "atlas",
           "image-to-image",
           "--prompt",
           "make it blue",
@@ -318,35 +377,15 @@ describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
           "ref.png",
           "--no-validate",
         ]);
-        await seen.reached("POST /model/uploadMedia");
-        child.kill("SIGINT");
-        const result = await child;
-        expect(result.exitCode).toBe(130);
-        const out = envelope(result.stdout);
-        expect(out).toMatchObject({ ok: false, command: "atlas image-to-image", exit_code: 130 });
-        expect(out.error.code).toBe("CANCELLED");
-        expect(out.error.hint).toMatch(/no job was created and nothing was billed/);
-        expect(out.provider_ids ?? []).toEqual([]);
-        expect(seen.routes).not.toContain("POST /model/generateImage");
-      });
-    });
-
-    it("a signal during the submit says it may have been accepted, not a clean cancel", async () => {
-      await withAtlas({ "POST /model/generateImage": "hold" }, async (baseUrl, seen) => {
-        const child = start(baseUrl, ["atlas", "image", "a cat", "--no-validate"]);
-        await seen.reached("POST /model/generateImage");
+        await seen.hit;
         child.kill("SIGTERM");
         const result = await child;
         expect(result.exitCode).toBe(143);
         const out = envelope(result.stdout);
-        expect(out).toMatchObject({ ok: false, command: "atlas image", exit_code: 143 });
+        expect(out).toMatchObject({ ok: false, command: "atlas image-to-image", exit_code: 143 });
         expect(out.error).toMatchObject({ code: "CANCELLED", retryable: false });
-        expect(out.error.hint).toContain("the Atlas Cloud dashboard");
-        expect(out.error.hint).toMatch(/before resubmitting/);
-        expect(out.error.hint).not.toMatch(/nothing was left behind/i);
-        // The unanswered submit counts as sent and cut off: the cost is not settled at $0.
-        expect(out.cost).toMatchObject({ status: "uncertain" });
-        expect(out.http).toMatchObject({ requests: 1, errors: 1 });
+        expect(out.error.hint).toContain("no prediction was created or billed");
+        expect(seen.requests.some((r) => r.includes("/model/generate"))).toBe(false);
       });
     });
 
@@ -354,54 +393,23 @@ describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
       ["SIGINT", 130],
       ["SIGHUP", 129],
     ] as const)(
-      "status --wait stopped by %s exits %i with the resume command first",
+      "status --wait stopped by %s exits %i with the resume command",
       async (signal, code) => {
-        await withAtlas(
-          { "GET /model/prediction/pred_sig02": { status: "processing" } },
-          async (baseUrl, seen) => {
-            const child = start(baseUrl, ["atlas", "status", "pred_sig02", "--wait"]);
-            await seen.reached("GET /model/prediction/pred_sig02");
-            child.kill(signal);
-            const result = await child;
-            expect(result.exitCode).toBe(code);
-            const out = envelope(result.stdout);
-            expect(out).toMatchObject({ ok: false, command: "atlas status", exit_code: code });
-            expect(out.provider_ids).toContain("pred_sig02");
-            expect(out.next[0]).toBe(resume);
-            expect(out.error).toMatchObject({ code: "CANCELLED", retryable: false });
-            expect(out.error.hint).toContain("Do not rerun; resume it");
-          },
-        );
+        await withHangingAtlas("/model/prediction/pred_sig02", async (baseUrl, seen) => {
+          const child = start(baseUrl, ["status", "pred_sig02", "--wait"]);
+          await seen.hit;
+          child.kill(signal);
+          const result = await child;
+          expect(result.exitCode).toBe(code);
+          const out = envelope(result.stdout);
+          expect(out).toMatchObject({ ok: false, command: "atlas status", exit_code: code });
+          expect(out.provider_ids).toContain("pred_sig02");
+          expect(out.next[0]).toBe("multix atlas status pred_sig02 --wait --download");
+          expect(out.error).toMatchObject({ code: "CANCELLED", retryable: false });
+          expect(out.error.hint).toContain("resume it with the next command");
+        });
       },
     );
-
-    it("SIGHUP mid-download removes the lock and temp file and exits 129 with the resume command", async () => {
-      await withAtlas(
-        {
-          "GET /model/prediction/pred_sig02": {
-            status: "completed",
-            outputs: ["https://cdn.atlas.example/out.png"],
-          },
-        },
-        async (baseUrl) => {
-          const child = start(baseUrl, ["atlas", "status", "pred_sig02", "--download"], FAKE_CDN);
-          const marker = path.join(tmp, "cdn-started");
-          const deadline = Date.now() + SPAWN_TIMEOUT - 3_000;
-          while (!fs.existsSync(marker) && Date.now() < deadline) {
-            await new Promise((r) => setTimeout(r, 25));
-          }
-          // The lock and the temp file exist while the download runs.
-          expect(fs.readdirSync(tmp).filter((n) => n.endsWith(".part")).length).toBeGreaterThan(0);
-          child.kill("SIGHUP");
-          const result = await child;
-          expect(result.exitCode).toBe(129);
-          const out = envelope(result.stdout);
-          expect(out.next[0]).toBe(resume);
-          expect(out.provider_ids).toContain("pred_sig02");
-          expect(fs.readdirSync(tmp).filter((n) => n.endsWith(".part"))).toEqual([]);
-        },
-      );
-    });
   });
 
   it("records runs in the ledger and shows them with history", async () => {

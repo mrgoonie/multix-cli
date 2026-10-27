@@ -259,60 +259,40 @@ describe("executePrediction (mocked submit -> poll -> saved output)", () => {
     run.ids = [];
   });
 
-  /** Run executePrediction and raise `signal` from inside the call `at` names. */
-  async function interruptAt(at: "upload" | "submit", signal: "SIGINT" | "SIGTERM" | "SIGHUP") {
+  it("a signal during the submit records that the prediction may exist, then exits", async () => {
     const { client, calls } = createFakeAtlas({
       "POST /model/generateImage": { body: prediction("sub01", "processing") },
     });
-    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
-    const raise = () => (process.listeners(signal).at(-1) as (s: string) => void)(signal);
-    if (at === "submit") {
-      vi.spyOn(client, "submit").mockImplementation(async () => {
-        raise();
-        throw new Error("unreachable");
-      });
-    }
+    vi.spyOn(process.stderr, "write").mockImplementation(() => true);
     const exits: number[] = [];
-    await expect(
-      executePrediction({
-        client,
-        logger,
-        kind: "image",
-        model: "m/x",
-        body: async () => {
-          if (at === "upload") raise();
-          return { prompt: "x" };
-        },
-        opts: {},
-        defaultWaitTimeoutMs: 60_000,
-        exit: (code) => {
-          exits.push(code);
-          throw new Error("exited");
-        },
-      }),
-    ).rejects.toThrow("exited");
-    const submit = run.submit;
-    run.submit = undefined;
-    return { exits, submit, stderr, calls };
-  }
-
-  it("a signal while uploading references is a clean cancel: nothing submitted", async () => {
-    const { exits, submit, stderr, calls } = await interruptAt("upload", "SIGTERM");
+    const signals = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
+    const before = signals.map((s) => process.listenerCount(s));
+    const origSubmit = client.submit.bind(client);
+    vi.spyOn(client, "submit").mockImplementation(async (...a) => {
+      (process.listeners("SIGTERM").at(-1) as (s: string) => void)("SIGTERM");
+      return origSubmit(...a);
+    });
+    const res = executePrediction({
+      client,
+      logger,
+      kind: "image",
+      model: "m/x",
+      body: { prompt: "x" },
+      opts: {},
+      defaultWaitTimeoutMs: 60_000,
+      exit: (code) => {
+        exits.push(code);
+        throw new Error("exited");
+      },
+    });
+    await expect(res).rejects.toThrow("exited");
     expect(exits).toEqual([143]);
-    expect(submit).toMatchObject({ sent: false });
-    expect(stderr).toHaveBeenCalledWith(expect.stringContaining("no prediction was created"));
-    expect(calls).toHaveLength(0);
+    expect(run.interrupted).toMatchObject({ retryable: false });
+    expect(run.interrupted?.hint).toContain("may have accepted");
     expect(run.inFlight).toBeUndefined();
-  });
-
-  it("a signal during the submit says Atlas may have accepted it, not a clean cancel", async () => {
-    const { exits, submit, stderr } = await interruptAt("submit", "SIGHUP");
-    expect(exits).toEqual([129]);
-    expect(submit).toMatchObject({ sent: true, check: expect.stringContaining("Atlas Cloud") });
-    expect(stderr).toHaveBeenCalledWith(
-      expect.stringContaining("Atlas Cloud may have accepted the prediction"),
-    );
-    expect(run.inFlight).toBeUndefined();
+    expect(calls.filter((c) => c.method === "POST")).toHaveLength(0);
+    expect(signals.map((s) => process.listenerCount(s))).toEqual(before);
+    run.interrupted = undefined;
   });
 
   it("resumeCommand adds --output only when given, quoting it when needed", () => {
@@ -728,8 +708,9 @@ describe("download hardening", () => {
     expect(exit).toHaveBeenLastCalledWith(143);
     expect(fs.readdirSync(tmp)).toEqual(["keep.mp4"]);
 
-    // A closed terminal mid-download cleans up the same way.
+    // A closed terminal (SIGHUP) cleans up the same way.
     claimOutputPath(file, "reuse");
+    expect(process.listenerCount("SIGHUP")).toBeGreaterThan(0);
     handleInterrupt("SIGHUP", exit);
     expect(exit).toHaveBeenLastCalledWith(129);
     expect(fs.readdirSync(tmp)).toEqual(["keep.mp4"]);

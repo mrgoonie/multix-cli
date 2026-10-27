@@ -73,11 +73,11 @@ export interface RunState {
    */
   inFlight?: { id: string; resume: string };
   /**
-   * A paid submit this run is about to send (or has sent) before the provider
-   * returned a job id: a signal before it is sent is a clean cancel, one after
-   * it may leave a billed job that only `check` (where to look) can confirm.
+   * What a signal left behind, recorded by the handler of a phase that knows better
+   * than request counting: an upload before submit billed nothing, while a submit
+   * still in flight may have been accepted under an id the run never saw.
    */
-  submit?: { sent: boolean; check: string };
+  interrupted?: { hint: string; retryable: boolean };
   /** True once a command action started (help and parse errors never get there). */
   actionStarted: boolean;
   finalized: boolean;
@@ -126,11 +126,6 @@ function addTokens(into: UsageTokens, from: UsageTokens): void {
     const v = from[key];
     if (v !== undefined) into[key] = (into[key] ?? 0) + v;
   }
-}
-
-/** Record where a paid submit stands while its job id is not known yet. */
-export function trackSubmit(sent: boolean, check: string, state: RunState = run): void {
-  state.submit = { sent, check };
 }
 
 /** Combine every response's usage into one summary. */

@@ -90,8 +90,9 @@ Concerns/Blockers: High 1 (receipt contradiction) should be fixed or explicitly 
 
 ## Resolution (author)
 
-- High 1 fixed in 2d8440e: requests still unanswered at finalize are recorded as cut off (`status: 0`), so the receipt is `uncertain`; the submit smoke test asserts `cost.status` and `http`.
-- Medium 2 is tracked by #392 (schema fetch), which another session already claimed. `atlas upload` is noted there.
-- Medium 3 fixed in 2d8440e: the pre-submit hint now says no job was created and nothing was billed.
-- Low, status with a bad id: a nonexistent id fails on the first poll with NOT_FOUND before any wait; only a signal during that first GET reports the resume hint. Kept as is.
-- Low, dashboard URL: `https://www.atlascloud.ai/console` answers HTTP 200 (checked 2026-10-27).
+The duplicate PR #391 for the same issue reached `dev` first, so the reviewed branch was rebuilt on top of it and keeps only what #391 lacks.
+
+- High 1 (receipt settled at $0 for a submit cut off by a signal) is fixed in the follow-up PR. Requests that are still unanswered at finalize are recorded as cut off (`status: 0`), so the receipt reads `uncertain`. The submit smoke test now asserts `cost.status` and `http`, and it fails without the fix.
+- Medium 2 (signal during the schema fetch, and in `atlas upload`) is tracked by #392.
+- Medium 3 is covered by #391's pre-submit hint, which says no prediction was created or billed.
+- The follow-up PR also adds the SIGHUP mid-download smoke test, with its fake CDN preload.

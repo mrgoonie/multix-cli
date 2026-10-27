@@ -220,10 +220,11 @@ let interruptCleanupInstalled = false;
 function installInterruptCleanup(): void {
   if (interruptCleanupInstalled) return;
   interruptCleanupInstalled = true;
-  process.once("SIGINT", () => handleInterrupt("SIGINT"));
-  process.once("SIGTERM", () => handleInterrupt("SIGTERM"));
-  // A closed terminal mid-download: clean up like Ctrl-C instead of leaving the lock behind.
-  process.once("SIGHUP", () => handleInterrupt("SIGHUP"));
+  for (const signal of Object.keys(INTERRUPT_EXIT_CODES) as Array<
+    keyof typeof INTERRUPT_EXIT_CODES
+  >) {
+    process.once(signal, () => handleInterrupt(signal));
+  }
 }
 
 function heldMessage(dest: string): string {
