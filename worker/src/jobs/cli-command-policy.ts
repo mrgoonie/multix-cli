@@ -255,6 +255,16 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   "media optimize": { fileOptions: { input: "file" } },
   "media split": { fileOptions: { input: "file" } },
   "media batch": { fileOptions: { "input-dir": "dir" } },
+  "media inspect": { filePositionals: ["file"] },
+  // Custom rules run local code and the cache and receipt paths are local state: not remote.
+  "media verify": {
+    filePositionals: ["file"],
+    fileOptions: { "profile-file": "file" },
+    unsupported: ["rule", "cache-dir", "receipt-out"],
+    repeatable: ["allow-black", "allow-freeze", "allow-silence"],
+  },
+  "media frames": { filePositionals: ["file"] },
+  "media check-receipt": { filePositionals: ["receipt", "file"] },
   "doc convert": { fileOptions: { input: "file" } },
   // One façade over several providers: only the routed providers' keys reach the job.
   "speech generate": {

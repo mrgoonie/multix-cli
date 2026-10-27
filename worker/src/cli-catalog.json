@@ -11958,8 +11958,313 @@
     },
     {
       "group": "media",
-      "description": "Media processing via ffmpeg/ImageMagick: compress video/audio/images, split long videos, batch optimize directories",
+      "description": "Media processing via ffmpeg/ImageMagick: compress video/audio/images, split long videos, batch optimize directories, inspect and verify media offline",
       "commands": [
+        {
+          "command": "media inspect",
+          "description": "Read-only facts about a local media file: sha256, magic bytes vs extension, container, streams, rational fps/timebase, rotation, audio; --decode also counts decode errors",
+          "positionals": [
+            {
+              "name": "file",
+              "description": "",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--decode",
+              "flags": "--decode",
+              "description": "Fully decode the file and report decode errors and decoded duration",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--timeout",
+              "flags": "--timeout <s>",
+              "description": "Stop ffprobe/ffmpeg after this many seconds",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "1800"
+            }
+          ]
+        },
+        {
+          "command": "media verify",
+          "description": "Check a local media file against a versioned profile (decode integrity, black/frozen frames, silence, clipping, expected duration/aspect) and print a receipt bound to its sha256",
+          "positionals": [
+            {
+              "name": "file",
+              "description": "",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--profile",
+              "flags": "--profile <id>",
+              "description": "Built-in profile: motion-graphics, camera-footage, thumbnail, audio",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--profile-file",
+              "flags": "--profile-file <json>",
+              "description": "Custom profile JSON (see docs: id, version, extends, media, checks)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--expect-duration",
+              "flags": "--expect-duration <s>",
+              "description": "Expected duration in seconds",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--duration-tolerance",
+              "flags": "--duration-tolerance <s>",
+              "description": "Allowed duration difference in seconds (default: max(0.1, one frame))",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--expect-aspect",
+              "flags": "--expect-aspect <W:H>",
+              "description": "Expected display aspect ratio, e.g. 16:9, 1:1, 9:16 (rotation applied)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--aspect-tolerance",
+              "flags": "--aspect-tolerance <ratio>",
+              "description": "Relative aspect tolerance",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "0.01"
+            },
+            {
+              "long": "--loudness",
+              "flags": "--loudness <LUFS>",
+              "description": "Target integrated loudness; checked only when given",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--loudness-tolerance",
+              "flags": "--loudness-tolerance <LU>",
+              "description": "Allowed loudness difference",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "1"
+            },
+            {
+              "long": "--allow-black",
+              "flags": "--allow-black <start-end>",
+              "description": "Declare an intentional black range in seconds (repeatable)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--allow-freeze",
+              "flags": "--allow-freeze <start-end>",
+              "description": "Declare an intentional static hold (repeatable)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--allow-silence",
+              "flags": "--allow-silence <start-end>",
+              "description": "Declare an intentional silence (repeatable)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--rule",
+              "flags": "--rule <file>",
+              "description": "Custom deterministic rule script: JSON on stdin, JSON verdict on stdout (repeatable)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--rule-timeout",
+              "flags": "--rule-timeout <s>",
+              "description": "Time limit per custom rule",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "30"
+            },
+            {
+              "long": "--cache-dir",
+              "flags": "--cache-dir <dir>",
+              "description": "Reuse and store receipts keyed by source sha256 + profile + expectations + rules + ffmpeg version",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--receipt-out",
+              "flags": "--receipt-out <file>",
+              "description": "Also write the receipt JSON to this file",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--timeout",
+              "flags": "--timeout <s>",
+              "description": "Stop ffprobe/ffmpeg after this many seconds (the receipt is then incomplete)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "1800"
+            }
+          ]
+        },
+        {
+          "command": "media frames",
+          "description": "Extract evenly spaced frames (and an optional contact sheet) with a manifest pinned to the source sha256; extraction only, nothing is reviewed or uploaded",
+          "positionals": [
+            {
+              "name": "file",
+              "description": "",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--output-dir",
+              "flags": "--output-dir <dir>",
+              "description": "Directory for frame-NNN.png, sheet.png and frames.json (existing ones are not overwritten)",
+              "required": true,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--count",
+              "flags": "--count <n>",
+              "description": "Number of frames, 1-100",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "9"
+            },
+            {
+              "long": "--sheet",
+              "flags": "--sheet",
+              "description": "Also build sheet.png, a grid of all frames",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--sheet-width",
+              "flags": "--sheet-width <px>",
+              "description": "Tile width in the contact sheet",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "320"
+            },
+            {
+              "long": "--timeout",
+              "flags": "--timeout <s>",
+              "description": "Time limit per ffmpeg call",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "300"
+            }
+          ]
+        },
+        {
+          "command": "media check-receipt",
+          "description": "Check that a media verify receipt vouches for this exact file (sha256 match and a pass verdict)",
+          "positionals": [
+            {
+              "name": "receipt",
+              "description": "",
+              "required": true,
+              "variadic": false
+            },
+            {
+              "name": "file",
+              "description": "",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": []
+        },
+        {
+          "command": "media profiles",
+          "description": "List the built-in verify profiles with their versions and thresholds",
+          "positionals": [],
+          "options": []
+        },
         {
           "command": "media optimize",
           "description": "Optimize a single media file (video, audio, or image)",

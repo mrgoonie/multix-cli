@@ -248,7 +248,10 @@ export function classifyError(error: unknown): ErrorInfo {
       );
     }
     if (error.code === "VALIDATION_ERROR") {
-      return build(codeFromText(message) === "NOT_FOUND" ? "NOT_FOUND" : "INVALID_INPUT", message);
+      const code = codeFromText(message);
+      // A missing ffmpeg/ffprobe is a setup blocker the caller fixes by installing it.
+      if (code === "BINARY_MISSING") return build(code, message);
+      return build(code === "NOT_FOUND" ? "NOT_FOUND" : "INVALID_INPUT", message);
     }
     if (error.code === "POLL_TIMEOUT") return build("TIMEOUT", message);
     if (error.code === "UNKNOWN_REMOTE_STATE") return build("UNKNOWN_REMOTE_STATE", message);

@@ -93,4 +93,15 @@ describe("classifyError", () => {
       EXIT_CODES.config,
     );
   });
+
+  it("reports a missing ffmpeg or ffprobe as a binary to install, not bad input", () => {
+    const info = classifyError(
+      new ValidationError("ffprobe not found on PATH — install ffmpeg which bundles ffprobe"),
+    );
+    expect(info.code).toBe("BINARY_MISSING");
+    expect(info.exit_code).toBe(EXIT_CODES.config);
+    expect(classifyError(new ValidationError("--profile must be one of: audio")).code).toBe(
+      "INVALID_INPUT",
+    );
+  });
 });

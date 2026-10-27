@@ -1,5 +1,6 @@
 /**
- * Registers the `media` command group: optimize, split, batch.
+ * Registers the `media` command group: optimize, split, batch, and the
+ * read-only quality commands inspect, verify, frames, check-receipt, profiles.
  */
 
 import fs from "node:fs";
@@ -9,6 +10,7 @@ import { ValidationError } from "../../core/errors.js";
 import { createLogger } from "../../core/logger.js";
 import { batchOptimize } from "./batch.js";
 import { extToKind } from "./detect-type.js";
+import { registerMediaQualityCommands } from "./media-quality-commands.js";
 import { optimizeAudio } from "./optimize-audio.js";
 import { optimizeImage } from "./optimize-image.js";
 import { optimizeVideo } from "./optimize-video.js";
@@ -18,8 +20,10 @@ export function registerMediaCommands(program: Command): void {
   const media = program
     .command("media")
     .description(
-      "Media processing via ffmpeg/ImageMagick: compress video/audio/images, split long videos, batch optimize directories",
+      "Media processing via ffmpeg/ImageMagick: compress video/audio/images, split long videos, batch optimize directories, inspect and verify media offline",
     );
+
+  registerMediaQualityCommands(media);
 
   // ── optimize ──────────────────────────────────────────────────────────────
   media

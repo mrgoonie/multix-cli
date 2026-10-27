@@ -46,6 +46,8 @@ export const PROJECT_ENV_EXCLUDED: ReadonlySet<string> = new Set([
   "MULTIX_CACHE_DIR",
   // Per-run: one id in a project file would merge every run's spend into one operation.
   "MULTIX_OPERATION_ID",
+  // Decides which ffmpeg or interpreter runs; `media verify` hands it to custom rules.
+  "PATH",
 ]);
 
 /** The documented MULTIX_* settings a project may choose. */

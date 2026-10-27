@@ -83,6 +83,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # The media inspect/verify tests decode real files; they skip where ffmpeg is absent.
+      - name: Install ffmpeg
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+
       - name: Lint
         run: npm run lint
 
