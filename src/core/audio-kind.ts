@@ -102,7 +102,11 @@ export function parseAudioContentType(value: string | null | undefined): AudioCo
   return out;
 }
 
-/** True when the bytes start like an MP3 (ID3 tag or MPEG frame sync). */
+/**
+ * True when the bytes start like an MP3 (ID3 tag or MPEG frame sync). Checks
+ * audio that was requested as mp3; ADTS AAC also passes, so use
+ * {@link sniffAudioKind} to tell what unknown bytes are.
+ */
 export function looksLikeMp3(bytes: Uint8Array): boolean {
   if (bytes.length < 3) return false;
   if (bytes[0] === 0x49 && bytes[1] === 0x44 && bytes[2] === 0x33) return true;
