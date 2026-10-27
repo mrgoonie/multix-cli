@@ -202,9 +202,6 @@ function rangedCheck(
   return { id, rule_version: "1", status, severity, unit: "s", threshold, findings };
 }
 
-/** Containers whose duration ffprobe estimates from the bitrate. */
-const RAW_FORMATS = /^(mp3|aac|ac3|eac3|dts|truehd|mlp|h264|hevc|m4v|mpegvideo)$/;
-
 const MEASURED_CHECKS = new Set([
   "black",
   "freeze",
@@ -255,16 +252,16 @@ export function judge(
   if (report.kind === null || !kindOk) return { checks, notMeasured };
 
   // Integrity: the whole file decodes without errors, as far as its decoded streams claim to
-  // run. The container's duration can count tracks that were not decoded, and for raw
-  // elementary formats (mp3, aac, ac3) it is only estimated from the bitrate, so no
-  // truncation is asserted from it there.
+  // run. The container's duration can count tracks that were not decoded, and when ffprobe
+  // only estimated it from the bitrate (a raw stream with no index or Xing header) no
+  // truncation is asserted from it.
   const videoDecoded = video !== null && profile.media !== "audio";
   const audioDecoded = audio !== null && profile.media !== "image";
   const streamEnds = [
     videoDecoded ? video?.duration_s : null,
     audioDecoded ? audio?.duration_s : null,
   ].filter((d): d is number => typeof d === "number");
-  const estimated = RAW_FORMATS.test(report.format?.format_name ?? "");
+  const estimated = report.format?.duration_estimated === true;
   const declared = estimated
     ? null
     : streamEnds.length > 0
@@ -594,10 +591,10 @@ export async function verifyMedia(input: string, opts: VerifyOptions): Promise<V
   await assertFfprobe();
   await assertFfmpeg();
 
-  const src = await resolveMediaSource(input);
+  const src = await resolveMediaSource(input, opts.signal);
   const profileJson = canonicalJson(opts.profile);
   const ruleFiles = await Promise.all(
-    rules.map(async (file) => ({ file, sha256: (await hashFile(file)).sha256 })),
+    rules.map(async (file) => ({ file, sha256: (await hashFile(file, opts.signal)).sha256 })),
   );
   const ffmpeg = await ffmpegVersion();
   const key = sha256Text(
@@ -688,11 +685,13 @@ export async function verifyMedia(input: string, opts: VerifyOptions): Promise<V
     );
   }
 
-  // The bytes judged must be the bytes named in the receipt.
-  const after = await hashFile(src.resolved);
-  const changed = after.sha256 !== src.sha256;
+  // The bytes judged must be the bytes named in the receipt. A cancelled run is incomplete
+  // anyway, so it does not wait to re-read the file.
+  const cancelled = opts.signal?.aborted === true;
+  const changed = !cancelled && (await hashFile(src.resolved, opts.signal)).sha256 !== src.sha256;
   const summary = summarise(checks);
   const incomplete =
+    cancelled ||
     changed ||
     (analysis !== null && !analysis.completed && (analysis.timed_out || analysis.cancelled)) ||
     summary.unknown > 0;

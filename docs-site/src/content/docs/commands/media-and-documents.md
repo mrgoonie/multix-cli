@@ -124,9 +124,10 @@ seconds). Findings inside them are reported as intentional instead of failing.
 A black hold is also a still picture, so `--allow-black` covers the freeze it
 causes as well.
 
-A receipt never claims more than was measured. A `--timeout`, Ctrl-C, an
-unmeasured check or a file that changed during the run makes it `incomplete`,
-never `pass`. `coverage.model_reviewed` is always `false`, and `not_measured`
+A receipt never claims more than was measured. A `--timeout`, an unmeasured
+check or a file that changed during the run makes it `incomplete`, never
+`pass`. Ctrl-C (or SIGTERM, or closing the terminal) stops the run, removes its
+temporary files and exits with 130 (143, 129) without writing a receipt. `coverage.model_reviewed` is always `false`, and `not_measured`
 lists what was not checked, such as audio/video sync and content correctness.
 
 A custom profile is a JSON file passed with `--profile-file`:

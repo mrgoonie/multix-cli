@@ -149,5 +149,5 @@ export async function inspectMedia(
   input: string,
   opts: InspectOptions = {},
 ): Promise<InspectReport> {
-  return inspectSource(await resolveMediaSource(input), opts);
+  return inspectSource(await resolveMediaSource(input, opts.signal), opts);
 }

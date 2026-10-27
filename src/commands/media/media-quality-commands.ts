@@ -43,32 +43,44 @@ function emit(data: unknown, human: () => string): void {
   console.log(run.json ? JSON.stringify(data) : human());
 }
 
+/** Shell exit status for a run stopped by each signal: 128 + the signal number. */
+const SIGNAL_EXIT: Partial<Record<NodeJS.Signals, number>> = {
+  SIGHUP: 129,
+  SIGINT: 130,
+  SIGTERM: 143,
+};
+
 /**
- * Ctrl-C cancels the running ffmpeg/ffprobe and rule processes, and the command's own
- * cleanup (temp and staging directories) runs before it exits. The listener stays
- * registered for the whole run: a once-listener would be gone by the time execa's exit
- * handler looks, and it would then re-raise the signal and skip that cleanup. A second
- * Ctrl-C exits at once.
+ * Ctrl-C, SIGTERM or a closed terminal (SIGHUP) cancels the running ffmpeg/ffprobe and
+ * rule processes, and the command's own cleanup (temp and staging directories) runs
+ * before it exits with 128 + the signal number, as a shell reports a killed command.
+ * The listeners stay registered for the whole run: a once-listener would be gone by the
+ * time execa's exit handler looks, and it would then re-raise the signal and skip that
+ * cleanup. A second signal exits at once.
  */
 async function cancellable<T>(fn: (signal: AbortSignal) => Promise<T>): Promise<T> {
   const ac = new AbortController();
+  let caught: NodeJS.Signals | undefined;
   const stop = (signal: NodeJS.Signals) => {
-    if (ac.signal.aborted) process.exit(signal === "SIGINT" ? 130 : 143);
+    if (caught) process.exit(SIGNAL_EXIT[signal] ?? 1);
+    caught = signal;
     ac.abort();
   };
-  process.on("SIGINT", stop);
-  process.on("SIGTERM", stop);
+  const signals = Object.keys(SIGNAL_EXIT) as NodeJS.Signals[];
+  for (const signal of signals) process.on(signal, stop);
+  let result: T | undefined;
   try {
-    const result = await fn(ac.signal);
-    if (ac.signal.aborted) throw new ValidationError("Cancelled");
-    return result;
+    result = await fn(ac.signal);
   } catch (e) {
-    if (ac.signal.aborted) throw new ValidationError("Cancelled");
-    throw e;
+    if (!caught) throw e;
   } finally {
-    process.off("SIGINT", stop);
-    process.off("SIGTERM", stop);
+    for (const signal of signals) process.off(signal, stop);
   }
+  if (caught) {
+    process.stderr.write("Cancelled\n");
+    process.exit(SIGNAL_EXIT[caught] ?? 1);
+  }
+  return result as T;
 }
 
 function fmtS(n: number | null | undefined): string {

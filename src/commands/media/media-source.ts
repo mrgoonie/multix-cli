@@ -36,12 +36,13 @@ export function assertLocalPath(input: string): void {
 /** Streams the file through sha256, keeping only its first bytes in memory. */
 export async function hashFile(
   file: string,
+  signal?: AbortSignal,
 ): Promise<{ sha256: string; bytes: number; head: Buffer }> {
   const hash = createHash("sha256");
   const headChunks: Buffer[] = [];
   let headLen = 0;
   let bytes = 0;
-  for await (const chunk of fs.createReadStream(file, { highWaterMark: 1 << 20 })) {
+  for await (const chunk of fs.createReadStream(file, { highWaterMark: 1 << 20, signal })) {
     const buf = chunk as Buffer;
     hash.update(buf);
     bytes += buf.length;
@@ -54,7 +55,10 @@ export async function hashFile(
   return { sha256: hash.digest("hex"), bytes, head: Buffer.concat(headChunks) };
 }
 
-export async function resolveMediaSource(input: string): Promise<MediaSource> {
+export async function resolveMediaSource(
+  input: string,
+  signal?: AbortSignal,
+): Promise<MediaSource> {
   assertLocalPath(input);
   let lstat: fs.Stats;
   try {
@@ -70,7 +74,7 @@ export async function resolveMediaSource(input: string): Promise<MediaSource> {
   }
   if (!fs.statSync(resolved).isFile())
     throw new ValidationError(`Input is not a regular file: ${input}`);
-  const { sha256, bytes, head } = await hashFile(resolved);
+  const { sha256, bytes, head } = await hashFile(resolved, signal);
   return {
     path: input,
     resolved: path.resolve(resolved),

@@ -135,6 +135,21 @@ describe("ffprobe normalisation", () => {
     });
     expect(attached).toMatchObject({ attached_pic: true });
   });
+
+  it("reads Matroska DURATION tags and ffprobe's bitrate estimate warning", () => {
+    const mkv = normaliseStream({
+      index: 0,
+      codec_type: "audio",
+      tags: { DURATION: "00:01:02.500000000" },
+    });
+    expect(mkv).toMatchObject({ duration_s: 62.5 });
+    const json = JSON.stringify({ format: { duration: "6.0" }, streams: [] });
+    expect(parseProbe(json).duration_estimated).toBe(false);
+    expect(
+      parseProbe(json, "[mp3 @ 0x1] Estimating duration from bitrate, this may be inaccurate")
+        .duration_estimated,
+    ).toBe(true);
+  });
 });
 
 describe("local path guard", () => {

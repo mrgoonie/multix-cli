@@ -68,6 +68,8 @@ export interface ProbeInfo {
   start_time_s: number | null;
   bit_rate: number | null;
   probe_score: number | null;
+  /** ffprobe guessed `duration_s` from the bitrate (raw streams without an index or Xing header). */
+  duration_estimated: boolean;
   streams: StreamInfo[];
 }
 
@@ -94,6 +96,19 @@ export function rational(value: unknown): Rational | null {
   const d = Number(m[2]);
   if (!n || !d) return null;
   return { num: n, den: d, value: Math.round((n / d) * 1e6) / 1e6 };
+}
+
+/**
+ * A stream's duration in seconds. Matroska and WebM keep it only in a
+ * `DURATION` tag ("00:01:02.500000000"), not in the stream's `duration`.
+ */
+// biome-ignore lint/suspicious/noExplicitAny: ffprobe JSON
+function streamDuration(s: any): number | null {
+  const own = num(s.duration);
+  if (own !== null) return own;
+  const tag = s.tags?.DURATION ?? s.tags?.duration;
+  const m = typeof tag === "string" ? tag.match(/^(\d+):(\d{2}):(\d{2}(?:\.\d+)?)$/) : null;
+  return m ? Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) : null;
 }
 
 function str(value: unknown): string | null {
@@ -151,7 +166,7 @@ export function normaliseStream(s: any): StreamInfo {
       variable_frame_rate: r && avg ? Math.abs(r.value - avg.value) > 0.01 : null,
       time_base: str(s.time_base),
       start_time_s: num(s.start_time),
-      duration_s: num(s.duration),
+      duration_s: streamDuration(s),
       nb_frames: num(s.nb_frames),
       attached_pic: s.disposition?.attached_pic === 1,
     };
@@ -166,14 +181,17 @@ export function normaliseStream(s: any): StreamInfo {
       channel_layout: str(s.channel_layout),
       time_base: str(s.time_base),
       start_time_s: num(s.start_time),
-      duration_s: num(s.duration),
+      duration_s: streamDuration(s),
     };
   }
   return { index, type: str(s.codec_type) ?? "unknown", codec };
 }
 
-/** Parses ffprobe's `-show_format -show_streams` JSON. */
-export function parseProbe(stdout: string): ProbeInfo {
+/**
+ * Parses ffprobe's `-show_format -show_streams` JSON; `stderr` holds its
+ * warnings, which say when the duration was only estimated.
+ */
+export function parseProbe(stdout: string, stderr = ""): ProbeInfo {
   // biome-ignore lint/suspicious/noExplicitAny: ffprobe JSON
   const data = JSON.parse(stdout) as any;
   const fmt = data.format ?? {};
@@ -184,6 +202,7 @@ export function parseProbe(stdout: string): ProbeInfo {
     start_time_s: num(fmt.start_time),
     bit_rate: num(fmt.bit_rate),
     probe_score: num(fmt.probe_score),
+    duration_estimated: /Estimating duration from bitrate/i.test(stderr),
     streams: (data.streams ?? []).map(normaliseStream),
   };
 }
@@ -198,7 +217,7 @@ export async function probeMedia(resolved: string, opts: ProbeOptions = {}): Pro
     "ffprobe",
     [
       "-v",
-      "error",
+      "warning",
       "-print_format",
       "json",
       "-show_format",
@@ -225,7 +244,7 @@ export async function probeMedia(resolved: string, opts: ProbeOptions = {}): Pro
         .join(" ") || "unreadable media";
     throw new ProviderError(`ffprobe could not read the file: ${reason}`, "ffprobe");
   }
-  return parseProbe(String(result.stdout));
+  return parseProbe(String(result.stdout), String(result.stderr ?? ""));
 }
 
 export function firstVideo(info: ProbeInfo): VideoStreamInfo | undefined {

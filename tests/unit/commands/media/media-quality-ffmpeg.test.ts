@@ -90,6 +90,12 @@ describe.skipIf(!hasFfmpeg)("media quality with ffmpeg", { timeout: 60_000 }, ()
       ...["-f", "lavfi", "-i", "anoisesrc=d=6:a=0.05,volume='if(lt(t,3),1,0.01)':eval=frame"],
       ...["-c:a", "libmp3lame", "-q:a", "2", "-write_xing", "0", f("vbr.mp3")],
     );
+    // An mp3 whose Xing header declares 6 s, cut to its first half.
+    ff("-f", "lavfi", "-i", "sine=d=6", "-c:a", "libmp3lame", f("xing.mp3"));
+    const mp3 = fs.readFileSync(f("xing.mp3"));
+    fs.writeFileSync(f("trunc.mp3"), mp3.subarray(0, Math.floor(mp3.length / 2)));
+    // Matroska keeps stream lengths only in DURATION tags.
+    ff("-i", f("short-video.mp4"), "-c", "copy", f("short-video.mkv"));
   });
 
   afterAll(() => {
@@ -281,15 +287,32 @@ describe.skipIf(!hasFfmpeg)("media quality with ffmpeg", { timeout: 60_000 }, ()
       expect(r.summary.unknown).toBeGreaterThan(0);
     });
 
-    it("stops decoding when cancelled", async () => {
+    it("does not start reading a file once cancelled", async () => {
       const ac = new AbortController();
       ac.abort();
-      const r = await verifyMedia(f("t.mp4"), {
+      await expect(
+        verifyMedia(f("t.mp4"), { profile: builtinProfile("motion-graphics"), signal: ac.signal }),
+      ).rejects.toThrow(/abort/i);
+    });
+
+    it("reports incomplete when cancelled mid-run", async () => {
+      const started = f("rule-started");
+      const rule = f("slow-rule.mjs");
+      fs.writeFileSync(
+        rule,
+        `import fs from "node:fs";\nfs.writeFileSync(${JSON.stringify(started)}, "");\nsetTimeout(() => {}, 20000);\n`,
+      );
+      const ac = new AbortController();
+      const run = verifyMedia(f("square.mp4"), {
         profile: builtinProfile("motion-graphics"),
+        rules: [rule],
         signal: ac.signal,
       });
+      while (!fs.existsSync(started)) await new Promise((r) => setTimeout(r, 25));
+      ac.abort();
+      const r = await run;
       expect(r.status).toBe("incomplete");
-      expect(r.coverage.completed).toBe(false);
+      expect(check(r, "rule:slow-rule.mjs").status).toBe("unknown");
     });
   });
 
@@ -308,6 +331,29 @@ describe.skipIf(!hasFfmpeg)("media quality with ffmpeg", { timeout: 60_000 }, ()
       });
       expect(r.status).toBe("fail");
       expect(check(r, "track_lengths")).toMatchObject({ status: "fail", severity: "error" });
+    });
+
+    it("reads stream lengths from Matroska's DURATION tags", async () => {
+      const r = await verifyMedia(f("short-video.mkv"), {
+        profile: builtinProfile("camera-footage"),
+      });
+      expect(check(r, "track_lengths").status).toBe("fail");
+      const audioOnly = await verifyMedia(f("short-video.mkv"), {
+        profile: builtinProfile("audio"),
+      });
+      expect(check(audioOnly, "decode").status).toBe("pass");
+      const m = await extractFrames(f("short-video.mkv"), { outDir: f("mkv-frames"), count: 3 });
+      expect(Math.max(...m.frames.map((x) => x.requested_s))).toBeLessThan(2);
+    });
+
+    it("fails an mp3 cut short of the length its Xing header declares", async () => {
+      expect(
+        check(await verifyMedia(f("xing.mp3"), { profile: builtinProfile("audio") }), "decode")
+          .status,
+      ).toBe("pass");
+      const r = await verifyMedia(f("trunc.mp3"), { profile: builtinProfile("audio") });
+      expect(r.status).toBe("fail");
+      expect(check(r, "decode").status).toBe("fail");
     });
 
     it("does not call a file truncated from durations it did not decode or that are estimates", async () => {

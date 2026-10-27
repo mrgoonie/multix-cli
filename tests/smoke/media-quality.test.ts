@@ -177,7 +177,7 @@ describe("media inspect/verify (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
         expect(staged()).toHaveLength(1);
         child.kill("SIGINT");
         const res = await child;
-        expect(res.exitCode).not.toBe(0);
+        expect(res.exitCode).toBe(130);
         expect(staged()).toEqual([]);
         expect(fs.readdirSync(out).filter((n) => n.endsWith(".png"))).toEqual([]);
       },

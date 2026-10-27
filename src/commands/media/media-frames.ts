@@ -73,7 +73,7 @@ export async function extractFrames(input: string, opts: FramesOptions): Promise
     throw new ValidationError(
       `Output directory already holds ${taken[0]}; pick another --output-dir so earlier frames are not overwritten`,
     );
-  const src = await resolveMediaSource(input);
+  const src = await resolveMediaSource(input, opts.signal);
   const probe = await probeMedia(src.resolved, opts);
   const video = firstVideo(probe);
   if (!video) throw new ValidationError("No video stream to sample frames from");

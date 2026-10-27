@@ -122,3 +122,104 @@ There are no tests for:
 10. Fixed: `--allow-black` ranges also cover freeze findings.
 11. Fixed: an empty number flag is invalid.
 12. Fixed with 1.
+
+## Re-review
+
+Commit: 471395f. Reviewed by a separate agent that did not write the fix.
+Gates: build, typecheck and lint pass; the 122 targeted media and classifier tests pass.
+Each finding was reproduced with dist/cli.js and ffmpeg 6.1.1. For the regressions, the old behaviour was confirmed by building 471395f^ separately.
+
+### Per finding
+
+| # | Verdict | Evidence |
+|---|---|---|
+| 1 | Resolved | `thumb%03d.png` (black) next to `thumb000.png` (pattern): verify now hashes and judges the black file (black_percent=100, fail). `j%d.jpg`, `100%.png`, `v%03d.mp4`, `a%03d.mp3` and `w%d.wav` all verify. ffprobe accepts `-pattern_type none` for mp4, mkv, mp3 and wav. ffprobe 4.4 only warns about unused demuxer options, so older ffprobe is not a regression. ffmpeg gets the flag only for image2 inputs; without that guard it fails with "Option pattern_type not found". |
+| 2 | Resolved | A rule running `sleep` with `--rule-timeout 2` finishes in 2.65 s. Backgrounded (`&`) and subshell grandchildren are killed after the rule exits. A rule that escapes with `setsid` still survives; it is local user code, so this is not a trust boundary. See new finding N3 for parent-exit cases. |
+| 3 | Partly resolved | mp4: 2 s of video with 4 s of audio now fails `track_lengths`. **Not resolved for mkv or webm.** ffprobe reports stream `duration=N/A` there (only `tags.DURATION`), so the check is skipped and `shortv.mkv` and `shortv.webm` still pass camera-footage. See N2. |
+| 4 | Partly resolved | (a) A VBR mp3 without a Xing header passes. (b) `--profile audio` on an mp4 with a short audio track passes. **(b) is not resolved for mkv:** `shorta.mkv --profile audio` still fails with "decoded 2.0 s of a declared 4.023 s (truncated)", because the stream durations are null and the check falls back to the format duration. (a) introduced regression N1. |
+| 5 | Partly resolved | mp4: frames sample over 2 s. **mkv still fails** with "could not extract a frame at 2.514 s", for the same null stream duration (N2). |
+| 6 | Resolved | SIGINT and SIGTERM (to the pid, and to the whole group) during `frames --count 100` leave no staging dir and no ffmpeg. SIGINT during a rule leaves no rule temp dir and no rule process. Before the fix, SIGINT to the pid left the rule's `sleep` and its temp dir behind. See N4 and N5 for side effects. |
+| 7 | Resolved | `--profile-file ffmpeg-missing.json` now gives INVALID_INPUT, not BINARY_MISSING. Note: `assertMagick` (magick-runner.ts:16) still throws a ValidationError and is classified INVALID_INPUT. That behaviour predates this feature and is not a regression; switching it to MissingBinaryError would be a follow-up issue. |
+| 8 | Resolved | These receipts are all rejected as INVALID_INPUT with no crash: `null`, `{data:null}` in an envelope, a bare string, a receipt without `profile`, and one with an unknown status. The docs now say receipts are unsigned. |
+| 9 | Resolved (documented) | README, docs-site (en/vi) and SKILL.md say only the rule's own file is hashed and that the cache dir is trusted local state. VERIFY_ENGINE was not bumped, which is fine because the feature has not shipped (147906b is not on origin/main). |
+| 10 | Resolved | camera-footage with a black tail and `--allow-black 4-6`: black and freeze both pass as intentional. A red still at 6-9 s right after an allowed black range at 4-6 s still fails freeze. The allowed range covers only freezes contained in it. |
+| 11 | Resolved | `--loudness ""` and `--loudness " "` are now invalid. |
+| 12 | Resolved | `--output-dir '.../o2 50%d' --sheet` writes 4 frames and sheet.png. |
+
+### New findings
+
+**N1. Major (regression): a truncated mp3 with a Xing/Info header now passes `decode`.**
+- Where: media-verify.ts:206 (`RAW_FORMATS`) and :267-272.
+- Cause: `estimated` is true for every `mp3` (and `aac`, `ac3`, …) container, so `declared` becomes null and truncation is never asserted. libmp3lame, LAME and ffmpeg write a Xing/Info header by default, so most mp3 files do have an exact duration.
+- Repro: take a 24 s VBR mp3 written by ffmpeg (Xing present) and cut it to half its bytes with `head -c`. The new build returns `pass` with decoded_s=11.9, declared_duration_s=null, declared_duration_estimated=true and error_count=0. The old build returned `fail`: "decoded 11.9 s of a declared 24.03 s (truncated)".
+- Signals available: ffprobe reports 24.03 s for that file and warns "filesize and duration do not match (growing file?)". It warns "Estimating duration from bitrate, this may be inaccurate" only for files without a header.
+- Impact: a cut-off download or upload of an mp3 gets a `pass` receipt. This is exactly the failure verify exists to catch.
+- Fix: mark the duration as estimated only when ffprobe says so.
+  - Run the probe with `-v warning` (or a second, stderr-only pass) and set the flag when stderr matches `Estimating duration from bitrate`.
+  - Treat `filesize and duration do not match` as truncation evidence.
+  - Keep the bitrate-only exemption for adts aac, which has no header.
+  - Add a test with a cut mp3 that has a Xing header.
+
+**N2. Medium: mkv and webm have no per-stream `duration`, so the fixes for 3, 4b and 5 do not apply to them.**
+- Where: media-probe.ts:154 and :169 (`duration_s: num(s.duration)`).
+- Repro (ffmpeg-muxed `.mkv`/`.webm`, 2 s video + 4 s audio, and the reverse):
+  - `track_lengths` is skipped and camera-footage passes.
+  - `--profile audio` on the reverse file fails as truncated.
+  - `media frames` fails at 2.51 s.
+- Fix: in `normaliseStream`, when `duration` is N/A, fall back to parsing `tags.DURATION` (`HH:MM:SS.fffffffff`, written by the Matroska muxer). Add mkv fixtures to the tests for 3, 4 and 5.
+
+**N3. Low (regression): a detached rule outlives the CLI when the parent dies from a signal it does not handle.**
+- Where: media-rule.ts:118 (`detached: posix`) together with media-quality-commands.ts:59-60.
+- Cause: execa skips its `cleanup` for detached children. The rule's own process group no longer receives the terminal's SIGHUP or Ctrl-C. Only SIGINT and SIGTERM are handled.
+- Repro: a `.sh` rule running `sleep` with `--rule-timeout 60`.
+  - SIGHUP to node: the `sleep` survives and the `multix-rule-*` temp dir is left behind. Before the fix, closing the terminal killed the whole foreground group.
+  - SIGKILL to node: the same leak, but it also leaked before the fix.
+- Fix:
+  - Add `SIGHUP` to the signals `cancellable` listens for.
+  - In runRule, register a `process.on("exit")` hook that synchronously calls `process.kill(-pid, "SIGKILL")` while the rule is running. `exit` also fires on the second-signal `process.exit`.
+  - SIGKILL cannot be handled. Document that limit.
+
+**N4. Low/Medium: a cancel is reported as INVALID_INPUT with exit code 2.**
+- Where: media-quality-commands.ts:63 and :66 (`throw new ValidationError("Cancelled")`).
+- Effect: SIGINT and SIGTERM now end with `{"code":"INVALID_INPUT","message":"Cancelled","hint":"Fix the flagged input; nothing was billed…"}` and exit code 2. Before the fix they ended with 130/143. Agents and CI read exit 2 as a usage error, and the hint is wrong.
+- Fix: after cleanup, remove the listeners and re-raise the signal with `process.kill(process.pid, signal)`. Or set `process.exitCode = 130/143` and use a dedicated cancelled error that does not go through INVALID_INPUT.
+
+**N5. Low: the first Ctrl-C is ignored while the source is hashed.**
+- Where: media-quality-commands.ts:55-60, and media-source.ts:37 (`hashFile` takes no signal).
+- Cause: the listener now replaces Node's default exit, and hashing does not watch the abort signal.
+- Repro: an 8 GB file, SIGINT 1 s into verify. The process exited 43 s later, after the full hash. The same happens for the second hash at media-verify.ts:692.
+- Fix: pass the AbortSignal to `hashFile` and stop between chunks. `stream.pipeline(..., { signal })` or a per-chunk `signal.throwIfAborted()` would do.
+
+**N6. Info: the post-exit `killTree()` (media-rule.ts:155) sends SIGKILL to the process group whose ID was the rule's pid, after that pid has been reaped.**
+- Linux does not reuse a pid while it is still a live process-group ID, so this is safe while grandchildren exist. When none remain, the call hits a stranger only if the pid has already been recycled as a new group leader. That is negligible, but worth a comment.
+- Windows (by design, per the code comment): grandchildren are killed only on timeout or cancel, not after a normal exit. I could not run Windows here.
+
+### Checked and confirmed OK (fix-specific)
+
+- **Other commands:** the signal listeners are removed in `finally`, so other commands keep Node's default signal behaviour.
+- **Second signal:** a second signal exits at once. execa's cleanup still reaps non-detached ffmpeg.
+- **AAC priming:** `track_lengths` passes normal mp4s whose audio is a few tens of ms longer (ok.mp4, full mkv). Audio that is shorter than the video gives only a warning. Images never run the check, since only `media: "video"` profiles do.
+- **Cut faststart mp4:** half the bytes still fails decode ("decoded 4.48 s of a declared 10 s", plus 3 decode errors), because `declared` comes from the stream durations in the moov at the front. A cut mkv still fails.
+- **adts aac:** a cut adts aac still fails, but only through its decode errors. A cut on a frame boundary would pass, and that limit was there before the fix.
+- **Contact sheet:** `media frames` runs ffmpeg with its cwd in the staging dir, and the input stays an absolute `file:` path.
+
+### Test gaps still open
+
+- a truncated mp3 with a Xing header (N1);
+- mkv or webm with unequal tracks (N2);
+- a CLI-level SIGHUP during a rule (N3);
+- the exit code of a cancelled run (N4).
+
+Status: DONE_WITH_CONCERNS
+Summary: 8 of 12 findings are fully resolved (1, 2, 6, 7, 8, 10, 11, 12) and 9 is resolved by documentation. 3, 4 and 5 are fixed for mp4 but not for mkv or webm. The raw-format exemption brings a Major regression: a truncated mp3 with a Xing header now passes.
+
+## Re-review resolution (author)
+
+- N1 (truncated Xing mp3 passed): fixed. The format-name list is gone; a duration counts as estimated only when ffprobe (now run at `-v warning`) prints "Estimating duration from bitrate", exposed as `format.duration_estimated`. A 6 s Xing mp3 cut in half now fails `decode`; the VBR mp3 without a Xing header still passes with `declared_duration_estimated: true`.
+- N2 (mkv/webm stream durations): fixed. A stream without `duration` falls back to its `DURATION` tag, so findings 3, 4b and 5 now hold for Matroska too (test: `short-video.mkv` fails `track_lengths`, passes `decode` under `--profile audio`, and `media frames` samples only the picture's 2 s).
+- N3 (SIGHUP): fixed. SIGHUP is handled like SIGINT/SIGTERM, so closing the terminal cancels the run and kills the rule's process group through the abort path.
+- N4 (cancel reported as INVALID_INPUT): fixed. After cleanup a cancelled CLI run exits with 128 + the signal (130, 143, 129) and prints "Cancelled" on stderr; the smoke test asserts 130. The library API still returns an `incomplete` receipt when cancelled mid-run, and it skips the post-run re-hash since the receipt is incomplete anyway.
+- N5 (Ctrl-C ignored while hashing): fixed. `hashFile` takes the abort signal (`createReadStream({ signal })`), so the source and rule hashes stop on the first Ctrl-C.
+- N6: accepted as documented; no Windows runner was available to test grandchild cleanup after a normal exit.
+
+Evidence: lint and typecheck clean; `npm test` 125 files passed (8 skipped), 2202 tests passed; `check:mcp` 393 tests passed and the bundle is clean; `verify:docs` 0 errors, 8/8 passed; the worker catalog is unchanged.

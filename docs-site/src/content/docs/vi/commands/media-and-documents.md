@@ -121,9 +121,11 @@ lại được `--allow-black`, `--allow-freeze` và `--allow-silence <start-end
 vì bị fail. Đoạn giữ màn hình đen cũng là hình đứng yên, nên `--allow-black`
 đồng thời che luôn phần đứng hình mà nó gây ra.
 
-Biên nhận không bao giờ khẳng định nhiều hơn những gì đã đo. `--timeout`,
-Ctrl-C, một check không đo được hoặc file bị thay đổi trong lúc chạy sẽ cho
-kết quả `incomplete`, không bao giờ là `pass`. `coverage.model_reviewed` luôn
+Biên nhận không bao giờ khẳng định nhiều hơn những gì đã đo. `--timeout`, một
+check không đo được hoặc file bị thay đổi trong lúc chạy sẽ cho kết quả
+`incomplete`, không bao giờ là `pass`. Ctrl-C (hoặc SIGTERM, hoặc đóng
+terminal) dừng lần chạy, xoá file tạm và thoát với mã 130 (143, 129) mà không
+ghi biên nhận. `coverage.model_reviewed` luôn
 là `false`, và `not_measured` liệt kê những gì không được kiểm tra, như đồng
 bộ audio/video và tính đúng đắn của nội dung.
 
