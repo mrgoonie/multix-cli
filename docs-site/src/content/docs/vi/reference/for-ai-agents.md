@@ -71,6 +71,8 @@ https://multix.zuey.me/llms.txt
   "command": "gemini generate",
   "provider": "gemini",
   "model": "gemini-2.5-flash-image",
+  "model_requested": "gemini-2.5-flash-image",
+  "model_resolved": "gemini-2.5-flash-image",
   "duration_ms": 8120,
   "outputs": [
     { "path": "gemini-image-1.webp", "bytes": 184220, "mime": "image/webp",
@@ -92,6 +94,8 @@ https://multix.zuey.me/llms.txt
 | `error` | `code`, `message`, `retryable`, `retry_after_s`, `hint`, `http_status`, `env` (tên key khi thiếu key). Query string của URL trong `message` và `log` đều bị che, kể cả URL đầu vào đã ký mà provider lặp lại trong thông báo lỗi. |
 | `usage` | Số liệu provider trả về: `tokens` (`input`, `output`, `total`, `thinking`), `cost_usd`, `credits` và các `metrics` dạng số khác theo key path. `sources.cost_usd` / `sources.credits` ghi nguồn của từng số (ví dụ `api.elevenlabs.io header.character-cost`). Không ước tính: số ước tính hoặc báo giá của provider (như `estimatedCost` của Runway) chỉ nằm trong `metrics`, không bao giờ được báo là `cost_usd` hay `credits`. `cost_usd` và `credits` là số đã tiêu cho lần chạy: số dư tài khoản (`apiCredit` của Leonardo từ `leonardo me`, credit còn lại hoặc credit đi kèm gói của HeyGen từ `heygen me`) không bao giờ được tính vào `credits` hay `cost_usd`. |
 | `http` | Số request tới provider, số request lỗi và tổng thời gian. |
+| `model_requested` / `model_resolved` | Model mà lần chạy yêu cầu (request đầu tiên có ghi model, nếu không có thì lấy `--model`; `model` giữ cùng giá trị để tương thích) và model mà provider báo đã phục vụ request đó (`model` của OpenAI/OpenRouter, `modelVersion` của Gemini, header `openai-model`). `model_resolved` là `null` khi provider không báo hoặc chưa gửi gì; không bao giờ đoán. |
+| `job` | `{ provider, id, attempt }` khi provider trả về job id hoặc request id: prediction đang được theo dõi (Atlas Cloud), nếu không thì là id của lần submit gần nhất provider chấp nhận (`request_id` của fal, prediction của Replicate). `attempt` là 1, trừ khi lệnh submit phải gửi lại sau một lần gửi lỗi (ví dụ 429). |
 | `provider_ids` | Request id, job id hoặc prediction id provider trả về. |
 | `request` | Với `--dry-run`: request lẽ ra đã được gửi. Giá trị header, các trường có tên dạng secret và query string của URL (URL đã ký) đều bị che; giá trị header duy nhất được hiển thị là `model` của Fish Audio (trong `header_values`), vì nó quyết định model nào chạy và bị tính phí, và không chứa secret. |
 | `estimate` | Giá ước tính trước khi chạy (với `--estimate`, `--max-cost`, hoặc với lệnh có bảng giá). `estimate_only: true` đánh dấu lần chạy `--estimate`. |
@@ -240,7 +244,8 @@ Mỗi lệnh provider ghi thêm một dòng vào `~/.multix/history.jsonl` (quy�
 0600, xoay vòng ở 20 MB): id, thời điểm, thời lượng, lệnh, provider, model,
 argv (giá trị của option có tên kiểu key, token, secret hoặc password bị che),
 kết quả và mã lỗi, output kèm kích thước và hash, usage của provider (tokens,
-cost, credits, metrics), số liệu HTTP và id phía provider. Key và signed URL
+cost, credits, metrics), số liệu HTTP, id phía provider, cùng
+`model_requested`, `model_resolved` và `job` giống envelope. Key và signed URL
 không bao giờ được ghi.
 
 ```bash

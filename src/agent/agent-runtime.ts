@@ -30,6 +30,7 @@ import { type OutputFile, type OutputWarning, inspectOutput } from "./output-fil
 import { installOutputFileTracker, producedFiles } from "./output-file-tracker.js";
 import {
   ENVELOPE_SCHEMA,
+  type JobIdentity,
   type ResultEnvelope,
   nextForError,
   stdoutPayload,
@@ -202,6 +203,18 @@ function logWarnings(): Array<{ code: "LOG_WARNING"; message: string }> {
   return out;
 }
 
+/**
+ * Provider job identity: the submitted job the run tracked (an Atlas Cloud
+ * prediction), else the id of the latest submit the provider accepted.
+ * Undefined when no provider returned an id.
+ */
+function jobIdentity(): JobIdentity | undefined {
+  const id = run.inFlight?.id ?? run.job?.id;
+  if (!id) return undefined;
+  const attempt = run.job?.id === id ? run.job.attempt : 1;
+  return { provider: run.group, id, attempt };
+}
+
 interface FinalizeInput {
   exitCode: number;
   error?: unknown;
@@ -264,6 +277,11 @@ export function finalizeRun(input: FinalizeInput): number {
   const historyId = recorded ? newHistoryId(run.startedAt) : undefined;
   const optionModel = typeof run.options.model === "string" ? run.options.model : undefined;
   const model = run.requestModel ?? optionModel;
+  // `model` stays for compatibility; the pair says what was asked and what the provider served.
+  const models = model
+    ? { model_requested: model, model_resolved: notSent ? null : (run.resolvedModel ?? null) }
+    : {};
+  const job = notSent ? undefined : jobIdentity();
   const usage = SPEND_LOOKUPS.test(run.command) ? undefined : summarizeUsage();
   const httpErrors = run.calls.filter((c) => c.status === 0 || c.status >= 400).length;
   const http = run.calls.length
@@ -303,6 +321,8 @@ export function finalizeRun(input: FinalizeInput): number {
       command: run.command,
       provider: run.group,
       ...(model ? { model } : {}),
+      ...models,
+      ...(job ? { job } : {}),
       argv: redactArgv(run.argv),
       ok: !failed,
       exit_code: exitCode,
@@ -336,6 +356,8 @@ export function finalizeRun(input: FinalizeInput): number {
       command: run.command,
       ...(run.group ? { provider: run.group } : {}),
       ...(model ? { model } : {}),
+      ...models,
+      ...(job ? { job } : {}),
       ...(dryRun ? { dry_run: true } : {}),
       ...(estimateOnly ? { estimate_only: true } : {}),
       duration_ms: duration,

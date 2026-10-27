@@ -71,6 +71,8 @@ https://multix.zuey.me/llms.txt
   "command": "gemini generate",
   "provider": "gemini",
   "model": "gemini-2.5-flash-image",
+  "model_requested": "gemini-2.5-flash-image",
+  "model_resolved": "gemini-2.5-flash-image",
   "duration_ms": 8120,
   "outputs": [
     { "path": "gemini-image-1.webp", "bytes": 184220, "mime": "image/webp",
@@ -92,6 +94,8 @@ https://multix.zuey.me/llms.txt
 | `error` | `code`, `message`, `retryable`, `retry_after_s`, `hint`, `http_status`, `env` (the key name when one is missing). URL query strings in `message` and `log` are redacted, including a pre-signed input URL a provider echoes back in its error. |
 | `usage` | What the provider reported: `tokens` (`input`, `output`, `total`, `thinking`), `cost_usd`, `credits`, and other numeric `metrics` by key path. `sources.cost_usd` / `sources.credits` name where each number came from (for example `api.elevenlabs.io header.character-cost`). Nothing is estimated: a provider's own estimate or quote (such as Runway `estimatedCost`) stays in `metrics` and is never reported as `cost_usd` or `credits`. `cost_usd` and `credits` are what the run spent: an account balance (Leonardo `apiCredit` from `leonardo me`, HeyGen remaining or included credits from `heygen me`) is never reported as `credits` or `cost_usd`. |
 | `http` | Provider request count, failed requests and total time. |
+| `model_requested` / `model_resolved` | The model the run asked for (the first request that names one, else `--model`; `model` is the same value, kept for compatibility) and the model the provider reported serving that request (OpenAI/OpenRouter `model`, Gemini `modelVersion`, the `openai-model` header). `model_resolved` is `null` when the provider reported none or nothing was sent; it is never guessed. |
+| `job` | `{ provider, id, attempt }` when a provider returned a job or request id: a tracked prediction (Atlas Cloud), else the id from the latest submit the provider accepted (a fal `request_id`, a Replicate prediction). `attempt` is 1 unless the submit was sent again after a failed send (such as a 429). |
 | `provider_ids` | Request, job or prediction ids the provider returned. |
 | `request` | With `--dry-run`: the request that would have been sent. Header values, secret-named fields and URL query strings (pre-signed URLs) are redacted; the one header value shown is Fish Audio's `model` (in `header_values`), because it chooses what runs and is billed and holds no secret. |
 | `estimate` | Pre-flight price of the run (with `--estimate`, `--max-cost`, or on a priced command). `estimate_only: true` marks an `--estimate` run. |
@@ -241,7 +245,8 @@ Each provider command appends one line to `~/.multix/history.jsonl` (file mode
 0600, rotated at 20 MB): id, time, duration, command, provider, model, argv
 (values of options named like key, token, secret or password are redacted),
 outcome and error code, outputs with size and hash, provider usage (tokens,
-cost, credits, metrics), HTTP counts and provider ids. Keys and signed URLs are
+cost, credits, metrics), HTTP counts, provider ids, and the same
+`model_requested`, `model_resolved` and `job` as the envelope. Keys and signed URLs are
 never written.
 
 ```bash

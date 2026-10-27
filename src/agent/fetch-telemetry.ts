@@ -122,7 +122,10 @@ export function installFetchTelemetry(onDryRun: (request: DryRunRequest) => neve
       host = u.host;
       path = u.pathname;
     } catch {}
-    if (!run.requestModel) run.requestModel = modelFromRequest(path, init?.body);
+    const named = modelFromRequest(path, init?.body);
+    if (!run.requestModel) run.requestModel = named;
+    // The response to the request that named the run's model reports which model served it.
+    const namesRunModel = named !== undefined && named === run.requestModel;
     let response: Response;
     run.requestsStarted++;
     try {
@@ -131,9 +134,11 @@ export function installFetchTelemetry(onDryRun: (request: DryRunRequest) => neve
       run.calls.push({ method, host, path, status: 0, ms: Date.now() - started });
       throw error;
     }
+    const attempt = sendAttempt(method, host, path);
     run.calls.push({ method, host, path, status: response.status, ms: Date.now() - started });
+    const call = { index: run.calls.length - 1, attempt, namesRunModel };
     // Read in the background: the caller keeps its own size caps and stall detection.
-    const pending = recordUsage(response, method, host, path).catch(() => {
+    const pending = recordUsage(response, method, host, path, call).catch(() => {
       // Telemetry never breaks a command.
     });
     pendingReads.add(pending);
@@ -159,6 +164,51 @@ export function modelFromRequest(path: string, body: unknown): string | undefine
     }
   } catch {}
   return undefined;
+}
+
+/**
+ * Which send of this request the current one is: 1 plus the failed sends of
+ * the same method and endpoint right before it (a retried 429 or network
+ * error), back to the last one that succeeded.
+ */
+function sendAttempt(method: string, host: string, path: string): number {
+  let attempt = 1;
+  for (let i = run.calls.length - 1; i >= 0; i--) {
+    const c = run.calls[i];
+    if (!c || c.method !== method || c.host !== host || c.path !== path) continue;
+    if (c.status !== 0 && c.status < 400) break;
+    attempt++;
+  }
+  return attempt;
+}
+
+/** A model name a provider reports, or undefined. */
+function modelName(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 && value.length <= 200 ? value : undefined;
+}
+
+/**
+ * The model a response says served the request: a top-level `model`
+ * (OpenAI, OpenRouter, BytePlus, Replicate) or `modelVersion` (Gemini) in the
+ * JSON body, `modelVersion` in the tail of an oversized one, or the
+ * `openai-model` header. Undefined when it names none; never guessed.
+ */
+export function modelFromResponse(
+  body: unknown,
+  headers: Headers,
+  tail?: string,
+): string | undefined {
+  if (body && typeof body === "object" && !Array.isArray(body)) {
+    const obj = body as Record<string, unknown>;
+    const named = modelName(obj.model) ?? modelName(obj.modelVersion);
+    if (named) return named;
+  }
+  if (tail) {
+    const matches = [...tail.matchAll(/(?<!\\)"modelVersion"\s*:\s*"([^"\\]{1,200})"/g)];
+    const last = matches.at(-1)?.[1];
+    if (last) return last;
+  }
+  return modelName(headers.get("openai-model") ?? undefined);
 }
 
 const pendingReads = new Set<Promise<void>>();
@@ -237,10 +287,12 @@ async function recordUsage(
   method: string,
   host: string,
   path: string,
+  call: { index: number; attempt: number; namesRunModel: boolean },
 ): Promise<void> {
   const type = response.headers.get("content-type") ?? "";
   const declared = Number(response.headers.get("content-length") ?? Number.NaN);
   let body: unknown;
+  let bodyTail: string | undefined;
   if (response.ok && type.includes("json") && !(declared > MAX_SCAN_BYTES)) {
     const { text, tail } = await readCapped(response, MAX_JSON_BYTES);
     if (text !== undefined) {
@@ -249,10 +301,25 @@ async function recordUsage(
       } catch {}
     } else if (tail !== undefined) {
       body = usageFromTail(tail);
+      bodyTail = tail;
     }
+  }
+  if (response.ok && call.namesRunModel && !run.resolvedModel) {
+    run.resolvedModel = modelFromResponse(bodyTail ? undefined : body, response.headers, bodyTail);
   }
   const usage = extractUsage(body, response.headers);
   for (const id of usage.ids) if (!run.ids.includes(id) && run.ids.length < 10) run.ids.push(id);
+  // The job is the latest submit the provider accepted; uploads before it return ids too.
+  const jobId = usage.ids[0];
+  if (
+    response.ok &&
+    method !== "GET" &&
+    method !== "HEAD" &&
+    jobId &&
+    (run.job?.call ?? -1) < call.index
+  ) {
+    run.job = { id: jobId, attempt: call.attempt, call: call.index };
+  }
   if (!hasUsage(usage)) return;
   if (usage.sources) {
     usage.sources = Object.fromEntries(

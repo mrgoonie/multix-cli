@@ -13,12 +13,26 @@ import type { UsageSummary } from "./run-state.js";
 
 export const ENVELOPE_SCHEMA = "multix.result/v1";
 
+/** The provider job or request a run submitted; attempt counts sends of a retried submit. */
+export interface JobIdentity {
+  provider: string;
+  id: string;
+  attempt: number;
+}
+
 export interface ResultEnvelope {
   schema: typeof ENVELOPE_SCHEMA;
   ok: boolean;
   command: string;
   provider?: string;
+  /** Same as `model_requested`; kept for compatibility. */
   model?: string;
+  /** Model the run asked for (first request that names one, else `--model`). */
+  model_requested?: string;
+  /** Model the provider reported serving; null when it reported none or nothing was sent. */
+  model_resolved?: string | null;
+  /** Present when a provider returned a job or request id. */
+  job?: JobIdentity;
   dry_run?: boolean;
   /** `--estimate`: priced only, nothing sent. */
   estimate_only?: boolean;
