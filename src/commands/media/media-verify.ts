@@ -26,7 +26,7 @@ import type { Severity, VerifyProfile } from "./verify-profiles.js";
 
 export const VERIFY_SCHEMA = "multix.media-verify/v1";
 /** Bumped when measuring or judging logic changes; part of every cache key. */
-export const VERIFY_ENGINE = "multix-media-verify/2";
+export const VERIFY_ENGINE = "multix-media-verify/3";
 
 export type CheckStatus = "pass" | "warn" | "fail" | "skipped" | "unknown";
 
@@ -704,7 +704,13 @@ export async function verifyMedia(input: string, opts: VerifyOptions): Promise<V
     changed ||
     (analysis !== null && !analysis.completed && (analysis.timed_out || analysis.cancelled)) ||
     summary.unknown > 0;
-  const declared = report.format?.duration_s ?? null;
+  // ffprobe sizes a cut WAV from the bytes left: scale its length up to what the header declares.
+  const wav = report.wav_data;
+  const probed = report.format?.duration_s ?? null;
+  const declared =
+    probed !== null && wav?.truncated && wav.present_bytes > 0
+      ? round((probed * wav.declared_bytes) / wav.present_bytes)
+      : probed;
   const rate = report.video?.avg_frame_rate
     ? "avg_frame_rate"
     : report.video?.r_frame_rate

@@ -10,7 +10,7 @@ import fs from "node:fs";
 export interface WavDataLength {
   /** Sample bytes the `data` chunk header declares. */
   declared_bytes: number;
-  /** Sample bytes the file holds after the chunk header. */
+  /** Sample bytes the file holds after the chunk header, up to the declared size. */
   present_bytes: number;
   truncated: boolean;
 }
@@ -18,10 +18,12 @@ export interface WavDataLength {
 /** Chunk headers walked before giving up on finding `data`. */
 const MAX_CHUNKS = 64;
 /**
- * 32-bit sizes a writer puts in the header when it does not know the length (a piped or
- * streamed WAV): 0, 0xFFFFFFFF, and 0x7FFFF000 (written by SoX and some streaming servers).
+ * 32-bit sizes from this one up are what writers put in the header when they do not know
+ * the length (a piped or streamed WAV): 0x7FFF0000 (GStreamer wavenc, whose RIFF size is
+ * that plus the header), 0x7FFFF000 (SoX, some streaming servers) and 0xFFFFFFFF (ffmpeg).
+ * Zero declares no length either. A real WAV this large is written as RF64.
  */
-const PLACEHOLDER_SIZES = new Set([0, 0xffffffff, 0x7ffff000]);
+const PLACEHOLDER_MIN = 0x7fff0000;
 const RIFF_MAGIC = new Set(["RIFF", "RIFX", "RF64"]);
 
 /** Whether a file's first bytes name a RIFF, RIFX or RF64 WAVE. */
@@ -55,7 +57,9 @@ export async function readWavDataLength(file: string): Promise<WavDataLength | n
     const magic = head.toString("latin1", 0, 4);
     const u32 = (b: Buffer, at: number) =>
       magic === "RIFX" ? b.readUInt32BE(at) : b.readUInt32LE(at);
-    const known = (n: number | null) => (n === null || PLACEHOLDER_SIZES.has(n) ? null : n);
+    const known = (n: number | null) => (n === null || n === 0 || n >= PLACEHOLDER_MIN ? null : n);
+    // ds64 sizes are 64-bit: a 2 GiB+ size there is real, so only these declare no length.
+    const known64 = (n: number | null) => (n === null || n === 0 || n === 0xffffffff ? null : n);
 
     let riffSize = magic === "RF64" ? null : known(u32(head, 4));
     let ds64DataSize: number | null = null;
@@ -70,18 +74,18 @@ export async function readWavDataLength(file: string): Promise<WavDataLength | n
         const body = await read(offset + 8, 16);
         if (!body) return null;
         const safe = (n: bigint) => (n <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(n) : null);
-        riffSize = known(safe(body.readBigUInt64LE(0)));
-        ds64DataSize = known(safe(body.readBigUInt64LE(8)));
+        riffSize = known64(safe(body.readBigUInt64LE(0)));
+        ds64DataSize = known64(safe(body.readBigUInt64LE(8)));
       }
       if (id === "data") {
-        const declared = known(
-          magic === "RF64" && chunkSize === 0xffffffff ? ds64DataSize : chunkSize,
-        );
+        const declared =
+          magic === "RF64" && chunkSize === 0xffffffff ? ds64DataSize : known(chunkSize);
         if (declared === null) return null;
         const present = size - (offset + 8);
         return {
           declared_bytes: declared,
-          present_bytes: present,
+          // Chunks after `data` (LIST, id3) are not sample bytes.
+          present_bytes: Math.min(present, declared),
           truncated: present < declared && (riffSize === null || riffSize + 8 > size),
         };
       }

@@ -396,6 +396,9 @@ describe.skipIf(!hasFfmpeg)("media quality with ffmpeg", { timeout: 60_000 }, ()
         declared_data_bytes: 4 * 44100 * 2,
         present_data_bytes: 4 * 44100 * 2 - 4 * 44100,
       });
+      // Coverage is measured against the declared 4 s, not the 2 s ffprobe sizes from the bytes.
+      expect(r.coverage.media_duration_s).toBeCloseTo(4, 1);
+      expect(r.coverage.ratio).toBeLessThan(0.6);
       const report = await inspectMedia(f("trunc.wav"));
       expect(report.ok).toBe(false);
       expect(report.wav_data).toMatchObject({ truncated: true });

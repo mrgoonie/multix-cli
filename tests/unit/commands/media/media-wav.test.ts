@@ -100,7 +100,7 @@ describe("readWavDataLength", () => {
       "trailer.wav",
       Buffer.concat([wav({ dataSize: 100, dataBytes: 100 }), chunk("LIST", Buffer.alloc(20))]),
     );
-    expect(r).toMatchObject({ truncated: false });
+    expect(r).toMatchObject({ truncated: false, declared_bytes: 100, present_bytes: 100 });
   });
 
   it("reads big-endian RIFX sizes", async () => {
@@ -115,6 +115,14 @@ describe("readWavDataLength", () => {
       wav({ magic: "RF64", ds64: 5000, dataSize: 0xffffffff, dataBytes: 2000 }),
     );
     expect(r).toMatchObject({ declared_bytes: 5000, present_bytes: 2000, truncated: true });
+  });
+
+  it("keeps RF64 sizes from 2 GiB up as real lengths", async () => {
+    const r = await lengthOf(
+      "rf64-big.wav",
+      wav({ magic: "RF64", ds64: 0x80000000, dataSize: 0xffffffff, dataBytes: 2000 }),
+    );
+    expect(r).toMatchObject({ declared_bytes: 0x80000000, present_bytes: 2000, truncated: true });
   });
 
   it("does not fail a complete file whose data size alone is miscounted", async () => {
@@ -135,6 +143,13 @@ describe("readWavDataLength", () => {
     expect(await lengthOf("sox.wav", wav({ dataSize: 0x7ffff000, dataBytes: 100 }))).toBeNull();
     expect(await lengthOf("pipe.wav", wav({ dataSize: 0xffffffff, dataBytes: 100 }))).toBeNull();
     expect(await lengthOf("zero.wav", wav({ dataSize: 0, dataBytes: 100 }))).toBeNull();
+    // GStreamer wavenc on a pipe: data 0x7FFF0000, RIFF size that plus the header.
+    expect(
+      await lengthOf(
+        "gst.wav",
+        wav({ dataSize: 0x7fff0000, riffSize: 0x7fff0000 + 36, dataBytes: 100 }),
+      ),
+    ).toBeNull();
   });
 
   it("returns null for other RIFF forms, other files and a header cut before data", async () => {
