@@ -28,6 +28,7 @@ const WORKER_SAFE_MODULES = [
   "redirect-fetch.ts",
   "async-poll.ts",
   "errors.ts",
+  "response-read.ts",
 ];
 
 describe("worker-safe core modules", () => {
