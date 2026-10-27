@@ -301,8 +301,12 @@ export function judge(
       unit: "s",
       measured: {
         decoded_s: analysis.decoded_s,
-        declared_duration_s: declared,
-        ...(estimated ? { declared_duration_estimated: true } : {}),
+        ...(wav?.truncated && wav.declared_duration_s !== null
+          ? { declared_duration_s: wav.declared_duration_s }
+          : {
+              declared_duration_s: declared,
+              ...(estimated ? { declared_duration_estimated: true } : {}),
+            }),
         ...(wav
           ? { declared_data_bytes: wav.declared_bytes, present_data_bytes: wav.present_bytes }
           : {}),
@@ -704,13 +708,9 @@ export async function verifyMedia(input: string, opts: VerifyOptions): Promise<V
     changed ||
     (analysis !== null && !analysis.completed && (analysis.timed_out || analysis.cancelled)) ||
     summary.unknown > 0;
-  // ffprobe sizes a cut WAV from the bytes left: scale its length up to what the header declares.
-  const wav = report.wav_data;
-  const probed = report.format?.duration_s ?? null;
-  const declared =
-    probed !== null && wav?.truncated && wav.present_bytes > 0
-      ? round((probed * wav.declared_bytes) / wav.present_bytes)
-      : probed;
+  // ffprobe sizes a cut WAV from the bytes left: cover it against what its header declares.
+  const wavDeclared = report.wav_data?.truncated ? report.wav_data.declared_duration_s : null;
+  const declared = wavDeclared ?? report.format?.duration_s ?? null;
   const rate = report.video?.avg_frame_rate
     ? "avg_frame_rate"
     : report.video?.r_frame_rate

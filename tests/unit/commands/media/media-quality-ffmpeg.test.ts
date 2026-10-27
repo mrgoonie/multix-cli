@@ -114,6 +114,16 @@ describe.skipIf(!hasFfmpeg)("media quality with ffmpeg", { timeout: 60_000 }, ()
         "-",
       ]),
     );
+    // WAVs with a fact chunk: ffprobe reports the declared duration, not the bytes left.
+    ff("-f", "lavfi", "-i", "sine=d=4", "-c:a", "adpcm_ms", f("adpcm.wav"));
+    ff("-f", "lavfi", "-i", "sine=d=4", "-c:a", "pcm_f32le", f("float.wav"));
+    for (const name of ["adpcm", "float"]) {
+      const bytes = fs.readFileSync(f(`${name}.wav`));
+      fs.writeFileSync(
+        f(`${name}-cut.wav`),
+        bytes.subarray(0, 1024 * Math.floor(bytes.length / 2048)),
+      );
+    }
     // Raw ac3 declares no length: one cut on a frame boundary is not detectable.
     // At 48 kHz and 192 kb/s every ac3 frame is 768 bytes.
     ff("-f", "lavfi", "-i", "sine=d=4:r=48000", "-b:a", "192k", f("tone.ac3"));
@@ -406,6 +416,16 @@ describe.skipIf(!hasFfmpeg)("media quality with ffmpeg", { timeout: 60_000 }, ()
       const piped = await verifyMedia(f("piped.wav"), { profile: audio });
       expect(check(piped, "decode").status).toBe("pass");
       expect((await inspectMedia(f("piped.wav"))).wav_data).toBeNull();
+    });
+
+    it("covers a cut WAV with a fact chunk against its declared length", async () => {
+      for (const name of ["adpcm-cut.wav", "float-cut.wav"]) {
+        const r = await verifyMedia(f(name), { profile: builtinProfile("audio") });
+        expect(r.status).toBe("fail");
+        expect(r.coverage.media_duration_s).toBeCloseTo(4, 1);
+        expect(r.coverage.ratio).toBeLessThan(0.6);
+        expect(check(r, "decode").measured).toMatchObject({ declared_duration_s: 4 });
+      }
     });
 
     it("keeps marking raw streams whose truncation cannot be seen as estimated", async () => {

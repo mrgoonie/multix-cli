@@ -74,6 +74,7 @@ describe("readWavDataLength", () => {
       declared_bytes: 4000,
       present_bytes: 4000,
       truncated: false,
+      declared_duration_s: null,
     });
   });
 
@@ -82,6 +83,7 @@ describe("readWavDataLength", () => {
       declared_bytes: 4000,
       present_bytes: 1000,
       truncated: true,
+      declared_duration_s: null,
     });
   });
 
@@ -125,6 +127,36 @@ describe("readWavDataLength", () => {
     expect(r).toMatchObject({ declared_bytes: 0x80000000, present_bytes: 2000, truncated: true });
   });
 
+  it("keeps a RIFF data size between 2 and 4 GiB as a real length", async () => {
+    expect(await lengthOf("big.wav", wav({ dataSize: 0xc0000000, dataBytes: 100 }))).toMatchObject({
+      declared_bytes: 0xc0000000,
+      present_bytes: 100,
+      truncated: true,
+    });
+  });
+
+  it("reads the declared duration from fmt for PCM and from fact otherwise", async () => {
+    const fmt = (tag: number, rate: number, byteRate: number) => {
+      const body = Buffer.alloc(16);
+      body.writeUInt16LE(tag, 0);
+      body.writeUInt32LE(rate, 4);
+      body.writeUInt32LE(byteRate, 8);
+      return body;
+    };
+    const pcm = wav({ dataSize: 4000, dataBytes: 1000 });
+    fmt(1, 1000, 2000).copy(pcm, 20);
+    expect(await lengthOf("pcm-dur.wav", pcm)).toMatchObject({ declared_duration_s: 2 });
+    const fact = Buffer.alloc(4);
+    fact.writeUInt32LE(3000);
+    const adpcm = wav({ before: [chunk("fact", fact)], dataSize: 4000, dataBytes: 1000 });
+    fmt(2, 1000, 900).copy(adpcm, 20);
+    expect(await lengthOf("adpcm-dur.wav", adpcm)).toMatchObject({ declared_duration_s: 3 });
+    // A compressed format without fact: the byte rate is not exact, so no duration.
+    const noFact = wav({ dataSize: 4000, dataBytes: 1000 });
+    fmt(2, 1000, 900).copy(noFact, 20);
+    expect(await lengthOf("nofact.wav", noFact)).toMatchObject({ declared_duration_s: null });
+  });
+
   it("does not fail a complete file whose data size alone is miscounted", async () => {
     const complete = wav({ dataSize: 4008, dataBytes: 4000 });
     complete.writeUInt32LE(complete.length - 8, 4);
@@ -132,6 +164,7 @@ describe("readWavDataLength", () => {
       declared_bytes: 4008,
       present_bytes: 4000,
       truncated: false,
+      declared_duration_s: null,
     });
     // The same header cut short: the RIFF size now exceeds the file as well.
     expect(await lengthOf("miscount-cut.wav", complete.subarray(0, 2000))).toMatchObject({
