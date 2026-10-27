@@ -84,7 +84,7 @@ its most expensive route) are priced so far; `--max-cost`
 refuses anything it cannot price. With `--json`, exit codes are `2` usage or
 input (including a refused `--max-cost`), `3` key or setup, `4` temporary
 (retry), `5` rejected (quota, safety, model), `6` timed out (job may still run),
-`1` unknown; plain runs keep exit 1 and print the code and hint on
+`129`/`130`/`143` cancelled by a signal (`CANCELLED`, also in plain runs), `1` unknown; plain runs exit 1 (or the command's own status) and print the code and hint on
 stderr. Each run is recorded in `~/.multix/history.jsonl` without keys or signed
 URLs (`MULTIX_HISTORY=0` turns it off). Details:
 [For AI agents](https://multix.zuey.me/reference/for-ai-agents/).
@@ -897,6 +897,7 @@ multix media check-receipt <receipt> <file>                    # same bytes as t
 ```
 
 - `verify` prints a `multix.media-verify/v1` receipt bound to the file's sha256 with status `pass`, `fail` or `incomplete` and exits non-zero unless it passes. Each check records its threshold, measured values and findings with `start_s`/`end_s`. Declare intended fades, holds and silences with the repeatable `--allow-*` ranges; they are reported as intentional instead of failing. Loudness is checked only when `--loudness` is given; no platform targets are built in.
+- Truncation: the `decode` check fails a file that decodes shorter than its container declares, and a WAV whose `data` chunk and RIFF header both declare more bytes than the file holds (`measured.declared_data_bytes`/`present_data_bytes`; `media inspect` reports it in `wav_data` and `errors`). Raw streams without a declared length (raw ac3/AAC, mp3 without a Xing header) are sized by ffprobe from the bitrate (`measured.declared_duration_estimated: true`); a cut on a frame boundary in such a stream cannot be detected. A piped or streamed WAV (size 0, 0xFFFFFFFF or 0x7FFFF000) declares no length either.
 - A timeout, a failed `--rule` or a file that changed during the run gives `incomplete`, never `pass`. Ctrl-C (or SIGTERM, or a closed terminal) stops the run, removes its temp files and exits with 130 (143, 129) without a receipt. Receipts state `model_reviewed: false` and list what was not measured (A/V sync, content correctness).
 - Custom profile JSON: `{id, version, description?, extends?, media?, checks}`; `extends` names a built-in profile and `null` disables a check. A `--rule` script reads `multix.media-rule-input/v1` JSON on stdin and prints `{id, version, status, message?, findings?}`; it runs without a shell, with only `PATH` in its environment, in an empty temp directory.
 - `--cache-dir` reuses passing and failing receipts keyed by source sha256, profile, expectations, rules and ffmpeg version; delete the directory to clear it (also after changing a module a rule imports: only the rule's own file is hashed). Receipts are unsigned records of a local run.

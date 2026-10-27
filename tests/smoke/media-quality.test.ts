@@ -178,8 +178,45 @@ describe("media inspect/verify (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
         child.kill("SIGINT");
         const res = await child;
         expect(res.exitCode).toBe(130);
+        expect(res.stderr).toContain("code: CANCELLED (exit 130 with --json)");
         expect(staged()).toEqual([]);
         expect(fs.readdirSync(out).filter((n) => n.endsWith(".png"))).toEqual([]);
+      },
+    );
+
+    it.skipIf(process.platform === "win32")(
+      "reports a SIGTERM as CANCELLED with the signal's exit code in --json",
+      async () => {
+        const out = path.join(tmp, "terminated");
+        const child = execa(
+          "node",
+          [CLI, "media", "frames", "clip.mp4", "--output-dir", out, "--count", "100", "--json"],
+          {
+            cwd: tmp,
+            env: isolatedEnv(tmp),
+            extendEnv: false,
+            reject: false,
+            timeout: SPAWN_TIMEOUT - 1_000,
+          },
+        );
+        const staged = () =>
+          fs.existsSync(out) ? fs.readdirSync(out).filter((n) => n.startsWith(".frames-")) : [];
+        const deadline = Date.now() + 10_000;
+        while (staged().length === 0 && Date.now() < deadline)
+          await new Promise((r) => setTimeout(r, 25));
+        expect(staged()).toHaveLength(1);
+        child.kill("SIGTERM");
+        const res = await child;
+        expect(res.exitCode).toBe(143);
+        const report = envelope(res.stdout);
+        expect(report).toMatchObject({ ok: false, exit_code: 143 });
+        expect(report.error).toMatchObject({
+          code: "CANCELLED",
+          message: "Cancelled by SIGTERM (exit 143)",
+          retryable: false,
+          hint: "The run was cancelled; nothing was left behind. Rerun the command.",
+        });
+        expect(staged()).toEqual([]);
       },
     );
 

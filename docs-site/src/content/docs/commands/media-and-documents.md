@@ -89,8 +89,11 @@ streams, and for the first video stream the codec, size, display size after
 rotation and sample aspect ratio, rotation, rational frame rates, time base
 and whether the frame rate is variable. Unknown values are `null`. A text file
 (an error page or playlist saved with a media extension) is reported as such
-and never passed to `ffprobe`. `--decode` decodes the whole file and counts
-decode errors.
+and never passed to `ffprobe`. For a WAV, `wav_data` compares the sample
+bytes its `data` chunk declares with those present and marks a shorter file
+`truncated`, which is also listed in `errors` and makes the command exit
+non-zero (`null` for other formats and for a WAV that declares no length).
+`--decode` decodes the whole file and counts decode errors.
 
 ### Verify
 
@@ -117,6 +120,18 @@ that ends before its sound, plus the expectations you pass:
 Loudness is checked only when you pass a target; no platform targets are built
 in. Each check records its threshold, the measured values and findings with
 `start_s`/`end_s`.
+
+The `decode` check fails a file that decodes shorter than its container
+declares. A WAV is sized by ffprobe from the bytes present, so for WAV the
+check compares the sample bytes its `data` chunk header declares with those
+in the file (`measured.declared_data_bytes` and `present_data_bytes`); the
+RIFF size must exceed the file too, so a header that miscounts only the data
+size does not fail a complete file. Raw
+streams that declare no length, such as raw ac3 or AAC and mp3 without a
+Xing header, have a duration ffprobe estimates from the bitrate; the receipt
+says so with `measured.declared_duration_estimated: true`, and a cut on a
+frame boundary in such a stream cannot be detected. A piped or streamed WAV
+(a size of 0, 0xFFFFFFFF or 0x7FFFF000) declares no length either.
 
 Declare intended fades, holds and silences with the repeatable
 `--allow-black`, `--allow-freeze` and `--allow-silence <start-end>` ranges (in

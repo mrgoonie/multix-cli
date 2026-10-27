@@ -19,6 +19,7 @@ import {
 } from "./media-probe.js";
 import { extensionMatches, sniffContainer } from "./media-sniff.js";
 import { type MediaSource, resolveMediaSource } from "./media-source.js";
+import { type WavDataLength, looksLikeWave, readWavDataLength } from "./media-wav.js";
 
 export const INSPECT_SCHEMA = "multix.media-inspect/v1";
 
@@ -42,6 +43,11 @@ export interface InspectReport {
   video: VideoStreamInfo | null;
   audio: AudioStreamInfo | null;
   decode: DecodeReport | null;
+  /**
+   * For a WAV file, the sample bytes its `data` chunk declares against those present.
+   * Null for other formats and for a WAV whose header declares no length (piped output).
+   */
+  wav_data: WavDataLength | null;
   /** ffprobe or the decode was stopped by the timeout or a cancel: what was not read is unknown. */
   interrupted: boolean;
   errors: string[];
@@ -92,6 +98,16 @@ export async function inspectSource(
     }
   }
   if (probe && probe.streams.length === 0) errors.push("No audio or video streams found");
+  // ffprobe sizes a WAV from the bytes present, so only the header shows a cut-off file.
+  // A file that vanished since it was hashed is not a verdict on its header.
+  const wavData =
+    probe && looksLikeWave(src.head)
+      ? await readWavDataLength(src.resolved).catch(() => null)
+      : null;
+  if (wavData?.truncated)
+    errors.push(
+      `WAV data chunk declares ${wavData.declared_bytes} bytes but the file holds ${wavData.present_bytes} (truncated)`,
+    );
 
   let decode: DecodeReport | null = null;
   if (opts.decode && probe && probe.streams.length > 0) {
@@ -140,6 +156,7 @@ export async function inspectSource(
     video: probe ? (firstVideo(probe) ?? null) : null,
     audio: probe ? (firstAudio(probe) ?? null) : null,
     decode,
+    wav_data: wavData,
     interrupted,
     errors,
   };

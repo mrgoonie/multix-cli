@@ -15,7 +15,12 @@
 
 import fs from "node:fs";
 import type { Command } from "commander";
-import { type ErrorInfo, classifyError, classifyMessage } from "../core/error-classify.js";
+import {
+  type ErrorInfo,
+  classifyError,
+  classifyMessage,
+  classifySignalExit,
+} from "../core/error-classify.js";
 import { setExternalRunGuard } from "../core/external-run-guard.js";
 import { redactUrlsInText } from "../core/redact.js";
 import { costReceiptFor, formatEstimate, formatReceipt, preflightCost } from "./cost-preflight.js";
@@ -219,7 +224,10 @@ export function finalizeRun(input: FinalizeInput): number {
     info =
       input.error !== undefined
         ? classifyError(input.error)
-        : classifyMessage(run.lastErrorLine ?? `Command exited with code ${input.exitCode}`);
+        : (classifySignalExit(
+            input.exitCode,
+            run.requestsStarted > 0 || run.externalRuns.length > 0,
+          ) ?? classifyMessage(run.lastErrorLine ?? `Command exited with code ${input.exitCode}`));
   }
   // A job submitted before the signal keeps running and is billed: resume it, never rerun.
   const inFlight =
@@ -233,11 +241,9 @@ export function finalizeRun(input: FinalizeInput): number {
     };
   }
   // Exit classes (2-6) are part of agent mode; plain runs keep the historical exit 1.
-  const exitCode = !failed
-    ? 0
-    : !run.json || info?.code === "UNKNOWN"
-      ? input.exitCode || 1
-      : (info?.exit_code ?? 1);
+  // An unclassified failure keeps the command's own status in both modes.
+  const jsonExitCode = info?.code === "UNKNOWN" ? input.exitCode || 1 : (info?.exit_code ?? 1);
+  const exitCode = !failed ? 0 : run.json ? jsonExitCode : input.exitCode || 1;
 
   const warnings: OutputWarning[] = [];
   const extra = typeof run.options.output === "string" ? [run.options.output] : [];
@@ -362,7 +368,7 @@ export function finalizeRun(input: FinalizeInput): number {
       ? `, retryable${info.retry_after_s ? ` after ${info.retry_after_s}s` : ""}`
       : "";
     const lines = [
-      `  code: ${info.code} (exit ${info.exit_code} with --json${retry})`,
+      `  code: ${info.code} (exit ${jsonExitCode} with --json${retry})`,
       `  hint: ${info.hint}`,
     ];
     if (input.error !== undefined && !run.lastErrorLine) lines.unshift(`Error: ${info.message}`);
