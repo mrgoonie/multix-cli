@@ -7034,7 +7034,7 @@
     },
     {
       "group": "fish",
-      "description": "Fish Audio (native API): Drama 3 text-to-speech and voice models",
+      "description": "Fish Audio (native API): Drama 3 text-to-speech, voice design, cloning and voice models",
       "commands": [
         {
           "command": "fish tts",
@@ -7276,6 +7276,245 @@
           ]
         },
         {
+          "command": "fish voice-design",
+          "description": "Design voices from a prompt (voice-design-1, $0.01 per request): saves 1-4 WAV candidates",
+          "positionals": [
+            {
+              "name": "prompt",
+              "description": "Voice description: age, tone, accent, pacing (1-2000 characters)",
+              "required": false,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--instruction",
+              "flags": "--instruction <text>",
+              "description": "Alias for the prompt argument",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--reference-text",
+              "flags": "--reference-text <text>",
+              "description": "Line every candidate reads, to compare them (up to 300 characters)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--language",
+              "flags": "--language <code>",
+              "description": "Language hint, e.g. en, zh, ja, vi",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--count",
+              "flags": "--count <n>",
+              "description": "Candidates to generate (1-4)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "2"
+            },
+            {
+              "long": "--speed",
+              "flags": "--speed <n>",
+              "description": "Speaking speed (above 0, at most 3)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--steps",
+              "flags": "--steps <n>",
+              "description": "Diffusion steps (1-128, default 32)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--guidance",
+              "flags": "--guidance <n>",
+              "description": "How strongly to follow the prompt (default 2)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--instruct-guidance",
+              "flags": "--instruct-guidance <n>",
+              "description": "Instruction guidance scale (default 0)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--seed",
+              "flags": "--seed <n>",
+              "description": "Seed that reproduces the same candidates",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        },
+        {
+          "command": "fish clone",
+          "description": "Create a reusable Fish Audio voice from audio samples (private by default)",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--title",
+              "flags": "--title <name>",
+              "description": "Name of the new voice",
+              "required": true,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--sample",
+              "flags": "--sample <path>",
+              "description": "Audio sample (wav, mp3, m4a, opus); repeat for up to 20",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--transcript",
+              "flags": "--transcript <text>",
+              "description": "Words spoken in the sample at the same position; repeat once per sample (else Fish transcribes)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--transcript-file",
+              "flags": "--transcript-file <path>",
+              "description": "UTF-8 file with one transcript per line, one line per sample",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--description",
+              "flags": "--description <text>",
+              "description": "Voice description",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--tag",
+              "flags": "--tag <tag>",
+              "description": "Tag (repeatable)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--visibility",
+              "flags": "--visibility <v>",
+              "description": "private|unlist (public is published from Fish's web app)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "private"
+            },
+            {
+              "long": "--no-enhance",
+              "flags": "--no-enhance",
+              "description": "Skip Fish's noise removal and level normalization",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": true
+            },
+            {
+              "long": "--design-signature",
+              "flags": "--design-signature <sig>",
+              "description": "Signature of a `fish voice-design` candidate, one per sample in order",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--consent",
+              "flags": "--consent",
+              "description": "Confirm you have the speaker's permission to clone this voice",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        },
+        {
           "command": "fish voices list",
           "description": "List your Fish Audio voice models (or public ones with --public)",
           "positionals": [],
@@ -7346,6 +7585,30 @@
             }
           ],
           "options": []
+        },
+        {
+          "command": "fish voices delete",
+          "description": "Delete one of your Fish Audio voices (cannot be undone)",
+          "positionals": [
+            {
+              "name": "id",
+              "description": "",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--yes",
+              "flags": "--yes",
+              "description": "Confirm the deletion",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            }
+          ]
         }
       ]
     },

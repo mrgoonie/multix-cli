@@ -148,6 +148,7 @@ Estimate: $0.00136 expected, $0.00136–$0.00136 range (proven ceiling)
 | `elevenlabs tts` | Ký tự (Unicode code point đúng như khi gửi) | Đã chứng minh. `--previous-text` và `--next-text` chỉ được tính vào mức cao. |
 | `openrouter tts` | Giá OpenRouter của model: ký tự với đa số model, byte UTF-8 với Fish Audio, token với Gemini TTS, giây âm thanh đầu ra với Seed Audio | Đã chứng minh với giá theo ký tự và byte (`--instructions` chỉ được tính vào mức cao); ước tính với giá theo token và theo giây đầu ra. Văn bản phải truyền qua `--text`. |
 | `fish tts` | Byte UTF-8 của văn bản đúng như khi gửi, kể cả tag; văn bản từ `--text`, hoặc khi chạy CLI là `--text-file` hay `--turns-file` đọc được (văn bản đã gắn tag do multix tạo) | Đã chứng minh. Qua MCP, văn bản từ file không được tính giá. |
+| `fish voice-design` | Cố định $0.01 cho mỗi request thành công, bất kể prompt hay `--count`; biên nhận đếm số request | Đã chứng minh. |
 | `openrouter transcribe` | Số giây âm thanh đầu vào, đo bằng `ffprobe` từ file `--input` cục bộ | Đã chứng minh. Mức cao cộng thêm 5% vào độ dài đo được và làm tròn lên tròn phút. Đầu vào là URL, file mà `ffprobe` không đọc được, hoặc model tính giá theo token sẽ là `unknown`. |
 | `speech generate` | Giá của từng route, tính như `gemini generate-speech`, `elevenlabs tts` hoặc `fish tts`; văn bản từ `--text` hoặc `--text-file` | Như provider đó. Với Gemini, `--style` được tính vào mức cao; với ElevenLabs, `--extra elevenlabs.previous_text`/`next_text` được tính vào mức cao. Kế hoạch có `--fallback` được tính theo route đắt nhất và chỉ được chứng minh khi mọi route đều được chứng minh. Một route trên provider khác (OpenAI, MiniMax, Atlas) hoặc model ElevenLabs chưa có giá (`eleven_v3_conversational`) khiến cả lần chạy là `unknown`. Qua MCP, `text-file` không được tính giá. |
 
@@ -199,7 +200,7 @@ Fish Audio Drama 3 và Gemini 3.8 TTS kết thúc cùng lúc giá API gốc thay
 
 Giá Gemini là tier Standard trả phí; tier miễn phí không tốn tiền. Gói thuê bao
 ElevenLabs trừ credit thay vì USD. Các rate `fish/*` tính giá cho API gốc của
-Fish Audio (`fish tts`, `speech generate --provider fish`); model `fish-audio/*`
+Fish Audio (`fish tts`, `speech generate --provider fish`, `fish voice-design`); model `fish-audio/*`
 của OpenRouter có rate `openrouter/*` riêng, và multix không bao giờ fallback
 giữa hai route.
 

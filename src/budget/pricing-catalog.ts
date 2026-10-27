@@ -37,7 +37,9 @@ export type PriceMeter =
   /** Seconds of audio sent to be transcribed. */
   | "input_audio_seconds"
   /** Seconds of audio the model returns. */
-  | "output_audio_seconds";
+  | "output_audio_seconds"
+  /** Successful requests, whatever they return (Fish voice design). */
+  | "requests";
 
 export interface PriceComponent {
   meter: PriceMeter;
@@ -466,6 +468,19 @@ export const PRICING_CATALOG: PriceEntry[] = [
     last_checked: "2026-10-26",
     source: FISH_PRICING,
     verified: true,
+  },
+  {
+    id: "fish/voice-design-1@api",
+    provider: "fish",
+    models: ["voice-design-1"],
+    tier: "api-usage",
+    currency: "USD",
+    region: "global",
+    windows: [{ components: [{ meter: "requests", usd: 0.01, per: 1 }] }],
+    last_checked: "2026-10-27",
+    source: FISH_PRICING,
+    verified: true,
+    notes: "Billed once per successful POST /v1/voice-design, however many candidates it returns.",
   },
   {
     id: "fish/s2.1-pro-free@api",

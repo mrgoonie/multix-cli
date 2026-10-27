@@ -138,15 +138,69 @@ trả audio, nên multix cảnh báo rằng response 200 không chứng minh t�
 `--text-file` hoặc `--turns-file`; xem
 [Chi phí](/vi/reference/for-ai-agents/#chi-phí-ước-tính-giới-hạn-chi-tiêu-và-biên-nhận).
 
+## Thiết kế giọng (voice design)
+
+`multix fish voice-design` gửi prompt tới `POST /v1/voice-design` với header
+`model: voice-design-1` và lưu 1 đến 4 giọng ứng viên thành file WAV
+(`fish_voice_design_<stamp>_<index>.wav`). Fish tính $0.01 cho mỗi request
+thành công, bất kể trả về bao nhiêu ứng viên. Request chỉ gửi một lần và
+không bao giờ tự thử lại.
+
+```bash
+multix fish voice-design "Giọng kể chuyện tiếng Việt, ngoài 30 tuổi, ấm và chậm" --count 3 --language vi
+multix fish voice-design --instruction "Energetic radio host" --reference-text "Good morning, everyone!" --seed 7
+multix fish voice-design "Gravelly old sailor" --estimate          # $0.01, mức trần đã chứng minh
+```
+
+| Tùy chọn | Ý nghĩa |
+|---|---|
+| `[prompt]` / `--instruction` | Mô tả giọng, 1 đến 2000 ký tự (chỉ đưa một lần) |
+| `--reference-text` | Câu mà mọi ứng viên cùng đọc, tối đa 300 ký tự |
+| `--language` | Gợi ý ngôn ngữ như `en`, `zh`, `ja`, `vi` |
+| `--count` | Số ứng viên, 1 đến 4 (mặc định 2) |
+| `--speed`, `--steps`, `--guidance`, `--instruct-guidance`, `--seed` | Tham số sinh, được kiểm tra trước khi gửi |
+
+Mỗi ứng viên trong kết quả `--json` có `path`, `bytes`, `sha256`,
+`audio_kind`, `sample_rate_hz`, `duration_s` và `design_signature`. Muốn giữ
+một ứng viên làm giọng dùng lại, hãy clone nó.
+
+## Clone giọng
+
+`multix fish clone` tạo một giọng lâu dài từ các mẫu âm thanh (`POST /model`,
+multipart, `type=tts`, `train_mode=fast`). Giọng ở chế độ riêng tư trừ khi bạn
+truyền `--visibility unlist`; muốn công khai thì làm trên web app của Fish.
+Clone giọng cần sự cho phép của người nói, nên lệnh từ chối chạy nếu thiếu
+`--consent`.
+
+```bash
+multix fish clone --title "My narrator" --sample take1.wav --sample take2.wav --consent
+multix fish clone --title "Designed voice" --sample fish_voice_design_..._0.wav \
+  --design-signature <design_signature> --consent
+multix fish clone --title "Narrator" --sample a.wav --sample b.wav --transcript-file lines.txt --consent
+```
+
+- Mẫu: `.wav`, `.mp3`, `.m4a`, `.opus`, `.ogg` hoặc `.flac`; tối đa 20 file,
+  mỗi file 50 MB và tổng 200 MB. File được stream từ đĩa.
+- Transcript: mỗi mẫu một `--transcript` theo thứ tự, hoặc một
+  `--transcript-file` mỗi dòng ứng với một mẫu. Nếu không có, Fish tự nhận
+  dạng lời trong mẫu.
+- `--tag` (lặp lại được), `--description`, và `--no-enhance` để bỏ bước khử
+  nhiễu của Fish.
+- Upload chỉ gửi một lần. Nếu kết nối đứt sau khi Fish có thể đã nhận, lệnh
+  kết thúc với `UNKNOWN_REMOTE_STATE`: kiểm tra `multix fish voices list`
+  trước khi gửi lại, nếu không có thể tạo ra giọng thứ hai.
+
 ## Voice model
 
-Liệt kê và đọc voice là request miễn phí.
+Liệt kê và đọc voice là request miễn phí. Xóa cần `--yes` vì không thể hoàn
+tác.
 
 ```bash
 multix fish voices list                          # voice model của bạn
 multix fish voices list --public --language vi --title narrator
 multix fish voices list --page-size 50 --page 2
 multix fish voices get <voice-id>
+multix fish voices delete <voice-id> --yes
 ```
 
 ## Fish Audio gốc và OpenRouter

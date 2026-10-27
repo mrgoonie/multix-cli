@@ -21,7 +21,7 @@ multix <group> <cmd> ... --json         # stdout = ONE line, schema multix.resul
 - Success = `ok: true` AND `outputs[]` non-empty (path, bytes, mime, sha256, width/height, duration_s) AND no `warnings` (`EMPTY_OUTPUT`, `CONTENT_MISMATCH`, `UNREADABLE_MEDIA`).
 - Failure: read `error.code`, `error.hint`, `next[]`. Exit codes (with `--json`; plain runs exit 1): 2 fix flags/input · 3 key/setup (`multix check`, key named in `error.env`) · 4 temporary (wait `retry_after_s`, `multix rerun <history_id>`) · 5 rejected: quota, safety, model (change input/provider) · 6 timed out, job may still run (status command in `next[]`, do not resubmit) · 1 unknown (`log[]`).
 - `usage` = what the provider reported (tokens, `cost_usd`, `credits`, metrics; `sources` names the header/body field each money number came from); `history_id` names the run.
-- Cost: `--estimate` prices a run without sending it (USD range, units, rate source; exit 0). `--max-cost <usd>` refuses before sending (exit 2: `BUDGET_EXCEEDED`, or `BUDGET_UNPROVEN` when the price is unknown or the ceiling only estimated; `--cost-policy estimate` accepts an estimated ceiling). Priced: `gemini generate-speech`, `elevenlabs tts`, `fish tts` (UTF-8 bytes; `--text`, `--text-file` or `--turns-file`), `openrouter tts` (`--text` only), `openrouter transcribe` (local `--input` measured with `ffprobe`; URLs and token-priced models stay unknown), `speech generate` (gemini/elevenlabs/fish routes only; `--fallback` plans priced at the most expensive route, unknown if any route is unpriced). Receipt `cost` (`multix.cost/v1`): `status` settled|computed|uncertain|unknown, `actual_usd` (`null` = unknown, not $0). `MULTIX_OPERATION_ID` (shell) groups submit/poll/download runs into one operation.
+- Cost: `--estimate` prices a run without sending it (USD range, units, rate source; exit 0). `--max-cost <usd>` refuses before sending (exit 2: `BUDGET_EXCEEDED`, or `BUDGET_UNPROVEN` when the price is unknown or the ceiling only estimated; `--cost-policy estimate` accepts an estimated ceiling). Priced: `gemini generate-speech`, `elevenlabs tts`, `fish tts` (UTF-8 bytes; `--text`, `--text-file` or `--turns-file`), `fish voice-design` (flat $0.01 per request), `openrouter tts` (`--text` only), `openrouter transcribe` (local `--input` measured with `ffprobe`; URLs and token-priced models stay unknown), `speech generate` (gemini/elevenlabs/fish routes only; `--fallback` plans priced at the most expensive route, unknown if any route is unpriced). Receipt `cost` (`multix.cost/v1`): `status` settled|computed|uncertain|unknown, `actual_usd` (`null` = unknown, not $0). `MULTIX_OPERATION_ID` (shell) groups submit/poll/download runs into one operation.
 - History: `multix history [--failed] [--since 1d]`, `multix history show last`, `multix history stats --by model|provider|command`, `multix rerun <id|last>`. Ledger `~/.multix/history.jsonl` has no keys or signed URLs; `MULTIX_HISTORY=0` disables it.
 
 ## When to use
@@ -38,7 +38,7 @@ Activate this skill when the user asks to:
 - **Generate video via Leonardo** (Motion, Veo, Kling, Hailuo, Seedance, LTX models)
 - Generate images or speech with Cloudflare Workers AI, or video through Cloudflare AI Gateway's Replicate route
 - Generate speech on any TTS provider with one flag set, or pick a TTS model by language (`multix speech`)
-- **Text-to-speech on the native Fish Audio API** (Drama 3 by default, multi-speaker `<|speaker:N|>` turns, pronunciation dictionaries; `multix fish tts`, voices via `multix fish voices list`)
+- **Text-to-speech on the native Fish Audio API** (Drama 3 by default, multi-speaker `<|speaker:N|>` turns, pronunciation dictionaries; `multix fish tts`, voice design via `multix fish voice-design`, cloning via `multix fish clone`, voices via `multix fish voices list`)
 - Generate or clone a voice, run STT, generate music or sound effects
 - Generate 3D models (BytePlus Hyper3D / Hitem3d)
 - Analyze, transcribe, or extract structured data from media/docs
@@ -492,6 +492,12 @@ multix fish tts --turns-file scene.json   # [{"text": "...", "voice": "<voice-id
 # Fish silently skips an unresolved reference (warned).
 multix fish voices list [--public] [--language vi] [--title <text>]   # free; your voices by default
 multix fish voices get <voice-id>
+multix fish voices delete <voice-id> --yes
+# Voice design: header model: voice-design-1, $0.01 per successful request (any --count 1-4), never retried; saves WAV candidates
+multix fish voice-design "A calm Vietnamese narrator" --count 3 --language vi --json   # candidates[].path, design_signature
+# Clone: POST /model multipart type=tts train_mode=fast, private by default; --consent required; sent once
+# (UNKNOWN_REMOTE_STATE = check `fish voices list` before resending, or you may create a second voice)
+multix fish clone --title "My narrator" --sample a.wav [--sample b.wav] [--transcript-file lines.txt] [--design-signature <sig>] --consent
 # Native Fish and OpenRouter fish-audio/* are separate routes and prices; multix never falls back between them.
 
 # Voice cloning + STT

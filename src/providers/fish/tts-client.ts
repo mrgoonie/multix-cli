@@ -103,28 +103,95 @@ export function isFishError(text: string): boolean {
   }
 }
 
-/** A paid Fish request cut off after it may have been accepted (`what`: "speech", "voice design", ...). */
-export function fishUnknownState(what: string, reason: string, cause?: unknown): MultixError {
+const USAGE_CHECK =
+  "so it may be billed: check your Fish Audio usage at https://fish.audio/app/ before sending it again";
+
+/**
+ * A paid Fish request cut off after it may have been accepted (`what`:
+ * "speech", "voice design", ...). `consequence` replaces the billing advice
+ * when the risk is something else, such as a duplicate voice.
+ */
+export function fishUnknownState(
+  what: string,
+  reason: string,
+  cause?: unknown,
+  consequence: string = USAGE_CHECK,
+): MultixError {
   return new MultixError(
-    `Fish Audio ${what} request was cut off (${reason}) after it may have been accepted, so it may be billed: check your Fish Audio usage at https://fish.audio/app/ before sending it again.`,
+    `Fish Audio ${what} request was cut off (${reason}) after it may have been accepted, ${consequence}.`,
     UNKNOWN_REMOTE_STATE,
     cause === undefined ? undefined : { cause },
   );
 }
 
 /** Map a fetch failure: proven not sent -> the plain error; otherwise UNKNOWN_REMOTE_STATE. */
-export function fishFetchFailure(cause: unknown, url: string, what: string): Error {
+export function fishFetchFailure(
+  cause: unknown,
+  url: string,
+  what: string,
+  consequence?: string,
+): Error {
   if (cause instanceof MultixError) return cause;
   const mapped = toFetchError(cause, url, { provider: "fish" });
   const notSent = errorCodes(cause).some((c) => NOT_SENT_CODES.has(c));
   if (mapped instanceof HttpError && !notSent) {
-    return fishUnknownState(what, mapped.snippet || "connection lost", cause);
+    return fishUnknownState(what, mapped.snippet || "connection lost", cause, consequence);
   }
   return mapped;
 }
 
 export function fishHeaders(apiKey: string): Record<string, string> {
   return { Authorization: `Bearer ${apiKey}` };
+}
+
+export interface FishPostOnce {
+  url: string;
+  /** Request name used in errors ("speech", "voice design", ...). */
+  what: string;
+  headers: Record<string, string>;
+  body: string | FormData;
+  signal: AbortSignal;
+  /** What an unknown outcome risks; defaults to a possible charge. */
+  consequence?: string;
+  fetch?: FetchLike;
+}
+
+/**
+ * Send one paid POST (never retried) and return the 2xx response. Errors:
+ * HttpError for Fish's own error answer (nothing created or billed),
+ * UNKNOWN_REMOTE_STATE when the connection broke or a gateway answered
+ * without saying whether Fish went on with the request.
+ */
+export async function postFishOnce(opts: FishPostOnce): Promise<Response> {
+  let response: Response;
+  try {
+    ({ response } = await fetchFollowingRedirects(
+      opts.url,
+      { method: "POST", headers: opts.headers, body: opts.body, signal: opts.signal },
+      { fetch: opts.fetch, crossOrigin: "error" },
+    ));
+  } catch (cause) {
+    throw fishFetchFailure(cause, opts.url, opts.what, opts.consequence);
+  }
+  if (!response.ok) {
+    const text = await readCappedText(response, ERROR_BODY_MAX);
+    // An edge page (502/504 HTML, a 408 from a proxy) does not say whether Fish went on; Fish's JSON does.
+    if ((response.status >= 500 || response.status === 408) && !isFishError(text)) {
+      throw fishUnknownState(
+        opts.what,
+        `HTTP ${response.status} from the gateway`,
+        undefined,
+        opts.consequence,
+      );
+    }
+    throw new HttpError(
+      response.status,
+      fishErrorMessage(text),
+      opts.url,
+      parseRetryAfter(response.headers.get("retry-after")),
+    );
+  }
+  return response;
 }
 
 /**
@@ -142,42 +209,21 @@ export async function createFishSpeech(opts: FishSpeechOptions): Promise<FishSpe
     );
   }
   const url = `${opts.baseUrl ?? FISH_API_BASE}/v1/tts`;
-  const signal = AbortSignal.timeout(opts.timeoutMs ?? 300_000);
-  let response: Response;
-  try {
-    ({ response } = await fetchFollowingRedirects(
-      url,
-      {
-        method: "POST",
-        headers: {
-          ...fishHeaders(opts.apiKey),
-          "Content-Type": "application/json",
-          model: opts.model,
-        },
-        body: JSON.stringify(opts.body),
-        signal,
-      },
-      { fetch: opts.fetch, crossOrigin: "error" },
-    ));
-  } catch (cause) {
-    throw fishFetchFailure(cause, url, "speech");
-  }
+  const response = await postFishOnce({
+    url,
+    what: "speech",
+    headers: {
+      ...fishHeaders(opts.apiKey),
+      "Content-Type": "application/json",
+      model: opts.model,
+    },
+    body: JSON.stringify(opts.body),
+    signal: AbortSignal.timeout(opts.timeoutMs ?? 300_000),
+    fetch: opts.fetch,
+  });
 
   const mime =
     response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() || undefined;
-  if (!response.ok) {
-    const text = await readCappedText(response, ERROR_BODY_MAX);
-    // An edge page (502/504 HTML) does not say whether synthesis went on; Fish's JSON does.
-    if (response.status >= 500 && !isFishError(text)) {
-      throw fishUnknownState("speech", `HTTP ${response.status} from the gateway`);
-    }
-    throw new HttpError(
-      response.status,
-      fishErrorMessage(text),
-      url,
-      parseRetryAfter(response.headers.get("retry-after")),
-    );
-  }
   if (mime && /json|text\/html/.test(mime)) {
     const text = await readCappedText(response, ERROR_BODY_MAX);
     throw new ProviderError(

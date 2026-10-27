@@ -116,6 +116,8 @@ export function measuredUnits(
     m["header.x-character-count"] ??
     (model && HALF_CREDIT_MODEL.test(model) ? undefined : m["header.character-cost"]);
   if (chars !== undefined) out.characters = chars;
+  const requests = m["request.count"];
+  if (requests !== undefined) out.requests = requests;
   return out;
 }
 

@@ -1,13 +1,20 @@
 /**
- * multix fish voices list|get — read Fish Audio voice models (free GETs).
- * `list` shows your own voices by default; `--public` searches the library.
+ * multix fish voices list|get|delete — Fish Audio voice models. `list` and
+ * `get` are free reads; `list` shows your own voices by default and
+ * `--public` searches the library. `delete` needs --yes: it cannot be undone.
  */
 
 import type { Command } from "commander";
 import { run } from "../../../agent/run-state.js";
 import { ValidationError } from "../../../core/errors.js";
 import { requireFishKey } from "../client.js";
-import { type FishVoice, getFishVoice, listFishVoices } from "../voices-client.js";
+import {
+  type FishVoice,
+  deleteFishVoice,
+  fishModelId,
+  getFishVoice,
+  listFishVoices,
+} from "../voices-client.js";
 
 function line(v: FishVoice): string {
   const meta = [v.state, v.visibility, v.languages.join("/")].filter(Boolean).join(", ");
@@ -64,10 +71,22 @@ export function registerFishVoicesCommand(parent: Command): void {
     .command("get <id>")
     .description("Show one Fish Audio voice model (state, visibility, languages)")
     .action(async (id: string) => {
-      if (!/^[A-Za-z0-9_-]{1,128}$/.test(id)) {
-        throw new ValidationError(`"${id}" is not a Fish Audio voice id`);
-      }
-      const voice = await getFishVoice({ apiKey: requireFishKey(), id });
+      const voice = await getFishVoice({ apiKey: requireFishKey(), id: fishModelId(id) });
       console.log(run.json ? JSON.stringify(voice) : line(voice));
+    });
+  voices
+    .command("delete <id>")
+    .description("Delete one of your Fish Audio voices (cannot be undone)")
+    .option("--yes", "Confirm the deletion")
+    .action(async (raw: string, opts: { yes?: boolean }) => {
+      const id = fishModelId(raw);
+      if (!opts.yes) {
+        throw new ValidationError(`Deleting ${id} cannot be undone: re-run with --yes to confirm`);
+      }
+      run.data = { deleting: id, dry_run: run.dryRun };
+      await deleteFishVoice({ apiKey: requireFishKey(), id });
+      const result = { deleted: id };
+      run.data = result;
+      console.log(run.json ? JSON.stringify(result) : `Deleted voice ${id}`);
     });
 }

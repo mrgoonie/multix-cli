@@ -137,15 +137,69 @@ dictionary was applied.
 `--text-file` or `--turns-file`; see
 [Cost](/reference/for-ai-agents/#cost-estimate-spend-guard-and-receipt).
 
+## Voice design
+
+`multix fish voice-design` sends a prompt to `POST /v1/voice-design` with the
+header `model: voice-design-1` and saves 1 to 4 candidate voices as WAV files
+(`fish_voice_design_<stamp>_<index>.wav`). Fish bills $0.01 per successful
+request, however many candidates it returns. The request is sent once and is
+never retried.
+
+```bash
+multix fish voice-design "A calm Vietnamese narrator, mid-30s, warm and slow" --count 3 --language vi
+multix fish voice-design --instruction "Energetic radio host" --reference-text "Good morning, everyone!" --seed 7
+multix fish voice-design "Gravelly old sailor" --estimate          # $0.01, a proven ceiling
+```
+
+| Option | Meaning |
+|---|---|
+| `[prompt]` / `--instruction` | Voice description, 1 to 2000 characters (give it once) |
+| `--reference-text` | Line every candidate reads, up to 300 characters |
+| `--language` | Language hint such as `en`, `zh`, `ja`, `vi` |
+| `--count` | Candidates, 1 to 4 (default 2) |
+| `--speed`, `--steps`, `--guidance`, `--instruct-guidance`, `--seed` | Generation controls, checked before sending |
+
+Each candidate in the `--json` result has `path`, `bytes`, `sha256`,
+`audio_kind`, `sample_rate_hz`, `duration_s` and `design_signature`. To keep a
+candidate as a reusable voice, clone it.
+
+## Voice cloning
+
+`multix fish clone` creates a persistent voice from audio samples
+(`POST /model`, multipart, `type=tts`, `train_mode=fast`). The voice is
+private unless you pass `--visibility unlist`; publishing it publicly happens
+in Fish's web app. Cloning needs the speaker's permission, so the command
+refuses to run without `--consent`.
+
+```bash
+multix fish clone --title "My narrator" --sample take1.wav --sample take2.wav --consent
+multix fish clone --title "Designed voice" --sample fish_voice_design_..._0.wav \
+  --design-signature <design_signature> --consent
+multix fish clone --title "Narrator" --sample a.wav --sample b.wav --transcript-file lines.txt --consent
+```
+
+- Samples: `.wav`, `.mp3`, `.m4a`, `.opus`, `.ogg` or `.flac`; up to 20 files,
+  50 MB each and 200 MB in total. They are streamed from disk.
+- Transcripts: one `--transcript` per sample in order, or a `--transcript-file`
+  with one line per sample. Without them Fish transcribes the samples itself.
+- `--tag` (repeatable), `--description`, and `--no-enhance` to skip Fish's
+  noise removal.
+- The upload is sent once. If the connection breaks after Fish may have
+  accepted it, the run ends with `UNKNOWN_REMOTE_STATE`: check
+  `multix fish voices list` before sending it again, or you may get a second
+  voice.
+
 ## Voice models
 
-Listing and reading voices are free requests.
+Listing and reading voices are free requests. Deleting needs `--yes` because
+it cannot be undone.
 
 ```bash
 multix fish voices list                          # your own voice models
 multix fish voices list --public --language vi --title narrator
 multix fish voices list --page-size 50 --page 2
 multix fish voices get <voice-id>
+multix fish voices delete <voice-id> --yes
 ```
 
 ## Native Fish Audio and OpenRouter

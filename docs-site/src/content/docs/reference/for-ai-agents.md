@@ -149,6 +149,7 @@ Estimate: $0.00136 expected, $0.00136–$0.00136 range (proven ceiling)
 | `elevenlabs tts` | Characters (Unicode code points as sent) | Proven. `--previous-text` and `--next-text` count only in the high end. |
 | `openrouter tts` | The model's OpenRouter price: characters for most models, UTF-8 bytes for Fish Audio, tokens for Gemini TTS, seconds of output audio for Seed Audio | Proven for character and byte prices (`--instructions` counts only in the high end); estimated for token and output-second prices. Text must come from `--text`. |
 | `fish tts` | UTF-8 bytes of the text as sent, tags included; text from `--text`, or from the CLI a readable `--text-file` or `--turns-file` (the tagged text multix builds) | Proven. Over MCP, file text is not priced. |
+| `fish voice-design` | A flat $0.01 per successful request, whatever the prompt or `--count`; the receipt counts the request | Proven. |
 | `openrouter transcribe` | Seconds of input audio, measured with `ffprobe` from the local `--input` file | Proven. The high end adds 5% to the measured length and rounds up to a whole minute. A URL input, a file `ffprobe` cannot read, or a token-priced model is `unknown`. |
 | `speech generate` | Each route's price, as `gemini generate-speech`, `elevenlabs tts` or `fish tts` would bill it; text from `--text` or `--text-file` | As for that provider. `--style` counts in the high end on Gemini; `--extra elevenlabs.previous_text`/`next_text` count in the high end on ElevenLabs. A `--fallback` plan is priced at its most expensive route and is proven only if every route is. A route on another provider (OpenAI, MiniMax, Atlas) or an ElevenLabs model without a listed price (`eleven_v3_conversational`) makes the whole run `unknown`. Over MCP, `text-file` is not priced. |
 
@@ -198,7 +199,8 @@ changes (2026-11-12 and 2027-01-01) and become `unknown` until re-checked.
 
 Gemini prices are the paid Standard tier; the free tier costs nothing.
 ElevenLabs subscription plans spend credits instead of USD. The `fish/*` rates
-price the native Fish Audio API (`fish tts`, `speech generate --provider fish`);
+price the native Fish Audio API (`fish tts`, `speech generate --provider fish`,
+`fish voice-design`);
 OpenRouter's `fish-audio/*` models have their own `openrouter/*` rates, and
 multix never falls back between the two routes.
 

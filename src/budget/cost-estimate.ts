@@ -199,6 +199,7 @@ function meterRanges(
       `Audio length: ${CHARS_PER_SECOND.slow}-${CHARS_PER_SECOND.fast} characters per second of speech (typical ${CHARS_PER_SECOND.typical}); the model decides the real length, so the high end is not a hard cap.`,
     );
   }
+  if (meters.has("requests")) units.requests = { low: 1, expected: 1, high: 1 };
   for (const m of meters) if (!units[m]) return undefined;
   return units;
 }

@@ -85,6 +85,8 @@ const BUILDERS: Record<string, RequestBuilder> = {
       ...(instructions ? { extra_text: [instructions] } : {}),
     };
   },
+  // One flat charge per successful request; the prompt does not change it.
+  "fish voice-design": () => ({ provider: "fish", model: "voice-design-1", text: "" }),
   "fish tts": (o, d) => {
     const text = opt(o, "text") ?? opt(o, "prompt") ?? d.text;
     if (text === undefined) return undefined;

@@ -159,6 +159,7 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
     fileOptions: { "text-file": "file", "turns-file": "file", "dictionary-file": "file" },
     repeatable: ["voice", "dictionary"],
   },
+  "fish clone": { fileOptions: { sample: "file", "transcript-file": "file" } },
   "leonardo generate": { caps: { count: ["num"] } },
   "leonardo image-to-image": { caps: { count: ["num"] } },
   "leonardo video": { caps: { resolution: ["resolution"] } },
