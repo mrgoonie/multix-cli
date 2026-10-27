@@ -242,17 +242,17 @@ describe("media inspect/verify (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
           await new Promise((r) => setTimeout(r, 25));
         expect(staged()).toHaveLength(1);
         child.kill("SIGINT");
-        // Two pending SIGINTs merge into one, so let the first be taken before the second.
+        // Two pending SIGINTs can merge into one, so let the first be taken before the second.
         await new Promise((r) => setTimeout(r, 2));
         child.kill("SIGINT");
         const res = await child;
-        if (res.signal === "SIGINT") {
-          // The second signal landed before cleanup finished: no result may be printed.
-          expect(res.stdout).toBe("");
-        } else {
+        if (res.stdout) {
           // Cleanup won the race: a clean cancel is true only when nothing is left behind.
           expect(envelope(res.stdout).error.code).toBe("CANCELLED");
           expect(staged()).toEqual([]);
+        } else {
+          // The second signal landed before cleanup finished: the run died by it.
+          expect(res.signal).toBe("SIGINT");
         }
       },
     );

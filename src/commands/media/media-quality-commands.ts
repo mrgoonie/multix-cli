@@ -57,7 +57,9 @@ const SIGNAL_EXIT: Partial<Record<NodeJS.Signals, number>> = {
  * The listeners stay registered for the whole run: a once-listener would be gone by the
  * time execa's exit handler looks, and it would then re-raise the signal and skip that
  * cleanup. A second signal skips the cleanup: it re-raises the signal so the process dies
- * as a killed command does, without a result claiming nothing was left behind.
+ * as a killed command does, without a result claiming nothing was left behind. Where the
+ * re-raise cannot kill (node as PID 1 in a container, Windows), it exits with the signal's
+ * status and still prints no result.
  */
 async function cancellable<T>(fn: (signal: AbortSignal) => Promise<T>): Promise<T> {
   const ac = new AbortController();
@@ -66,7 +68,15 @@ async function cancellable<T>(fn: (signal: AbortSignal) => Promise<T>): Promise<
   const stop = (signal: NodeJS.Signals) => {
     if (caught) {
       for (const s of signals) process.off(s, stop);
-      process.kill(process.pid, signal);
+      try {
+        process.kill(process.pid, signal);
+      } catch {
+        // Windows has no SIGHUP to raise; the fallback below exits.
+      }
+      setImmediate(() => {
+        run.finalized = true; // no envelope: the cleanup did not run
+        process.exit(SIGNAL_EXIT[signal] ?? 1);
+      });
       return;
     }
     caught = signal;
