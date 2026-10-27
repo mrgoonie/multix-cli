@@ -153,6 +153,11 @@ export interface FishPostOnce {
   signal: AbortSignal;
   /** What an unknown outcome risks; defaults to a possible charge. */
   consequence?: string;
+  /**
+   * The request creates something that Fish may have saved before a server
+   * error, so any 5xx but 503 leaves the outcome unknown even with Fish's JSON.
+   */
+  creates?: boolean;
   fetch?: FetchLike;
 }
 
@@ -175,8 +180,13 @@ export async function postFishOnce(opts: FishPostOnce): Promise<Response> {
   }
   if (!response.ok) {
     const text = await readCappedText(response, ERROR_BODY_MAX);
-    // An edge page (502/504 HTML, a 408 from a proxy) does not say whether Fish went on; Fish's JSON does.
-    if ((response.status >= 500 || response.status === 408) && !isFishError(text)) {
+    // An edge page (502/504 HTML) does not say whether Fish went on; Fish's JSON does,
+    // except for a creating request, which a server error can interrupt after the save.
+    const serverError = response.status >= 500;
+    if (
+      (serverError && !isFishError(text)) ||
+      (serverError && opts.creates && response.status !== 503)
+    ) {
       throw fishUnknownState(
         opts.what,
         `HTTP ${response.status} from the gateway`,

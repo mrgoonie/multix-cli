@@ -159,8 +159,6 @@ export interface CreateFishCloneOptions {
   visibility?: FishVisibility;
   tags?: string[];
   enhanceAudioQuality?: boolean;
-  /** One /v1/voice-design candidate signature per sample, in order. */
-  designSignatures?: string[];
   timeoutMs?: number;
   baseUrl?: string;
   fetch?: FetchLike;
@@ -177,9 +175,6 @@ export function cloneForm(opts: CreateFishCloneOptions): FormData {
   if (texts.some((t) => t !== undefined) && texts.some((t) => t === undefined)) {
     throw new ValidationError("Give a transcript for every sample, or for none");
   }
-  if (opts.designSignatures && opts.designSignatures.length !== opts.samples.length) {
-    throw new ValidationError("Give one --design-signature per sample, in the same order");
-  }
   const form = new FormData();
   form.append("type", "tts");
   form.append("train_mode", "fast");
@@ -190,7 +185,6 @@ export function cloneForm(opts: CreateFishCloneOptions): FormData {
   if (opts.enhanceAudioQuality === false) form.append("enhance_audio_quality", "false");
   for (const s of opts.samples) form.append("voices", s.data, s.name);
   for (const t of texts) if (t !== undefined) form.append("texts", t);
-  for (const sig of opts.designSignatures ?? []) form.append("voice_design_signatures", sig);
   return form;
 }
 
@@ -213,6 +207,7 @@ export async function createFishClone(opts: CreateFishCloneOptions): Promise<Fis
     body: cloneForm(opts),
     signal: AbortSignal.timeout(opts.timeoutMs ?? 300_000),
     consequence: VOICES_CHECK,
+    creates: true,
     fetch: opts.fetch,
   });
   // Fish accepted the upload, so the voice probably exists: an unreadable

@@ -160,8 +160,8 @@ multix fish voice-design "Gravelly old sailor" --estimate          # $0.01, a pr
 | `--speed`, `--steps`, `--guidance`, `--instruct-guidance`, `--seed` | Generation controls, checked before sending |
 
 Each candidate in the `--json` result has `path`, `bytes`, `sha256`,
-`audio_kind`, `sample_rate_hz`, `duration_s` and `design_signature`. To keep a
-candidate as a reusable voice, clone it.
+`audio_kind`, `sample_rate_hz`, `duration_s` and `language`. To keep a
+candidate as a reusable voice, clone its saved file.
 
 ## Voice cloning
 
@@ -173,8 +173,7 @@ refuses to run without `--consent`.
 
 ```bash
 multix fish clone --title "My narrator" --sample take1.wav --sample take2.wav --consent
-multix fish clone --title "Designed voice" --sample fish_voice_design_..._0.wav \
-  --design-signature <design_signature> --consent
+multix fish clone --title "Designed voice" --sample fish_voice_design_..._0.wav --consent
 multix fish clone --title "Narrator" --sample a.wav --sample b.wav --transcript-file lines.txt --consent
 ```
 

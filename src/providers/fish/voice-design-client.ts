@@ -88,8 +88,6 @@ export interface DesignedVoice {
   check: AudioCheck;
   text: string | null;
   language: string | null;
-  /** Pass to `fish clone --design-signature` to mark a clone of this audio as designed. */
-  signature: string | null;
 }
 
 interface RawCandidate {
@@ -100,7 +98,6 @@ interface RawCandidate {
   duration_ms?: unknown;
   text?: unknown;
   language?: unknown;
-  signature?: unknown;
 }
 
 const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/;
@@ -207,7 +204,6 @@ export async function designFishVoice(opts: DesignFishVoiceOptions): Promise<Des
       check: checkFishAudio(audio, "wav", rate),
       text: str(c.text),
       language: str(c.language),
-      signature: str(c.signature),
     };
   });
 }

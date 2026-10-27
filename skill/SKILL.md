@@ -494,10 +494,10 @@ multix fish voices list [--public] [--language vi] [--title <text>]   # free; yo
 multix fish voices get <voice-id>
 multix fish voices delete <voice-id> --yes
 # Voice design: header model: voice-design-1, $0.01 per successful request (any --count 1-4), never retried; saves WAV candidates
-multix fish voice-design "A calm Vietnamese narrator" --count 3 --language vi --json   # candidates[].path, design_signature
+multix fish voice-design "A calm Vietnamese narrator" --count 3 --language vi --json   # candidates[].path
 # Clone: POST /model multipart type=tts train_mode=fast, private by default; --consent required; sent once
 # (UNKNOWN_REMOTE_STATE = check `fish voices list` before resending, or you may create a second voice)
-multix fish clone --title "My narrator" --sample a.wav [--sample b.wav] [--transcript-file lines.txt] [--design-signature <sig>] --consent
+multix fish clone --title "My narrator" --sample a.wav [--sample b.wav] [--transcript-file lines.txt] --consent
 # Native Fish and OpenRouter fish-audio/* are separate routes and prices; multix never falls back between them.
 
 # Voice cloning + STT

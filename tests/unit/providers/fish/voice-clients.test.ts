@@ -89,7 +89,6 @@ describe("fish voice design client", () => {
                 audio_base64: b64(audio),
                 sample_rate: 44_100,
                 duration_ms: 1000,
-                signature: "sig-1",
               },
             ],
           }),
@@ -110,7 +109,7 @@ describe("fish voice design client", () => {
     expect(seen[0]?.headers.get("model")).toBe("voice-design-1");
     expect(JSON.parse(String(seen[0]?.body))).toEqual({ instruction: "Warm narrator", n: 1 });
     expect(accepted).toBe(1);
-    expect(out[0]).toMatchObject({ id: "c-1", index: 0, signature: "sig-1" });
+    expect(out[0]).toMatchObject({ id: "c-1", index: 0 });
     expect(out[0]?.check).toMatchObject({ kind: "wav", signature_ok: true, duration_s: 1 });
   });
 
@@ -171,10 +170,10 @@ describe("fish voice design client", () => {
     expect(seen).toHaveLength(1);
   });
 
-  it("reports an unknown remote state for a gateway page, a 408 or a dropped line", async () => {
+  it("reports an unknown remote state for a gateway page or a dropped line", async () => {
     const answers: Array<() => Response> = [
       () => new Response("<html>Bad Gateway</html>", { status: 502 }),
-      () => new Response("Request Timeout", { status: 408 }),
+      () => new Response("Gateway Timeout", { status: 504 }),
       () => {
         throw Object.assign(new TypeError("fetch failed"), { cause: { code: "ECONNRESET" } });
       },
@@ -197,7 +196,7 @@ describe("fish voice design client", () => {
 describe("fish voice clone and delete clients", () => {
   const sample = { name: "a.wav", data: new Blob([wav(16_000, 320)]) };
 
-  it("builds a private fast tts form and refuses partial transcripts or signatures", () => {
+  it("builds a private fast tts form and refuses partial transcripts", () => {
     const form = cloneForm({ apiKey: KEY, title: " Me ", samples: [sample, sample] });
     expect(form.get("type")).toBe("tts");
     expect(form.get("train_mode")).toBe("fast");
@@ -213,19 +212,14 @@ describe("fish voice clone and delete clients", () => {
       visibility: "unlist",
       tags: ["vi", "narrator"],
       enhanceAudioQuality: false,
-      designSignatures: ["sig-1"],
     });
     expect(full.getAll("texts")).toEqual(["xin chào"]);
     expect(full.get("visibility")).toBe("unlist");
     expect(full.getAll("tags")).toEqual(["vi", "narrator"]);
     expect(full.get("enhance_audio_quality")).toBe("false");
-    expect(full.getAll("voice_design_signatures")).toEqual(["sig-1"]);
     expect(() =>
       cloneForm({ apiKey: KEY, title: "Me", samples: [{ ...sample, text: "hi" }, sample] }),
     ).toThrow(/every sample, or for none/);
-    expect(() =>
-      cloneForm({ apiKey: KEY, title: "Me", samples: [sample], designSignatures: ["a", "b"] }),
-    ).toThrow(/one --design-signature per sample/);
     expect(() => cloneForm({ apiKey: KEY, title: "Me", samples: [] })).toThrow(/1-20/);
     expect(() => cloneForm({ apiKey: KEY, title: " ", samples: [sample] })).toThrow(/--title/);
   });
@@ -271,6 +265,23 @@ describe("fish voice clone and delete clients", () => {
       }).catch((e) => e);
       expect(err.code).toBe("UNKNOWN_REMOTE_STATE");
       expect(err.message).toMatch(/fish voices list/);
+    }
+  });
+
+  it("treats Fish's own 5xx answer to a clone as an unknown state, but not its 4xx or 503", async () => {
+    const fishError = (status: number) =>
+      fetchReturning(
+        () => new Response(JSON.stringify({ status, message: "Server error" }), { status }),
+      );
+    const send = (fetch: ReturnType<typeof fishError>["fetch"]) =>
+      createFishClone({ apiKey: KEY, title: "Me", samples: [sample], fetch }).catch((e) => e);
+    const interrupted = await send(fishError(500).fetch);
+    expect(interrupted.code).toBe("UNKNOWN_REMOTE_STATE");
+    expect(interrupted.message).toMatch(/fish voices list/);
+    for (const status of [400, 503]) {
+      const err = await send(fishError(status).fetch);
+      expect(err).toBeInstanceOf(HttpError);
+      expect(err.status).toBe(status);
     }
   });
 

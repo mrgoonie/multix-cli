@@ -75,7 +75,7 @@ export function registerFishCloneCommand(parent: Command): void {
     .requiredOption("--title <name>", "Name of the new voice")
     .option(
       "--sample <path>",
-      `Audio sample (wav, mp3, m4a, opus); repeat for up to ${MAX_CLONE_SAMPLES}`,
+      `Audio sample (wav, mp3, m4a, opus, ogg, flac); repeat for up to ${MAX_CLONE_SAMPLES}`,
       collect,
       [],
     )
@@ -97,12 +97,6 @@ export function registerFishCloneCommand(parent: Command): void {
       "private",
     )
     .option("--no-enhance", "Skip Fish's noise removal and level normalization")
-    .option(
-      "--design-signature <sig>",
-      "Signature of a `fish voice-design` candidate, one per sample in order",
-      collect,
-      [],
-    )
     .option("--consent", "Confirm you have the speaker's permission to clone this voice")
     .option("-v, --verbose", "Verbose logging")
     .action(async (opts) => {
@@ -153,7 +147,6 @@ export function registerFishCloneCommand(parent: Command): void {
         visibility: opts.visibility,
         tags: opts.tag,
         enhanceAudioQuality: opts.enhance,
-        ...(opts.designSignature.length > 0 ? { designSignatures: opts.designSignature } : {}),
       });
       run.data = voice;
       if (run.json) {

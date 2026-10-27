@@ -161,8 +161,8 @@ multix fish voice-design "Gravelly old sailor" --estimate          # $0.01, mứ
 | `--speed`, `--steps`, `--guidance`, `--instruct-guidance`, `--seed` | Tham số sinh, được kiểm tra trước khi gửi |
 
 Mỗi ứng viên trong kết quả `--json` có `path`, `bytes`, `sha256`,
-`audio_kind`, `sample_rate_hz`, `duration_s` và `design_signature`. Muốn giữ
-một ứng viên làm giọng dùng lại, hãy clone nó.
+`audio_kind`, `sample_rate_hz`, `duration_s` và `language`. Muốn giữ
+một ứng viên làm giọng dùng lại, hãy clone file đã lưu của nó.
 
 ## Clone giọng
 
@@ -174,8 +174,7 @@ Clone giọng cần sự cho phép của người nói, nên lệnh từ chối 
 
 ```bash
 multix fish clone --title "My narrator" --sample take1.wav --sample take2.wav --consent
-multix fish clone --title "Designed voice" --sample fish_voice_design_..._0.wav \
-  --design-signature <design_signature> --consent
+multix fish clone --title "Designed voice" --sample fish_voice_design_..._0.wav --consent
 multix fish clone --title "Narrator" --sample a.wav --sample b.wav --transcript-file lines.txt --consent
 ```
 

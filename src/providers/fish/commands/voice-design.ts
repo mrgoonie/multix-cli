@@ -110,9 +110,9 @@ export function registerFishVoiceDesignCommand(parent: Command): void {
       });
 
       const stamp = outputStamp();
-      const saved = candidates.map((c) => {
+      const saved = candidates.map((c, i) => {
         const ext = c.check.kind && c.check.kind !== "pcm" ? c.check.kind : "wav";
-        const dest = path.join(getOutputDir(), `fish_voice_design_${stamp}_${c.index}.${ext}`);
+        const dest = path.join(getOutputDir(), `fish_voice_design_${stamp}_${i}.${ext}`);
         fs.writeFileSync(dest, c.audio);
         if (!c.check.signature_ok) {
           logger.warn(
@@ -129,8 +129,6 @@ export function registerFishVoiceDesignCommand(parent: Command): void {
           sample_rate_hz: c.check.sample_rate_hz ?? c.sample_rate_hz,
           duration_s: c.check.duration_s ?? Math.round(c.duration_ms) / 1000,
           language: c.language,
-          // A signature lets `fish clone` mark a clone of this audio as designed.
-          design_signature: c.signature,
         };
       });
       const result = { ...plan, candidates: saved };

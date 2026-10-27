@@ -7409,7 +7409,7 @@
             {
               "long": "--sample",
               "flags": "--sample <path>",
-              "description": "Audio sample (wav, mp3, m4a, opus); repeat for up to 20",
+              "description": "Audio sample (wav, mp3, m4a, opus, ogg, flac); repeat for up to 20",
               "required": false,
               "takesValue": true,
               "valueOptional": false,
@@ -7479,17 +7479,6 @@
               "valueOptional": false,
               "variadic": false,
               "negatable": true
-            },
-            {
-              "long": "--design-signature",
-              "flags": "--design-signature <sig>",
-              "description": "Signature of a `fish voice-design` candidate, one per sample in order",
-              "required": false,
-              "takesValue": true,
-              "valueOptional": false,
-              "variadic": false,
-              "negatable": false,
-              "default": []
             },
             {
               "long": "--consent",
