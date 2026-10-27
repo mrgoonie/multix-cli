@@ -115,7 +115,7 @@ SIGTERM while the command waits stops polling and exits with 130 or 143 after
 printing that resume command; the prediction keeps running and is billed, so
 resume it instead of running the command again. With `--json`, the envelope
 lists the id in `provider_ids` and the resume command first in `next`. The same
-holds for `status --wait`, and a closed terminal (SIGHUP) exits with 129. A
+holds while outputs are saved and for `status --wait`, and a closed terminal (SIGHUP) exits with 129. A
 signal before submit (while the schema loads or files upload) is a clean cancel:
 no prediction was created, so rerunning is safe. A signal while the submit request is
 open warns that Atlas Cloud may have accepted the prediction: check your request

@@ -44,6 +44,7 @@ import {
   INTERRUPT_EXIT_CODES,
   type InterruptSignal,
   type NamingPolicy,
+  cleanupActiveClaims,
   downloadClaimed,
   savedOutput,
 } from "./output-claims.js";
@@ -198,8 +199,8 @@ function shellQuote(value: string): string {
 /**
  * Run `work` so that Ctrl-C, SIGTERM or a closed terminal stops it and exits
  * with 128 + the signal number through the agent runtime (envelope, history),
- * after printing `message`. For phases with no local state to clean up:
- * schema reads, uploads, submit and polling.
+ * after printing `message`. Removes this run's download locks and temp files
+ * first, so it also covers delivery before the first output claims its path.
  */
 export async function exitOnInterrupt<T>(
   work: () => Promise<T>,
@@ -209,6 +210,7 @@ export async function exitOnInterrupt<T>(
   const signals = Object.keys(INTERRUPT_EXIT_CODES) as InterruptSignal[];
   const stop = (signal: InterruptSignal) => {
     process.stderr.write(`${message}\n`);
+    cleanupActiveClaims();
     exit(INTERRUPT_EXIT_CODES[signal]);
   };
   for (const signal of signals) process.on(signal, stop);
@@ -226,6 +228,11 @@ export async function exitOnInterrupt<T>(
 export function beforeSubmit<T>(work: () => Promise<T>): Promise<T> {
   run.preSubmit = true;
   return exitOnInterrupt(work, "Cancelled before submit; no prediction was created.");
+}
+
+/** Stderr line for a signal while a finished prediction's outputs are saved. */
+export function deliveryCancelledMessage(id: string, resume: string): string {
+  return `Cancelled while saving the outputs of prediction ${id}; it has finished and is billed. Resume with: ${resume}`;
 }
 
 /** Stderr line for a signal while a submitted prediction is polled. */
@@ -272,12 +279,11 @@ export async function executePrediction(o: ExecuteOptions): Promise<ExecuteResul
       );
   assertPredictionSucceeded(final);
   // File names come from the submit-time id, which a resume also uses.
-  const delivered = await deliverPrediction(final, {
-    logger,
-    opts,
-    hint: o.hint,
-    predictionId: id,
-  });
+  const delivered = await exitOnInterrupt(
+    () => deliverPrediction(final, { logger, opts, hint: o.hint, predictionId: id }),
+    deliveryCancelledMessage(id, resume),
+    o.exit,
+  );
   return { predictionId: id, prediction: final, ...delivered };
 }
 

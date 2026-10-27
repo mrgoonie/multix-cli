@@ -292,29 +292,35 @@ describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
         });
       const processing = { code: 200, data: { id: "pred_sig02", status: "processing" } };
 
-      it("SIGINT while status --wait polls exits 130 with the id and resume command", async () => {
-        await withAtlas(
-          () => processing,
-          async (baseUrl, seen) => {
-            const child = atlas(baseUrl, ["status", "pred_sig02", "--wait", "--output", "out"]);
-            await seen.first;
-            child.kill("SIGINT");
-            const result = await child;
-            expect(result.exitCode).toBe(130);
-            const out = envelope(result.stdout);
-            expect(out).toMatchObject({ ok: false, command: "atlas status", exit_code: 130 });
-            expect(out.provider_ids).toContain("pred_sig02");
-            expect(out.next[0]).toBe(
-              "multix atlas status pred_sig02 --wait --download --output out",
-            );
-            expect(out.error).toMatchObject({ code: "CANCELLED", retryable: false });
-            expect(out.log.join("\n")).toContain(
-              "Cancelled while waiting on prediction pred_sig02",
-            );
-            expect(seen.requests.every((r) => r.startsWith("GET "))).toBe(true);
-          },
-        );
-      });
+      it.each([
+        ["SIGINT", 130],
+        ["SIGHUP", 129],
+      ] as const)(
+        "%s while status --wait polls exits %i with the id and resume command",
+        async (signal, code) => {
+          await withAtlas(
+            () => processing,
+            async (baseUrl, seen) => {
+              const child = atlas(baseUrl, ["status", "pred_sig02", "--wait", "--output", "out"]);
+              await seen.first;
+              child.kill(signal);
+              const result = await child;
+              expect(result.exitCode).toBe(code);
+              const out = envelope(result.stdout);
+              expect(out).toMatchObject({ ok: false, command: "atlas status", exit_code: code });
+              expect(out.provider_ids).toContain("pred_sig02");
+              expect(out.next[0]).toBe(
+                "multix atlas status pred_sig02 --wait --download --output out",
+              );
+              expect(out.error).toMatchObject({ code: "CANCELLED", retryable: false });
+              expect(out.log.join("\n")).toContain(
+                "Cancelled while waiting on prediction pred_sig02",
+              );
+              expect(seen.requests.every((r) => r.startsWith("GET "))).toBe(true);
+            },
+          );
+        },
+      );
 
       it("SIGTERM while the submit request is open warns that a paid job may exist", async () => {
         await withAtlas(
@@ -335,23 +341,55 @@ describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
         );
       });
 
-      it("SIGINT while the schema loads is a clean cancel with nothing submitted", async () => {
+      it.each([
+        ["image", ["image", "a cat"]],
+        ["run", ["run", "m/x", "--input", '{"prompt":"a cat"}']],
+      ])(
+        "SIGINT while %s loads the schema is a clean cancel with nothing submitted",
+        async (_, args) => {
+          await withAtlas(
+            () => false,
+            async (baseUrl, seen) => {
+              const child = atlas(baseUrl, args);
+              await seen.first;
+              child.kill("SIGINT");
+              const result = await child;
+              expect(result.exitCode).toBe(130);
+              const out = envelope(result.stdout);
+              expect(out.error.code).toBe("CANCELLED");
+              expect(out.error.hint).toMatch(/nothing was left behind/);
+              expect(out.provider_ids ?? []).toEqual([]);
+              expect(out.log.join("\n")).toContain(
+                "Cancelled before submit; no prediction was created.",
+              );
+              expect(seen.requests.some((r) => r.startsWith("POST "))).toBe(false);
+            },
+          );
+        },
+      );
+
+      it("SIGTERM while a local reference uploads is a clean cancel with nothing submitted", async () => {
+        fs.writeFileSync(path.join(tmp, "ref.png"), "PNG");
         await withAtlas(
           () => false,
           async (baseUrl, seen) => {
-            const child = atlas(baseUrl, ["image", "a cat"]);
+            const child = atlas(baseUrl, [
+              "image-to-image",
+              "--prompt",
+              "make it blue",
+              "--ref",
+              "ref.png",
+              "--no-validate",
+            ]);
             await seen.first;
-            child.kill("SIGINT");
+            child.kill("SIGTERM");
             const result = await child;
-            expect(result.exitCode).toBe(130);
+            expect(result.exitCode).toBe(143);
             const out = envelope(result.stdout);
             expect(out.error.code).toBe("CANCELLED");
             expect(out.error.hint).toMatch(/nothing was left behind/);
-            expect(out.provider_ids ?? []).toEqual([]);
-            expect(out.log.join("\n")).toContain(
-              "Cancelled before submit; no prediction was created.",
-            );
-            expect(seen.requests.some((r) => r.startsWith("POST "))).toBe(false);
+            expect(out.log.join("\n")).toContain("Cancelled before submit");
+            expect(seen.requests).toEqual(["POST /api/v1/model/uploadMedia"]);
           },
         );
       });

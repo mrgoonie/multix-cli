@@ -15,6 +15,7 @@ import { createAtlasClientFromEnv } from "./env.js";
 import {
   type RunCliOpts,
   deliverPrediction,
+  deliveryCancelledMessage,
   exitOnInterrupt,
   parseTimeoutMs,
   resumeCommand,
@@ -64,10 +65,14 @@ export function registerAtlasStatusCommand(parent: Command): void {
         return;
       }
       assertPredictionSucceeded(prediction);
-      await deliverPrediction(prediction, {
-        logger,
-        opts: { ...opts, download: true },
-        predictionId,
-      });
+      await exitOnInterrupt(
+        () =>
+          deliverPrediction(prediction, {
+            logger,
+            opts: { ...opts, download: true },
+            predictionId,
+          }),
+        deliveryCancelledMessage(predictionId, resume),
+      );
     });
 }
