@@ -134,7 +134,7 @@ export function installFetchTelemetry(onDryRun: (request: DryRunRequest) => neve
     }
     run.calls.push({ method, host, path, status: response.status, ms: Date.now() - started, seq });
     // Read in the background: the caller keeps its own size caps and stall detection.
-    const call = { method, host, path, seq, named: named !== undefined };
+    const call = { method, host, path, seq, named: named ?? modelInPath(path) };
     const pending = recordUsage(response, call).catch(() => {
       // Telemetry never breaks a command.
     });
@@ -253,35 +253,64 @@ export function modelFromTail(tail: string): string | undefined {
   return matches.at(-1)?.[1];
 }
 
+/**
+ * The command's model (`--model` or a `<model>` argument) when the request path
+ * carries it, as fal (`/fal-ai/flux/dev`) and Replicate
+ * (`/models/<owner>/<name>/predictions`) submit a job: that request is the
+ * generation request even though its body names no model.
+ */
+function modelInPath(path: string): string | undefined {
+  const option = typeof run.options.model === "string" ? run.options.model : undefined;
+  for (const model of [option, run.positionalModel]) {
+    if (model?.includes("/") && path.includes(`/${model}`)) return model;
+  }
+  return undefined;
+}
+
+/** A Gemini long-running operation (`models/veo-…/operations/<id>`): the job id of a Veo run. */
+function operationName(body: unknown): string | undefined {
+  const name = body && typeof body === "object" ? (body as { name?: unknown }).name : undefined;
+  return typeof name === "string" && name.length <= 200 && /(^|\/)operations\/[^/]+$/.test(name)
+    ? name
+    : undefined;
+}
+
 interface CallInfo {
   method: string;
   host: string;
   path: string;
   seq: number;
-  /** The request body or path named a model: the generation request, not an upload or poll. */
-  named: boolean;
+  /** Model the request named (body, path, or the command's model in the path): the generation request. */
+  named?: string;
 }
 
 /**
- * Remember the served model and the job id this response reports. The request
- * that named a model outranks the rest, a body id outranks a request-id header,
- * and a GET that named no model (a poll or lookup) ranks last.
+ * Remember the served model and the job id this response reports. Only the
+ * generation request (one that named a model) reports the served model, paired
+ * with the model it asked for. For the job, that request outranks the rest, a
+ * body id outranks a request-id header, and a GET (a poll or lookup) ranks last.
  */
 function recordIdentity(
   call: CallInfo,
+  body: unknown,
   model: string | undefined,
   ids: string[],
   headers: Headers,
 ): void {
   const base = call.named ? 0 : call.method === "GET" ? 4 : 2;
-  if (model) {
-    run.resolvedModel = preferRanked(run.resolvedModel, { seq: call.seq, rank: base, model });
+  if (model && call.named) {
+    run.resolvedModel = preferRanked(run.resolvedModel, {
+      seq: call.seq,
+      rank: 0,
+      model,
+      requested: call.named,
+    });
   }
   const headerIds = new Set<string>();
   headers.forEach((value, name) => {
     if (/(request|generation)-?id/i.test(name)) headerIds.add(value);
   });
-  const fromBody = ids.find((id) => !headerIds.has(id));
+  const fromBody = operationName(body) ?? ids.find((id) => !headerIds.has(id));
   const id = fromBody ?? ids[0];
   if (!id) return;
   run.job = preferRanked(run.job, {
@@ -314,7 +343,7 @@ async function recordUsage(response: Response, call: CallInfo): Promise<void> {
   }
   const usage = extractUsage(body, response.headers);
   for (const id of usage.ids) if (!run.ids.includes(id) && run.ids.length < 10) run.ids.push(id);
-  if (response.ok) recordIdentity(call, model, usage.ids, response.headers);
+  if (response.ok) recordIdentity(call, body, model, usage.ids, response.headers);
   if (!hasUsage(usage)) return;
   if (usage.sources) {
     usage.sources = Object.fromEntries(

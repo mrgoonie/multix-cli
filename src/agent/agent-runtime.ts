@@ -272,12 +272,12 @@ export function finalizeRun(input: FinalizeInput): number {
   const optionModel =
     typeof run.options.model === "string" ? run.options.model : run.positionalModel;
   const model = run.requestModel ?? optionModel;
-  const modelResolved = notSent ? undefined : run.resolvedModel?.model;
-  // Requested and served model, both named whenever either is known; never a guess.
-  const models =
-    model || modelResolved
-      ? { model_requested: model ?? null, model_resolved: modelResolved ?? null }
-      : {};
+  // Requested and served model of the same request; never a guess.
+  const served = notSent ? undefined : run.resolvedModel;
+  const modelRequested = served?.requested ?? model;
+  const models = modelRequested
+    ? { model_requested: modelRequested, model_resolved: served?.model ?? null }
+    : {};
   const job = notSent ? undefined : jobIdentity();
   const usage = SPEND_LOOKUPS.test(run.command) ? undefined : summarizeUsage();
   const httpErrors = run.calls.filter((c) => c.status === 0 || c.status >= 400).length;

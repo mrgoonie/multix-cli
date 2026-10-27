@@ -60,7 +60,7 @@ export interface RunState {
   /** Model named by the first provider request that names one. */
   requestModel?: string;
   /** Model a provider response reported serving (`model`, `modelVersion`). */
-  resolvedModel?: Ranked & { model: string };
+  resolvedModel?: Ranked & { model: string; requested: string };
   /** Best id for the run's job: from the request that named the model, body over header. */
   job?: JobCandidate;
   /** Structured result a command reports for the envelope's `data` (wins over parsed stdout). */
@@ -128,9 +128,13 @@ export function preferRanked<T extends Ranked>(current: T | undefined, next: T):
   return next.seq < current.seq ? next : current;
 }
 
+/** Groups that route one command to other providers: their job names the API host instead. */
+const ROUTING_GROUPS = new Set(["speech", "scene"]);
+
 /**
  * The run's provider job: id, and the attempt that created it (1 plus the
- * failed calls to the same endpoint before it). A tracked in-flight job wins.
+ * failed calls to the same endpoint right before it, with no success between).
+ * A tracked in-flight job wins.
  */
 export function jobIdentity(
   state: RunState = run,
@@ -140,16 +144,22 @@ export function jobIdentity(
   if (!id) return undefined;
   let attempt = 1;
   if (best && best.id === id) {
-    attempt += state.calls.filter(
-      (c) =>
-        c.seq < best.seq &&
-        c.method === best.method &&
-        c.host === best.host &&
-        c.path === best.path &&
-        (c.status === 0 || c.status >= 400),
-    ).length;
+    const earlier = state.calls
+      .filter(
+        (c) =>
+          c.seq < best.seq &&
+          c.method === best.method &&
+          c.host === best.host &&
+          c.path === best.path,
+      )
+      .sort((a, b) => b.seq - a.seq);
+    for (const c of earlier) {
+      if (c.status !== 0 && c.status < 400) break;
+      attempt++;
+    }
   }
-  return { provider: state.group || best?.host || "", id, attempt };
+  const routed = !state.group || ROUTING_GROUPS.has(state.group);
+  return { provider: routed ? best?.host || state.group : state.group, id, attempt };
 }
 
 /** Record a submitted job that keeps running if the run stops; its id goes in provider_ids. */

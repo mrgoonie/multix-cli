@@ -47,6 +47,8 @@ function reset(): void {
   run.job = undefined;
   run.inFlight = undefined;
   run.group = "";
+  run.options = {};
+  run.positionalModel = undefined;
   run.dryRun = false;
 }
 
@@ -104,21 +106,106 @@ describe("resolved model and job from provider responses", () => {
     expect(jobIdentity()).toEqual({ provider: "fal", id: "fal-req-1", attempt: 1 });
   });
 
-  it("counts failed calls to the same endpoint before the one that returned the job", async () => {
+  it("takes a Veo operation name as the job and counts the retries before it", async () => {
+    run.group = "gemini";
+    const op = "models/veo-3.0-generate-001/operations/abc123";
+    serve(
+      json({ error: { code: 503, status: "UNAVAILABLE" } }, 503),
+      json({ error: { code: 429, status: "RESOURCE_EXHAUSTED" } }, 429),
+      json({ name: op }),
+      json({ name: op, done: true, response: {} }),
+    );
+    const base = "https://generativelanguage.googleapis.com/v1beta";
+    const url = `${base}/models/veo-3.0-generate-001:predictLongRunning`;
+    for (let i = 0; i < 3; i++) await fetch(url, { method: "POST", body: "{}" });
+    await fetch(`${base}/${op}`);
+    await settleTelemetry();
+    expect(run.requestModel).toBe("veo-3.0-generate-001");
+    expect(run.resolvedModel).toBeUndefined();
+    expect(jobIdentity()).toEqual({ provider: "gemini", id: op, attempt: 3 });
+  });
+
+  it("reads Gemini's modelVersion as the served model of generateContent", async () => {
     run.group = "gemini";
     serve(
-      json({ error: { code: 503 } }, 503),
-      json({ error: { code: 429 } }, 429),
-      json({ name: "operations/abc", id: "op-1", modelVersion: "veo-3.0-001" }),
-      json({ id: "op-1", done: true }),
+      json({
+        candidates: [],
+        usageMetadata: { totalTokenCount: 5 },
+        modelVersion: "gemini-2.5-flash-image-001",
+        responseId: "resp-1",
+      }),
     );
-    const url = "https://generativelanguage.googleapis.com/v1beta/models/veo-3.0:predict";
-    for (let i = 0; i < 3; i++) await fetch(url, { method: "POST", body: "{}" });
-    await fetch("https://generativelanguage.googleapis.com/v1beta/operations/abc");
+    await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent",
+      { method: "POST", body: "{}" },
+    );
     await settleTelemetry();
-    expect(run.requestModel).toBe("veo-3.0");
-    expect(run.resolvedModel?.model).toBe("veo-3.0-001");
-    expect(jobIdentity()).toEqual({ provider: "gemini", id: "op-1", attempt: 3 });
+    expect(run.resolvedModel).toMatchObject({
+      model: "gemini-2.5-flash-image-001",
+      requested: "gemini-2.5-flash-image",
+    });
+  });
+
+  it("counts only the failures since the endpoint's last success", async () => {
+    run.group = "openai";
+    serve(json({ id: "a-1" }), json({ error: {} }, 429), json({ id: "c-1", model: "gpt-image-1" }));
+    const url = "https://api.openai.com/v1/images/generations";
+    await fetch(url, { method: "POST", body: "{}" });
+    await fetch(url, { method: "POST", body: "{}" });
+    await fetch(url, { method: "POST", body: JSON.stringify({ model: "gpt-image-1" }) });
+    await settleTelemetry();
+    expect(jobIdentity()).toEqual({ provider: "openai", id: "c-1", attempt: 2 });
+    run.job = { ...(run.job as NonNullable<typeof run.job>), id: "a-1", seq: 1 };
+    expect(jobIdentity()?.attempt).toBe(1);
+  });
+
+  it("takes the prediction, not an earlier file upload, when the model is in the path", async () => {
+    run.group = "replicate";
+    run.positionalModel = "acme/flux";
+    serve(
+      json({ id: "file-abc", urls: { get: "x" } }),
+      json({ id: "pred9abc", model: "acme/flux", status: "starting" }),
+    );
+    await fetch("https://api.replicate.com/v1/files", { method: "POST", body: "{}" });
+    await fetch("https://api.replicate.com/v1/models/acme/flux/predictions", {
+      method: "POST",
+      body: JSON.stringify({ input: { prompt: "cat" } }),
+    });
+    await settleTelemetry();
+    expect(jobIdentity()).toEqual({ provider: "replicate", id: "pred9abc", attempt: 1 });
+    expect(run.resolvedModel).toMatchObject({ model: "acme/flux", requested: "acme/flux" });
+  });
+
+  it("does not take a served model from a poll or result payload", async () => {
+    run.group = "fal";
+    serve(json({ request_id: "r-1" }), json({ model: "not-the-served-model", images: [] }));
+    await fetch("https://queue.fal.run/fal-ai/flux/dev", { method: "POST", body: "{}" });
+    await fetch("https://queue.fal.run/fal-ai/flux/requests/r-1");
+    await settleTelemetry();
+    expect(run.resolvedModel).toBeUndefined();
+  });
+
+  it("pairs the served model with the request that succeeded and names the routed host", async () => {
+    run.group = "speech";
+    serve(
+      json({ detail: "busy" }, 503),
+      json({ id: "gen-5", model: "openai/gpt-4o-mini-tts-2025" }),
+    );
+    await fetch("https://api.elevenlabs.io/v1/text-to-speech/v", {
+      method: "POST",
+      body: JSON.stringify({ model_id: "eleven_v3" }),
+    });
+    await fetch("https://openrouter.ai/api/v1/audio/speech", {
+      method: "POST",
+      body: JSON.stringify({ model: "openai/gpt-4o-mini-tts" }),
+    });
+    await settleTelemetry();
+    expect(run.requestModel).toBe("eleven_v3");
+    expect(run.resolvedModel).toMatchObject({
+      model: "openai/gpt-4o-mini-tts-2025",
+      requested: "openai/gpt-4o-mini-tts",
+    });
+    expect(jobIdentity()).toEqual({ provider: "openrouter.ai", id: "gen-5", attempt: 1 });
   });
 
   it("prefers the generation request's id over an earlier upload's", async () => {
@@ -208,7 +295,12 @@ describe("finalizeRun receipt identity", () => {
       s.command = "openrouter chat";
       s.group = "openrouter";
       s.requestModel = "openai/gpt-4o";
-      s.resolvedModel = { seq: 1, rank: 0, model: "openai/gpt-4o-2024-08-06" };
+      s.resolvedModel = {
+        seq: 1,
+        rank: 0,
+        model: "openai/gpt-4o-2024-08-06",
+        requested: "openai/gpt-4o",
+      };
       s.job = { seq: 1, rank: 0, id: "gen-1", method: "POST", host: "openrouter.ai", path: "/x" };
       s.calls = [{ method: "POST", host: "openrouter.ai", path: "/x", status: 200, ms: 1, seq: 1 }];
     });
