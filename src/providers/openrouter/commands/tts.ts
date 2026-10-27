@@ -28,6 +28,7 @@ import {
   DEFAULT_PCM_SAMPLE_RATE,
   type ResolvedSpeechFormat,
   SPEECH_FORMATS,
+  type SpeechFormat,
   looksLikeMp3,
   parseSpeechFormat,
   pcmDurationSeconds,
@@ -46,9 +47,10 @@ import {
   listSpeechModels,
   matchVoice,
 } from "../speech-client.js";
+import { OPENROUTER_TTS_MODEL_ENV } from "../speech-defaults.js";
 import { waitForGeneration } from "./generation.js";
 
-export const OPENROUTER_TTS_MODEL_ENV = "OPENROUTER_TTS_MODEL";
+export { OPENROUTER_TTS_MODEL_ENV } from "../speech-defaults.js";
 /** Upper bound on input text; OpenRouter models cap far lower (ElevenLabs v4: 10,000). */
 const MAX_TEXT_CHARS = 100_000;
 const MAX_TURNS = 100;
@@ -248,6 +250,142 @@ function writeAudio(bytes: Uint8Array, ext: string, output: string | undefined):
   return dest;
 }
 
+export interface OpenRouterTtsInput {
+  model: string;
+  input: string | SpeechTurn[];
+  voice?: string;
+  instructions?: string;
+  format: SpeechFormat;
+  /** PCM rate for the WAV header when OpenRouter does not state it. */
+  sampleRate?: number;
+  speed?: number;
+  providerOptions?: Record<string, unknown>;
+  zdr?: boolean;
+  denyDataCollection?: boolean;
+  /** Check the model and voices against the live catalog first (a free GET). */
+  modelCheck: boolean;
+  /** Seconds to wait for /generation to report the cost; 0 skips it. */
+  costWaitSeconds: number;
+}
+
+/**
+ * Validate, send one /audio/speech request (never retried), save the audio and
+ * describe it. Shared by `openrouter tts` and the `multix speech` façade.
+ */
+export async function runOpenRouterTts(
+  params: OpenRouterTtsInput,
+  ctx: { output?: string; logger: Logger },
+) {
+  const { logger } = ctx;
+  let model = params.model.trim();
+  if (!model.includes("/")) {
+    throw new ValidationError(
+      `--model must be an OpenRouter model id like provider/name, got "${model}"`,
+    );
+  }
+  let format: ResolvedSpeechFormat = resolveSpeechFormat(params.format, model);
+  let input = params.input;
+  const chars = charCount(input);
+  const utf8Bytes = utf8ByteCount(input);
+  if (chars > MAX_TEXT_CHARS) {
+    throw new ValidationError(
+      `The text is ${chars} characters; at most ${MAX_TEXT_CHARS} are allowed per request`,
+    );
+  }
+  const apiKey = requireOpenRouterKey();
+  const headers = buildOpenRouterHeaders(apiKey);
+
+  let voice = params.voice?.trim() || undefined;
+  let entry: SpeechModel | undefined;
+  // A dry run reports the speech request itself, so it skips the catalog GET.
+  if (params.modelCheck && !run.dryRun) {
+    const checked = await checkCatalog(model, voice, input, logger);
+    entry = checked.entry;
+    model = entry.id; // the catalog spelling, whatever case --model used
+    voice = checked.voice;
+    input = checked.input;
+  }
+
+  const body: SpeechRequestBody = {
+    model,
+    input,
+    response_format: requestFormat(format),
+    ...(voice ? { voice } : {}),
+    ...(params.instructions ? { instructions: params.instructions } : {}),
+    ...(params.speed !== undefined ? { speed: params.speed } : {}),
+  };
+  if (params.zdr || params.denyDataCollection || params.providerOptions) {
+    body.provider = {
+      ...(params.zdr ? { zdr: true } : {}),
+      ...(params.denyDataCollection ? { data_collection: "deny" as const } : {}),
+      ...(params.providerOptions ? { options: params.providerOptions } : {}),
+    };
+  }
+  logger.debug(
+    `TTS model=${model} voice=${voice ?? "(provider default)"} format=${format} chars=${chars}`,
+  );
+
+  const speech = await createSpeech({ body, headers, maxBytes: maxDownloadBytes() });
+  const responseRate = speech.contentType.sampleRate;
+  const channels = speech.contentType.channels ?? 1;
+  const sampleRate = responseRate ?? params.sampleRate ?? DEFAULT_PCM_SAMPLE_RATE;
+  const sampleRateSource = responseRate ? "content-type" : params.sampleRate ? "flag" : "assumed";
+
+  let bytes = speech.audio;
+  const responseMime = speech.contentType.mime;
+  if (format === "mp3" && !looksLikeMp3(bytes)) {
+    logger.warn(
+      `${model} returned ${responseMime ?? "unlabelled"} data that does not look like MP3`,
+    );
+  } else if (
+    format !== "mp3" &&
+    (responseMime === "audio/mpeg" || (responseMime !== "audio/pcm" && looksLikeMp3(bytes)))
+  ) {
+    // A WAV header on MP3 bytes would be a corrupt file: keep what was returned.
+    logger.warn(`${model} returned MP3 instead of pcm; saving it as .mp3`);
+    format = "mp3";
+  }
+  if (format === "wav") bytes = pcmToWav(bytes, sampleRate, channels);
+  const dest = writeAudio(bytes, format, ctx.output);
+
+  const isPcm = format !== "mp3";
+  const mime = format === "mp3" ? "audio/mpeg" : format === "wav" ? "audio/wav" : "audio/pcm";
+  let stats: GenerationStats | undefined;
+  if (speech.generationId && params.costWaitSeconds > 0) {
+    stats = await waitForGeneration(
+      speech.generationId,
+      headers,
+      params.costWaitSeconds * 1000,
+      logger,
+    );
+  }
+  return {
+    model_requested: model,
+    model_resolved: stats?.model ?? null,
+    provider: stats?.providerName ?? speech.providerName ?? null,
+    voice: voice ?? null,
+    input_chars: chars,
+    input_utf8_bytes: utf8Bytes,
+    turns: Array.isArray(input) ? input.length : null,
+    format,
+    mime,
+    response_mime: speech.contentType.mime ?? null,
+    bytes: bytes.byteLength,
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+    sample_rate_hz: isPcm ? sampleRate : null,
+    sample_rate_source: isPcm ? sampleRateSource : null,
+    channels: isPcm ? channels : null,
+    duration_s: isPcm ? pcmDurationSeconds(speech.audio.byteLength, sampleRate, channels) : null,
+    generation_id: speech.generationId ?? null,
+    cost_usd: stats?.totalCost ?? null,
+    cost_source: stats?.totalCost !== undefined ? "openrouter-generation" : null,
+    estimated_cost_usd: estimateCost(entry, BILLS_UTF8_BYTES.test(model) ? utf8Bytes : chars),
+    is_byok: stats?.isByok ?? null,
+    path: dest,
+    output: ctx.output ? path.resolve(ctx.output) : null,
+  };
+}
+
 export function registerOpenRouterTtsCommand(parent: Command): void {
   parent
     .command("tts")
@@ -306,139 +444,51 @@ export function registerOpenRouterTtsCommand(parent: Command): void {
     .option("-v, --verbose", "Verbose logging")
     .action(async (opts: TtsOptions) => {
       const logger = createLogger({ verbose: opts.verbose ?? false });
-      let model = (opts.model ?? DEFAULT_OPENROUTER_TTS_MODEL).trim();
-      if (!model.includes("/")) {
-        throw new ValidationError(
-          `--model must be an OpenRouter model id like provider/name, got "${model}"`,
-        );
-      }
-      let format: ResolvedSpeechFormat = resolveSpeechFormat(parseSpeechFormat(opts.format), model);
-      const sampleRateFlag = opts.sampleRate
-        ? Math.round(positiveNumber(opts.sampleRate, "--sample-rate", 384_000))
-        : undefined;
-      const speed = opts.speed ? positiveNumber(opts.speed, "--speed", 4) : undefined;
       const costWait = Number(opts.costWait);
       if (!Number.isFinite(costWait) || costWait < 0 || costWait > 120) {
         throw new ValidationError("--cost-wait must be between 0 and 120 seconds");
       }
-      const providerOptions = opts.providerOptions
-        ? parseProviderOptions(opts.providerOptions)
-        : undefined;
-      let input = inputText(opts);
-      const chars = charCount(input);
-      const utf8Bytes = utf8ByteCount(input);
-      if (chars > MAX_TEXT_CHARS) {
-        throw new ValidationError(
-          `The text is ${chars} characters; at most ${MAX_TEXT_CHARS} are allowed per request`,
-        );
-      }
-      const apiKey = requireOpenRouterKey();
-      const headers = buildOpenRouterHeaders(apiKey);
-
-      let voice = opts.voice?.trim() || undefined;
-      let entry: SpeechModel | undefined;
-      // A dry run reports the speech request itself, so it skips the catalog GET.
-      if (opts.modelCheck && !run.dryRun) {
-        const checked = await checkCatalog(model, voice, input, logger);
-        entry = checked.entry;
-        model = entry.id; // the catalog spelling, whatever case --model used
-        voice = checked.voice;
-        input = checked.input;
-      }
-
-      const body: SpeechRequestBody = {
-        model,
-        input,
-        response_format: requestFormat(format),
-        ...(voice ? { voice } : {}),
-        ...(opts.instructions ? { instructions: opts.instructions } : {}),
-        ...(speed !== undefined ? { speed } : {}),
-      };
-      if (opts.zdr || opts.denyDataCollection || providerOptions) {
-        body.provider = {
-          ...(opts.zdr ? { zdr: true } : {}),
-          ...(opts.denyDataCollection ? { data_collection: "deny" as const } : {}),
-          ...(providerOptions ? { options: providerOptions } : {}),
-        };
-      }
-      logger.debug(
-        `TTS model=${model} voice=${voice ?? "(provider default)"} format=${format} chars=${chars}`,
+      const result = await runOpenRouterTts(
+        {
+          model: opts.model ?? DEFAULT_OPENROUTER_TTS_MODEL,
+          input: inputText(opts),
+          voice: opts.voice,
+          instructions: opts.instructions,
+          format: parseSpeechFormat(opts.format),
+          sampleRate: opts.sampleRate
+            ? Math.round(positiveNumber(opts.sampleRate, "--sample-rate", 384_000))
+            : undefined,
+          speed: opts.speed ? positiveNumber(opts.speed, "--speed", 4) : undefined,
+          providerOptions: opts.providerOptions
+            ? parseProviderOptions(opts.providerOptions)
+            : undefined,
+          zdr: opts.zdr,
+          denyDataCollection: opts.denyDataCollection,
+          modelCheck: opts.modelCheck,
+          costWaitSeconds: opts.cost ? costWait : 0,
+        },
+        { output: opts.output, logger },
       );
-
-      const speech = await createSpeech({ body, headers, maxBytes: maxDownloadBytes() });
-      const responseRate = speech.contentType.sampleRate;
-      const channels = speech.contentType.channels ?? 1;
-      const sampleRate = responseRate ?? sampleRateFlag ?? DEFAULT_PCM_SAMPLE_RATE;
-      const sampleRateSource = responseRate ? "content-type" : sampleRateFlag ? "flag" : "assumed";
-
-      let bytes = speech.audio;
-      const responseMime = speech.contentType.mime;
-      if (format === "mp3" && !looksLikeMp3(bytes)) {
-        logger.warn(
-          `${model} returned ${responseMime ?? "unlabelled"} data that does not look like MP3`,
-        );
-      } else if (
-        format !== "mp3" &&
-        (responseMime === "audio/mpeg" || (responseMime !== "audio/pcm" && looksLikeMp3(bytes)))
-      ) {
-        // A WAV header on MP3 bytes would be a corrupt file: keep what was returned.
-        logger.warn(`${model} returned MP3 instead of pcm; saving it as .mp3`);
-        format = "mp3";
-      }
-      if (format === "wav") bytes = pcmToWav(bytes, sampleRate, channels);
-      const dest = writeAudio(bytes, format, opts.output);
-
-      const isPcm = format !== "mp3";
-      const mime = format === "mp3" ? "audio/mpeg" : format === "wav" ? "audio/wav" : "audio/pcm";
-      let stats: GenerationStats | undefined;
-      if (opts.cost && speech.generationId && costWait > 0) {
-        stats = await waitForGeneration(speech.generationId, headers, costWait * 1000, logger);
-      }
-      const result = {
-        model_requested: model,
-        model_resolved: stats?.model ?? null,
-        provider: stats?.providerName ?? speech.providerName ?? null,
-        voice: voice ?? null,
-        input_chars: chars,
-        input_utf8_bytes: utf8Bytes,
-        turns: Array.isArray(input) ? input.length : null,
-        format,
-        mime,
-        response_mime: speech.contentType.mime ?? null,
-        bytes: bytes.byteLength,
-        sha256: createHash("sha256").update(bytes).digest("hex"),
-        sample_rate_hz: isPcm ? sampleRate : null,
-        sample_rate_source: isPcm ? sampleRateSource : null,
-        channels: isPcm ? channels : null,
-        duration_s: isPcm
-          ? pcmDurationSeconds(speech.audio.byteLength, sampleRate, channels)
-          : null,
-        generation_id: speech.generationId ?? null,
-        cost_usd: stats?.totalCost ?? null,
-        cost_source: stats?.totalCost !== undefined ? "openrouter-generation" : null,
-        estimated_cost_usd: estimateCost(entry, BILLS_UTF8_BYTES.test(model) ? utf8Bytes : chars),
-        is_byok: stats?.isByok ?? null,
-        path: dest,
-        output: opts.output ? path.resolve(opts.output) : null,
-      };
-
       if (run.json) {
         console.log(JSON.stringify(result));
         return;
       }
-      logger.success(`Saved: ${dest}`);
-      if (opts.output) logger.success(`Copied to: ${path.resolve(opts.output)}`);
+      const { format, voice } = result;
+      logger.success(`Saved: ${result.path}`);
+      if (result.output) logger.success(`Copied to: ${result.output}`);
       const details = [
-        `model ${result.model_resolved ?? model}`,
+        `model ${result.model_resolved ?? result.model_requested}`,
         voice ? `voice ${voice}` : "",
-        `${format}${isPcm ? ` ${sampleRate} Hz${sampleRateSource === "assumed" ? " (assumed)" : ""}` : ""}`,
+        `${format}${result.sample_rate_hz !== null ? ` ${result.sample_rate_hz} Hz${result.sample_rate_source === "assumed" ? " (assumed)" : ""}` : ""}`,
         result.duration_s !== null ? `${result.duration_s}s` : "",
         result.cost_usd !== null ? `$${result.cost_usd}` : "",
       ].filter(Boolean);
       console.log(`  ${details.join(", ")}`);
-      if (speech.generationId && result.cost_usd === null && opts.cost) {
-        console.log(`  Cost not reported yet: multix openrouter generation ${speech.generationId}`);
+      if (result.generation_id && result.cost_usd === null && opts.cost) {
+        console.log(
+          `  Cost not reported yet: multix openrouter generation ${result.generation_id}`,
+        );
       }
-      console.log(`\nGenerated audio: ${dest}`);
+      console.log(`\nGenerated audio: ${result.path}`);
     });
 }

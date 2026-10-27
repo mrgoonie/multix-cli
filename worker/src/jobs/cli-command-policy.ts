@@ -97,7 +97,16 @@ const OMNI_VIDEO_CAPS: CapRules = { ...VIDEO_CAPS, fillResolution: true };
 /** Veo leaves the Gemini API on 2026-10-22 and rejects --duration, which the caps always send. */
 const OMNI_MODEL = { model: "gemini-omni-1.1-flash" };
 const IMAGE_COUNT: CapRules = { count: ["num-images"] };
-const SPEECH_KEY_GROUPS = ["gemini", "openai", "elevenlabs", "minimax", "atlas", "fish"];
+const SPEECH_KEY_GROUPS = [
+  "gemini",
+  "openai",
+  "elevenlabs",
+  "minimax",
+  "atlas",
+  "fish",
+  "openrouter",
+  "fal",
+];
 
 export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   "gemini analyze": { fileOptions: { files: "file" } },
@@ -294,6 +303,8 @@ export const GROUP_KEYS: Readonly<Record<string, readonly ProviderSecretName[]>>
     "MINIMAX_API_KEY",
     "ATLASCLOUD_API_KEY",
     "FISH_API_KEY",
+    "OPENROUTER_API_KEY",
+    "FAL_KEY",
   ],
 };
 
@@ -313,6 +324,8 @@ export const GROUP_REQUIRED_KEYS: Readonly<
       "MINIMAX_API_KEY",
       "ATLASCLOUD_API_KEY",
       "FISH_API_KEY",
+      "OPENROUTER_API_KEY",
+      "FAL_KEY",
     ],
   ],
 };

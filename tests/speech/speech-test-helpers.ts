@@ -12,7 +12,7 @@ import { registerSpeechCommands } from "../../src/commands/speech/index.js";
 
 /** Env names that select a speech provider, its key or its output directory. */
 const SPEECH_ENV =
-  /^(GEMINI_|GOOGLE_|OPENAI_|ELEVENLABS_|MINIMAX_|ATLASCLOUD_|FISH_|MULTIX_OUTPUT_DIR$)/;
+  /^(GEMINI_|GOOGLE_|OPENAI_|ELEVENLABS_|MINIMAX_|ATLASCLOUD_|FISH_|OPENROUTER_|FAL_|MULTIX_OUTPUT_DIR$)/;
 
 /**
  * Replace the speech-related env with exactly `vars` (undefined values unset).

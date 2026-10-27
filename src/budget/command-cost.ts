@@ -150,12 +150,14 @@ const SPEECH_ROUTE_COMMANDS: Partial<Record<SpeechProvider, string>> = {
   gemini: "gemini generate-speech",
   elevenlabs: "elevenlabs tts",
   fish: "fish tts",
+  openrouter: "openrouter tts",
 };
 
 const SPEECH_DEFAULT_MODELS: Partial<Record<SpeechProvider, string>> = {
   gemini: GEMINI_TTS_DEFAULT,
   elevenlabs: ELEVENLABS_DEFAULTS.ttsModel,
   fish: DEFAULT_FISH_TTS_MODEL,
+  openrouter: DEFAULT_OPENROUTER_TTS_MODEL,
 };
 
 const list = (value: unknown): string[] =>
@@ -237,12 +239,14 @@ function estimateSpeech(o: Options, d: CommandDefaults): CostEstimate {
         ? { text, model: route.model, style }
         : route.provider === "fish"
           ? { text, model: route.model }
-          : {
-              text,
-              model: route.model,
-              "previous-text": extras["elevenlabs.previous_text"],
-              "next-text": extras["elevenlabs.next_text"],
-            };
+          : route.provider === "openrouter"
+            ? { text, model: route.model, instructions: style }
+            : {
+                text,
+                model: route.model,
+                "previous-text": extras["elevenlabs.previous_text"],
+                "next-text": extras["elevenlabs.next_text"],
+              };
     const estimate = estimateCommand(routeCommand, routeOptions, { at: d.at });
     if (estimate.status !== "estimated") {
       return { ...estimate, detail: `${label} route: ${estimate.detail}` };

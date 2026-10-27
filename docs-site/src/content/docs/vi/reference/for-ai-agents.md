@@ -201,8 +201,8 @@ Fish Audio Drama 3 và Gemini 3.8 TTS kết thúc cùng lúc giá API gốc thay
 Giá Gemini là tier Standard trả phí; tier miễn phí không tốn tiền. Gói thuê bao
 ElevenLabs trừ credit thay vì USD. Các rate `fish/*` tính giá cho API gốc của
 Fish Audio (`fish tts`, `speech generate --provider fish`, `fish voice-design`); model `fish-audio/*`
-của OpenRouter có rate `openrouter/*` riêng, và multix không bao giờ fallback
-giữa hai route.
+của OpenRouter có rate `openrouter/*` riêng (`openrouter tts`, `speech generate --provider openrouter`),
+và multix không bao giờ tự chuyển giữa hai route.
 
 ### Biên nhận chi phí
 

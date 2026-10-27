@@ -23,6 +23,10 @@ import { BudgetError } from "../core/errors.js";
 import { DEFAULT_FISH_TTS_MODEL, FISH_TTS_MODEL_ENV } from "../providers/fish/models.js";
 import { turnsToSpeakerText } from "../providers/fish/tts-request.js";
 import { getDefaultModel } from "../providers/gemini/models.js";
+import {
+  DEFAULT_OPENROUTER_TTS_MODEL,
+  OPENROUTER_TTS_MODEL_ENV,
+} from "../providers/openrouter/speech-defaults.js";
 import { probeDuration } from "./output-file-inspect.js";
 import { run } from "./run-state.js";
 
@@ -103,6 +107,7 @@ function runtimeDefaults(command: string, options: Record<string, unknown>): Com
       speechModels: {
         gemini: getDefaultModel("generate-speech"),
         fish: envDefault(FISH_TTS_MODEL_ENV, DEFAULT_FISH_TTS_MODEL),
+        openrouter: envDefault(OPENROUTER_TTS_MODEL_ENV, DEFAULT_OPENROUTER_TTS_MODEL),
       },
       ...(text !== undefined ? { text } : {}),
     };

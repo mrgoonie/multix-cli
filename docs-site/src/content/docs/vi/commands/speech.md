@@ -1,16 +1,17 @@
 ---
 title: Lệnh speech
-description: Text-to-speech qua Gemini, OpenAI, ElevenLabs, MiniMax, Atlas Cloud và Fish Audio với một kiểu request và routing tường minh.
+description: Text-to-speech qua Gemini, OpenAI, ElevenLabs, MiniMax, Atlas Cloud, Fish Audio, OpenRouter và fal.ai với một kiểu request và routing tường minh.
 ---
 
 `multix speech` gom các model text-to-speech của nhiều provider sau cùng một bộ
 flag. Nó không thay thế lệnh của từng provider (`gemini generate-speech`,
 `openai generate-speech`, `elevenlabs tts`, `minimax generate-speech`,
-`atlas audio`, `fish tts`); các lệnh đó vẫn hoạt động như cũ. Dùng `speech` khi muốn so
+`atlas audio`, `fish tts`, `openrouter tts`, `fal tts`); các lệnh đó vẫn hoạt động như cũ. Dùng `speech` khi muốn so
 sánh provider, chọn model theo ngôn ngữ, hoặc để agent chọn mà không phải học
 flag riêng của từng provider.
 
-Provider: `gemini`, `openai`, `elevenlabs`, `minimax`, `atlas`, `fish`. Mỗi provider
+Provider: `gemini`, `openai`, `elevenlabs`, `minimax`, `atlas`, `fish`, `openrouter`,
+`fal`. Mỗi provider
 cần key riêng (xem [Biến môi trường](/vi/reference/environment/)); không có key
 mới.
 
@@ -56,7 +57,7 @@ Chạy `multix speech generate --help` để xem đầy đủ flag. Các flag ch
 | `--emotion <name>` | Emotion có tên, cho model có tham số emotion (MiniMax). |
 | `--format <fmt>` | Định dạng audio; nếu bỏ trống thì lấy từ đuôi `--output` hoặc định dạng đầu tiên của model. |
 | `--output <path>` | Sao chép audio tới đường dẫn này. |
-| `--async` | Gửi job rồi in job id và lệnh tiếp tục (model hỗ trợ async, như Atlas Cloud). |
+| `--async` | Gửi job rồi in job id và lệnh tiếp tục (model hỗ trợ async, như Atlas Cloud và fal). |
 | `--fallback <route>` | Route dự phòng `provider[:model[:voice]]` phải tự bật (lặp lại được); xem bên dưới. |
 | `--extra <provider.key=value>` | Tùy chọn riêng của provider, ví dụ `elevenlabs.stability=0.4` (lặp lại được). |
 
@@ -103,6 +104,45 @@ giọng, dùng `multix fish tts --turns-file`. `--extra` nhận `fish.temperatur
 `fish.top_p`, `fish.speed`, `fish.volume`, `fish.chunk_length`,
 `fish.normalize` và `fish.latency`.
 
+### OpenRouter
+
+```bash
+multix speech generate --provider openrouter --model elevenlabs/eleven-v4 \
+  --voice sarah --text "Welcome to multix." --extra openrouter.speed=1.1 --output welcome.mp3
+```
+
+Route này gửi đúng request như
+[`multix openrouter tts`](/vi/commands/openrouter/), chỉ với một `OPENROUTER_API_KEY`.
+`speech models` liệt kê các model speech của OpenRouter đã được kiểm tra định
+dạng và voice; id khác lấy từ `multix openrouter speech-models` cũng được nhận.
+Trước request tính phí, route đọc danh sách model speech trực tiếp của
+OpenRouter và dừng nếu model hoặc voice không có trong đó. Voice là id riêng
+của từng model trên OpenRouter (`Kore` cho Gemini, `sarah` cho ElevenLabs); không
+có `--voice` thì dùng voice mặc định của model. `--extra` nhận
+`openrouter.speed`, `openrouter.zdr` và `openrouter.deny_data_collection`. Model
+Gemini trả về PCM thô, được lưu thành WAV trừ khi bạn chọn `--format pcm`.
+
+### fal.ai
+
+```bash
+multix speech generate --provider fal --model elevenlabs/tts/eleven-v4 \
+  --language vi --text "Xin chào" --format mp3 --output hello.mp3
+multix speech generate --provider fal --text "Welcome to multix." --async
+```
+
+Route này gửi vào hàng đợi fal với cùng cách map input như
+[`multix fal tts`](/vi/commands/fal/) và dùng `FAL_KEY`. Route nhận các endpoint fal
+mà `speech models -p fal` liệt kê (Gemini 3.8 Flash và Flash-Lite TTS,
+ElevenLabs v4 và v4 Turbo); voice là tên riêng của từng endpoint
+(`multix fal voices`). Không có `--async` thì lệnh chờ kết quả và lưu audio; có
+`--async` thì lệnh in request id cùng lệnh `multix fal result` để tiếp tục, và
+giữ receipt trong `~/.multix/fal/requests`. Lần submit không rõ kết quả được báo
+lại, không bao giờ gửi lần nữa.
+
+`google/gemini-3.8-flash-tts` có trên cả `openrouter` và `fal`, nên model này cần
+`--provider`. `--estimate` tính giá được route OpenRouter; route fal chưa có bảng
+giá và báo `unknown`.
+
 ## Quy tắc routing
 
 Mỗi provider tính phí speech khác nhau và voice không thay thế được cho nhau,
@@ -140,7 +180,9 @@ Các flag toàn cục `--json` và `--dry-run` hoạt động như ở mọi l�
 
 - `--dry-run` kiểm tra request, chọn route và hiển thị request đầu tiên gửi tới
   provider thay vì gửi đi. Atlas Cloud đọc input schema của model trước, nên
-  dry run của nó hiển thị bước tra cứu đó chứ không phải request submit.
+  dry run của nó hiển thị bước tra cứu đó chứ không phải request submit. Route
+  OpenRouter bỏ qua bước kiểm tra model trực tiếp khi dry run và hiển thị request
+  speech; route fal hiển thị request submit vào hàng đợi.
 - Với `--json`, `data` là object `multix.speech.result/v1`: `request` (schema
   `multix.speech.request/v1`; văn bản chỉ được ghi dưới dạng `text_chars` và
   `text_sha256`; `request.body` của dry run vẫn hiển thị văn bản), `route` (provider, model, voice,

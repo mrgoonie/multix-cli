@@ -244,7 +244,7 @@ describe("contract fixtures: language, style, format, async, speakers", () => {
 describe("routing: which provider and model a request uses", () => {
   it("requires a provider or a model", () => {
     expect(() => resolveTarget(undefined, undefined, defaultModel)).toThrow(
-      /Choose a provider: --provider <gemini\|openai\|elevenlabs\|minimax\|atlas\|fish>/,
+      /Choose a provider: --provider <gemini\|openai\|elevenlabs\|minimax\|atlas\|fish\|openrouter\|fal>/,
     );
   });
 
@@ -270,8 +270,8 @@ describe("routing: which provider and model a request uses", () => {
   });
 
   it("rejects an unknown provider", () => {
-    expect(() => resolveTarget("fal", undefined, defaultModel)).toThrow(
-      /Unknown speech provider "fal"/,
+    expect(() => resolveTarget("acme", undefined, defaultModel)).toThrow(
+      /Unknown speech provider "acme"/,
     );
   });
 
@@ -280,14 +280,18 @@ describe("routing: which provider and model a request uses", () => {
     expect(planOne("atlas", undefined).model).toBe("xai/tts-v1");
   });
 
-  it("every known model id belongs to one provider, so a bare --model is never ambiguous", () => {
+  it("only the gateways (OpenRouter, fal) share a model id, and a bare --model for it asks for --provider", () => {
     const owners = new Map<string, Set<string>>();
     for (const m of speechModels()) {
       owners.set(m.model, (owners.get(m.model) ?? new Set()).add(m.provider));
     }
     for (const [model, providers] of owners) {
-      expect(providers.size, `model ${model}`).toBe(1);
+      if (providers.size > 1)
+        expect([...providers], `model ${model}`).toEqual(["openrouter", "fal"]);
     }
+    expect(() => resolveTarget(undefined, "google/gemini-3.8-flash-tts", defaultModel)).toThrow(
+      /Model "google\/gemini-3.8-flash-tts" is served by openrouter and fal; pass --provider to choose/,
+    );
   });
 });
 
@@ -338,11 +342,11 @@ describe("fallback routes", () => {
     expect(() =>
       planSpeechRoutes({
         provider: "gemini",
-        fallbacks: ["fal"],
+        fallbacks: ["acme"],
         input: input(),
         defaultModel,
       }),
-    ).toThrow(/Unknown speech provider "fal"/);
+    ).toThrow(/Unknown speech provider "acme"/);
   });
 
   it("rejects an extra whose provider is on no route", () => {

@@ -15,6 +15,7 @@ import {
   ELEVENLABS_TTS_MODEL_CAPS,
   type ElevenLabsTtsModel,
 } from "../providers/elevenlabs/models.js";
+import { FAL_SPEECH_MODELS, type FalSpeechModel } from "../providers/fal/speech-models.js";
 import {
   FISH_PUBLIC_VOICES,
   FISH_TTS_FORMATS,
@@ -31,6 +32,8 @@ export const SPEECH_PROVIDERS = [
   "minimax",
   "atlas",
   "fish",
+  "openrouter",
+  "fal",
 ] as const;
 export type SpeechProvider = (typeof SPEECH_PROVIDERS)[number];
 
@@ -157,6 +160,28 @@ export const SPEECH_PROVIDER_INFO: Readonly<Record<SpeechProvider, SpeechProvide
     billing:
       "UTF-8 bytes of the text (drama-3 $50/M list, $10/M promotion until 2026-11-12 17:00 UTC; S2 family $15/M)",
   },
+  openrouter: {
+    provider: "openrouter",
+    keys: ["OPENROUTER_API_KEY"],
+    // Voices belong to each model; the rows below name a default where the model needs one.
+    default_voice: "",
+    voice_kind: "ids",
+    voices_command: "multix openrouter speech-models",
+    extras: { speed: "number", zdr: "boolean", deny_data_collection: "boolean" },
+    any_model: true,
+    billing:
+      "the model's OpenRouter price: per input character for most models (Fish Audio per UTF-8 byte), per output second for a few (Seed Audio)",
+  },
+  fal: {
+    provider: "fal",
+    keys: ["FAL_KEY"],
+    default_voice: "Kore",
+    voice_kind: "names",
+    voices_command: "multix fal voices",
+    extras: {},
+    any_model: false,
+    billing: "the endpoint's fal.ai price (see https://fal.ai/models/<model>)",
+  },
 };
 
 const GEMINI_SOURCE = "https://ai.google.dev/gemini-api/docs/speech-generation";
@@ -164,6 +189,8 @@ const OPENAI_SOURCE = "https://platform.openai.com/docs/guides/text-to-speech";
 const ELEVENLABS_SOURCE = "https://elevenlabs.io/docs/models";
 const MINIMAX_SOURCE = "https://platform.minimax.io/docs/api-reference/speech-t2a-http";
 const ATLAS_SOURCE = "https://www.atlascloud.ai/models";
+/** The live speech model list (models, voices, prices) the OpenRouter rows were checked against. */
+const OPENROUTER_SOURCE = "https://openrouter.ai/api/v1/models?output_modalities=speech";
 const VERIFIED = "2026-10-26";
 
 const codes = (list: string): readonly string[] => list.split(" ");
@@ -359,6 +386,61 @@ const FISH_MODELS: readonly SpeechModel[] = FISH_TTS_MODELS.map((model) => ({
   verified_at: "2026-10-27",
 }));
 
+/**
+ * OpenRouter serves many speech models and adds new ones often, so any model
+ * id is accepted: before the paid request the adapter checks the model and
+ * voice against the live list (`multix openrouter speech-models`). These rows
+ * describe the documented families. OpenRouter takes no language parameter,
+ * and multi-speaker turns go through `multix openrouter tts --turns-file`.
+ */
+const OPENROUTER_MODELS: readonly SpeechModel[] = [
+  ...["google/gemini-3.8-flash-tts", "google/gemini-3.8-flash-lite-tts"].map((model) => ({
+    model,
+    // Gemini returns pcm only; wav is that pcm with a WAV header.
+    formats: ["wav", "pcm"] as const,
+    style: true,
+    default_voice: "Kore",
+  })),
+  ...["elevenlabs/eleven-v4", "elevenlabs/eleven-v4-turbo"].map((model) => ({
+    model,
+    formats: ["mp3", "wav", "pcm"] as const,
+    style: false,
+    default_voice: "sarah",
+  })),
+  { model: "fish-audio/drama-3", formats: ["mp3", "wav", "pcm"] as const, style: true },
+].map((row) => ({
+  provider: "openrouter",
+  languages: null,
+  max_speakers: 1,
+  async: false,
+  source: OPENROUTER_SOURCE,
+  verified_at: "2026-10-27",
+  ...row,
+}));
+
+/**
+ * fal.ai endpoints with a verified input schema (fal's OpenAPI per endpoint).
+ * fal writes wav for Gemini and the requested container for ElevenLabs;
+ * `--async` submits and returns the queue receipt. Dialogue turns go through
+ * `multix fal tts --input`, so the façade sends one voice.
+ */
+function falModel(m: FalSpeechModel): SpeechModel {
+  return {
+    provider: "fal",
+    model: m.id,
+    languages: null,
+    ...(m.languageField ? { language_param: m.languageField } : {}),
+    formats: m.formatField ? ["mp3", "pcm"] : [m.output as SpeechFormat],
+    style: Boolean(m.styleField),
+    ...(m.maxTextChars ? { max_chars: m.maxTextChars } : {}),
+    default_voice: m.defaultVoice,
+    max_speakers: 1,
+    async: true,
+    source: `https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=${m.id}`,
+    verified_at: "2026-10-27",
+  };
+}
+
 /** Every model the façade knows, in provider order. */
 export function speechModels(): SpeechModel[] {
   return [
@@ -368,13 +450,15 @@ export function speechModels(): SpeechModel[] {
     ...[...MINIMAX_SPEECH_MODELS].map(minimaxModel),
     ...ATLAS_MODELS,
     ...FISH_MODELS,
+    ...OPENROUTER_MODELS,
+    ...FAL_SPEECH_MODELS.map(falModel),
   ];
 }
 
 /**
  * Capabilities of `model` on `provider`. A provider that takes any model id
- * (Atlas Cloud) gets a row with nothing documented: language and format are
- * then checked by the provider, not here.
+ * (Atlas Cloud, OpenRouter) gets a row with nothing documented: language and
+ * format are then checked by the provider, not here.
  */
 export function findSpeechModel(provider: SpeechProvider, model: string): SpeechModel | undefined {
   const rows = speechModels().filter((m) => m.provider === provider);
@@ -394,7 +478,7 @@ export function findSpeechModel(provider: SpeechProvider, model: string): Speech
     style: false,
     max_speakers: 1,
     async: provider === "atlas",
-    source: ATLAS_SOURCE,
+    source: provider === "openrouter" ? OPENROUTER_SOURCE : ATLAS_SOURCE,
     verified_at: VERIFIED,
   };
 }

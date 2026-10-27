@@ -10,16 +10,16 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Command } from "commander";
 import { ValidationError } from "../../../core/errors.js";
-import { createLogger } from "../../../core/logger.js";
+import { type Logger, createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import { appIdFromModel, createFalClient } from "../client.js";
 import { FAL_DEFAULTS } from "../models.js";
 import { type FalReceipt, buildReceipt, persistReceipt } from "../request-receipt.js";
 import { parseInputArg, submitFalRequest, waitForFalResult } from "../run-helpers.js";
-import { buildSpeechRequest } from "../speech-input.js";
+import { type SpeechFlags, buildSpeechRequest } from "../speech-input.js";
 import { FAL_SPEECH_MODELS, expectedAudioExt } from "../speech-models.js";
-import { saveSpeechAudio } from "../speech-output.js";
-import type { FalSubmitResponse } from "../types.js";
+import { type SavedAudio, saveSpeechAudio } from "../speech-output.js";
+import type { FalResultResponse, FalSubmitResponse } from "../types.js";
 
 interface TtsFlags {
   model?: string;
@@ -67,6 +67,76 @@ function textFrom(positional: string | undefined, opts: TtsFlags): string | unde
   return positional ?? opts.text;
 }
 
+export interface FalTtsRun {
+  detach: boolean;
+  /** Save the receipt here (a detached run saves it to the default directory otherwise). */
+  receiptFile?: string;
+  download: boolean;
+  outDir: string;
+  waitTimeoutMs: number;
+  logger: Logger;
+}
+
+export interface FalTtsOutcome {
+  requestId: string;
+  receipt?: FalReceipt;
+  /** Absent for a detached run. */
+  result?: FalResultResponse;
+  /** The downloaded audio; absent for a detached run or without download. */
+  saved?: SavedAudio;
+}
+
+/**
+ * Build the per-model input, submit it once (never retried) on the fal queue,
+ * then either return the receipt (detached) or wait and save the audio.
+ * Shared by `fal tts` and the `multix speech` façade.
+ */
+export async function runFalTts(flags: SpeechFlags, opts: FalTtsRun): Promise<FalTtsOutcome> {
+  const { model } = flags;
+  const { logger } = opts;
+  appIdFromModel(model);
+  const request = buildSpeechRequest(flags);
+  const client = createFalClient();
+
+  logger.info(`Submitting to ${model}...`);
+  let receipt: FalReceipt | undefined;
+  const onAccepted = (accepted: FalSubmitResponse) => {
+    logger.info(`fal accepted request ${accepted.request_id}`);
+    receipt = buildReceipt({
+      model,
+      requestId: accepted.request_id,
+      status: accepted.status,
+      input: request.input,
+      // Raw formats (pcm, ulaw, alaw) have no header; resuming must know which was asked for.
+      ...(request.format ? { resultArgs: ["--format", request.format] } : {}),
+    });
+    if (opts.detach || opts.receiptFile) {
+      receipt = persistReceipt(receipt, opts.receiptFile, logger);
+    }
+  };
+  const submit = await submitFalRequest(client, model, request.input, logger, onAccepted);
+  if (opts.detach && receipt) return { requestId: submit.request_id, receipt };
+
+  const result = await waitForFalResult({
+    client,
+    model,
+    submit,
+    logger,
+    waitTimeoutMs: opts.waitTimeoutMs,
+  });
+  const done = { requestId: submit.request_id, ...(receipt ? { receipt } : {}), result };
+  if (!opts.download) return done;
+  const saved = await saveSpeechAudio({
+    result,
+    outDir: opts.outDir,
+    requestId: submit.request_id,
+    // Only a requested format is a promise about the bytes; a model default may change.
+    ...(request.format ? { expectedExt: expectedAudioExt(request.profile, request.format) } : {}),
+    logger,
+  });
+  return { ...done, saved };
+}
+
 export function registerFalTtsCommand(parent: Command): void {
   parent
     .command("tts [text]")
@@ -104,69 +174,38 @@ export function registerFalTtsCommand(parent: Command): void {
     .action(async (positional: string | undefined, opts: TtsFlags) => {
       // stdout carries only the result (receipt, JSON or saved path); progress goes to stderr.
       const logger = createLogger({ verbose: opts.verbose ?? false, stderr: true });
-      const model = opts.model ?? FAL_DEFAULTS.ttsModel;
-      appIdFromModel(model);
-      const request = buildSpeechRequest({
-        model,
-        text: textFrom(positional, opts),
-        voice: opts.voice,
-        style: opts.style,
-        format: opts.format,
-        language: opts.language,
-        textField: opts.textField,
-        voiceField: opts.voiceField,
-        ...(opts.input !== undefined ? { extra: parseInputArg(opts.input) } : {}),
-      });
-      const client = createFalClient();
-
-      logger.info(`Submitting to ${model}...`);
-      let receipt: FalReceipt | undefined;
-      const onAccepted = (accepted: FalSubmitResponse) => {
-        logger.info(`fal accepted request ${accepted.request_id}`);
-        receipt = buildReceipt({
-          model,
-          requestId: accepted.request_id,
-          status: accepted.status,
-          input: request.input,
-          // Raw formats (pcm, ulaw, alaw) have no header; resuming must know which was asked for.
-          ...(request.format ? { resultArgs: ["--format", request.format] } : {}),
-        });
-        if (opts.detach || opts.receipt) receipt = persistReceipt(receipt, opts.receipt, logger);
-      };
-      const submit = await submitFalRequest(client, model, request.input, logger, onAccepted);
-
-      if (opts.detach && receipt) {
-        logger.success(`Queued fal request ${submit.request_id}`);
-        logger.info(`Check: ${receipt.status_command}`);
-        logger.info(`Fetch: ${receipt.result_command}`);
-        console.log(JSON.stringify(receipt, null, 2));
+      const out = await runFalTts(
+        {
+          model: opts.model ?? FAL_DEFAULTS.ttsModel,
+          text: textFrom(positional, opts),
+          voice: opts.voice,
+          style: opts.style,
+          format: opts.format,
+          language: opts.language,
+          textField: opts.textField,
+          voiceField: opts.voiceField,
+          ...(opts.input !== undefined ? { extra: parseInputArg(opts.input) } : {}),
+        },
+        {
+          detach: Boolean(opts.detach),
+          receiptFile: opts.receipt,
+          download: opts.download !== false,
+          outDir: opts.outputDir ? path.resolve(opts.outputDir) : getOutputDir(),
+          waitTimeoutMs: Number.parseInt(opts.waitTimeout, 10) || 480_000,
+          logger,
+        },
+      );
+      if (out.receipt && !out.result) {
+        logger.success(`Queued fal request ${out.requestId}`);
+        logger.info(`Check: ${out.receipt.status_command}`);
+        logger.info(`Fetch: ${out.receipt.result_command}`);
+        console.log(JSON.stringify(out.receipt, null, 2));
         return;
       }
-
-      const result = await waitForFalResult({
-        client,
-        model,
-        submit,
-        logger,
-        waitTimeoutMs: Number.parseInt(opts.waitTimeout, 10) || 480_000,
-      });
-
-      if (opts.download === false) {
-        console.log(JSON.stringify(result, null, 2));
+      if (!out.saved) {
+        console.log(JSON.stringify(out.result, null, 2));
         return;
       }
-
-      const outDir = opts.outputDir ? path.resolve(opts.outputDir) : getOutputDir();
-      const saved = await saveSpeechAudio({
-        result,
-        outDir,
-        requestId: submit.request_id,
-        // Only a requested format is a promise about the bytes; a model default may change.
-        ...(request.format
-          ? { expectedExt: expectedAudioExt(request.profile, request.format) }
-          : {}),
-        logger,
-      });
-      console.log(`\nGenerated audio: ${saved.path}`);
+      console.log(`\nGenerated audio: ${out.saved.path}`);
     });
 }

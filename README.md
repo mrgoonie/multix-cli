@@ -810,14 +810,14 @@ multix heygen me
 
 ### `multix speech`
 
-One text-to-speech interface over Gemini, OpenAI, ElevenLabs, MiniMax, Atlas Cloud and Fish Audio. The provider commands above are unchanged; `speech` adds one set of flags, checks the request against the chosen model's documented capabilities before calling it, and never switches provider on its own.
+One text-to-speech interface over Gemini, OpenAI, ElevenLabs, MiniMax, Atlas Cloud, Fish Audio, OpenRouter and fal.ai. The provider commands above are unchanged; `speech` adds one set of flags, checks the request against the chosen model's documented capabilities before calling it, and never switches provider on its own.
 
 ```bash
 # Models with their languages, formats, style/emotion support, speakers, voices, billing and key readiness
 multix speech models [-p <provider>] [-l <iso-639-1>] [--ready] [--json]
 
 # Generate on an explicit provider (model defaults to the provider's TTS default)
-multix speech generate --provider <gemini|openai|elevenlabs|minimax|atlas|fish> [--model <id>] (--text <str>|--text-file <path>) \
+multix speech generate --provider <gemini|openai|elevenlabs|minimax|atlas|fish|openrouter|fal> [--model <id>] (--text <str>|--text-file <path>) \
   [--voice <id>] [--speaker <name:voice> ...] [--language <code>] [--style <text>] [--emotion <name>] \
   [--format mp3|wav|pcm|flac|opus|aac] [--output <path>] [--async] \
   [--fallback <route> ...] [--extra <provider.key=value> ...] [-v]
@@ -832,6 +832,8 @@ multix speech generate --provider minimax --language vi --emotion happy --text "
 
 - `--model` without `--provider` works only when exactly one provider serves that model.
 - `--provider fish` (default model `drama-3`, default voice Adrian) sends one voice; use `multix fish tts --turns-file` for multi-speaker dialogue. Fish `--extra` keys: `fish.temperature`, `fish.top_p`, `fish.speed`, `fish.volume`, `fish.chunk_length`, `fish.normalize`, `fish.latency`.
+- `--provider openrouter` sends the `openrouter tts` request (default `google/gemini-3.8-flash-tts`; any id from `multix openrouter speech-models`, checked against OpenRouter's live list before the paid request). `--extra` keys: `openrouter.speed`, `openrouter.zdr`, `openrouter.deny_data_collection`.
+- `--provider fal` submits to the fal queue like `fal tts` (Gemini 3.8 Flash/Flash-Lite TTS, ElevenLabs v4/v4 Turbo); `--async` prints the request id and a `multix fal result` resume command. `google/gemini-3.8-flash-tts` is on both gateways, so it needs `--provider`.
 - `--fallback` is opt-in and used only when the routes before it have no API key, so it is decided before any paid request; a paid request is never sent again elsewhere. Taking a fallback prints a warning with the voice, billing and format differences.
 - `--json` puts a `multix.speech.result/v1` object in `data` (`data.request` records the text as its length and SHA-256); `--dry-run` validates and shows the first request without sending it.
 - Remote MCP: `speech generate` requires `--provider`, and the job gets only the routed providers' keys. Full reference: [Speech commands](https://multix.zuey.me/commands/speech/).

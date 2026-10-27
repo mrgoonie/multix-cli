@@ -201,8 +201,9 @@ Gemini prices are the paid Standard tier; the free tier costs nothing.
 ElevenLabs subscription plans spend credits instead of USD. The `fish/*` rates
 price the native Fish Audio API (`fish tts`, `speech generate --provider fish`,
 `fish voice-design`);
-OpenRouter's `fish-audio/*` models have their own `openrouter/*` rates, and
-multix never falls back between the two routes.
+OpenRouter's `fish-audio/*` models have their own `openrouter/*` rates (`openrouter tts`,
+`speech generate --provider openrouter`), and multix never switches between the
+two routes on its own.
 
 ### Cost receipt
 

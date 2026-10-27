@@ -5,9 +5,12 @@
  * adapter sends at most one billable request and never retries it.
  */
 
+import fs from "node:fs";
+import path from "node:path";
 import { envDefault } from "../../core/env-default.js";
 import { ConfigError, ProviderError } from "../../core/errors.js";
 import type { Logger } from "../../core/logger.js";
+import { getOutputDir } from "../../core/output-dir.js";
 import { atlasDefaultModel, requireAtlasKey } from "../../providers/atlascloud/commands/env.js";
 import { runGenerationCommand } from "../../providers/atlascloud/commands/generation-command.js";
 import { resumeCommand } from "../../providers/atlascloud/commands/prediction-runner.js";
@@ -18,6 +21,9 @@ import {
   saveBytes,
 } from "../../providers/elevenlabs/client.js";
 import { TASK_DEFAULTS as ELEVENLABS_DEFAULTS } from "../../providers/elevenlabs/models.js";
+import { requireFalKey } from "../../providers/fal/client.js";
+import { runFalTts } from "../../providers/fal/commands/tts.js";
+import { FAL_DEFAULTS } from "../../providers/fal/models.js";
 import { requireFishKey } from "../../providers/fish/client.js";
 import { runFishTts } from "../../providers/fish/commands/tts.js";
 import {
@@ -39,6 +45,13 @@ import {
   type OpenAITtsOutputFormat,
 } from "../../providers/openai/models.js";
 import { generateOpenAISpeech } from "../../providers/openai/openai-audio.js";
+import { requireOpenRouterKey } from "../../providers/openrouter/client.js";
+import { runOpenRouterTts } from "../../providers/openrouter/commands/tts.js";
+import { parseSpeechFormat } from "../../providers/openrouter/speech-audio.js";
+import {
+  DEFAULT_OPENROUTER_TTS_MODEL,
+  OPENROUTER_TTS_MODEL_ENV,
+} from "../../providers/openrouter/speech-defaults.js";
 import { MINIMAX_LANGUAGE_BOOST, type SpeechProvider } from "../../speech/speech-catalog.js";
 import type { SpeechInput, SpeechRoute } from "../../speech/speech-request.js";
 
@@ -252,6 +265,80 @@ const fish: SpeechAdapter = {
   },
 };
 
+const openrouter: SpeechAdapter = {
+  defaultModel: () => envDefault(OPENROUTER_TTS_MODEL_ENV, DEFAULT_OPENROUTER_TTS_MODEL),
+  requireKey: () => void requireOpenRouterKey(),
+  async generate(route, input, ctx) {
+    const x = route.extras;
+    const result = await runOpenRouterTts(
+      {
+        model: route.model,
+        input: input.text,
+        voice: route.voice,
+        instructions: input.style,
+        // No format: the model's own (mp3, or wav for pcm-only models such as Gemini).
+        format: parseSpeechFormat(route.format ?? "auto"),
+        speed: num(x.speed),
+        zdr: x.zdr === true,
+        denyDataCollection: x.deny_data_collection === true,
+        // The live catalog check (a free GET) catches a model or voice typo before the paid POST.
+        modelCheck: true,
+        // The cost lags the audio by seconds; it stays readable by the generation id.
+        costWaitSeconds: 0,
+      },
+      { output: ctx.output, logger: ctx.logger },
+    );
+    if (result.generation_id) {
+      ctx.logger.info(`Cost: multix openrouter generation ${result.generation_id}`);
+    }
+    return { files: [result.path] };
+  },
+};
+
+/** fal output_format for a façade format (ElevenLabs endpoints; Gemini has no format field). */
+const FAL_FORMAT: Readonly<Record<string, string>> = {
+  mp3: "mp3_44100_128",
+  pcm: "pcm_24000",
+};
+const FAL_WAIT_MS = 480_000;
+
+const fal: SpeechAdapter = {
+  defaultModel: () => FAL_DEFAULTS.ttsModel,
+  requireKey: () => void requireFalKey(),
+  async generate(route, input, ctx) {
+    const hasFormat = route.capability.formats?.length !== 1;
+    const out = await runFalTts(
+      {
+        model: route.model,
+        text: input.text,
+        ...(route.voice ? { voice: route.voice } : {}),
+        ...(input.style ? { style: input.style } : {}),
+        ...(input.language && route.capability.language_param ? { language: input.language } : {}),
+        ...(hasFormat && route.format ? { format: FAL_FORMAT[route.format] } : {}),
+      },
+      {
+        detach: input.async,
+        download: true,
+        outDir: getOutputDir(),
+        waitTimeoutMs: FAL_WAIT_MS,
+        logger: ctx.logger,
+      },
+    );
+    if (out.receipt && !out.result) {
+      console.log(out.requestId);
+      ctx.logger.info(`Fetch the audio later: ${out.receipt.result_command}`);
+      return { files: [], job: { id: out.requestId, resume: out.receipt.result_command } };
+    }
+    if (!out.saved) throw new ProviderError("fal returned no audio", "fal");
+    if (ctx.output) {
+      const target = path.resolve(ctx.output);
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.copyFileSync(out.saved.path, target);
+    }
+    return { files: [out.saved.path] };
+  },
+};
+
 export const SPEECH_ADAPTERS: Readonly<Record<SpeechProvider, SpeechAdapter>> = {
   gemini,
   openai,
@@ -259,4 +346,6 @@ export const SPEECH_ADAPTERS: Readonly<Record<SpeechProvider, SpeechAdapter>> = 
   minimax,
   atlas,
   fish,
+  openrouter,
+  fal,
 };

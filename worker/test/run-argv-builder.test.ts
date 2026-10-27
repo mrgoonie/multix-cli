@@ -532,9 +532,17 @@ describe("prepareRun: speech", () => {
     expect(jobEnv(prepared.keyGroups, keys)).toEqual({ OPENAI_API_KEY: "sk-test-openai" });
   });
 
+  it("gives the OpenRouter and fal gateway routes their own keys", () => {
+    const prepared = run({
+      command: "speech generate",
+      options: { provider: "fal", fallback: ["openrouter"], text: "hi" },
+    });
+    expect(prepared.keyGroups).toEqual(["fal", "openrouter"]);
+  });
+
   it("rejects a provider or fallback that is not a speech provider", () => {
     rejects(
-      { command: "speech generate", options: { provider: "fal", text: "hi" } },
+      { command: "speech generate", options: { provider: "acme", text: "hi" } },
       /--provider must name one of: gemini, openai, elevenlabs, minimax, atlas/,
     );
     rejects(
@@ -542,7 +550,7 @@ describe("prepareRun: speech", () => {
       /--provider must name one of/,
     );
     rejects(
-      { command: "speech generate", options: { provider: "openai", fallback: ["fal:flux"] } },
+      { command: "speech generate", options: { provider: "openai", fallback: ["acme:flux"] } },
       /--fallback must name one of: gemini, openai, elevenlabs, minimax, atlas/,
     );
   });

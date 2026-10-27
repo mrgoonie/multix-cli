@@ -21,7 +21,7 @@ multix <group> <cmd> ... --json         # stdout = ONE line, schema multix.resul
 - Success = `ok: true` AND `outputs[]` non-empty (path, bytes, mime, sha256, width/height, duration_s) AND no `warnings` (`EMPTY_OUTPUT`, `CONTENT_MISMATCH`, `UNREADABLE_MEDIA`).
 - Failure: read `error.code`, `error.hint`, `next[]`. Exit codes (with `--json`; plain runs exit 1): 2 fix flags/input · 3 key/setup (`multix check`, key named in `error.env`) · 4 temporary (wait `retry_after_s`, `multix rerun <history_id>`) · 5 rejected: quota, safety, model (change input/provider) · 6 timed out, job may still run (status command in `next[]`, do not resubmit) · 1 unknown (`log[]`).
 - `usage` = what the provider reported (tokens, `cost_usd`, `credits`, metrics; `sources` names the header/body field each money number came from); `history_id` names the run.
-- Cost: `--estimate` prices a run without sending it (USD range, units, rate source; exit 0). `--max-cost <usd>` refuses before sending (exit 2: `BUDGET_EXCEEDED`, or `BUDGET_UNPROVEN` when the price is unknown or the ceiling only estimated; `--cost-policy estimate` accepts an estimated ceiling). Priced: `gemini generate-speech`, `elevenlabs tts`, `fish tts` (UTF-8 bytes; `--text`, `--text-file` or `--turns-file`), `fish voice-design` (flat $0.01 per request), `openrouter tts` (`--text` only), `openrouter transcribe` (local `--input` measured with `ffprobe`; URLs and token-priced models stay unknown), `speech generate` (gemini/elevenlabs/fish routes only; `--fallback` plans priced at the most expensive route, unknown if any route is unpriced). Receipt `cost` (`multix.cost/v1`): `status` settled|computed|uncertain|unknown, `actual_usd` (`null` = unknown, not $0). `MULTIX_OPERATION_ID` (shell) groups submit/poll/download runs into one operation.
+- Cost: `--estimate` prices a run without sending it (USD range, units, rate source; exit 0). `--max-cost <usd>` refuses before sending (exit 2: `BUDGET_EXCEEDED`, or `BUDGET_UNPROVEN` when the price is unknown or the ceiling only estimated; `--cost-policy estimate` accepts an estimated ceiling). Priced: `gemini generate-speech`, `elevenlabs tts`, `fish tts` (UTF-8 bytes; `--text`, `--text-file` or `--turns-file`), `fish voice-design` (flat $0.01 per request), `openrouter tts` (`--text` only), `openrouter transcribe` (local `--input` measured with `ffprobe`; URLs and token-priced models stay unknown), `speech generate` (gemini/elevenlabs/fish/openrouter routes only; `--fallback` plans priced at the most expensive route, unknown if any route is unpriced). Receipt `cost` (`multix.cost/v1`): `status` settled|computed|uncertain|unknown, `actual_usd` (`null` = unknown, not $0). `MULTIX_OPERATION_ID` (shell) groups submit/poll/download runs into one operation.
 - History: `multix history [--failed] [--since 1d]`, `multix history show last`, `multix history stats --by model|provider|command`, `multix rerun <id|last>`. Ledger `~/.multix/history.jsonl` has no keys or signed URLs; `MULTIX_HISTORY=0` disables it.
 
 ## When to use
@@ -438,7 +438,7 @@ Discover, then generate on an explicit provider. The request is checked against 
 
 ```bash
 multix speech models --language vi --json      # models documenting Vietnamese: formats, style, emotions, max_speakers, async, voices, extras, billing, ready
-multix speech generate --provider <gemini|openai|elevenlabs|minimax|atlas|fish> [--model <id>] --text-file scene.txt --output <file.ext> --dry-run --json
+multix speech generate --provider <gemini|openai|elevenlabs|minimax|atlas|fish|openrouter|fal> [--model <id>] --text-file scene.txt --output <file.ext> --dry-run --json
 multix speech generate --provider <...> [--model <id>] --text-file scene.txt --output <file.ext> --json
 
 # Vietnamese two-speaker dialogue (Gemini, max 2 speakers); scene.txt:
@@ -454,6 +454,7 @@ multix speech generate --provider minimax --language vi --emotion happy --text "
 - `--fallback provider[:model[:voice]]` (repeatable) is opt-in, used only when earlier routes lack an API key, before any paid request; a paid request is never resent. A fallback prints a warning with voice/billing/format differences (`data.fallback` in JSON).
 - `--voice` must belong to the chosen provider; `--extra <provider.key=value>` for provider options (keys listed in `speech models`).
 - `--provider fish` (default `drama-3`, voice Adrian) sends one voice; dialogue goes through `multix fish tts --turns-file`.
+- `--provider openrouter`: any OpenRouter speech id (rows in `speech models` are verified); model and voice checked against OpenRouter's live list before the paid request; `--extra openrouter.speed|zdr|deny_data_collection`. `--provider fal`: the `fal tts` endpoints, voices from `multix fal voices`; `--async` returns `job.resume` (`multix fal result ...`). `google/gemini-3.8-flash-tts` is on both, so pass `--provider`.
 - JSON `data` = `multix.speech.result/v1`: `request` (text recorded as `text_chars` + `text_sha256`), `route`, files or async `job`.
 - Remote MCP: `--provider` required; `--text-file` is an `inputs` URL; `speech models --ready` unavailable.
 

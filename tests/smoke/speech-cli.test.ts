@@ -24,6 +24,9 @@ const NO_KEYS = {
   ELEVENLABS_API_KEY: "",
   MINIMAX_API_KEY: "",
   ATLASCLOUD_API_KEY: "",
+  FISH_API_KEY: "",
+  OPENROUTER_API_KEY: "",
+  FAL_KEY: "",
 };
 
 describe("speech (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
@@ -94,7 +97,7 @@ describe("speech (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     });
 
     it("rejects an unknown provider filter with exit 2", async () => {
-      const result = await run(["speech", "models", "--provider", "fal", "--json"]);
+      const result = await run(["speech", "models", "--provider", "acme", "--json"]);
       expect(result.exitCode).toBe(2);
       expect(envelope(result.stdout).error.code).toBe("INVALID_INPUT");
     });
@@ -152,6 +155,42 @@ describe("speech (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
         },
       });
       expect(fs.existsSync(output)).toBe(false);
+    });
+
+    it("an OpenRouter dry run skips the catalog lookup and reports the speech POST", async () => {
+      const result = await run(
+        ["speech", "generate", "--provider", "openrouter", "--text", "hi", "--dry-run", "--json"],
+        { OPENROUTER_API_KEY: "sk-or-test-not-real-12345" },
+      );
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).not.toContain("sk-or-test-not-real-12345");
+      expect(envelope(result.stdout)).toMatchObject({
+        ok: true,
+        dry_run: true,
+        provider: "openrouter",
+        request: {
+          method: "POST",
+          url: "https://openrouter.ai/api/v1/audio/speech",
+          body: { model: "google/gemini-3.8-flash-tts", input: "hi", voice: "Kore" },
+        },
+      });
+    });
+
+    it("a fal dry run reports the queue submit and sends nothing", async () => {
+      const result = await run(
+        ["speech", "generate", "--provider", "fal", "--text", "hi", "--dry-run", "--json"],
+        { FAL_KEY: "fal-test-not-real-12345" },
+      );
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).not.toContain("fal-test-not-real-12345");
+      const out = envelope(result.stdout);
+      expect(out).toMatchObject({
+        ok: true,
+        dry_run: true,
+        provider: "fal",
+        request: { method: "POST" },
+      });
+      expect(out.request.url).toMatch(/^https:\/\/queue\.fal\.run\//);
     });
 
     it("an Atlas dry run without its key stops with MISSING_KEY and no request", async () => {

@@ -31,6 +31,8 @@ export const GROUP_KEY_ROWS: Readonly<Record<string, readonly (readonly string[]
       "MINIMAX_API_KEY",
       "ATLASCLOUD_API_KEY",
       "FISH_API_KEY",
+      "OPENROUTER_API_KEY",
+      "FAL_KEY",
     ],
   ],
   // A scene renders through the providers its voice profiles name; `scene

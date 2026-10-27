@@ -1,16 +1,17 @@
 ---
 title: Speech commands
-description: Text-to-speech across Gemini, OpenAI, ElevenLabs, MiniMax, Atlas Cloud, and Fish Audio with one request shape and explicit routing.
+description: Text-to-speech across Gemini, OpenAI, ElevenLabs, MiniMax, Atlas Cloud, Fish Audio, OpenRouter, and fal.ai with one request shape and explicit routing.
 ---
 
 `multix speech` puts the text-to-speech models of several providers behind one
 set of flags. It does not replace the provider commands (`gemini
 generate-speech`, `openai generate-speech`, `elevenlabs tts`, `minimax
-generate-speech`, `atlas audio`, `fish tts`); those keep working as before. Use `speech`
+generate-speech`, `atlas audio`, `fish tts`, `openrouter tts`, `fal tts`); those keep working as before. Use `speech`
 when you want to compare providers, pick a model by language, or let an agent
 choose without learning each provider's flags.
 
-Providers: `gemini`, `openai`, `elevenlabs`, `minimax`, `atlas`, `fish`. Each needs its
+Providers: `gemini`, `openai`, `elevenlabs`, `minimax`, `atlas`, `fish`, `openrouter`,
+`fal`. Each needs its
 own key (see [Environment variables](/reference/environment/)); no new key is
 introduced.
 
@@ -56,7 +57,7 @@ Run `multix speech generate --help` for the full flag list. The main ones:
 | `--emotion <name>` | Named emotion, for models with an emotion parameter (MiniMax). |
 | `--format <fmt>` | Audio container; otherwise taken from the `--output` extension or the model's first format. |
 | `--output <path>` | Copy the audio to this path. |
-| `--async` | Submit and print a job id and resume command (models with async support, such as Atlas Cloud). |
+| `--async` | Submit and print a job id and resume command (models with async support, such as Atlas Cloud and fal). |
 | `--fallback <route>` | Opt-in fallback route `provider[:model[:voice]]` (repeatable); see below. |
 | `--extra <provider.key=value>` | Provider-specific option, for example `elevenlabs.stability=0.4` (repeatable). |
 
@@ -104,6 +105,45 @@ The route sends the same native request as
 `fish.top_p`, `fish.speed`, `fish.volume`, `fish.chunk_length`,
 `fish.normalize`, and `fish.latency`.
 
+### OpenRouter
+
+```bash
+multix speech generate --provider openrouter --model elevenlabs/eleven-v4 \
+  --voice sarah --text "Welcome to multix." --extra openrouter.speed=1.1 --output welcome.mp3
+```
+
+The route sends the same request as
+[`multix openrouter tts`](/commands/openrouter/) with one `OPENROUTER_API_KEY`.
+`speech models` lists the OpenRouter speech models whose formats and voices
+were checked; any other id from `multix openrouter speech-models` is accepted
+too. Before the paid request, the route reads OpenRouter's live speech model
+list and stops if the model or voice is not on it. Voices are OpenRouter's
+per-model ids (`Kore` for Gemini, `sarah` for ElevenLabs); without `--voice` the
+model's default is used. `--extra` takes `openrouter.speed`, `openrouter.zdr`,
+and `openrouter.deny_data_collection`. Gemini models return raw PCM, which is
+saved as WAV unless you ask for `--format pcm`.
+
+### fal.ai
+
+```bash
+multix speech generate --provider fal --model elevenlabs/tts/eleven-v4 \
+  --language vi --text "Xin chào" --format mp3 --output hello.mp3
+multix speech generate --provider fal --text "Welcome to multix." --async
+```
+
+The route submits to the fal queue with the same input mapping as
+[`multix fal tts`](/commands/fal/) and `FAL_KEY`. It accepts the fal endpoints
+listed by `speech models -p fal` (Gemini 3.8 Flash and Flash-Lite TTS,
+ElevenLabs v4 and v4 Turbo); voices are each endpoint's own names
+(`multix fal voices`). Without `--async` it waits for the result and saves the
+audio; with `--async` it prints the request id and the `multix fal result`
+command that resumes it, and keeps a receipt in `~/.multix/fal/requests`. A
+submit whose outcome is unknown is reported, never sent again.
+
+`google/gemini-3.8-flash-tts` is served by both `openrouter` and `fal`, so that
+model needs `--provider`. `--estimate` prices the OpenRouter route; the fal
+route has no price table yet and reports `unknown`.
+
 ## Routing rules
 
 Speech is billed differently by every provider and the voices are not
@@ -140,7 +180,9 @@ The global `--json` and `--dry-run` flags work as on every command
 
 - `--dry-run` validates the request, resolves the route, and shows the first
   provider request instead of sending it. Atlas Cloud reads the model's
-  input schema first, so its dry run shows that lookup, not the submit.
+  input schema first, so its dry run shows that lookup, not the submit. The
+  OpenRouter route skips its live model check on a dry run and shows the
+  speech request; the fal route shows the queue submit.
 - With `--json`, `data` holds a `multix.speech.result/v1` object: `request`
   (schema `multix.speech.request/v1`; the text is recorded only as
   `text_chars` and `text_sha256`; a dry run's `request.body` still shows it), `route` (provider, model,

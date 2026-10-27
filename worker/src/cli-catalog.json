@@ -11763,7 +11763,7 @@
             {
               "long": "--provider",
               "flags": "-p, --provider <name>",
-              "description": "Only this provider (gemini|openai|elevenlabs|minimax|atlas|fish)",
+              "description": "Only this provider (gemini|openai|elevenlabs|minimax|atlas|fish|openrouter|fal)",
               "required": false,
               "takesValue": true,
               "valueOptional": false,
@@ -11802,7 +11802,7 @@
             {
               "long": "--provider",
               "flags": "--provider <name>",
-              "description": "Speech provider (gemini|openai|elevenlabs|minimax|atlas|fish)",
+              "description": "Speech provider (gemini|openai|elevenlabs|minimax|atlas|fish|openrouter|fal)",
               "required": false,
               "takesValue": true,
               "valueOptional": false,
