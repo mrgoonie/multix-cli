@@ -223,3 +223,56 @@ Summary: 8 of 12 findings are fully resolved (1, 2, 6, 7, 8, 10, 11, 12) and 9 i
 - N6: accepted as documented; no Windows runner was available to test grandchild cleanup after a normal exit.
 
 Evidence: lint and typecheck clean; `npm test` 125 files passed (8 skipped), 2202 tests passed; `check:mcp` 393 tests passed and the bundle is clean; `verify:docs` 0 errors, 8/8 passed; the worker catalog is unchanged.
+
+## Re-review 2
+
+Scope: commit 8ea56fc only. Tests used real ffmpeg 6.1.1 fixtures and `node dist/cli.js`, built from this commit on Node 22.22. The media unit and smoke tests passed (116), and lint and typecheck were clean.
+
+No Critical or High regressions were found. N1 to N5 hold under real files.
+
+Evidence: `verify` decode status for each fixture, where `_trunc` means the first half of the file was kept.
+
+| Fixture | Result | Note |
+|---|---|---|
+| mp3 with Xing, CBR "Info" and VBR | pass | |
+| mp3 with Xing, `_trunc` | **fail** (decoded 4.9 of declared 10.03) | ffprobe warns "filesize and duration do not match", not "Estimating" |
+| mp3 without Xing, CBR or VBR, whole | pass, `declared_duration_estimated: true` | |
+| mp4 faststart `_trunc` / mkv `_trunc` / webm `_trunc` / ts `_trunc` | fail | mkv/webm declared comes from the `DURATION` tag (10.008) |
+| mp4 with moov at end, `_trunc` | fail at probe | |
+| mkv `-t 5 -c copy`, mkv `-live 1` (no DURATION), mkv with a forced stale DURATION, video-only mkv, mkv whose audio is shorter | pass | ffmpeg rewrites DURATION, so a stale input tag does not survive |
+| raw h264 / m2v / m4v, flac, wav, mpeg-PS, whole | pass | Formats removed from the old list do not fail falsely; raw h264/m2v have no duration, so `declared` is null |
+
+- Error-reason path: a truncated mp4 and random bytes still produce `ffprobe could not read the file: … moov atom not found …: Invalid data found`. The extra warning line ("misdetection possible!") sits ahead of the error, and the error stays last.
+- BINARY_MISSING: running with `PATH` set to node only gives `BINARY_MISSING` with exit 3 under `--json`, and exit 1 as text. This is unchanged.
+- Cancel: SIGINT, SIGTERM and SIGHUP were sent to `verify` while ffmpeg ran, to `verify` while a `--rule` ran, to `inspect --decode`, to `frames --sheet`, and while a 3 GB file was being hashed. The exits were 130, 143 and 129. No ffmpeg, ffprobe or rule process was left, no `multix-rule-*` temp directory, no `.frames-*` staging directory and no `--receipt-out` file. Hashing stopped after 0.67 s, against 14 s for a full run. A real terminal hang-up (pty master closed from a Python `pty.fork` harness) also exited 129 with cleanup done.
+
+### Findings
+
+1. **Low: a pre-aborted signal leaks the file descriptor.** Location: `src/commands/media/media-source.ts:45`, reached from `src/commands/media/media-verify.ts:597`. On Node 22.22, `fs.createReadStream(file, { signal })` given an already-aborted signal rejects with AbortError, but the fd it opens is never closed.
+   - Repro: abort 100 streams before reading, then count fds. Base 21 became 121, and `/proc/self/fd/20` pointed at the media file. Aborting in the middle of a read leaks nothing (21 stays 21).
+   - Where it happens: `verifyMedia` hashes the `--rule` files after the source. A signal that lands between the two creates every rule stream pre-aborted. Library callers who pass an aborted signal, and the new "does not start reading a file once cancelled" test, hit it too.
+   - Impact: the CLI exits right after, so the leak has no effect there. Only long-lived library callers are affected.
+   - Fix: add `signal?.throwIfAborted();` at the top of `hashFile`, before `createReadStream`.
+2. **Low: a cancelled run is classified as an UNKNOWN error.** Location: `src/commands/media/media-quality-commands.ts:80`, together with `src/agent/agent-runtime.ts:351`.
+   - With `--json`, the envelope reads `{"code":"UNKNOWN","message":"Command exited with code 130","retryable":false,"hint":"Read the message; rerun with --verbose for details."}` with `"log":["Cancelled"]`.
+   - In text mode, stderr shows `code: UNKNOWN (exit 1 with --json)`, but the run actually exits 130 with `--json`.
+   - Cancellation is no longer mislabelled INVALID_INPUT, but agents still get no distinct signal. The exit code is the only cue, and the hint text is wrong.
+   - The misleading "(exit 1 with --json)" line comes from shared code and also appears for other UNKNOWN failures that exit non-zero, so it is not caused by this commit alone. It is not blocking. If this matters, open a separate issue for a `CANCELLED` classification.
+3. **Informational, not caused by this commit: truncated raw or estimated streams still pass.**
+   - A WAV cut on a sample boundary (`head -c 44+2*44100*4`) passes `decode`. ffprobe prints "Estimating duration from bitrate" and ignores the RIFF data size; decoded is 3.9 against an estimated 3.9996.
+   - Truncated ac3 and mp3 without Xing also pass.
+   - The same files passed before this commit: wav's estimated stream duration was its own length, and ac3/mp3 were on the raw list. A raw stream has no other length to compare against. For WAV, comparing against the header's `data` chunk size would catch it; this should be a separate issue if wanted.
+4. **Informational: inconsistent library contract on cancel.** `verifyMedia` throws AbortError when cancelled while hashing, but returns an `incomplete` receipt when cancelled later. The CLI drops both, so users are not affected. Callers of the API should be told that both outcomes can happen.
+
+Checked with no defect found: a truncated mp4 or mkv passing (it does not), an mp3 without Xing failing (it passes), DURATION parsing (`H:MM:SS(.f)`; when the tag is missing, `null` falls back to the format duration, and ffmpeg overrides a stale tag on remux), `-v warning` noise in the failure reason, `process.exit` skipping cleanup (cleanup runs inside `fn` before `finally`, and the envelope is still printed by the exit hook), and a second signal (exits at once as documented).
+
+Fixtures, the pty script and the fd-leak script were in the scratchpad and have been deleted.
+
+Status: DONE_WITH_CONCERNS
+Summary: The commit fixes N1 to N5 with no regression on real mp3/mp4/mkv/webm/ts/wav/raw fixtures. Two Low issues remain: a pre-aborted signal leaks the fd in `hashFile`, and a cancel is reported as an UNKNOWN error with a wrong "exit 1" hint.
+
+## Re-review 2 resolution (author)
+
+- Finding 1 (fd leak on a pre-aborted signal): fixed with `signal?.throwIfAborted()` before the read stream opens.
+- Finding 2 (cancel reported as UNKNOWN by the shared exit envelope) and finding 3 (truncated WAV/ac3/Xing-less mp3 still pass, pre-existing): tracked as separate issues rather than widening this PR.
+- Finding 4: accepted; a run cancelled before the source is hashed has no bytes to bind a receipt to, so it throws.

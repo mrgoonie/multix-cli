@@ -38,6 +38,8 @@ export async function hashFile(
   file: string,
   signal?: AbortSignal,
 ): Promise<{ sha256: string; bytes: number; head: Buffer }> {
+  // A read stream given an already-aborted signal rejects without closing the fd it opened.
+  signal?.throwIfAborted();
   const hash = createHash("sha256");
   const headChunks: Buffer[] = [];
   let headLen = 0;
