@@ -24,3 +24,15 @@ follow-up commit on the same branch.
 - `run.submit` is cleared on `--async` and by `trackInFlight`; thrown errors bypass it (the signal path needs `error === undefined`); commands that never call `trackSubmit` keep the old behaviour.
 - No listener leak: `exitOnInterrupt` removes its handlers in `finally`; it and the download handlers are never active together.
 - Signals go through the patched `process.exit` and `finalizeRun`; text mode keeps 129/130/143.
+
+## Re-review of 43a541d
+
+Approved: H1, M1 and L1–L3 verified by the same reviewer (loopback reproduction shows
+`cost.status: "uncertain"` for a cut-off submit; 1964 unit tests pass). Side effect noted:
+on any failure path, requests still in flight at exit now count as cut off (status 0), which
+can turn a "refused" receipt into "uncertain"; more accurate, applies to every provider.
+
+Non-blocking follow-up, fixed in the next commit: a signal during a `--ref` upload said
+"nothing was billed" while the receipt said "uncertain" (uploads are POSTs). While the paid
+job is still unsent, the receipt is now settled at $0 with the reason "The run stopped before
+it submitted its paid job."

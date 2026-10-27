@@ -335,6 +335,7 @@ describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
         expect(out).toMatchObject({ ok: false, command: "atlas image-to-image", exit_code: 130 });
         expect(out.error).toMatchObject({ code: "CANCELLED" });
         expect(out.error.hint).toContain("before it submitted its paid job");
+        expect(out.cost).toMatchObject({ status: "settled", actual_usd: 0 });
         expect(seen.uploads).toBe(1);
         expect(seen.posts).toBe(0);
       }, "upload");

@@ -162,14 +162,16 @@ export function costReceiptFor(opts: {
   usage?: Parameters<typeof buildCostReceipt>[0]["usage"];
 }): CostReceipt | undefined {
   if (!run.group) return undefined;
-  return buildCostReceipt({
+  // Schema reads and uploads before a submit are free: the paid job never went out.
+  const unsent = run.submit?.state === "unsent";
+  const receipt = buildCostReceipt({
     operation_id: operationIdFor({
       explicit: process.env.MULTIX_OPERATION_ID,
       provider: run.group,
       providerIds: run.ids,
       runId: opts.historyId ?? `h_${run.startedAt.toString(36)}`,
     }),
-    outcome: opts.notSent ? "not_sent" : opts.failed ? "failed" : "ok",
+    outcome: opts.notSent || unsent ? "not_sent" : opts.failed ? "failed" : "ok",
     provider: run.group,
     model: opts.model,
     // A provider's own CLI spends quota without a fetch call: count it as a
@@ -180,6 +182,9 @@ export function costReceiptFor(opts: {
     max_cost_usd: run.maxCost,
     policy: run.maxCost !== undefined ? run.costPolicy : undefined,
   });
+  return unsent && !opts.notSent
+    ? { ...receipt, reason: "The run stopped before it submitted its paid job." }
+    : receipt;
 }
 
 export function usd(n: number | null | undefined): string {
