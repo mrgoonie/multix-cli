@@ -25,10 +25,22 @@ describe("readCappedBytes", () => {
   });
 
   it("refuses a declared Content-Length over the cap before reading", async () => {
-    const res = new Response(new Uint8Array(20), { headers: { "content-length": "20" } });
+    const body = new ReadableStream({
+      pull() {
+        throw new Error("body was read");
+      },
+    });
+    const res = new Response(body, { headers: { "content-length": "20" } });
     await expect(readCappedBytes(res, 10, 1000, "https://x.test/a")).rejects.toBeInstanceOf(
       ResponseTooLargeError,
     );
+  });
+
+  it("accepts a body of exactly the cap", async () => {
+    const res = new Response(streamOf([new Uint8Array(4), new Uint8Array(6)]), {
+      headers: { "content-length": "10" },
+    });
+    expect((await readCappedBytes(res, 10, 1000, "https://x.test/a")).length).toBe(10);
   });
 
   it("stops once the streamed bytes pass the cap", async () => {
@@ -58,6 +70,10 @@ describe("readCappedText", () => {
     expect(await readCappedText(res, 3)).toBe("abc");
   });
 
+  it("returns an empty string for a response without a body", async () => {
+    expect(await readCappedText(new Response(null), 10)).toBe("");
+  });
+
   it("says so when the body cannot be read", async () => {
     const body = new ReadableStream({
       pull(controller) {
@@ -79,7 +95,10 @@ describe("errorCodes", () => {
   it("collects codes from nested causes and aggregate errors", () => {
     const err = {
       code: "UND_ERR",
-      cause: { errors: [{ code: "ECONNREFUSED" }, { code: 1 }], cause: { code: "ENOTFOUND" } },
+      cause: {
+        errors: [{ code: "ECONNREFUSED" }, null, { code: 1 }],
+        cause: { code: "ENOTFOUND" },
+      },
     };
     expect(errorCodes(err)).toEqual(["UND_ERR", "ECONNREFUSED", "ENOTFOUND"]);
     expect(errorCodes(err).some((c) => NOT_SENT_CODES.has(c))).toBe(true);
