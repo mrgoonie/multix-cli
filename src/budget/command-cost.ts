@@ -8,6 +8,7 @@
 
 import { BudgetError } from "../core/errors.js";
 import { TASK_DEFAULTS as ELEVENLABS_DEFAULTS } from "../providers/elevenlabs/models.js";
+import { DEFAULT_FISH_TTS_MODEL } from "../providers/fish/models.js";
 import { TTS_MODEL_DEFAULT as GEMINI_TTS_DEFAULT } from "../providers/gemini/voices.js";
 import {
   DEFAULT_OPENROUTER_STT_MODEL,
@@ -84,6 +85,16 @@ const BUILDERS: Record<string, RequestBuilder> = {
       ...(instructions ? { extra_text: [instructions] } : {}),
     };
   },
+  "fish tts": (o, d) => {
+    const text = opt(o, "text") ?? opt(o, "prompt") ?? d.text;
+    if (text === undefined) return undefined;
+    // Fish bills the UTF-8 bytes of the text exactly as sent (tags included); the model is the header.
+    return {
+      provider: "fish",
+      model: (opt(o, "model") ?? d.model ?? DEFAULT_FISH_TTS_MODEL).trim(),
+      text,
+    };
+  },
   "openrouter transcribe": (o, d) => {
     if (opt(o, "input") === undefined) return undefined;
     return {
@@ -99,6 +110,7 @@ const BUILDERS: Record<string, RequestBuilder> = {
 const NEEDS: Record<string, string> = {
   "openrouter tts": "--text or --prompt (text from --text-file or --turns-file is not priced)",
   "openrouter transcribe": "the audio to transcribe (--input)",
+  "fish tts": "--text, --prompt or (from the CLI) a readable --text-file or --turns-file",
 };
 
 /** Commands with a pre-flight estimator. */
@@ -135,11 +147,13 @@ function unknownEstimate(
 const SPEECH_ROUTE_COMMANDS: Partial<Record<SpeechProvider, string>> = {
   gemini: "gemini generate-speech",
   elevenlabs: "elevenlabs tts",
+  fish: "fish tts",
 };
 
 const SPEECH_DEFAULT_MODELS: Partial<Record<SpeechProvider, string>> = {
   gemini: GEMINI_TTS_DEFAULT,
   elevenlabs: ELEVENLABS_DEFAULTS.ttsModel,
+  fish: DEFAULT_FISH_TTS_MODEL,
 };
 
 const list = (value: unknown): string[] =>
@@ -219,12 +233,14 @@ function estimateSpeech(o: Options, d: CommandDefaults): CostEstimate {
     const routeOptions: Options =
       route.provider === "gemini"
         ? { text, model: route.model, style }
-        : {
-            text,
-            model: route.model,
-            "previous-text": extras["elevenlabs.previous_text"],
-            "next-text": extras["elevenlabs.next_text"],
-          };
+        : route.provider === "fish"
+          ? { text, model: route.model }
+          : {
+              text,
+              model: route.model,
+              "previous-text": extras["elevenlabs.previous_text"],
+              "next-text": extras["elevenlabs.next_text"],
+            };
     const estimate = estimateCommand(routeCommand, routeOptions, { at: d.at });
     if (estimate.status !== "estimated") {
       return { ...estimate, detail: `${label} route: ${estimate.detail}` };

@@ -18,6 +18,14 @@ import {
   saveBytes,
 } from "../../providers/elevenlabs/client.js";
 import { TASK_DEFAULTS as ELEVENLABS_DEFAULTS } from "../../providers/elevenlabs/models.js";
+import { requireFishKey } from "../../providers/fish/client.js";
+import { runFishTts } from "../../providers/fish/commands/tts.js";
+import {
+  DEFAULT_FISH_TTS_MODEL,
+  FISH_TTS_MODEL_ENV,
+  type FishTtsFormat,
+  type FishTtsModel,
+} from "../../providers/fish/models.js";
 import { generateGeminiSpeech } from "../../providers/gemini/generators/speech.js";
 import { listGeminiKeys } from "../../providers/gemini/key-pool.js";
 import { getDefaultModel } from "../../providers/gemini/models.js";
@@ -215,10 +223,40 @@ const atlas: SpeechAdapter = {
   },
 };
 
+const num = (v: unknown): number | undefined => (typeof v === "number" ? v : undefined);
+
+const fish: SpeechAdapter = {
+  defaultModel: () => envDefault(FISH_TTS_MODEL_ENV, DEFAULT_FISH_TTS_MODEL),
+  requireKey: () => void requireFishKey(),
+  async generate(route, input, ctx) {
+    const x = route.extras;
+    const result = await runFishTts(
+      {
+        // The catalog lists only allowlisted models, so the route model is a valid header value.
+        model: route.model as FishTtsModel,
+        text: input.text,
+        voices: route.voice ? [route.voice] : [],
+        format: (route.format ?? "mp3") as FishTtsFormat,
+        ...(input.language ? { language: input.language } : {}),
+        ...(num(x.temperature) !== undefined ? { temperature: num(x.temperature) } : {}),
+        ...(num(x.top_p) !== undefined ? { topP: num(x.top_p) } : {}),
+        ...(num(x.speed) !== undefined ? { speed: num(x.speed) } : {}),
+        ...(num(x.volume) !== undefined ? { volume: num(x.volume) } : {}),
+        ...(num(x.chunk_length) !== undefined ? { chunkLength: num(x.chunk_length) } : {}),
+        ...(typeof x.normalize === "boolean" ? { normalize: x.normalize } : {}),
+        ...(typeof x.latency === "string" ? { latency: x.latency } : {}),
+      },
+      { output: ctx.output, logger: ctx.logger },
+    );
+    return { files: [result.path] };
+  },
+};
+
 export const SPEECH_ADAPTERS: Readonly<Record<SpeechProvider, SpeechAdapter>> = {
   gemini,
   openai,
   elevenlabs,
   minimax,
   atlas,
+  fish,
 };

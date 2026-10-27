@@ -17,20 +17,19 @@
 import { HttpError, MultixError, ProviderError, ResponseTooLargeError } from "../../core/errors.js";
 import { toFetchError } from "../../core/fetch-error.js";
 import { type FetchLike, fetchJson, parseRetryAfter } from "../../core/fetch-json.js";
+import { fetchFollowingRedirects } from "../../core/redirect-fetch.js";
 import {
   NOT_SENT_CODES,
   UNKNOWN_REMOTE_STATE,
   errorCodes,
-  readAudio,
+  readCappedBytes,
   readCappedText,
-} from "../../core/http-body.js";
-import { fetchFollowingRedirects } from "../../core/redirect-fetch.js";
+} from "../../core/response-read.js";
 import { type AudioContentType, parseAudioContentType } from "./speech-audio.js";
 
+export { NOT_SENT_CODES, UNKNOWN_REMOTE_STATE, errorCodes, readCappedText };
 export const OPENROUTER_API_BASE = "https://openrouter.ai/api/v1";
 export { DEFAULT_OPENROUTER_TTS_MODEL } from "./speech-defaults.js";
-// Moved to core so other providers need not import OpenRouter; re-exported for existing callers.
-export { NOT_SENT_CODES, UNKNOWN_REMOTE_STATE, errorCodes, readCappedText };
 
 const ERROR_BODY_MAX = 64 * 1024;
 const SNIPPET_MAX = 500;
@@ -186,7 +185,7 @@ export async function createSpeech(opts: CreateSpeechOptions): Promise<SpeechAud
 
   let audio: Uint8Array;
   try {
-    audio = await readAudio(response, opts.maxBytes, opts.idleTimeoutMs ?? 60_000, url);
+    audio = await readCappedBytes(response, opts.maxBytes, opts.idleTimeoutMs ?? 60_000, url);
   } catch (err) {
     if (err instanceof ResponseTooLargeError) {
       // The generation is done (and billed) even though its audio was dropped.

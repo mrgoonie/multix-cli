@@ -92,6 +92,7 @@ export default defineConfig({
             { label: "BytePlus", slug: "commands/byteplus" },
             { label: "Cloudflare", slug: "commands/cloudflare" },
             { label: "ElevenLabs", slug: "commands/elevenlabs" },
+            { label: "Fish Audio", slug: "commands/fish" },
             { label: "fal.ai", slug: "commands/fal" },
             { label: "Atlas Cloud", slug: "commands/atlascloud" },
             { label: "Replicate", slug: "commands/replicate" },

@@ -1,16 +1,16 @@
 ---
 title: Speech commands
-description: Text-to-speech across Gemini, OpenAI, ElevenLabs, MiniMax, and Atlas Cloud with one request shape and explicit routing.
+description: Text-to-speech across Gemini, OpenAI, ElevenLabs, MiniMax, Atlas Cloud, and Fish Audio with one request shape and explicit routing.
 ---
 
 `multix speech` puts the text-to-speech models of several providers behind one
 set of flags. It does not replace the provider commands (`gemini
 generate-speech`, `openai generate-speech`, `elevenlabs tts`, `minimax
-generate-speech`, `atlas audio`); those keep working as before. Use `speech`
+generate-speech`, `atlas audio`, `fish tts`); those keep working as before. Use `speech`
 when you want to compare providers, pick a model by language, or let an agent
 choose without learning each provider's flags.
 
-Providers: `gemini`, `openai`, `elevenlabs`, `minimax`, `atlas`. Each needs its
+Providers: `gemini`, `openai`, `elevenlabs`, `minimax`, `atlas`, `fish`. Each needs its
 own key (see [Environment variables](/reference/environment/)); no new key is
 introduced.
 
@@ -89,6 +89,20 @@ multix speech generate --provider minimax --language vi --emotion happy \
 
 MiniMax receives `--language` as its `language_boost` value; the
 `multix speech models` row says which request field each provider uses.
+
+### Fish Audio
+
+```bash
+multix speech generate --provider fish --model drama-3 \
+  --text "Welcome to multix." --extra fish.speed=1.1 --output welcome.mp3
+```
+
+The route sends the same native request as
+[`multix fish tts`](/commands/fish/), with the default voice Adrian unless
+`--voice` names another. It sends one voice; for multi-speaker dialogue use
+`multix fish tts --turns-file`. `--extra` takes `fish.temperature`,
+`fish.top_p`, `fish.speed`, `fish.volume`, `fish.chunk_length`,
+`fish.normalize`, and `fish.latency`.
 
 ## Routing rules
 

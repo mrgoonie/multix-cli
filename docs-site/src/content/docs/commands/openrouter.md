@@ -81,6 +81,11 @@ multix openrouter generation <generation-id>        # cost recorded later
   20, max 120) for OpenRouter to report the cost; `--no-cost` skips it. With
   `--json`, the result includes the generation ID, cost, voice, format, size,
   SHA-256, and duration (pcm/WAV only); unknown values are `null`.
+- `input_chars` and `input_utf8_bytes` report the size of the spoken text.
+  Fish Audio models (`fish-audio/*`) bill UTF-8 bytes, so their
+  `estimated_cost_usd` is the catalog price times `input_utf8_bytes`; other
+  per-input models use characters. Accented text has more bytes than
+  characters. For the native Fish Audio API see [Fish Audio](/commands/fish/).
 
 ## Speech-to-text
 

@@ -169,6 +169,24 @@ describe("prepareRun: argv", () => {
     ]);
   }, 120_000);
 
+  it("passes fish tts voices and dictionary references once per value", async () => {
+    const prepared = run({
+      command: "fish tts",
+      options: {
+        text: "<|speaker:0|>Hi.<|speaker:1|>Hello.",
+        voice: ["aaaabbbbccccddddeeeeffff00001111", "2222333344445555666677778888aaaa"],
+        dictionary: ["dict_1@ver_2", "dict_3@ver_4"],
+      },
+    });
+    const parsed = await parseWithCli(prepared.argv, "fish tts");
+    expect(parsed.opts.voice).toEqual([
+      "aaaabbbbccccddddeeeeffff00001111",
+      "2222333344445555666677778888aaaa",
+    ]);
+    expect(parsed.opts.dictionary).toEqual(["dict_1@ver_2", "dict_3@ver_4"]);
+    expect(parsed.opts.text).toBe("<|speaker:0|>Hi.<|speaker:1|>Hello.");
+  }, 120_000);
+
   it("runs runway video and image with downloaded inputs, repeated references and capped duration", async () => {
     const video = run({
       command: "runway video",

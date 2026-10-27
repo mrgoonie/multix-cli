@@ -16,12 +16,13 @@ description: Choose the multix command group that matches your media workflow.
 | [BytePlus](/commands/byteplus/) | Seedream images, Seedance video, reference video, and 3D assets. |
 | [Cloudflare](/commands/cloudflare/) | Workers AI image/speech and AI Gateway video jobs. |
 | [ElevenLabs](/commands/elevenlabs/) | Voices, TTS, cloning, STT, music, SFX, dubbing, isolation, and alignment. |
+| [Fish Audio](/commands/fish/) | Native Fish Audio TTS (Drama 3 by default), multi-speaker turns, pronunciation dictionaries, and voice models. |
 | [fal.ai](/commands/fal/) | Any fal queue model, plus image/video convenience commands. |
 | [Atlas Cloud](/commands/atlascloud/) | Any Atlas Cloud model: image, image edit, video, audio, 3D, and resumable async predictions. |
 | [Replicate](/commands/replicate/) | Any Replicate model via the direct API, image/video wrappers, and prediction status/cancel. |
 | [Runway](/commands/runway/) | Gen-4.5 and Gen-4 Turbo video, Gen-4 images, and task status/cancel. |
 | [HeyGen](/commands/heygen/) | Video Agent prompt-to-video, scripted avatar videos, video translation, lipsync, and TTS. |
-| [Speech](/commands/speech/) | Text-to-speech on Gemini, OpenAI, ElevenLabs, MiniMax, or Atlas Cloud with one set of flags, capability checks, and opt-in fallback. |
+| [Speech](/commands/speech/) | Text-to-speech on Gemini, OpenAI, ElevenLabs, MiniMax, Atlas Cloud, or Fish Audio with one set of flags, capability checks, and opt-in fallback. |
 | [Scenes](/commands/scene/) | Multi-character dialogue audio: voice profiles, per-line cached takes, approval, and stem export. |
 | `multix media` | Optimize, split, and batch-process files with ffmpeg/ImageMagick. |
 | `multix doc` | Convert supported documents to Markdown through Gemini. |

@@ -244,7 +244,7 @@ describe("contract fixtures: language, style, format, async, speakers", () => {
 describe("routing: which provider and model a request uses", () => {
   it("requires a provider or a model", () => {
     expect(() => resolveTarget(undefined, undefined, defaultModel)).toThrow(
-      /Choose a provider: --provider <gemini\|openai\|elevenlabs\|minimax\|atlas>/,
+      /Choose a provider: --provider <gemini\|openai\|elevenlabs\|minimax\|atlas\|fish>/,
     );
   });
 

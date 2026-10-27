@@ -51,8 +51,9 @@ export interface RunState {
   maxCost?: number;
   costPolicy?: CostPolicy;
   /**
-   * `--text-file` as read by the pre-flight estimate; the command speaks this
-   * same text so a file changed in between cannot exceed a proven ceiling.
+   * `--text-file` (or `fish tts --turns-file`) as read by the pre-flight
+   * estimate, without a leading BOM; the command speaks this same text so a
+   * file changed in between cannot exceed a proven ceiling.
    */
   textFile?: { path: string; text: string };
   /** Outcome of the --max-cost check. */

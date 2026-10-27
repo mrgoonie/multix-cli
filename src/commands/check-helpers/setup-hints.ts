@@ -13,6 +13,7 @@ To configure multix, set at least one provider API key:
     Leonardo.Ai        : https://app.leonardo.ai/settings/api-keys
     BytePlus           : https://console.byteplus.com/auth/api-keys
     fal.ai             : https://fal.ai/dashboard/keys
+    Fish Audio         : https://fish.audio/app/api-keys/
     Atlas Cloud        : https://www.atlascloud.ai/console/api-keys
     Replicate          : https://replicate.com/account/api-tokens
     Runway             : https://dev.runwayml.com/

@@ -10,6 +10,7 @@ import { registerBytePlusCommands } from "../providers/byteplus/commands/index.j
 import { registerCloudflareCommands } from "../providers/cloudflare/commands/index.js";
 import { registerElevenLabsCommands } from "../providers/elevenlabs/commands/index.js";
 import { registerFalCommands } from "../providers/fal/commands/index.js";
+import { registerFishCommands } from "../providers/fish/commands/index.js";
 import { registerGeminiCommands } from "../providers/gemini/commands/index.js";
 import { registerHeygenCommands } from "../providers/heygen/commands/index.js";
 import { registerLeonardoCommands } from "../providers/leonardo/commands/index.js";
@@ -41,6 +42,7 @@ export function registerCommands(program: Command): void {
   registerCloudflareCommands(program);
   registerElevenLabsCommands(program);
   registerFalCommands(program);
+  registerFishCommands(program);
   registerAtlasCloudCommands(program);
   registerReplicateCommands(program);
   registerRunwayCommands(program);

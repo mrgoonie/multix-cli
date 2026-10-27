@@ -28,8 +28,6 @@ const WORKER_SAFE_MODULES = [
   "redirect-fetch.ts",
   "async-poll.ts",
   "errors.ts",
-  "http-body.ts",
-  "audio-kind.ts",
 ];
 
 describe("worker-safe core modules", () => {

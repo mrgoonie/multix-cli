@@ -1,16 +1,16 @@
 ---
 title: Lệnh speech
-description: Text-to-speech qua Gemini, OpenAI, ElevenLabs, MiniMax và Atlas Cloud với một kiểu request và routing tường minh.
+description: Text-to-speech qua Gemini, OpenAI, ElevenLabs, MiniMax, Atlas Cloud và Fish Audio với một kiểu request và routing tường minh.
 ---
 
 `multix speech` gom các model text-to-speech của nhiều provider sau cùng một bộ
 flag. Nó không thay thế lệnh của từng provider (`gemini generate-speech`,
 `openai generate-speech`, `elevenlabs tts`, `minimax generate-speech`,
-`atlas audio`); các lệnh đó vẫn hoạt động như cũ. Dùng `speech` khi muốn so
+`atlas audio`, `fish tts`); các lệnh đó vẫn hoạt động như cũ. Dùng `speech` khi muốn so
 sánh provider, chọn model theo ngôn ngữ, hoặc để agent chọn mà không phải học
 flag riêng của từng provider.
 
-Provider: `gemini`, `openai`, `elevenlabs`, `minimax`, `atlas`. Mỗi provider
+Provider: `gemini`, `openai`, `elevenlabs`, `minimax`, `atlas`, `fish`. Mỗi provider
 cần key riêng (xem [Biến môi trường](/vi/reference/environment/)); không có key
 mới.
 
@@ -88,6 +88,20 @@ multix speech generate --provider minimax --language vi --emotion happy \
 
 MiniMax nhận `--language` qua giá trị `language_boost`; dòng tương ứng trong
 `multix speech models` cho biết mỗi provider dùng field request nào.
+
+### Fish Audio
+
+```bash
+multix speech generate --provider fish --model drama-3 \
+  --text "Welcome to multix." --extra fish.speed=1.1 --output welcome.mp3
+```
+
+Route này gửi cùng request gốc như
+[`multix fish tts`](/vi/commands/fish/), với voice mặc định Adrian trừ khi
+`--voice` chỉ định voice khác. Route chỉ gửi một voice; với hội thoại nhiều
+giọng, dùng `multix fish tts --turns-file`. `--extra` nhận `fish.temperature`,
+`fish.top_p`, `fish.speed`, `fish.volume`, `fish.chunk_length`,
+`fish.normalize` và `fish.latency`.
 
 ## Quy tắc routing
 

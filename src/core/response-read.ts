@@ -1,33 +1,27 @@
 /**
- * Response-body reads and request-outcome helpers shared by provider clients
- * that send paid, non-idempotent POSTs (OpenRouter speech and transcription,
- * Fish Audio). Runtime-neutral: no node:* imports, the worker bundles them.
+ * Bounded reads of a fetch Response for paid requests, and the connection
+ * error codes that prove a request never left (runtime-neutral: no `node:*`
+ * imports). A paid POST is never retried, so callers use these to tell "not
+ * sent" apart from "may have been accepted and billed".
  */
 
 import { ResponseTooLargeError } from "./errors.js";
 
+/** Connection failures that prove the request never reached the provider. */
+export const NOT_SENT_CODES = new Set(["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "ENETUNREACH"]);
+
 /** Error code of a request whose outcome (and billing) is unknown. */
 export const UNKNOWN_REMOTE_STATE = "UNKNOWN_REMOTE_STATE";
 
-/** Connection failures that prove the request never reached the server. */
-export const NOT_SENT_CODES = new Set(["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "ENETUNREACH"]);
-
-/** Error codes of an error and its causes (undici nests them). */
-export function errorCodes(err: unknown): string[] {
-  const codes: string[] = [];
-  let current: unknown = err;
-  for (let depth = 0; depth < 4 && current && typeof current === "object"; depth++) {
-    const e = current as { code?: unknown; cause?: unknown; errors?: unknown };
-    if (typeof e.code === "string") codes.push(e.code);
-    if (Array.isArray(e.errors)) {
-      for (const m of e.errors) {
-        const code = (m as { code?: unknown } | null)?.code;
-        if (typeof code === "string") codes.push(code);
-      }
-    }
-    current = e.cause;
+export function concatBytes(chunks: Uint8Array[], size: number): Uint8Array {
+  const out = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk.subarray(0, size - offset), offset);
+    offset += chunk.byteLength;
+    if (offset >= size) break;
   }
-  return codes;
+  return out;
 }
 
 /** Read at most `limit` bytes of a body as text (error bodies are small JSON). */
@@ -50,22 +44,29 @@ export async function readCappedText(response: Response, limit: number): Promise
   } catch {
     return "(could not read body)";
   }
-  return new TextDecoder().decode(concat(chunks, size).subarray(0, limit));
+  return new TextDecoder().decode(concatBytes(chunks, size).subarray(0, limit));
 }
 
-function concat(chunks: Uint8Array[], size: number): Uint8Array {
-  const out = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) {
-    out.set(chunk.subarray(0, size - offset), offset);
-    offset += chunk.byteLength;
-    if (offset >= size) break;
+/** Error codes of an error and its causes (undici nests them). */
+export function errorCodes(err: unknown): string[] {
+  const codes: string[] = [];
+  let current: unknown = err;
+  for (let depth = 0; depth < 4 && current && typeof current === "object"; depth++) {
+    const e = current as { code?: unknown; cause?: unknown; errors?: unknown };
+    if (typeof e.code === "string") codes.push(e.code);
+    if (Array.isArray(e.errors)) {
+      for (const m of e.errors) {
+        const code = (m as { code?: unknown } | null)?.code;
+        if (typeof code === "string") codes.push(code);
+      }
+    }
+    current = e.cause;
   }
-  return out;
+  return codes;
 }
 
-/** Read the audio body under a byte cap and an idle timeout. */
-export async function readAudio(
+/** Read a binary body under a byte cap and an idle timeout (no bytes for `idleTimeoutMs`). */
+export async function readCappedBytes(
   response: Response,
   maxBytes: number,
   idleTimeoutMs: number,
@@ -105,5 +106,5 @@ export async function readAudio(
     }
     chunks.push(step.value);
   }
-  return concat(chunks, size);
+  return concatBytes(chunks, size);
 }

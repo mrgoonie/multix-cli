@@ -15,10 +15,23 @@ import {
   ELEVENLABS_TTS_MODEL_CAPS,
   type ElevenLabsTtsModel,
 } from "../providers/elevenlabs/models.js";
+import {
+  FISH_PUBLIC_VOICES,
+  FISH_TTS_FORMATS,
+  FISH_TTS_MODELS,
+  FISH_TTS_SOURCE,
+} from "../providers/fish/models.js";
 import { GEMINI_INTERACTIONS_TTS_MODELS, GEMINI_TTS_MODELS } from "../providers/gemini/voices.js";
 import { MINIMAX_SPEECH_MODELS } from "../providers/minimax/models.js";
 
-export const SPEECH_PROVIDERS = ["gemini", "openai", "elevenlabs", "minimax", "atlas"] as const;
+export const SPEECH_PROVIDERS = [
+  "gemini",
+  "openai",
+  "elevenlabs",
+  "minimax",
+  "atlas",
+  "fish",
+] as const;
 export type SpeechProvider = (typeof SPEECH_PROVIDERS)[number];
 
 /** Audio containers the façade names; each provider maps them to its own values. */
@@ -123,6 +136,26 @@ export const SPEECH_PROVIDER_INFO: Readonly<Record<SpeechProvider, SpeechProvide
     extras: {},
     any_model: true,
     billing: "per request at the model's Atlas Cloud price",
+  },
+  fish: {
+    provider: "fish",
+    keys: ["FISH_API_KEY"],
+    // A request without reference_id gets an unspecified voice; default to a documented public one.
+    default_voice: FISH_PUBLIC_VOICES.adrian ?? "",
+    voice_kind: "ids",
+    voices_command: "multix fish voices list",
+    extras: {
+      temperature: "number",
+      top_p: "number",
+      speed: "number",
+      volume: "number",
+      chunk_length: "number",
+      normalize: "boolean",
+      latency: "string",
+    },
+    any_model: false,
+    billing:
+      "UTF-8 bytes of the text (drama-3 $50/M list, $10/M promotion until 2026-11-12 17:00 UTC; S2 family $15/M)",
   },
 };
 
@@ -308,6 +341,24 @@ const ATLAS_MODELS: readonly SpeechModel[] = [
   },
 ];
 
+/**
+ * Fish Audio publishes no per-model language list; `language` only steers
+ * text normalization. Multi-speaker dialogue goes through `multix fish tts
+ * --turns-file`, so the façade sends one voice.
+ */
+const FISH_MODELS: readonly SpeechModel[] = FISH_TTS_MODELS.map((model) => ({
+  provider: "fish",
+  model,
+  languages: null,
+  language_param: "language",
+  formats: [...FISH_TTS_FORMATS],
+  style: false,
+  max_speakers: 1,
+  async: false,
+  source: FISH_TTS_SOURCE,
+  verified_at: "2026-10-27",
+}));
+
 /** Every model the façade knows, in provider order. */
 export function speechModels(): SpeechModel[] {
   return [
@@ -316,6 +367,7 @@ export function speechModels(): SpeechModel[] {
     ...ELEVENLABS_TTS_MODELS.map(elevenLabsModel),
     ...[...MINIMAX_SPEECH_MODELS].map(minimaxModel),
     ...ATLAS_MODELS,
+    ...FISH_MODELS,
   ];
 }
 

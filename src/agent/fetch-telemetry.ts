@@ -24,7 +24,12 @@ export interface DryRunRequest {
   body?: unknown;
   body_bytes?: number;
   headers?: string[];
+  /** Values of headers that select behaviour and carry no secret (Fish Audio's `model`). */
+  header_values?: Record<string, string>;
 }
+
+/** Header values a dry run may show: they choose what runs and is billed, and hold no credential. */
+const SHOWN_HEADER_VALUES = new Set(["model"]);
 
 /** Request URL without query string or fragment (signed URLs, keys). */
 export function safeUrl(url: string): string {
@@ -69,6 +74,12 @@ function describeRequest(input: string | URL | Request, init?: RequestInit): Dry
   );
   const names = [...headers.keys()];
   if (names.length > 0) out.headers = names;
+  const shown = names.filter((n) => SHOWN_HEADER_VALUES.has(n));
+  if (shown.length > 0) {
+    out.header_values = Object.fromEntries(
+      shown.map((n) => [n, (headers.get(n) ?? "").slice(0, 100)]),
+    );
+  }
   const body = init?.body;
   if (typeof body === "string") {
     out.body_bytes = body.length;

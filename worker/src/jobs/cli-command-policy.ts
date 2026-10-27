@@ -97,7 +97,7 @@ const OMNI_VIDEO_CAPS: CapRules = { ...VIDEO_CAPS, fillResolution: true };
 /** Veo leaves the Gemini API on 2026-10-22 and rejects --duration, which the caps always send. */
 const OMNI_MODEL = { model: "gemini-omni-1.1-flash" };
 const IMAGE_COUNT: CapRules = { count: ["num-images"] };
-const SPEECH_KEY_GROUPS = ["gemini", "openai", "elevenlabs", "minimax", "atlas"];
+const SPEECH_KEY_GROUPS = ["gemini", "openai", "elevenlabs", "minimax", "atlas", "fish"];
 
 export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   "gemini analyze": { fileOptions: { files: "file" } },
@@ -155,6 +155,10 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   },
   "openrouter tts": { fileOptions: { "text-file": "file", "turns-file": "file" } },
   "openrouter transcribe": { fileOptions: { input: "file" } },
+  "fish tts": {
+    fileOptions: { "text-file": "file", "turns-file": "file", "dictionary-file": "file" },
+    repeatable: ["voice", "dictionary"],
+  },
   "leonardo generate": { caps: { count: ["num"] } },
   "leonardo image-to-image": { caps: { count: ["num"] } },
   "leonardo video": { caps: { resolution: ["resolution"] } },
@@ -277,6 +281,7 @@ export const GROUP_KEYS: Readonly<Record<string, readonly ProviderSecretName[]>>
   elevenlabs: ["ELEVENLABS_API_KEY"],
   fal: ["FAL_KEY"],
   atlas: ["ATLASCLOUD_API_KEY"],
+  fish: ["FISH_API_KEY"],
   replicate: ["REPLICATE_API_TOKEN", "REPLICATE_API_KEY"],
   runway: ["RUNWAYML_API_SECRET"],
   heygen: ["HEYGEN_API_KEY"],
@@ -287,6 +292,7 @@ export const GROUP_KEYS: Readonly<Record<string, readonly ProviderSecretName[]>>
     "ELEVENLABS_API_KEY",
     "MINIMAX_API_KEY",
     "ATLASCLOUD_API_KEY",
+    "FISH_API_KEY",
   ],
 };
 
@@ -305,6 +311,7 @@ export const GROUP_REQUIRED_KEYS: Readonly<
       "ELEVENLABS_API_KEY",
       "MINIMAX_API_KEY",
       "ATLASCLOUD_API_KEY",
+      "FISH_API_KEY",
     ],
   ],
 };
