@@ -64,8 +64,8 @@ function checkFormat(format: string, profile: FalSpeechModel, flag: string): voi
   }
 }
 
-/** ISO 639 language code with an optional region or script subtag (en, vi, pt-BR). */
-const LANGUAGE_RE = /^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})?$/;
+/** ISO 639 language code with optional script or region subtags (en, vi, pt-BR, zh-Hant-TW). */
+const LANGUAGE_RE = /^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/;
 
 function checkLanguage(language: unknown, flag: string): void {
   if (typeof language !== "string" || !LANGUAGE_RE.test(language)) {
@@ -100,6 +100,16 @@ function objectList(value: unknown, what: string): Record<string, unknown>[] {
   return value as Record<string, unknown>[];
 }
 
+/** Refuse keys fal's schema does not list: it forbids them, but only after queueing. */
+function onlyKeys(item: Record<string, unknown>, keys: readonly string[], what: string): void {
+  const unknown = Object.keys(item).filter((k) => !keys.includes(k));
+  if (unknown.length > 0) {
+    throw new ValidationError(
+      `${what} has unknown field(s) ${unknown.join(", ")}; allowed: ${keys.join(", ")}`,
+    );
+  }
+}
+
 function nonBlank(value: unknown, what: string): string {
   if (typeof value !== "string" || value.trim() === "") {
     throw new ValidationError(`${what} must be a non-empty string`);
@@ -122,7 +132,7 @@ function checkDialogue(
   const field = profile.dialogueField as string;
   const turns = objectList(turnsValue, `--input ${field}`);
   if (turns.length === 0) throw new ValidationError(`--input ${field} must not be empty`);
-  if (speakersValue === undefined) {
+  if (speakersValue === undefined || speakersValue === null) {
     throw new ValidationError(`--input ${field} needs "speakers": two {speaker_id, voice} entries`);
   }
   const speakers = objectList(speakersValue, "--input speakers");
@@ -133,12 +143,14 @@ function checkDialogue(
   }
   const ids = new Set<string>();
   const checked = speakers.map((s, i) => {
+    onlyKeys(s, ["speaker_id", "voice"], `speakers[${i}]`);
     const id = nonBlank(s.speaker_id, `speakers[${i}].speaker_id`);
     if (ids.has(id)) throw new ValidationError(`speakers[${i}].speaker_id "${id}" is repeated`);
     ids.add(id);
     return { ...s, voice: knownVoice(s.voice, profile, `speakers[${i}].voice`) };
   });
   turns.forEach((t, i) => {
+    onlyKeys(t, ["speaker_id", "text", "style_instructions"], `${field}[${i}]`);
     const id = nonBlank(t.speaker_id, `${field}[${i}].speaker_id`);
     if (!ids.has(id)) {
       throw new ValidationError(`${field}[${i}].speaker_id "${id}" is not one of the speakers`);
@@ -168,6 +180,8 @@ export function buildSpeechRequest(flags: SpeechFlags): SpeechRequest {
     throw new ValidationError(`--voice-field and --text-field are both "${textField}"`);
   }
   const has = (field: string) => Object.hasOwn(extra, field);
+  // fal's schemas allow null for optional fields (playground payloads carry them): null means unset.
+  const given = (field: string) => has(field) && extra[field] !== null;
 
   const input: Record<string, unknown> = { ...extra };
   const set = (flag: string, field: string, value: unknown) => {
@@ -177,14 +191,19 @@ export function buildSpeechRequest(flags: SpeechFlags): SpeechRequest {
     input[field] = value;
   };
 
-  const dialogue = profile?.dialogueField !== undefined && has(profile.dialogueField);
+  const dialogue = profile?.dialogueField !== undefined && given(profile.dialogueField);
+  if (profile?.dialogueField && !dialogue && given("speakers")) {
+    throw new ValidationError(
+      `--input speakers needs "${profile.dialogueField}": the turns of the dialogue`,
+    );
+  }
   if (profile && dialogue) {
-    if (flags.text !== undefined || has(textField)) {
+    if (flags.text !== undefined || given(textField)) {
       throw new ValidationError(
         `Omit the text when --input has "${profile.dialogueField}": ${profile.id} speaks either one text or a dialogue`,
       );
     }
-    if (flags.voice !== undefined || (voiceField && has(voiceField))) {
+    if (flags.voice !== undefined || (voiceField && given(voiceField))) {
       throw new ValidationError(
         "--voice does not apply to a dialogue: set each speaker's voice in --input speakers",
       );
@@ -195,7 +214,7 @@ export function buildSpeechRequest(flags: SpeechFlags): SpeechRequest {
   if (flags.text !== undefined) {
     checkText(flags.text, profile);
     set("--text", textField, flags.text);
-  } else if (has(textField)) {
+  } else if (given(textField)) {
     const text = extra[textField];
     if (profile && typeof text !== "string") {
       throw new ValidationError(`--input "${textField}" must be a string`);
@@ -211,7 +230,7 @@ export function buildSpeechRequest(flags: SpeechFlags): SpeechRequest {
     if (!voiceField)
       throw new ValidationError(`Pass --voice-field <field> to set a voice on ${flags.model}`);
     set("--voice", voiceField, profile ? knownVoice(flags.voice, profile, "--voice") : flags.voice);
-  } else if (profile && voiceField && has(voiceField)) {
+  } else if (profile && voiceField && given(voiceField)) {
     input[voiceField] = knownVoice(extra[voiceField], profile, `--input ${voiceField}`);
   }
 
@@ -224,7 +243,7 @@ export function buildSpeechRequest(flags: SpeechFlags): SpeechRequest {
     if (!profile?.languageField) throw unsupported("--language", flags.model);
     checkLanguage(flags.language, "--language");
     set("--language", profile.languageField, flags.language);
-  } else if (profile?.languageField && has(profile.languageField)) {
+  } else if (profile?.languageField && given(profile.languageField)) {
     checkLanguage(extra[profile.languageField], `--input ${profile.languageField}`);
   }
 
@@ -234,7 +253,7 @@ export function buildSpeechRequest(flags: SpeechFlags): SpeechRequest {
     checkFormat(flags.format, profile, "--format");
     set("--format", profile.formatField, flags.format);
     format = flags.format;
-  } else if (profile?.formatField && has(profile.formatField)) {
+  } else if (profile?.formatField && given(profile.formatField)) {
     const extraFormat = extra[profile.formatField];
     if (typeof extraFormat !== "string") {
       throw new ValidationError(`--input "${profile.formatField}" must be a string`);

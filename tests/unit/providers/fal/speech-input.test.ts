@@ -170,6 +170,13 @@ describe("buildSpeechRequest", () => {
         { model, extra: { voice: "Kore", turns: [turn], speakers: [a, b] } },
         /each speaker's voice/,
       ],
+      [{ model, text: "Hi", extra: { speakers: [a, b] } }, /needs "turns"/],
+      [{ model, extra: { turns: [turn], speakers: null } }, /needs "speakers"/],
+      [{ model, extra: { turns: [turn], speakers: [a, { ...b, style: "x" }] } }, /unknown field/],
+      [
+        { model, extra: { turns: [{ ...turn, voice: "Kore" }], speakers: [a, b] } },
+        /unknown field/,
+      ],
     ];
     for (const [c, pattern] of cases) {
       expect(() => buildSpeechRequest(c), JSON.stringify(c)).toThrow(pattern);
@@ -197,6 +204,26 @@ describe("buildSpeechRequest", () => {
     expect(
       buildSpeechRequest({ model: eleven, text: "x", extra: { language_code: "pt-BR" } }).input,
     ).toEqual({ text: "x", language_code: "pt-BR" });
+    // null is how fal's playground writes an unset optional field.
+    expect(
+      buildSpeechRequest({
+        model: gemini,
+        extra: { prompt: "Hi", speakers: null, turns: null, voice: null },
+      }).input,
+    ).toEqual({ prompt: "Hi", speakers: null, turns: null, voice: null });
+    expect(
+      buildSpeechRequest({
+        model: eleven,
+        text: "x",
+        extra: { language_code: null, output_format: null },
+      }).format,
+    ).toBeUndefined();
+    expect(() => buildSpeechRequest({ model: gemini, extra: { prompt: null } })).toThrow(
+      /Provide the text/,
+    );
+    expect(
+      buildSpeechRequest({ model: eleven, text: "x", language: "zh-Hant-TW" }).input,
+    ).toMatchObject({ language_code: "zh-Hant-TW" });
     // Unlisted models keep their own voice names.
     expect(
       buildSpeechRequest({
