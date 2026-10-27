@@ -42,6 +42,14 @@ gh issue edit 123 --remove-label "in review" --add-label "done"     # after the 
 gh issue edit 123 --remove-label "done" --add-label "shipped"       # after merge
 ```
 
+Where GraphQL is blocked (some agent sessions), `gh issue edit` fails; use the
+REST routes instead:
+
+```bash
+gh api -X POST repos/mrgoonie/multix-cli/issues/123/labels -f 'labels[]=in review'
+gh api -X DELETE "repos/mrgoonie/multix-cli/issues/123/labels/in%20progress"
+```
+
 Re-check right before you open a new issue or a PR, with direct reads rather
 than `--search` (the search index lags behind by up to a minute, which is
 exactly the window in which parallel sessions collide):
