@@ -40,14 +40,7 @@ import {
   thumbnailSource,
 } from "../prediction-output.js";
 import type { AtlasMediaKind, AtlasModelSpec, AtlasPrediction } from "../types.js";
-import {
-  INTERRUPT_EXIT_CODES,
-  type InterruptSignal,
-  type NamingPolicy,
-  cleanupActiveClaims,
-  downloadClaimed,
-  savedOutput,
-} from "./output-claims.js";
+import { type NamingPolicy, downloadClaimed, savedOutput } from "./output-claims.js";
 
 export type { NamingPolicy };
 
@@ -196,22 +189,31 @@ function shellQuote(value: string): string {
   return `"${value.replace(/(["\\$`])/g, "\\$1")}"`;
 }
 
+/** Shell exit status for a run stopped by each signal: 128 + the signal number. */
+const SIGNAL_EXIT = { SIGHUP: 129, SIGINT: 130, SIGTERM: 143 } as const;
+
+export interface InterruptOptions {
+  /** Printed to stderr before exiting. */
+  message: string;
+  /** What the envelope says the signal left behind (its hint and retryable). */
+  outcome?: { hint: string; retryable: boolean };
+  exit?: (code: number) => void;
+}
+
 /**
  * Run `work` so that Ctrl-C, SIGTERM or a closed terminal stops it and exits
  * with 128 + the signal number through the agent runtime (envelope, history),
- * after printing `message`. Removes this run's download locks and temp files
- * first, so it also covers delivery before the first output claims its path.
+ * after printing the message. Nothing local needs cleanup in these phases.
  */
 export async function exitOnInterrupt<T>(
   work: () => Promise<T>,
-  message: string,
-  exit: (code: number) => void = (code) => process.exit(code),
+  { message, outcome, exit = (code) => process.exit(code) }: InterruptOptions,
 ): Promise<T> {
-  const signals = Object.keys(INTERRUPT_EXIT_CODES) as InterruptSignal[];
-  const stop = (signal: InterruptSignal) => {
+  const signals = Object.keys(SIGNAL_EXIT) as Array<keyof typeof SIGNAL_EXIT>;
+  const stop = (signal: keyof typeof SIGNAL_EXIT) => {
+    if (outcome) run.interrupted = outcome;
     process.stderr.write(`${message}\n`);
-    cleanupActiveClaims();
-    exit(INTERRUPT_EXIT_CODES[signal]);
+    exit(SIGNAL_EXIT[signal]);
   };
   for (const signal of signals) process.on(signal, stop);
   try {
@@ -221,36 +223,27 @@ export async function exitOnInterrupt<T>(
   }
 }
 
-/**
- * Run the work before submit (schema read, uploads) cancellable, as a clean
- * cancel: none of its requests can start a paid prediction.
- */
-export function beforeSubmit<T>(work: () => Promise<T>): Promise<T> {
-  run.preSubmit = true;
-  return exitOnInterrupt(work, "Cancelled before submit; no prediction was created.");
-}
-
-/** Stderr line for a signal while a finished prediction's outputs are saved. */
-export function deliveryCancelledMessage(id: string, resume: string): string {
-  return `Cancelled while saving the outputs of prediction ${id}; it has finished and is billed. Resume with: ${resume}`;
-}
-
-/** Stderr line for a signal while a submitted prediction is polled. */
-export function waitCancelledMessage(id: string, resume: string): string {
-  return `Cancelled while waiting on prediction ${id}; it keeps running and is billed. Resume with: ${resume}`;
-}
+/** A signal before the submit leaves no prediction behind; the user stopped it, so no automatic retry. */
+export const NOTHING_SUBMITTED = {
+  hint: "The run stopped before the prediction was submitted, so no prediction was created or billed. Rerun the command.",
+  retryable: false,
+};
 
 /** Submit, then either exit with the id (--async) or wait, verify, and deliver outputs. */
 export async function executePrediction(o: ExecuteOptions): Promise<ExecuteResult> {
   const { client, logger, opts } = o;
   const timeoutMs = parseTimeoutMs(opts.waitTimeout, o.defaultWaitTimeoutMs);
   logger.info(`Submitting to ${o.model} (generate${capitalize(o.kind)})...`);
-  // A request cut off here may still have been accepted, so this cancel is not clean.
-  run.preSubmit = false;
   const submitted = await exitOnInterrupt(
     () => client.submit(o.kind, { ...o.body, model: o.model }),
-    `Cancelled while submitting to ${o.model}; Atlas Cloud may have accepted the prediction. Check your Atlas Cloud request history before resubmitting.`,
-    o.exit,
+    {
+      message: `Cancelled while submitting to ${o.model}; Atlas Cloud may already have accepted the prediction.`,
+      outcome: {
+        hint: "The run stopped while the submit request was in flight, so Atlas Cloud may have accepted (and will bill) a prediction whose id the run never received. Check the predictions in the Atlas Cloud console before resubmitting, or you may pay twice.",
+        retryable: false,
+      },
+      exit: o.exit,
+    },
   );
   const id = submitted.id;
 
@@ -274,16 +267,19 @@ export async function executePrediction(o: ExecuteOptions): Promise<ExecuteResul
             resumeHint: `Resume with: ${resume}`,
             onPoll: (p, n) => logger.debug(`poll ${n}: ${p.status}`),
           }),
-        waitCancelledMessage(id, resume),
-        o.exit,
+        {
+          message: `Cancelled while waiting on prediction ${id}; it keeps running and is billed. Resume with: ${resume}`,
+          exit: o.exit,
+        },
       );
   assertPredictionSucceeded(final);
   // File names come from the submit-time id, which a resume also uses.
-  const delivered = await exitOnInterrupt(
-    () => deliverPrediction(final, { logger, opts, hint: o.hint, predictionId: id }),
-    deliveryCancelledMessage(id, resume),
-    o.exit,
-  );
+  const delivered = await deliverPrediction(final, {
+    logger,
+    opts,
+    hint: o.hint,
+    predictionId: id,
+  });
   return { predictionId: id, prediction: final, ...delivered };
 }
 

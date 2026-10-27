@@ -93,6 +93,8 @@ const ID_KEYS = new Set([
   "video_id",
   "job_id",
   "jobId",
+  // Gemini generateContent names its response here.
+  "responseId",
 ]);
 const USAGE_HEADERS = [
   "x-request-id",

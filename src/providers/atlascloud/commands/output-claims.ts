@@ -204,13 +204,11 @@ export function cleanupActiveClaims(): void {
   }
 }
 
-/** Shell exit status for a run stopped by each signal: 128 + the signal number. */
-export const INTERRUPT_EXIT_CODES = { SIGHUP: 129, SIGINT: 130, SIGTERM: 143 } as const;
-export type InterruptSignal = keyof typeof INTERRUPT_EXIT_CODES;
+const INTERRUPT_EXIT_CODES = { SIGHUP: 129, SIGINT: 130, SIGTERM: 143 } as const;
 
 /** Clean up, then exit with the conventional 128+signal code. */
 export function handleInterrupt(
-  signal: InterruptSignal,
+  signal: keyof typeof INTERRUPT_EXIT_CODES,
   exit: (code: number) => void = (code) => process.exit(code),
 ): void {
   cleanupActiveClaims();
@@ -222,7 +220,9 @@ let interruptCleanupInstalled = false;
 function installInterruptCleanup(): void {
   if (interruptCleanupInstalled) return;
   interruptCleanupInstalled = true;
-  for (const signal of Object.keys(INTERRUPT_EXIT_CODES) as InterruptSignal[]) {
+  for (const signal of Object.keys(INTERRUPT_EXIT_CODES) as Array<
+    keyof typeof INTERRUPT_EXIT_CODES
+  >) {
     process.once(signal, () => handleInterrupt(signal));
   }
 }

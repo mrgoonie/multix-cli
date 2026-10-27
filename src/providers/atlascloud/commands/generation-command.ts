@@ -10,10 +10,11 @@ import type { AtlasMediaKind } from "../types.js";
 import { createAtlasClientFromEnv, createAtlasLogger, resolveMediaRefs } from "./env.js";
 import {
   type ExecuteResult,
+  NOTHING_SUBMITTED,
   type RunCliOpts,
   assertEndpoint,
-  beforeSubmit,
   executePrediction,
+  exitOnInterrupt,
   loadModelSpec,
 } from "./prediction-runner.js";
 
@@ -39,17 +40,21 @@ export async function runGenerationCommand(cfg: GenerationCommandConfig): Promis
     stdoutReserved: cfg.opts.async,
   });
   const client = createAtlasClientFromEnv();
-  const { kind, body } = await beforeSubmit(async () => {
-    const spec = await loadModelSpec(client, cfg.model, logger, cfg.opts.validate);
-    const kind = cfg.endpointFromSchema ? (spec?.endpoint ?? cfg.kind) : cfg.kind;
-    assertEndpoint(spec, kind, cfg.model);
+  const spec = await loadModelSpec(client, cfg.model, logger, cfg.opts.validate);
+  const kind = cfg.endpointFromSchema ? (spec?.endpoint ?? cfg.kind) : cfg.kind;
+  assertEndpoint(spec, kind, cfg.model);
 
-    const refs = cfg.refs ?? [];
-    // Validate with the raw refs first so a bad flag never costs an upload.
-    buildModelInput(spec, cfg.requests(refs));
-    const refUrls = refs.length > 0 ? await resolveMediaRefs(client, refs, logger) : [];
-    return { kind, body: buildModelInput(spec, cfg.requests(refUrls)) };
-  });
+  const refs = cfg.refs ?? [];
+  // Validate with the raw refs first so a bad flag never costs an upload.
+  buildModelInput(spec, cfg.requests(refs));
+  const refUrls =
+    refs.length > 0
+      ? await exitOnInterrupt(() => resolveMediaRefs(client, refs, logger), {
+          message: "Cancelled while uploading reference files; no prediction was submitted.",
+          outcome: NOTHING_SUBMITTED,
+        })
+      : [];
+  const body = buildModelInput(spec, cfg.requests(refUrls));
   logger.debug(`Request fields: ${Object.keys(body).join(", ")}`);
 
   return executePrediction({

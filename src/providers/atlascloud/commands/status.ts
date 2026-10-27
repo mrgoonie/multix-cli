@@ -11,15 +11,14 @@ import { imageFormatOption, noWebpOption } from "../../../core/image-webp-finali
 import { createLogger } from "../../../core/logger.js";
 import { AtlasPredictionFailedError, assertPredictionSucceeded } from "../client.js";
 import { isFailureStatus } from "../prediction-output.js";
+import type { AtlasPrediction } from "../types.js";
 import { createAtlasClientFromEnv } from "./env.js";
 import {
   type RunCliOpts,
   deliverPrediction,
-  deliveryCancelledMessage,
   exitOnInterrupt,
   parseTimeoutMs,
   resumeCommand,
-  waitCancelledMessage,
 } from "./prediction-runner.js";
 
 const STATUS_WAIT_MS = 600_000;
@@ -44,20 +43,25 @@ export function registerAtlasStatusCommand(parent: Command): void {
       const logger = createLogger({ verbose: opts.verbose ?? false });
       const client = createAtlasClientFromEnv();
       const wait = Boolean(opts.wait || opts.download);
-      const resume = resumeCommand(predictionId, opts.output);
-      // A signal while waiting or downloading reports how to resume, like a generation command.
-      if (wait) trackInFlight(predictionId, resume);
-      const prediction = wait
-        ? await exitOnInterrupt(
-            () =>
-              client.waitForPrediction(predictionId, {
-                timeoutMs: parseTimeoutMs(opts.waitTimeout, STATUS_WAIT_MS),
-                resumeHint: `Resume with: ${resume}`,
-                onPoll: (p, n) => logger.debug(`poll ${n}: ${p.status}`),
-              }),
-            waitCancelledMessage(predictionId, resume),
-          )
-        : await client.getPrediction(predictionId);
+      let prediction: AtlasPrediction;
+      if (wait) {
+        const resume = resumeCommand(predictionId, opts.output);
+        // A stopped wait leaves the prediction running: report how to resume it.
+        trackInFlight(predictionId, resume);
+        prediction = await exitOnInterrupt(
+          () =>
+            client.waitForPrediction(predictionId, {
+              timeoutMs: parseTimeoutMs(opts.waitTimeout, STATUS_WAIT_MS),
+              resumeHint: `Resume with: ${resume}`,
+              onPoll: (p, n) => logger.debug(`poll ${n}: ${p.status}`),
+            }),
+          {
+            message: `Cancelled while waiting on prediction ${predictionId}; it keeps running. Resume with: ${resume}`,
+          },
+        );
+      } else {
+        prediction = await client.getPrediction(predictionId);
+      }
 
       if (!opts.download) {
         console.log(JSON.stringify(prediction, null, 2));
@@ -65,14 +69,10 @@ export function registerAtlasStatusCommand(parent: Command): void {
         return;
       }
       assertPredictionSucceeded(prediction);
-      await exitOnInterrupt(
-        () =>
-          deliverPrediction(prediction, {
-            logger,
-            opts: { ...opts, download: true },
-            predictionId,
-          }),
-        deliveryCancelledMessage(predictionId, resume),
-      );
+      await deliverPrediction(prediction, {
+        logger,
+        opts: { ...opts, download: true },
+        predictionId,
+      });
     });
 }

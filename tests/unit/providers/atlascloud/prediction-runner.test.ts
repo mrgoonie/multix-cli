@@ -259,21 +259,18 @@ describe("executePrediction (mocked submit -> poll -> saved output)", () => {
     run.ids = [];
   });
 
-  it("a signal before the first output responds exits 129 with the resume command and no temp files", async () => {
-    const { client } = createFakeAtlas({
-      "POST /model/generateImage": {
-        body: prediction("deliv01", "completed", { outputs: ["https://m.test/a.png"] }),
-      },
+  it("a signal during the submit records that the prediction may exist, then exits", async () => {
+    const { client, calls } = createFakeAtlas({
+      "POST /model/generateImage": { body: prediction("sub01", "processing") },
     });
-    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    vi.spyOn(process.stderr, "write").mockImplementation(() => true);
     const exits: number[] = [];
     const signals = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
     const before = signals.map((s) => process.listenerCount(s));
-    // The terminal closes while the output's request waits for headers: no path is claimed yet.
-    vi.stubGlobal("fetch", async () => {
-      (process.listeners("SIGHUP").at(-1) as (s: string) => void)("SIGHUP");
-      // A real exit never returns; failing the request lets the test's promise settle.
-      throw new Error("connection closed");
+    const origSubmit = client.submit.bind(client);
+    vi.spyOn(client, "submit").mockImplementation(async (...a) => {
+      (process.listeners("SIGTERM").at(-1) as (s: string) => void)("SIGTERM");
+      return origSubmit(...a);
     });
     const res = executePrediction({
       client,
@@ -281,25 +278,21 @@ describe("executePrediction (mocked submit -> poll -> saved output)", () => {
       kind: "image",
       model: "m/x",
       body: { prompt: "x" },
-      opts: { imageFormat: "original" },
+      opts: {},
       defaultWaitTimeoutMs: 60_000,
       exit: (code) => {
         exits.push(code);
+        throw new Error("exited");
       },
     });
-    await expect(res).rejects.toThrow();
-    expect(exits).toEqual([129]);
-    const resume = "multix atlas status deliv01 --wait --download";
-    expect(run.inFlight).toEqual({ id: "deliv01", resume });
-    expect(stderr).toHaveBeenCalledWith(
-      expect.stringContaining(
-        `saving the outputs of prediction deliv01; it has finished and is billed. Resume with: ${resume}`,
-      ),
-    );
-    expect(fs.readdirSync(tmp)).toEqual([]);
+    await expect(res).rejects.toThrow("exited");
+    expect(exits).toEqual([143]);
+    expect(run.interrupted).toMatchObject({ retryable: false });
+    expect(run.interrupted?.hint).toContain("may have accepted");
+    expect(run.inFlight).toBeUndefined();
+    expect(calls.filter((c) => c.method === "POST")).toHaveLength(0);
     expect(signals.map((s) => process.listenerCount(s))).toEqual(before);
-    run.inFlight = undefined;
-    run.ids = [];
+    run.interrupted = undefined;
   });
 
   it("resumeCommand adds --output only when given, quoting it when needed", () => {
@@ -715,8 +708,9 @@ describe("download hardening", () => {
     expect(exit).toHaveBeenLastCalledWith(143);
     expect(fs.readdirSync(tmp)).toEqual(["keep.mp4"]);
 
-    // A closed terminal (SIGHUP) mid-download cleans up the same way.
+    // A closed terminal (SIGHUP) cleans up the same way.
     claimOutputPath(file, "reuse");
+    expect(process.listenerCount("SIGHUP")).toBeGreaterThan(0);
     handleInterrupt("SIGHUP", exit);
     expect(exit).toHaveBeenLastCalledWith(129);
     expect(fs.readdirSync(tmp)).toEqual(["keep.mp4"]);

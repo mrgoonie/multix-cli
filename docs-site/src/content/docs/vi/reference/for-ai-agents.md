@@ -71,6 +71,8 @@ https://multix.zuey.me/llms.txt
   "command": "gemini generate",
   "provider": "gemini",
   "model": "gemini-2.5-flash-image",
+  "model_requested": "gemini-2.5-flash-image",
+  "model_resolved": "gemini-2.5-flash-image",
   "duration_ms": 8120,
   "outputs": [
     { "path": "gemini-image-1.webp", "bytes": 184220, "mime": "image/webp",
@@ -92,6 +94,8 @@ https://multix.zuey.me/llms.txt
 | `error` | `code`, `message`, `retryable`, `retry_after_s`, `hint`, `http_status`, `env` (tên key khi thiếu key). Query string của URL trong `message` và `log` đều bị che, kể cả URL đầu vào đã ký mà provider lặp lại trong thông báo lỗi. |
 | `usage` | Số liệu provider trả về: `tokens` (`input`, `output`, `total`, `thinking`), `cost_usd`, `credits` và các `metrics` dạng số khác theo key path. `sources.cost_usd` / `sources.credits` ghi nguồn của từng số (ví dụ `api.elevenlabs.io header.character-cost`). Không ước tính: số ước tính hoặc báo giá của provider (như `estimatedCost` của Runway) chỉ nằm trong `metrics`, không bao giờ được báo là `cost_usd` hay `credits`. `cost_usd` và `credits` là số đã tiêu cho lần chạy: số dư tài khoản (`apiCredit` của Leonardo từ `leonardo me`, credit còn lại hoặc credit đi kèm gói của HeyGen từ `heygen me`) không bao giờ được tính vào `credits` hay `cost_usd`. |
 | `http` | Số request tới provider, số request lỗi và tổng thời gian. |
+| `model_requested` / `model_resolved` | Model mà lần chạy yêu cầu (ghi trong request gửi provider, nếu không thì lấy từ `--model`) và model mà response của provider báo đã dùng (`model` cấp cao nhất, `modelVersion` của Gemini, hoặc các khóa đó bên trong `data`). `model_resolved` là `null` khi provider không báo, và luôn là `null` khi dry run hoặc estimate; không bao giờ đoán. Trường `model` vẫn giữ nguyên và bằng `model_requested`. |
+| `job` | `{ provider, id, attempt }` khi một response thành công của provider trả về id: job đang chạy (prediction của Atlas), nếu không thì id đầu tiên mà một lần submit thành công trả về (không tính upload file), nếu không nữa thì id đầu tiên mà một lần đọc trạng thái thành công trả về. Id của request thất bại chỉ nằm trong `provider_ids`. `attempt` là 1, cộng thêm một cho mỗi lần gửi cùng submit đó thất bại trước đó (ví dụ một lệnh Gemini thử lại bằng key khác sau 429); lần đọc trạng thái thất bại không được tính. |
 | `provider_ids` | Request id, job id hoặc prediction id provider trả về. |
 | `request` | Với `--dry-run`: request lẽ ra đã được gửi. Giá trị header, các trường có tên dạng secret và query string của URL (URL đã ký) đều bị che; giá trị header duy nhất được hiển thị là `model` của Fish Audio (trong `header_values`), vì nó quyết định model nào chạy và bị tính phí, và không chứa secret. |
 | `estimate` | Giá ước tính trước khi chạy (với `--estimate`, `--max-cost`, hoặc với lệnh có bảng giá). `estimate_only: true` đánh dấu lần chạy `--estimate`. |
@@ -109,7 +113,7 @@ https://multix.zuey.me/llms.txt
 | 4 | tạm thời | `RATE_LIMITED`, `PROVIDER_UNAVAILABLE`, `NETWORK_ERROR` | Chờ `retry_after_s`, rồi `multix rerun <id>`. |
 | 5 | bị từ chối | `QUOTA_EXCEEDED`, `CONTENT_BLOCKED`, `MODEL_NOT_FOUND`, `NOT_FOUND`, `PROVIDER_REJECTED`, `JOB_FAILED`, `RESPONSE_TOO_LARGE` | Đổi input, model hoặc provider. |
 | 6 | hết thời gian hoặc không rõ | `TIMEOUT`, `UNKNOWN_REMOTE_STATE` | Job có thể vẫn đang chạy: dùng lệnh status trong `next[]`. `UNKNOWN_REMOTE_STATE`: lần submit thất bại mà không chứng minh được provider đã từ chối (bị cắt kết nối, lỗi gateway 5xx) nên job có thể đã vào hàng đợi; kiểm tra danh sách request của provider trước khi submit lại. |
-| 129, 130, 143 | đã hủy | `CANCELLED` | Lần chạy bị dừng bởi SIGHUP, Ctrl-C (SIGINT) hoặc SIGTERM sau khi đã dọn dẹp; không để lại gì. Chạy lại lệnh. Nếu request đã được gửi tới provider, hint sẽ nói rõ: lấy kết quả theo `provider_ids` trước khi chạy lại, nếu không có thể bị tính phí hai lần. Tín hiệu thứ hai dừng lệnh trước khi dọn dẹp: lệnh vẫn kết thúc với exit code đó nhưng không có envelope, và có thể còn file tạm. |
+| 129, 130, 143 | đã hủy | `CANCELLED` | Lần chạy bị dừng bởi SIGHUP, Ctrl-C (SIGINT) hoặc SIGTERM sau khi đã dọn dẹp; không để lại gì. Chạy lại lệnh. Nếu request đã được gửi tới provider, hint sẽ nói rõ: lấy kết quả theo `provider_ids` trước khi chạy lại, nếu không có thể bị tính phí hai lần. Khi lệnh biết rõ hơn, hint sẽ cụ thể: job đã submit và đang chờ thì tiếp tục bằng `next[0]` (không chạy lại); submit bị dừng giữa chừng có thể đã được nhận với id chưa biết (kiểm tra console của provider trước); dừng trước khi submit thì không có gì bị tính phí. Tín hiệu thứ hai dừng lệnh trước khi dọn dẹp: lệnh vẫn kết thúc với exit code đó nhưng không có envelope, và có thể còn file tạm. |
 | 1 | không rõ | `UNKNOWN` | Đọc `log[]` (các dòng stderr cuối). |
 
 Các nhóm exit code này áp dụng ở agent mode (`--json` hoặc `MULTIX_OUTPUT=json`).
@@ -237,7 +241,7 @@ thêm chi phí. Lần chạy không gửi gì không bao giờ làm giảm chi p
 ## Lịch sử chạy
 
 Mỗi lệnh provider ghi thêm một dòng vào `~/.multix/history.jsonl` (quyền file
-0600, xoay vòng ở 20 MB): id, thời điểm, thời lượng, lệnh, provider, model,
+0600, xoay vòng ở 20 MB): id, thời điểm, thời lượng, lệnh, provider, model (`model_requested`, `model_resolved`, `job`),
 argv (giá trị của option có tên kiểu key, token, secret hoặc password bị che),
 kết quả và mã lỗi, output kèm kích thước và hash, usage của provider (tokens,
 cost, credits, metrics), số liệu HTTP và id phía provider. Key và signed URL
