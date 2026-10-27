@@ -87,3 +87,11 @@ None.
 Status: DONE_WITH_CONCERNS
 Summary: The signal handling is correct and well tested: no ordering bug, no listener leak, correct exit codes, and docs that match the code. However, the envelope for a submit cut off by a signal carries a cost receipt saying "settled $0, no request was sent", which contradicts its own "may have been billed" hint.
 Concerns/Blockers: High 1 (receipt contradiction) should be fixed or explicitly deferred to its own issue before merge; Medium 2 is a follow-up gap that already existed.
+
+## Resolution (author)
+
+- High 1 fixed in 2d8440e: requests still unanswered at finalize are recorded as cut off (`status: 0`), so the receipt is `uncertain`; the submit smoke test asserts `cost.status` and `http`.
+- Medium 2 is tracked by #392 (schema fetch), which another session already claimed. `atlas upload` is noted there.
+- Medium 3 fixed in 2d8440e: the pre-submit hint now says no job was created and nothing was billed.
+- Low, status with a bad id: a nonexistent id fails on the first poll with NOT_FOUND before any wait; only a signal during that first GET reports the resume hint. Kept as is.
+- Low, dashboard URL: `https://www.atlascloud.ai/console` answers HTTP 200 (checked 2026-10-27).
