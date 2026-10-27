@@ -170,6 +170,57 @@ describe("job identity", () => {
     expect(out.job).toEqual({ provider: "atlas", id: "pred_1", attempt: 1 });
   });
 
+  it("names the prediction, not the input file a Replicate run uploaded first", async () => {
+    const out = await runWith(
+      "replicate",
+      [json({ id: "file-abc", name: "1mb.png" }, 201), json({ id: "pred-xyz", model: "o/m" }, 201)],
+      async () => {
+        await fetch("https://api.replicate.com/v1/files", { method: "POST" });
+        await post("https://api.replicate.com/v1/predictions", { version: "o/m" });
+      },
+    );
+    expect(out.job).toEqual({ provider: "replicate", id: "pred-xyz", attempt: 1 });
+  });
+
+  it("does not count a failed status poll as a resubmit", async () => {
+    const url = "https://queue.fal.run/fal-ai/flux/requests/req-1/status";
+    const out = await runWith(
+      "fal",
+      [json({ detail: "busy" }, 503), json({ status: "COMPLETED", request_id: "req-1" })],
+      async () => {
+        await fetch(url).then(() => undefined);
+        await fetch(url).then(() => undefined);
+      },
+    );
+    expect(out.job).toEqual({ provider: "fal", id: "req-1", attempt: 1 });
+  });
+
+  it("names no job when only a failed request returned an id", async () => {
+    const out = await runWith(
+      "fal",
+      [json({ detail: "bad" }, 422, { "x-request-id": "rej-1" })],
+      () => post("https://queue.fal.run/fal-ai/flux", {}),
+    );
+    expect(out.provider_ids).toEqual(["rej-1"]);
+    expect(out.job).toBeUndefined();
+  });
+
+  it("reads the model and response id after inline audio in an oversized body", async () => {
+    const audio = "A".repeat(2_100_000);
+    const body = `{"candidates":[{"content":{"parts":[{"inlineData":{"data":"${audio}"}}]}}],"usageMetadata":{"totalTokenCount":5},"modelVersion":"gemini-tts-001","responseId":"resp-big"}`;
+    const out = await runWith(
+      "gemini",
+      [new Response(body, { headers: { "content-type": "application/json" } })],
+      () =>
+        post(
+          "https://generativelanguage.googleapis.com/v1beta/models/gemini-tts:generateContent",
+          {},
+        ),
+    );
+    expect(out.model_resolved).toBe("gemini-tts-001");
+    expect(out.job).toEqual({ provider: "gemini", id: "resp-big", attempt: 1 });
+  });
+
   it("is absent for a command outside a provider group", async () => {
     const out = await runWith("", [json({ id: "x" })], () =>
       fetch("https://example.com/a").then(() => undefined),

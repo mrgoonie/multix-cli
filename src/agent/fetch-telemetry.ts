@@ -181,7 +181,7 @@ export function modelFromResponse(body: unknown): string | undefined {
   return undefined;
 }
 
-/** Gemini's `modelVersion` in the tail of an oversized body (inline TTS audio). */
+/** Gemini's `modelVersion` in the tail of an oversized body (inline TTS audio, which puts it after the audio). */
 function modelFromTail(tail: string): string | undefined {
   const value = tail.match(/"modelVersion"\s*:\s*"([^"\\]{1,200})"/)?.[1];
   return value || undefined;
@@ -276,7 +276,8 @@ async function recordUsage(
       } catch {}
       run.resolvedModel ??= modelFromResponse(body);
     } else if (tail !== undefined) {
-      body = usageFromTail(tail);
+      const responseId = tail.match(/"responseId"\s*:\s*"([^"\\]{1,128})"/)?.[1];
+      body = { ...usageFromTail(tail), ...(responseId ? { responseId } : {}) };
       run.resolvedModel ??= modelFromTail(tail);
     }
   }
