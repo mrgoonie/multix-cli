@@ -10,18 +10,33 @@ import fs from "node:fs";
 export interface WavDataLength {
   /** Sample bytes the `data` chunk header declares. */
   declared_bytes: number;
-  /** Sample bytes the file holds after the chunk header. */
+  /** Sample bytes the file holds after the chunk header, up to the declared size. */
   present_bytes: number;
   truncated: boolean;
+  /**
+   * Seconds the header declares: the `fact` sample count over the sample rate, or for PCM
+   * and float the declared bytes over the byte rate. Null when the header does not say.
+   */
+  declared_duration_s: number | null;
 }
 
 /** Chunk headers walked before giving up on finding `data`. */
 const MAX_CHUNKS = 64;
 /**
  * 32-bit sizes a writer puts in the header when it does not know the length (a piped or
- * streamed WAV): 0, 0xFFFFFFFF, and 0x7FFFF000 (written by SoX and some streaming servers).
+ * streamed WAV): 0, 0xFFFFFFFF (ffmpeg), 0x7FFFF000 (SoX, some streaming servers),
+ * 0x7FFF0000 (GStreamer wavenc), 0x80000000 and 0x7FFFFF00 (arecord). Only these exact
+ * values: a RIFF WAV of 2-4 GiB is real.
  */
-const PLACEHOLDER_SIZES = new Set([0, 0xffffffff, 0x7ffff000]);
+const PLACEHOLDER_SIZES = new Set([0, 0xffffffff, 0x7ffff000, 0x7fff0000, 0x80000000, 0x7fffff00]);
+/** WAVE_FORMAT_PCM and WAVE_FORMAT_IEEE_FLOAT: a constant byte rate. */
+const CONSTANT_RATE_FORMATS = new Set([1, 3]);
+/**
+ * WAVE_FORMAT_EXTENSIBLE keeps the real format code in the first two bytes of its SubFormat
+ * GUID; the other 14 are the KSDATAFORMAT base. The GUID is little-endian even in RIFX.
+ */
+const WAVE_FORMAT_EXTENSIBLE = 0xfffe;
+const KSDATAFORMAT_BASE = Buffer.from("000000001000800000aa00389b71", "hex");
 const RIFF_MAGIC = new Set(["RIFF", "RIFX", "RF64"]);
 
 /** Whether a file's first bytes name a RIFF, RIFX or RF64 WAVE. */
@@ -55,7 +70,13 @@ export async function readWavDataLength(file: string): Promise<WavDataLength | n
     const magic = head.toString("latin1", 0, 4);
     const u32 = (b: Buffer, at: number) =>
       magic === "RIFX" ? b.readUInt32BE(at) : b.readUInt32LE(at);
+    const u16 = (b: Buffer, at: number) =>
+      magic === "RIFX" ? b.readUInt16BE(at) : b.readUInt16LE(at);
     const known = (n: number | null) => (n === null || PLACEHOLDER_SIZES.has(n) ? null : n);
+    let formatTag: number | null = null;
+    let sampleRate = 0;
+    let byteRate = 0;
+    let factSamples: number | null = null;
 
     let riffSize = magic === "RF64" ? null : known(u32(head, 4));
     let ds64DataSize: number | null = null;
@@ -69,20 +90,46 @@ export async function readWavDataLength(file: string): Promise<WavDataLength | n
         // RF64 keeps its 64-bit sizes in ds64: riffSize, then dataSize.
         const body = await read(offset + 8, 16);
         if (!body) return null;
-        const safe = (n: bigint) => (n <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(n) : null);
-        riffSize = known(safe(body.readBigUInt64LE(0)));
-        ds64DataSize = known(safe(body.readBigUInt64LE(8)));
+        // The 32-bit placeholders are real lengths here; only 0 and out-of-range sizes are not.
+        const size64 = (n: bigint) =>
+          n > 0n && n <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(n) : null;
+        riffSize = size64(body.readBigUInt64LE(0));
+        ds64DataSize = size64(body.readBigUInt64LE(8));
+      }
+      if (id === "fmt " && chunkSize >= 16) {
+        const body = await read(offset + 8, Math.min(chunkSize, 40));
+        if (body) {
+          formatTag = u16(body, 0);
+          sampleRate = u32(body, 4);
+          byteRate = u32(body, 8);
+          if (formatTag === WAVE_FORMAT_EXTENSIBLE)
+            formatTag =
+              body.length >= 40 && body.subarray(26, 40).equals(KSDATAFORMAT_BASE)
+                ? body.readUInt16LE(24)
+                : null;
+        }
+      }
+      if (id === "fact" && chunkSize >= 4) {
+        const body = await read(offset + 8, 4);
+        if (body) factSamples = known(u32(body, 0));
       }
       if (id === "data") {
-        const declared = known(
-          magic === "RF64" && chunkSize === 0xffffffff ? ds64DataSize : chunkSize,
-        );
+        const declared =
+          magic === "RF64" && chunkSize === 0xffffffff ? ds64DataSize : known(chunkSize);
         if (declared === null) return null;
         const present = size - (offset + 8);
+        const seconds =
+          factSamples !== null && sampleRate > 0
+            ? factSamples / sampleRate
+            : formatTag !== null && CONSTANT_RATE_FORMATS.has(formatTag) && byteRate > 0
+              ? declared / byteRate
+              : null;
         return {
           declared_bytes: declared,
-          present_bytes: present,
+          // Chunks after `data` (LIST, id3) are not sample bytes.
+          present_bytes: Math.min(present, declared),
           truncated: present < declared && (riffSize === null || riffSize + 8 > size),
+          declared_duration_s: seconds === null ? null : Math.round(seconds * 1e6) / 1e6,
         };
       }
       // Chunks are padded to an even length.

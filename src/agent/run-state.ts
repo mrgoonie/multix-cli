@@ -37,10 +37,14 @@ export interface RunState {
   postUsage: ResponseUsage[];
   getUsage: Map<string, ResponseUsage>;
   ids: string[];
+  /** Index in calls[] of the response that first returned each id in ids. */
+  idCalls: Map<string, number>;
   /** Programs started for paid work outside fetch (the Codex image driver). */
   externalRuns: string[];
   /** Model named by the first provider request that names one. */
   requestModel?: string;
+  /** Model the first provider response that reports one names as served (alias or route resolved). */
+  resolvedModel?: string;
   /** Structured result a command reports for the envelope's `data` (wins over parsed stdout). */
   data?: unknown;
   /** stdout/stderr text captured in JSON mode. */
@@ -98,6 +102,7 @@ export const run: RunState = {
   postUsage: [],
   getUsage: new Map(),
   ids: [],
+  idCalls: new Map(),
   externalRuns: [],
   stdout: [],
   stderr: [],
@@ -126,6 +131,53 @@ function addTokens(into: UsageTokens, from: UsageTokens): void {
     const v = from[key];
     if (v !== undefined) into[key] = (into[key] ?? 0) + v;
   }
+}
+
+export interface JobIdentity {
+  provider: string;
+  id: string;
+  /** 1, or one more per failed send of the same request before the one that returned the id. */
+  attempt: number;
+}
+
+/** Upload endpoints: the id they return names an input file, not the job. */
+const UPLOAD_PATH = /upload|\/(files|assets)(\/|$)/i;
+
+/**
+ * The provider job or request this run is about: the in-flight job when one
+ * was tracked, else the first id a successful submit (non-GET, not an upload)
+ * returned, else the first id a successful GET returned. Ids from failed calls
+ * stay in provider_ids but never name the job.
+ */
+export function jobIdentity(state: RunState = run): JobIdentity | undefined {
+  if (!state.group) return undefined;
+  const callOf = (id: string) => state.calls[state.idCalls.get(id) ?? -1];
+  const ok = (id: string, submit: boolean) => {
+    const call = callOf(id);
+    if (!call || call.status === 0 || call.status >= 400 || UPLOAD_PATH.test(call.path)) {
+      return false;
+    }
+    return !submit || call.method !== "GET";
+  };
+  const id =
+    state.inFlight?.id ?? state.ids.find((i) => ok(i, true)) ?? state.ids.find((i) => ok(i, false));
+  if (!id) return undefined;
+  const at = state.idCalls.get(id) ?? -1;
+  const call = state.calls[at];
+  // Only a failed send of the same submit before it is a retry; failed polls resubmit nothing.
+  const failedBefore =
+    call && call.method !== "GET"
+      ? state.calls
+          .slice(0, at)
+          .filter(
+            (c) =>
+              c.method === call.method &&
+              c.host === call.host &&
+              c.path === call.path &&
+              (c.status === 0 || c.status >= 400),
+          ).length
+      : 0;
+  return { provider: state.group, id, attempt: 1 + failedBefore };
 }
 
 /** Combine every response's usage into one summary. */

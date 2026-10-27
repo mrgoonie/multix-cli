@@ -26,7 +26,7 @@ import type { Severity, VerifyProfile } from "./verify-profiles.js";
 
 export const VERIFY_SCHEMA = "multix.media-verify/v1";
 /** Bumped when measuring or judging logic changes; part of every cache key. */
-export const VERIFY_ENGINE = "multix-media-verify/2";
+export const VERIFY_ENGINE = "multix-media-verify/3";
 
 export type CheckStatus = "pass" | "warn" | "fail" | "skipped" | "unknown";
 
@@ -301,8 +301,12 @@ export function judge(
       unit: "s",
       measured: {
         decoded_s: analysis.decoded_s,
-        declared_duration_s: declared,
-        ...(estimated ? { declared_duration_estimated: true } : {}),
+        ...(wav?.truncated && wav.declared_duration_s !== null
+          ? { declared_duration_s: wav.declared_duration_s }
+          : {
+              declared_duration_s: declared,
+              ...(estimated ? { declared_duration_estimated: true } : {}),
+            }),
         ...(wav
           ? { declared_data_bytes: wav.declared_bytes, present_data_bytes: wav.present_bytes }
           : {}),
@@ -704,7 +708,9 @@ export async function verifyMedia(input: string, opts: VerifyOptions): Promise<V
     changed ||
     (analysis !== null && !analysis.completed && (analysis.timed_out || analysis.cancelled)) ||
     summary.unknown > 0;
-  const declared = report.format?.duration_s ?? null;
+  // ffprobe sizes a cut WAV from the bytes left: cover it against what its header declares.
+  const wavDeclared = report.wav_data?.truncated ? report.wav_data.declared_duration_s : null;
+  const declared = wavDeclared ?? report.format?.duration_s ?? null;
   const rate = report.video?.avg_frame_rate
     ? "avg_frame_rate"
     : report.video?.r_frame_rate

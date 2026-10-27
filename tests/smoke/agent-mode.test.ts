@@ -17,6 +17,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLI = path.resolve(__dirname, "../../dist/cli.js");
 const SPAWN_TIMEOUT = 15_000;
 
+// Windows cannot deliver POSIX signals to a child process: kill() ends it outright.
+const describeSignals = process.platform === "win32" ? describe.skip : describe;
+
 describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
   let tmp: string;
   let env: NodeJS.ProcessEnv;
@@ -160,7 +163,7 @@ describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     }
   });
 
-  describe("a signal while atlas waits on a submitted prediction", () => {
+  describeSignals("a signal while atlas waits on a submitted prediction", () => {
     /** Fake Atlas API: submit returns a processing prediction that never finishes. */
     async function withPendingAtlas(
       fn: (baseUrl: string, seen: { posts: number; polled: Promise<void> }) => Promise<void>,
@@ -220,6 +223,11 @@ describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
         const out = envelope(result.stdout);
         expect(out).toMatchObject({ ok: false, command: "atlas image", exit_code: code });
         expect(out.provider_ids).toContain("pred_sig01");
+        expect(out.job).toEqual({ provider: "atlas", id: "pred_sig01", attempt: 1 });
+        const entry = JSON.parse(fs.readFileSync(path.join(tmp, "h.jsonl"), "utf8").trim());
+        expect(entry.job).toEqual(out.job);
+        expect(entry.model_requested).toBe(out.model_requested);
+        expect(entry.model_resolved).toBe(out.model_resolved);
         expect(out.next[0]).toBe(resume);
         expect(out.error).toMatchObject({ code: "CANCELLED", retryable: false });
         expect(out.error.hint).toContain("Do not rerun; resume it");
@@ -241,7 +249,7 @@ describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     });
   });
 
-  describe("a signal before or outside the wait on an atlas prediction", () => {
+  describeSignals("a signal before or outside the wait on an atlas prediction", () => {
     /**
      * Fake Atlas API: the catalog, uploads and submits hang until the run is killed, polls
      * return a prediction that never finishes. `seen.hit` resolves on the first

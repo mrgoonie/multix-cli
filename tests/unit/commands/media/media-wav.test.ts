@@ -21,12 +21,14 @@ function wav(opts: {
   dataSize: number;
   dataBytes: number;
   ds64?: number;
+  /** Body of the fmt chunk; all zeros by default. */
+  fmtBody?: Buffer;
   /** RIFF size in the file header; the default 0xFFFFFFFF declares none. */
   riffSize?: number;
 }): Buffer {
   const magic = opts.magic ?? "RIFF";
   const bigEndian = magic === "RIFX";
-  const fmt = chunk("fmt ", Buffer.alloc(16), bigEndian);
+  const fmt = chunk("fmt ", opts.fmtBody ?? Buffer.alloc(16), bigEndian);
   const ds64 =
     opts.ds64 === undefined
       ? []
@@ -74,6 +76,7 @@ describe("readWavDataLength", () => {
       declared_bytes: 4000,
       present_bytes: 4000,
       truncated: false,
+      declared_duration_s: null,
     });
   });
 
@@ -82,6 +85,7 @@ describe("readWavDataLength", () => {
       declared_bytes: 4000,
       present_bytes: 1000,
       truncated: true,
+      declared_duration_s: null,
     });
   });
 
@@ -100,7 +104,7 @@ describe("readWavDataLength", () => {
       "trailer.wav",
       Buffer.concat([wav({ dataSize: 100, dataBytes: 100 }), chunk("LIST", Buffer.alloc(20))]),
     );
-    expect(r).toMatchObject({ truncated: false });
+    expect(r).toMatchObject({ truncated: false, declared_bytes: 100, present_bytes: 100 });
   });
 
   it("reads big-endian RIFX sizes", async () => {
@@ -117,6 +121,67 @@ describe("readWavDataLength", () => {
     expect(r).toMatchObject({ declared_bytes: 5000, present_bytes: 2000, truncated: true });
   });
 
+  it("keeps RF64 sizes from 2 GiB up as real lengths", async () => {
+    const r = await lengthOf(
+      "rf64-big.wav",
+      wav({ magic: "RF64", ds64: 0x80000000, dataSize: 0xffffffff, dataBytes: 2000 }),
+    );
+    expect(r).toMatchObject({ declared_bytes: 0x80000000, present_bytes: 2000, truncated: true });
+  });
+
+  it("keeps a RIFF data size between 2 and 4 GiB as a real length", async () => {
+    expect(await lengthOf("big.wav", wav({ dataSize: 0xc0000000, dataBytes: 100 }))).toMatchObject({
+      declared_bytes: 0xc0000000,
+      present_bytes: 100,
+      truncated: true,
+    });
+  });
+
+  it("reads the declared duration from fmt for PCM and from fact otherwise", async () => {
+    const fmt = (tag: number, rate: number, byteRate: number) => {
+      const body = Buffer.alloc(16);
+      body.writeUInt16LE(tag, 0);
+      body.writeUInt32LE(rate, 4);
+      body.writeUInt32LE(byteRate, 8);
+      return body;
+    };
+    const pcm = wav({ dataSize: 4000, dataBytes: 1000 });
+    fmt(1, 1000, 2000).copy(pcm, 20);
+    expect(await lengthOf("pcm-dur.wav", pcm)).toMatchObject({ declared_duration_s: 2 });
+    const fact = Buffer.alloc(4);
+    fact.writeUInt32LE(3000);
+    const adpcm = wav({ before: [chunk("fact", fact)], dataSize: 4000, dataBytes: 1000 });
+    fmt(2, 1000, 900).copy(adpcm, 20);
+    expect(await lengthOf("adpcm-dur.wav", adpcm)).toMatchObject({ declared_duration_s: 3 });
+    // A compressed format without fact: the byte rate is not exact, so no duration.
+    const noFact = wav({ dataSize: 4000, dataBytes: 1000 });
+    fmt(2, 1000, 900).copy(noFact, 20);
+    expect(await lengthOf("nofact.wav", noFact)).toMatchObject({ declared_duration_s: null });
+    // WAVE_FORMAT_EXTENSIBLE: the SubFormat GUID names the real format.
+    const ext = (sub: number, magic: "RIFF" | "RIFX" = "RIFF") => {
+      const body = Buffer.alloc(40);
+      if (magic === "RIFX") {
+        body.writeUInt16BE(0xfffe, 0);
+        body.writeUInt32BE(1000, 4);
+        body.writeUInt32BE(2000, 8);
+      } else fmt(0xfffe, 1000, 2000).copy(body);
+      // The SubFormat GUID is little-endian in RIFX too: format code, then the base.
+      body.writeUInt16LE(sub, 24);
+      Buffer.from("000000001000800000aa00389b71", "hex").copy(body, 26);
+      return wav({ magic, fmtBody: body, dataSize: 4000, dataBytes: 1000 });
+    };
+    expect(await lengthOf("ext-be.wav", ext(1, "RIFX"))).toMatchObject({
+      declared_duration_s: 2,
+    });
+    const vendor = ext(1);
+    vendor[20 + 39] ^= 0xff; // a GUID outside the KSDATAFORMAT base
+    expect(await lengthOf("ext-vendor.wav", vendor)).toMatchObject({ declared_duration_s: null });
+    expect(await lengthOf("ext-pcm.wav", ext(1))).toMatchObject({ declared_duration_s: 2 });
+    expect(await lengthOf("ext-adpcm.wav", ext(0x11))).toMatchObject({
+      declared_duration_s: null,
+    });
+  });
+
   it("does not fail a complete file whose data size alone is miscounted", async () => {
     const complete = wav({ dataSize: 4008, dataBytes: 4000 });
     complete.writeUInt32LE(complete.length - 8, 4);
@@ -124,6 +189,7 @@ describe("readWavDataLength", () => {
       declared_bytes: 4008,
       present_bytes: 4000,
       truncated: false,
+      declared_duration_s: null,
     });
     // The same header cut short: the RIFF size now exceeds the file as well.
     expect(await lengthOf("miscount-cut.wav", complete.subarray(0, 2000))).toMatchObject({
@@ -135,6 +201,18 @@ describe("readWavDataLength", () => {
     expect(await lengthOf("sox.wav", wav({ dataSize: 0x7ffff000, dataBytes: 100 }))).toBeNull();
     expect(await lengthOf("pipe.wav", wav({ dataSize: 0xffffffff, dataBytes: 100 }))).toBeNull();
     expect(await lengthOf("zero.wav", wav({ dataSize: 0, dataBytes: 100 }))).toBeNull();
+    // arecord on a pipe: its 2 GiB WAV cap, or 0x7FFFFF00.
+    expect(await lengthOf("arecord.wav", wav({ dataSize: 0x80000000, dataBytes: 100 }))).toBeNull();
+    expect(
+      await lengthOf("arecord2.wav", wav({ dataSize: 0x7fffff00, dataBytes: 100 })),
+    ).toBeNull();
+    // GStreamer wavenc on a pipe: data 0x7FFF0000, RIFF size that plus the header.
+    expect(
+      await lengthOf(
+        "gst.wav",
+        wav({ dataSize: 0x7fff0000, riffSize: 0x7fff0000 + 36, dataBytes: 100 }),
+      ),
+    ).toBeNull();
   });
 
   it("returns null for other RIFF forms, other files and a header cut before data", async () => {

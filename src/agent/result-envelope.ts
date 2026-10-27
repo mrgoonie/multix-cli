@@ -9,7 +9,7 @@ import type { CostReceipt } from "../budget/cost-receipt.js";
 import type { ErrorInfo } from "../core/error-classify.js";
 import type { DryRunRequest } from "./fetch-telemetry.js";
 import type { OutputFile, OutputWarning } from "./output-file-inspect.js";
-import type { UsageSummary } from "./run-state.js";
+import type { JobIdentity, UsageSummary } from "./run-state.js";
 
 export const ENVELOPE_SCHEMA = "multix.result/v1";
 
@@ -18,7 +18,14 @@ export interface ResultEnvelope {
   ok: boolean;
   command: string;
   provider?: string;
+  /** Same as model_requested; kept for readers written before it existed. */
   model?: string;
+  /** Model the run asked the provider for (request body or path, else --model); null when none. */
+  model_requested: string | null;
+  /** Model the provider response reported serving; null when it reported none. */
+  model_resolved: string | null;
+  /** Provider job or request id this run is about, and the send attempt that returned it. */
+  job?: JobIdentity;
   dry_run?: boolean;
   /** `--estimate`: priced only, nothing sent. */
   estimate_only?: boolean;
