@@ -64,6 +64,12 @@ export interface RunState {
     code?: string;
     message?: string;
   };
+  /**
+   * A paid provider job this run submitted that keeps running if the run is
+   * stopped (an Atlas Cloud prediction being polled): a run cancelled by a
+   * signal reports how to resume it instead of a rerun that would pay twice.
+   */
+  inFlight?: { id: string; resume: string };
   /** True once a command action started (help and parse errors never get there). */
   actionStarted: boolean;
   finalized: boolean;
@@ -89,6 +95,12 @@ export const run: RunState = {
   actionStarted: false,
   finalized: false,
 };
+
+/** Record a submitted job that keeps running if the run stops; its id goes in provider_ids. */
+export function trackInFlight(id: string, resume: string, state: RunState = run): void {
+  state.inFlight = { id, resume };
+  if (!state.ids.includes(id)) state.ids.unshift(id);
+}
 
 export interface UsageSummary {
   tokens?: UsageTokens;
