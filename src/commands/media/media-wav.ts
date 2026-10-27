@@ -31,8 +31,12 @@ const MAX_CHUNKS = 64;
 const PLACEHOLDER_SIZES = new Set([0, 0xffffffff, 0x7ffff000, 0x7fff0000, 0x80000000, 0x7fffff00]);
 /** WAVE_FORMAT_PCM and WAVE_FORMAT_IEEE_FLOAT: a constant byte rate. */
 const CONSTANT_RATE_FORMATS = new Set([1, 3]);
-/** WAVE_FORMAT_EXTENSIBLE keeps the real format code at the start of its SubFormat GUID. */
+/**
+ * WAVE_FORMAT_EXTENSIBLE keeps the real format code in the first two bytes of its SubFormat
+ * GUID; the other 14 are the KSDATAFORMAT base. The GUID is little-endian even in RIFX.
+ */
 const WAVE_FORMAT_EXTENSIBLE = 0xfffe;
+const KSDATAFORMAT_BASE = Buffer.from("000000001000800000aa00389b71", "hex");
 const RIFF_MAGIC = new Set(["RIFF", "RIFX", "RF64"]);
 
 /** Whether a file's first bytes name a RIFF, RIFX or RF64 WAVE. */
@@ -99,7 +103,10 @@ export async function readWavDataLength(file: string): Promise<WavDataLength | n
           sampleRate = u32(body, 4);
           byteRate = u32(body, 8);
           if (formatTag === WAVE_FORMAT_EXTENSIBLE)
-            formatTag = body.length >= 26 ? u16(body, 24) : null;
+            formatTag =
+              body.length >= 40 && body.subarray(26, 40).equals(KSDATAFORMAT_BASE)
+                ? body.readUInt16LE(24)
+                : null;
         }
       }
       if (id === "fact" && chunkSize >= 4) {

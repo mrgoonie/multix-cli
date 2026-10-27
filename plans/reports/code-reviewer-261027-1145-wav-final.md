@@ -87,4 +87,4 @@ Summary: The PR closes all findings from the 1107 and 1130 reviews, and the test
 - L2: kept. Without a declared duration, coverage falls back to ffprobe; the check still fails the file as truncated. The docs now say so.
 - L3: kept, informational. It matches ffmpeg's reader.
 - L4: docs now describe the coverage source and `wav_data.declared_duration_s`. The PR body has been corrected.
-- L5: the extensible format and arecord placeholders are covered. RIFX fmt/fact and RF64 compressed formats share the same code path as the tested cases.
+- L5: the extensible format (RIFF and RIFX) and the arecord placeholders are covered. RF64 compressed formats share the RIFF fmt/fact code path.

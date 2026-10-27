@@ -158,12 +158,24 @@ describe("readWavDataLength", () => {
     fmt(2, 1000, 900).copy(noFact, 20);
     expect(await lengthOf("nofact.wav", noFact)).toMatchObject({ declared_duration_s: null });
     // WAVE_FORMAT_EXTENSIBLE: the SubFormat GUID names the real format.
-    const ext = (sub: number) => {
+    const ext = (sub: number, magic: "RIFF" | "RIFX" = "RIFF") => {
       const body = Buffer.alloc(40);
-      fmt(0xfffe, 1000, 2000).copy(body);
+      if (magic === "RIFX") {
+        body.writeUInt16BE(0xfffe, 0);
+        body.writeUInt32BE(1000, 4);
+        body.writeUInt32BE(2000, 8);
+      } else fmt(0xfffe, 1000, 2000).copy(body);
+      // The SubFormat GUID is little-endian in RIFX too: format code, then the base.
       body.writeUInt16LE(sub, 24);
-      return wav({ fmtBody: body, dataSize: 4000, dataBytes: 1000 });
+      Buffer.from("000000001000800000aa00389b71", "hex").copy(body, 26);
+      return wav({ magic, fmtBody: body, dataSize: 4000, dataBytes: 1000 });
     };
+    expect(await lengthOf("ext-be.wav", ext(1, "RIFX"))).toMatchObject({
+      declared_duration_s: 2,
+    });
+    const vendor = ext(1);
+    vendor[20 + 39] ^= 0xff; // a GUID outside the KSDATAFORMAT base
+    expect(await lengthOf("ext-vendor.wav", vendor)).toMatchObject({ declared_duration_s: null });
     expect(await lengthOf("ext-pcm.wav", ext(1))).toMatchObject({ declared_duration_s: 2 });
     expect(await lengthOf("ext-adpcm.wav", ext(0x11))).toMatchObject({
       declared_duration_s: null,
