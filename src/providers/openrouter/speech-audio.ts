@@ -6,7 +6,15 @@
  * Docs: https://openrouter.ai/docs/guides/overview/multimodal/tts
  */
 
+import {
+  type AudioContentType,
+  looksLikeMp3,
+  parseAudioContentType,
+} from "../../core/audio-kind.js";
 import { ValidationError } from "../../core/errors.js";
+
+// Shared with other providers; re-exported so existing imports keep working.
+export { type AudioContentType, looksLikeMp3, parseAudioContentType };
 
 export const SPEECH_FORMATS = ["auto", "mp3", "pcm", "wav"] as const;
 export type SpeechFormat = (typeof SPEECH_FORMATS)[number];
@@ -50,28 +58,6 @@ export function requestFormat(format: ResolvedSpeechFormat): "mp3" | "pcm" {
   return format === "mp3" ? "mp3" : "pcm";
 }
 
-export interface AudioContentType {
-  mime?: string;
-  sampleRate?: number;
-  channels?: number;
-}
-
-/** `audio/pcm;rate=24000;channels=1` -> mime, rate and channels (each only when present and valid). */
-export function parseAudioContentType(value: string | null | undefined): AudioContentType {
-  if (!value) return {};
-  const [type = "", ...params] = value.split(";").map((p) => p.trim());
-  const out: AudioContentType = {};
-  if (type) out.mime = type.toLowerCase();
-  for (const param of params) {
-    const [key = "", raw = ""] = param.split("=").map((p) => p.trim().toLowerCase());
-    const n = Number(raw);
-    if (!Number.isInteger(n) || n <= 0) continue;
-    if ((key === "rate" || key === "sample_rate") && n <= 384_000) out.sampleRate = n;
-    if (key === "channels" && n <= 8) out.channels = n;
-  }
-  return out;
-}
-
 /** Bytes per second of 16-bit pcm. */
 export function pcmDurationSeconds(bytes: number, sampleRate: number, channels: number): number {
   return Math.round((bytes / (sampleRate * channels * 2)) * 1000) / 1000;
@@ -102,11 +88,4 @@ export function pcmToWav(pcm: Uint8Array, sampleRate: number, channels: number):
   out.set(new Uint8Array(header), 0);
   out.set(pcm, 44);
   return out;
-}
-
-/** True when the bytes start like an MP3 (ID3 tag or MPEG frame sync). */
-export function looksLikeMp3(bytes: Uint8Array): boolean {
-  if (bytes.length < 3) return false;
-  if (bytes[0] === 0x49 && bytes[1] === 0x44 && bytes[2] === 0x33) return true;
-  return bytes[0] === 0xff && ((bytes[1] ?? 0) & 0xe0) === 0xe0;
 }

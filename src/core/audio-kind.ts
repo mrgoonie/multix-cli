@@ -1,7 +1,8 @@
 /**
- * Audio container detection from magic bytes, and the file extension for an
- * audio MIME type. Lets a download be saved under the extension its bytes
- * really have, whatever the URL or Content-Type claimed.
+ * Audio container detection from magic bytes, the file extension for an audio
+ * MIME type, and the fields of an audio Content-Type. Lets a download be saved
+ * under the extension its bytes really have, whatever the URL or Content-Type
+ * claimed.
  * Runtime-neutral: takes bytes, no `node:*` imports.
  */
 
@@ -77,4 +78,33 @@ const EXT_BY_MIME: Record<string, string> = {
 export function audioExtFromMime(mime: string | undefined): string | undefined {
   if (!mime) return undefined;
   return EXT_BY_MIME[mime.split(";")[0]?.trim().toLowerCase() ?? ""];
+}
+
+export interface AudioContentType {
+  mime?: string;
+  sampleRate?: number;
+  channels?: number;
+}
+
+/** `audio/pcm;rate=24000;channels=1` -> mime, rate and channels (each only when present and valid). */
+export function parseAudioContentType(value: string | null | undefined): AudioContentType {
+  if (!value) return {};
+  const [type = "", ...params] = value.split(";").map((p) => p.trim());
+  const out: AudioContentType = {};
+  if (type) out.mime = type.toLowerCase();
+  for (const param of params) {
+    const [key = "", raw = ""] = param.split("=").map((p) => p.trim().toLowerCase());
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n <= 0) continue;
+    if ((key === "rate" || key === "sample_rate") && n <= 384_000) out.sampleRate = n;
+    if (key === "channels" && n <= 8) out.channels = n;
+  }
+  return out;
+}
+
+/** True when the bytes start like an MP3 (ID3 tag or MPEG frame sync). */
+export function looksLikeMp3(bytes: Uint8Array): boolean {
+  if (bytes.length < 3) return false;
+  if (bytes[0] === 0x49 && bytes[1] === 0x44 && bytes[2] === 0x33) return true;
+  return bytes[0] === 0xff && ((bytes[1] ?? 0) & 0xe0) === 0xe0;
 }
