@@ -72,6 +72,12 @@ export interface RunState {
    * signal reports how to resume it instead of a rerun that would pay twice.
    */
   inFlight?: { id: string; resume: string };
+  /**
+   * A paid submit this run is about to send (or has sent) before the provider
+   * returned a job id: a signal before it is sent is a clean cancel, one after
+   * it may leave a billed job that only `check` (where to look) can confirm.
+   */
+  submit?: { sent: boolean; check: string };
   /** True once a command action started (help and parse errors never get there). */
   actionStarted: boolean;
   finalized: boolean;
@@ -120,6 +126,11 @@ function addTokens(into: UsageTokens, from: UsageTokens): void {
     const v = from[key];
     if (v !== undefined) into[key] = (into[key] ?? 0) + v;
   }
+}
+
+/** Record where a paid submit stands while its job id is not known yet. */
+export function trackSubmit(sent: boolean, check: string, state: RunState = run): void {
+  state.submit = { sent, check };
 }
 
 /** Combine every response's usage into one summary. */

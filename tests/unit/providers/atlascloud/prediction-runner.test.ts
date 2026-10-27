@@ -259,6 +259,62 @@ describe("executePrediction (mocked submit -> poll -> saved output)", () => {
     run.ids = [];
   });
 
+  /** Run executePrediction and raise `signal` from inside the call `at` names. */
+  async function interruptAt(at: "upload" | "submit", signal: "SIGINT" | "SIGTERM" | "SIGHUP") {
+    const { client, calls } = createFakeAtlas({
+      "POST /model/generateImage": { body: prediction("sub01", "processing") },
+    });
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const raise = () => (process.listeners(signal).at(-1) as (s: string) => void)(signal);
+    if (at === "submit") {
+      vi.spyOn(client, "submit").mockImplementation(async () => {
+        raise();
+        throw new Error("unreachable");
+      });
+    }
+    const exits: number[] = [];
+    await expect(
+      executePrediction({
+        client,
+        logger,
+        kind: "image",
+        model: "m/x",
+        body: async () => {
+          if (at === "upload") raise();
+          return { prompt: "x" };
+        },
+        opts: {},
+        defaultWaitTimeoutMs: 60_000,
+        exit: (code) => {
+          exits.push(code);
+          throw new Error("exited");
+        },
+      }),
+    ).rejects.toThrow("exited");
+    const submit = run.submit;
+    run.submit = undefined;
+    return { exits, submit, stderr, calls };
+  }
+
+  it("a signal while uploading references is a clean cancel: nothing submitted", async () => {
+    const { exits, submit, stderr, calls } = await interruptAt("upload", "SIGTERM");
+    expect(exits).toEqual([143]);
+    expect(submit).toMatchObject({ sent: false });
+    expect(stderr).toHaveBeenCalledWith(expect.stringContaining("no prediction was created"));
+    expect(calls).toHaveLength(0);
+    expect(run.inFlight).toBeUndefined();
+  });
+
+  it("a signal during the submit says Atlas may have accepted it, not a clean cancel", async () => {
+    const { exits, submit, stderr } = await interruptAt("submit", "SIGHUP");
+    expect(exits).toEqual([129]);
+    expect(submit).toMatchObject({ sent: true, check: expect.stringContaining("Atlas Cloud") });
+    expect(stderr).toHaveBeenCalledWith(
+      expect.stringContaining("Atlas Cloud may have accepted the prediction"),
+    );
+    expect(run.inFlight).toBeUndefined();
+  });
+
   it("resumeCommand adds --output only when given, quoting it when needed", () => {
     expect(resumeCommand("p1")).toBe("multix atlas status p1 --wait --download");
     expect(resumeCommand("p1", "out/clip.mp4")).toBe(
@@ -656,7 +712,7 @@ describe("download hardening", () => {
     expect(savedOutput(path.join(tmp, "missing.mp4"))).toBeUndefined();
   });
 
-  it("the interrupt handler removes this run's locks and temp files, then exits 130/143", () => {
+  it("the interrupt handler removes this run's locks and temp files, then exits 129/130/143", () => {
     const file = path.join(tmp, "atlas-int01-01.mp4");
     expect(claimOutputPath(file, "reuse")).toBe(file);
     const temp = `${file}.${process.pid}-1700000000000-k3x9qa.part`;
@@ -670,6 +726,12 @@ describe("download hardening", () => {
     claimOutputPath(file, "reuse");
     handleInterrupt("SIGTERM", exit);
     expect(exit).toHaveBeenLastCalledWith(143);
+    expect(fs.readdirSync(tmp)).toEqual(["keep.mp4"]);
+
+    // A closed terminal mid-download cleans up the same way.
+    claimOutputPath(file, "reuse");
+    handleInterrupt("SIGHUP", exit);
+    expect(exit).toHaveBeenLastCalledWith(129);
     expect(fs.readdirSync(tmp)).toEqual(["keep.mp4"]);
   });
 

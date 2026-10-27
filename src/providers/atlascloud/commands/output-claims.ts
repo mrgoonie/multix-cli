@@ -204,7 +204,7 @@ export function cleanupActiveClaims(): void {
   }
 }
 
-const INTERRUPT_EXIT_CODES = { SIGINT: 130, SIGTERM: 143 } as const;
+const INTERRUPT_EXIT_CODES = { SIGHUP: 129, SIGINT: 130, SIGTERM: 143 } as const;
 
 /** Clean up, then exit with the conventional 128+signal code. */
 export function handleInterrupt(
@@ -222,6 +222,8 @@ function installInterruptCleanup(): void {
   interruptCleanupInstalled = true;
   process.once("SIGINT", () => handleInterrupt("SIGINT"));
   process.once("SIGTERM", () => handleInterrupt("SIGTERM"));
+  // A closed terminal mid-download: clean up like Ctrl-C instead of leaving the lock behind.
+  process.once("SIGHUP", () => handleInterrupt("SIGHUP"));
 }
 
 function heldMessage(dest: string): string {

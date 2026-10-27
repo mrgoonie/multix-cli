@@ -13,7 +13,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Command } from "commander";
-import { trackInFlight } from "../../../agent/run-state.js";
+import { trackInFlight, trackSubmit } from "../../../agent/run-state.js";
 import { ProviderError, ValidationError } from "../../../core/errors.js";
 import { maxDownloadBytes } from "../../../core/http-client.js";
 import {
@@ -40,7 +40,12 @@ import {
   thumbnailSource,
 } from "../prediction-output.js";
 import type { AtlasMediaKind, AtlasModelSpec, AtlasPrediction } from "../types.js";
-import { type NamingPolicy, downloadClaimed, savedOutput } from "./output-claims.js";
+import {
+  type NamingPolicy,
+  cleanupActiveClaims,
+  downloadClaimed,
+  savedOutput,
+} from "./output-claims.js";
 
 export type { NamingPolicy };
 
@@ -160,13 +165,14 @@ export interface ExecuteOptions {
   logger: Logger;
   kind: AtlasMediaKind;
   model: string;
-  body: Record<string, unknown>;
+  /** The request, or a builder that may upload local references; it runs once signals are handled. */
+  body: Record<string, unknown> | (() => Promise<Record<string, unknown>>);
   opts: RunCliOpts;
   /** Expected output kind; used only for the extension of URLs that carry none. */
   hint?: OutputCategory;
   defaultWaitTimeoutMs: number;
   pollIntervalMs?: number;
-  /** Ends the process on Ctrl-C/SIGTERM/SIGHUP while waiting (tests inject it). */
+  /** Ends the process on Ctrl-C/SIGTERM/SIGHUP (tests inject it). */
   exit?: (code: number) => void;
 }
 
@@ -192,35 +198,73 @@ function shellQuote(value: string): string {
 /** Shell exit status for a run stopped by each signal: 128 + the signal number. */
 const SIGNAL_EXIT = { SIGHUP: 129, SIGINT: 130, SIGTERM: 143 } as const;
 
+/** Where to look for a prediction whose submit was cut off before Atlas answered. */
+const ATLAS_DASHBOARD = "the Atlas Cloud dashboard (https://www.atlascloud.ai/console)";
+
 /**
- * Run `wait` so that Ctrl-C, SIGTERM or a closed terminal stops polling and
- * exits with 128 + the signal number through the agent runtime (envelope,
- * history), after printing `message`. Nothing local needs cleanup while polling.
+ * Run `work` so that Ctrl-C, SIGTERM or a closed terminal prints `message()`
+ * (what the signal leaves behind at that moment), removes this run's download
+ * locks and temp files, and exits with 128 + the signal number through the
+ * agent runtime (envelope, history).
  */
-async function exitOnInterrupt<T>(
-  wait: () => Promise<T>,
-  message: string,
+export async function exitOnInterrupt<T>(
+  work: () => Promise<T>,
+  message: () => string,
   exit: (code: number) => void = (code) => process.exit(code),
 ): Promise<T> {
   const signals = Object.keys(SIGNAL_EXIT) as Array<keyof typeof SIGNAL_EXIT>;
   const stop = (signal: keyof typeof SIGNAL_EXIT) => {
-    process.stderr.write(`${message}\n`);
+    process.stderr.write(`${message()}\n`);
+    cleanupActiveClaims();
     exit(SIGNAL_EXIT[signal]);
   };
   for (const signal of signals) process.on(signal, stop);
   try {
-    return await wait();
+    return await work();
   } finally {
     for (const signal of signals) process.off(signal, stop);
   }
 }
 
-/** Submit, then either exit with the id (--async) or wait, verify, and deliver outputs. */
+/** Message for a signal that stops the wait or the download of a submitted prediction. */
+export function cancelledWithResume(id: string, resume: string): string {
+  return `Cancelled; prediction ${id} keeps running (or has finished) and is billed. Resume with: ${resume}`;
+}
+
+/**
+ * Build the request (uploading local references), submit, then either exit
+ * with the id (--async) or wait, verify, and deliver outputs. A signal at any
+ * point exits through the agent runtime saying what it left behind: nothing
+ * before the submit, a prediction that may exist while the submit is
+ * unanswered, and the resume command once the id is known.
+ */
 export async function executePrediction(o: ExecuteOptions): Promise<ExecuteResult> {
+  let cancelled = "Cancelled before submitting; no prediction was created.";
+  return exitOnInterrupt(
+    () =>
+      runPrediction(o, (message) => {
+        cancelled = message;
+      }),
+    () => cancelled,
+    o.exit,
+  );
+}
+
+async function runPrediction(
+  o: ExecuteOptions,
+  onSignal: (message: string) => void,
+): Promise<ExecuteResult> {
   const { client, logger, opts } = o;
   const timeoutMs = parseTimeoutMs(opts.waitTimeout, o.defaultWaitTimeoutMs);
+  trackSubmit(false, ATLAS_DASHBOARD);
+  const body = typeof o.body === "function" ? await o.body() : o.body;
   logger.info(`Submitting to ${o.model} (generate${capitalize(o.kind)})...`);
-  const submitted = await client.submit(o.kind, { ...o.body, model: o.model });
+  // Atlas may accept the POST even if the run stops before the answer arrives.
+  trackSubmit(true, ATLAS_DASHBOARD);
+  onSignal(
+    `Cancelled while submitting; Atlas Cloud may have accepted the prediction and will bill it. Check ${ATLAS_DASHBOARD} before resubmitting.`,
+  );
+  const submitted = await client.submit(o.kind, { ...body, model: o.model });
   const id = submitted.id;
 
   if (opts.async) {
@@ -232,20 +276,16 @@ export async function executePrediction(o: ExecuteOptions): Promise<ExecuteResul
   const resume = resumeCommand(id, opts.output);
   // From here a stopped run leaves a billed prediction behind: report how to resume it.
   trackInFlight(id, resume);
+  onSignal(cancelledWithResume(id, resume));
   logger.info(`Prediction ${id} — waiting up to ${Math.round(timeoutMs / 1000)}s...`);
   const final = isTerminalStatus(submitted.status)
     ? submitted
-    : await exitOnInterrupt(
-        () =>
-          client.waitForPrediction(id, {
-            timeoutMs,
-            intervalMs: o.pollIntervalMs,
-            resumeHint: `Resume with: ${resume}`,
-            onPoll: (p, n) => logger.debug(`poll ${n}: ${p.status}`),
-          }),
-        `Cancelled while waiting on prediction ${id}; it keeps running and is billed. Resume with: ${resume}`,
-        o.exit,
-      );
+    : await client.waitForPrediction(id, {
+        timeoutMs,
+        intervalMs: o.pollIntervalMs,
+        resumeHint: `Resume with: ${resume}`,
+        onPoll: (p, n) => logger.debug(`poll ${n}: ${p.status}`),
+      });
   assertPredictionSucceeded(final);
   // File names come from the submit-time id, which a resume also uses.
   const delivered = await deliverPrediction(final, {

@@ -229,17 +229,27 @@ export function finalizeRun(input: FinalizeInput): number {
             run.requestsStarted > 0 || run.externalRuns.length > 0,
           ) ?? classifyMessage(run.lastErrorLine ?? `Command exited with code ${input.exitCode}`));
   }
+  const signalled = Boolean(info) && input.error === undefined && SIGNAL_EXITS.has(input.exitCode);
   // A job submitted before the signal keeps running and is billed: resume it, never rerun.
-  const inFlight =
-    info && input.error === undefined && SIGNAL_EXITS.has(input.exitCode)
-      ? run.inFlight
-      : undefined;
+  const inFlight = signalled ? run.inFlight : undefined;
   if (info && inFlight) {
     info = {
       ...info,
       retryable: false,
       hint: `Job ${inFlight.id} was submitted before the run stopped; it runs on (or has finished) and is billed. Do not rerun; resume it with the next command.`,
     };
+  } else if (signalled && run.submit) {
+    // The command knows better than "a request was sent": free requests (uploads)
+    // leave nothing billed, a submit cut off before its answer may have been accepted.
+    const { sent, check } = run.submit;
+    info = classifySignalExit(input.exitCode);
+    if (info && sent) {
+      info = {
+        ...info,
+        retryable: false,
+        hint: `The run stopped while the submit was in flight, so the provider may have accepted it and will bill it: check ${check} before resubmitting, or you may pay twice.`,
+      };
+    }
   }
   // Exit classes (2-6) are part of agent mode; plain runs keep the historical exit 1.
   // An unclassified failure keeps the command's own status in both modes.
