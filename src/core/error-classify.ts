@@ -47,6 +47,7 @@ export const EXIT_CODES = {
   retryable: 4,
   rejected: 5,
   timeout: 6,
+  /** Default only: classifySignalExit reports the signal's own status (129, 130 or 143). */
   cancelled: 130,
 } as const;
 
@@ -222,11 +223,25 @@ export function codeFromHttp(status: number, body: string): ErrorCode {
   return "PROVIDER_REJECTED";
 }
 
-/** Classify a run that exited with a signal's status (129, 130 or 143); undefined for any other code. */
-export function classifySignalExit(exitCode: number): ErrorInfo | undefined {
+/**
+ * Classify a run that exited with a signal's status (129, 130 or 143); undefined for any
+ * other code. `providerContacted`: a request already reached a provider, so a paid job may
+ * have been accepted and rerunning blindly could pay twice.
+ */
+export function classifySignalExit(
+  exitCode: number,
+  providerContacted = false,
+): ErrorInfo | undefined {
   const signal = SIGNAL_BY_EXIT[exitCode];
   if (!signal) return undefined;
-  return build("CANCELLED", `Cancelled by ${signal} (exit ${exitCode})`, { exit_code: exitCode });
+  return build("CANCELLED", `Cancelled by ${signal} (exit ${exitCode})`, {
+    exit_code: exitCode,
+    ...(providerContacted
+      ? {
+          hint: "The run was cancelled after a provider request was sent, so a paid job may already exist: check provider_ids or the provider's request list and fetch the result before rerunning, or you may pay twice.",
+        }
+      : {}),
+  });
 }
 
 /** Classify a log line or error message alone (no error object). */

@@ -124,6 +124,7 @@ export function installFetchTelemetry(onDryRun: (request: DryRunRequest) => neve
     } catch {}
     if (!run.requestModel) run.requestModel = modelFromRequest(path, init?.body);
     let response: Response;
+    run.requestsStarted++;
     try {
       response = await original(input, init);
     } catch (error) {

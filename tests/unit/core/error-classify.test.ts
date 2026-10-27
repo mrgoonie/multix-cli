@@ -122,6 +122,9 @@ describe("classifyError", () => {
         exit_code: status,
       });
     }
+    const sent = classifySignalExit(143, true);
+    expect(sent).toMatchObject({ code: "CANCELLED", exit_code: 143 });
+    expect(sent?.hint).toMatch(/pay twice/);
     for (const status of [0, 1, 2, 6, 128, 131, 137]) {
       expect(classifySignalExit(status)).toBeUndefined();
     }

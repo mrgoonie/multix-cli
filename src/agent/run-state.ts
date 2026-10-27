@@ -31,6 +31,8 @@ export interface RunState {
   /** Absolute paths written by this process. */
   written: Set<string>;
   calls: HttpCall[];
+  /** Requests handed to fetch, counted before they settle (calls[] records them after). */
+  requestsStarted: number;
   /** Usage from POST responses (summed) and the latest GET responses (last wins). */
   postUsage: ResponseUsage[];
   getUsage: Map<string, ResponseUsage>;
@@ -80,6 +82,7 @@ export const run: RunState = {
   verbose: false,
   written: new Set(),
   calls: [],
+  requestsStarted: 0,
   postUsage: [],
   getUsage: new Map(),
   ids: [],

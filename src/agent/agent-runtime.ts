@@ -222,8 +222,10 @@ export function finalizeRun(input: FinalizeInput): number {
     info =
       input.error !== undefined
         ? classifyError(input.error)
-        : (classifySignalExit(input.exitCode) ??
-          classifyMessage(run.lastErrorLine ?? `Command exited with code ${input.exitCode}`));
+        : (classifySignalExit(
+            input.exitCode,
+            run.requestsStarted > 0 || run.externalRuns.length > 0,
+          ) ?? classifyMessage(run.lastErrorLine ?? `Command exited with code ${input.exitCode}`));
   }
   // Exit classes (2-6) are part of agent mode; plain runs keep the historical exit 1.
   // An unclassified failure keeps the command's own status in both modes.
