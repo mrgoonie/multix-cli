@@ -222,7 +222,8 @@ describe("executePrediction (mocked submit -> poll -> saved output)", () => {
     });
     const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
     const exits: number[] = [];
-    const before = process.listenerCount("SIGINT");
+    const signals = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
+    const before = signals.map((s) => process.listenerCount(s));
     let polls = 0;
     const res = executePrediction({
       client,
@@ -252,8 +253,10 @@ describe("executePrediction (mocked submit -> poll -> saved output)", () => {
     expect(run.ids).toContain("wait01");
     expect(stderr).toHaveBeenCalledWith(expect.stringContaining(`Resume with: ${resume}`));
     expect(calls.filter((c) => c.method === "POST")).toHaveLength(1);
-    // The handler is removed once the wait ends, so a later Ctrl-C is not swallowed.
-    expect(process.listenerCount("SIGINT")).toBe(before);
+    // The handlers are removed once the wait ends, so a later signal is not swallowed.
+    expect(signals.map((s) => process.listenerCount(s))).toEqual(before);
+    run.inFlight = undefined;
+    run.ids = [];
   });
 
   it("resumeCommand adds --output only when given, quoting it when needed", () => {
