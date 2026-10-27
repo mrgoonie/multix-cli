@@ -53,3 +53,7 @@ Rơi vào `known()` -> null. Hiếm; cùng gốc với M1.
 3. (M2) Sửa comment media-wav.ts:24 và README/docs EN+VI/SKILL.md cho khớp.
 
 Status: DONE_WITH_CONCERNS
+
+## Resolution
+
+Fixed in f7f509c: exact placeholder list (M1), `declared_duration_s` read from `fact`/`fmt` and used by both coverage and the decode check (H1, L1), docs wording (M2), RF64 32-bit sizes (L3). Tests cover each case and fail on the earlier code.

@@ -131,8 +131,13 @@ streams that declare no length, such as raw ac3 or AAC and mp3 without a
 Xing header, have a duration ffprobe estimates from the bitrate; the receipt
 says so with `measured.declared_duration_estimated: true`, and a cut on a
 frame boundary in such a stream cannot be detected. A piped or streamed WAV
-(a size of 0, 0xFFFFFFFF, 0x7FFFF000 or 0x7FFF0000: the placeholders ffmpeg,
-SoX and GStreamer write) declares no length either.
+(a size of 0, 0xFFFFFFFF, 0x7FFFF000, 0x7FFF0000, 0x80000000 or 0x7FFFFF00:
+the placeholders ffmpeg, SoX, GStreamer and arecord write) declares no length
+either. For a truncated WAV, `coverage` and `measured.declared_duration_s` use
+the duration its header declares (the `fact` sample count, or the data size
+over the byte rate for PCM and float), also reported as
+`wav_data.declared_duration_s`; a header that declares none falls back to what
+ffprobe reports.
 
 Declare intended fades, holds and silences with the repeatable
 `--allow-black`, `--allow-freeze` and `--allow-silence <start-end>` ranges (in

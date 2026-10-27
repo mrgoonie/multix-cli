@@ -24,12 +24,15 @@ export interface WavDataLength {
 const MAX_CHUNKS = 64;
 /**
  * 32-bit sizes a writer puts in the header when it does not know the length (a piped or
- * streamed WAV): 0, 0xFFFFFFFF (ffmpeg), 0x7FFFF000 (SoX, some streaming servers) and
- * 0x7FFF0000 (GStreamer wavenc). Only these exact values: a RIFF WAV of 2-4 GiB is real.
+ * streamed WAV): 0, 0xFFFFFFFF (ffmpeg), 0x7FFFF000 (SoX, some streaming servers),
+ * 0x7FFF0000 (GStreamer wavenc), 0x80000000 and 0x7FFFFF00 (arecord). Only these exact
+ * values: a RIFF WAV of 2-4 GiB is real.
  */
-const PLACEHOLDER_SIZES = new Set([0, 0xffffffff, 0x7ffff000, 0x7fff0000]);
-/** WAVE_FORMAT_PCM, WAVE_FORMAT_IEEE_FLOAT and WAVE_FORMAT_EXTENSIBLE: constant byte rate. */
-const CONSTANT_RATE_FORMATS = new Set([1, 3, 0xfffe]);
+const PLACEHOLDER_SIZES = new Set([0, 0xffffffff, 0x7ffff000, 0x7fff0000, 0x80000000, 0x7fffff00]);
+/** WAVE_FORMAT_PCM and WAVE_FORMAT_IEEE_FLOAT: a constant byte rate. */
+const CONSTANT_RATE_FORMATS = new Set([1, 3]);
+/** WAVE_FORMAT_EXTENSIBLE keeps the real format code at the start of its SubFormat GUID. */
+const WAVE_FORMAT_EXTENSIBLE = 0xfffe;
 const RIFF_MAGIC = new Set(["RIFF", "RIFX", "RF64"]);
 
 /** Whether a file's first bytes name a RIFF, RIFX or RF64 WAVE. */
@@ -83,16 +86,20 @@ export async function readWavDataLength(file: string): Promise<WavDataLength | n
         // RF64 keeps its 64-bit sizes in ds64: riffSize, then dataSize.
         const body = await read(offset + 8, 16);
         if (!body) return null;
-        const safe = (n: bigint) => (n <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(n) : null);
-        riffSize = known(safe(body.readBigUInt64LE(0)));
-        ds64DataSize = known(safe(body.readBigUInt64LE(8)));
+        // The 32-bit placeholders are real lengths here; only 0 and out-of-range sizes are not.
+        const size64 = (n: bigint) =>
+          n > 0n && n <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(n) : null;
+        riffSize = size64(body.readBigUInt64LE(0));
+        ds64DataSize = size64(body.readBigUInt64LE(8));
       }
       if (id === "fmt " && chunkSize >= 16) {
-        const body = await read(offset + 8, 16);
+        const body = await read(offset + 8, Math.min(chunkSize, 40));
         if (body) {
           formatTag = u16(body, 0);
           sampleRate = u32(body, 4);
           byteRate = u32(body, 8);
+          if (formatTag === WAVE_FORMAT_EXTENSIBLE)
+            formatTag = body.length >= 26 ? u16(body, 24) : null;
         }
       }
       if (id === "fact" && chunkSize >= 4) {

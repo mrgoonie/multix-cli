@@ -128,8 +128,12 @@ khai báo độ dài, như ac3 hoặc AAC thô và mp3 không có header Xing, c
 lượng do ffprobe ước tính từ bitrate; biên nhận ghi rõ điều này bằng
 `measured.declared_duration_estimated: true`, và không thể phát hiện việc bị
 cắt đúng ranh giới frame ở những stream đó. WAV ghi qua pipe hoặc stream (kích
-thước 0, 0xFFFFFFFF, 0x7FFFF000 hoặc 0x7FFF0000: giá trị giữ chỗ mà ffmpeg,
-SoX và GStreamer ghi) cũng không khai báo độ dài.
+thước 0, 0xFFFFFFFF, 0x7FFFF000, 0x7FFF0000, 0x80000000 hoặc 0x7FFFFF00: giá trị
+giữ chỗ mà ffmpeg, SoX, GStreamer và arecord ghi) cũng không khai báo độ dài.
+Với WAV bị cắt, `coverage` và `measured.declared_duration_s` dùng thời lượng
+header khai báo (số mẫu trong chunk `fact`, hoặc kích thước data chia byte rate
+với PCM và float), cũng được báo trong `wav_data.declared_duration_s`; nếu
+header không khai báo thì dùng giá trị ffprobe báo.
 
 Khai báo các đoạn fade, giữ hình và khoảng lặng có chủ ý bằng các khoảng lặp
 lại được `--allow-black`, `--allow-freeze` và `--allow-silence <start-end>`
