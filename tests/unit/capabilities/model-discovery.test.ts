@@ -70,6 +70,26 @@ describe("catalog parsing", () => {
     expect(read.models).toHaveLength(calls.length);
   });
 
+  it("stops on an empty fal page or a repeated cursor and says the list may be incomplete", async () => {
+    const empty = fakeFetch([
+      ["cursor=c2", { body: falPage([], "c3") }],
+      ["api.fal.ai", { body: falPage(["a/tts"], "c2") }],
+    ]);
+    const a = await readCatalog("fal", "speech", empty.fn);
+    expect(a.models.map((m) => m.model)).toEqual(["a/tts"]);
+    expect(a.truncated).toBe(true);
+    expect(empty.calls).toHaveLength(2);
+
+    const loop = fakeFetch([
+      ["cursor=c1", { body: falPage(["b/tts"], "c1") }],
+      ["api.fal.ai", { body: falPage(["a/tts"], "c1") }],
+    ]);
+    const b = await readCatalog("fal", "speech", loop.fn);
+    expect(b.models.map((m) => m.model)).toEqual(["a/tts", "b/tts"]);
+    expect(b.truncated).toBe(true);
+    expect(loop.calls).toHaveLength(2);
+  });
+
   it("reads OpenRouter speech models with voices and pricing, and image-edit needs image input", async () => {
     const speech = fakeFetch([
       [

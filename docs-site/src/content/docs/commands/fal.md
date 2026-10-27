@@ -154,8 +154,21 @@ prints the typed inputs as JSON):
 - A flag the model has no field for (`--style` on ElevenLabs, `--format` on
   Gemini), a voice outside the model's list, or a format outside its enum fails
   with `INVALID_INPUT` before anything is sent. `--input` adds other fields
-  (`stability`, `seed`, Gemini `turns` for multi-speaker dialogue, ...); a field
-  set by both a flag and `--input` is an error.
+  (`stability`, `seed`, ...); a field set by both a flag and `--input` is an
+  error. Values given through `--input` meet the same checks as the flags: text
+  length (counted in characters), the voice list, the `output_format` enum and
+  the language code (`en`, `vi`, `pt-BR`).
+- Gemini multi-speaker dialogue goes through `--input` instead of the text:
+  exactly two `speakers` with distinct `speaker_id`s and voices from the list,
+  and one or more `turns`, each naming one of them with non-empty `text`.
+  `--voice` and a text are refused with a dialogue. A malformed dialogue is
+  refused before it is queued, so it costs nothing; fal currently rejects even
+  a well-formed one with HTTP 422 after queueing it
+  ([#310](https://github.com/mrgoonie/multix-cli/issues/310)).
+
+  ```bash
+  multix fal tts --input '{"speakers":[{"speaker_id":"A","voice":"Kore"},{"speaker_id":"B","voice":"Puck"}],"turns":[{"speaker_id":"A","text":"Hi!"},{"speaker_id":"B","text":"Hello."}]}'
+  ```
 - Set the default model with `FAL_TTS_MODEL`.
 - Other fal TTS endpoints work when you name their fields:
   `multix fal tts "hi" -m <model> --text-field input [--voice-field speaker --voice anna]`.
@@ -166,8 +179,9 @@ The audio is saved as `fal-<request_id>-01.<ext>`, with the extension taken
 from the bytes: WAV, MP3, Ogg/Opus, FLAC, M4A, AAC, WebM and AIFF are
 recognised by their header, whatever the URL or Content-Type says. Raw formats
 with no header (`pcm_*` → `.pcm`, `ulaw_8000` → `.ulaw`, `alaw_8000` →
-`.alaw`) are named from the requested format. An empty file, an error page, or
-bytes that are not the container fal declared are refused and no file is left
+`.alaw`) are named from the requested format. An empty file, an error page, a WAV
+with a header but no samples, or bytes that are not the container fal declared
+are refused and no file is left
 behind. `fal result <model> <id> --download` applies the same checks to a
 speech job; for a raw format add `--format <fmt>` (a `--detach` receipt's
 `result_command` already includes it), or the headerless bytes cannot be named.

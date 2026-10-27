@@ -22,12 +22,24 @@ const GEMINI = "google/gemini-3.8-flash-tts";
 const ELEVEN = "elevenlabs/tts/eleven-v4-turbo";
 const CDN = "https://v3b.fal.media/files/b/out/";
 
-const WAV = Buffer.concat([
-  Buffer.from("RIFF"),
-  Buffer.from([0x24, 0, 0, 0]),
-  Buffer.from("WAVEfmt "),
-  Buffer.alloc(32, 1),
-]);
+/** RIFF/WAVE with a 16-byte fmt chunk, then a data chunk of `samples` bytes. */
+function wav(samples: number, dataSize = samples): Buffer {
+  const head = Buffer.alloc(44);
+  head.write("RIFF", 0, "latin1");
+  head.writeUInt32LE(36 + samples, 4);
+  head.write("WAVEfmt ", 8, "latin1");
+  head.writeUInt32LE(16, 16);
+  head.writeUInt16LE(1, 20); // PCM
+  head.writeUInt16LE(1, 22); // mono
+  head.writeUInt32LE(24_000, 24);
+  head.writeUInt32LE(48_000, 28);
+  head.writeUInt16LE(2, 32);
+  head.writeUInt16LE(16, 34);
+  head.write("data", 36, "latin1");
+  head.writeUInt32LE(dataSize, 40);
+  return Buffer.concat([head, Buffer.alloc(samples, 1)]);
+}
+const WAV = wav(32);
 const MP3 = Buffer.concat([
   Buffer.from("ID3"),
   Buffer.from([4, 0, 0, 0, 0, 0]),
@@ -199,6 +211,8 @@ describe("fal tts — audio output verification", () => {
     ["blank audio", Buffer.alloc(0), /empty audio/],
     ["an HTML error page", Buffer.from("<html><body>Access denied</body></html>"), /not audio/],
     ["bytes that are not the declared container", Buffer.alloc(64, 7), /bytes are not wav/],
+    ["a WAV header with no samples", wav(0), /header but no audio samples/],
+    ["a streamed WAV header (data size 0) with no samples", wav(0, 0), /no audio samples/],
   ] as const) {
     it(`refuses ${name} and leaves no file behind`, async () => {
       job(GEMINI, { audio: { url: `${CDN}a.wav`, content_type: "audio/wav" } }, { body });
@@ -206,6 +220,12 @@ describe("fal tts — audio output verification", () => {
       expect(fs.existsSync(out) ? saved() : []).toEqual([]);
     });
   }
+
+  it("keeps a streamed WAV whose data size is 0 but whose samples follow", async () => {
+    job(GEMINI, { audio: { url: `${CDN}a.wav`, content_type: "audio/wav" } }, { body: wav(8, 0) });
+    await cli("tts", "Hi", "--wait-timeout", "5000");
+    expect(saved()).toEqual([`fal-${REQUEST_ID}-01.wav`]);
+  });
 
   it("refuses an audio URL that is not https before fetching it", async () => {
     const fake = job(GEMINI, { audio: { url: "http://v3b.fal.media/files/a.wav" } });
@@ -241,6 +261,8 @@ describe("fal tts — validation before any request", () => {
     ["tts", "Hi", "-m", "not-a-model-id"],
     ["tts", "Hi", "-m", ELEVEN, "--input", '{"output_format":"../../evil"}'],
     ["tts", "-m", ELEVEN, "--input", '{"text":"  "}'],
+    ["tts", "--input", '{"turns":[{"speaker_id":"a","text":"Hi"}]}'],
+    ["tts", "Hi", "-m", ELEVEN, "--input", '{"language_code":"not a code"}'],
     ["tts", "Hi", "-m", "fal-ai/other-tts", "--text-field", "__proto__"],
     ["tts", "Hi", "-m", "fal-ai/other-tts", "--text-field", "t", "--voice-field", "t"],
   ];

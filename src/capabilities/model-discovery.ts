@@ -72,6 +72,7 @@ async function readFal(task: Task, fetchFn: FetchFn): Promise<CatalogRead> {
   const base = `https://api.fal.ai/v1/models?category=${encodeURIComponent(category)}&limit=100`;
   const models: DiscoveredModel[] = [];
   let cursor: string | undefined;
+  const seenCursors = new Set<string>();
   for (let page = 0; page < MAX_FAL_PAGES; page++) {
     const url = cursor ? `${base}&cursor=${encodeURIComponent(cursor)}` : base;
     const body = (await getJson(fetchFn, url)) as FalPage;
@@ -91,6 +92,10 @@ async function readFal(task: Task, fetchFn: FetchFn): Promise<CatalogRead> {
     }
     cursor = body.has_more === true ? str(body.next_cursor) : undefined;
     if (!cursor) return { url: base, models };
+    // More is promised, but an empty page or a cursor seen before would only
+    // repeat requests: stop and say the list may be incomplete.
+    if (body.models.length === 0 || seenCursors.has(cursor)) break;
+    seenCursors.add(cursor);
   }
   return { url: base, models, truncated: true };
 }
