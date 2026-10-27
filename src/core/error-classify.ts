@@ -29,13 +29,16 @@ export type ErrorCode =
   | "BINARY_MISSING"
   | "BUDGET_EXCEEDED"
   | "BUDGET_UNPROVEN"
+  | "CANCELLED"
   | "UNKNOWN";
 
 /**
  * Process exit codes by class: 0 ok, 1 unknown, 2 usage or invalid input,
  * 3 missing/invalid key or config, 4 temporary (retry may succeed),
  * 5 rejected by the provider (do not retry unchanged), 6 timed out while the
- * job may still be running (resume it, do not resubmit).
+ * job may still be running (resume it, do not resubmit). A run stopped by a
+ * signal keeps the shell's 128 + signal number (130 Ctrl-C, 143 SIGTERM,
+ * 129 SIGHUP).
  */
 export const EXIT_CODES = {
   ok: 0,
@@ -88,6 +91,7 @@ const HINTS: Record<ErrorCode, string> = {
     "Nothing was sent: the estimate is over --max-cost. Raise the limit, shorten the input or pick a cheaper model (see --estimate).",
   BUDGET_UNPROVEN:
     "Nothing was sent: the cost cannot be bounded. Check --estimate; pass --cost-policy estimate to accept an estimated high end, or drop --max-cost.",
+  CANCELLED: "The run was cancelled; nothing was left behind. Rerun the command.",
   UNKNOWN: "Read the message; rerun with --verbose for details.",
 };
 
@@ -112,6 +116,7 @@ const EXIT_BY_CODE: Record<ErrorCode, number> = {
   BINARY_MISSING: EXIT_CODES.config,
   BUDGET_EXCEEDED: EXIT_CODES.usage,
   BUDGET_UNPROVEN: EXIT_CODES.usage,
+  CANCELLED: 130,
   UNKNOWN: EXIT_CODES.unknown,
 };
 
@@ -212,6 +217,26 @@ export function codeFromHttp(status: number, body: string): ErrorCode {
   if (fromText === "CONTENT_BLOCKED" || fromText === "QUOTA_EXCEEDED") return fromText;
   if (fromText === "MODEL_NOT_FOUND") return fromText;
   return "PROVIDER_REJECTED";
+}
+
+/** Signals a command handles by cleaning up and exiting with 128 + the signal number. */
+const SIGNAL_BY_EXIT: Record<number, string> = { 129: "SIGHUP", 130: "SIGINT", 143: "SIGTERM" };
+
+const CANCELLED_AFTER_SEND =
+  "The run was cancelled after a provider request was sent; the job may still run and bill. Check the provider before rerunning.";
+
+/**
+ * Classify an exit status set by a signal handler, or undefined for any other
+ * status. The real exit code is kept. `requestSent` swaps the hint, since a
+ * paid job may already be queued.
+ */
+export function classifySignalExit(exitCode: number, requestSent = false): ErrorInfo | undefined {
+  const signal = SIGNAL_BY_EXIT[exitCode];
+  if (!signal) return undefined;
+  return build("CANCELLED", `Cancelled by ${signal} (exit ${exitCode})`, {
+    exit_code: exitCode,
+    ...(requestSent ? { hint: CANCELLED_AFTER_SEND } : {}),
+  });
 }
 
 /** Classify a log line or error message alone (no error object). */

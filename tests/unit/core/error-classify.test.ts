@@ -3,6 +3,7 @@ import {
   EXIT_CODES,
   classifyError,
   classifyMessage,
+  classifySignalExit,
   codeFromHttp,
 } from "../../../src/core/error-classify.js";
 import {
@@ -60,6 +61,31 @@ describe("classifyMessage", () => {
     const info = classifyMessage("something odd");
     expect(info.code).toBe("UNKNOWN");
     expect(info.hint.length).toBeGreaterThan(0);
+  });
+});
+
+describe("classifySignalExit", () => {
+  it.each([
+    [129, "SIGHUP"],
+    [130, "SIGINT"],
+    [143, "SIGTERM"],
+  ])("maps exit %i to CANCELLED and keeps the real exit code", (exit, signal) => {
+    const info = classifySignalExit(exit);
+    expect(info).toMatchObject({
+      code: "CANCELLED",
+      exit_code: exit,
+      retryable: false,
+      message: `Cancelled by ${signal} (exit ${exit})`,
+      hint: "The run was cancelled; nothing was left behind. Rerun the command.",
+    });
+  });
+
+  it("warns that a sent request may still run and bill", () => {
+    expect(classifySignalExit(130, true)?.hint).toMatch(/Check the provider before rerunning/);
+  });
+
+  it("ignores every other exit status", () => {
+    for (const exit of [0, 1, 2, 6, 131, 137]) expect(classifySignalExit(exit)).toBeUndefined();
   });
 });
 

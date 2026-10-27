@@ -15,7 +15,12 @@
 
 import fs from "node:fs";
 import type { Command } from "commander";
-import { type ErrorInfo, classifyError, classifyMessage } from "../core/error-classify.js";
+import {
+  type ErrorInfo,
+  classifyError,
+  classifyMessage,
+  classifySignalExit,
+} from "../core/error-classify.js";
 import { setExternalRunGuard } from "../core/external-run-guard.js";
 import { redactUrlsInText } from "../core/redact.js";
 import { costReceiptFor, formatEstimate, formatReceipt, preflightCost } from "./cost-preflight.js";
@@ -217,7 +222,8 @@ export function finalizeRun(input: FinalizeInput): number {
     info =
       input.error !== undefined
         ? classifyError(input.error)
-        : classifyMessage(run.lastErrorLine ?? `Command exited with code ${input.exitCode}`);
+        : (classifySignalExit(input.exitCode, run.calls.length > 0) ??
+          classifyMessage(run.lastErrorLine ?? `Command exited with code ${input.exitCode}`));
   }
   // Exit classes (2-6) are part of agent mode; plain runs keep the historical exit 1.
   const exitCode = !failed

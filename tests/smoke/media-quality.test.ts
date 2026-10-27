@@ -154,32 +154,56 @@ describe("media inspect/verify (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
       expect(envelope(res.stdout).error.message).toMatch(/--loudness/);
     });
 
+    /** Start `media frames`, wait until it has staged a directory, then send `signal`. */
+    async function interruptFrames(dir: string, signal: NodeJS.Signals, extra: string[] = []) {
+      const out = path.join(tmp, dir);
+      const child = execa(
+        "node",
+        [CLI, "media", "frames", "clip.mp4", "--output-dir", out, "--count", "100", ...extra],
+        {
+          cwd: tmp,
+          env: isolatedEnv(tmp),
+          extendEnv: false,
+          reject: false,
+          timeout: SPAWN_TIMEOUT - 1_000,
+        },
+      );
+      const staged = () =>
+        fs.existsSync(out) ? fs.readdirSync(out).filter((n) => n.startsWith(".frames-")) : [];
+      const deadline = Date.now() + 10_000;
+      while (staged().length === 0 && Date.now() < deadline)
+        await new Promise((r) => setTimeout(r, 25));
+      expect(staged()).toHaveLength(1);
+      child.kill(signal);
+      const res = await child;
+      expect(staged()).toEqual([]);
+      expect(fs.readdirSync(out).filter((n) => n.endsWith(".png"))).toEqual([]);
+      return res;
+    }
+
     it.skipIf(process.platform === "win32")(
-      "removes its staging directory when interrupted with Ctrl-C",
+      "removes its staging directory when interrupted with Ctrl-C and reports CANCELLED",
       async () => {
-        const out = path.join(tmp, "interrupted");
-        const child = execa(
-          "node",
-          [CLI, "media", "frames", "clip.mp4", "--output-dir", out, "--count", "100"],
-          {
-            cwd: tmp,
-            env: isolatedEnv(tmp),
-            extendEnv: false,
-            reject: false,
-            timeout: SPAWN_TIMEOUT - 1_000,
-          },
-        );
-        const staged = () =>
-          fs.existsSync(out) ? fs.readdirSync(out).filter((n) => n.startsWith(".frames-")) : [];
-        const deadline = Date.now() + 10_000;
-        while (staged().length === 0 && Date.now() < deadline)
-          await new Promise((r) => setTimeout(r, 25));
-        expect(staged()).toHaveLength(1);
-        child.kill("SIGINT");
-        const res = await child;
+        const res = await interruptFrames("interrupted", "SIGINT");
         expect(res.exitCode).toBe(130);
-        expect(staged()).toEqual([]);
-        expect(fs.readdirSync(out).filter((n) => n.endsWith(".png"))).toEqual([]);
+        expect(res.stderr).toContain("code: CANCELLED (exit 130 with --json)");
+        expect(res.stderr).toContain("nothing was left behind");
+      },
+    );
+
+    it.skipIf(process.platform === "win32")(
+      "keeps the real exit code in the --json envelope when terminated",
+      async () => {
+        const res = await interruptFrames("terminated", "SIGTERM", ["--json"]);
+        expect(res.exitCode).toBe(143);
+        const env = envelope(res.stdout);
+        expect(env).toMatchObject({ ok: false, exit_code: 143 });
+        expect(env.error).toMatchObject({
+          code: "CANCELLED",
+          retryable: false,
+          message: "Cancelled by SIGTERM (exit 143)",
+        });
+        expect(env.error.hint).toMatch(/nothing was left behind/);
       },
     );
 
