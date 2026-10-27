@@ -26,7 +26,7 @@ import type { Severity, VerifyProfile } from "./verify-profiles.js";
 
 export const VERIFY_SCHEMA = "multix.media-verify/v1";
 /** Bumped when measuring or judging logic changes; part of every cache key. */
-export const VERIFY_ENGINE = "multix-media-verify/1";
+export const VERIFY_ENGINE = "multix-media-verify/2";
 
 export type CheckStatus = "pass" | "warn" | "fail" | "skipped" | "unknown";
 
@@ -254,7 +254,8 @@ export function judge(
   // Integrity: the whole file decodes without errors, as far as its decoded streams claim to
   // run. The container's duration can count tracks that were not decoded, and when ffprobe
   // only estimated it from the bitrate (a raw stream with no index or Xing header) no
-  // truncation is asserted from it.
+  // truncation is asserted from it. A WAV is sized by ffprobe from the bytes present, so its
+  // truncation is read from the `data` chunk header instead.
   const videoDecoded = video !== null && profile.media !== "audio";
   const audioDecoded = audio !== null && profile.media !== "image";
   const streamEnds = [
@@ -270,28 +271,31 @@ export function judge(
   if (!analysis) {
     checks.push({
       id: "decode",
-      rule_version: "1",
+      rule_version: "2",
       status: "unknown",
       severity: "error",
       reason: "not decoded",
     });
   } else {
+    const wav = report.wav_data;
     const truncated =
       report.kind !== "image" &&
       analysis.completed &&
       declared !== null &&
       analysis.decoded_s !== null &&
       analysis.decoded_s < declared - Math.max(0.5, fps ? 2 / fps : 0);
-    const status: CheckStatus = !analysis.completed
-      ? analysis.timed_out || analysis.cancelled
-        ? "unknown"
-        : "fail"
-      : analysis.decode_error_count > 0 || truncated
-        ? "fail"
-        : "pass";
+    const status: CheckStatus = wav?.truncated
+      ? "fail"
+      : !analysis.completed
+        ? analysis.timed_out || analysis.cancelled
+          ? "unknown"
+          : "fail"
+        : analysis.decode_error_count > 0 || truncated
+          ? "fail"
+          : "pass";
     checks.push({
       id: "decode",
-      rule_version: "1",
+      rule_version: "2",
       status,
       severity: "error",
       unit: "s",
@@ -299,23 +303,28 @@ export function judge(
         decoded_s: analysis.decoded_s,
         declared_duration_s: declared,
         ...(estimated ? { declared_duration_estimated: true } : {}),
+        ...(wav
+          ? { declared_data_bytes: wav.declared_bytes, present_data_bytes: wav.present_bytes }
+          : {}),
         error_count: analysis.decode_error_count,
         completed: analysis.completed,
       },
       ...(analysis.decode_errors.length || truncated || status !== "pass"
         ? {
-            reason: analysis.timed_out
-              ? "decode timed out"
-              : analysis.cancelled
-                ? "decode cancelled"
-                : truncated
-                  ? `decoded ${analysis.decoded_s} s of a declared ${declared} s (truncated)`
-                  : [
-                      ...analysis.decode_errors.slice(0, 5),
-                      ...(analysis.completed ? [] : analysis.log_tail.slice(-2)),
-                    ]
-                      .join(" | ")
-                      .slice(0, 2000),
+            reason: wav?.truncated
+              ? `WAV data chunk declares ${wav.declared_bytes} bytes but the file holds ${wav.present_bytes} (truncated)`
+              : analysis.timed_out
+                ? "decode timed out"
+                : analysis.cancelled
+                  ? "decode cancelled"
+                  : truncated
+                    ? `decoded ${analysis.decoded_s} s of a declared ${declared} s (truncated)`
+                    : [
+                        ...analysis.decode_errors.slice(0, 5),
+                        ...(analysis.completed ? [] : analysis.log_tail.slice(-2)),
+                      ]
+                        .join(" | ")
+                        .slice(0, 2000),
           }
         : {}),
     });
