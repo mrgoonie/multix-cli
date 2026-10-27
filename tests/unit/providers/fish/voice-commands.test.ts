@@ -13,6 +13,7 @@ import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { run as runState } from "../../../../src/agent/run-state.js";
 import { estimateCommand } from "../../../../src/budget/command-cost.js";
+import { buildCostReceipt } from "../../../../src/budget/cost-receipt.js";
 import { _resetOutputDir } from "../../../../src/core/output-dir.js";
 import { registerFishCommands } from "../../../../src/providers/fish/commands/index.js";
 
@@ -205,6 +206,27 @@ describe("fish voice-design", () => {
     );
   });
 
+  it("asks Fish for 2 candidates when --count is omitted, so caps see the real count", async () => {
+    stubFetch(() =>
+      json({ candidates: [{ id: "c0", index: 5, audio_base64: b64(WAV), sample_rate: 24000 }] }),
+    );
+    await run("voice-design", "--instruction", "x");
+    expect(calls[0]?.body).toEqual({ instruction: "x", n: 2 });
+    expect(allText()).toContain("Candidate 1: ");
+    expect(allText()).toMatch(/fish_voice_design_.+_1\.wav/);
+  });
+
+  it("settles a successful run's receipt at $0.01", () => {
+    const receipt = buildCostReceipt({
+      operation_id: "op",
+      outcome: "ok",
+      provider: "fish",
+      model: "voice-design-1",
+      calls: [{ method: "POST", status: 200 }],
+    });
+    expect(receipt).toMatchObject({ status: "computed", actual_usd: 0.01 });
+  });
+
   it("is priced at $0.01 per request before it runs, whatever the candidate count", () => {
     const estimate = estimateCommand("fish voice-design", { instruction: "x", count: "4" });
     expect(estimate).toMatchObject({
@@ -268,6 +290,14 @@ describe("fish voices create", () => {
     expect(jsonResult()).toMatchObject({ id: VOICE, state: "trained", samples: 2, warnings: [] });
   });
 
+  it("types a sample with no extension by its bytes", async () => {
+    stubFetch(() => json(MODEL, 201));
+    await run("voices", "create", "--title", "N", "--sample", sample("download"), "--consent");
+    const file = (calls[0]?.body as FormData).get("voices") as File;
+    expect(file.name).toBe("download.wav");
+    expect(file.type).toBe("audio/wav");
+  });
+
   it("warns when the new model is not trained yet", async () => {
     stubFetch(() => json({ ...MODEL, state: "training" }, 201));
     await run("voices", "create", "--title", "N", "--sample", sample("a.wav"), "--consent");
@@ -293,6 +323,9 @@ describe("fish voices create", () => {
     await expect(run(...base, path.join(tmp, "nope.wav"))).rejects.toThrow("not found");
     await expect(run(...base, sample("fake.mp3"))).rejects.toThrow("its bytes are wav");
     await expect(run(...base, sample("x.flac"))).rejects.toThrow("Fish takes");
+    await expect(run(...base, sample("noext", new Uint8Array([1, 2, 3])))).rejects.toThrow(
+      "has no extension",
+    );
     await expect(run("voices", "create", "--title", "N", "--consent")).rejects.toThrow(
       "1 to 20 --sample",
     );

@@ -137,8 +137,6 @@ export interface FishVoiceDesignCandidate {
   duration_ms: number | null;
   text: string | null;
   language: string | null;
-  /** Pass to `fish voices create --voice-design-signature` when Fish returns one. */
-  signature: string | null;
   problem: string | null;
 }
 
@@ -210,7 +208,6 @@ function parseCandidate(raw: unknown, i: number, maxBytes: number): FishVoiceDes
     duration_ms: count(c.duration_ms),
     text: str(c.text),
     language: str(c.language),
-    signature: str(c.signature) ?? str(c.voice_design_signature),
     problem,
   };
 }
@@ -275,7 +272,13 @@ export async function createFishVoiceDesign(
   let parsed: { candidates?: unknown };
   try {
     parsed = JSON.parse(new TextDecoder().decode(raw)) as { candidates?: unknown };
-  } catch {
+  } catch (err) {
+    // A body too long for one JavaScript string is too large, not cut off.
+    if (err instanceof RangeError) {
+      const tooLarge = new ResponseTooLargeError(opts.maxBytes, url);
+      tooLarge.message += "; the voice design request is still billed by Fish Audio";
+      throw tooLarge;
+    }
     throw fishUnknownState("voice design", "the 200 response is not complete JSON");
   }
   if (!Array.isArray(parsed?.candidates) || parsed.candidates.length === 0) {

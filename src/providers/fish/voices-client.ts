@@ -144,7 +144,7 @@ export interface CreateFishVoiceOptions {
   generateSample?: boolean;
   /** One /v1/voice-design signature per sample, in order. */
   voiceDesignSignatures?: string[];
-  /** Whole request, upload included. Default 300 s. */
+  /** Whole request, upload included. Default 300 s plus 1 s per 100 KB of samples. */
   timeoutMs?: number;
   baseUrl?: string;
   fetch?: FetchLike;
@@ -185,7 +185,10 @@ export async function createFishVoice(opts: CreateFishVoiceOptions): Promise<Fis
         method: "POST",
         headers: fishHeaders(opts.apiKey),
         body: form,
-        signal: AbortSignal.timeout(opts.timeoutMs ?? 300_000),
+        signal: AbortSignal.timeout(
+          opts.timeoutMs ??
+            300_000 + Math.ceil(opts.samples.reduce((n, s) => n + s.bytes.byteLength, 0) / 100),
+        ),
       },
       { fetch: opts.fetch, crossOrigin: "error" },
     ));

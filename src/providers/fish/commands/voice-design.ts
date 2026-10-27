@@ -79,6 +79,9 @@ export function fishVoiceDesignInput(opts: FishVoiceDesignOptions): FishVoiceDes
 }
 
 export interface FishVoiceDesignCandidateResult {
+  /** 1-based position in the response; the number in the file name. */
+  number: number;
+  /** Fish's own candidate index. */
   index: number;
   id: string | null;
   path: string | null;
@@ -88,8 +91,6 @@ export interface FishVoiceDesignCandidateResult {
   signature_ok: boolean;
   sample_rate_hz: number | null;
   duration_s: number | null;
-  /** Pass to `fish voices create --voice-design-signature` when Fish returns one. */
-  signature: string | null;
   problems: string[];
 }
 
@@ -114,9 +115,8 @@ export async function runFishVoiceDesign(
   const design = await createFishVoiceDesign({
     apiKey,
     body,
-    // Base64 inflates the audio by a third; leave room for every candidate.
-    maxBytes:
-      Math.ceil((maxDownloadBytes() * FISH_VOICE_DESIGN_MAX_CANDIDATES * 4) / 3) + 64 * 1024,
+    // The whole JSON (every candidate, base64 adds a third) is held in memory: cap it like one download.
+    maxBytes: Math.ceil((maxDownloadBytes() * 4) / 3) + 64 * 1024,
     maxCandidateBytes: maxDownloadBytes(),
   });
   const stamp = outputStamp();
@@ -125,6 +125,7 @@ export async function runFishVoiceDesign(
     const problems = c.problem ? [c.problem] : [];
     if (!c.audio) {
       return {
+        number: i + 1,
         index: c.index,
         id: c.id,
         path: null,
@@ -133,7 +134,6 @@ export async function runFishVoiceDesign(
         signature_ok: false,
         sample_rate_hz: null,
         duration_s: null,
-        signature: c.signature,
         problems,
       };
     }
@@ -144,6 +144,7 @@ export async function runFishVoiceDesign(
     const dest = path.join(getOutputDir(), `fish_voice_design_${stamp}_${i + 1}.wav`);
     fs.writeFileSync(dest, c.audio);
     return {
+      number: i + 1,
       index: c.index,
       id: c.id,
       path: dest,
@@ -152,12 +153,11 @@ export async function runFishVoiceDesign(
       signature_ok: check.signature_ok,
       sample_rate_hz: check.sample_rate_hz,
       duration_s: check.duration_s ?? (c.duration_ms !== null ? c.duration_ms / 1000 : null),
-      signature: c.signature,
       problems,
     };
   });
   for (const c of candidates) {
-    for (const p of c.problems) warnings.push(`candidate ${c.index}: ${p}`);
+    for (const p of c.problems) warnings.push(`candidate ${c.number}: ${p}`);
   }
   const estimate = estimateCost({
     provider: "fish",
@@ -202,10 +202,7 @@ export function registerFishVoiceDesignCommand(parent: Command): void {
       "Line every candidate reads, to compare them (short; Fish rejects long text)",
     )
     .option("--language <bcp47>", "Language hint (en, zh, ja, vi, ...)")
-    .option(
-      "--count <n>",
-      `Candidates to generate, 1 to ${FISH_VOICE_DESIGN_MAX_CANDIDATES} (Fish default 2)`,
-    )
+    .option("--count <n>", `Candidates to generate, 1 to ${FISH_VOICE_DESIGN_MAX_CANDIDATES}`, "2")
     .option("--speed <n>", "Speaking speed multiplier, above 0 up to 3 (default 1)")
     .option("--num-step <n>", "Diffusion steps, 1 to 128 (default 32)")
     .option("--guidance-scale <n>", "How closely to follow the description, 0 or more (default 2)")
@@ -229,7 +226,7 @@ export function registerFishVoiceDesignCommand(parent: Command): void {
           c.sample_rate_hz ? `${c.sample_rate_hz} Hz` : "",
         ].filter(Boolean);
         logger.success(
-          `Candidate ${c.index}: ${c.path}${details.length ? ` (${details.join(", ")})` : ""}`,
+          `Candidate ${c.number}: ${c.path}${details.length ? ` (${details.join(", ")})` : ""}`,
         );
       }
       console.log(

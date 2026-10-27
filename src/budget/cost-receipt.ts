@@ -174,7 +174,13 @@ export function buildCostReceipt(input: ReceiptInput): CostReceipt {
     let computed: number | undefined;
     if (input.model && role === "charge") {
       const lookup = resolveRate(input.provider, input.model, at);
-      if (lookup.ok) computed = computeActual(lookup.rate.components, measured);
+      if (lookup.ok) {
+        // A per-request price (Fish voice design) bills each billable call that succeeded.
+        if (lookup.rate.components.some((c) => c.meter === "requests")) {
+          measured.requests = billable.filter((c) => c.status >= 200 && c.status < 300).length;
+        }
+        computed = computeActual(lookup.rate.components, measured);
+      }
     }
     // Cut off, timed out or a server error: the provider may have done (and
     // billed) the work. A 4xx refusal (bad input, auth, rate limit) is not billed.

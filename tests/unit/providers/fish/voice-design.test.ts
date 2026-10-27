@@ -127,7 +127,6 @@ describe("createFishVoiceDesign", () => {
             duration_ms: 900,
             text: "Hi",
             language: "en",
-            signature: "sig-1",
           },
         ],
       }),
@@ -151,7 +150,6 @@ describe("createFishVoiceDesign", () => {
       duration_ms: 900,
       text: "Hi",
       language: "en",
-      signature: "sig-1",
       problem: null,
     });
   });

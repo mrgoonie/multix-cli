@@ -167,12 +167,12 @@ ends with `UNKNOWN_REMOTE_STATE`. If no candidate is a usable WAV, the command
 fails, and the request is still billed.
 
 Fish keeps nothing from a voice design. To keep a candidate, clone it with
-`fish voices create --sample <wav>`, passing the candidate's `signature` (when
-Fish returns one) as `--voice-design-signature`. With `--json`, the result
-includes `model_header_sent`, `instruction_chars`, `instruction_sha256`,
-`candidates_requested`, `candidates` (each with `index`, `id`, `path`,
-`bytes`, `sha256`, `signature_ok`, `sample_rate_hz`, `duration_s`,
-`signature`, and `problems`), `estimated_cost_usd`, `rate_id`, and `warnings`.
+`fish voices create --sample <wav>`. With `--json`, the result includes
+`model_header_sent`, `instruction_chars`, `instruction_sha256`,
+`candidates_requested`, `candidates` (each with `number`, the 1-based number in
+its file name, Fish's `index`, `id`, `path`, `bytes`, `sha256`,
+`signature_ok`, `sample_rate_hz`, `duration_s`, and `problems`),
+`estimated_cost_usd`, `rate_id`, and `warnings`.
 The instruction is recorded only as its length and hash.
 
 ## Voice models
@@ -191,19 +191,19 @@ multix fish voices get <voice-id>
 ```bash
 multix fish voices create --title "My narrator" --sample take1.wav --sample take2.mp3 --consent
 multix fish voices create --title "Designed host" --sample fish_voice_design_<stamp>_1.wav \
-  --voice-design-signature <signature> --visibility unlist --consent
+  --visibility unlist --consent
 ```
 
 `--consent` is required: clone only a voice you own or have the speaker's
 permission to clone. Give 1 to 20 `--sample` files (`.wav`, `.mp3`, `.m4a`, or
 `.opus`, at most 50 MB each); the extension must match the file's audio
-header. Other flags:
+header (a file with no extension is typed by its header alone). Other flags:
 
 | Flag | Meaning |
 | --- | --- |
 | `--title <name>` | Required, 1 to 200 characters. |
 | `--transcript <text>` | What a sample says, one per `--sample` in order; omit them all to let Fish transcribe. |
-| `--voice-design-signature <sig>` | One per `--sample` in order, from `fish voice-design`. |
+| `--voice-design-signature <sig>` | One per `--sample` in order: a voice-design signature Fish issued for that audio. Fish rejects the request if one does not verify. The voice-design response does not document this field, so `fish voice-design` does not report one. |
 | `--description <text>`, `--tag <tag>` | Metadata; `--tag` repeats. |
 | `--visibility <v>` | `private` (default) or `unlist`. `public` is refused when creating. |
 | `--no-enhance-audio-quality` | Do not clean up the samples before cloning. |

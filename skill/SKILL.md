@@ -497,7 +497,7 @@ multix fish voices get <voice-id>
 multix fish voice-design --instruction "A calm low narrator" [--reference-text <line>] [--language vi] [--count 1-4] [--speed <0-3>] [--num-step 1-128] [--guidance-scale <n>] [--instruct-guidance-scale <n>] [--seed <n>] --json
 # Clone: --consent required; 1-20 samples wav/mp3/m4a/opus (50 MB each, extension must match bytes); one --transcript per sample or none (ASR).
 # Unpriced (no listed clone price): --max-cost refuses it. Warns if state != trained. Cut off = unknown: check `fish voices list` before retrying.
-multix fish voices create --title <name> --sample cand.wav --voice-design-signature <sig> [--visibility private|unlist] --consent
+multix fish voices create --title <name> --sample cand.wav [--visibility private|unlist] --consent
 multix fish voices update <voice-id> [--title ...] [--description ...] [--tag ...] [--visibility private|unlist|public]   # public needs --yes; --tag replaces tags
 multix fish voices delete <voice-id> --yes   # irreversible
 # Native Fish and OpenRouter fish-audio/* are separate routes and prices; multix never falls back between them.

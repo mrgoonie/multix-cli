@@ -167,12 +167,12 @@ bị ngắt kết thúc với `UNKNOWN_REMOTE_STATE`. Nếu không ứng viên n
 được, lệnh báo lỗi và request vẫn bị tính phí.
 
 Fish không lưu lại gì từ một lần thiết kế giọng. Muốn giữ một ứng viên, hãy
-clone nó bằng `fish voices create --sample <wav>`, truyền `signature` của ứng
-viên (khi Fish trả về) qua `--voice-design-signature`. Với `--json`, kết quả gồm
+clone nó bằng `fish voices create --sample <wav>`. Với `--json`, kết quả gồm
 `model_header_sent`, `instruction_chars`, `instruction_sha256`,
-`candidates_requested`, `candidates` (mỗi ứng viên có `index`, `id`, `path`,
-`bytes`, `sha256`, `signature_ok`, `sample_rate_hz`, `duration_s`,
-`signature` và `problems`), `estimated_cost_usd`, `rate_id` và `warnings`. Mô tả
+`candidates_requested`, `candidates` (mỗi ứng viên có `number` là số thứ tự từ 1
+trong tên file, `index` của Fish, `id`, `path`, `bytes`, `sha256`,
+`signature_ok`, `sample_rate_hz`, `duration_s` và `problems`),
+`estimated_cost_usd`, `rate_id` và `warnings`. Mô tả
 giọng chỉ được ghi dưới dạng độ dài và hash.
 
 ## Voice model
@@ -191,19 +191,19 @@ multix fish voices get <voice-id>
 ```bash
 multix fish voices create --title "Giọng dẫn chuyện" --sample take1.wav --sample take2.mp3 --consent
 multix fish voices create --title "Giọng đã thiết kế" --sample fish_voice_design_<stamp>_1.wav \
-  --voice-design-signature <signature> --visibility unlist --consent
+  --visibility unlist --consent
 ```
 
 Bắt buộc có `--consent`: chỉ clone giọng của chính bạn hoặc giọng bạn đã được
 người nói cho phép clone. Truyền 1 đến 20 file `--sample` (`.wav`, `.mp3`,
 `.m4a` hoặc `.opus`, mỗi file tối đa 50 MB); phần mở rộng phải khớp với header
-audio của file. Các flag khác:
+audio của file (file không có phần mở rộng được nhận dạng chỉ theo header). Các flag khác:
 
 | Flag | Ý nghĩa |
 | --- | --- |
 | `--title <name>` | Bắt buộc, 1 đến 200 ký tự. |
 | `--transcript <text>` | Nội dung một sample nói, mỗi `--sample` một transcript theo đúng thứ tự; bỏ hết để Fish tự phiên âm. |
-| `--voice-design-signature <sig>` | Mỗi `--sample` một signature theo đúng thứ tự, lấy từ `fish voice-design`. |
+| `--voice-design-signature <sig>` | Mỗi `--sample` một signature theo đúng thứ tự: signature voice design mà Fish cấp cho audio đó. Fish từ chối request nếu một signature không hợp lệ. Response của voice design không mô tả trường này, nên `fish voice-design` không báo signature nào. |
 | `--description <text>`, `--tag <tag>` | Metadata; `--tag` lặp lại được. |
 | `--visibility <v>` | `private` (mặc định) hoặc `unlist`. `public` bị từ chối khi tạo. |
 | `--no-enhance-audio-quality` | Không làm sạch sample trước khi clone. |

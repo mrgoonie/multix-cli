@@ -7323,12 +7323,13 @@
             {
               "long": "--count",
               "flags": "--count <n>",
-              "description": "Candidates to generate, 1 to 4 (Fish default 2)",
+              "description": "Candidates to generate, 1 to 4",
               "required": false,
               "takesValue": true,
               "valueOptional": false,
               "variadic": false,
-              "negatable": false
+              "negatable": false,
+              "default": "2"
             },
             {
               "long": "--speed",

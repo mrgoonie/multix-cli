@@ -50,8 +50,10 @@ function voiceId(id: string): string {
 /** Read and check one sample file: known extension, matching audio header, size cap. */
 export function readFishSample(file: string): FishVoiceSample {
   const resolved = path.resolve(file);
-  const type = SAMPLE_TYPES[path.extname(resolved).toLowerCase()];
-  if (!type) {
+  const ext = path.extname(resolved).toLowerCase();
+  const named = SAMPLE_TYPES[ext];
+  // A file with no extension (a downloaded signed URL) is typed by its bytes alone.
+  if (!named && ext !== "") {
     throw new ValidationError(
       `--sample ${file}: Fish takes ${Object.keys(SAMPLE_TYPES).join(", ")} files`,
     );
@@ -65,12 +67,18 @@ export function readFishSample(file: string): FishVoiceSample {
   }
   const bytes = new Uint8Array(fs.readFileSync(resolved));
   const sniffed = sniffAudioKind(bytes);
-  if (sniffed !== type.kind) {
+  const type = named ?? Object.values(SAMPLE_TYPES).find((t) => t.kind === sniffed);
+  if (!type || sniffed !== type.kind) {
     throw new ValidationError(
-      `--sample ${file} is named ${path.extname(resolved)} but its bytes ${sniffed ? `are ${sniffed}` : "have no known audio header"}`,
+      named
+        ? `--sample ${file} is named ${ext} but its bytes ${sniffed ? `are ${sniffed}` : "have no known audio header"}`
+        : `--sample ${file} has no extension and its bytes are not wav, mp3, m4a or opus audio`,
     );
   }
-  return { name: path.basename(resolved), bytes, mime: type.mime };
+  const name = named
+    ? path.basename(resolved)
+    : `${path.basename(resolved)}.${type.kind === "ogg" ? "opus" : type.kind}`;
+  return { name, bytes, mime: type.mime };
 }
 
 function visibility(value: string | undefined): FishVisibility | undefined {
