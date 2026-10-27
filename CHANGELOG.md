@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.22.0](https://github.com/mrgoonie/multix-cli/compare/v1.21.1...v1.22.0) (2026-10-27)
+
+
+### Added
+
+* **budget:** price speech generate on its gemini and elevenlabs routes ([764f2fa](https://github.com/mrgoonie/multix-cli/commit/764f2fa3e7f26312f56979449affb7f10c07d530))
+* **budget:** price speech generate on its gemini and elevenlabs routes ([0bbd998](https://github.com/mrgoonie/multix-cli/commit/0bbd9983c0c717a04363475c92d8c0a4ca5930c4)), closes [#344](https://github.com/mrgoonie/multix-cli/issues/344)
+* **budget:** price speech generate on its gemini and elevenlabs routes ([#355](https://github.com/mrgoonie/multix-cli/issues/355)) ([764f2fa](https://github.com/mrgoonie/multix-cli/commit/764f2fa3e7f26312f56979449affb7f10c07d530))
+* **fish:** add native Fish Audio TTS with Drama 3, multi-speaker and dictionaries ([c955217](https://github.com/mrgoonie/multix-cli/commit/c9552173963d5bcef83c19ae17db5bb1124809f4)), closes [#357](https://github.com/mrgoonie/multix-cli/issues/357)
+* **fish:** add voice design, voice cloning and voice deletion ([#360](https://github.com/mrgoonie/multix-cli/issues/360)) ([c3cc2fb](https://github.com/mrgoonie/multix-cli/commit/c3cc2fbe13d7e61c116704eab2c36f8b19635035))
+
+
+### Fixed
+
+* **agent:** do not drop spend keys like *_credits_used as balances ([#343](https://github.com/mrgoonie/multix-cli/issues/343)) ([da269f5](https://github.com/mrgoonie/multix-cli/commit/da269f57a80114caf88bfeb0479fd18d6166d780))
+* **budget:** speak the priced --text-file and bound fallback ranges per route ([1c95848](https://github.com/mrgoonie/multix-cli/commit/1c958480a51d4ac9c4f4db84da92a94e8450eab6)), closes [#344](https://github.com/mrgoonie/multix-cli/issues/344)
+* **openrouter:** price Fish Audio TTS models per UTF-8 byte ([6a96c42](https://github.com/mrgoonie/multix-cli/commit/6a96c427f36d5adaa5b4262637571311bdf969e0)), closes [#357](https://github.com/mrgoonie/multix-cli/issues/357)
+* **scene:** give bare punctuation and tags words to go with when splitting ([d6e8d86](https://github.com/mrgoonie/multix-cli/commit/d6e8d86e61103f96d87cd2ff3673ca72855ebac5)), closes [#347](https://github.com/mrgoonie/multix-cli/issues/347)
+* **scene:** keep tags with spoken text in unspaced lines and join bare parts ([3977bac](https://github.com/mrgoonie/multix-cli/commit/3977bace972480605a536c83d9cc50b8ee822158)), closes [#347](https://github.com/mrgoonie/multix-cli/issues/347)
+* **scene:** move the last spoken word, not a trailing "?" or tag, into a bare part ([f60c46c](https://github.com/mrgoonie/multix-cli/commit/f60c46c4a49cc53d25dd1aecdf7bff178704da36))
+* **scene:** never send a markup tag as its own part when splitting a line ([6932a54](https://github.com/mrgoonie/multix-cli/commit/6932a54b9e0140739c059d26be9d980e63f624ba)), closes [#347](https://github.com/mrgoonie/multix-cli/issues/347)
+* **scene:** never send a markup tag as its own part when splitting a long line ([9aae371](https://github.com/mrgoonie/multix-cli/commit/9aae3719406aea790bdc92b740633848d7041eb5))
+* **scene:** never send a markup tag as its own part when splitting a long line ([#354](https://github.com/mrgoonie/multix-cli/issues/354)) ([9aae371](https://github.com/mrgoonie/multix-cli/commit/9aae3719406aea790bdc92b740633848d7041eb5))
+
 ## [1.21.1](https://github.com/mrgoonie/multix-cli/compare/v1.21.0...v1.21.1) (2026-10-26)
 
 
