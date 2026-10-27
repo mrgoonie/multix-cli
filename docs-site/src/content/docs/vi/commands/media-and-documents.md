@@ -87,8 +87,11 @@ video stream đầu tiên: codec, kích thước, kích thước hiển thị sa
 rotation và tỉ lệ khung điểm ảnh (SAR), góc xoay, frame rate dạng phân số,
 time base và frame rate có thay đổi hay không. Giá trị không xác định là
 `null`. File văn bản (trang lỗi hoặc playlist lưu với đuôi media) được báo
-đúng là văn bản và không bao giờ được đưa vào `ffprobe`. `--decode` giải mã
-toàn bộ file và đếm số lỗi giải mã.
+đúng là văn bản và không bao giờ được đưa vào `ffprobe`. Với WAV, `wav_data`
+so số byte mẫu mà chunk `data` khai báo với số byte thực có và đánh dấu
+`truncated` khi file ngắn hơn; lỗi này cũng nằm trong `errors` và khiến lệnh
+thoát với mã khác 0 (`null` với định dạng khác và với WAV không khai báo độ
+dài). `--decode` giải mã toàn bộ file và đếm số lỗi giải mã.
 
 ### Verify
 
@@ -114,6 +117,18 @@ kết thúc trước tiếng, cùng các kỳ vọng bạn truyền vào: `--exp
 (`--loudness-tolerance`). Loudness chỉ được kiểm tra khi bạn truyền mục tiêu;
 không có sẵn mục tiêu của nền tảng nào. Mỗi check ghi lại ngưỡng, giá trị đo
 được và các phát hiện kèm `start_s`/`end_s`.
+
+Check `decode` fail khi file giải mã ra ngắn hơn độ dài container khai báo.
+ffprobe tính độ dài WAV từ số byte có trong file, nên với WAV check này so số
+byte mẫu mà header của chunk `data` khai báo với số byte thực có
+(`measured.declared_data_bytes` và `present_data_bytes`); kích thước RIFF cũng
+phải vượt quá file, nên header chỉ đếm sai kích thước data không làm fail một
+file đầy đủ. Các stream thô không
+khai báo độ dài, như ac3 hoặc AAC thô và mp3 không có header Xing, có thời
+lượng do ffprobe ước tính từ bitrate; biên nhận ghi rõ điều này bằng
+`measured.declared_duration_estimated: true`, và không thể phát hiện việc bị
+cắt đúng ranh giới frame ở những stream đó. WAV ghi qua pipe hoặc stream (kích
+thước 0, 0xFFFFFFFF hoặc 0x7FFFF000) cũng không khai báo độ dài.
 
 Khai báo các đoạn fade, giữ hình và khoảng lặng có chủ ý bằng các khoảng lặp
 lại được `--allow-black`, `--allow-freeze` và `--allow-silence <start-end>`

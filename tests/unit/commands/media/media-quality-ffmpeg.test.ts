@@ -94,6 +94,31 @@ describe.skipIf(!hasFfmpeg)("media quality with ffmpeg", { timeout: 60_000 }, ()
     ff("-f", "lavfi", "-i", "sine=d=6", "-c:a", "libmp3lame", f("xing.mp3"));
     const mp3 = fs.readFileSync(f("xing.mp3"));
     fs.writeFileSync(f("trunc.mp3"), mp3.subarray(0, Math.floor(mp3.length / 2)));
+    // A WAV cut on a sample boundary: ffprobe sizes it from the bytes present, only the
+    // data chunk header still declares 4 s. A piped WAV declares no length at all.
+    ff("-f", "lavfi", "-i", "sine=d=4", f("tone.wav"));
+    const pcm = fs.readFileSync(f("tone.wav"));
+    fs.writeFileSync(f("trunc.wav"), pcm.subarray(0, pcm.length - 4 * 44100));
+    fs.writeFileSync(
+      f("piped.wav"),
+      execFileSync("ffmpeg", [
+        "-nostdin",
+        "-loglevel",
+        "error",
+        "-f",
+        "lavfi",
+        "-i",
+        "sine=d=2",
+        "-f",
+        "wav",
+        "-",
+      ]),
+    );
+    // Raw ac3 declares no length: one cut on a frame boundary is not detectable.
+    // At 48 kHz and 192 kb/s every ac3 frame is 768 bytes.
+    ff("-f", "lavfi", "-i", "sine=d=4:r=48000", "-b:a", "192k", f("tone.ac3"));
+    const ac3 = fs.readFileSync(f("tone.ac3"));
+    fs.writeFileSync(f("trunc.ac3"), ac3.subarray(0, 768 * Math.floor(ac3.length / 768 / 2)));
     // Matroska keeps stream lengths only in DURATION tags.
     ff("-i", f("short-video.mp4"), "-c", "copy", f("short-video.mkv"));
   });
@@ -354,6 +379,36 @@ describe.skipIf(!hasFfmpeg)("media quality with ffmpeg", { timeout: 60_000 }, ()
       const r = await verifyMedia(f("trunc.mp3"), { profile: builtinProfile("audio") });
       expect(r.status).toBe("fail");
       expect(check(r, "decode").status).toBe("fail");
+    });
+
+    it("fails a WAV whose data chunk declares more sample bytes than the file holds", async () => {
+      const audio = builtinProfile("audio");
+      const whole = await verifyMedia(f("tone.wav"), { profile: audio });
+      expect(check(whole, "decode").status).toBe("pass");
+      const r = await verifyMedia(f("trunc.wav"), { profile: audio });
+      expect(r.status).toBe("fail");
+      const decode = check(r, "decode");
+      expect(decode.status).toBe("fail");
+      expect(decode.reason).toMatch(
+        /WAV data chunk declares \d+ bytes but the file holds \d+ \(truncated\)/,
+      );
+      expect(decode.measured).toMatchObject({
+        declared_data_bytes: 4 * 44100 * 2,
+        present_data_bytes: 4 * 44100 * 2 - 4 * 44100,
+      });
+      const report = await inspectMedia(f("trunc.wav"));
+      expect(report.ok).toBe(false);
+      expect(report.wav_data).toMatchObject({ truncated: true });
+      // A WAV piped out of ffmpeg declares no length, so nothing is claimed either way.
+      const piped = await verifyMedia(f("piped.wav"), { profile: audio });
+      expect(check(piped, "decode").status).toBe("pass");
+      expect((await inspectMedia(f("piped.wav"))).wav_data).toBeNull();
+    });
+
+    it("keeps marking raw streams whose truncation cannot be seen as estimated", async () => {
+      const r = await verifyMedia(f("trunc.ac3"), { profile: builtinProfile("audio") });
+      expect(check(r, "decode").status).toBe("pass");
+      expect(check(r, "decode").measured).toMatchObject({ declared_duration_estimated: true });
     });
 
     it("does not call a file truncated from durations it did not decode or that are estimates", async () => {
