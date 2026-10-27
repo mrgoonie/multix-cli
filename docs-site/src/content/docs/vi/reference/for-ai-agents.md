@@ -113,8 +113,9 @@ https://multix.zuey.me/llms.txt
 | 1 | không rõ | `UNKNOWN` | Đọc `log[]` (các dòng stderr cuối). |
 
 Các nhóm exit code này áp dụng ở agent mode (`--json` hoặc `MULTIX_OUTPUT=json`).
-Không có chế độ đó, lệnh lỗi vẫn exit 1 như các phiên bản trước (lần chạy bị hủy
-giữ exit 128 + số hiệu signal ở cả hai chế độ) và in thêm các
+Không có chế độ đó, lệnh lỗi exit 1 như các phiên bản trước, trừ khi lệnh tự đặt
+exit code riêng (lần chạy bị hủy giữ exit 128 + số hiệu signal ở cả hai chế độ), và
+in thêm các
 dòng `code:`, `hint:` và `next:` ra stderr. Ledger lịch sử luôn ghi mã lỗi.
 
 ## Chi phí: ước tính, giới hạn chi tiêu và biên nhận

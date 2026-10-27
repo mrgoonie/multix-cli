@@ -113,8 +113,9 @@ https://multix.zuey.me/llms.txt
 | 1 | unknown | `UNKNOWN` | Read `log[]` (last stderr lines). |
 
 These exit classes apply in agent mode (`--json` or `MULTIX_OUTPUT=json`).
-Without it a failed command still exits 1, as in earlier versions (a cancelled
-run keeps its 128 + signal status in both modes), and prints
+Without it a failed command exits 1, as in earlier versions, unless the command
+set its own status (a cancelled run keeps its 128 + signal status in both modes),
+and prints
 `code:`, `hint:` and `next:` lines on stderr. The history ledger records the
 error code either way.
 
