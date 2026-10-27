@@ -84,7 +84,8 @@ its most expensive route) are priced so far; `--max-cost`
 refuses anything it cannot price. With `--json`, exit codes are `2` usage or
 input (including a refused `--max-cost`), `3` key or setup, `4` temporary
 (retry), `5` rejected (quota, safety, model), `6` timed out (job may still run),
-`129`/`130`/`143` cancelled by a signal (`CANCELLED`, also in plain runs), `1` unknown; plain runs exit 1 (or the command's own status) and print the code and hint on
+`129`/`130`/`143` cancelled by a signal (`CANCELLED`, also in plain runs; a
+second signal skips cleanup and prints no result), `1` unknown; plain runs exit 1 (or the command's own status) and print the code and hint on
 stderr. Each run is recorded in `~/.multix/history.jsonl` without keys or signed
 URLs (`MULTIX_HISTORY=0` turns it off). Details:
 [For AI agents](https://multix.zuey.me/reference/for-ai-agents/).
@@ -703,7 +704,7 @@ multix atlas upload ./photo.png
 - Inputs are model-specific. multix reads each model's published schema, maps flags onto that model's field names, and rejects unsupported flags or invalid values before submitting. Use `--no-validate` to skip this check.
 - `--async` prints only the prediction id on stdout and `upload` prints only the URL; progress goes to stderr, so `id=$(multix atlas video "waves" --async)` works.
 - `--ref` takes one value per flag; repeat it for several references. Local `--ref` / `--audio` files are uploaded first: only image, video and audio files, up to 200 MB (`ATLASCLOUD_MAX_UPLOAD_MB`).
-- Text outputs (transcripts, lyrics) are printed instead of downloaded. A failed prediction, or a download where some outputs fail, exits non-zero with the resume command (including your `--output`). Ctrl-C or SIGTERM while waiting exits 130 or 143 with that resume command (first in `next` with `--json`, the id in `provider_ids`): the prediction keeps running and is billed, so resume it rather than rerunning. Atlas Cloud has no cancel endpoint.
+- Text outputs (transcripts, lyrics) are printed instead of downloaded. A failed prediction, or a download where some outputs fail, exits non-zero with the resume command (including your `--output`). Ctrl-C, SIGTERM or a closed terminal (SIGHUP) while waiting, in a generation command or in `status --wait`, exits 130, 143 or 129 with that resume command (first in `next` with `--json`, the id in `provider_ids`): the prediction keeps running and is billed, so resume it rather than rerunning. A signal while the submit request is in flight cannot tell whether Atlas Cloud accepted it: check your predictions in the Atlas Cloud console before resubmitting. A signal while local `--ref` / `--audio` files upload is a clean cancel; nothing was submitted. Atlas Cloud has no cancel endpoint.
 - `run --no-validate` skips the schema, so pass `--type` with it.
 
 ### `multix replicate`

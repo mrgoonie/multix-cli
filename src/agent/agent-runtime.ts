@@ -240,6 +240,13 @@ export function finalizeRun(input: FinalizeInput): number {
       retryable: false,
       hint: `Job ${inFlight.id} was submitted before the run stopped; it runs on (or has finished) and is billed. Do not rerun; resume it with the next command.`,
     };
+  } else if (
+    info &&
+    run.interrupted &&
+    input.error === undefined &&
+    SIGNAL_EXITS.has(input.exitCode)
+  ) {
+    info = { ...info, ...run.interrupted };
   }
   // Exit classes (2-6) are part of agent mode; plain runs keep the historical exit 1.
   // An unclassified failure keeps the command's own status in both modes.

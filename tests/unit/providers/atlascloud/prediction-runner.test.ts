@@ -259,6 +259,42 @@ describe("executePrediction (mocked submit -> poll -> saved output)", () => {
     run.ids = [];
   });
 
+  it("a signal during the submit records that the prediction may exist, then exits", async () => {
+    const { client, calls } = createFakeAtlas({
+      "POST /model/generateImage": { body: prediction("sub01", "processing") },
+    });
+    vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const exits: number[] = [];
+    const signals = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
+    const before = signals.map((s) => process.listenerCount(s));
+    const origSubmit = client.submit.bind(client);
+    vi.spyOn(client, "submit").mockImplementation(async (...a) => {
+      (process.listeners("SIGTERM").at(-1) as (s: string) => void)("SIGTERM");
+      return origSubmit(...a);
+    });
+    const res = executePrediction({
+      client,
+      logger,
+      kind: "image",
+      model: "m/x",
+      body: { prompt: "x" },
+      opts: {},
+      defaultWaitTimeoutMs: 60_000,
+      exit: (code) => {
+        exits.push(code);
+        throw new Error("exited");
+      },
+    });
+    await expect(res).rejects.toThrow("exited");
+    expect(exits).toEqual([143]);
+    expect(run.interrupted).toMatchObject({ retryable: false });
+    expect(run.interrupted?.hint).toContain("may have accepted");
+    expect(run.inFlight).toBeUndefined();
+    expect(calls.filter((c) => c.method === "POST")).toHaveLength(0);
+    expect(signals.map((s) => process.listenerCount(s))).toEqual(before);
+    run.interrupted = undefined;
+  });
+
   it("resumeCommand adds --output only when given, quoting it when needed", () => {
     expect(resumeCommand("p1")).toBe("multix atlas status p1 --wait --download");
     expect(resumeCommand("p1", "out/clip.mp4")).toBe(
@@ -656,7 +692,7 @@ describe("download hardening", () => {
     expect(savedOutput(path.join(tmp, "missing.mp4"))).toBeUndefined();
   });
 
-  it("the interrupt handler removes this run's locks and temp files, then exits 130/143", () => {
+  it("the interrupt handler removes this run's locks and temp files, then exits 129/130/143", () => {
     const file = path.join(tmp, "atlas-int01-01.mp4");
     expect(claimOutputPath(file, "reuse")).toBe(file);
     const temp = `${file}.${process.pid}-1700000000000-k3x9qa.part`;
@@ -670,6 +706,13 @@ describe("download hardening", () => {
     claimOutputPath(file, "reuse");
     handleInterrupt("SIGTERM", exit);
     expect(exit).toHaveBeenLastCalledWith(143);
+    expect(fs.readdirSync(tmp)).toEqual(["keep.mp4"]);
+
+    // A closed terminal (SIGHUP) cleans up the same way.
+    claimOutputPath(file, "reuse");
+    expect(process.listenerCount("SIGHUP")).toBeGreaterThan(0);
+    handleInterrupt("SIGHUP", exit);
+    expect(exit).toHaveBeenLastCalledWith(129);
     expect(fs.readdirSync(tmp)).toEqual(["keep.mp4"]);
   });
 
