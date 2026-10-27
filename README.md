@@ -47,6 +47,9 @@ multix doc convert --input report.pdf
 
 # Optimize a video to 100MB
 multix media optimize --input video.mp4 --output out.mp4 --target-size 100
+
+# Check a render offline (no upload, no key) and keep the receipt
+multix media verify out.mp4 --profile motion-graphics --receipt-out out.receipt.json
 ```
 
 ## For AI agents
@@ -874,6 +877,30 @@ multix media batch --input-dir <dir> --output-dir <dir> [--quality 85] [--max-wi
 **Defaults:** quality=85, max-width=1920, bitrate=64k, chunk-duration=3600s.
 **Audio:** mono 16 kHz; the codec follows the output extension (`.mp3` → MP3, `.m4a`/`.aac`/`.mp4`/`.mka`/`.mkv`/`.mov` → AAC, `.opus`/`.ogg` → Opus, `.wav`/`.aiff` → PCM, `.flac` → FLAC); other extensions are rejected. Embedded cover art is dropped.
 **Video:** uses libx264 CRF encoding. Image optimization uses ImageMagick (replaces Pillow).
+
+#### Inspect and verify media offline
+
+These commands run locally with `ffmpeg` and `ffprobe` only: no upload, no provider call, no API key (missing ffmpeg stops with `BINARY_MISSING`). Inputs must be local paths; URLs and ffmpeg protocols (`concat:`, `pipe:`) are refused, symlinks are followed and reported.
+
+```bash
+multix media inspect <file> [--decode] [--timeout 1800]        # sha256, magic bytes vs extension, streams, rational fps/timebase, rotation
+multix media profiles                                          # built-in profiles: motion-graphics, camera-footage, thumbnail, audio
+multix media verify <file> --profile <id> | --profile-file <json> \
+  [--expect-duration <s>] [--duration-tolerance <s>] [--expect-aspect 16:9] [--aspect-tolerance 0.01] \
+  [--loudness <LUFS>] [--loudness-tolerance 1] \
+  [--allow-black <start-end>] [--allow-freeze <start-end>] [--allow-silence <start-end>] \
+  [--rule <script>] [--rule-timeout 30] [--cache-dir <dir>] [--receipt-out <file>] [--timeout 1800]
+multix media frames <file> --output-dir <dir> [--count 9] [--sheet] [--sheet-width 320] [--timeout 300]
+multix media check-receipt <receipt> <file>                    # same bytes as the receipt, and the receipt passed
+```
+
+- `verify` prints a `multix.media-verify/v1` receipt bound to the file's sha256 with status `pass`, `fail` or `incomplete` and exits non-zero unless it passes. Each check records its threshold, measured values and findings with `start_s`/`end_s`. Declare intended fades, holds and silences with the repeatable `--allow-*` ranges; they are reported as intentional instead of failing. Loudness is checked only when `--loudness` is given; no platform targets are built in.
+- A timeout, Ctrl-C, a failed `--rule` or a file that changed during the run gives `incomplete`, never `pass`. Receipts state `model_reviewed: false` and list what was not measured (A/V sync, content correctness).
+- Custom profile JSON: `{id, version, description?, extends?, media?, checks}`; `extends` names a built-in profile and `null` disables a check. A `--rule` script reads `multix.media-rule-input/v1` JSON on stdin and prints `{id, version, status, message?, findings?}`; it runs without a shell, with only `PATH` in its environment, in an empty temp directory.
+- `--cache-dir` reuses passing and failing receipts keyed by source sha256, profile, expectations, rules and ffmpeg version; delete the directory to clear it.
+- `frames` only extracts frames (manifest `frames.json`, `model_reviewed: false`). To have a model look at them, pass them to `multix gemini analyze`.
+- A transcoded or remuxed file has new bytes: run `verify` on the final file, then `check-receipt` before shipping it.
+- Remote MCP: `--rule`, `--cache-dir` and `--receipt-out` are not supported. Full reference: [Media and documents](https://multix.zuey.me/commands/media-and-documents/).
 
 ### `multix doc`
 

@@ -1,6 +1,6 @@
 ---
 name: multix
-description: AI multimodal CLI — generate and edit images (OpenAI, Codex driver, Gemini Nano Banana, Imagen, MiniMax, OpenRouter, Leonardo, BytePlus Seedream, Cloudflare Workers AI FLUX.1 Schnell, fal.ai FLUX, Replicate FLUX, Runway Gen-4 Image), generate, edit and extend video (Gemini Omni Flash, plus legacy Gemini Veo), generate video (MiniMax Hailuo, OpenRouter via Veo/Seedance/Kling, Leonardo via Motion/Veo/Kling/Hailuo/Seedance/LTX, BytePlus Seedance, Cloudflare AI Gateway via Replicate, fal.ai queue models, Replicate direct API models incl. P-Video, Runway Gen-4.5 and Gen-4 Turbo, HeyGen Video Agent and scripted avatar videos), video translation and lipsync (HeyGen), TTS/STT/music (OpenAI, Gemini Flash TTS incl. Gemini 3.8 with delivery-style control, OpenRouter TTS (Gemini, ElevenLabs, Fish Audio, MiniMax routed) and STT (Whisper, GPT-4o transcribe, Gemini Transcribe, ElevenLabs Scribe, Voxtral, Deepgram, AssemblyAI routed), MiniMax, Cloudflare Workers AI MeloTTS, ElevenLabs, native Fish Audio Drama 3 TTS with multi-speaker turns and pronunciation dictionaries), multi-character dialogue audio with per-character voice profiles, cached per-line takes and stem export (multix scene), 3D models (BytePlus Hyper3D/Hitem3d), analyze/transcribe media, convert documents to Markdown, optimize media via ffmpeg/ImageMagick, and self-update the CLI. Use whenever the user wants to create, edit, or transform images/video/audio/3D/documents from a CLI, mentions any of: OpenAI, Codex image driver, image-to-image, i2i, image edit, watercolor/cyberpunk style transfer, reference image, OpenRouter, Nano Banana, Flux, Seedream, Gemini Omni, Omni Flash, Veo, Hailuo, Seedance, Kling, Cloudflare Workers AI, AI Gateway, fal.ai, Atlas Cloud, Replicate, replicate.com models, Replicate predictions, Runway, Gen-4.5, Gen-4 Turbo, Gen-4 Image, HeyGen, Fish Audio, Drama 3, avatar video, talking head, Video Agent, video translation, dubbing, lipsync, video generation, text-to-video, image-to-video, i2v, ElevenLabs voice cloning, updating/upgrading multix, or asks for batch media optimization.
+description: AI multimodal CLI — generate and edit images (OpenAI, Codex driver, Gemini Nano Banana, Imagen, MiniMax, OpenRouter, Leonardo, BytePlus Seedream, Cloudflare Workers AI FLUX.1 Schnell, fal.ai FLUX, Replicate FLUX, Runway Gen-4 Image), generate, edit and extend video (Gemini Omni Flash, plus legacy Gemini Veo), generate video (MiniMax Hailuo, OpenRouter via Veo/Seedance/Kling, Leonardo via Motion/Veo/Kling/Hailuo/Seedance/LTX, BytePlus Seedance, Cloudflare AI Gateway via Replicate, fal.ai queue models, Replicate direct API models incl. P-Video, Runway Gen-4.5 and Gen-4 Turbo, HeyGen Video Agent and scripted avatar videos), video translation and lipsync (HeyGen), TTS/STT/music (OpenAI, Gemini Flash TTS incl. Gemini 3.8 with delivery-style control, OpenRouter TTS (Gemini, ElevenLabs, Fish Audio, MiniMax routed) and STT (Whisper, GPT-4o transcribe, Gemini Transcribe, ElevenLabs Scribe, Voxtral, Deepgram, AssemblyAI routed), MiniMax, Cloudflare Workers AI MeloTTS, ElevenLabs, native Fish Audio Drama 3 TTS with multi-speaker turns and pronunciation dictionaries), multi-character dialogue audio with per-character voice profiles, cached per-line takes and stem export (multix scene), 3D models (BytePlus Hyper3D/Hitem3d), analyze/transcribe media, convert documents to Markdown, optimize media via ffmpeg/ImageMagick, inspect and verify media offline with sha256-bound QA receipts, and self-update the CLI. Use whenever the user wants to create, edit, or transform images/video/audio/3D/documents from a CLI, mentions any of: OpenAI, Codex image driver, image-to-image, i2i, image edit, watercolor/cyberpunk style transfer, reference image, OpenRouter, Nano Banana, Flux, Seedream, Gemini Omni, Omni Flash, Veo, Hailuo, Seedance, Kling, Cloudflare Workers AI, AI Gateway, fal.ai, Atlas Cloud, Replicate, replicate.com models, Replicate predictions, Runway, Gen-4.5, Gen-4 Turbo, Gen-4 Image, HeyGen, Fish Audio, Drama 3, avatar video, talking head, Video Agent, video translation, dubbing, lipsync, video generation, text-to-video, image-to-video, i2v, ElevenLabs voice cloning, updating/upgrading multix, or asks for batch media optimization.
 version: 1.22.0-beta.1 # x-release-please-version
 ---
 
@@ -44,6 +44,7 @@ Activate this skill when the user asks to:
 - Analyze, transcribe, or extract structured data from media/docs
 - Convert PDFs / DOCX / images to Markdown
 - Optimize, resize, batch-convert, or split video/audio/image files
+- Inspect a media file or QA it offline against a profile (black/frozen frames, silence, clipping, duration, aspect) with a sha256-bound receipt (`multix media inspect|verify|check-receipt`)
 - Run any fal.ai model (generic queue-API runner), or fal.ai's default image/video models and text-to-speech (Gemini 3.8 Flash/Flash-Lite TTS, ElevenLabs v4/v4 Turbo) with typed inputs
 - Run any Atlas Cloud model (image, image edit, video, TTS/STT, 3D) with schema-validated inputs and resumable async predictions
 - Run any Replicate model (official or versioned) via the direct API, generate Replicate images/video, or resume/cancel a Replicate prediction by id
@@ -528,6 +529,28 @@ multix media optimize --input voice.wav --output voice.mp3 [--bitrate 64k]   # a
 multix media split --input <video> [--chunk-duration 3600]
 multix media batch --input-dir <dir> --output-dir <dir>
 ```
+
+### Inspect and verify media offline (`media inspect|verify|frames|check-receipt|profiles`)
+
+Local only (ffmpeg + ffprobe): no upload, no provider call, no key, no cost. Local paths only (URLs, `concat:`, `pipe:` refused). Missing ffmpeg = `BINARY_MISSING`.
+
+```bash
+multix media inspect out.mp4 [--decode] --json      # sha256, magic bytes vs extension, streams, rational fps/timebase, rotation; unknown = null
+multix media profiles --json                        # motion-graphics, camera-footage, thumbnail (image), audio — versioned thresholds
+multix media verify out.mp4 --profile motion-graphics [--expect-duration 12] [--expect-aspect 9:16] \
+  [--allow-black 0-0.5] [--allow-freeze 10-12] [--allow-silence 0-1] [--loudness -14] --receipt-out out.receipt.json --json
+multix media frames out.mp4 --output-dir ./frames [--count 9] [--sheet]    # extraction only; frames.json manifest
+multix media check-receipt out.receipt.json final.mp4                     # same bytes AND receipt passed
+```
+
+- Use `inspect` to see what a file really is before acting on it (an HTML error page saved as `.mp4` reports text, not media). Use `verify` before handing a generated or edited file to the user.
+- Receipt (`data`, `multix.media-verify/v1`): `status` pass|fail|incomplete (exit non-zero unless pass). Read `checks[]` (`status`, `threshold`, `measured`, `findings[].start_s/end_s`), `summary`, `not_measured[]`. `incomplete` (timeout, Ctrl-C, unmeasured check, failed rule, file changed mid-run) is never a pass: rerun, do not report success.
+- A receipt is not a content review: `coverage.model_reviewed: false`; A/V sync and content correctness are in `not_measured`. To have a model look, run `media frames`, then pass the frames to `multix gemini analyze` explicitly.
+- Intended fades, holds and silences: declare them with `--allow-black|--allow-freeze|--allow-silence <start-end>` (seconds, repeatable) so they are reported as intentional; do not widen ranges to hide real defects.
+- Loudness is checked only with `--loudness <LUFS>`; there are no built-in platform targets, so pass the target the user asked for.
+- Custom profile: `--profile-file` JSON `{id, version, extends?, media?, checks}` (`null` disables a check). Custom rule: `--rule <script>` reads `multix.media-rule-input/v1` on stdin, prints `{id, version, status: pass|fail|warn|unknown, message?, findings?}`; no shell, only `PATH` in env, 30 s default (`--rule-timeout`).
+- After transcode/optimize/remux the bytes change: verify the final file, then `check-receipt` it. Never reuse a source receipt for a derived file.
+- `--cache-dir` reuses non-incomplete receipts for identical bytes, profile, expectations, rules and ffmpeg version. Remote MCP: no `--rule`, `--cache-dir`, `--receipt-out`.
 
 ## Output
 

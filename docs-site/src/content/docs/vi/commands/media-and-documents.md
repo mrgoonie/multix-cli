@@ -1,6 +1,6 @@
 ---
 title: Media và tài liệu
-description: Tối ưu media bằng tool local và chuyển tài liệu sang Markdown với Gemini.
+description: Tối ưu, kiểm tra và xác minh media bằng tool local, chuyển tài liệu sang Markdown với Gemini.
 ---
 
 ## Điều kiện tiên quyết
@@ -60,6 +60,120 @@ multix media optimize --input photo.png --output photo.webp --quality 85 --max-w
 multix media split --input long-video.mp4 --chunk-duration 3600
 multix media batch --input-dir ./source --output-dir ./optimized
 ```
+
+## Kiểm tra và xác minh media
+
+`media inspect`, `verify`, `frames`, `check-receipt` và `profiles` chạy
+offline: không upload gì, không gọi provider nào và không cần API key. Các
+lệnh này cần `ffmpeg` và `ffprobe` trên `PATH` (không dùng ImageMagick); nếu
+thiếu, lệnh dừng với `BINARY_MISSING` kèm gợi ý cài đặt. Input phải là đường
+dẫn local: URL và giao thức ffmpeg như `concat:` hay `pipe:` bị từ chối, còn
+symlink được đi theo và ghi lại trong báo cáo.
+
+```bash
+multix media inspect clip.mp4 --decode
+multix media profiles
+multix media verify clip.mp4 --profile motion-graphics --expect-aspect 16:9 \
+  --allow-black 0-1 --receipt-out clip.receipt.json
+multix media frames clip.mp4 --output-dir ./frames --count 9 --sheet
+multix media check-receipt clip.receipt.json clip.mp4
+```
+
+### Inspect
+
+`media inspect` chỉ đọc. Lệnh báo cáo sha256 và kích thước file, container
+nhận diện từ magic bytes và đuôi file có khớp hay không, các stream, và với
+video stream đầu tiên: codec, kích thước, kích thước hiển thị sau khi áp dụng
+rotation và tỉ lệ khung điểm ảnh (SAR), góc xoay, frame rate dạng phân số,
+time base và frame rate có thay đổi hay không. Giá trị không xác định là
+`null`. File văn bản (trang lỗi hoặc playlist lưu với đuôi media) được báo
+đúng là văn bản và không bao giờ được đưa vào `ffprobe`. `--decode` giải mã
+toàn bộ file và đếm số lỗi giải mã.
+
+### Verify
+
+`media verify` kiểm tra file theo một profile có phiên bản và in ra biên nhận
+(`multix.media-verify/v1`) gắn với sha256 của file, với trạng thái `pass`,
+`fail` hoặc `incomplete`. Lệnh thoát với mã khác 0 trừ khi trạng thái là
+`pass`; với `--json`, biên nhận nằm trong `data` của envelope kết quả.
+`--receipt-out` ghi thêm biên nhận ra file.
+
+Các profile có sẵn (liệt kê bằng `multix media profiles`):
+
+| Profile | Media | Đánh giá |
+|---|---|---|
+| `motion-graphics` | video | Khoảng đen bị fail; chỉ cảnh đứng yên dài mới cảnh báo |
+| `camera-footage` | video | Khoảng đen và khung hình đứng yên trên 1 giây bị fail; thiếu audio và khoảng lặng dài thì cảnh báo |
+| `thumbnail` | ảnh | Phải giải mã được và không được trống |
+| `audio` | audio | Bắt buộc có audio stream; true peak từ 0 dBTP trở lên bị fail; khoảng lặng dài thì cảnh báo |
+
+Các check gồm loại media, tính toàn vẹn khi giải mã và file bị cắt cụt, khoảng
+đen và đứng hình, ảnh trống, khoảng lặng và clipping, cùng các kỳ vọng bạn
+truyền vào: `--expect-duration` (`--duration-tolerance`), `--expect-aspect` như
+`16:9`, `9:16` hoặc `1:1` (`--aspect-tolerance`), và `--loudness`
+(`--loudness-tolerance`). Loudness chỉ được kiểm tra khi bạn truyền mục tiêu;
+không có sẵn mục tiêu của nền tảng nào. Mỗi check ghi lại ngưỡng, giá trị đo
+được và các phát hiện kèm `start_s`/`end_s`.
+
+Khai báo các đoạn fade, giữ hình và khoảng lặng có chủ ý bằng các khoảng lặp
+lại được `--allow-black`, `--allow-freeze` và `--allow-silence <start-end>`
+(tính bằng giây). Phát hiện nằm trong các khoảng này được ghi là có chủ ý thay
+vì bị fail.
+
+Biên nhận không bao giờ khẳng định nhiều hơn những gì đã đo. `--timeout`,
+Ctrl-C, một check không đo được hoặc file bị thay đổi trong lúc chạy sẽ cho
+kết quả `incomplete`, không bao giờ là `pass`. `coverage.model_reviewed` luôn
+là `false`, và `not_measured` liệt kê những gì không được kiểm tra, như đồng
+bộ audio/video và tính đúng đắn của nội dung.
+
+Profile tùy chỉnh là một file JSON truyền bằng `--profile-file`:
+
+```json
+{
+  "id": "short-promo",
+  "version": 1,
+  "extends": "camera-footage",
+  "checks": { "freeze": null, "audio_required": "error" }
+}
+```
+
+`extends` chỉ định một profile có sẵn mà các check của nó được ghi đè từng cái
+một; `null` tắt một check. Nếu không có `extends`, hãy đặt `media` (`video`,
+`audio` hoặc `image`).
+
+`--rule <script>` (lặp lại được) thêm một check xác định của riêng bạn. Script
+đọc JSON `multix.media-rule-input/v1` từ stdin và in
+`{id, version, status, message?, findings?}` ra stdout, trong đó `status` là
+`pass`, `fail`, `warn` hoặc `unknown`. `.js`/`.mjs`/`.cjs` chạy bằng Node,
+`.py` bằng `python3 -I`, `.sh` bằng `sh`, các file khác được chạy trực tiếp.
+Rule chạy không qua shell, môi trường chỉ có `PATH` (không có API key), trong
+một thư mục tạm rỗng được xoá sau khi chạy, với `--rule-timeout` (mặc định
+30 giây) và giới hạn output 1 MB. Rule bị crash, quá thời gian hoặc in output
+không hợp lệ sẽ thành check `unknown` và biên nhận là `incomplete`.
+
+`--cache-dir <dir>` dùng lại biên nhận theo khoá gồm phiên bản engine verify
+và ffmpeg, sha256 của file nguồn, profile, các kỳ vọng và các script rule.
+Biên nhận `incomplete` không bao giờ được cache; xoá thư mục để làm sạch cache.
+
+### Frames
+
+`media frames` trích `--count` khung hình (mặc định 9) tại điểm giữa của các
+đoạn bằng nhau ra `frame-NNN.png`, tùy chọn thêm contact sheet `sheet.png`, và
+manifest `frames.json` gồm sha256 của file nguồn, time base và frame rate của
+stream, cùng timestamp và sha256 của từng khung hình. Lệnh từ chối thư mục
+output đã có sẵn các file này. Trích khung hình không phải là review: để một
+model xem chúng, hãy tự truyền chúng vào `multix gemini analyze`.
+
+### Kiểm tra biên nhận
+
+`media check-receipt <receipt> <file>` băm lại file và chỉ thành công khi đó
+đúng là các byte mà biên nhận đã đánh giá và biên nhận có trạng thái `pass`.
+Lệnh nhận biên nhận thuần hoặc envelope `--json`. File đã transcode, remux hoặc
+finalize có byte mới, nên hãy verify chính file cuối cùng trước khi kiểm tra
+biên nhận của nó.
+
+Trên [remote MCP server](/vi/guides/mcp-server/), `--rule`, `--cache-dir` và
+`--receipt-out` không được hỗ trợ.
 
 ## Chuyển tài liệu
 

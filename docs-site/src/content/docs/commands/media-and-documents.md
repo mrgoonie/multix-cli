@@ -1,6 +1,6 @@
 ---
 title: Media and documents
-description: Optimize media with local tooling and convert documents to Markdown with Gemini.
+description: Optimize, inspect and verify media with local tooling and convert documents to Markdown with Gemini.
 ---
 
 ## Prerequisites
@@ -62,6 +62,118 @@ multix media optimize --input voice.wav --output voice.mp3 --bitrate 64k
 multix media split --input long-video.mp4 --chunk-duration 3600
 multix media batch --input-dir ./source --output-dir ./optimized
 ```
+
+## Inspect and verify media
+
+`media inspect`, `verify`, `frames`, `check-receipt` and `profiles` run
+offline: nothing is uploaded, no provider is called and no API key is needed.
+They need `ffmpeg` and `ffprobe` on `PATH` (ImageMagick is not used); without
+them the command stops with `BINARY_MISSING` and an install hint. Inputs must
+be local paths: URLs and ffmpeg protocols such as `concat:` or `pipe:` are
+refused, and symlinks are followed and reported.
+
+```bash
+multix media inspect clip.mp4 --decode
+multix media profiles
+multix media verify clip.mp4 --profile motion-graphics --expect-aspect 16:9 \
+  --allow-black 0-1 --receipt-out clip.receipt.json
+multix media frames clip.mp4 --output-dir ./frames --count 9 --sheet
+multix media check-receipt clip.receipt.json clip.mp4
+```
+
+### Inspect
+
+`media inspect` is read-only. It reports the file's sha256 and size, the
+container sniffed from its magic bytes and whether the extension matches, the
+streams, and for the first video stream the codec, size, display size after
+rotation and sample aspect ratio, rotation, rational frame rates, time base
+and whether the frame rate is variable. Unknown values are `null`. A text file
+(an error page or playlist saved with a media extension) is reported as such
+and never passed to `ffprobe`. `--decode` decodes the whole file and counts
+decode errors.
+
+### Verify
+
+`media verify` checks a file against a versioned profile and prints a
+receipt (`multix.media-verify/v1`) bound to the file's sha256, with status
+`pass`, `fail` or `incomplete`. The command exits non-zero unless the status
+is `pass`; with `--json` the receipt is the `data` of the result envelope.
+`--receipt-out` also writes it to a file.
+
+Built-in profiles (list them with `multix media profiles`):
+
+| Profile | Media | Judges |
+|---|---|---|
+| `motion-graphics` | video | Black gaps fail; only long static holds warn |
+| `camera-footage` | video | Black gaps and frozen frames over 1 s fail; missing audio and long silences warn |
+| `thumbnail` | image | Must decode and must not be blank |
+| `audio` | audio | Audio stream required; true peak at 0 dBTP or above fails; long silences warn |
+
+Checks cover media kind, decode integrity and truncation, black and frozen
+ranges, blank images, silence and clipping, plus the expectations you pass:
+`--expect-duration` (`--duration-tolerance`), `--expect-aspect` such as `16:9`,
+`9:16` or `1:1` (`--aspect-tolerance`), and `--loudness` (`--loudness-tolerance`).
+Loudness is checked only when you pass a target; no platform targets are built
+in. Each check records its threshold, the measured values and findings with
+`start_s`/`end_s`.
+
+Declare intended fades, holds and silences with the repeatable
+`--allow-black`, `--allow-freeze` and `--allow-silence <start-end>` ranges (in
+seconds). Findings inside them are reported as intentional instead of failing.
+
+A receipt never claims more than was measured. A `--timeout`, Ctrl-C, an
+unmeasured check or a file that changed during the run makes it `incomplete`,
+never `pass`. `coverage.model_reviewed` is always `false`, and `not_measured`
+lists what was not checked, such as audio/video sync and content correctness.
+
+A custom profile is a JSON file passed with `--profile-file`:
+
+```json
+{
+  "id": "short-promo",
+  "version": 1,
+  "extends": "camera-footage",
+  "checks": { "freeze": null, "audio_required": "error" }
+}
+```
+
+`extends` names a built-in profile whose checks are overridden one by one;
+`null` disables a check. Without `extends`, set `media` (`video`, `audio` or
+`image`).
+
+`--rule <script>` (repeatable) adds a deterministic check of your own. The
+script reads `multix.media-rule-input/v1` JSON on stdin and prints
+`{id, version, status, message?, findings?}` on stdout, where `status` is
+`pass`, `fail`, `warn` or `unknown`. `.js`/`.mjs`/`.cjs` run with Node, `.py`
+with `python3 -I`, `.sh` with `sh`, anything else directly. Rules run without
+a shell, with only `PATH` in the environment (no API keys), in an empty
+temporary directory that is removed afterwards, with `--rule-timeout`
+(default 30 s) and a 1 MB output cap. A crash, timeout or invalid output
+becomes an `unknown` check and the receipt is `incomplete`.
+
+`--cache-dir <dir>` reuses receipts keyed by the verify engine and ffmpeg
+versions, the source sha256, the profile, the expectations and the rule
+scripts. Incomplete receipts are never cached; delete the directory to clear
+it.
+
+### Frames
+
+`media frames` extracts `--count` frames (default 9) at the midpoints of equal
+slices to `frame-NNN.png`, optionally a `sheet.png` contact sheet, and a
+`frames.json` manifest with the source sha256, the stream time base and frame
+rate, and each frame's timestamp and sha256. It refuses an output directory
+that already holds these files. Extracting frames is not a review: to have a
+model look at them, pass them to `multix gemini analyze` yourself.
+
+### Check a receipt
+
+`media check-receipt <receipt> <file>` re-hashes the file and succeeds only if
+it is the exact bytes the receipt judged and the receipt passed. It accepts a
+bare receipt or a `--json` envelope. A transcoded, remuxed or finalized file
+has new bytes, so verify the final file itself before checking its receipt.
+
+On the [remote MCP server](/guides/mcp-server/), `--rule`, `--cache-dir` and
+`--receipt-out` are not supported.
 
 ## Document conversion
 
