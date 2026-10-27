@@ -26,7 +26,7 @@ import type { Severity, VerifyProfile } from "./verify-profiles.js";
 
 export const VERIFY_SCHEMA = "multix.media-verify/v1";
 /** Bumped when measuring or judging logic changes; part of every cache key. */
-export const VERIFY_ENGINE = "multix-media-verify/1";
+export const VERIFY_ENGINE = "multix-media-verify/2";
 
 export type CheckStatus = "pass" | "warn" | "fail" | "skipped" | "unknown";
 
@@ -276,12 +276,17 @@ export function judge(
       reason: "not decoded",
     });
   } else {
-    const truncated =
+    // A WAV header states its sample bytes exactly, which a cut on a sample boundary
+    // leaves no shorter duration to see.
+    const wav = report.wav_data;
+    const wavShort = wav !== null && wav.present_bytes < wav.declared_bytes;
+    const durationShort =
       report.kind !== "image" &&
       analysis.completed &&
       declared !== null &&
       analysis.decoded_s !== null &&
       analysis.decoded_s < declared - Math.max(0.5, fps ? 2 / fps : 0);
+    const truncated = wavShort || durationShort;
     const status: CheckStatus = !analysis.completed
       ? analysis.timed_out || analysis.cancelled
         ? "unknown"
@@ -301,6 +306,12 @@ export function judge(
         ...(estimated ? { declared_duration_estimated: true } : {}),
         error_count: analysis.decode_error_count,
         completed: analysis.completed,
+        ...(wav
+          ? {
+              wav_data_declared_bytes: wav.declared_bytes,
+              wav_data_present_bytes: wav.present_bytes,
+            }
+          : {}),
       },
       ...(analysis.decode_errors.length || truncated || status !== "pass"
         ? {
@@ -308,14 +319,16 @@ export function judge(
               ? "decode timed out"
               : analysis.cancelled
                 ? "decode cancelled"
-                : truncated
-                  ? `decoded ${analysis.decoded_s} s of a declared ${declared} s (truncated)`
-                  : [
-                      ...analysis.decode_errors.slice(0, 5),
-                      ...(analysis.completed ? [] : analysis.log_tail.slice(-2)),
-                    ]
-                      .join(" | ")
-                      .slice(0, 2000),
+                : wavShort
+                  ? `holds ${wav.present_bytes} of the ${wav.declared_bytes} sample bytes its WAV header declares (truncated)`
+                  : durationShort
+                    ? `decoded ${analysis.decoded_s} s of a declared ${declared} s (truncated)`
+                    : [
+                        ...analysis.decode_errors.slice(0, 5),
+                        ...(analysis.completed ? [] : analysis.log_tail.slice(-2)),
+                      ]
+                        .join(" | ")
+                        .slice(0, 2000),
           }
         : {}),
     });

@@ -115,6 +115,12 @@ kết thúc trước tiếng, cùng các kỳ vọng bạn truyền vào: `--exp
 không có sẵn mục tiêu của nền tảng nào. Mỗi check ghi lại ngưỡng, giá trị đo
 được và các phát hiện kèm `start_s`/`end_s`.
 
+File bị cắt cụt được phát hiện bằng cách so với độ dài mà chính file khai báo:
+thời lượng các stream trong container, header Xing của mp3, hoặc số byte mẫu
+trong header WAV. Stream thô không khai báo độ dài (ac3, AAC dạng ADTS, mp3
+không có header Xing) chỉ được kiểm tra lỗi giải mã; biên nhận ghi rõ điều đó
+bằng `declared_duration_estimated: true`.
+
 Khai báo các đoạn fade, giữ hình và khoảng lặng có chủ ý bằng các khoảng lặp
 lại được `--allow-black`, `--allow-freeze` và `--allow-silence <start-end>`
 (tính bằng giây). Phát hiện nằm trong các khoảng này được ghi là có chủ ý thay

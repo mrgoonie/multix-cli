@@ -17,7 +17,7 @@ import {
   firstVideo,
   probeMedia,
 } from "./media-probe.js";
-import { extensionMatches, sniffContainer } from "./media-sniff.js";
+import { extensionMatches, sniffContainer, wavDataSize } from "./media-sniff.js";
 import { type MediaSource, resolveMediaSource } from "./media-source.js";
 
 export const INSPECT_SCHEMA = "multix.media-inspect/v1";
@@ -42,6 +42,8 @@ export interface InspectReport {
   video: VideoStreamInfo | null;
   audio: AudioStreamInfo | null;
   decode: DecodeReport | null;
+  /** A WAV's `data` chunk: the sample bytes its header declares and those present. */
+  wav_data: { declared_bytes: number; present_bytes: number } | null;
   /** ffprobe or the decode was stopped by the timeout or a cancel: what was not read is unknown. */
   interrupted: boolean;
   errors: string[];
@@ -140,6 +142,7 @@ export async function inspectSource(
     video: probe ? (firstVideo(probe) ?? null) : null,
     audio: probe ? (firstAudio(probe) ?? null) : null,
     decode,
+    wav_data: wavDataSize(src.head, src.bytes),
     interrupted,
     errors,
   };

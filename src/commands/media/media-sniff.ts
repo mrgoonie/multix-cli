@@ -84,3 +84,25 @@ export function extensionMatches(ext: string, sniff: SniffResult): boolean | nul
   // An extension multix does not know (e.g. .bin) proves nothing either way.
   return extToKind(`.${bare}`) ? false : null;
 }
+
+/**
+ * Bytes a WAV's `data` chunk header declares against the bytes the file still holds after
+ * it. Null when the file is not a WAV, the chunk header lies beyond `head`, or the size is
+ * a streaming placeholder (0 or 0xFFFFFFFF) that declares nothing.
+ */
+export function wavDataSize(
+  head: Buffer,
+  fileBytes: number,
+): { declared_bytes: number; present_bytes: number } | null {
+  if (!ascii(head, 0, "RIFF") || !ascii(head, 8, "WAVE")) return null;
+  let at = 12;
+  while (at + 8 <= head.length) {
+    const size = head.readUInt32LE(at + 4);
+    if (ascii(head, at, "data")) {
+      if (size === 0 || size === 0xffffffff) return null;
+      return { declared_bytes: size, present_bytes: Math.max(0, fileBytes - at - 8) };
+    }
+    at += 8 + size + (size % 2);
+  }
+  return null;
+}

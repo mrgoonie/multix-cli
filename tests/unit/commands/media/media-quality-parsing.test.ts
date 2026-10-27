@@ -10,7 +10,11 @@ import {
   parseProbe,
   rational,
 } from "../../../../src/commands/media/media-probe.js";
-import { extensionMatches, sniffContainer } from "../../../../src/commands/media/media-sniff.js";
+import {
+  extensionMatches,
+  sniffContainer,
+  wavDataSize,
+} from "../../../../src/commands/media/media-sniff.js";
 import { assertLocalPath, ffInput } from "../../../../src/commands/media/media-source.js";
 import {
   canonicalJson,
@@ -271,6 +275,7 @@ const VIDEO_REPORT = {
     r_frame_rate: { num: 25, den: 1, value: 25 },
   },
   audio: { index: 1, type: "audio" },
+  wav_data: null,
 } as unknown as InspectReport;
 
 const analysis = (over: Record<string, unknown> = {}) =>
@@ -414,5 +419,33 @@ describe("profiles", () => {
       /built-in/,
     );
     expect(() => loadProfileFile(write({ id: "x", version: 1 }))).toThrow(/media/);
+  });
+});
+
+describe("WAV data size", () => {
+  const wav = (dataSize: number, extra: number[] = []) => {
+    const b = Buffer.alloc(44 + extra.length);
+    b.write("RIFF", 0, "latin1");
+    b.write("WAVE", 8, "latin1");
+    b.write("fmt ", 12, "latin1");
+    b.writeUInt32LE(16, 16);
+    b.write("data", 36, "latin1");
+    b.writeUInt32LE(dataSize, 40);
+    return b;
+  };
+
+  it("compares the data chunk's declared size with the bytes after it", () => {
+    expect(wavDataSize(wav(1000), 44 + 1000)).toEqual({
+      declared_bytes: 1000,
+      present_bytes: 1000,
+    });
+    expect(wavDataSize(wav(1000), 44 + 400)).toEqual({ declared_bytes: 1000, present_bytes: 400 });
+  });
+
+  it("declares nothing for streaming placeholders, other formats or a chunk past the head", () => {
+    expect(wavDataSize(wav(0), 500)).toBeNull();
+    expect(wavDataSize(wav(0xffffffff), 500)).toBeNull();
+    expect(wavDataSize(Buffer.from("ID3\u0003\u0000\u0000\u0000\u0000"), 8)).toBeNull();
+    expect(wavDataSize(wav(1000).subarray(0, 30), 2000)).toBeNull();
   });
 });

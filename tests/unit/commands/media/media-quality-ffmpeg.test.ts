@@ -94,6 +94,11 @@ describe.skipIf(!hasFfmpeg)("media quality with ffmpeg", { timeout: 60_000 }, ()
     ff("-f", "lavfi", "-i", "sine=d=6", "-c:a", "libmp3lame", f("xing.mp3"));
     const mp3 = fs.readFileSync(f("xing.mp3"));
     fs.writeFileSync(f("trunc.mp3"), mp3.subarray(0, Math.floor(mp3.length / 2)));
+    // 16-bit mono WAV cut on a sample boundary: the header still declares all 4 s.
+    ff("-f", "lavfi", "-i", "sine=d=4", "-ac", "1", "-c:a", "pcm_s16le", f("whole.wav"));
+    const wav = fs.readFileSync(f("whole.wav"));
+    const cut = Math.floor(wav.length / 2);
+    fs.writeFileSync(f("cut.wav"), wav.subarray(0, cut - (cut % 2)));
     // Matroska keeps stream lengths only in DURATION tags.
     ff("-i", f("short-video.mp4"), "-c", "copy", f("short-video.mkv"));
   });
@@ -344,6 +349,17 @@ describe.skipIf(!hasFfmpeg)("media quality with ffmpeg", { timeout: 60_000 }, ()
       expect(check(audioOnly, "decode").status).toBe("pass");
       const m = await extractFrames(f("short-video.mkv"), { outDir: f("mkv-frames"), count: 3 });
       expect(Math.max(...m.frames.map((x) => x.requested_s))).toBeLessThan(2);
+    });
+
+    it("fails a WAV that holds fewer sample bytes than its header declares", async () => {
+      const whole = await verifyMedia(f("whole.wav"), { profile: builtinProfile("audio") });
+      expect(check(whole, "decode").status).toBe("pass");
+      const r = await verifyMedia(f("cut.wav"), { profile: builtinProfile("audio") });
+      expect(r.status).toBe("fail");
+      expect(check(r, "decode")).toMatchObject({
+        status: "fail",
+        reason: expect.stringMatching(/WAV header declares \(truncated\)/),
+      });
     });
 
     it("fails an mp3 cut short of the length its Xing header declares", async () => {

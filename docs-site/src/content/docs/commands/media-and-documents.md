@@ -118,6 +118,12 @@ Loudness is checked only when you pass a target; no platform targets are built
 in. Each check records its threshold, the measured values and findings with
 `start_s`/`end_s`.
 
+Truncation is judged against the length the file declares: a container's
+stream durations, an mp3's Xing header, or the sample bytes in a WAV header. A
+raw stream with no declared length (ac3, ADTS AAC, an mp3 without a Xing
+header) can only be checked for decode errors; its receipt says so with
+`declared_duration_estimated: true`.
+
 Declare intended fades, holds and silences with the repeatable
 `--allow-black`, `--allow-freeze` and `--allow-silence <start-end>` ranges (in
 seconds). Findings inside them are reported as intentional instead of failing.
