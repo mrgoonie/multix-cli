@@ -187,6 +187,34 @@ describe("prepareRun: argv", () => {
     expect(parsed.opts.text).toBe("<|speaker:0|>Hi.<|speaker:1|>Hello.");
   }, 120_000);
 
+  it("downloads fish voices create samples and repeats transcripts and signatures per value", async () => {
+    const prepared = run({
+      command: "fish voices create",
+      options: {
+        title: "Narrator",
+        transcript: ["One.", "Two."],
+        tag: ["calm"],
+        "voice-design-signature": ["s1", "s2"],
+        consent: true,
+      },
+      inputs: { sample: ["https://cdn.example.com/a.wav", "https://cdn.example.com/b.wav"] },
+    });
+    expect(prepared.inputs.map((i) => i.path)).toEqual(["in/0-a.wav", "in/1-b.wav"]);
+    const parsed = await parseWithCli(prepared.argv, "fish voices create");
+    expect(parsed.opts).toMatchObject({
+      title: "Narrator",
+      sample: ["in/0-a.wav", "in/1-b.wav"],
+      transcript: ["One.", "Two."],
+      tag: ["calm"],
+      voiceDesignSignature: ["s1", "s2"],
+      consent: true,
+    });
+    rejects(
+      { command: "fish voice-design", options: { instruction: "x", count: 99 } },
+      /--count must be at most/,
+    );
+  }, 120_000);
+
   it("runs runway video and image with downloaded inputs, repeated references and capped duration", async () => {
     const video = run({
       command: "runway video",

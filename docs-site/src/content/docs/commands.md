@@ -16,7 +16,7 @@ description: Choose the multix command group that matches your media workflow.
 | [BytePlus](/commands/byteplus/) | Seedream images, Seedance video, reference video, and 3D assets. |
 | [Cloudflare](/commands/cloudflare/) | Workers AI image/speech and AI Gateway video jobs. |
 | [ElevenLabs](/commands/elevenlabs/) | Voices, TTS, cloning, STT, music, SFX, dubbing, isolation, and alignment. |
-| [Fish Audio](/commands/fish/) | Native Fish Audio TTS (Drama 3 by default), multi-speaker turns, pronunciation dictionaries, and voice models. |
+| [Fish Audio](/commands/fish/) | Native Fish Audio TTS (Drama 3 by default), multi-speaker turns, pronunciation dictionaries, voice design, and voice cloning. |
 | [fal.ai](/commands/fal/) | Any fal queue model, plus image/video convenience commands. |
 | [Atlas Cloud](/commands/atlascloud/) | Any Atlas Cloud model: image, image edit, video, audio, 3D, and resumable async predictions. |
 | [Replicate](/commands/replicate/) | Any Replicate model via the direct API, image/video wrappers, and prediction status/cancel. |

@@ -8,7 +8,7 @@
 
 import { BudgetError } from "../core/errors.js";
 import { TASK_DEFAULTS as ELEVENLABS_DEFAULTS } from "../providers/elevenlabs/models.js";
-import { DEFAULT_FISH_TTS_MODEL } from "../providers/fish/models.js";
+import { DEFAULT_FISH_TTS_MODEL, FISH_VOICE_DESIGN_MODEL } from "../providers/fish/models.js";
 import { TTS_MODEL_DEFAULT as GEMINI_TTS_DEFAULT } from "../providers/gemini/voices.js";
 import {
   DEFAULT_OPENROUTER_STT_MODEL,
@@ -95,6 +95,12 @@ const BUILDERS: Record<string, RequestBuilder> = {
       text,
     };
   },
+  // One flat charge per successful request; the instruction and the candidate count do not change it.
+  "fish voice-design": (o) => ({
+    provider: "fish",
+    model: FISH_VOICE_DESIGN_MODEL,
+    text: opt(o, "instruction") ?? opt(o, "prompt") ?? "",
+  }),
   "openrouter transcribe": (o, d) => {
     if (opt(o, "input") === undefined) return undefined;
     return {

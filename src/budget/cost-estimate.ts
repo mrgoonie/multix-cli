@@ -143,6 +143,7 @@ function meterRanges(
   assumptions: string[],
 ): CostEstimate["units"] | undefined {
   const units: CostEstimate["units"] = {};
+  if (meters.has("requests")) units.requests = { low: 1, expected: 1, high: 1 };
   if (meters.has("characters")) {
     // A provider may count UTF-16 units: the high end takes the larger count.
     const high = Math.max(all.characters, all.utf16_units);

@@ -1,6 +1,6 @@
 ---
 title: Fish Audio commands
-description: Native Fish Audio text-to-speech (Drama 3 by default) with multi-speaker turns, pronunciation dictionaries, and voice model lookup.
+description: Native Fish Audio text-to-speech (Drama 3 by default) with multi-speaker turns, pronunciation dictionaries, voice design, and voice model management.
 ---
 
 Fish Audio commands use the native Fish Audio API and require `FISH_API_KEY`
@@ -137,6 +137,44 @@ dictionary was applied.
 `--text-file` or `--turns-file`; see
 [Cost](/reference/for-ai-agents/#cost-estimate-spend-guard-and-receipt).
 
+## Voice design
+
+`fish voice-design` describes a voice in words and returns 1 to 4 candidate
+voices as WAV files (Fish's `voice-design-1` model, sent as the `model`
+header).
+
+```bash
+multix fish voice-design --instruction "A calm, low-pitched narrator with a slight British accent"
+multix fish voice-design --instruction "An energetic young host" --reference-text "Welcome back to the show." --count 4 --language en
+```
+
+| Flag | Meaning |
+| --- | --- |
+| `--instruction <text>` | The voice description, 1 to 2,000 characters (alias `--prompt`). |
+| `--reference-text <text>` | A line every candidate reads, to compare them. multix accepts up to 300 characters, as Fish's guide says, but Fish's API schema says 150; Fish rejects what it does not take, and a rejected request is not billed. |
+| `--language <bcp47>` | Language hint, such as `en`, `vi`, or `es-MX`. |
+| `--count <n>` | Candidates, 1 to 4 (Fish's default is 2). |
+| `--speed <n>` | Speaking speed, above 0 up to 3. |
+| `--num-step <n>` | Diffusion steps, 1 to 128. |
+| `--guidance-scale <n>`, `--instruct-guidance-scale <n>` | Guidance, 0 or more. |
+| `--seed <n>` | Seed to reproduce a generation. |
+
+Each candidate is saved as `fish_voice_design_<stamp>_<n>.wav` in the output
+directory and checked like TTS audio. A request is billed $0.01 when it
+succeeds, however many candidates it returns, so `--estimate` and `--max-cost`
+work (rate `fish/voice-design-1@api`). It is never retried; a cut-off request
+ends with `UNKNOWN_REMOTE_STATE`. If no candidate is a usable WAV, the command
+fails, and the request is still billed.
+
+Fish keeps nothing from a voice design. To keep a candidate, clone it with
+`fish voices create --sample <wav>`, passing the candidate's `signature` (when
+Fish returns one) as `--voice-design-signature`. With `--json`, the result
+includes `model_header_sent`, `instruction_chars`, `instruction_sha256`,
+`candidates_requested`, `candidates` (each with `index`, `id`, `path`,
+`bytes`, `sha256`, `signature_ok`, `sample_rate_hz`, `duration_s`,
+`signature`, and `problems`), `estimated_cost_usd`, `rate_id`, and `warnings`.
+The instruction is recorded only as its length and hash.
+
 ## Voice models
 
 Listing and reading voices are free requests.
@@ -147,6 +185,49 @@ multix fish voices list --public --language vi --title narrator
 multix fish voices list --page-size 50 --page 2
 multix fish voices get <voice-id>
 ```
+
+### Clone a voice
+
+```bash
+multix fish voices create --title "My narrator" --sample take1.wav --sample take2.mp3 --consent
+multix fish voices create --title "Designed host" --sample fish_voice_design_<stamp>_1.wav \
+  --voice-design-signature <signature> --visibility unlist --consent
+```
+
+`--consent` is required: clone only a voice you own or have the speaker's
+permission to clone. Give 1 to 20 `--sample` files (`.wav`, `.mp3`, `.m4a`, or
+`.opus`, at most 50 MB each); the extension must match the file's audio
+header. Other flags:
+
+| Flag | Meaning |
+| --- | --- |
+| `--title <name>` | Required, 1 to 200 characters. |
+| `--transcript <text>` | What a sample says, one per `--sample` in order; omit them all to let Fish transcribe. |
+| `--voice-design-signature <sig>` | One per `--sample` in order, from `fish voice-design`. |
+| `--description <text>`, `--tag <tag>` | Metadata; `--tag` repeats. |
+| `--visibility <v>` | `private` (default) or `unlist`. `public` is refused when creating. |
+| `--no-enhance-audio-quality` | Do not clean up the samples before cloning. |
+| `--generate-sample` | Have Fish generate a preview sample. |
+
+Fish's pricing page lists no price for cloning, so `voices create` is
+unpriced: `--estimate` reports `unknown` and `--max-cost` refuses it. multix
+warns when the new voice's state is not `trained`; check it with
+`fish voices get <id>` before using it. A create request cut off before its
+answer leaves the outcome unknown: check `multix fish voices list` before
+creating the voice again.
+
+### Edit or delete a voice
+
+```bash
+multix fish voices update <voice-id> --title "New name" --tag narrator --tag calm
+multix fish voices update <voice-id> --visibility public --yes
+multix fish voices delete <voice-id> --yes
+```
+
+`update` takes `--title`, `--description`, `--tag` (replaces all tags), and
+`--visibility` (`private`, `unlist`, or `public`); `public` lists the voice in
+the public Fish Audio library and needs `--yes`. `delete` cannot be undone and
+needs `--yes`.
 
 ## Native Fish Audio and OpenRouter
 

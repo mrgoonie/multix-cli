@@ -148,6 +148,7 @@ Estimate: $0.00136 expected, $0.00136–$0.00136 range (proven ceiling)
 | `elevenlabs tts` | Ký tự (Unicode code point đúng như khi gửi) | Đã chứng minh. `--previous-text` và `--next-text` chỉ được tính vào mức cao. |
 | `openrouter tts` | Giá OpenRouter của model: ký tự với đa số model, byte UTF-8 với Fish Audio, token với Gemini TTS, giây âm thanh đầu ra với Seed Audio | Đã chứng minh với giá theo ký tự và byte (`--instructions` chỉ được tính vào mức cao); ước tính với giá theo token và theo giây đầu ra. Văn bản phải truyền qua `--text`. |
 | `fish tts` | Byte UTF-8 của văn bản đúng như khi gửi, kể cả tag; văn bản từ `--text`, hoặc khi chạy CLI là `--text-file` hay `--turns-file` đọc được (văn bản đã gắn tag do multix tạo) | Đã chứng minh. Qua MCP, văn bản từ file không được tính giá. |
+| `fish voice-design` | Một mức phí cố định cho mỗi request thành công, bất kể trả về bao nhiêu ứng viên | Đã chứng minh. |
 | `openrouter transcribe` | Số giây âm thanh đầu vào, đo bằng `ffprobe` từ file `--input` cục bộ | Đã chứng minh. Mức cao cộng thêm 5% vào độ dài đo được và làm tròn lên tròn phút. Đầu vào là URL, file mà `ffprobe` không đọc được, hoặc model tính giá theo token sẽ là `unknown`. |
 | `speech generate` | Giá của từng route, tính như `gemini generate-speech`, `elevenlabs tts` hoặc `fish tts`; văn bản từ `--text` hoặc `--text-file` | Như provider đó. Với Gemini, `--style` được tính vào mức cao; với ElevenLabs, `--extra elevenlabs.previous_text`/`next_text` được tính vào mức cao. Kế hoạch có `--fallback` được tính theo route đắt nhất và chỉ được chứng minh khi mọi route đều được chứng minh. Một route trên provider khác (OpenAI, MiniMax, Atlas) hoặc model ElevenLabs chưa có giá (`eleven_v3_conversational`) khiến cả lần chạy là `unknown`. Qua MCP, `text-file` không được tính giá. |
 
@@ -164,7 +165,7 @@ chưa xác minh, hoặc được kiểm tra lần cuối hơn 120 ngày trước
 `unknown`. Trong vòng 24 giờ quanh một lần đổi giá, mức cao dùng giá cao hơn; giá kết thúc
 trong vòng 24 giờ mà chưa biết giá tiếp theo sẽ là `unknown`.
 
-Giá được kiểm tra ngày 2026-10-26 (`--estimate` hiển thị giá đang áp dụng):
+Giá được kiểm tra ngày 2026-10-26, thiết kế giọng ngày 2026-10-27 (`--estimate` hiển thị giá đang áp dụng):
 
 | Rate id | Model | Giá (USD) |
 | --- | --- | --- |
@@ -179,6 +180,7 @@ Giá được kiểm tra ngày 2026-10-26 (`--estimate` hiển thị giá đang 
 | `fish/s2.1-pro-free@api` | `s2.1-pro-free` | $0 (giới hạn của model miễn phí không được mô hình hóa) |
 | `fish/s1@api` | `s1` | $15 / 1 triệu byte UTF-8 |
 | `fish/drama-3@api` | `drama-3` | $10 / 1 triệu byte UTF-8 (khuyến mãi đến 2026-11-12T17:00Z), sau đó $50 |
+| `fish/voice-design-1@api` | `voice-design-1` | $0,01 / request |
 
 Giá speech và transcription của OpenRouter được chép từ catalog model công khai
 của OpenRouter (`/api/v1/models?output_modalities=speech` và
@@ -199,7 +201,7 @@ Fish Audio Drama 3 và Gemini 3.8 TTS kết thúc cùng lúc giá API gốc thay
 
 Giá Gemini là tier Standard trả phí; tier miễn phí không tốn tiền. Gói thuê bao
 ElevenLabs trừ credit thay vì USD. Các rate `fish/*` tính giá cho API gốc của
-Fish Audio (`fish tts`, `speech generate --provider fish`); model `fish-audio/*`
+Fish Audio (`fish tts`, `fish voice-design`, `speech generate --provider fish`); model `fish-audio/*`
 của OpenRouter có rate `openrouter/*` riêng, và multix không bao giờ fallback
 giữa hai route.
 
@@ -273,7 +275,7 @@ shell hoặc `~/.multix/.env`, không nhận từ `.env` của project).
 | Seedream, Seedance, reference video hoặc 3D | [BytePlus](/vi/commands/byteplus/) |
 | Workers AI image/speech hoặc AI Gateway video | [Cloudflare](/vi/commands/cloudflare/) |
 | Voice workflow, dubbing hoặc audio generation | [ElevenLabs](/vi/commands/elevenlabs/) |
-| Speech qua API gốc của Fish Audio: Drama 3, hội thoại nhiều giọng, từ điển phát âm | [Fish Audio](/vi/commands/fish/) |
+| Speech qua API gốc của Fish Audio: Drama 3, hội thoại nhiều giọng, từ điển phát âm, thiết kế giọng, clone giọng | [Fish Audio](/vi/commands/fish/) |
 | Bất kỳ model queue fal.ai, ảnh hoặc video | [fal.ai](/vi/commands/fal/) |
 | Bất kỳ model Atlas Cloud nào, hoặc job ảnh/video/âm thanh/3D bất đồng bộ cần tiếp tục sau | [Atlas Cloud](/vi/commands/atlascloud/) |
 | Bất kỳ model Replicate, ảnh hoặc video; tiếp tục/hủy theo prediction ID | [Replicate](/vi/commands/replicate/) |

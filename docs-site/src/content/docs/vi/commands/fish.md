@@ -1,6 +1,6 @@
 ---
 title: Lệnh Fish Audio
-description: Text-to-speech qua API gốc của Fish Audio (mặc định Drama 3), hội thoại nhiều giọng, từ điển phát âm và tra cứu voice model.
+description: Text-to-speech qua API gốc của Fish Audio (mặc định Drama 3), hội thoại nhiều giọng, từ điển phát âm, thiết kế giọng và quản lý voice model.
 ---
 
 Lệnh Fish Audio dùng API gốc của Fish Audio và cần `FISH_API_KEY` (tạo tại
@@ -138,6 +138,43 @@ trả audio, nên multix cảnh báo rằng response 200 không chứng minh t�
 `--text-file` hoặc `--turns-file`; xem
 [Chi phí](/vi/reference/for-ai-agents/#chi-phí-ước-tính-giới-hạn-chi-tiêu-và-biên-nhận).
 
+## Thiết kế giọng
+
+`fish voice-design` mô tả một giọng bằng lời và trả về 1 đến 4 giọng ứng viên
+dưới dạng file WAV (model `voice-design-1` của Fish, gửi qua header `model`).
+
+```bash
+multix fish voice-design --instruction "Giọng dẫn chuyện trầm, điềm tĩnh, hơi có âm sắc Anh"
+multix fish voice-design --instruction "Người dẫn chương trình trẻ, năng động" --reference-text "Chào mừng các bạn quay lại." --count 4 --language vi
+```
+
+| Flag | Ý nghĩa |
+| --- | --- |
+| `--instruction <text>` | Mô tả giọng, 1 đến 2.000 ký tự (alias `--prompt`). |
+| `--reference-text <text>` | Câu mà mọi ứng viên cùng đọc, để so sánh. multix nhận tối đa 300 ký tự như hướng dẫn của Fish, nhưng schema API của Fish ghi 150; Fish từ chối phần nó không nhận, và request bị từ chối không bị tính phí. |
+| `--language <bcp47>` | Gợi ý ngôn ngữ, như `en`, `vi` hoặc `es-MX`. |
+| `--count <n>` | Số ứng viên, 1 đến 4 (mặc định của Fish là 2). |
+| `--speed <n>` | Tốc độ nói, lớn hơn 0 và tối đa 3. |
+| `--num-step <n>` | Số bước diffusion, 1 đến 128. |
+| `--guidance-scale <n>`, `--instruct-guidance-scale <n>` | Mức guidance, từ 0 trở lên. |
+| `--seed <n>` | Seed để tái tạo một lần sinh. |
+
+Mỗi ứng viên được lưu thành `fish_voice_design_<stamp>_<n>.wav` trong thư mục
+output và được kiểm tra như audio TTS. Mỗi request thành công bị tính $0,01,
+bất kể trả về bao nhiêu ứng viên, nên `--estimate` và `--max-cost` hoạt động
+(rate `fish/voice-design-1@api`). Request không bao giờ được thử lại; request
+bị ngắt kết thúc với `UNKNOWN_REMOTE_STATE`. Nếu không ứng viên nào là WAV dùng
+được, lệnh báo lỗi và request vẫn bị tính phí.
+
+Fish không lưu lại gì từ một lần thiết kế giọng. Muốn giữ một ứng viên, hãy
+clone nó bằng `fish voices create --sample <wav>`, truyền `signature` của ứng
+viên (khi Fish trả về) qua `--voice-design-signature`. Với `--json`, kết quả gồm
+`model_header_sent`, `instruction_chars`, `instruction_sha256`,
+`candidates_requested`, `candidates` (mỗi ứng viên có `index`, `id`, `path`,
+`bytes`, `sha256`, `signature_ok`, `sample_rate_hz`, `duration_s`,
+`signature` và `problems`), `estimated_cost_usd`, `rate_id` và `warnings`. Mô tả
+giọng chỉ được ghi dưới dạng độ dài và hash.
+
 ## Voice model
 
 Liệt kê và đọc voice là request miễn phí.
@@ -148,6 +185,48 @@ multix fish voices list --public --language vi --title narrator
 multix fish voices list --page-size 50 --page 2
 multix fish voices get <voice-id>
 ```
+
+### Clone giọng
+
+```bash
+multix fish voices create --title "Giọng dẫn chuyện" --sample take1.wav --sample take2.mp3 --consent
+multix fish voices create --title "Giọng đã thiết kế" --sample fish_voice_design_<stamp>_1.wav \
+  --voice-design-signature <signature> --visibility unlist --consent
+```
+
+Bắt buộc có `--consent`: chỉ clone giọng của chính bạn hoặc giọng bạn đã được
+người nói cho phép clone. Truyền 1 đến 20 file `--sample` (`.wav`, `.mp3`,
+`.m4a` hoặc `.opus`, mỗi file tối đa 50 MB); phần mở rộng phải khớp với header
+audio của file. Các flag khác:
+
+| Flag | Ý nghĩa |
+| --- | --- |
+| `--title <name>` | Bắt buộc, 1 đến 200 ký tự. |
+| `--transcript <text>` | Nội dung một sample nói, mỗi `--sample` một transcript theo đúng thứ tự; bỏ hết để Fish tự phiên âm. |
+| `--voice-design-signature <sig>` | Mỗi `--sample` một signature theo đúng thứ tự, lấy từ `fish voice-design`. |
+| `--description <text>`, `--tag <tag>` | Metadata; `--tag` lặp lại được. |
+| `--visibility <v>` | `private` (mặc định) hoặc `unlist`. `public` bị từ chối khi tạo. |
+| `--no-enhance-audio-quality` | Không làm sạch sample trước khi clone. |
+| `--generate-sample` | Yêu cầu Fish tạo một sample nghe thử. |
+
+Trang giá của Fish không niêm yết giá clone, nên `voices create` không có giá:
+`--estimate` báo `unknown` và `--max-cost` từ chối chạy. multix cảnh báo khi
+trạng thái của giọng mới không phải `trained`; kiểm tra bằng
+`fish voices get <id>` trước khi dùng. Request tạo bị ngắt trước khi có phản
+hồi thì không rõ kết quả: kiểm tra `multix fish voices list` trước khi tạo lại.
+
+### Sửa hoặc xóa giọng
+
+```bash
+multix fish voices update <voice-id> --title "Tên mới" --tag narrator --tag calm
+multix fish voices update <voice-id> --visibility public --yes
+multix fish voices delete <voice-id> --yes
+```
+
+`update` nhận `--title`, `--description`, `--tag` (thay toàn bộ tag) và
+`--visibility` (`private`, `unlist` hoặc `public`); `public` đưa giọng vào thư
+viện công khai của Fish Audio và cần `--yes`. `delete` không thể hoàn tác và
+cần `--yes`.
 
 ## Fish Audio gốc và OpenRouter
 

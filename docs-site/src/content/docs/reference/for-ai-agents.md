@@ -149,6 +149,7 @@ Estimate: $0.00136 expected, $0.00136–$0.00136 range (proven ceiling)
 | `elevenlabs tts` | Characters (Unicode code points as sent) | Proven. `--previous-text` and `--next-text` count only in the high end. |
 | `openrouter tts` | The model's OpenRouter price: characters for most models, UTF-8 bytes for Fish Audio, tokens for Gemini TTS, seconds of output audio for Seed Audio | Proven for character and byte prices (`--instructions` counts only in the high end); estimated for token and output-second prices. Text must come from `--text`. |
 | `fish tts` | UTF-8 bytes of the text as sent, tags included; text from `--text`, or from the CLI a readable `--text-file` or `--turns-file` (the tagged text multix builds) | Proven. Over MCP, file text is not priced. |
+| `fish voice-design` | One flat charge per successful request, however many candidates it returns | Proven. |
 | `openrouter transcribe` | Seconds of input audio, measured with `ffprobe` from the local `--input` file | Proven. The high end adds 5% to the measured length and rounds up to a whole minute. A URL input, a file `ffprobe` cannot read, or a token-priced model is `unknown`. |
 | `speech generate` | Each route's price, as `gemini generate-speech`, `elevenlabs tts` or `fish tts` would bill it; text from `--text` or `--text-file` | As for that provider. `--style` counts in the high end on Gemini; `--extra elevenlabs.previous_text`/`next_text` count in the high end on ElevenLabs. A `--fallback` plan is priced at its most expensive route and is proven only if every route is. A route on another provider (OpenAI, MiniMax, Atlas) or an ElevenLabs model without a listed price (`eleven_v3_conversational`) makes the whole run `unknown`. Over MCP, `text-file` is not priced. |
 
@@ -165,7 +166,7 @@ unverified, or last checked more than 120 days ago resolves to `unknown`.
 Within 24 hours of a price change the high end uses the higher price; a price
 that ends within 24 hours with no known next price is `unknown`.
 
-Prices as checked on 2026-10-26 (`--estimate` shows the rate in force):
+Prices as checked on 2026-10-26, voice design on 2026-10-27 (`--estimate` shows the rate in force):
 
 | Rate id | Models | Price (USD) |
 | --- | --- | --- |
@@ -180,6 +181,7 @@ Prices as checked on 2026-10-26 (`--estimate` shows the rate in force):
 | `fish/s2.1-pro-free@api` | `s2.1-pro-free` | $0 (the free model's limits are not modelled) |
 | `fish/s1@api` | `s1` | $15 / 1M UTF-8 bytes |
 | `fish/drama-3@api` | `drama-3` | $10 / 1M UTF-8 bytes (promotion until 2026-11-12T17:00Z), then $50 |
+| `fish/voice-design-1@api` | `voice-design-1` | $0.01 / request |
 
 OpenRouter speech and transcription prices are copied from OpenRouter's public
 models catalog (`/api/v1/models?output_modalities=speech` and
@@ -198,7 +200,7 @@ changes (2026-11-12 and 2027-01-01) and become `unknown` until re-checked.
 
 Gemini prices are the paid Standard tier; the free tier costs nothing.
 ElevenLabs subscription plans spend credits instead of USD. The `fish/*` rates
-price the native Fish Audio API (`fish tts`, `speech generate --provider fish`);
+price the native Fish Audio API (`fish tts`, `fish voice-design`, `speech generate --provider fish`);
 OpenRouter's `fish-audio/*` models have their own `openrouter/*` rates, and
 multix never falls back between the two routes.
 
@@ -274,7 +276,7 @@ or `~/.multix/.env` only, not a project `.env`).
 | Seedream, Seedance, reference video, or 3D | [BytePlus](/commands/byteplus/) |
 | Workers AI image/speech or AI Gateway video | [Cloudflare](/commands/cloudflare/) |
 | Voice workflows, dubbing, or generated audio | [ElevenLabs](/commands/elevenlabs/) |
-| Native Fish Audio speech: Drama 3, multi-speaker turns, pronunciation dictionaries | [Fish Audio](/commands/fish/) |
+| Native Fish Audio speech: Drama 3, multi-speaker turns, pronunciation dictionaries, voice design, voice cloning | [Fish Audio](/commands/fish/) |
 | Any fal.ai queue model, image, or video | [fal.ai](/commands/fal/) |
 | Any Atlas Cloud model, or a resumable async image/video/audio/3D job | [Atlas Cloud](/commands/atlascloud/) |
 | Any Replicate model, image, or video; resume/cancel by prediction ID | [Replicate](/commands/replicate/) |

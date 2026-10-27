@@ -16,7 +16,7 @@ description: Chọn nhóm lệnh multix phù hợp với workflow media của b�
 | [BytePlus](/vi/commands/byteplus/) | Seedream, Seedance, reference video và 3D. |
 | [Cloudflare](/vi/commands/cloudflare/) | Workers AI image/speech và video job qua AI Gateway. |
 | [ElevenLabs](/vi/commands/elevenlabs/) | Voice, TTS, clone, STT, music, SFX, dubbing và isolation. |
-| [Fish Audio](/vi/commands/fish/) | TTS qua API gốc của Fish Audio (mặc định Drama 3), hội thoại nhiều giọng, từ điển phát âm và voice model. |
+| [Fish Audio](/vi/commands/fish/) | TTS qua API gốc của Fish Audio (mặc định Drama 3), hội thoại nhiều giọng, từ điển phát âm, thiết kế giọng và clone giọng. |
 | [fal.ai](/vi/commands/fal/) | Bất kỳ model queue nào của fal, cộng lệnh tiện lợi image/video. |
 | [Atlas Cloud](/vi/commands/atlascloud/) | Bất kỳ model Atlas Cloud nào: ảnh, chỉnh sửa ảnh, video, âm thanh, 3D và prediction bất đồng bộ có thể tiếp tục. |
 | [Replicate](/vi/commands/replicate/) | Bất kỳ model Replicate nào qua API trực tiếp, lệnh tiện lợi image/video, cùng status/cancel prediction. |

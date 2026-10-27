@@ -66,3 +66,10 @@ export const FISH_MAX_SPEAKERS = 10;
 export function isFishTtsModel(value: string): value is FishTtsModel {
   return (FISH_TTS_MODELS as readonly string[]).includes(value);
 }
+
+/** `model` header /v1/voice-design requires (exact spelling). */
+export const FISH_VOICE_DESIGN_MODEL = "voice-design-1";
+export const FISH_VOICE_DESIGN_SOURCE =
+  "https://docs.fish.audio/api-reference/endpoint/openapi-v1/voice-design";
+export const FISH_CREATE_MODEL_SOURCE =
+  "https://docs.fish.audio/api-reference/endpoint/model/create-model";

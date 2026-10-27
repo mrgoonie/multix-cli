@@ -4,12 +4,14 @@
 
 import type { Command } from "commander";
 import { registerFishTtsCommand } from "./tts.js";
+import { registerFishVoiceDesignCommand } from "./voice-design.js";
 import { registerFishVoicesCommand } from "./voices.js";
 
 export function registerFishCommands(program: Command): void {
   const fish = program
     .command("fish")
-    .description("Fish Audio (native API): Drama 3 text-to-speech and voice models");
+    .description("Fish Audio (native API): Drama 3 text-to-speech, voice design and voice cloning");
   registerFishTtsCommand(fish);
+  registerFishVoiceDesignCommand(fish);
   registerFishVoicesCommand(fish);
 }

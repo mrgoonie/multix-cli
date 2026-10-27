@@ -15,7 +15,7 @@ description: Chọn tài liệu lệnh có đối chiếu source cho từng AI p
 | BytePlus | [Lệnh](/vi/commands/byteplus/) | Seedream, Seedance, reference video và 3D | Dùng `status` sau khi submit async. |
 | Cloudflare | [Lệnh](/vi/commands/cloudflare/) | Workers AI image/speech và AI Gateway video | Video cần AI Gateway ID và Replicate token. |
 | ElevenLabs | [Lệnh](/vi/commands/elevenlabs/) | Voice, speech, audio và dubbing | Dubbing có workflow job/status. |
-| Fish Audio | [Lệnh](/vi/commands/fish/) | TTS qua API gốc (mặc định Drama 3), hội thoại nhiều giọng, từ điển phát âm, voice model | Model là đúng giá trị header `model`; tách biệt với model `fish-audio/*` của OpenRouter và giá của chúng. |
+| Fish Audio | [Lệnh](/vi/commands/fish/) | TTS qua API gốc (mặc định Drama 3), hội thoại nhiều giọng, từ điển phát âm, thiết kế giọng, clone giọng | Model là đúng giá trị header `model`; tách biệt với model `fish-audio/*` của OpenRouter và giá của chúng. |
 | fal.ai | [Lệnh](/vi/commands/fal/) | Bất kỳ model queue nào, cộng lệnh tiện lợi image/video | Status/result dùng app id của model (hai segment đầu path), không phải model id đầy đủ. |
 | Atlas Cloud | [Lệnh](/vi/commands/atlascloud/) | Mọi model: ảnh, chỉnh sửa ảnh, video, âm thanh và 3D | Đầu vào được kiểm tra theo schema của từng model; `--async` cùng `status --wait --download` để tiếp tục job. |
 | Replicate | [Lệnh](/vi/commands/replicate/) | Bất kỳ model nào qua API trực tiếp, cộng lệnh tiện lợi image/video | Model cộng đồng cần version; tiếp tục hoặc hủy job theo prediction ID. |

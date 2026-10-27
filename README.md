@@ -4,7 +4,7 @@ AI multimodal CLI — generate images/video/speech/music, analyze and transcribe
 
 ![Isometric technical illustration of multix media workflows](docs-site/public/images/multix-isometric-banner.png)
 
-Supports **OpenAI** (image, image edits, TTS, STT, optional Codex image driver), **Gemini** (analyze, transcribe, generate, Omni Flash video generation and editing, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation, image-to-video, TTS, STT), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), **Cloudflare** (Workers AI image and speech; AI Gateway-routed Replicate video), **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment), **Fish Audio** (native Drama 3 TTS, multi-speaker turns, pronunciation dictionaries, voice models), **fal.ai** (generic model runner, image, video, text-to-speech via the fal queue API), and **Atlas Cloud** (any model: image, image edit, video, audio, 3D, with resumable async predictions), **Replicate** (generic model runner, image, video, async prediction status/cancel via the direct Replicate API), **Runway** (Gen-4.5 and Gen-4 Turbo video, Gen-4 images, resumable task status/cancel), **HeyGen** (v3 Video Agent prompt-to-video, scripted avatar videos, video translation, lipsync, TTS).
+Supports **OpenAI** (image, image edits, TTS, STT, optional Codex image driver), **Gemini** (analyze, transcribe, generate, Omni Flash video generation and editing, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation, image-to-video, TTS, STT), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), **Cloudflare** (Workers AI image and speech; AI Gateway-routed Replicate video), **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment), **Fish Audio** (native Drama 3 TTS, multi-speaker turns, pronunciation dictionaries, voice design, voice cloning and management), **fal.ai** (generic model runner, image, video, text-to-speech via the fal queue API), and **Atlas Cloud** (any model: image, image edit, video, audio, 3D, with resumable async predictions), **Replicate** (generic model runner, image, video, async prediction status/cancel via the direct Replicate API), **Runway** (Gen-4.5 and Gen-4 Turbo video, Gen-4 images, resumable task status/cancel), **HeyGen** (v3 Video Agent prompt-to-video, scripted avatar videos, video translation, lipsync, TTS).
 
 ## Documentation
 
@@ -74,7 +74,7 @@ metrics, and `sources` naming the header or body field each money number came
 from), `error` (`code`, `retryable`, `retry_after_s`, `hint`) and `next`
 commands, plus a `cost` receipt (`multix.cost/v1`: estimate, provider-reported
 and actual cost, variance; unknown stays `null`, never $0). Only
-`gemini generate-speech`, `elevenlabs tts`, `fish tts`, `openrouter tts`,
+`gemini generate-speech`, `elevenlabs tts`, `fish tts`, `fish voice-design`, `openrouter tts`,
 `openrouter transcribe` (local files, measured with `ffprobe`) and
 `speech generate` on its Gemini, ElevenLabs and Fish routes (a `--fallback` plan at
 its most expensive route) are priced so far; `--max-cost`
@@ -603,6 +603,17 @@ multix fish tts --turns-file scene.json   # [{"text": "...", "voice": "<voice-id
 # Voice models (free reads): your own, or the public library
 multix fish voices list [--public] [--title <text>] [--language <code>] [--page-size 20] [--page 1]
 multix fish voices get <voice-id>
+
+# Voice design: 1-4 candidate WAVs from a description ($0.01 per request); Fish keeps nothing
+multix fish voice-design --instruction "A calm low narrator" [--reference-text <line>] [--language <bcp47>] [--count 1-4] \
+  [--speed <0-3>] [--num-step <1-128>] [--guidance-scale <n>] [--instruct-guidance-scale <n>] [--seed <n>]
+
+# Clone (needs --consent; unpriced, so --max-cost refuses it), edit, delete
+multix fish voices create --title <name> --sample <wav|mp3|m4a|opus> [--sample ...] --consent [--transcript <text> ...] \
+  [--voice-design-signature <sig> ...] [--description <text>] [--tag <tag> ...] [--visibility private|unlist] \
+  [--no-enhance-audio-quality] [--generate-sample]
+multix fish voices update <voice-id> [--title <name>] [--description <text>] [--tag <tag> ...] [--visibility private|unlist|public --yes]
+multix fish voices delete <voice-id> --yes
 ```
 
 **Notes:**
@@ -611,6 +622,8 @@ multix fish voices get <voice-id>
 - Direction tags (`[whispering]`) and phoneme tags are sent unchanged. Fish documents phonemes for English (Arpabet), Chinese (pinyin) and Japanese (romaji) only.
 - Pronunciation dictionaries: up to 3, either all `--dictionary id@version` (a pinned version id, not `latest` or `V1`) or one inline `--dictionary-file`, never mixed; no phoneme markers in keys or values. Fish silently skips a reference it cannot resolve, so multix warns.
 - The paid POST is never retried; a cut-off request ends with `UNKNOWN_REMOTE_STATE`. The audio is checked (container signature, sample rate, duration, SHA-256); a 200 whose body is not the requested audio fails, after saving the bytes for inspection (unless Fish labelled them JSON or HTML).
+- `voice-design` saves `fish_voice_design_<stamp>_<n>.wav`; it is billed once per successful request however many candidates it returns, and never retried. Keep a candidate by cloning it with `voices create` (pass its `signature` as `--voice-design-signature`). `--reference-text` takes up to 300 characters as Fish's guide says; Fish's API schema says 150, and Fish rejects (unbilled) what it does not take.
+- `voices create` takes 1 to 20 samples (50 MB each; the extension must match the audio bytes) and one `--transcript` per sample or none (Fish transcribes). It warns when the new voice is not `trained`; a cut-off create leaves the outcome unknown, so check `multix fish voices list` before retrying. `public` visibility is refused on create and needs `--yes` on update; `delete` is irreversible.
 - Native Fish and OpenRouter's `fish-audio/*` models are separate routes with separate prices; multix never falls back between them. Full reference: [Fish Audio commands](https://multix.zuey.me/commands/fish/).
 
 ### `multix fal`
