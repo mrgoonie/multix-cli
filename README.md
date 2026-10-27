@@ -84,8 +84,9 @@ its most expensive route) are priced so far; `--max-cost`
 refuses anything it cannot price. With `--json`, exit codes are `2` usage or
 input (including a refused `--max-cost`), `3` key or setup, `4` temporary
 (retry), `5` rejected (quota, safety, model), `6` timed out (job may still run),
-`1` unknown; plain runs keep exit 1 and print the code and hint on
-stderr. Each run is recorded in `~/.multix/history.jsonl` without keys or signed
+`1` unknown, and `129`/`130`/`143` for a run cancelled by a signal
+(`CANCELLED`); plain runs keep exit 1 (a cancelled run keeps its signal code)
+and print the code and hint on stderr. Each run is recorded in `~/.multix/history.jsonl` without keys or signed
 URLs (`MULTIX_HISTORY=0` turns it off). Details:
 [For AI agents](https://multix.zuey.me/reference/for-ai-agents/).
 

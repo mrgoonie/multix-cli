@@ -80,8 +80,17 @@ describe("classifySignalExit", () => {
     });
   });
 
-  it("warns that a sent request may still run and bill", () => {
-    expect(classifySignalExit(130, true)?.hint).toMatch(/Check the provider before rerunning/);
+  it("warns that a sent request may already have run and been billed", () => {
+    const info = classifySignalExit(130, { requestSent: true, cleanupSkipped: true });
+    expect(info).toMatchObject({ code: "CANCELLED", exit_code: 130 });
+    expect(info?.hint).toMatch(/provider_ids.*before rerunning, or you may pay twice/);
+    expect(info?.hint).not.toMatch(/nothing was left behind/);
+  });
+
+  it("does not claim a clean exit when a second signal cut the cleanup short", () => {
+    const info = classifySignalExit(143, { cleanupSkipped: true });
+    expect(info?.hint).toMatch(/remove leftover temporary files/);
+    expect(info?.hint).not.toMatch(/nothing was left behind/);
   });
 
   it("ignores every other exit status", () => {

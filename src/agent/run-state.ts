@@ -66,6 +66,8 @@ export interface RunState {
   };
   /** True once a command action started (help and parse errors never get there). */
   actionStarted: boolean;
+  /** A second signal stopped the run before its cleanup finished. */
+  cleanupSkipped: boolean;
   finalized: boolean;
 }
 
@@ -87,6 +89,7 @@ export const run: RunState = {
   stdout: [],
   stderr: [],
   actionStarted: false,
+  cleanupSkipped: false,
   finalized: false,
 };
 

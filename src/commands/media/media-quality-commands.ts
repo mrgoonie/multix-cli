@@ -62,7 +62,10 @@ async function cancellable<T>(fn: (signal: AbortSignal) => Promise<T>): Promise<
   const ac = new AbortController();
   let caught: NodeJS.Signals | undefined;
   const stop = (signal: NodeJS.Signals) => {
-    if (caught) process.exit(SIGNAL_EXIT[signal] ?? 1);
+    if (caught) {
+      run.cleanupSkipped = true;
+      process.exit(SIGNAL_EXIT[signal] ?? 1);
+    }
     caught = signal;
     ac.abort();
   };

@@ -110,7 +110,7 @@ https://multix.zuey.me/llms.txt
 | 5 | bị từ chối | `QUOTA_EXCEEDED`, `CONTENT_BLOCKED`, `MODEL_NOT_FOUND`, `NOT_FOUND`, `PROVIDER_REJECTED`, `JOB_FAILED`, `RESPONSE_TOO_LARGE` | Đổi input, model hoặc provider. |
 | 6 | hết thời gian hoặc không rõ | `TIMEOUT`, `UNKNOWN_REMOTE_STATE` | Job có thể vẫn đang chạy: dùng lệnh status trong `next[]`. `UNKNOWN_REMOTE_STATE`: lần submit thất bại mà không chứng minh được provider đã từ chối (bị cắt kết nối, lỗi gateway 5xx) nên job có thể đã vào hàng đợi; kiểm tra danh sách request của provider trước khi submit lại. |
 | 1 | không rõ | `UNKNOWN` | Đọc `log[]` (các dòng stderr cuối). |
-| 129, 130, 143 | bị hủy bằng tín hiệu (SIGHUP, Ctrl-C, SIGTERM) | `CANCELLED` | Lệnh đã dọn file tạm; chạy lại lệnh. Nếu request tới provider đã được gửi, hint sẽ nói rõ: job có thể vẫn chạy và bị tính phí, nên kiểm tra provider trước. |
+| 129, 130, 143 | bị hủy bằng tín hiệu (SIGHUP, Ctrl-C, SIGTERM) | `CANCELLED` | Lệnh đã dọn file tạm; chạy lại lệnh. Hint sẽ khác trong hai trường hợp: request tới provider đã được gửi (job có thể đã chạy và bị tính phí, nên tra theo `provider_ids` trước khi chạy lại), hoặc tín hiệu thứ hai cắt ngang bước dọn dẹp (xóa file tạm còn sót trước). |
 
 Các nhóm exit code này áp dụng ở agent mode (`--json` hoặc `MULTIX_OUTPUT=json`).
 Không có chế độ đó, lệnh lỗi vẫn exit 1 như các phiên bản trước và in thêm các

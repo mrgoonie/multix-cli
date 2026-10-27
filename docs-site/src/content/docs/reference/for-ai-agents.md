@@ -110,7 +110,7 @@ https://multix.zuey.me/llms.txt
 | 5 | rejected | `QUOTA_EXCEEDED`, `CONTENT_BLOCKED`, `MODEL_NOT_FOUND`, `NOT_FOUND`, `PROVIDER_REJECTED`, `JOB_FAILED`, `RESPONSE_TOO_LARGE` | Change the input, model or provider. |
 | 6 | timed out or unknown | `TIMEOUT`, `UNKNOWN_REMOTE_STATE` | The job may still run: use the status command in `next[]`. `UNKNOWN_REMOTE_STATE`: the submit failed without proof that the provider rejected it (cut off, 5xx gateway error), so it may have been queued; check the provider's request list before resubmitting. |
 | 1 | unknown | `UNKNOWN` | Read `log[]` (last stderr lines). |
-| 129, 130, 143 | cancelled by a signal (SIGHUP, Ctrl-C, SIGTERM) | `CANCELLED` | The command cleaned up its temporary files; rerun it. If a provider request was already sent, the hint says so: the job may still run and bill, so check the provider first. |
+| 129, 130, 143 | cancelled by a signal (SIGHUP, Ctrl-C, SIGTERM) | `CANCELLED` | The command cleaned up its temporary files; rerun it. The hint says otherwise in two cases: a provider request was already sent (the job may have run and been billed, so look it up by `provider_ids` before rerunning), or a second signal cut the cleanup short (remove leftover temporary files first). |
 
 These exit classes apply in agent mode (`--json` or `MULTIX_OUTPUT=json`).
 Without it a failed command still exits 1, as in earlier versions, and prints

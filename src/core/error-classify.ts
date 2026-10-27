@@ -48,6 +48,8 @@ export const EXIT_CODES = {
   retryable: 4,
   rejected: 5,
   timeout: 6,
+  /** Ctrl-C; a run stopped by another signal keeps its own 128 + signal number. */
+  cancelled: 130,
 } as const;
 
 export interface ErrorInfo {
@@ -116,7 +118,7 @@ const EXIT_BY_CODE: Record<ErrorCode, number> = {
   BINARY_MISSING: EXIT_CODES.config,
   BUDGET_EXCEEDED: EXIT_CODES.usage,
   BUDGET_UNPROVEN: EXIT_CODES.usage,
-  CANCELLED: 130,
+  CANCELLED: EXIT_CODES.cancelled,
   UNKNOWN: EXIT_CODES.unknown,
 };
 
@@ -223,19 +225,29 @@ export function codeFromHttp(status: number, body: string): ErrorCode {
 const SIGNAL_BY_EXIT: Record<number, string> = { 129: "SIGHUP", 130: "SIGINT", 143: "SIGTERM" };
 
 const CANCELLED_AFTER_SEND =
-  "The run was cancelled after a provider request was sent; the job may still run and bill. Check the provider before rerunning.";
+  "The run was cancelled after a provider request was sent, so the job may have run and been billed. Look it up by provider_ids (the provider's status command or request list) before rerunning, or you may pay twice.";
+const CANCELLED_BEFORE_CLEANUP =
+  "A second signal stopped the run before its cleanup finished: remove leftover temporary files (for example .frames-* staging directories), then rerun the command.";
 
 /**
  * Classify an exit status set by a signal handler, or undefined for any other
- * status. The real exit code is kept. `requestSent` swaps the hint, since a
- * paid job may already be queued.
+ * status. The real exit code is kept. The hint changes when a provider request
+ * was already sent (a paid job may have run) or the cleanup was cut short.
  */
-export function classifySignalExit(exitCode: number, requestSent = false): ErrorInfo | undefined {
+export function classifySignalExit(
+  exitCode: number,
+  context: { requestSent?: boolean; cleanupSkipped?: boolean } = {},
+): ErrorInfo | undefined {
   const signal = SIGNAL_BY_EXIT[exitCode];
   if (!signal) return undefined;
+  const hint = context.requestSent
+    ? CANCELLED_AFTER_SEND
+    : context.cleanupSkipped
+      ? CANCELLED_BEFORE_CLEANUP
+      : undefined;
   return build("CANCELLED", `Cancelled by ${signal} (exit ${exitCode})`, {
     exit_code: exitCode,
-    ...(requestSent ? { hint: CANCELLED_AFTER_SEND } : {}),
+    ...(hint ? { hint } : {}),
   });
 }
 
