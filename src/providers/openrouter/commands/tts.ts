@@ -161,9 +161,21 @@ function inputText(opts: TtsOptions): string | SpeechTurn[] {
   return text;
 }
 
-function charCount(input: string | SpeechTurn[]): number {
-  return typeof input === "string" ? input.length : input.reduce((n, t) => n + t.text.length, 0);
+function spokenText(input: string | SpeechTurn[]): string[] {
+  return typeof input === "string" ? [input] : input.map((t) => t.text);
 }
+
+function charCount(input: string | SpeechTurn[]): number {
+  return spokenText(input).reduce((n, t) => n + t.length, 0);
+}
+
+function utf8ByteCount(input: string | SpeechTurn[]): number {
+  const encoder = new TextEncoder();
+  return spokenText(input).reduce((n, t) => n + encoder.encode(t).byteLength, 0);
+}
+
+/** Fish Audio bills UTF-8 bytes, not characters, so its catalog price applies per byte. */
+const BILLS_UTF8_BYTES = /^fish-audio\//i;
 
 /** Families whose OpenRouter adapter rejects a request without a voice ("An explicit voice is required"). */
 const VOICE_REQUIRED = /^(google|elevenlabs)\//;
@@ -213,13 +225,16 @@ async function checkCatalog(
   };
 }
 
-/** Catalog price x characters, for per-character models only (per-second ones are priced on output). */
-function estimateCost(entry: SpeechModel | undefined, chars: number): number | null {
+/**
+ * Catalog price x billed units (characters, or UTF-8 bytes for Fish Audio),
+ * for per-input models only (per-second ones are priced on output).
+ */
+function estimateCost(entry: SpeechModel | undefined, units: number): number | null {
   const perChar = Number(entry?.pricing.prompt);
   const perSecond = Number(entry?.pricing.completion);
   if (!entry || !Number.isFinite(perChar) || perChar <= 0) return null;
   if (Number.isFinite(perSecond) && perSecond > 0) return null;
-  return Math.round(perChar * chars * 1e6) / 1e6;
+  return Math.round(perChar * units * 1e6) / 1e6;
 }
 
 function writeAudio(bytes: Uint8Array, ext: string, output: string | undefined): string {
@@ -311,6 +326,7 @@ export function registerOpenRouterTtsCommand(parent: Command): void {
         : undefined;
       let input = inputText(opts);
       const chars = charCount(input);
+      const utf8Bytes = utf8ByteCount(input);
       if (chars > MAX_TEXT_CHARS) {
         throw new ValidationError(
           `The text is ${chars} characters; at most ${MAX_TEXT_CHARS} are allowed per request`,
@@ -384,6 +400,7 @@ export function registerOpenRouterTtsCommand(parent: Command): void {
         provider: stats?.providerName ?? speech.providerName ?? null,
         voice: voice ?? null,
         input_chars: chars,
+        input_utf8_bytes: utf8Bytes,
         turns: Array.isArray(input) ? input.length : null,
         format,
         mime,
@@ -399,7 +416,7 @@ export function registerOpenRouterTtsCommand(parent: Command): void {
         generation_id: speech.generationId ?? null,
         cost_usd: stats?.totalCost ?? null,
         cost_source: stats?.totalCost !== undefined ? "openrouter-generation" : null,
-        estimated_cost_usd: estimateCost(entry, chars),
+        estimated_cost_usd: estimateCost(entry, BILLS_UTF8_BYTES.test(model) ? utf8Bytes : chars),
         is_byok: stats?.isByok ?? null,
         path: dest,
         output: opts.output ? path.resolve(opts.output) : null,

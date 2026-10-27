@@ -81,6 +81,12 @@ multix openrouter generation <generation-id>        # chi phí ghi nhận sau
   120) để OpenRouter báo chi phí; `--no-cost` bỏ qua bước này. Với `--json`,
   kết quả gồm generation ID, chi phí, voice, định dạng, kích thước, SHA-256 và
   thời lượng (chỉ pcm/WAV); giá trị chưa biết là `null`.
+- `input_chars` và `input_utf8_bytes` cho biết độ dài văn bản được đọc. Các
+  model Fish Audio (`fish-audio/*`) tính phí theo byte UTF-8, nên
+  `estimated_cost_usd` của chúng bằng giá trong catalog nhân với
+  `input_utf8_bytes`; các model tính theo đầu vào khác dùng số ký tự. Văn bản
+  có dấu có nhiều byte hơn ký tự. API Fish Audio gốc xem tại
+  [Fish Audio](/vi/commands/fish/).
 
 ## Chuyển giọng nói thành văn bản
 

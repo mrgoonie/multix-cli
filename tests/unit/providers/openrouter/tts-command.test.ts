@@ -350,6 +350,34 @@ describe("openrouter tts", () => {
     expect(posts()[0]?.body).toMatchObject({ input: "Hello" });
   });
 
+  it("prices Fish Audio models per UTF-8 byte and reports the byte count", async () => {
+    stubFetch(() => audio(MP3, "audio/mpeg"));
+    runState.json = true;
+    const text = "Xin chào thế giới"; // 17 characters, 22 UTF-8 bytes
+    await run("tts", "--text", text, "--model", "fish-audio/drama-3", "--no-cost");
+    await run(
+      "tts",
+      "--text",
+      text,
+      "--model",
+      "elevenlabs/eleven-v4",
+      "--voice",
+      "sarah",
+      "--no-cost",
+    );
+    const [fish, eleven] = stdout.filter((l) => l.startsWith("{")).map((l) => JSON.parse(l));
+    expect(fish).toMatchObject({
+      input_chars: 17,
+      input_utf8_bytes: 22,
+      estimated_cost_usd: 0.000044, // $2 per million bytes x 22
+    });
+    expect(eleven).toMatchObject({
+      input_chars: 17,
+      input_utf8_bytes: 22,
+      estimated_cost_usd: 0.00136, // per character: $80 per million x 17
+    });
+  });
+
   it("validates flags before any request", async () => {
     stubFetch(() => audio(MP3, "audio/mpeg"));
     await expect(run("tts")).rejects.toThrow(/Provide the text/);
