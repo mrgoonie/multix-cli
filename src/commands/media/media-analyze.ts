@@ -33,6 +33,8 @@ export interface AnalysisPlan {
     silence?: { noiseDb: number; minDurationS: number };
     loudness?: boolean;
   };
+  /** ffprobe's format_name for the file, so a `%` in an image path is read literally. */
+  formatName?: string | null;
   timeoutMs?: number;
   signal?: AbortSignal;
 }
@@ -88,7 +90,7 @@ export function analysisArgs(resolved: string, plan: AnalysisPlan): string[] {
     "-nostats",
     "-loglevel",
     "level+info",
-    ...ffInput(resolved),
+    ...ffInput(resolved, { formatName: plan.formatName }),
   ];
   if (plan.video) {
     const v = plan.video;

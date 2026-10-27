@@ -82,20 +82,47 @@ export async function runRule(
   opts: { timeoutMs: number; signal?: AbortSignal },
 ): Promise<RuleRun> {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "multix-rule-"));
+  const posix = process.platform !== "win32";
+  let timedOut = false;
+  let cancelled = false;
+  let sub: ReturnType<typeof execa> | undefined;
+  // A rule's own children inherit its stdout, so killing only the rule would leave the pipe
+  // open and the run waiting: on POSIX the rule leads its own process group and the whole
+  // group is killed; on Windows taskkill /T ends the tree.
+  const killTree = () => {
+    const pid = sub?.pid;
+    if (pid === undefined) return;
+    try {
+      if (posix) process.kill(-pid, "SIGKILL");
+      else execa("taskkill", ["/pid", String(pid), "/T", "/F"], { reject: false });
+    } catch {
+      // Already gone.
+    }
+  };
+  const onAbort = () => {
+    cancelled = true;
+    killTree();
+  };
+  const timer = setTimeout(() => {
+    timedOut = true;
+    killTree();
+  }, opts.timeoutMs);
+  opts.signal?.addEventListener("abort", onAbort, { once: true });
   try {
+    if (opts.signal?.aborted) return { file, sha256, error: "rule was cancelled" };
     const { program, args } = ruleCommand(file);
-    const res = await execa(program, args, {
+    sub = execa(program, args, {
       cwd,
       input: JSON.stringify(input),
       reject: false,
-      timeout: opts.timeoutMs,
-      cancelSignal: opts.signal,
+      detached: posix,
       maxBuffer: RULE_OUTPUT_LIMIT_BYTES,
       extendEnv: false,
       env: ruleEnv(),
     });
-    if (res.timedOut) return { file, sha256, error: `rule timed out after ${opts.timeoutMs} ms` };
-    if (res.isCanceled) return { file, sha256, error: "rule was cancelled" };
+    const res = await sub;
+    if (timedOut) return { file, sha256, error: `rule timed out after ${opts.timeoutMs} ms` };
+    if (cancelled) return { file, sha256, error: "rule was cancelled" };
     if (res.isMaxBuffer)
       return { file, sha256, error: `rule output exceeded ${RULE_OUTPUT_LIMIT_BYTES} bytes` };
     if (res.exitCode !== 0)
@@ -121,6 +148,11 @@ export async function runRule(
       };
     return { file, sha256, verdict: verdict.data };
   } finally {
+    clearTimeout(timer);
+    opts.signal?.removeEventListener("abort", onAbort);
+    // Nothing the rule started may outlive it (or its deleted working directory). Only on
+    // POSIX: a finished Windows PID may already belong to another process.
+    if (posix) killTree();
     fs.rmSync(cwd, { recursive: true, force: true });
   }
 }

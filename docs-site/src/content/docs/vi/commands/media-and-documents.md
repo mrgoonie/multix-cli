@@ -108,8 +108,8 @@ Các profile có sẵn (liệt kê bằng `multix media profiles`):
 | `audio` | audio | Bắt buộc có audio stream; true peak từ 0 dBTP trở lên bị fail; khoảng lặng dài thì cảnh báo |
 
 Các check gồm loại media, tính toàn vẹn khi giải mã và file bị cắt cụt, khoảng
-đen và đứng hình, ảnh trống, khoảng lặng và clipping, cùng các kỳ vọng bạn
-truyền vào: `--expect-duration` (`--duration-tolerance`), `--expect-aspect` như
+đen và đứng hình, ảnh trống, khoảng lặng, clipping và (với profile video) hình
+kết thúc trước tiếng, cùng các kỳ vọng bạn truyền vào: `--expect-duration` (`--duration-tolerance`), `--expect-aspect` như
 `16:9`, `9:16` hoặc `1:1` (`--aspect-tolerance`), và `--loudness`
 (`--loudness-tolerance`). Loudness chỉ được kiểm tra khi bạn truyền mục tiêu;
 không có sẵn mục tiêu của nền tảng nào. Mỗi check ghi lại ngưỡng, giá trị đo
@@ -118,7 +118,8 @@ không có sẵn mục tiêu của nền tảng nào. Mỗi check ghi lại ngư
 Khai báo các đoạn fade, giữ hình và khoảng lặng có chủ ý bằng các khoảng lặp
 lại được `--allow-black`, `--allow-freeze` và `--allow-silence <start-end>`
 (tính bằng giây). Phát hiện nằm trong các khoảng này được ghi là có chủ ý thay
-vì bị fail.
+vì bị fail. Đoạn giữ màn hình đen cũng là hình đứng yên, nên `--allow-black`
+đồng thời che luôn phần đứng hình mà nó gây ra.
 
 Biên nhận không bao giờ khẳng định nhiều hơn những gì đã đo. `--timeout`,
 Ctrl-C, một check không đo được hoặc file bị thay đổi trong lúc chạy sẽ cho
@@ -154,6 +155,9 @@ không hợp lệ sẽ thành check `unknown` và biên nhận là `incomplete`.
 `--cache-dir <dir>` dùng lại biên nhận theo khoá gồm phiên bản engine verify
 và ffmpeg, sha256 của file nguồn, profile, các kỳ vọng và các script rule.
 Biên nhận `incomplete` không bao giờ được cache; xoá thư mục để làm sạch cache.
+Chỉ file của chính rule được băm: sau khi sửa một module mà rule import, hãy
+xoá cache. Hãy coi thư mục cache là trạng thái cục bộ đáng tin cậy, không dùng
+chung.
 
 ### Frames
 
@@ -170,7 +174,8 @@ model xem chúng, hãy tự truyền chúng vào `multix gemini analyze`.
 đúng là các byte mà biên nhận đã đánh giá và biên nhận có trạng thái `pass`.
 Lệnh nhận biên nhận thuần hoặc envelope `--json`. File đã transcode, remux hoặc
 finalize có byte mới, nên hãy verify chính file cuối cùng trước khi kiểm tra
-biên nhận của nó.
+biên nhận của nó. Biên nhận không được ký: nó ghi lại một lần chạy cục bộ, nên
+chỉ tin nó ở mức bạn tin nguồn gốc của nó.
 
 Trên [remote MCP server](/vi/guides/mcp-server/), `--rule`, `--cache-dir` và
 `--receipt-out` không được hỗ trợ.

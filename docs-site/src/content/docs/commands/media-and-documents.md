@@ -110,7 +110,8 @@ Built-in profiles (list them with `multix media profiles`):
 | `audio` | audio | Audio stream required; true peak at 0 dBTP or above fails; long silences warn |
 
 Checks cover media kind, decode integrity and truncation, black and frozen
-ranges, blank images, silence and clipping, plus the expectations you pass:
+ranges, blank images, silence, clipping and (for video profiles) a picture
+that ends before its sound, plus the expectations you pass:
 `--expect-duration` (`--duration-tolerance`), `--expect-aspect` such as `16:9`,
 `9:16` or `1:1` (`--aspect-tolerance`), and `--loudness` (`--loudness-tolerance`).
 Loudness is checked only when you pass a target; no platform targets are built
@@ -120,6 +121,8 @@ in. Each check records its threshold, the measured values and findings with
 Declare intended fades, holds and silences with the repeatable
 `--allow-black`, `--allow-freeze` and `--allow-silence <start-end>` ranges (in
 seconds). Findings inside them are reported as intentional instead of failing.
+A black hold is also a still picture, so `--allow-black` covers the freeze it
+causes as well.
 
 A receipt never claims more than was measured. A `--timeout`, Ctrl-C, an
 unmeasured check or a file that changed during the run makes it `incomplete`,
@@ -154,7 +157,9 @@ becomes an `unknown` check and the receipt is `incomplete`.
 `--cache-dir <dir>` reuses receipts keyed by the verify engine and ffmpeg
 versions, the source sha256, the profile, the expectations and the rule
 scripts. Incomplete receipts are never cached; delete the directory to clear
-it.
+it. Only a rule's own file is hashed: after changing a module it imports, clear
+the cache. Treat the cache directory as trusted local state, not something to
+share.
 
 ### Frames
 
@@ -171,6 +176,8 @@ model look at them, pass them to `multix gemini analyze` yourself.
 it is the exact bytes the receipt judged and the receipt passed. It accepts a
 bare receipt or a `--json` envelope. A transcoded, remuxed or finalized file
 has new bytes, so verify the final file itself before checking its receipt.
+Receipts are not signed: they record a local run, so trust one only as far as
+you trust where it came from.
 
 On the [remote MCP server](/guides/mcp-server/), `--rule`, `--cache-dir` and
 `--receipt-out` are not supported.

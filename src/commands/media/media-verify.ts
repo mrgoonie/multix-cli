@@ -202,6 +202,9 @@ function rangedCheck(
   return { id, rule_version: "1", status, severity, unit: "s", threshold, findings };
 }
 
+/** Containers whose duration ffprobe estimates from the bitrate. */
+const RAW_FORMATS = /^(mp3|aac|ac3|eac3|dts|truehd|mlp|h264|hevc|m4v|mpegvideo)$/;
+
 const MEASURED_CHECKS = new Set([
   "black",
   "freeze",
@@ -251,8 +254,22 @@ export function judge(
   });
   if (report.kind === null || !kindOk) return { checks, notMeasured };
 
-  // Integrity: the whole file decodes without errors, as far as it claims to run.
-  const declared = report.format?.duration_s ?? null;
+  // Integrity: the whole file decodes without errors, as far as its decoded streams claim to
+  // run. The container's duration can count tracks that were not decoded, and for raw
+  // elementary formats (mp3, aac, ac3) it is only estimated from the bitrate, so no
+  // truncation is asserted from it there.
+  const videoDecoded = video !== null && profile.media !== "audio";
+  const audioDecoded = audio !== null && profile.media !== "image";
+  const streamEnds = [
+    videoDecoded ? video?.duration_s : null,
+    audioDecoded ? audio?.duration_s : null,
+  ].filter((d): d is number => typeof d === "number");
+  const estimated = RAW_FORMATS.test(report.format?.format_name ?? "");
+  const declared = estimated
+    ? null
+    : streamEnds.length > 0
+      ? Math.max(...streamEnds)
+      : (report.format?.duration_s ?? null);
   if (!analysis) {
     checks.push({
       id: "decode",
@@ -284,6 +301,7 @@ export function judge(
       measured: {
         decoded_s: analysis.decoded_s,
         declared_duration_s: declared,
+        ...(estimated ? { declared_duration_estimated: true } : {}),
         error_count: analysis.decode_error_count,
         completed: analysis.completed,
       },
@@ -303,6 +321,27 @@ export function judge(
                       .slice(0, 2000),
           }
         : {}),
+    });
+  }
+
+  // The picture must run as long as the sound: frames missing at the end are neither black
+  // nor frozen to the detectors, since nothing is decoded there.
+  if (profile.media === "video" && video?.duration_s != null && audio?.duration_s != null) {
+    const tol = Math.max(0.5, fps ? 2 / fps : 0);
+    const gap = round(audio.duration_s - video.duration_s);
+    checks.push({
+      id: "track_lengths",
+      rule_version: "1",
+      status: gap > tol ? "fail" : -gap > tol ? "warn" : "pass",
+      severity: gap > tol ? "error" : "warning",
+      unit: "s",
+      threshold: { tolerance_s: round(tol) },
+      measured: { video_s: video.duration_s, audio_s: audio.duration_s },
+      ...(gap > tol
+        ? { reason: `the picture ends ${gap} s before the audio` }
+        : -gap > tol
+          ? { reason: `the audio ends ${-gap} s before the picture` }
+          : {}),
     });
   }
 
@@ -382,7 +421,15 @@ export function judge(
     if (report.kind !== "video") skip("freeze", "not a video", c.freeze.severity);
     else if (usable)
       checks.push(
-        rangedCheck("freeze", analysis.freeze, expect.allow_freeze, c.freeze.severity, t, fps),
+        // A declared black hold is also a still picture: it covers the freeze it causes.
+        rangedCheck(
+          "freeze",
+          analysis.freeze,
+          [...(expect.allow_freeze ?? []), ...(expect.allow_black ?? [])],
+          c.freeze.severity,
+          t,
+          fps,
+        ),
       );
   }
   if (c.blank_image && usable) {
@@ -494,7 +541,7 @@ function planFor(
   expect: VerifyExpectations,
 ): AnalysisPlan {
   const c = profile.checks;
-  const plan: AnalysisPlan = {};
+  const plan: AnalysisPlan = { formatName: report.format?.format_name };
   if (
     report.video &&
     (report.kind === "video" || report.kind === "image") &&

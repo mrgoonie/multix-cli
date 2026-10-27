@@ -100,6 +100,7 @@ export async function inspectSource(
     const a = await analyzeMedia(src.resolved, {
       video: video ? { streamIndex: video.index } : undefined,
       audio: audio ? { streamIndex: audio.index } : undefined,
+      formatName: probe.format_name,
       timeoutMs: opts.timeoutMs,
       signal: opts.signal,
     });

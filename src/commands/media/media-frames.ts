@@ -77,7 +77,8 @@ export async function extractFrames(input: string, opts: FramesOptions): Promise
   const probe = await probeMedia(src.resolved, opts);
   const video = firstVideo(probe);
   if (!video) throw new ValidationError("No video stream to sample frames from");
-  const duration = probe.duration_s ?? video.duration_s;
+  // The picture can end before the container (a longer audio track): sample the video's own span.
+  const duration = video.duration_s ?? probe.duration_s;
   if (duration === null || duration <= 0)
     throw new ValidationError("Video duration is unknown; cannot place sample times");
   await assertFfmpeg();
@@ -98,7 +99,7 @@ export async function extractFrames(input: string, opts: FramesOptions): Promise
           "level+info",
           "-ss",
           String(t),
-          ...ffInput(src.resolved),
+          ...ffInput(src.resolved, { formatName: probe.format_name }),
           "-map",
           `0:${video.index}`,
           "-frames:v",
@@ -106,9 +107,11 @@ export async function extractFrames(input: string, opts: FramesOptions): Promise
           "-vf",
           "showinfo",
           "-y",
-          path.join(stage, name),
+          // Relative to the staging cwd: a `%` in --output-dir is not an image2 pattern.
+          name,
         ],
         {
+          cwd: stage,
           reject: false,
           stdin: "ignore",
           timeout: opts.timeoutMs,
@@ -149,15 +152,21 @@ export async function extractFrames(input: string, opts: FramesOptions): Promise
           "-start_number",
           "1",
           "-i",
-          path.join(stage, "frame-%03d.png"),
+          "frame-%03d.png",
           "-vf",
           `scale=${tileWidth}:-2,tile=${columns}x${rows}`,
           "-frames:v",
           "1",
           "-y",
-          path.join(stage, "sheet.png"),
+          "sheet.png",
         ],
-        { reject: false, stdin: "ignore", timeout: opts.timeoutMs, cancelSignal: opts.signal },
+        {
+          cwd: stage,
+          reject: false,
+          stdin: "ignore",
+          timeout: opts.timeoutMs,
+          cancelSignal: opts.signal,
+        },
       );
       if (res.exitCode !== 0)
         throw new ProviderError(

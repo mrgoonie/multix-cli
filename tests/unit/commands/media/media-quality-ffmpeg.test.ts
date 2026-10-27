@@ -77,6 +77,19 @@ describe.skipIf(!hasFfmpeg)("media quality with ffmpeg", { timeout: 60_000 }, ()
     fs.writeFileSync(f("error.mp4"), "<html><body>403 Forbidden</body></html>\n");
     fs.mkdirSync(f("thư mục có dấu cách"));
     fs.copyFileSync(f("square.mp4"), f("thư mục có dấu cách/tệp vuông.mp4"));
+    // To image2, `thumb%03d.png` names `thumb000.png`: a blank file beside a good one.
+    fs.copyFileSync(f("black.png"), f("thumb%03d.png"));
+    fs.copyFileSync(f("ok.png"), f("thumb000.png"));
+    // 2 s of picture under 4 s of sound.
+    ff(
+      ...["-f", "lavfi", "-i", "testsrc2=s=160x90:r=25:d=2", "-f", "lavfi", "-i", "sine=d=4"],
+      ...["-pix_fmt", "yuv420p", f("short-video.mp4")],
+    );
+    // VBR mp3 without a Xing header: ffprobe estimates its duration from the first frames.
+    ff(
+      ...["-f", "lavfi", "-i", "anoisesrc=d=6:a=0.05,volume='if(lt(t,3),1,0.01)':eval=frame"],
+      ...["-c:a", "libmp3lame", "-q:a", "2", "-write_xing", "0", f("vbr.mp3")],
+    );
   });
 
   afterAll(() => {
@@ -280,6 +293,43 @@ describe.skipIf(!hasFfmpeg)("media quality with ffmpeg", { timeout: 60_000 }, ()
     });
   });
 
+  describe("verdicts on real-world shapes", () => {
+    it("judges the file named, not an image2 pattern match, when its name holds a %", async () => {
+      const r = await verifyMedia(f("thumb%03d.png"), { profile: builtinProfile("thumbnail") });
+      expect(r.status).toBe("fail");
+      expect(check(r, "blank_image").status).toBe("fail");
+      const probe = await inspectMedia(f("thumb%03d.png"), {});
+      expect(probe.source.sha256).toBe((await inspectMedia(f("black.png"), {})).source.sha256);
+    });
+
+    it("fails a picture that ends seconds before its sound", async () => {
+      const r = await verifyMedia(f("short-video.mp4"), {
+        profile: builtinProfile("camera-footage"),
+      });
+      expect(r.status).toBe("fail");
+      expect(check(r, "track_lengths")).toMatchObject({ status: "fail", severity: "error" });
+    });
+
+    it("does not call a file truncated from durations it did not decode or that are estimates", async () => {
+      const audioOnly = await verifyMedia(f("short-video.mp4"), {
+        profile: builtinProfile("audio"),
+      });
+      expect(check(audioOnly, "decode").status).toBe("pass");
+      const mp3 = await verifyMedia(f("vbr.mp3"), { profile: builtinProfile("audio") });
+      expect(check(mp3, "decode").status).toBe("pass");
+      expect(check(mp3, "decode").measured).toMatchObject({ declared_duration_estimated: true });
+    });
+
+    it("counts a declared black hold as an intended freeze too", async () => {
+      const r = await verifyMedia(f("t.mp4"), {
+        profile: builtinProfile("camera-footage"),
+        expect: { allow_black: ["0-1"] },
+      });
+      expect(check(r, "black").status).toBe("pass");
+      expect(check(r, "freeze").status).toBe("pass");
+    });
+  });
+
   describe("cache", () => {
     it("hits for the same bytes and inputs and misses when source, profile or rule change", async () => {
       const cacheDir = f("cache");
@@ -382,6 +432,31 @@ describe.skipIf(!hasFfmpeg)("media quality with ffmpeg", { timeout: 60_000 }, ()
       expect(reasons[1]).toMatch(/exited with code 3/);
       expect(reasons[2]).toMatch(/output invalid/);
     });
+
+    it.skipIf(process.platform === "win32")(
+      "time out even when a child of the rule holds its stdout open, and leave no child behind",
+      async () => {
+        const marker = `multix-rule-orphan-${process.pid}`;
+        const rule = f("spawner.mjs");
+        fs.writeFileSync(
+          rule,
+          `import { spawn } from "node:child_process";
+spawn(process.execPath, ["-e", "setTimeout(() => {}, 60000)", "${marker}"], { stdio: "inherit" });
+setTimeout(() => {}, 60000);
+`,
+        );
+        const started = Date.now();
+        const r = await verifyMedia(f("square.mp4"), {
+          profile: builtinProfile("motion-graphics"),
+          rules: [rule],
+          ruleTimeoutMs: 1000,
+        });
+        expect(Date.now() - started).toBeLessThan(15_000);
+        expect(r.rules[0]?.error).toMatch(/timed out/);
+        const ps = spawnSync("ps", ["-eo", "args"], { encoding: "utf8" }).stdout;
+        expect(ps).not.toContain(marker);
+      },
+    );
   });
 
   describe("custom profile files", () => {
@@ -417,6 +492,12 @@ describe.skipIf(!hasFfmpeg)("media quality with ffmpeg", { timeout: 60_000 }, ()
         hash_matches: true,
         receipt_status: "pass",
       });
+      for (const bad of [null, { schema: "multix.media-verify/v1", status: "pass" }]) {
+        fs.writeFileSync(f("bad-receipt.json"), JSON.stringify(bad));
+        await expect(checkReceipt(f("bad-receipt.json"), f("t.mp4"))).rejects.toThrow(
+          /Invalid receipt/,
+        );
+      }
       const other = await checkReceipt(receipt, f("t2.mp4"));
       expect(other).toMatchObject({ ok: false, hash_matches: false });
       expect(other.reason).toMatch(/verify it again|differ/i);
@@ -443,6 +524,20 @@ describe.skipIf(!hasFfmpeg)("media quality with ffmpeg", { timeout: 60_000 }, ()
       expect(fs.readdirSync(outDir).filter((n) => n.startsWith(".frames-"))).toEqual([]);
       expect(fs.readdirSync(dir).filter((n) => n.startsWith(".frames-"))).toEqual(before);
       await expect(extractFrames(f("t.mp4"), { outDir, count: 2 })).rejects.toThrow(/already/i);
+    });
+
+    it("samples only the picture's span and writes into a directory whose name holds a %", async () => {
+      const outDir = f("frames 100%");
+      const m = await extractFrames(f("short-video.mp4"), { outDir, count: 3, sheet: true });
+      expect(m.frames).toHaveLength(3);
+      expect(Math.max(...m.frames.map((x) => x.requested_s))).toBeLessThan(2);
+      expect(fs.readdirSync(outDir).sort()).toEqual([
+        "frame-001.png",
+        "frame-002.png",
+        "frame-003.png",
+        "frames.json",
+        "sheet.png",
+      ]);
     });
   });
 });

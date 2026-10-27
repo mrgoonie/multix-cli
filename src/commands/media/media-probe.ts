@@ -196,7 +196,15 @@ export async function probeMedia(resolved: string, opts: ProbeOptions = {}): Pro
   await assertFfprobe();
   const result = await execa(
     "ffprobe",
-    ["-v", "error", "-print_format", "json", "-show_format", "-show_streams", ...ffInput(resolved)],
+    [
+      "-v",
+      "error",
+      "-print_format",
+      "json",
+      "-show_format",
+      "-show_streams",
+      ...ffInput(resolved, { probe: true }),
+    ],
     {
       reject: false,
       timeout: opts.timeoutMs,

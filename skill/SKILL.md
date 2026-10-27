@@ -546,11 +546,11 @@ multix media check-receipt out.receipt.json final.mp4                     # same
 - Use `inspect` to see what a file really is before acting on it (an HTML error page saved as `.mp4` reports text, not media). Use `verify` before handing a generated or edited file to the user.
 - Receipt (`data`, `multix.media-verify/v1`): `status` pass|fail|incomplete (exit non-zero unless pass). Read `checks[]` (`status`, `threshold`, `measured`, `findings[].start_s/end_s`), `summary`, `not_measured[]`. `incomplete` (timeout, Ctrl-C, unmeasured check, failed rule, file changed mid-run) is never a pass: rerun, do not report success.
 - A receipt is not a content review: `coverage.model_reviewed: false`; A/V sync and content correctness are in `not_measured`. To have a model look, run `media frames`, then pass the frames to `multix gemini analyze` explicitly.
-- Intended fades, holds and silences: declare them with `--allow-black|--allow-freeze|--allow-silence <start-end>` (seconds, repeatable) so they are reported as intentional; do not widen ranges to hide real defects.
+- Intended fades, holds and silences: declare them with `--allow-black|--allow-freeze|--allow-silence <start-end>` (seconds, repeatable) so they are reported as intentional; do not widen ranges to hide real defects. `--allow-black` also covers the freeze a black hold causes.
 - Loudness is checked only with `--loudness <LUFS>`; there are no built-in platform targets, so pass the target the user asked for.
 - Custom profile: `--profile-file` JSON `{id, version, extends?, media?, checks}` (`null` disables a check). Custom rule: `--rule <script>` reads `multix.media-rule-input/v1` on stdin, prints `{id, version, status: pass|fail|warn|unknown, message?, findings?}`; no shell, only `PATH` in env, 30 s default (`--rule-timeout`).
 - After transcode/optimize/remux the bytes change: verify the final file, then `check-receipt` it. Never reuse a source receipt for a derived file.
-- `--cache-dir` reuses non-incomplete receipts for identical bytes, profile, expectations, rules and ffmpeg version. Remote MCP: no `--rule`, `--cache-dir`, `--receipt-out`.
+- `--cache-dir` reuses non-incomplete receipts for identical bytes, profile, expectations, rules and ffmpeg version (only a rule's own file is hashed; clear the cache after changing what it imports). Receipts are unsigned local records. Remote MCP: no `--rule`, `--cache-dir`, `--receipt-out`.
 
 ## Output
 

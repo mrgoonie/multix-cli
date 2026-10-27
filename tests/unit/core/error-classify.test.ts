@@ -8,6 +8,7 @@ import {
 import {
   ConfigError,
   HttpError,
+  MissingBinaryError,
   ProviderError,
   ValidationError,
 } from "../../../src/core/errors.js";
@@ -96,12 +97,13 @@ describe("classifyError", () => {
 
   it("reports a missing ffmpeg or ffprobe as a binary to install, not bad input", () => {
     const info = classifyError(
-      new ValidationError("ffprobe not found on PATH — install ffmpeg which bundles ffprobe"),
+      new MissingBinaryError("ffprobe not found on PATH — install ffmpeg which bundles ffprobe"),
     );
     expect(info.code).toBe("BINARY_MISSING");
     expect(info.exit_code).toBe(EXIT_CODES.config);
-    expect(classifyError(new ValidationError("--profile must be one of: audio")).code).toBe(
-      "INVALID_INPUT",
-    );
+    // A user's file name that mentions ffmpeg is still bad input, not a missing binary.
+    expect(
+      classifyError(new ValidationError("Profile file not found: ffmpeg-missing.json")).code,
+    ).toBe("INVALID_INPUT");
   });
 });

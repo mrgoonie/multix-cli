@@ -28,7 +28,8 @@ function numberFlag(
   opts: { min?: number; positive?: boolean } = {},
 ) {
   if (value === undefined) return undefined;
-  const n = Number(value);
+  // Number("") is 0: an empty value must not become a 0 target.
+  const n = value.trim() === "" ? Number.NaN : Number(value);
   if (!Number.isFinite(n) || (opts.positive && n <= 0) || (opts.min !== undefined && n < opts.min))
     throw new ValidationError(`Invalid ${flag}: ${value}`);
   return n;
@@ -42,16 +43,28 @@ function emit(data: unknown, human: () => string): void {
   console.log(run.json ? JSON.stringify(data) : human());
 }
 
-/** Ctrl-C cancels the running ffmpeg/ffprobe (and cleans temp files) instead of orphaning it. */
+/**
+ * Ctrl-C cancels the running ffmpeg/ffprobe and rule processes, and the command's own
+ * cleanup (temp and staging directories) runs before it exits. The listener stays
+ * registered for the whole run: a once-listener would be gone by the time execa's exit
+ * handler looks, and it would then re-raise the signal and skip that cleanup. A second
+ * Ctrl-C exits at once.
+ */
 async function cancellable<T>(fn: (signal: AbortSignal) => Promise<T>): Promise<T> {
   const ac = new AbortController();
-  const stop = () => ac.abort();
-  process.once("SIGINT", stop);
-  process.once("SIGTERM", stop);
+  const stop = (signal: NodeJS.Signals) => {
+    if (ac.signal.aborted) process.exit(signal === "SIGINT" ? 130 : 143);
+    ac.abort();
+  };
+  process.on("SIGINT", stop);
+  process.on("SIGTERM", stop);
   try {
     const result = await fn(ac.signal);
     if (ac.signal.aborted) throw new ValidationError("Cancelled");
     return result;
+  } catch (e) {
+    if (ac.signal.aborted) throw new ValidationError("Cancelled");
+    throw e;
   } finally {
     process.off("SIGINT", stop);
     process.off("SIGTERM", stop);

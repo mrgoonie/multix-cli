@@ -2,7 +2,8 @@
  * `media check-receipt`: does a verify receipt vouch for this exact file?
  * A receipt names the sha256 of the bytes it judged, so a receipt for a
  * source does not vouch for a file transcoded, remuxed or re-encoded from it:
- * verify the final file itself.
+ * verify the final file itself. Receipts are not signed: they record a
+ * local run, so trust one only as far as you trust where it came from.
  */
 
 import fs from "node:fs";
@@ -28,18 +29,18 @@ export function readReceipt(file: string): VerifyReceipt {
     throw new ValidationError(`Invalid receipt ${file}: ${(e as Error).message}`);
   }
   // Accept a bare receipt or the multix.result/v1 envelope that carries one as `data`.
-  const r =
-    (raw as { schema?: string; data?: unknown }).schema === "multix.result/v1"
-      ? (raw as { data: unknown }).data
-      : raw;
-  const receipt = r as Partial<VerifyReceipt> | undefined;
+  const outer = raw as { schema?: string; data?: unknown } | null;
+  const r = outer?.schema === "multix.result/v1" ? outer.data : raw;
+  const receipt = (r ?? undefined) as Partial<VerifyReceipt> | undefined;
   if (
     receipt?.schema !== VERIFY_SCHEMA ||
     typeof receipt.source?.sha256 !== "string" ||
-    !/^[0-9a-f]{64}$/.test(receipt.source.sha256)
+    !/^[0-9a-f]{64}$/.test(receipt.source.sha256) ||
+    !["pass", "fail", "incomplete"].includes(receipt.status as string) ||
+    typeof receipt.profile?.id !== "string"
   )
     throw new ValidationError(
-      `Invalid receipt ${file}: not a ${VERIFY_SCHEMA} receipt with a source sha256`,
+      `Invalid receipt ${file}: not a ${VERIFY_SCHEMA} receipt with a source sha256, status and profile`,
     );
   return receipt as VerifyReceipt;
 }

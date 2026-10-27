@@ -139,6 +139,50 @@ describe("media inspect/verify (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
       expect(envelope(bad.stdout).data).toMatchObject({ ok: false, hash_matches: false });
     });
 
+    it("reads an empty number flag as invalid, not 0", async () => {
+      const res = await run([
+        "media",
+        "verify",
+        "clip.mp4",
+        "--profile",
+        "audio",
+        "--loudness",
+        "",
+        "--json",
+      ]);
+      expect(res.exitCode).toBe(2);
+      expect(envelope(res.stdout).error.message).toMatch(/--loudness/);
+    });
+
+    it.skipIf(process.platform === "win32")(
+      "removes its staging directory when interrupted with Ctrl-C",
+      async () => {
+        const out = path.join(tmp, "interrupted");
+        const child = execa(
+          "node",
+          [CLI, "media", "frames", "clip.mp4", "--output-dir", out, "--count", "100"],
+          {
+            cwd: tmp,
+            env: isolatedEnv(tmp),
+            extendEnv: false,
+            reject: false,
+            timeout: SPAWN_TIMEOUT - 1_000,
+          },
+        );
+        const staged = () =>
+          fs.existsSync(out) ? fs.readdirSync(out).filter((n) => n.startsWith(".frames-")) : [];
+        const deadline = Date.now() + 10_000;
+        while (staged().length === 0 && Date.now() < deadline)
+          await new Promise((r) => setTimeout(r, 25));
+        expect(staged()).toHaveLength(1);
+        child.kill("SIGINT");
+        const res = await child;
+        expect(res.exitCode).not.toBe(0);
+        expect(staged()).toEqual([]);
+        expect(fs.readdirSync(out).filter((n) => n.endsWith(".png"))).toEqual([]);
+      },
+    );
+
     it("prints a readable inspect summary without --json", async () => {
       const res = await run(["media", "inspect", "clip.mp4"]);
       expect(res.exitCode).toBe(0);

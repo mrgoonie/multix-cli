@@ -30,6 +30,14 @@ export class ConfigError extends MultixError {
   }
 }
 
+/** A local tool the command runs (ffmpeg, ffprobe) is not installed. */
+export class MissingBinaryError extends MultixError {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, "BINARY_MISSING", options);
+    this.name = "MissingBinaryError";
+  }
+}
+
 /** Provider API returned an error or unexpected response. */
 export class ProviderError extends MultixError {
   constructor(

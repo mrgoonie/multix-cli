@@ -5,7 +5,7 @@
  */
 
 import { type ExecaError, execa } from "execa";
-import { ProviderError, ValidationError } from "../../core/errors.js";
+import { MissingBinaryError, ProviderError, ValidationError } from "../../core/errors.js";
 import type { Logger } from "../../core/logger.js";
 
 /** Check ffmpeg is on PATH. Throws ValidationError with install hint if not. */
@@ -14,7 +14,7 @@ export async function assertFfmpeg(): Promise<void> {
     await execa("ffmpeg", ["-version"], { reject: true });
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === "ENOENT") {
-      throw new ValidationError(
+      throw new MissingBinaryError(
         "ffmpeg not found on PATH.\n" +
           "  Linux: sudo apt-get install ffmpeg\n" +
           "  macOS: brew install ffmpeg\n" +
@@ -31,7 +31,9 @@ export async function assertFfprobe(): Promise<void> {
     await execa("ffprobe", ["-version"], { reject: true });
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === "ENOENT") {
-      throw new ValidationError("ffprobe not found on PATH — install ffmpeg which bundles ffprobe");
+      throw new MissingBinaryError(
+        "ffprobe not found on PATH — install ffmpeg which bundles ffprobe",
+      );
     }
   }
 }

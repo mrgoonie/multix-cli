@@ -81,7 +81,23 @@ export async function resolveMediaSource(input: string): Promise<MediaSource> {
   };
 }
 
-/** The argument ffmpeg/ffprobe get for a resolved path: the file protocol only, never a URL. */
-export function ffInput(resolved: string): string[] {
-  return ["-protocol_whitelist", "file", "-i", `file:${resolved}`];
+/**
+ * The arguments ffmpeg/ffprobe get for a resolved path: the file protocol only, never a URL.
+ * To the image2 demuxer a `%` in the name is a frame-number pattern (`a%03d.png` reads
+ * `a000.png`), so such a path also gets `-pattern_type none` to read the file named.
+ * ffprobe accepts that option for any input; ffmpeg only for image2, so pass `formatName`.
+ */
+export function ffInput(
+  resolved: string,
+  opts: { probe?: boolean; formatName?: string | null } = {},
+): string[] {
+  const literal =
+    resolved.includes("%") && (opts.probe || /(^|,)image2(,|$)/.test(opts.formatName ?? ""));
+  return [
+    "-protocol_whitelist",
+    "file",
+    ...(literal ? ["-pattern_type", "none"] : []),
+    "-i",
+    `file:${resolved}`,
+  ];
 }
