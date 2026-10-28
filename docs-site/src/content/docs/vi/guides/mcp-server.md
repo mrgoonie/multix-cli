@@ -20,11 +20,12 @@ thay đổi cách `multix` chạy trên máy bạn.
 | Tool | Mục đích |
 |---|---|
 | `multix_catalog` | Các lệnh CLI mà `multix_run` chạy được. Không có `group`: mọi nhóm lệnh, các lệnh trong nhóm và bạn đã lưu key cho nhóm đó chưa (`has_keys`). Có `group`: positional và option của từng lệnh, option nào nhận file, và giá trị server bắt buộc. Có `task` (như `speech`): chỉ các lệnh và model đã xác minh cho task đó; thêm `group` để giới hạn trong một nhóm. Có `model`: input, voice và định dạng đầu ra của một model đã xác minh cùng cách truyền nó cho `multix_run`, hoặc `verified: null` khi chưa biết input của model. |
+| `multix_model_catalog` | [Danh mục model và provider](/vi/commands/catalog/), chỉ đọc: `view` là `providers`, `models`, `show` (kèm `offering`) hoặc `compare` (đúng một request: `task`, `resolution`, `duration_s`, `audio`, `aspect_ratio`, `images`). Cùng payload với phần `data` của `multix catalog <view> --json`; trạng thái sẵn sàng dựa trên key bạn đã lưu. Usage, rating, review và ghi chú vẫn nằm trên máy và không được phục vụ. |
 | `multix_run` | Chạy một lệnh CLI trong container riêng bằng key đã lưu của bạn. Chờ tối đa `wait_seconds` (mặc định 25, tối đa 40, tính cả thời gian khởi động container), sau đó trả về kết quả hoặc job ID để poll. Mặc định mỗi tài khoản chạy tối đa 2 job cùng lúc (`MULTIX_MAX_JOBS_PER_ACCOUNT`). |
 | `multix_job_status` | Đọc job `multix_run`: trạng thái, URL output, stdout và phần cuối của stderr. |
 | `multix_job_cancel` | Dừng job đang chạy cùng container của nó. |
 
-`multix_catalog` luôn được liệt kê. `multix_run`, `multix_job_status` và
+`multix_catalog` và `multix_model_catalog` luôn được liệt kê. `multix_run`, `multix_job_status` và
 `multix_job_cancel` chỉ xuất hiện khi Worker có các binding chạy job
 (`MULTIX_JOBS` và `MULTIX_JOB_QUOTA`, xem [Triển khai](#triển-khai)).
 
@@ -161,8 +162,10 @@ thay vào đó `multix_catalog` báo `has_keys` theo key bạn đã lưu. Xem
 - Tính năng tương tác hoặc chỉ chạy cục bộ: `multix update`, `multix check`,
   Codex image driver, `--stdin-ext`, và đọc giá trị từ `@file`.
 - Chọn nơi lưu file: server tự đặt thư mục đầu ra. Hãy tải output từ URL R2.
-- Khi không có container chạy job, chỉ `multix_catalog` được liệt kê, nên
-  không lệnh nào chạy được.
+- Khi không có container chạy job, chỉ `multix_catalog` và
+  `multix_model_catalog` được liệt kê, nên không lệnh nào chạy được.
+- Các lệnh `multix catalog`: chúng đọc usage và review cục bộ của bạn. Hãy dùng
+  `multix_model_catalog` để xem offering, giá và so sánh.
 
 ## Tài khoản và credential
 
@@ -255,7 +258,8 @@ Cloudflare.
    instance type `basic`, tối đa 10 instance) và binding Durable Object
    `MULTIX_JOBS` bật `multix_run`. Để triển khai không kèm trình chạy CLI
    (không cần Docker, dùng được Workers Free), xóa `containers`,
-   `durable_objects` và `exports`; khi đó chỉ `multix_catalog` được liệt kê.
+   `durable_objects` và `exports`; khi đó chỉ `multix_catalog` và
+   `multix_model_catalog` được liệt kê.
    Binding `MULTIX_JOB_QUOTA` (class `AccountJobQuota`) giữ số job đang chạy
    theo từng tài khoản và trên toàn server, và phải đi cùng `MULTIX_JOBS`.
    Binding `MULTIX_EVENTS` (class `AccountEvents`) giữ

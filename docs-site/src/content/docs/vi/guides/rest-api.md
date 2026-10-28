@@ -68,6 +68,7 @@ Mọi path đều tương đối với `/api/v1`.
 | `PUT` | `/storage` | Kiểm tra quyền truy cập bucket, rồi lưu cấu hình R2. |
 | `DELETE` | `/storage` | Xóa cấu hình R2. |
 | `GET` | `/catalog[?group=&task=&model=]` | Các lệnh CLI server chạy được; cùng payload và bộ lọc với `multix_catalog`. |
+| `GET` | `/model-catalog[?view=&task=&provider=&family=&q=&offering=&priced=&ready=&resolution=&duration_s=&audio=&aspect_ratio=&images=&sort=]` | Offering, giá theo từng cấu hình và so sánh; cùng payload với `multix_model_catalog`. `view` mặc định là `models`. Xem [Danh mục](/vi/commands/catalog/). |
 | `POST` | `/jobs` | Chạy một lệnh CLI; cùng input với `multix_run`. |
 | `GET` | `/jobs/{id}` | Trạng thái job, output, stdout và phần cuối stderr. |
 | `POST` | `/jobs/{id}/cancel` | Dừng một job đang chạy. |

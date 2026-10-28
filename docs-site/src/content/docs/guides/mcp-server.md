@@ -19,11 +19,12 @@ does not change how `multix` behaves on your machine.
 | Tool | Purpose |
 |---|---|
 | `multix_catalog` | The CLI commands `multix_run` can run. Without `group`: every group, its commands and whether you saved keys for it (`has_keys`). With `group`: each command's positionals and options, which ones take files, and the values the server forces. With `task` (such as `speech`): only the commands and verified models for that task; add `group` to stay in one group. With `model`: a verified model's inputs, voices and output formats and how to pass it to `multix_run`, or `verified: null` when its inputs are unknown. |
+| `multix_model_catalog` | The [model and provider catalogue](/commands/catalog/), read-only: `view` is `providers`, `models`, `show` (with `offering`) or `compare` (one exact request: `task`, `resolution`, `duration_s`, `audio`, `aspect_ratio`, `images`). Same payload as the `data` of `multix catalog <view> --json`; readiness comes from your saved keys. Usage, ratings, reviews and notes stay local and are not served. |
 | `multix_run` | Run one CLI command in its own container with your saved keys. Waits up to `wait_seconds` (default 25, max 40, container start included), then returns the result or a job ID to poll. At most 2 running jobs per account by default (`MULTIX_MAX_JOBS_PER_ACCOUNT`). |
 | `multix_job_status` | Read a `multix_run` job: status, output URLs, stdout and the tail of stderr. |
 | `multix_job_cancel` | Stop a running job and its container. |
 
-`multix_catalog` is always listed. `multix_run`, `multix_job_status` and
+`multix_catalog` and `multix_model_catalog` are always listed. `multix_run`, `multix_job_status` and
 `multix_job_cancel` appear only when the Worker has its job bindings
 (`MULTIX_JOBS` and `MULTIX_JOB_QUOTA`, see [Deploy](#deploy)).
 
@@ -166,8 +167,10 @@ See [Speech commands](/commands/speech/).
   Codex image driver, `--stdin-ext`, and reading values from `@file`.
 - Choosing where files go: the server sets the output directory. Download
   outputs from their R2 URLs.
-- Without the job container, only `multix_catalog` is listed, so no command
-  can run.
+- Without the job container, only `multix_catalog` and `multix_model_catalog`
+  are listed, so no command can run.
+- `multix catalog` commands: they read your local usage and reviews. Use
+  `multix_model_catalog` for offerings, prices and comparisons.
 
 ## Accounts and credentials
 
@@ -260,7 +263,8 @@ image to Cloudflare.
    `MultixJobContainer`, instance type `basic`, at most 10 instances) and the
    `MULTIX_JOBS` Durable Object binding enable `multix_run`. To deploy without
    the CLI runner (no Docker, Workers Free), remove `containers`,
-   `durable_objects` and `exports`; only `multix_catalog` is then listed. The
+   `durable_objects` and `exports`; only `multix_catalog` and
+   `multix_model_catalog` are then listed. The
    `MULTIX_JOB_QUOTA` binding (class `AccountJobQuota`) holds the running-job
    counts per account and server-wide, and is required together with
    `MULTIX_JOBS`. The `MULTIX_EVENTS` binding (class `AccountEvents`) holds

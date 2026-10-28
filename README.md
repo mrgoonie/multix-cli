@@ -68,6 +68,7 @@ multix fal image "a red fox" --json           # one-line multix.result/v1 envelo
 multix elevenlabs tts --text "Hi" --estimate  # price range, units, rate and source; nothing is sent
 multix elevenlabs tts --text "Hi" --max-cost 0.01  # refuse before sending unless the cost fits
 multix history stats --by model               # runs, success rate, p50/p90 time, cost, credits, tokens
+multix catalog compare -t video --resolution 720p --duration 10 --audio on  # rank prices for one exact request
 multix rerun last                             # repeat a recorded run
 ```
 
@@ -102,6 +103,17 @@ lists with status `missing` (unless the catalog was too long to read in full,
 `truncated`, when it stays unknown). Catalogs are cached for a day in `~/.multix/cache/models`
 (`--refresh` refetches); offline, a stale copy up to 7 days old is used, or the
 catalog is reported `unavailable` and nothing is claimed available.
+
+`multix catalog` compares offerings (provider + model) before a run. Prices are
+per configuration (resolution, audio, variant), each with its source URL and
+check date; a price that is missing, unverified, checked more than 120 days ago
+or outside its window shows as unknown with the reason, never $0. `compare`
+ranks only rows whose price confirms every setting you pinned (others are
+`not_comparable` or `unknown`, with the reason) and says nothing about quality.
+`usage` counts only runs that went through multix on this machine, `rate`,
+`review` and `note` keep your own verdicts in a private or project store (text
+is scrubbed and returned as untrusted data), and `recommend` scores offerings
+from that evidence. Details: [Catalogue](https://multix.zuey.me/commands/catalog/).
 
 ## Environment variables
 
@@ -166,6 +178,7 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `MULTIX_OUTPUT` | No | `json` prints one `multix.result/v1` envelope per run, as `--json` does |
 | `MULTIX_HISTORY` | No | `0` stops recording runs in `~/.multix/history.jsonl` |
 | `MULTIX_HISTORY_FILE` | No | Run ledger path (shell or `~/.multix/.env` only) |
+| `MULTIX_CATALOG_FILE` | No | Private `multix catalog` ratings, reviews and notes (default `~/.multix/catalog-notes.json`; shell or `~/.multix/.env` only) |
 | `MULTIX_CACHE_DIR` | No | Cache root for `multix models --live` catalogs (default `~/.multix/cache`; shell or `~/.multix/.env` only) |
 | `MULTIX_MODELS_TTL` | No | Seconds a cached catalog stays fresh (default `86400`, at most `604800`) |
 | `OPENROUTER_IMAGE_MODEL` | No | Default OpenRouter model |
@@ -186,7 +199,7 @@ Set extra keys as `GEMINI_API_KEY_2`, `GEMINI_API_KEY_3`, … (any numeric suffi
 
 Priority: `process.env` > `cwd/.env` > `~/.multix/.env`. A blank or whitespace-only value in a `.env` file does not count as set, so a project `.env` copied from `.env.example` does not hide `~/.multix/.env`; a shell variable wins even when blank. Set `MULTIX_LEGACY_CLAUDE_ENV=1` (shell or `~/.multix/.env`) to also read legacy AgentKit files (`.claude/skills/{ai-multimodal,ak-ai-multimodal}/.env`, `.claude/skills/.env`, `.claude/.env`, project first, then home) with the lowest priority (credential names only, never endpoint/proxy settings); `multix check -v` lists the env files that were loaded.
 
-A project `.env` may only set variables `multix` reads: provider keys, the provider settings in `.env.example` (`*_BASE_URL`, model overrides, Cloudflare IDs), the documented `MULTIX_*` settings (`MULTIX_OUTPUT_DIR`, so a project can choose where outputs go, `MULTIX_IMAGE_FORMAT`, `MULTIX_MAX_DOWNLOAD_MB`, `MULTIX_UPLOAD_MIN_KBPS`, `MULTIX_OUTPUT`, `MULTIX_HISTORY`, `MULTIX_MODELS_TTL`) and `NO_COLOR`. The opt-ins `MULTIX_ALLOW_PROJECT_BASE_URL` and `MULTIX_LEGACY_CLAUDE_ENV`, and `MULTIX_HISTORY_FILE` and `MULTIX_CACHE_DIR`, are refused there; set them in the shell or `~/.multix/.env`. Other names, such as `NODE_OPTIONS`, `npm_config_registry`, `LD_PRELOAD` or `HTTPS_PROXY`, are not loaded, so they never reach `multix` or the tools it starts (`npm` in `multix update`, ffmpeg, ImageMagick, cwebp); one warning on stderr lists the ignored names, never their values. The shell and `~/.multix/.env` are not filtered.
+A project `.env` may only set variables `multix` reads: provider keys, the provider settings in `.env.example` (`*_BASE_URL`, model overrides, Cloudflare IDs), the documented `MULTIX_*` settings (`MULTIX_OUTPUT_DIR`, so a project can choose where outputs go, `MULTIX_IMAGE_FORMAT`, `MULTIX_MAX_DOWNLOAD_MB`, `MULTIX_UPLOAD_MIN_KBPS`, `MULTIX_OUTPUT`, `MULTIX_HISTORY`, `MULTIX_MODELS_TTL`) and `NO_COLOR`. The opt-ins `MULTIX_ALLOW_PROJECT_BASE_URL` and `MULTIX_LEGACY_CLAUDE_ENV`, and `MULTIX_HISTORY_FILE`, `MULTIX_CACHE_DIR` and `MULTIX_CATALOG_FILE`, are refused there; set them in the shell or `~/.multix/.env`. Other names, such as `NODE_OPTIONS`, `npm_config_registry`, `LD_PRELOAD` or `HTTPS_PROXY`, are not loaded, so they never reach `multix` or the tools it starts (`npm` in `multix update`, ffmpeg, ImageMagick, cwebp); one warning on stderr lists the ignored names, never their values. The shell and `~/.multix/.env` are not filtered.
 
 `*_BASE_URL`, `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_AI_GATEWAY_ID` decide where your API key is sent. Values from the shell or `~/.multix/.env` are always used. A value from the project `.env` (or a legacy `.claude` file under it) is used only when every key the provider sends with it comes from that same project file (the repository's own key). That protects your key, not your data: a project `.env` that ships its own key and base URL routes that project's requests, including your prompts and any files you upload, to that host, and its key replaces yours from `~/.multix/.env`, so review a cloned repository's `.env` before running `multix` in it. If a key comes from anywhere else, the project value is ignored: the `~/.multix/.env` value is used with a warning (variable, file and key source named, never the value), or, if there is none, the command stops with an error instead of falling back to the vendor default. `multix check` shows whether each such setting is in effect or ignored. To use a project value for one command, run `MULTIX_ALLOW_PROJECT_BASE_URL=1 multix ...`; do not put the opt-in in `~/.multix/.env`, which disables the check for every directory. Non-default base URLs must be `https://` (plain `http://` only for `localhost`, `127.0.0.1`, `[::1]`), and `multix` warns once per variable on stderr with the provider and hostname only.
 ## Commands
@@ -965,6 +978,9 @@ instance runs at `https://multix.zuey.me/mcp` (invited GitHub accounts only).
 
 - Tools: `multix_catalog` (runnable commands, their options and file inputs,
   and `has_keys` per group from the caller's saved keys; always listed),
+  `multix_model_catalog` (offerings, prices per configuration and
+  comparisons, the same payload as the `data` of `multix catalog <view> --json`; always
+  listed),
   `multix_run` (run one CLI command, for example
   `gemini analyze` or `media optimize`, in its own Cloudflare Container with
   ffmpeg and ImageMagick; waits up to `wait_seconds`, default 25, max 40,
@@ -1047,7 +1063,8 @@ Full guide: [Remote MCP server](https://multix.zuey.me/guides/mcp-server/).
 ### REST API
 
 The same server exposes a JSON REST API at `/api/v1` for scripts and CI
-(manage provider keys and R2 storage, read the catalog, run and poll jobs).
+(manage provider keys and R2 storage, read the catalog and the model catalogue
+at `GET /api/v1/model-catalog`, run and poll jobs).
 Create an account API key (`mxk_…`, shown once) in the **API keys** card at
 `/dashboard` and send it as `Authorization: Bearer <key>`:
 

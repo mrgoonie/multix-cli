@@ -48,6 +48,11 @@ every run into one operation.
 the catalog cache that `multix models` reports from. Set it in the shell or
 `~/.multix/.env`.
 
+`MULTIX_CATALOG_FILE` (your private [catalogue](/commands/catalog/) ratings,
+reviews and notes, default `~/.multix/catalog-notes.json`) is refused for the
+same reason: a repository must not read or seed your private reviews. Set it in
+the shell or `~/.multix/.env`.
+
 [`.env.example`](https://github.com/mrgoonie/multix-cli/blob/main/.env.example)
 lists them, along with the two opt-ins. Any other name, for example `NODE_OPTIONS`, `npm_config_registry`,
 `LD_PRELOAD`, `HTTPS_PROXY` or `NODE_TLS_REJECT_UNAUTHORIZED`, is not loaded,
