@@ -1,17 +1,126 @@
 ---
-// Same page as Starlight's built-in 404 route, which is disabled in
-// astro.config.mjs because it warns on every build when no docs entry named
-// 404 exists. Edit the 404 page here (src/content/docs/404.md is not used),
-// and compare with get404Route in Starlight when upgrading it.
+// Starlight's built-in 404 route is disabled in astro.config.mjs because it
+// warns on every build when no docs entry named 404 exists. This page keeps
+// the Starlight frame (header, search, theme picker) and replaces the splash
+// hero with the Obsidian 404. The 404 is served for every locale, so it offers
+// both the English and the Vietnamese entry points.
 import StarlightPage from "@astrojs/starlight/components/StarlightPage.astro";
 ---
 
 <StarlightPage
   frontmatter={{
-    title: "404",
+    title: "Page not found",
     template: "splash",
     editUrl: false,
     pagefind: false,
-    hero: { tagline: Astro.locals.t("404.text") },
+    tableOfContents: false,
   }}
-/>
+>
+  <section class="mx-404 not-content" aria-labelledby="mx-404-title">
+    <p class="mx-404__code" aria-hidden="true">404</p>
+    <h2 id="mx-404-title" class="mx-404__title">
+      This page is <em>out of frame.</em>
+    </h2>
+    <p class="mx-404__text">
+      The link may be old, or the page moved. Search the docs with{" "}
+      <kbd>⌘</kbd>&nbsp;<kbd>K</kbd>, or start from one of these.
+    </p>
+    <nav class="mx-404__links" aria-label="Where to go next">
+      <a class="mx-404__link mx-404__link--primary" href="/getting-started/">Read the docs</a>
+      <a class="mx-404__link" href="/">Back to home</a>
+      <a class="mx-404__link" href="/vi/getting-started/" lang="vi">Tài liệu tiếng Việt</a>
+    </nav>
+  </section>
+</StarlightPage>
+
+<style is:global>
+  /* Starlight's title stays as the page's h1 for assistive tech; the 404 art replaces it visually. */
+  .main-pane:has(.mx-404) .content-panel:has(h1#_top) {
+    border: 0;
+    height: 1px;
+    overflow: hidden;
+    padding: 0;
+    position: absolute;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    width: 1px;
+  }
+</style>
+
+<style>
+  .mx-404 {
+    margin: 0 auto;
+    max-width: 40rem;
+    padding: clamp(2rem, 8vh, 6rem) 0 clamp(3rem, 10vh, 7rem);
+    text-align: center;
+  }
+
+  .mx-404__code {
+    background: linear-gradient(180deg, var(--mx-text) 10%, var(--mx-text-faint));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    font-family: var(--mx-font-serif);
+    font-size: clamp(6rem, 3rem + 14vw, 11rem);
+    font-style: italic;
+    font-weight: 400;
+    letter-spacing: var(--mx-tracking-display);
+    line-height: 0.9;
+    margin: 0;
+  }
+
+  .mx-404__title {
+    color: var(--mx-text);
+    font-size: var(--mx-text-2xl);
+    font-weight: 600;
+    letter-spacing: var(--mx-tracking-tight);
+    margin: 1.5rem 0 0;
+  }
+
+  .mx-404__title em {
+    font-family: var(--mx-font-serif);
+    font-style: italic;
+    font-weight: 400;
+  }
+
+  .mx-404__text {
+    color: var(--mx-text-muted);
+    margin: 0.75rem auto 0;
+    max-width: 30rem;
+  }
+
+  .mx-404__links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    justify-content: center;
+    margin-top: 2rem;
+  }
+
+  .mx-404__link {
+    border: 1px solid var(--mx-line-strong);
+    border-radius: var(--mx-radius-pill);
+    color: var(--mx-text);
+    font-size: var(--mx-text-sm);
+    font-weight: 500;
+    padding: 0.625rem 1.125rem;
+    text-decoration: none;
+  }
+
+  .mx-404__link:hover {
+    background-color: var(--mx-glow-soft);
+    border-color: var(--mx-text-faint);
+  }
+
+  .mx-404__link--primary {
+    background-color: var(--mx-accent);
+    border-color: var(--mx-accent);
+    color: var(--mx-accent-contrast);
+  }
+
+  .mx-404__link--primary:hover {
+    background-color: var(--mx-accent);
+    border-color: var(--mx-accent);
+    box-shadow: 0 0 24px -4px var(--mx-glow);
+  }
+</style>

@@ -63,10 +63,10 @@ export default defineConfig({
       ],
       sidebar: [
         {
+          // The landing page owns "/", so the docs open on the install guide.
           label: "Start here",
           translations: { vi: "Bắt đầu" },
           items: [
-            { label: "Overview", translations: { vi: "Tổng quan" }, slug: "index" },
             {
               label: "Install and configure",
               translations: { vi: "Cài đặt và cấu hình" },
@@ -155,8 +155,45 @@ export default defineConfig({
       ],
       components: {
         Footer: "./src/components/DocsFooter.astro",
+        SiteTitle: "./src/components/starlight/SiteTitle.astro",
       },
-      customCss: ["./src/styles/custom.css"],
+      // Code frames are obsidian wells in both themes: one dark theme on a fixed
+      // primitive background, so a light page without JS never shows dark syntax
+      // colours on a light frame.
+      expressiveCode: {
+        themes: ["vitesse-black"],
+        useStarlightUiThemeColors: false,
+        styleOverrides: {
+          borderColor: "var(--mx-line-strong)",
+          borderRadius: "var(--mx-radius-lg)",
+          codeBackground: "var(--mx-obsidian-2)",
+          codeFontFamily: "var(--mx-font-mono)",
+          uiFontFamily: "var(--mx-font-sans)",
+          frames: {
+            editorActiveTabBackground: "var(--mx-obsidian-2)",
+            editorActiveTabIndicatorTopColor: "var(--mx-white)",
+            editorTabBarBackground: "var(--mx-obsidian-1)",
+            editorTabBarBorderBottomColor: "var(--mx-graphite-1)",
+            terminalBackground: "var(--mx-obsidian-2)",
+            terminalTitlebarBackground: "var(--mx-obsidian-1)",
+            terminalTitlebarBorderBottomColor: "var(--mx-graphite-1)",
+            terminalTitlebarForeground: "var(--mx-graphite-3)",
+            terminalTitlebarDotsForeground: "var(--mx-graphite-2)",
+            frameBoxShadowCssValue: "none",
+            inlineButtonForeground: "var(--mx-graphite-4)",
+            inlineButtonBorder: "var(--mx-graphite-1)",
+            tooltipSuccessBackground: "var(--mx-white)",
+            tooltipSuccessForeground: "var(--mx-obsidian-1)",
+          },
+        },
+      },
+      customCss: [
+        "./src/styles/fonts.css",
+        "./src/styles/tokens.css",
+        "./src/styles/custom.css",
+        "./src/styles/starlight-chrome.css",
+        "./src/styles/starlight-content.css",
+      ],
     }),
   ],
 });
