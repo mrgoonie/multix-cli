@@ -33,6 +33,7 @@ describe("isOpenRouterModel", () => {
 describe("DEFAULT_OPENROUTER_MODEL", () => {
   it("is the expected google gemini model", () => {
     expect(DEFAULT_OPENROUTER_MODEL).toBe("google/gemini-3.1-flash-image");
+    expect(resolveModalities(DEFAULT_OPENROUTER_MODEL)).toEqual(["image", "text"]);
   });
 });
 

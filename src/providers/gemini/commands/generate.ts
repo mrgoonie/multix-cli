@@ -20,6 +20,7 @@ import { withGeminiKey } from "../key-pool.js";
 import {
   ASPECT_RATIOS,
   type AspectRatio,
+  IMAGE_MODEL_DEFAULT,
   IMAGE_SIZES,
   type ImageSize,
   getDefaultModel,
@@ -53,6 +54,12 @@ export function registerGenerateCommand(parent: Command): void {
         const logger = createLogger({ verbose: opts.verbose ?? false });
         const model = opts.model ?? getDefaultModel("generate");
         const numImages = Math.min(Math.max(Number.parseInt(opts.numImages, 10) || 1, 1), 4);
+
+        if (/^(models\/)?imagen-/.test(model)) {
+          throw new ValidationError(
+            `Imagen models are no longer served on the Gemini API; use ${IMAGE_MODEL_DEFAULT} or another Nano Banana model`,
+          );
+        }
 
         // Validate aspect ratio
         if (!ASPECT_RATIOS.includes(opts.aspectRatio as AspectRatio)) {

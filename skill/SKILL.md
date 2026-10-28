@@ -106,7 +106,7 @@ multix check [--verbose]
 | Provider | Command | Notes |
 |---|---|---|
 | OpenAI | `multix openai generate --prompt "<text>" [--driver api\|codex\|auto] [--model gpt-image-2] [--size 1024x1024] [--quality medium] [--format png]` | API first; Codex driver is experimental image-only fallback |
-| Gemini | `multix gemini generate --prompt "<text>" [--model gemini-3.1-flash-image] [--aspect-ratio 16:9] [--size 1K\|2K\|4K] [--num-images N]` | Nano Banana 2 (default), `gemini-3.1-flash-lite-image` (cheapest), `gemini-3-pro-image`, `gemini-nano-banana-2.1`. Imagen 4 is no longer served |
+| Gemini | `multix gemini generate --prompt "<text>" [--model gemini-3.1-flash-image] [--aspect-ratio 16:9] [--size 1K\|2K\|4K] [--num-images N]` | Nano Banana 2 (default), `gemini-3.1-flash-lite-image` (fast, low cost), `gemini-3-pro-image`, `gemini-nano-banana-2.1`. Imagen 4 is no longer served |
 | MiniMax | `multix minimax generate --prompt "<text>" [--model image-01] [--aspect-ratio 1:1] [-n N]` | |
 | OpenRouter | `multix openrouter generate --prompt "<text>" [--model <id>] [--aspect-ratio 16:9] [--image-size 2K] [--num-images N]` | Default `google/gemini-3.1-flash-image` |
 | Leonardo | `multix leonardo generate "<text>" [-w 1024 -h 1024] [--alchemy] [--ultra] [--quality HIGH]` | Polls until done, downloads automatically |

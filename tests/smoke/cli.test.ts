@@ -309,6 +309,26 @@ describe("multix --help (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
   });
 });
 
+describe("gemini generate (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
+  it("refuses Imagen ids before any request, naming the GA default", async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "multix-smoke-imagen-"));
+    try {
+      const result = await run(
+        ["gemini", "generate", "--prompt", "a lake", "--model", "imagen-4.0-generate-001"],
+        { cwd: tmp, extendEnv: false, env: isolatedEnv(tmp) },
+      );
+      const out = result.stdout + result.stderr;
+      expect(result.exitCode).toBe(1);
+      expect(out).toContain("INVALID_INPUT");
+      expect(out).toContain("Imagen models are no longer served");
+      expect(out).toContain("gemini-3.1-flash-image");
+      expect(out).not.toContain("GEMINI_API_KEY is not set");
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("gemini --files - (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
   it("reads piped stdin, labels it, and removes the temp file", async () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "multix-smoke-stdin-"));
