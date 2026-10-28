@@ -12,7 +12,7 @@
  *   PUT    /api/v1/storage                     check access, then save R2 settings
  *   DELETE /api/v1/storage                     remove R2 settings
  *   GET    /api/v1/catalog[?group=&task=&model=] CLI commands, task routes, verified models
- *   GET    /api/v1/price-book?view=…           providers, offerings, sourced prices, comparisons
+ *   GET    /api/v1/model-catalog[?view=&task=…]  offerings, prices per configuration, comparisons
  *   POST   /api/v1/jobs                        run a CLI command (same input as multix_run)
  *   GET    /api/v1/jobs/{id}                   job status and outputs
  *   POST   /api/v1/jobs/{id}/cancel            stop a job
@@ -63,7 +63,7 @@ import {
   listDeadLetters,
   listSubscriptions,
 } from "./event-api-handlers.js";
-import { cancelJob, getCatalog, getJob, getPriceBook, postJob } from "./job-api-handlers.js";
+import { cancelJob, getCatalog, getJob, getModelCatalog, postJob } from "./job-api-handlers.js";
 import { openApiDocument } from "./openapi-document.js";
 
 export const API_PREFIX = "/api/v1";
@@ -168,9 +168,9 @@ async function route(
     return getCatalog(keys, url);
   }
 
-  if (resource === "price-book" && !id) {
+  if (resource === "model-catalog" && !id) {
     if (method !== "GET") methodNotAllowed("GET");
-    return getPriceBook(keys, url);
+    return getModelCatalog(keys, url);
   }
 
   if (resource === "jobs") {
@@ -247,12 +247,10 @@ export async function handleApi(
     routeName = parts[0] ?? "root";
     const caller = await authenticate(app, request);
     if (caller instanceof Response) return caller;
-    // Only the catalog, the price book's providers view (readiness) and jobs use the decrypted
-    // keys; the other routes must keep working (e.g. to revoke an API key) even if a stored key
-    // cannot be decrypted.
-    const priceBookKeys =
-      routeName === "price-book" && (url.searchParams.get("view") ?? "providers") === "providers";
-    const needsKeys = routeName === "catalog" || priceBookKeys || routeName === "jobs";
+    // Only the catalogs and jobs use the decrypted keys; the other routes must keep
+    // working (e.g. to revoke an API key) even if a stored key cannot be decrypted.
+    const needsKeys =
+      routeName === "catalog" || routeName === "model-catalog" || routeName === "jobs";
     const keys: ProviderKeys = needsKeys ? await app.accounts.providerKeys(caller.account.id) : {};
     // Scrub the caller's own key values from any error message that echoes CLI output.
     secrets = secretValues(keys);

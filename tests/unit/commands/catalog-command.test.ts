@@ -1,547 +1,260 @@
 /**
- * `multix catalog` through commander: sourced comparison, provider readiness
- * without key values, the rating, review, note, edit and delete loop, the
- * refusals for shared scope and secrets, usage over a temp run ledger, and
- * recommendations. Dates are fixed, the fetch global throws, and every file
- * the command reads or writes lives in a temp directory.
+ * `multix catalog` smoke tests: spawn the compiled dist/cli.js with a private
+ * notes file and run ledger in a temp directory, and read its JSON envelope.
+ * The CLI has no pricing-date override, so price assertions accept the
+ * stale state that applies once the price book is older than its 120-day window.
  */
 
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { Command } from "commander";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { HistoryEntry } from "../../../src/agent/history-store.js";
-import { run } from "../../../src/agent/run-state.js";
-import { registerCommands } from "../../../src/commands/index.js";
-import { ValidationError } from "../../../src/core/errors.js";
+import { fileURLToPath } from "node:url";
+import { type Options, execa } from "execa";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { isolatedEnv } from "../../smoke/child-env.js";
 
-const REF = "fal:bytedance/seedance-2.0/text-to-video";
-const FAL_KEY_VALUE = "fal-test-value-not-for-output";
-const OPENAI_KEY_VALUE = "sk-openai-test-value-0123456789abcdef";
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const CLI = path.resolve(__dirname, "../../../dist/cli.js");
+const SPAWN_TIMEOUT = 15_000;
+const SEEDANCE = "fal:bytedance/seedance-2.5/text-to-video";
 
-let tmp: string;
-let stdout: string[];
+let dir: string;
+let notesFile: string;
+let historyFile: string;
 
-interface Quote {
-  ref: string;
-  amount: number | null;
-  rank?: number;
-  status?: string;
-}
-
-interface ProviderRow {
-  provider: string;
-  ready: boolean | null;
-}
-
-interface Json {
-  comparable: Quote[];
-  not_comparable: Quote[];
-  recommendations: Array<{
-    ref: string;
-    rank: number;
-    caveats: string[];
-    evidence: { key_ready: boolean | null; own_note: string | null; price: { status: string } };
-  }>;
-  ranking_basis: string[];
-  rows: Array<{
-    key: string;
-    operations: number;
-    runs: number;
-    cost: { actual_usd: number | null };
-  }>;
-  totals: { operations: number };
-  quotes?: Array<{ status: string; amount: number | null }>;
-  entries: Array<{
-    id: string;
-    kind: string;
-    score?: number;
-    text?: string;
-    verdict?: string;
-    verified_usage?: unknown;
-    content_trust: string;
-  }>;
-  summary: { count: number };
-  verified_usage?: { history_id: string; job_id?: string };
-  id: string;
-  kind: string;
-  score?: number;
-  text?: string;
-  scope: string;
-  deleted?: string;
-  ratings: { count: number };
-  feedback: unknown[];
-  usage: unknown;
-}
-
-function historyEntry(over: Partial<HistoryEntry>): HistoryEntry {
-  return {
-    v: 1,
-    id: "h_x",
-    ts: "2026-10-27T10:00:00.000Z",
-    duration_ms: 4000,
-    cwd: "/work",
-    version: "0.0.0",
-    command: "fal video",
-    provider: "fal",
-    argv: [],
-    ok: true,
-    exit_code: 0,
-    ...over,
-  };
-}
-
-function writeHistory(entries: HistoryEntry[]): void {
-  fs.writeFileSync(
-    path.join(tmp, "history.jsonl"),
-    `${entries.map((e) => JSON.stringify(e)).join("\n")}\n`,
-  );
-}
-
-function newProgram(): Command {
-  const program = new Command().name("multix").enablePositionalOptions();
-  program.exitOverride();
-  program.configureOutput({ writeErr: () => {} });
-  registerCommands(program);
-  return program;
-}
-
-/** Runs `multix catalog ...` and parses the one JSON document it printed. */
-async function catalog<T = Json>(...args: string[]): Promise<T> {
-  run.json = true;
-  stdout = [];
-  await newProgram().parseAsync(["node", "multix", "catalog", ...args]);
-  return JSON.parse(stdout.join("\n")) as T;
-}
-
-/** Runs `multix catalog ...` in text mode and returns the printed lines. */
-async function catalogText(...args: string[]): Promise<string> {
-  run.json = false;
-  stdout = [];
-  await newProgram().parseAsync(["node", "multix", "catalog", ...args]);
-  return stdout.join("\n");
-}
-
-beforeEach(() => {
-  tmp = fs.mkdtempSync(path.join(os.tmpdir(), "multix-catalog-cmd-"));
-  vi.useFakeTimers({ toFake: ["Date"] });
-  vi.setSystemTime(new Date("2026-10-28T12:00:00.000Z"));
-  vi.stubEnv("MULTIX_CATALOG_FEEDBACK_FILE", path.join(tmp, "feedback.json"));
-  vi.stubEnv("MULTIX_HISTORY_FILE", path.join(tmp, "history.jsonl"));
-  vi.stubEnv("FAL_KEY", "");
-  vi.stubEnv("OPENAI_API_KEY", "");
-  stdout = [];
-  vi.spyOn(console, "log").mockImplementation((...a: unknown[]) => {
-    stdout.push(a.map(String).join(" "));
-  });
-  vi.spyOn(console, "warn").mockImplementation(() => {});
-  vi.spyOn(console, "error").mockImplementation(() => {});
-  // Catalog reads never touch the network; any call here is a test failure.
-  vi.stubGlobal("fetch", () => {
-    throw new Error("catalog commands must not call the network");
-  });
+beforeAll(() => {
+  dir = fs.mkdtempSync(path.join(os.tmpdir(), "multix-catalog-cli-"));
+  notesFile = path.join(dir, "catalog-notes.json");
+  historyFile = path.join(dir, "history.jsonl");
 });
 
-afterEach(() => {
-  run.json = false;
-  vi.useRealTimers();
-  vi.restoreAllMocks();
-  vi.unstubAllGlobals();
-  vi.unstubAllEnvs();
-  fs.rmSync(tmp, { recursive: true, force: true });
+afterAll(() => {
+  fs.rmSync(dir, { recursive: true, force: true });
 });
 
-describe("multix catalog compare", () => {
-  it("compares seedance-2.0 at 720p for 10 s: BytePlus first at $1.5, then fal at $3.034 twice", async () => {
-    const result = await catalog(
+/** Run the built CLI inside the temp directory with its own notes file and run ledger. */
+function run(args: string[], extra: Record<string, string> = {}) {
+  return execa("node", [CLI, ...args], {
+    reject: false,
+    timeout: SPAWN_TIMEOUT - 1_000,
+    cwd: dir,
+    extendEnv: false,
+    env: {
+      ...isolatedEnv(dir),
+      MULTIX_CATALOG_FILE: notesFile,
+      MULTIX_HISTORY_FILE: historyFile,
+      ...extra,
+    } as Options["env"],
+  });
+}
+
+/** The JSON envelope the CLI prints for `--json`. */
+// biome-ignore lint/suspicious/noExplicitAny: envelope payloads are checked field by field
+async function envelope(args: string[]): Promise<any> {
+  const result = await run([...args, "--json"]);
+  return JSON.parse(result.stdout);
+}
+
+describe("multix catalog (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
+  it("lists every subcommand in --help", async () => {
+    const result = await run(["catalog", "--help"]);
+    expect(result.exitCode).toBe(0);
+    for (const sub of [
+      "providers",
+      "models",
+      "show",
       "compare",
-      "seedance-2.0",
-      "--resolution",
-      "720p",
-      "--duration",
-      "10",
-    );
-    expect(result.comparable.map((q) => [q.ref, q.amount, q.rank])).toEqual([
-      ["byteplus:dreamina-seedance-2-0-260128", 1.5, 1],
-      ["fal:bytedance/seedance-2.0/image-to-video", 3.034, 2],
-      ["fal:bytedance/seedance-2.0/text-to-video", 3.034, 3],
-    ]);
-    expect(result.comparable.some((q) => q.ref.includes("fast"))).toBe(false);
-  });
-
-  it("prints the ranking in text mode with the basis and the note", async () => {
-    const text = await catalogText(
-      "compare",
-      "seedance-2.0",
-      "--resolution",
-      "720p",
-      "--duration",
-      "10",
-    );
-    expect(text).toContain(
-      "#1 byteplus:dreamina-seedance-2-0-260128  $1.5  (10 s x 0.15 USD/video_second)",
-    );
-    expect(text).toContain("List prices only");
-  });
-
-  it("says nothing is quoted when no duration is given, instead of ranking $0", async () => {
-    const result = await catalog("compare", "seedance-2.0", "--resolution", "720p");
-    expect(result.comparable).toEqual([]);
-    expect(result.not_comparable.every((q) => q.amount === null)).toBe(true);
-  });
-});
-
-describe("multix catalog providers", () => {
-  it("reports readiness and never prints a key value, in JSON or text", async () => {
-    vi.stubEnv("FAL_KEY", FAL_KEY_VALUE);
-    vi.stubEnv("OPENAI_API_KEY", OPENAI_KEY_VALUE);
-    const providers = await catalog<ProviderRow[]>("providers");
-    expect(providers.find((p) => p.provider === "fal")?.ready).toBe(true);
-    expect(providers.find((p) => p.provider === "openai")?.ready).toBe(true);
-    expect(JSON.stringify(providers)).not.toContain(FAL_KEY_VALUE);
-    expect(JSON.stringify(providers)).not.toContain(OPENAI_KEY_VALUE);
-
-    const text = await catalogText("providers");
-    expect(text).not.toContain(FAL_KEY_VALUE);
-    expect(text).not.toContain(OPENAI_KEY_VALUE);
-    expect(text).toMatch(/fal\s+ready/);
-  });
-
-  it("marks a provider without its key as not ready", async () => {
-    const providers = await catalog<ProviderRow[]>("providers");
-    expect(providers.find((p) => p.provider === "fal")?.ready).toBe(false);
-  });
-});
-
-describe("multix catalog rate, feedback, edit and delete", () => {
-  it("rates an offering, lists it, edits it and deletes it", async () => {
-    const saved = await catalog(
+      "usage",
+      "recommend",
       "rate",
-      REF,
-      "--score",
+      "review",
+      "reviews",
+      "note",
+    ]) {
+      expect(result.stdout, sub).toMatch(new RegExp(`^\\s+${sub}\\b`, "m"));
+    }
+  });
+
+  it("prints the compare payload under the catalogue schema", async () => {
+    const body = await envelope([
+      "catalog",
+      "compare",
+      "--task",
+      "video",
+      "--resolution",
+      "720p",
+      "--duration",
+      "10",
+      "--audio",
+      "on",
+    ]);
+    expect(body.ok).toBe(true);
+    expect(body.data.schema).toBe("multix.catalog/v1");
+    const row = body.data.comparison.rows.find(
+      (r: { offering: string }) => r.offering === SEEDANCE,
+    );
+    expect(row).toBeDefined();
+    expect(row.rate_id).toBe("fal/seedance-2.5-t2v-720p@api");
+    if (row.status === "priced") {
+      expect(row.total_usd).toBe(4.6224);
+      expect(row.price_rank).toBe(1);
+    } else {
+      expect(row).toMatchObject({ status: "unknown", total_usd: null });
+      expect(row.reasons[0]).toMatch(/last checked 2026-10-28, over 120 days ago/);
+    }
+  });
+
+  it("lists models for one provider with ids, tasks and readiness", async () => {
+    const body = await envelope(["catalog", "models", "--task", "video", "--provider", "fal"]);
+    expect(body.data.schema).toBe("multix.catalog/v1");
+    expect(body.data.offerings.length).toBeGreaterThan(0);
+    for (const o of body.data.offerings) {
+      expect(o.provider).toBe("fal");
+      expect(o.tasks).toContain("video");
+      expect(typeof o.ready).toBe("boolean");
+    }
+  });
+
+  it("refuses an ambiguous bare model id with ValidationError and names the ids to use", async () => {
+    const body = await envelope(["catalog", "show", "bytedance/seedance-2.5/text-to-video"]);
+    expect(body.ok).toBe(false);
+    expect(body.error.code).toBe("INVALID_INPUT");
+    expect(body.error.message).toContain(
+      `use one of atlas:bytedance/seedance-2.5/text-to-video, ${SEEDANCE}`,
+    );
+  });
+
+  it("refuses a rating shared beyond this machine with INVALID_INPUT and writes nothing", async () => {
+    const result = await run(["catalog", "rate", SEEDANCE, "4", "--scope", "team", "--json"]);
+    expect(result.exitCode).toBe(2);
+    const body = JSON.parse(result.stdout);
+    expect(body.error.code).toBe("INVALID_INPUT");
+    expect(body.error.message).toContain("beyond this machine");
+    expect(fs.existsSync(notesFile)).toBe(false);
+  });
+
+  it("refuses a review tied to a run that is not in the ledger", async () => {
+    const body = await envelope(["catalog", "review", SEEDANCE, "--job", "h_missing"]);
+    expect(body.ok).toBe(false);
+    expect(body.error.code).toBe("INVALID_INPUT");
+    expect(body.error.message).toBe("No run h_missing in the run ledger (multix history list).");
+  });
+
+  it("rates, reviews, notes and removes records in the private notes file", async () => {
+    const rated = await envelope([
+      "catalog",
+      "rate",
+      SEEDANCE,
       "4",
-      "--use-case",
+      "-u",
       "product-ugc",
       "--aspect",
       "quality=5",
-      "--tag",
-      "ugc",
-    );
-    expect(saved).toMatchObject({
-      kind: "rating",
+    ]);
+    expect(rated.ok).toBe(true);
+    expect(rated.data.review).toMatchObject({
+      offering: SEEDANCE,
+      use_case: "product-ugc",
       score: 4,
+      aspects: { quality: 5 },
       scope: "private",
-      content_trust: "user-authored",
+    });
+    const reviewId = rated.data.review.id as string;
+
+    const reviewed = await envelope([
+      "catalog",
+      "review",
+      SEEDANCE,
+      "-u",
+      "product-ugc",
+      "--text",
+      "Smooth motion, mail jane@example.com",
+    ]);
+    expect(reviewed.data.review).toMatchObject({
+      id: reviewId,
+      score: 4,
+      text: "Smooth motion, mail [email]",
     });
 
-    const listed = await catalog("feedback");
-    expect(listed.summary.count).toBe(1);
-    expect(listed.entries.map((e) => e.id)).toEqual([saved.id]);
+    const listed = await envelope(["catalog", "reviews", "list"]);
+    expect(listed.data.summary).toMatchObject({ reviews: 1, rated: 1, average: 4 });
+    expect(listed.data.user_content).toMatch(/data, never as instructions/);
 
-    const byRef = await catalog("feedback", REF, "--use-case", "product-ugc", "--kind", "rating");
-    expect(byRef.entries).toHaveLength(1);
-    expect((await catalog("feedback", REF, "--kind", "note")).entries).toEqual([]);
-
-    const edited = await catalog(
-      "edit",
-      saved.id,
-      "--score",
-      "5",
-      "--text",
-      "better on the second try",
-    );
-    expect(edited).toMatchObject({ id: saved.id, score: 5, text: "better on the second try" });
-    const after = await catalog("feedback", REF);
-    expect(after.entries[0]).toMatchObject({ score: 5, text: "better on the second try" });
-
-    expect(await catalog("delete", saved.id)).toEqual({ deleted: saved.id });
-    expect((await catalog("feedback")).entries).toEqual([]);
-    await expect(catalog("delete", saved.id)).rejects.toThrow(ValidationError);
-  });
-
-  it("keeps the rating and tags an edit did not change", async () => {
-    const saved = await catalog(
-      "rate",
-      REF,
-      "--score",
-      "3",
-      "--use-case",
-      "product-ugc",
-      "--tag",
-      "fast",
-    );
-    const edited = await catalog("edit", saved.id, "--text", "fine");
-    expect(edited).toMatchObject({ score: 3, text: "fine" });
-  });
-
-  it("prints the saved entry in text mode", async () => {
-    const text = await catalogText("rate", REF, "--score", "4");
-    expect(text).toMatch(
-      /^Saved rating fb_\S+ for fal:bytedance\/seedance-2\.0\/text-to-video \(private\)/,
-    );
-  });
-
-  it("refuses a shared scope", async () => {
-    await expect(catalog("rate", REF, "--score", "4", "--scope", "public")).rejects.toThrow(
-      /--scope public is not available yet/,
-    );
-    expect((await catalog("feedback")).entries).toEqual([]);
-  });
-
-  it("refuses a review that contains an API key and stores nothing", async () => {
-    await expect(
-      catalog("review", REF, "--text", "my key sk-abcdefghijklmnopqrstuvwxyz"),
-    ).rejects.toThrow(/looks like it contains an API key/);
-    expect((await catalog("feedback")).entries).toEqual([]);
-  });
-
-  it("refuses a rating for an offering that is neither in the catalogue nor in history", async () => {
-    await expect(catalog("rate", "fal:nobody/nothing", "--score", "4")).rejects.toThrow(
-      /not in the catalogue or your history/,
-    );
-  });
-
-  it("requires a score for a rating", async () => {
-    await expect(catalog("rate", REF)).rejects.toThrow(/--score/);
-  });
-
-  it("records a note that marks an offering avoid for a use case", async () => {
-    const note = await catalog(
+    const noted = await envelope([
+      "catalog",
       "note",
-      REF,
+      "add",
+      SEEDANCE,
+      "-u",
+      "product-ugc",
       "--verdict",
-      "avoid",
-      "--use-case",
-      "product-ugc",
-      "--weakness",
-      "slow queue",
-    );
-    expect(note).toMatchObject({ kind: "note", verdict: "avoid" });
-  });
-
-  it("refuses a rating that claims a run which did not complete", async () => {
-    writeHistory([
-      historyEntry({
-        id: "h_failed",
-        ok: false,
-        exit_code: 1,
-        error: { code: "PROVIDER_ERROR", message: "boom" },
-        job: { provider: "fal", id: "req_failed", attempt: 1 },
-        model_resolved: "bytedance/seedance-2.0/text-to-video",
-      }),
+      "recommended",
+      "--text",
+      "Good for ads",
     ]);
-    await expect(catalog("rate", REF, "--score", "4", "--job", "req_failed")).rejects.toThrow(
-      /did not complete; only completed runs verify usage/,
-    );
+    const noteId = noted.data.note.id as string;
+    expect(noted.data.note).toMatchObject({ verdict: "recommended", use_case: "product-ugc" });
+
+    const edited = await envelope(["catalog", "note", "edit", noteId, "--verdict", "avoid"]);
+    expect(edited.data.note).toMatchObject({ id: noteId, verdict: "avoid", text: "Good for ads" });
+
+    const notes = await envelope(["catalog", "note", "list"]);
+    expect(notes.data.notes.map((n: { id: string }) => n.id)).toEqual([noteId]);
+
+    expect((await envelope(["catalog", "note", "rm", noteId])).data).toMatchObject({
+      removed: noteId,
+      scope: "private",
+    });
+    expect((await envelope(["catalog", "reviews", "rm", reviewId])).data).toMatchObject({
+      removed: reviewId,
+      scope: "private",
+    });
+    expect((await envelope(["catalog", "reviews", "list"])).data.reviews).toEqual([]);
   });
 
-  it("marks a rating as verified usage when it names a completed run of the offering", async () => {
-    writeHistory([
-      historyEntry({
-        id: "h_done",
-        job: { provider: "fal", id: "req_done", attempt: 1 },
-        model_resolved: "bytedance/seedance-2.0/text-to-video",
-      }),
-    ]);
-    const saved = await catalog("rate", REF, "--score", "4", "--job", "req_done");
-    expect(saved.verified_usage).toMatchObject({ history_id: "h_done", job_id: "req_done" });
-  });
-});
-
-describe("multix catalog rate --job for an async job", () => {
-  it("verifies usage when only the submit names the model and the status poll completed", async () => {
-    const job = { provider: "fal", id: "req_async", attempt: 1 };
-    writeHistory([
-      historyEntry({
-        id: "h_submit",
-        ts: "2026-10-27T10:00:00.000Z",
-        job,
-        model_resolved: "bytedance/seedance-2.0/text-to-video",
-      }),
-      historyEntry({ id: "h_status", ts: "2026-10-27T10:01:00.000Z", command: "fal status", job }),
-    ]);
-    const saved = await catalog("rate", REF, "--score", "4", "--job", "req_async");
-    expect(saved.verified_usage).toMatchObject({ history_id: "h_status", job_id: "req_async" });
+  it("keeps the notes file readable only by its owner", async () => {
+    await envelope(["catalog", "rate", SEEDANCE, "3"]);
+    if (process.platform === "win32") return;
+    expect(fs.statSync(notesFile).mode & 0o777).toBe(0o600);
   });
 
-  it("matches an exact provider job id before a history id prefix", async () => {
-    writeHistory([
-      historyEntry({
-        id: "h_other_run",
-        ts: "2026-10-27T11:00:00.000Z",
-        provider: "byteplus",
-        model_resolved: "dreamina-seedance-2-0-260128",
-      }),
-      historyEntry({
-        id: "h_fal_run",
-        ts: "2026-10-27T10:00:00.000Z",
-        job: { provider: "fal", id: "h_", attempt: 1 },
-        model_resolved: "bytedance/seedance-2.0/text-to-video",
-      }),
-    ]);
-    const saved = await catalog("rate", REF, "--score", "4", "--job", "h_");
-    expect(saved.verified_usage).toMatchObject({ history_id: "h_fal_run" });
-  });
-});
-
-describe("multix catalog project feedback", () => {
-  it("applies a project note only in the project that wrote it", async () => {
-    const a = path.join(tmp, "a", "app");
-    const b = path.join(tmp, "b", "app");
-    fs.mkdirSync(a, { recursive: true });
-    fs.mkdirSync(b, { recursive: true });
-    const cwd = vi.spyOn(process, "cwd").mockReturnValue(a);
-    await catalog("note", REF, "--verdict", "avoid", "--use-case", "ugc", "--scope", "project");
-    expect((await catalog("show", REF)).feedback).toHaveLength(1);
-    cwd.mockReturnValue(b);
-    expect((await catalog("show", REF)).feedback).toHaveLength(0);
-  });
-});
-
-describe("multix catalog usage", () => {
-  beforeEach(() => {
-    writeHistory([
-      historyEntry({
-        id: "h_fal_submit",
-        ts: "2026-10-27T10:00:00.000Z",
-        model_requested: "bytedance/seedance-2.0/text-to-video",
-        model_resolved: "bytedance/seedance-2.0/text-to-video",
-        job: { provider: "fal", id: "req_1", attempt: 1 },
-      }),
-      historyEntry({
-        id: "h_fal_poll",
-        ts: "2026-10-27T10:00:30.000Z",
-        command: "fal status",
-        job: { provider: "fal", id: "req_1", attempt: 1 },
-        model_resolved: "bytedance/seedance-2.0/text-to-video",
-      }),
-      historyEntry({
-        id: "h_byte",
-        ts: "2026-10-27T11:00:00.000Z",
-        command: "byteplus video",
-        provider: "byteplus",
-        model_resolved: "dreamina-seedance-2-0-260128",
-        cost: {
-          schema: "multix.cost/v1",
-          operation_id: "op-byte-1",
-          role: "charge",
-          status: "settled",
-          currency: "USD",
-          provider_reported: { cost_usd: 0.5, credits: null },
-          actual_usd: 0.5,
-          actual_source: "provider_reported",
-          variance_usd: null,
-          at: "2026-10-27T11:00:05.000Z",
-        },
-      }),
-      historyEntry({
-        id: "h_old",
-        ts: "2026-01-02T00:00:00.000Z",
-        command: "fal video",
-        model_resolved: "bytedance/seedance-2.0/text-to-video",
+  it("summarises the run ledger per offering from the run history file", async () => {
+    const entry = {
+      v: 1,
+      id: "h_seed1",
+      ts: "2026-10-27T10:00:00.000Z",
+      duration_ms: 4000,
+      cwd: dir,
+      version: "0.0.0",
+      command: "fal video",
+      provider: "fal",
+      model_resolved: "bytedance/seedance-2.5/text-to-video",
+      argv: ["fal", "video"],
+      ok: true,
+      exit_code: 0,
+      usage: { cost_usd: 0.5 },
+    };
+    fs.writeFileSync(historyFile, `${JSON.stringify(entry)}\n`);
+    const body = await envelope(["catalog", "usage", "--by", "offering"]);
+    expect(body.data.scope).toBe("multix run ledger on this machine");
+    expect(body.data.usage).toEqual([
+      expect.objectContaining({
+        key: SEEDANCE,
+        requests: 1,
+        completed: 1,
+        p50_s: 4,
+        cost: expect.objectContaining({
+          known_usd: 0.5,
+          per_success_usd: 0.5,
+          unknown_operations: 0,
+        }),
       }),
     ]);
   });
 
-  it("groups by model by default, one operation per job with its runs", async () => {
-    const report = await catalog("usage");
-    const fal = report.rows.find((r) => r.key === REF);
-    expect(fal).toMatchObject({ operations: 2, runs: 3 });
-    const byte = report.rows.find((r) => r.key === "byteplus:dreamina-seedance-2-0-260128");
-    expect(byte?.cost.actual_usd).toBe(0.5);
-  });
-
-  it("filters by provider and by age", async () => {
-    const fal = await catalog("usage", "--provider", "fal");
-    expect(fal.rows.map((r) => r.key)).toEqual([REF]);
-    const recent = await catalog("usage", "--since", "7d");
-    expect(recent.totals.operations).toBe(2);
-  });
-
-  it("groups by provider when asked", async () => {
-    const report = await catalog("usage", "--by", "provider");
-    expect(report.rows.map((r) => r.key).sort()).toEqual(["byteplus", "fal"]);
-  });
-
-  it("refuses an unknown grouping", async () => {
-    await expect(catalog("usage", "--by", "bogus")).rejects.toThrow(
-      /--by must be provider, model, task or command/,
-    );
-  });
-
-  it("says no runs match a filter that excludes all of them", async () => {
-    const text = await catalogText("usage", "--provider", "openai");
-    expect(text).toBe("No runs recorded for this filter.");
-  });
-});
-
-describe("multix catalog recommend", () => {
-  it("suggests video offerings with reasons, caveats and evidence", async () => {
-    vi.stubEnv("FAL_KEY", FAL_KEY_VALUE);
-    const result = await catalog("recommend", "--task", "video", "--limit", "5");
-    expect(result.ranking_basis).toHaveLength(7);
-    expect(result.recommendations).toHaveLength(5);
-    expect(result.recommendations.map((r) => r.rank)).toEqual([1, 2, 3, 4, 5]);
-    const fal = result.recommendations.find((r) => r.ref.startsWith("fal:"));
-    expect(fal?.evidence.key_ready).toBe(true);
-  });
-
-  it("quotes candidates when a configuration beyond the task is given", async () => {
-    const result = await catalog(
-      "recommend",
-      "--task",
-      "video",
-      "--resolution",
-      "720p",
-      "--duration",
-      "10",
-      "--limit",
-      "10",
-    );
-    const byteplus = result.recommendations.find(
-      (r) => r.ref === "byteplus:dreamina-seedance-2-0-260128",
-    );
-    expect(byteplus?.evidence.price).toMatchObject({ status: "quoted", amount: 1.5 });
-  });
-
-  it("puts a candidate the user marked avoid for the use case last", async () => {
-    await catalog("note", REF, "--verdict", "avoid", "--use-case", "product-ugc");
-    const result = await catalog(
-      "recommend",
-      "--task",
-      "video",
-      "--use-case",
-      "product-ugc",
-      "--limit",
-      "100",
-    );
-    const last = result.recommendations.at(-1);
-    expect(last?.ref).toBe(REF);
-    expect(last?.evidence.own_note).toBe("avoid");
-  });
-
-  it("requires a task", async () => {
-    await expect(catalog("recommend")).rejects.toThrow(/--task is required/);
-  });
-});
-
-describe("multix catalog show and models", () => {
-  it("shows one offering with its quotes for a configuration", async () => {
-    const result = await catalog("show", REF, "--resolution", "720p", "--duration", "10");
-    expect(result.quotes?.map((q) => [q.status, q.amount])).toEqual([
-      ["quoted", 3.034],
-      ["not_equivalent", null],
-    ]);
-    expect(result.usage).toBeNull();
-    expect(result.ratings.count).toBe(0);
-  });
-
-  it("refuses a ref that is not a provider:model pair", async () => {
-    await expect(catalog("show", "no-colon-here")).rejects.toThrow(/Use <provider>:<model>/);
-  });
-
-  it("refuses a ref that is not in the catalogue", async () => {
-    await expect(catalog("show", "fal:nobody/nothing")).rejects.toThrow(/not in the catalogue/);
+  it("keeps a rate that was given the wrong grouping of settings out of the ledger when it fails", async () => {
+    const body = await envelope(["catalog", "usage", "--by", "color"]);
+    expect(body.ok).toBe(false);
+    expect(body.error.code).toBe("INVALID_INPUT");
   });
 });

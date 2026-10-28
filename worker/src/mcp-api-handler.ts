@@ -25,12 +25,15 @@ import { BodyTooLargeError, originAllowed, readBodyLimited } from "./http-guards
 import { SECURITY_HEADERS, jsonRpcError, text } from "./http-responses.js";
 import type { JobToolsContext } from "./jobs/job-runner.js";
 import { createMcpServer } from "./mcp-server.js";
+import type { SkillsContext } from "./skills/skill-catalog.js";
 
 export interface McpDeps {
   /** The caller's job context for the CLI runner tools (absent = tools not offered). */
   jobs?: JobToolsContext;
   /** The caller's MCP Events context (absent = events not offered). */
   events?: EventsContext;
+  /** The caller's skills context (absent = built-in skills only). */
+  skills?: SkillsContext;
 }
 
 /**
@@ -105,7 +108,12 @@ export async function handleMcpRequest(
     });
   }
 
-  const server = createMcpServer(env, { version, jobs: deps.jobs, era: "legacy" });
+  const server = createMcpServer(env, {
+    version,
+    jobs: deps.jobs,
+    skills: deps.skills,
+    era: "legacy",
+  });
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
     enableJsonResponse: true,
@@ -143,7 +151,14 @@ async function handleModern(
     );
   }
   const handler = createMcpHandler(
-    () => createMcpServer(env, { version, jobs: deps.jobs, events: deps.events, era: "modern" }),
+    () =>
+      createMcpServer(env, {
+        version,
+        jobs: deps.jobs,
+        events: deps.events,
+        skills: deps.skills,
+        era: "modern",
+      }),
     { legacy: "reject", responseMode: "json", maxRequestBodySize: MAX_BODY_BYTES },
   );
   try {

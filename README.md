@@ -68,7 +68,7 @@ multix fal image "a red fox" --json           # one-line multix.result/v1 envelo
 multix elevenlabs tts --text "Hi" --estimate  # price range, units, rate and source; nothing is sent
 multix elevenlabs tts --text "Hi" --max-cost 0.01  # refuse before sending unless the cost fits
 multix history stats --by model               # runs, success rate, p50/p90 time, cost, credits, tokens
-multix catalog compare seedance-2.0 --resolution 720p --duration 10  # sourced list prices, like for like
+multix catalog compare -t video --resolution 720p --duration 10 --audio on  # rank prices for one exact request
 multix rerun last                             # repeat a recorded run
 ```
 
@@ -104,34 +104,16 @@ lists with status `missing` (unless the catalog was too long to read in full,
 (`--refresh` refetches); offline, a stale copy up to 7 days old is used, or the
 catalog is reported `unavailable` and nothing is claimed available.
 
-`multix catalog` (`multix.catalog/v1`) keeps prices, usage and opinions apart:
-
-```bash
-multix catalog providers                       # tasks, docs, pricing page, key readiness
-multix catalog models --family seedance-2.0    # offerings and price status
-multix catalog show fal:bytedance/seedance-2.0/text-to-video --resolution 720p --duration 10
-multix catalog compare seedance-2.0 --resolution 720p --duration 10
-multix catalog usage --by model --since 30d    # runs, operations, attempts, actual vs estimated cost
-multix catalog recommend --task video --use-case product-ugc
-multix catalog rate <provider>:<model> --score 4 --use-case product-ugc
-```
-
-Prices are list prices read from each provider's own pricing page, with source
-URL and check date; a rate not re-checked within 120 days is `stale`, and an
-offering without a usable rate is `unknown`, never $0. `compare` ranks only
-like-for-like quotes at your configuration and lists the rest with the reason;
-a lower price says nothing about quality. (The BytePlus per-second figure is
-the pricing page's 16:9 example, and whether the `seedance-2.0` alias maps to
-BytePlus's dated model id is not confirmed.) `usage` covers only traffic run
-through multix on this machine, from the local history. `recommend` orders by
-a fixed list of criteria and uses price only as the final tie-breaker.
-Ratings, reviews and use-case notes stay private in
-`~/.multix/catalog-feedback.json` (mode 0600); `project` scope is allowed,
-`team`/`public` are refused until shared moderation exists, secrets and
-personal data are rejected, and readers get the text marked
-`content_trust: "user-authored"`. A remote usage ledger dashboard (Phase 2)
-and shared reviews are not available yet. Details:
-[Catalog commands](https://multix.zuey.me/commands/catalog/).
+`multix catalog` compares offerings (provider + model) before a run. Prices are
+per configuration (resolution, audio, variant), each with its source URL and
+check date; a price that is missing, unverified, checked more than 120 days ago
+or outside its window shows as unknown with the reason, never $0. `compare`
+ranks only rows whose price confirms every setting you pinned (others are
+`not_comparable` or `unknown`, with the reason) and says nothing about quality.
+`usage` counts only runs that went through multix on this machine, `rate`,
+`review` and `note` keep your own verdicts in a private or project store (text
+is scrubbed and returned as untrusted data), and `recommend` scores offerings
+from that evidence. Details: [Catalogue](https://multix.zuey.me/commands/catalog/).
 
 ## Environment variables
 
@@ -196,7 +178,7 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `MULTIX_OUTPUT` | No | `json` prints one `multix.result/v1` envelope per run, as `--json` does |
 | `MULTIX_HISTORY` | No | `0` stops recording runs in `~/.multix/history.jsonl` |
 | `MULTIX_HISTORY_FILE` | No | Run ledger path (shell or `~/.multix/.env` only) |
-| `MULTIX_CATALOG_FEEDBACK_FILE` | No | Where `multix catalog` ratings, reviews and notes are kept (default `~/.multix/catalog-feedback.json`; shell or `~/.multix/.env` only) |
+| `MULTIX_CATALOG_FILE` | No | Private `multix catalog` ratings, reviews and notes (default `~/.multix/catalog-notes.json`; shell or `~/.multix/.env` only) |
 | `MULTIX_CACHE_DIR` | No | Cache root for `multix models --live` catalogs (default `~/.multix/cache`; shell or `~/.multix/.env` only) |
 | `MULTIX_MODELS_TTL` | No | Seconds a cached catalog stays fresh (default `86400`, at most `604800`) |
 | `OPENROUTER_IMAGE_MODEL` | No | Default OpenRouter model |
@@ -217,7 +199,7 @@ Set extra keys as `GEMINI_API_KEY_2`, `GEMINI_API_KEY_3`, … (any numeric suffi
 
 Priority: `process.env` > `cwd/.env` > `~/.multix/.env`. A blank or whitespace-only value in a `.env` file does not count as set, so a project `.env` copied from `.env.example` does not hide `~/.multix/.env`; a shell variable wins even when blank. Set `MULTIX_LEGACY_CLAUDE_ENV=1` (shell or `~/.multix/.env`) to also read legacy AgentKit files (`.claude/skills/{ai-multimodal,ak-ai-multimodal}/.env`, `.claude/skills/.env`, `.claude/.env`, project first, then home) with the lowest priority (credential names only, never endpoint/proxy settings); `multix check -v` lists the env files that were loaded.
 
-A project `.env` may only set variables `multix` reads: provider keys, the provider settings in `.env.example` (`*_BASE_URL`, model overrides, Cloudflare IDs), the documented `MULTIX_*` settings (`MULTIX_OUTPUT_DIR`, so a project can choose where outputs go, `MULTIX_IMAGE_FORMAT`, `MULTIX_MAX_DOWNLOAD_MB`, `MULTIX_UPLOAD_MIN_KBPS`, `MULTIX_OUTPUT`, `MULTIX_HISTORY`, `MULTIX_MODELS_TTL`) and `NO_COLOR`. The opt-ins `MULTIX_ALLOW_PROJECT_BASE_URL` and `MULTIX_LEGACY_CLAUDE_ENV`, and `MULTIX_HISTORY_FILE` and `MULTIX_CACHE_DIR`, are refused there; set them in the shell or `~/.multix/.env`. Other names, such as `NODE_OPTIONS`, `npm_config_registry`, `LD_PRELOAD` or `HTTPS_PROXY`, are not loaded, so they never reach `multix` or the tools it starts (`npm` in `multix update`, ffmpeg, ImageMagick, cwebp); one warning on stderr lists the ignored names, never their values. The shell and `~/.multix/.env` are not filtered.
+A project `.env` may only set variables `multix` reads: provider keys, the provider settings in `.env.example` (`*_BASE_URL`, model overrides, Cloudflare IDs), the documented `MULTIX_*` settings (`MULTIX_OUTPUT_DIR`, so a project can choose where outputs go, `MULTIX_IMAGE_FORMAT`, `MULTIX_MAX_DOWNLOAD_MB`, `MULTIX_UPLOAD_MIN_KBPS`, `MULTIX_OUTPUT`, `MULTIX_HISTORY`, `MULTIX_MODELS_TTL`) and `NO_COLOR`. The opt-ins `MULTIX_ALLOW_PROJECT_BASE_URL` and `MULTIX_LEGACY_CLAUDE_ENV`, and `MULTIX_HISTORY_FILE`, `MULTIX_CACHE_DIR` and `MULTIX_CATALOG_FILE`, are refused there; set them in the shell or `~/.multix/.env`. Other names, such as `NODE_OPTIONS`, `npm_config_registry`, `LD_PRELOAD` or `HTTPS_PROXY`, are not loaded, so they never reach `multix` or the tools it starts (`npm` in `multix update`, ffmpeg, ImageMagick, cwebp); one warning on stderr lists the ignored names, never their values. The shell and `~/.multix/.env` are not filtered.
 
 `*_BASE_URL`, `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_AI_GATEWAY_ID` decide where your API key is sent. Values from the shell or `~/.multix/.env` are always used. A value from the project `.env` (or a legacy `.claude` file under it) is used only when every key the provider sends with it comes from that same project file (the repository's own key). That protects your key, not your data: a project `.env` that ships its own key and base URL routes that project's requests, including your prompts and any files you upload, to that host, and its key replaces yours from `~/.multix/.env`, so review a cloned repository's `.env` before running `multix` in it. If a key comes from anywhere else, the project value is ignored: the `~/.multix/.env` value is used with a warning (variable, file and key source named, never the value), or, if there is none, the command stops with an error instead of falling back to the vendor default. `multix check` shows whether each such setting is in effect or ignored. To use a project value for one command, run `MULTIX_ALLOW_PROJECT_BASE_URL=1 multix ...`; do not put the opt-in in `~/.multix/.env`, which disables the check for every directory. Non-default base URLs must be `https://` (plain `http://` only for `localhost`, `127.0.0.1`, `[::1]`), and `multix` warns once per variable on stderr with the provider and hostname only.
 ## Commands
@@ -290,11 +272,11 @@ multix gemini generate-speech --text "Joe: How's it going? Jane: Not too bad!" \
 
 **Gemini models:**
 - Text output (analyze, transcribe, extract, doc convert): `gemini-3.6-flash` (default), `gemini-3.5-flash` (manual override)
-- Image gen: `gemini-3.1-flash-image-preview` (Nano Banana 2, fastest), `gemini-3-pro-image-preview` (4K text), `imagen-4.0-generate-001` (production)
+- Image gen: `gemini-3.1-flash-image` (Nano Banana 2, default), `gemini-3.1-flash-lite-image` (fast, low cost), `gemini-3-pro-image` (4K text), `gemini-nano-banana-2.1` (Google's recommended successor). Imagen 4 is no longer served on the Gemini API, and the `-preview` image ids are past their earliest announced shutdown date and may stop at any time.
 - Video: `gemini-omni-1.1-flash` (default, Interactions API, requires billing). Legacy `veo-*` models still run with an explicit `--model`; see [Gemini video migration](#gemini-video-migration-veo-to-omni-flash).
 - TTS: `gemini-3.8-flash-lite-tts` (default, fast/cheap, 101 languages), `gemini-3.8-flash-tts` (highest fidelity, 130 languages), legacy `gemini-3.1-flash-tts-preview`, `gemini-2.5-flash-preview-tts`, `gemini-2.5-pro-preview-tts`. Gemini 3.8 models use the Interactions API, read the text verbatim, take delivery direction via `--style`, and also accept custom `voice_…`/`voicekey_…` voice ids.
 
-`gemini-3.6-flash` is a text-output model. Use Nano Banana/Imagen for images, Gemini Omni Flash for video, and Gemini Flash TTS for speech.
+`gemini-3.6-flash` is a text-output model. Use Nano Banana for images, Gemini Omni Flash for video, and Gemini Flash TTS for speech.
 
 #### Gemini video migration (Veo to Omni Flash)
 
@@ -343,7 +325,7 @@ multix minimax generate-music [--lyrics <str>] [--prompt <str>] [--model music-2
 ### `multix openrouter`
 
 ```bash
-multix openrouter generate --prompt "Retro robot" [--model google/gemini-3.1-flash-image-preview] [--aspect-ratio 1:1] [--image-size <sz>] [--num-images 1] [-v]
+multix openrouter generate --prompt "Retro robot" [--model google/gemini-3.1-flash-image] [--aspect-ratio 1:1] [--image-size <sz>] [--num-images 1] [-v]
 
 # Image-to-image (alias: i2i) — refs accept URL or local path
 multix openrouter image-to-image --prompt "make it cyberpunk" --ref ./photo.jpg [--ref https://...] [--model google/gemini-2.5-flash-image] [--strength 0.7] [--output <path>] [-v]
@@ -996,13 +978,15 @@ instance runs at `https://multix.zuey.me/mcp` (invited GitHub accounts only).
 
 - Tools: `multix_catalog` (runnable commands, their options and file inputs,
   and `has_keys` per group from the caller's saved keys; always listed),
-  `multix_price_book` (providers, offerings and sourced list prices with
-  views `providers`, `models`, `show` and `compare`, the same data as
-  `multix catalog --json`; read-only, always listed),
+  `multix_model_catalog` (offerings, prices per configuration and
+  comparisons, the same payload as the `data` of `multix catalog providers|models|compare --json`;
+  `show` there leaves out the local usage, ratings and notes the CLI adds; always
+  listed),
   `multix_run` (run one CLI command, for example
   `gemini analyze` or `media optimize`, in its own Cloudflare Container with
   ffmpeg and ImageMagick; waits up to `wait_seconds`, default 25, max 40,
-  container start included), `multix_job_status` and `multix_job_cancel`.
+  container start included), `multix_job_status`, `multix_job_cancel`, and
+  `multix_skills` (read-only skills catalogue; always listed).
   Each account runs at most `MULTIX_MAX_JOBS_PER_ACCOUNT` jobs at once
   (default 2; `busy: …` otherwise) and the server at most
   `MULTIX_MAX_JOBS_TOTAL` (default 10, keep it at or below the container
@@ -1021,6 +1005,15 @@ instance runs at `https://multix.zuey.me/mcp` (invited GitHub accounts only).
   verified, signed `https://` webhooks to public hosts. Subscriptions are kept
   per account in the `MULTIX_EVENTS` Durable Object, next to the REST
   webhook subscriptions.
+- Skills: the server serves this repository's `skill/` directory (the `multix`
+  entry skill and its task skills, bundled at build time) as read-only
+  resources at `skill://multix/...`. Protocol `2026-07-28` clients use the
+  `io.modelcontextprotocol/skills` extension (`skills/list`, `skills/get`,
+  `resources/read`, `resources/directory/read`); 2025 clients use
+  `resources/list`, `resources/read` and `multix_skills`. Reading a skill never
+  runs it. Private and team skills have a per-account store (`MULTIX_SKILLS`)
+  but no publish API yet. See
+  [Skills](https://multix.zuey.me/guides/mcp-server/#skills).
 - Auth: OAuth 2.1 (dynamic client registration, PKCE) with GitHub sign-in.
   Only GitHub logins or verified emails in the `MULTIX_ALLOWED_USERS` secret
   can sign in.
@@ -1081,8 +1074,8 @@ Full guide: [Remote MCP server](https://multix.zuey.me/guides/mcp-server/).
 ### REST API
 
 The same server exposes a JSON REST API at `/api/v1` for scripts and CI
-(manage provider keys and R2 storage, read the catalog and the price book at
-`GET /api/v1/price-book`, run and poll jobs).
+(manage provider keys and R2 storage, read the catalog and the model catalogue
+at `GET /api/v1/model-catalog`, run and poll jobs).
 Create an account API key (`mxk_…`, shown once) in the **API keys** card at
 `/dashboard` and send it as `Authorization: Bearer <key>`:
 

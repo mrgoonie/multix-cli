@@ -48,11 +48,10 @@ every run into one operation.
 the catalog cache that `multix models` reports from. Set it in the shell or
 `~/.multix/.env`.
 
-`MULTIX_CATALOG_FEEDBACK_FILE` (where `multix catalog rate`, `review` and
-`note` keep your entries, default `~/.multix/catalog-feedback.json`) is refused
-for the same reason: a repository must not choose, or seed, the feedback that
-`multix catalog recommend` and agents read. Set it in the shell or
-`~/.multix/.env`. See [Catalog commands](/commands/catalog/#ratings-reviews-and-notes).
+`MULTIX_CATALOG_FILE` (your private [catalogue](/commands/catalog/) ratings,
+reviews and notes, default `~/.multix/catalog-notes.json`) is refused for the
+same reason: a repository must not read or seed your private reviews. Set it in
+the shell or `~/.multix/.env`.
 
 [`.env.example`](https://github.com/mrgoonie/multix-cli/blob/main/.env.example)
 lists them, along with the two opt-ins. Any other name, for example `NODE_OPTIONS`, `npm_config_registry`,

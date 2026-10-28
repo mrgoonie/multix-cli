@@ -104,8 +104,8 @@ export default defineConfig({
               slug: "commands/scene",
             },
             {
-              label: "Catalog (prices, usage, reviews)",
-              translations: { vi: "Catalog (giá, mức sử dụng, đánh giá)" },
+              label: "Model and provider catalogue",
+              translations: { vi: "Danh mục model và provider" },
               slug: "commands/catalog",
             },
             {

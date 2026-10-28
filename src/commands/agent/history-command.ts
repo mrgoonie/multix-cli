@@ -16,8 +16,10 @@ import {
 } from "../../agent/history-store.js";
 import { run } from "../../agent/run-state.js";
 import { type CostReceipt, settleOperations } from "../../budget/cost-receipt.js";
-import { receiptOf } from "../../catalog/usage-analytics.js";
+import { receiptOf } from "../../catalog/usage-aggregate.js";
 import { ValidationError } from "../../core/errors.js";
+
+export { receiptOf };
 
 interface ListOpts {
   last?: string;

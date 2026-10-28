@@ -13,7 +13,7 @@ transcription-models` for transcription model IDs.
 ```bash
 multix openrouter generate \
   --prompt "Retro robot in a rainy city" \
-  --model google/gemini-3.1-flash-image-preview \
+  --model google/gemini-3.1-flash-image \
   --aspect-ratio 16:9 --output robot.png
 
 multix openrouter i2i \

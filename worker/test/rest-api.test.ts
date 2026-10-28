@@ -257,24 +257,6 @@ describe("REST API jobs", () => {
     expect((await api(browser, key, "/catalog?task=telepathy")).status).toBe(400);
     expect((await api(browser, key, "/catalog?model=bad%20id")).status).toBe(400);
 
-    const compare = await body(
-      await api(
-        browser,
-        key,
-        "/price-book?view=compare&family=seedance-2.0&resolution=720p&duration=10",
-      ),
-    );
-    expect(compare.comparison.comparable[0]).toMatchObject({ provider: "byteplus", amount: 1.5 });
-    const providers = await body(await api(browser, key, "/price-book?view=providers"));
-    expect(providers.providers.find((p: Json) => p.provider === "gemini").ready).toBe(true);
-    expect(JSON.stringify(providers)).not.toContain(GEMINI_KEY);
-    expect((await api(browser, key, "/price-book?view=compare")).status).toBe(400);
-    expect((await api(browser, key, "/price-book?view=models&priced=maybe")).status).toBe(400);
-    expect((await api(browser, key, "/price-book?view=compare&family=x&duration=-1")).status).toBe(
-      400,
-    );
-    expect((await api(browser, key, "/price-book", { method: "POST" })).status).toBe(405);
-
     const run = await api(browser, key, "/jobs", {
       method: "POST",
       body: JSON.stringify({ command: "gemini generate", options: { prompt: "a cat" } }),
@@ -499,5 +481,38 @@ describe("REST API documentation", () => {
         if (response.status === 404) expect(path, `${method} ${path}`).toContain("{id}");
       }
     }
+  });
+});
+
+describe("REST API model catalogue", () => {
+  it("compares offerings for one request and rejects bad parameters", async () => {
+    const { browser } = await signedInBrowser();
+    const key = await createApiKey(browser);
+    const compare = await api(
+      browser,
+      key,
+      "/model-catalog?view=compare&task=video&resolution=720p&duration_s=10&audio=true",
+    );
+    expect(compare.status).toBe(200);
+    const rows = (await body(compare)).comparison.rows as Json[];
+    const seedance = rows.find(
+      (r) =>
+        r.offering === "fal:bytedance/seedance-2.5/text-to-video" && r.price_rank !== undefined,
+    );
+    expect(seedance?.total_usd).toBeCloseTo(4.6224, 4);
+
+    const models = await body(await api(browser, key, "/model-catalog?task=video&priced=true"));
+    expect(models.offerings.length).toBeGreaterThan(0);
+    expect((await api(browser, key, "/model-catalog?duration_s=abc&view=compare")).status).toBe(
+      400,
+    );
+    expect((await api(browser, key, "/model-catalog?view=everything")).status).toBe(400);
+    expect((await api(browser, key, "/model-catalog?view=compare&images=2.5")).status).toBe(400);
+    expect((await api(browser, key, "/model-catalog?view=compare&duration_s=3601")).status).toBe(
+      400,
+    );
+    expect((await api(browser, key, "/model-catalog?view=compare&duration_s=0")).status).toBe(400);
+    expect((await api(browser, key, "/model-catalog?task=telepathy")).status).toBe(400);
+    expect((await api(browser, undefined, "/model-catalog")).status).toBe(401);
   });
 });

@@ -109,9 +109,10 @@ describe("protocol negotiation", () => {
 
   it("serves the tools to modern clients", async () => {
     const list = await modernRpc(fullEnv(), "tools/list");
-    expect(list.result.tools.map((t: { name: string }) => t.name)).toEqual([
+    expect(list.result.tools.map((t: { name: string }) => t.name).sort()).toEqual([
       "multix_catalog",
-      "multix_price_book",
+      "multix_model_catalog",
+      "multix_skills",
     ]);
     const call = await modernRpc(fullEnv(), "tools/call", {
       name: "multix_catalog",

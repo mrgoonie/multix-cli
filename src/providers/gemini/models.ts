@@ -6,8 +6,11 @@
 import { envDefault } from "../../core/env-default.js";
 import { TTS_MODEL_DEFAULT } from "./voices.js";
 
-/** Default image generation model (Nano Banana 2 — fastest, ~95% Pro quality). */
-export const IMAGE_MODEL_DEFAULT = "gemini-3.1-flash-image-preview";
+/**
+ * Default image generation model (Nano Banana 2, GA). The `-preview` id it
+ * replaces is past its earliest shutdown date (2026-06-25).
+ */
+export const IMAGE_MODEL_DEFAULT = "gemini-3.1-flash-image";
 
 /** Fallback if default image model fails. */
 export const IMAGE_MODEL_FALLBACK = "gemini-2.5-flash-image";
@@ -43,20 +46,19 @@ export { TTS_MODEL_DEFAULT };
 /** Default document conversion model. */
 export const DOC_MODEL_DEFAULT = TEXT_MODEL_DEFAULT;
 
-/** Imagen 4 model ids — require billing, use generateImages API. */
-export const IMAGEN_MODELS = new Set([
-  "imagen-4.0-generate-001",
-  "imagen-4.0-ultra-generate-001",
-  "imagen-4.0-fast-generate-001",
-]);
-
-/** All valid Gemini image-capable models (generate_content API). */
+/**
+ * Gemini image-capable models (generateContent API). Imagen 4 and
+ * gemini-2.5-flash-image-preview are no longer served; the `-preview` ids
+ * below are past their earliest shutdown date and may stop at any time.
+ */
 export const GEMINI_IMAGE_MODELS = new Set([
+  "gemini-nano-banana-2.1",
+  "gemini-3.1-flash-image",
+  "gemini-3.1-flash-lite-image",
+  "gemini-3-pro-image",
+  "gemini-2.5-flash-image",
   "gemini-3.1-flash-image-preview",
   "gemini-3-pro-image-preview",
-  "gemini-2.5-flash-image",
-  "gemini-2.5-flash-image-preview",
-  ...IMAGEN_MODELS,
 ]);
 
 /** Supported aspect ratios for image generation (video models have their own lists). */
@@ -74,7 +76,7 @@ export const ASPECT_RATIOS = [
 ] as const;
 export type AspectRatio = (typeof ASPECT_RATIOS)[number];
 
-/** Supported image sizes (Nano Banana / Imagen). */
+/** Supported image sizes (Nano Banana). */
 export const IMAGE_SIZES = ["1K", "2K", "4K"] as const;
 export type ImageSize = (typeof IMAGE_SIZES)[number];
 

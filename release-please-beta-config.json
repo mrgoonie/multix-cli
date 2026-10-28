@@ -17,6 +17,30 @@
         {
           "type": "generic",
           "path": "skill/SKILL.md"
+        },
+        {
+          "type": "generic",
+          "path": "skill/image-generation/SKILL.md"
+        },
+        {
+          "type": "generic",
+          "path": "skill/video-production/SKILL.md"
+        },
+        {
+          "type": "generic",
+          "path": "skill/speech-production/SKILL.md"
+        },
+        {
+          "type": "generic",
+          "path": "skill/media-qa/SKILL.md"
+        },
+        {
+          "type": "generic",
+          "path": "skill/document-conversion/SKILL.md"
+        },
+        {
+          "type": "generic",
+          "path": "skill/3d-generation/SKILL.md"
         }
       ]
     }

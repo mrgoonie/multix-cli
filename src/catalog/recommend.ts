@@ -1,189 +1,166 @@
 /**
- * Explainable model suggestions for a task and use case. There is no blended
- * score: candidates are ordered by a fixed list of criteria, each backed by
- * evidence that is reported next to it with its sample size, and evidence too
- * thin to lean on (fewer ratings or runs than the thresholds) is shown but
- * does not move the order. Price is the last criterion, a tie-breaker between
- * otherwise equal candidates, so the cheapest offering is never the default
- * answer. The user's own "avoid" note for the use case sends an offering to
- * the end; their "use" note lifts it, and both are labelled as personal notes.
- *
- * Runtime-neutral: it ranks the data it is given.
+ * Explainable recommendations for a task (and optionally a use case) from
+ * what multix knows: observed reliability in the run ledger, the user's own
+ * ratings, use-case notes and the quoted price for the request. Every factor
+ * carries its evidence and sample size; a factor without enough evidence is
+ * left out (its weight drops from the coverage) instead of being guessed.
+ * Offerings noted "avoid" for the use case are excluded with the reason.
+ * Runtime-neutral: the caller supplies usage rows, reviews and notes.
  */
 
-import type { Task } from "../capabilities/capability-types.js";
-import { CATALOG_SCHEMA, type OfferingView, type Quote } from "./catalog-types.js";
-import { type Feedback, MIN_RATINGS_FOR_MEAN, summariseRatings } from "./feedback-rules.js";
-import type { UsageRow } from "./usage-analytics.js";
+import type { Offering, QuoteRequest, Review, UseCaseNote } from "./catalog-types.js";
+import { compareOfferings } from "./price-compare.js";
+import { summarizeReviews } from "./reviews.js";
+import type { UsageRow } from "./usage-aggregate.js";
 
-/** Operations needed before an observed success rate orders candidates. */
-export const MIN_RUNS_FOR_RELIABILITY = 5;
+/** Minimum runs before reliability counts, and ratings before the average counts. */
+export const MIN_RUNS = 5;
+export const MIN_RATINGS = 3;
 
-/** Where an offering without enough ratings or runs sorts: the scale midpoints. */
-const NEUTRAL_RATING = 3;
-const NEUTRAL_SUCCESS = 0.5;
+export const WEIGHTS = { reliability: 0.35, rating: 0.25, note: 0.2, price: 0.2 } as const;
+type Factor = keyof typeof WEIGHTS;
 
 export interface RecommendInput {
-  task: Task;
+  offerings: Offering[];
+  request: QuoteRequest;
   use_case?: string;
-  offerings: OfferingView[];
-  /** Quote per offering ref at the requested configuration, when one was asked for. */
-  quotes: Map<string, Quote>;
-  /** Usage rows keyed "<provider>:<model>". */
-  usage: Map<string, UsageRow>;
-  feedback: Feedback[];
-  ready: (provider: string) => boolean | null;
-  limit?: number;
+  usage: UsageRow[];
+  reviews: Review[];
+  notes: UseCaseNote[];
+  ready: (provider: string) => boolean;
+  /** Only providers the caller has keys for. */
+  ready_only?: boolean;
 }
 
 export interface Recommendation {
-  rank: number;
-  ref: string;
-  command: string | null;
+  offering: string;
+  provider: string;
+  model: string;
+  ready: boolean;
+  /** Weighted mean of the factors with evidence, 0–1, times coverage. */
+  score: number;
+  /** Share of the total weight backed by evidence (0–1). */
+  coverage: number;
+  factors: Partial<Record<Factor, { value: number; weight: number; evidence: string }>>;
+  quote_usd: number | null;
   reasons: string[];
-  caveats: string[];
-  evidence: {
-    key_ready: boolean | null;
-    verified: boolean;
-    price: Pick<Quote, "status" | "amount" | "currency" | "basis" | "source"> | { status: string };
-    reliability: { success_rate: number | null; operations: number; p50_s: number | null } | null;
-    ratings: ReturnType<typeof summariseRatings>;
-    own_note: "use" | "avoid" | null;
-  };
 }
 
 export interface RecommendResult {
-  schema: typeof CATALOG_SCHEMA;
-  task: Task;
-  use_case: string | null;
-  ranking_basis: string[];
+  task?: string;
+  use_case?: string;
   recommendations: Recommendation[];
+  excluded: Array<{ offering: string; reason: string }>;
+  note: string;
 }
 
-const RANKING_BASIS = [
-  "not marked avoid in your notes for this use case",
-  "provider key ready",
-  "verified by multix (inputs checked against the provider schema)",
-  "marked use in your notes for this use case",
-  `mean rating (only with ${MIN_RATINGS_FOR_MEAN}+ ratings; fewer count as ${NEUTRAL_RATING}/5)`,
-  `observed success rate (only with ${MIN_RUNS_FOR_RELIABILITY}+ operations; fewer count as ${NEUTRAL_SUCCESS * 100}%)`,
-  "lower quoted price for the same configuration (tie-breaker only)",
-];
+const round = (n: number, d = 3) => Math.round(n * 10 ** d) / 10 ** d;
 
 export function recommend(input: RecommendInput): RecommendResult {
-  const rows = input.offerings
-    .filter((o) => o.tasks.includes(input.task))
-    .map((o) => {
-      const mine = input.feedback.filter(
-        (f) => f.ref === o.ref && (!input.use_case || !f.use_case || f.use_case === input.use_case),
-      );
-      const notes = mine.filter((f) => f.kind === "note" && f.use_case === input.use_case);
-      const latestNote = notes.sort((a, b) => a.updated_at.localeCompare(b.updated_at)).at(-1);
-      const ownNote = input.use_case ? (latestNote?.verdict ?? null) : null;
-      const ratings = summariseRatings(mine.filter((f) => f.kind !== "note"));
-      const usage = input.usage.get(o.ref);
-      const quote = input.quotes.get(o.ref);
-      const ready = input.ready(o.provider);
-      const reasons: string[] = [];
-      const caveats: string[] = [];
-      if (ready === true) reasons.push(`${o.provider} key is set`);
-      else if (ready === false) caveats.push(`no ${o.provider} key set`);
-      if (o.verified) reasons.push("verified by multix");
-      else caveats.push("not verified by multix: check its inputs first");
-      if (ownNote === "use") reasons.push(`your note: use for ${input.use_case}`);
-      if (ownNote === "avoid") caveats.push(`your note: avoid for ${input.use_case}`);
-      if (ratings.mean !== null) {
-        reasons.push(
-          `rated ${ratings.mean}/5 from ${ratings.count} rating(s) (${ratings.confidence} confidence)`,
-        );
-      } else if (ratings.count) {
-        caveats.push(`only ${ratings.count} rating(s): too few to weigh`);
-      }
-      const reliable = usage && usage.operations >= MIN_RUNS_FOR_RELIABILITY;
-      if (usage && usage.success_rate !== null) {
-        const line = `${Math.round(usage.success_rate * 100)}% success over ${usage.operations} run(s) through multix`;
-        if (reliable) reasons.push(line);
-        else caveats.push(`${line}: too few to weigh`);
-      }
-      if (quote?.status === "quoted") {
-        reasons.push(
-          `list price ${quote.amount} ${quote.currency} for this configuration (${quote.basis})`,
-        );
-      } else if (quote) {
-        caveats.push(`price: ${quote.reason ?? quote.status}`);
-      } else if (o.price_status !== "priced") {
-        caveats.push(`price ${o.price_status}`);
-      }
-      if (o.deprecated) caveats.push("deprecated");
-      return {
-        o,
-        ownNote,
-        ready,
-        ratings,
-        usage,
-        quote,
-        reliable,
-        reasons,
-        caveats,
+  const { request, use_case } = input;
+  const candidates = input.offerings.filter(
+    (o) =>
+      (!request.task || o.tasks.includes(request.task)) &&
+      (!input.ready_only || input.ready(o.provider)),
+  );
+  const notesFor = (id: string) =>
+    input.notes.filter((n) => n.offering === id && (!use_case || n.use_case === use_case));
+  const excluded: RecommendResult["excluded"] = [];
+  const kept = candidates.filter((o) => {
+    const avoid = use_case ? notesFor(o.id).find((n) => n.verdict === "avoid") : undefined;
+    if (avoid) excluded.push({ offering: o.id, reason: `noted "avoid" for ${use_case}` });
+    return !avoid;
+  });
+
+  // Cheapest comparable quote per offering for this exact request.
+  const comparison = compareOfferings(kept, request);
+  const quote = new Map<string, number>();
+  for (const r of comparison.rows) {
+    if (r.price_rank === undefined || r.total_usd === null) continue;
+    const prev = quote.get(r.offering);
+    if (prev === undefined || r.total_usd < prev) quote.set(r.offering, r.total_usd);
+  }
+  const prices = [...quote.values()];
+  const [lo, hi] = [Math.min(...prices), Math.max(...prices)];
+  const usage = new Map(input.usage.map((u) => [u.key, u]));
+
+  const recommendations = kept.map((o): Recommendation => {
+    const factors: Recommendation["factors"] = {};
+    const reasons: string[] = [];
+    const u = usage.get(o.id);
+    if (u && u.requests >= MIN_RUNS && u.success_rate !== null) {
+      factors.reliability = {
+        value: u.success_rate,
+        weight: WEIGHTS.reliability,
+        evidence: `${u.completed}/${u.requests} runs completed through multix`,
       };
-    });
-  const readyRank = (r: boolean | null) => (r === true ? 2 : r === null ? 1 : 0);
-  // Missing or too-thin evidence sits at the neutral point, so it neither lifts
-  // nor sinks a candidate: below a well-rated one, above a poorly rated one.
-  const ratingKey = (r: (typeof rows)[number]) => r.ratings.mean ?? NEUTRAL_RATING;
-  const reliabilityKey = (r: (typeof rows)[number]) =>
-    r.reliable ? (r.usage?.success_rate ?? NEUTRAL_SUCCESS) : NEUTRAL_SUCCESS;
-  rows.sort(
+    } else reasons.push(`reliability: ${u?.requests ?? 0} runs (needs ${MIN_RUNS})`);
+
+    const own = input.reviews.filter(
+      (r) => r.offering === o.id && (!use_case || r.use_case === use_case),
+    );
+    const summary = summarizeReviews(own);
+    if (summary.average !== null && summary.rated >= MIN_RATINGS) {
+      factors.rating = {
+        value: (summary.average - 1) / 4,
+        weight: WEIGHTS.rating,
+        evidence: `average ${summary.average}/5 from ${summary.rated} ratings (${summary.verified} tied to a run)`,
+      };
+    } else reasons.push(`rating: ${summary.rated} ratings (needs ${MIN_RATINGS})`);
+
+    const notes = notesFor(o.id);
+    if (notes.length) {
+      const value =
+        notes.reduce(
+          (s, n) => s + (n.verdict === "recommended" ? 1 : n.verdict === "mixed" ? 0.5 : 0),
+          0,
+        ) / notes.length;
+      factors.note = {
+        value,
+        weight: WEIGHTS.note,
+        evidence: notes.map((n) => `${n.verdict} for ${n.use_case}`).join("; "),
+      };
+    }
+
+    const q = quote.get(o.id);
+    if (q !== undefined) {
+      factors.price = {
+        value: hi === lo ? 1 : 1 - (q - lo) / (hi - lo),
+        weight: WEIGHTS.price,
+        evidence: `quoted $${q} for this request (range $${lo}–$${hi})`,
+      };
+    } else reasons.push("price: no comparable quote for this request");
+
+    const used = Object.values(factors);
+    const coverage = used.reduce((s, f) => s + f.weight, 0);
+    const mean = coverage ? used.reduce((s, f) => s + f.value * f.weight, 0) / coverage : 0;
+    const ready = input.ready(o.provider);
+    if (!ready) reasons.push("provider key not set");
+    return {
+      offering: o.id,
+      provider: o.provider,
+      model: o.model,
+      ready,
+      score: round(mean * coverage),
+      coverage: round(coverage),
+      factors,
+      quote_usd: q ?? null,
+      reasons,
+    };
+  });
+
+  recommendations.sort(
     (a, b) =>
-      Number(a.ownNote === "avoid") - Number(b.ownNote === "avoid") ||
-      readyRank(b.ready) - readyRank(a.ready) ||
-      Number(b.o.verified) - Number(a.o.verified) ||
-      Number(b.ownNote === "use") - Number(a.ownNote === "use") ||
-      ratingKey(b) - ratingKey(a) ||
-      reliabilityKey(b) - reliabilityKey(a) ||
-      quoted(a.quote) - quoted(b.quote) ||
-      a.o.ref.localeCompare(b.o.ref),
+      b.score - a.score ||
+      b.coverage - a.coverage ||
+      Number(b.ready) - Number(a.ready) ||
+      a.offering.localeCompare(b.offering),
   );
   return {
-    schema: CATALOG_SCHEMA,
-    task: input.task,
-    use_case: input.use_case ?? null,
-    ranking_basis: RANKING_BASIS,
-    recommendations: rows.slice(0, input.limit ?? 10).map((r, i) => ({
-      rank: i + 1,
-      ref: r.o.ref,
-      command: r.o.command,
-      reasons: r.reasons,
-      caveats: r.caveats,
-      evidence: {
-        key_ready: r.ready,
-        verified: r.o.verified,
-        price: r.quote
-          ? {
-              status: r.quote.status,
-              amount: r.quote.amount,
-              currency: r.quote.currency,
-              ...(r.quote.basis ? { basis: r.quote.basis } : {}),
-              ...(r.quote.source ? { source: r.quote.source } : {}),
-            }
-          : { status: r.o.price_status },
-        reliability: r.usage
-          ? {
-              success_rate: r.usage.success_rate,
-              operations: r.usage.operations,
-              p50_s: r.usage.latency_s?.p50 ?? null,
-            }
-          : null,
-        ratings: r.ratings,
-        own_note: r.ownNote,
-      },
-    })),
+    ...(request.task ? { task: request.task } : {}),
+    ...(use_case ? { use_case } : {}),
+    recommendations,
+    excluded,
+    note: "Scores combine only the evidence shown per factor; coverage is how much of the weight had evidence. Price compares this exact request only.",
   };
-}
-
-/** Quoted USD amount for sorting; unquoted sorts last. */
-function quoted(q: Quote | undefined): number {
-  return q?.status === "quoted" && q.currency === "USD" && q.amount !== null
-    ? q.amount
-    : Number.POSITIVE_INFINITY;
 }

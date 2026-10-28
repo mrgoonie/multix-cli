@@ -6,7 +6,6 @@
  */
 
 import { TASKS } from "../../../src/capabilities/capability-types.js";
-import { PRICE_BOOK_VIEWS } from "../../../src/catalog/price-book-view.js";
 import { MAX_API_KEYS_PER_ACCOUNT } from "../accounts/api-key-store.js";
 import { EVENT_NAMES } from "../events/event-catalog.js";
 import {
@@ -213,43 +212,19 @@ export function openApiDocument(origin: string): Json {
           responses: { ...ok("Catalog", { type: "object" }), ...ERRORS },
         },
       },
-      "/price-book": {
+      "/model-catalog": {
         get: {
-          summary: "Providers, offerings and sourced list prices",
+          summary: "Model & provider catalogue",
           description:
-            "The same data as multix_price_book and `multix catalog --json`. view=providers: providers with tasks, docs, pricing page and whether your saved keys cover them. view=models: offerings with price status; unknown prices stay unknown, never 0. view=show&ref=provider:model: every rate with source, check date and freshness, quoted at the configuration given. view=compare&family=…: one model family across providers at one configuration, like-for-like quotes ranked cheapest first, the rest listed with the reason they are not comparable. List prices only.",
-          operationId: "getPriceBook",
+            "The same views as `multix catalog --json`. view=providers: provider links and whether your saved keys cover each. view=models (default): offerings (provider + model) with tasks, the multix command and prices per configuration, each with its source URL and check date; a price that is unknown, unverified or stale says so and is never $0. view=show&offering=<provider>:<model>: one offering. view=compare: quote every offering for one exact request (task, resolution, duration_s, audio, aspect_ratio, images); only prices the source confirms for that configuration are ranked.",
+          operationId: "getModelCatalog",
           parameters: [
             {
               name: "view",
               in: "query",
               required: false,
-              schema: { type: "string", enum: [...PRICE_BOOK_VIEWS], default: "providers" },
+              schema: { type: "string", enum: ["providers", "models", "show", "compare"] },
               example: "compare",
-            },
-            {
-              name: "ref",
-              in: "query",
-              required: false,
-              schema: { type: "string" },
-              example: "fal:bytedance/seedance-2.0/text-to-video",
-              description: "view show: <provider>:<model>",
-            },
-            {
-              name: "family",
-              in: "query",
-              required: false,
-              schema: { type: "string" },
-              example: "seedance-2.0",
-              description: "view compare (required) or models",
-            },
-            {
-              name: "provider",
-              in: "query",
-              required: false,
-              schema: { type: "string" },
-              example: "fal",
-              description: "view models: one provider group",
             },
             {
               name: "task",
@@ -259,19 +234,29 @@ export function openApiDocument(origin: string): Json {
               example: "video",
             },
             {
-              name: "priced",
+              name: "provider",
               in: "query",
               required: false,
-              schema: { type: "boolean" },
-              description: "view models: only offerings with a current price",
+              schema: { type: "string" },
+              example: "fal",
             },
             {
-              name: "verified",
+              name: "family",
               in: "query",
               required: false,
-              schema: { type: "boolean" },
-              description: "view models: only offerings verified by multix",
+              schema: { type: "string" },
+              example: "seedance-2.5",
             },
+            { name: "q", in: "query", required: false, schema: { type: "string" } },
+            {
+              name: "offering",
+              in: "query",
+              required: false,
+              schema: { type: "string" },
+              example: "fal:bytedance/seedance-2.5/text-to-video",
+            },
+            { name: "priced", in: "query", required: false, schema: { type: "boolean" } },
+            { name: "ready", in: "query", required: false, schema: { type: "boolean" } },
             {
               name: "resolution",
               in: "query",
@@ -280,12 +265,18 @@ export function openApiDocument(origin: string): Json {
               example: "720p",
             },
             {
-              name: "duration",
+              name: "duration_s",
               in: "query",
               required: false,
-              schema: { type: "number", exclusiveMinimum: 0, maximum: 3600 },
+              schema: { type: "number" },
               example: 10,
-              description: "seconds",
+            },
+            {
+              name: "audio",
+              in: "query",
+              required: false,
+              schema: { type: "boolean" },
+              example: true,
             },
             {
               name: "aspect_ratio",
@@ -294,15 +285,15 @@ export function openApiDocument(origin: string): Json {
               schema: { type: "string" },
               example: "16:9",
             },
-            { name: "audio", in: "query", required: false, schema: { type: "boolean" } },
+            { name: "images", in: "query", required: false, schema: { type: "integer" } },
             {
-              name: "count",
+              name: "sort",
               in: "query",
               required: false,
-              schema: { type: "integer", minimum: 1, maximum: 100 },
+              schema: { type: "string", enum: ["id", "provider", "price", "checked"] },
             },
           ],
-          responses: { ...ok("Price book view", { type: "object" }), ...ERRORS },
+          responses: { ...ok("Catalogue view", { type: "object" }), ...ERRORS },
         },
       },
       "/jobs": {

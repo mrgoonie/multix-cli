@@ -23,6 +23,7 @@ import {
   PROVIDER_SECRET_NAMES,
   type ProviderKeys,
 } from "./provider-secret-names.js";
+import type { AccountSkillsNamespace } from "./skills/account-skills.js";
 
 export interface RateLimiter {
   limit(options: { key: string }): Promise<{ success: boolean }>;
@@ -80,6 +81,8 @@ export interface WorkerEnv extends ServerSettings {
   MULTIX_JOB_QUOTA?: JobQuotaNamespace;
   /** Durable Object namespace of AccountEvents (event subscriptions and webhook deliveries per account). */
   MULTIX_EVENTS?: AccountEventsNamespace;
+  /** Durable Object namespace of AccountSkills (each account's versioned skills registry). */
+  MULTIX_SKILLS?: AccountSkillsNamespace;
   /** Jobs one account may run at the same time (default 2, at most 50). */
   MULTIX_MAX_JOBS_PER_ACCOUNT?: string;
   /** Jobs the server may run at the same time (default 10, at most 1000; keep <= containers max_instances). */

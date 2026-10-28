@@ -1,17 +1,16 @@
 /**
- * REST handlers for the CLI runner: the command catalog, the price book and jobs. They reuse
+ * REST handlers for the CLI runner: the command catalog and jobs. They reuse
  * the MCP tools' code paths (catalogPayload, prepareRun, JobRunner), so caps,
  * input checks, ownership and output scrubbing are the same on both surfaces.
  */
 
-import { z } from "zod";
 import type { Limits } from "../config.js";
 import { json } from "../http-responses.js";
 import { MODEL_ID_RE, catalogPayload } from "../jobs/catalog-view.js";
 import { type JobStatus, isTerminal } from "../jobs/job-protocol.js";
 import { DEFAULT_WAIT_SECONDS, JobRunner, MAX_WAIT_SECONDS } from "../jobs/job-runner.js";
 import type { JobToolsContext } from "../jobs/job-runner.js";
-import { priceBookArgsSchema, priceBookView } from "../jobs/price-book-view.js";
+import { modelCatalogPayload } from "../jobs/model-catalog-view.js";
 import { type RunRequest, prepareRun } from "../jobs/run-argv-builder.js";
 import type { ProviderKeys } from "../provider-secret-names.js";
 import { ApiError, readJsonObject } from "./api-http.js";
@@ -31,43 +30,59 @@ export function getCatalog(keys: ProviderKeys, url: URL): Response {
   return json(200, catalogPayload(keys, group, { task, model }));
 }
 
-/** Same views and arguments as multix_price_book, as query parameters. */
-export function getPriceBook(keys: ProviderKeys, url: URL): Response {
-  const q = url.searchParams;
-  const flag = (name: string) => {
-    const v = q.get(name);
-    if (v === null) return undefined;
-    if (v === "true" || v === "1") return true;
-    if (v === "false" || v === "0") return false;
-    throw new ApiError(400, "bad_request", `${name} must be true or false`);
-  };
-  const num = (name: string) => {
-    const v = q.get(name);
-    return v === null ? undefined : Number(v);
-  };
-  const input: Record<string, unknown> = { view: q.get("view") ?? "providers" };
-  for (const name of ["ref", "family", "provider", "task", "resolution", "aspect_ratio"]) {
-    const v = q.get(name);
-    if (v !== null) input[name] = v;
-  }
-  for (const name of ["priced", "verified", "audio"]) {
-    const v = flag(name);
-    if (v !== undefined) input[name] = v;
-  }
-  for (const name of ["duration", "count"]) {
-    const v = num(name);
-    if (v !== undefined) input[name] = v;
-  }
-  const parsed = z.object(priceBookArgsSchema).safeParse(input);
-  if (!parsed.success) {
-    const issue = parsed.error.issues[0];
+const NUMBER_RE = /^\d+(\.\d+)?$/;
+
+function boolParam(url: URL, name: string): boolean | undefined {
+  const v = url.searchParams.get(name);
+  if (v === null) return undefined;
+  if (v === "true" || v === "on" || v === "1") return true;
+  if (v === "false" || v === "off" || v === "0") return false;
+  throw new ApiError(400, "bad_request", `${name} must be true or false`);
+}
+
+/** Same bounds as the multix_model_catalog input schema. */
+function numberParam(url: URL, name: string, max: number, whole = false): number | undefined {
+  const v = url.searchParams.get(name);
+  if (v === null) return undefined;
+  const n = Number(v);
+  if (!NUMBER_RE.test(v) || n <= 0 || n > max || (whole && !Number.isInteger(n))) {
     throw new ApiError(
       400,
       "bad_request",
-      `${issue?.path.join(".") || "query"}: ${issue?.message ?? "invalid"}`,
+      `${name} must be a positive ${whole ? "whole " : ""}number up to ${max}`,
     );
   }
-  return json(200, priceBookView(keys, parsed.data));
+  return n;
+}
+
+/** GET /model-catalog: the same views as `multix catalog --json` and multix_model_catalog. */
+export function getModelCatalog(keys: ProviderKeys, url: URL): Response {
+  const p = url.searchParams;
+  const text = (name: string, max: number) => {
+    const v = p.get(name) ?? undefined;
+    if (v !== undefined && v.length > max) {
+      throw new ApiError(400, "bad_request", `${name} is longer than ${max} characters`);
+    }
+    return v;
+  };
+  const query = {
+    view: (text("view", 20) ?? "models") as "models",
+    task: text("task", 40),
+    provider: text("provider", 40),
+    family: text("family", 60),
+    query: text("q", 100),
+    offering: text("offering", 250),
+    resolution: text("resolution", 20),
+    aspect_ratio: text("aspect_ratio", 10),
+    sort: text("sort", 20),
+    priced: boolParam(url, "priced"),
+    ready: boolParam(url, "ready"),
+    audio: boolParam(url, "audio"),
+    duration_s: numberParam(url, "duration_s", 3600),
+    images: numberParam(url, "images", 100, true),
+  };
+  const defined = Object.fromEntries(Object.entries(query).filter(([, v]) => v !== undefined));
+  return json(200, modelCatalogPayload(keys, defined as typeof query));
 }
 
 function requireJobs(jobs: JobToolsContext | undefined): JobToolsContext {

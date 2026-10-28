@@ -464,6 +464,24 @@ describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     expect(envelope(again.stdout)).toMatchObject({ dry_run: true, command: "fal image" });
   });
 
+  it("never records catalog commands, whose arguments carry review text", async () => {
+    const review = await run(
+      [
+        "catalog",
+        "review",
+        "fal:bytedance/seedance-2.5/text-to-video",
+        "--score",
+        "4",
+        "--text",
+        "see https://cdn.example.com/a.mp4?X-Amz-Signature=abc123 from me@corp.example",
+      ],
+      { MULTIX_CATALOG_FILE: path.join(tmp, "notes.json") },
+    );
+    expect(review.exitCode).toBe(0);
+    const ledger = path.join(tmp, "h.jsonl");
+    expect(fs.existsSync(ledger) ? fs.readFileSync(ledger, "utf8") : "").toBe("");
+  });
+
   it("keeps exit 1 without --json but prints the code, hint and next steps", async () => {
     const result = await run(["fal", "image", "a cat"], { FAL_KEY: "" });
     expect(result.exitCode).toBe(1);

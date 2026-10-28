@@ -68,7 +68,7 @@ Mọi path đều tương đối với `/api/v1`.
 | `PUT` | `/storage` | Kiểm tra quyền truy cập bucket, rồi lưu cấu hình R2. |
 | `DELETE` | `/storage` | Xóa cấu hình R2. |
 | `GET` | `/catalog[?group=&task=&model=]` | Các lệnh CLI server chạy được; cùng payload và bộ lọc với `multix_catalog`. |
-| `GET` | `/price-book?view=…` | Provider, offering và giá niêm yết có nguồn; cùng view và tham số với `multix_price_book`, dưới dạng query parameter: `view` (mặc định `providers`, `models`, `show`, `compare`), `ref`, `family`, `provider`, `task`, `priced`, `verified`, `resolution`, `duration`, `aspect_ratio`, `audio`, `count`. Giá trị boolean nhận `true`/`false` (hoặc `1`/`0`). |
+| `GET` | `/model-catalog[?view=&task=&provider=&family=&q=&offering=&priced=&ready=&resolution=&duration_s=&audio=&aspect_ratio=&images=&sort=]` | Offering, giá theo từng cấu hình và so sánh; cùng payload với `multix_model_catalog`. `view` mặc định là `models`. Xem [Danh mục](/vi/commands/catalog/). |
 | `POST` | `/jobs` | Chạy một lệnh CLI; cùng input với `multix_run`. |
 | `GET` | `/jobs/{id}` | Trạng thái job, output, stdout và phần cuối stderr. |
 | `POST` | `/jobs/{id}/cancel` | Dừng một job đang chạy. |
@@ -81,11 +81,6 @@ Mọi path đều tương đối với `/api/v1`.
 | `DELETE` | `/events/subscriptions/{id}` | Thu hồi một subscription. |
 | `GET` | `/events/dead-letters` | Các lần gửi đã bị bỏ cuộc (ID, lý do, số lần thử; không kèm payload). |
 | `GET` | `/events/audit` | Nhật ký audit của subscription: tạo, thu hồi, vô hiệu hóa, hết hạn. |
-
-```bash
-curl -s "https://multix.zuey.me/api/v1/price-book?view=compare&family=seedance-2.0&resolution=720p&duration=10" \
-  -H "Authorization: Bearer $MULTIX_API_KEY"
-```
 
 Tên provider key là tên biến môi trường mà CLI đọc (ví dụ `GEMINI_API_KEY`),
 cùng các tên của Cloudflare Workers AI; `GET /provider-keys` liệt kê tất cả.

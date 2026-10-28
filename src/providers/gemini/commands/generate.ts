@@ -1,5 +1,5 @@
 /**
- * multix gemini generate — generate images with Gemini (Nano Banana / Imagen 4).
+ * multix gemini generate — generate images with Gemini (Nano Banana).
  * Saves generated images to the output directory.
  */
 
@@ -20,6 +20,7 @@ import { withGeminiKey } from "../key-pool.js";
 import {
   ASPECT_RATIOS,
   type AspectRatio,
+  IMAGE_MODEL_DEFAULT,
   IMAGE_SIZES,
   type ImageSize,
   getDefaultModel,
@@ -28,7 +29,7 @@ import {
 export function registerGenerateCommand(parent: Command): void {
   parent
     .command("generate")
-    .description("Generate images with Gemini (Nano Banana / Imagen 4)")
+    .description("Generate images with Gemini (Nano Banana)")
     .requiredOption("--prompt <text>", "Image generation prompt")
     .option("--model <id>", "Gemini image model to use")
     .option("--aspect-ratio <ratio>", `Aspect ratio (${ASPECT_RATIOS.join("|")})`, "1:1")
@@ -53,6 +54,12 @@ export function registerGenerateCommand(parent: Command): void {
         const logger = createLogger({ verbose: opts.verbose ?? false });
         const model = opts.model ?? getDefaultModel("generate");
         const numImages = Math.min(Math.max(Number.parseInt(opts.numImages, 10) || 1, 1), 4);
+
+        if (/^(models\/)?imagen-/.test(model)) {
+          throw new ValidationError(
+            `Imagen models are no longer served on the Gemini API; use ${IMAGE_MODEL_DEFAULT} or another Nano Banana model`,
+          );
+        }
 
         // Validate aspect ratio
         if (!ASPECT_RATIOS.includes(opts.aspectRatio as AspectRatio)) {
