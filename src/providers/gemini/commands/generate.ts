@@ -1,5 +1,5 @@
 /**
- * multix gemini generate — generate images with Gemini (Nano Banana / Imagen 4).
+ * multix gemini generate — generate images with Gemini (Nano Banana).
  * Saves generated images to the output directory.
  */
 
@@ -28,7 +28,7 @@ import {
 export function registerGenerateCommand(parent: Command): void {
   parent
     .command("generate")
-    .description("Generate images with Gemini (Nano Banana / Imagen 4)")
+    .description("Generate images with Gemini (Nano Banana)")
     .requiredOption("--prompt <text>", "Image generation prompt")
     .option("--model <id>", "Gemini image model to use")
     .option("--aspect-ratio <ratio>", `Aspect ratio (${ASPECT_RATIOS.join("|")})`, "1:1")

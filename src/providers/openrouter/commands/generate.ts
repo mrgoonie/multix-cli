@@ -19,7 +19,7 @@ export function registerOpenRouterGenerateCommand(parent: Command): void {
       "Generate images via OpenRouter (text-to-image); models: Gemini, GPT-Image, Flux, Recraft, Seedream",
     )
     .requiredOption("--prompt <text>", "Image generation prompt")
-    .option("--model <id>", "OpenRouter model id (e.g. google/gemini-3.1-flash-image-preview)")
+    .option("--model <id>", "OpenRouter model id (e.g. google/gemini-3.1-flash-image)")
     .option("--aspect-ratio <ratio>", "Aspect ratio (e.g. 1:1, 16:9)", "1:1")
     .option("--image-size <size>", "Image size hint (e.g. 1K, 2K)")
     .option("--num-images <n>", "Number of images to generate", "1")

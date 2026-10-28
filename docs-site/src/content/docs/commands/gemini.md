@@ -40,7 +40,10 @@ curl -s https://example.com/talk.mp3 | multix gemini transcribe --files - --stdi
 ## Images
 
 `generate` supports `--model`, `--aspect-ratio`, `--num-images`, `--size`, and
-`--output`. `image-to-image` (alias `i2i`) accepts repeated `--ref` inputs.
+`--output`. The default model is `gemini-3.1-flash-image` (Nano Banana 2, GA);
+`gemini-3.1-flash-lite-image`, `gemini-3-pro-image` and `gemini-nano-banana-2.1`
+are other choices. Imagen 4 is no longer served on the Gemini API, and the
+`-preview` image ids are past their shutdown date. `image-to-image` (alias `i2i`) accepts repeated `--ref` inputs.
 
 ```bash
 multix gemini generate --prompt "A mountain lake" --aspect-ratio 16:9 --size 2K

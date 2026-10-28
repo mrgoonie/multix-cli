@@ -259,11 +259,11 @@ multix gemini generate-speech --text "Joe: How's it going? Jane: Not too bad!" \
 
 **Gemini models:**
 - Text output (analyze, transcribe, extract, doc convert): `gemini-3.6-flash` (default), `gemini-3.5-flash` (manual override)
-- Image gen: `gemini-3.1-flash-image-preview` (Nano Banana 2, fastest), `gemini-3-pro-image-preview` (4K text), `imagen-4.0-generate-001` (production)
+- Image gen: `gemini-3.1-flash-image` (Nano Banana 2, default, fastest), `gemini-3.1-flash-lite-image` (cheapest), `gemini-3-pro-image` (4K text), `gemini-nano-banana-2.1` (Google's recommended successor). Imagen 4 is no longer served on the Gemini API, and the `-preview` image ids are past their shutdown date.
 - Video: `gemini-omni-1.1-flash` (default, Interactions API, requires billing). Legacy `veo-*` models still run with an explicit `--model`; see [Gemini video migration](#gemini-video-migration-veo-to-omni-flash).
 - TTS: `gemini-3.8-flash-lite-tts` (default, fast/cheap, 101 languages), `gemini-3.8-flash-tts` (highest fidelity, 130 languages), legacy `gemini-3.1-flash-tts-preview`, `gemini-2.5-flash-preview-tts`, `gemini-2.5-pro-preview-tts`. Gemini 3.8 models use the Interactions API, read the text verbatim, take delivery direction via `--style`, and also accept custom `voice_…`/`voicekey_…` voice ids.
 
-`gemini-3.6-flash` is a text-output model. Use Nano Banana/Imagen for images, Gemini Omni Flash for video, and Gemini Flash TTS for speech.
+`gemini-3.6-flash` is a text-output model. Use Nano Banana for images, Gemini Omni Flash for video, and Gemini Flash TTS for speech.
 
 #### Gemini video migration (Veo to Omni Flash)
 
@@ -312,7 +312,7 @@ multix minimax generate-music [--lyrics <str>] [--prompt <str>] [--model music-2
 ### `multix openrouter`
 
 ```bash
-multix openrouter generate --prompt "Retro robot" [--model google/gemini-3.1-flash-image-preview] [--aspect-ratio 1:1] [--image-size <sz>] [--num-images 1] [-v]
+multix openrouter generate --prompt "Retro robot" [--model google/gemini-3.1-flash-image] [--aspect-ratio 1:1] [--image-size <sz>] [--num-images 1] [-v]
 
 # Image-to-image (alias: i2i) — refs accept URL or local path
 multix openrouter image-to-image --prompt "make it cyberpunk" --ref ./photo.jpg [--ref https://...] [--model google/gemini-2.5-flash-image] [--strength 0.7] [--output <path>] [-v]

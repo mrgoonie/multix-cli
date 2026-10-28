@@ -40,7 +40,10 @@ curl -s https://example.com/talk.mp3 | multix gemini transcribe --files - --stdi
 ## Ảnh
 
 `generate` hỗ trợ `--model`, `--aspect-ratio`, `--num-images`, `--size` và
-`--output`. `image-to-image` (alias `i2i`) nhận nhiều input `--ref`.
+`--output`. Model mặc định là `gemini-3.1-flash-image` (Nano Banana 2, GA);
+có thể chọn `gemini-3.1-flash-lite-image`, `gemini-3-pro-image` hoặc
+`gemini-nano-banana-2.1`. Imagen 4 không còn chạy trên Gemini API, và các id ảnh
+`-preview` đã quá ngày ngừng hoạt động. `image-to-image` (alias `i2i`) nhận nhiều input `--ref`.
 
 ```bash
 multix gemini generate --prompt "A mountain lake" --aspect-ratio 16:9 --size 2K
