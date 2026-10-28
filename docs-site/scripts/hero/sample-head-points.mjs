@@ -215,7 +215,8 @@ function crc32(bytes) {
   return ~c >>> 0;
 }
 
-function png(width, height, rgba) {
+/** Grey + alpha PNG (the dots are one colour), with the Sub filter so dot rows compress well. */
+function png(size, grey, alpha) {
   const chunk = (type, data) => {
     const out = Buffer.alloc(12 + data.length);
     out.writeUInt32BE(data.length, 0);
@@ -225,12 +226,21 @@ function png(width, height, rgba) {
     return out;
   };
   const header = Buffer.alloc(13);
-  header.writeUInt32BE(width, 0);
-  header.writeUInt32BE(height, 4);
-  header.set([8, 6, 0, 0, 0], 8);
-  const raw = Buffer.alloc((width * 4 + 1) * height);
-  for (let y = 0; y < height; y++)
-    rgba.copy(raw, y * (width * 4 + 1) + 1, y * width * 4, (y + 1) * width * 4);
+  header.writeUInt32BE(size, 0);
+  header.writeUInt32BE(size, 4);
+  header.set([8, 4, 0, 0, 0], 8);
+  const stride = size * 2 + 1;
+  const raw = Buffer.alloc(stride * size);
+  for (let y = 0; y < size; y++) {
+    raw[y * stride] = 1;
+    for (let x = 0; x < size; x++) {
+      const a = alpha[y * size + x];
+      const previous = x > 0 ? alpha[y * size + x - 1] : 0;
+      // Sub filter: each byte minus the same channel one pixel to the left.
+      raw[y * stride + 1 + x * 2] = x > 0 ? 0 : grey;
+      raw[y * stride + 2 + x * 2] = (a - previous) & 0xff;
+    }
+  }
   return Buffer.concat([
     Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
     chunk("IHDR", header),
@@ -239,11 +249,14 @@ function png(width, height, rgba) {
   ]);
 }
 
-/** Same camera as the hero at rest: slight turn and tilt, perspective from distance 4.3. */
-/** `ink` posters (dark dots on a light page) put more ink where light falls away, like an engraving. */
-function renderPoster(points, normals, [r, g, b], { ink = false } = {}, size = 900) {
+/**
+ * Same camera as the hero at rest: slight turn and tilt, perspective from distance 4.3.
+ * `ink` posters (dark dots on a light page) put more ink where light falls away, like an engraving.
+ */
+function renderPoster(points, normals, grey, { ink = false } = {}, size = 640) {
   const light = [-0.45, 0.55, 0.7].map((c, _, l) => c / Math.hypot(...l));
-  const alpha = new Float32Array(size * size);
+  const coverage = new Float32Array(size * size);
+  const dot = size / 900;
   const yaw = -0.35;
   const pitch = 0.08;
   for (let i = 0; i < points.length; i++) {
@@ -259,19 +272,18 @@ function renderPoster(points, normals, [r, g, b], { ink = false } = {}, size = 9
     const depth = Math.min(1, Math.max(0, (z + 1) / 2));
     const shade = ink ? 1 - lambert * 0.85 : Math.min(1, 0.3 + 1.05 * lambert);
     const intensity = shade * (0.35 + 0.65 * depth);
-    const radius = 1.3 + depth * 1.1;
+    const radius = (1.3 + depth * 1.1) * dot;
     for (let py = Math.floor(sy - radius); py <= sy + radius; py++) {
       for (let px = Math.floor(sx - radius); px <= sx + radius; px++) {
         if (px < 0 || py < 0 || px >= size || py >= size) continue;
         const d = Math.hypot(px + 0.5 - sx, py + 0.5 - sy);
-        if (d < radius) alpha[py * size + px] += intensity * Math.min(1, radius - d);
+        if (d < radius) coverage[py * size + px] += intensity * Math.min(1, radius - d);
       }
     }
   }
-  const rgba = Buffer.alloc(size * size * 4);
-  for (let i = 0; i < alpha.length; i++)
-    rgba.set([r, g, b, Math.round(Math.min(1, alpha[i]) * 255)], i * 4);
-  return png(size, size, rgba);
+  // 16 alpha levels are indistinguishable on dots this small and roughly halve the file.
+  const alpha = Uint8Array.from(coverage, (c) => Math.round(Math.min(1, c) * 15) * 17);
+  return png(size, grey, alpha);
 }
 
 // ---------- main ----------
@@ -321,13 +333,10 @@ const manifestJson = JSON.stringify(manifest, null, 2).replace(
   (_, items) => `[${items.split(/,\s*/).join(", ")}]`,
 );
 writeFileSync(`${outDir}head-points.json`, `${manifestJson}\n`);
-writeFileSync(
-  `${outDir}head-poster-dark.png`,
-  renderPoster(sample.points, sample.normals, [235, 240, 248]),
-);
+writeFileSync(`${outDir}head-poster-dark.png`, renderPoster(sample.points, sample.normals, 240));
 writeFileSync(
   `${outDir}head-poster-light.png`,
-  renderPoster(sample.points, sample.normals, [18, 20, 26], { ink: true }),
+  renderPoster(sample.points, sample.normals, 20, { ink: true }),
 );
 
 const counts = {};

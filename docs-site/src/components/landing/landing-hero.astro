@@ -38,15 +38,15 @@ const senses = [
   </div>
   <div class="mx-stage" id="mx-stage" data-points="/hero/head-points.bin">
     {
-      /* One poster per theme; the hidden one is lazy, so only the visible one loads. */
+      /* One poster per theme (CSS shows one); both load eagerly because the visible one is the LCP image. */
       (["dark", "light"] as const).map((theme) => (
         <img
           class={`mx-poster mx-poster-${theme}`}
           src={`/hero/head-poster-${theme}.png`}
           alt={hero.posterAlt}
-          width="900"
-          height="900"
-          loading="lazy"
+          width="640"
+          height="640"
+          fetchpriority="high"
           decoding="async"
         />
       ))
