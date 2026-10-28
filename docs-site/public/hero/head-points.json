@@ -10,26 +10,10 @@
     "5": "crown"
   },
   "anchors": {
-    "eyes": [
-      0.233,
-      0.332,
-      0.474
-    ],
-    "ears": [
-      0.597,
-      0.146,
-      -0.177
-    ],
-    "mouth": [
-      0,
-      -0.126,
-      0.598
-    ],
-    "crown": [
-      0,
-      0.96,
-      0
-    ]
+    "eyes": [0.233, 0.332, 0.474],
+    "ears": [0.597, 0.146, -0.177],
+    "mouth": [0, -0.126, 0.598],
+    "crown": [0, 0.96, 0]
   },
   "source": "multix atlas image → multix atlas 3d (tencent/hunyuan3d-rapid/image-to-3d), sampled by scripts/hero/sample-head-points.mjs"
 }
