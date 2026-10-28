@@ -13759,7 +13759,8 @@
               "takesValue": true,
               "valueOptional": false,
               "variadic": false,
-              "negatable": false
+              "negatable": false,
+              "default": []
             },
             {
               "long": "--model-version",
@@ -13835,7 +13836,8 @@
               "takesValue": true,
               "valueOptional": false,
               "variadic": false,
-              "negatable": false
+              "negatable": false,
+              "default": []
             },
             {
               "long": "--con",
@@ -13845,7 +13847,8 @@
               "takesValue": true,
               "valueOptional": false,
               "variadic": false,
-              "negatable": false
+              "negatable": false,
+              "default": []
             },
             {
               "long": "--tag",
@@ -13855,7 +13858,8 @@
               "takesValue": true,
               "valueOptional": false,
               "variadic": false,
-              "negatable": false
+              "negatable": false,
+              "default": []
             },
             {
               "long": "--use-case",
@@ -13876,7 +13880,8 @@
               "takesValue": true,
               "valueOptional": false,
               "variadic": false,
-              "negatable": false
+              "negatable": false,
+              "default": []
             },
             {
               "long": "--model-version",
@@ -14015,7 +14020,8 @@
               "takesValue": true,
               "valueOptional": false,
               "variadic": false,
-              "negatable": false
+              "negatable": false,
+              "default": []
             },
             {
               "long": "--weakness",
@@ -14025,7 +14031,8 @@
               "takesValue": true,
               "valueOptional": false,
               "variadic": false,
-              "negatable": false
+              "negatable": false,
+              "default": []
             },
             {
               "long": "--limitation",
@@ -14035,7 +14042,8 @@
               "takesValue": true,
               "valueOptional": false,
               "variadic": false,
-              "negatable": false
+              "negatable": false,
+              "default": []
             },
             {
               "long": "--tag",
@@ -14045,7 +14053,8 @@
               "takesValue": true,
               "valueOptional": false,
               "variadic": false,
-              "negatable": false
+              "negatable": false,
+              "default": []
             },
             {
               "long": "--model-version",
@@ -14149,7 +14158,8 @@
               "takesValue": true,
               "valueOptional": false,
               "variadic": false,
-              "negatable": false
+              "negatable": false,
+              "default": []
             },
             {
               "long": "--weakness",
@@ -14159,7 +14169,8 @@
               "takesValue": true,
               "valueOptional": false,
               "variadic": false,
-              "negatable": false
+              "negatable": false,
+              "default": []
             },
             {
               "long": "--limitation",
@@ -14169,7 +14180,8 @@
               "takesValue": true,
               "valueOptional": false,
               "variadic": false,
-              "negatable": false
+              "negatable": false,
+              "default": []
             },
             {
               "long": "--tag",
@@ -14179,7 +14191,8 @@
               "takesValue": true,
               "valueOptional": false,
               "variadic": false,
-              "negatable": false
+              "negatable": false,
+              "default": []
             },
             {
               "long": "--model-version",

@@ -147,6 +147,9 @@ export function parseAspects(values: string[] | undefined): Review["aspects"] {
   const out: Partial<Record<ReviewAspect, number>> = {};
   for (const pair of values.flatMap((v) => v.split(","))) {
     const [k, v] = pair.split("=").map((s) => s.trim());
+    if (v === undefined || v === "") {
+      throw new ValidationError(`${k} must be a whole number from 1 to 5.`);
+    }
     if (!k || !(REVIEW_ASPECTS as readonly string[]).includes(k)) {
       throw new ValidationError(`Unknown aspect ${k}. Valid: ${REVIEW_ASPECTS.join(", ")}`);
     }
@@ -172,7 +175,8 @@ export interface ReviewInput {
 /** Validate and scrub review fields; throws ValidationError. */
 export function cleanReview(input: ReviewInput): Omit<Review, "id" | "created_at" | "updated_at"> {
   const text = boundedText("text", input.text, LIMITS.text);
-  if (input.score === undefined && !text && !input.aspects) {
+  const hasAspects = Boolean(input.aspects && Object.keys(input.aspects).length);
+  if (input.score === undefined && !text && !hasAspects) {
     throw new ValidationError("A review needs a score, aspect scores or text.");
   }
   const out: Omit<Review, "id" | "created_at" | "updated_at"> = {

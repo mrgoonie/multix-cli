@@ -480,6 +480,7 @@ function addReviewOptions(cmd: Command): Command {
       "--aspect <name=score>",
       "Aspect score 1-5: quality, fidelity, motion, audio, speed, value, reliability (repeatable)",
       collect,
+      [],
     )
     .option("--model-version <text>", "Model version the review is about")
     .option(
@@ -506,9 +507,9 @@ function registerReviews(catalog: Command): void {
       )
       .option("--text <text>", `Review text (max ${LIMITS.text} characters)`)
       .option("-s, --score <n>", "Stars 1-5")
-      .option("--pro <text>", "A strength (repeatable)", collect)
-      .option("--con <text>", "A weakness (repeatable)", collect)
-      .option("--tag <name>", "Tag (repeatable)", collect),
+      .option("--pro <text>", "A strength (repeatable)", collect, [])
+      .option("--con <text>", "A weakness (repeatable)", collect, [])
+      .option("--tag <name>", "Tag (repeatable)", collect, []),
   ).action((ref: string, opts: ReviewFlags & { score?: string }) =>
     saveReview(ref, opts.score, opts),
   );
@@ -555,10 +556,10 @@ function registerReviews(catalog: Command): void {
   const noteOptions = (cmd: Command) =>
     cmd
       .option("--text <text>", `Note text (max ${LIMITS.text} characters)`)
-      .option("--strength <text>", "Strength (repeatable)", collect)
-      .option("--weakness <text>", "Weakness (repeatable)", collect)
-      .option("--limitation <text>", "Known limitation (repeatable)", collect)
-      .option("--tag <name>", "Tag (repeatable)", collect)
+      .option("--strength <text>", "Strength (repeatable)", collect, [])
+      .option("--weakness <text>", "Weakness (repeatable)", collect, [])
+      .option("--limitation <text>", "Known limitation (repeatable)", collect, [])
+      .option("--tag <name>", "Tag (repeatable)", collect, [])
       .option("--model-version <text>", "Model version the note is about")
       .option("--source <text>", "Where the finding comes from (a run, a test, an article)");
   type NoteFlags = {
@@ -642,10 +643,10 @@ function registerReviews(catalog: Command): void {
       useCase: opts.useCase ?? prev.use_case,
       verdict: opts.verdict ?? prev.verdict,
       text: opts.text ?? prev.text,
-      strength: opts.strength ?? prev.strengths,
-      weakness: opts.weakness ?? prev.weaknesses,
-      limitation: opts.limitation ?? prev.limitations,
-      tag: opts.tag ?? prev.tags,
+      strength: opts.strength?.length ? opts.strength : prev.strengths,
+      weakness: opts.weakness?.length ? opts.weakness : prev.weaknesses,
+      limitation: opts.limitation?.length ? opts.limitation : prev.limitations,
+      tag: opts.tag?.length ? opts.tag : prev.tags,
       modelVersion: opts.modelVersion ?? prev.version,
       source: opts.source ?? prev.source,
     };

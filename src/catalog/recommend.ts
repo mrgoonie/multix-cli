@@ -111,7 +111,10 @@ export function recommend(input: RecommendInput): RecommendResult {
     const notes = notesFor(o.id);
     if (notes.length) {
       const value =
-        notes.reduce((s, n) => s + (n.verdict === "recommended" ? 1 : 0.5), 0) / notes.length;
+        notes.reduce(
+          (s, n) => s + (n.verdict === "recommended" ? 1 : n.verdict === "mixed" ? 0.5 : 0),
+          0,
+        ) / notes.length;
       factors.note = {
         value,
         weight: WEIGHTS.note,

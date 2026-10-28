@@ -52,10 +52,9 @@ export function receiptOf(e: HistoryEntry): CostReceipt | undefined {
   };
 }
 
-/** The model the provider ran: resolved when recorded, else the legacy `model` field. */
+/** The model the provider reported running; never the requested or legacy `model` field. */
 export function resolvedModel(e: HistoryEntry): string | undefined {
-  if (e.model_resolved !== undefined) return e.model_resolved ?? undefined;
-  return e.model;
+  return e.model_resolved ?? undefined;
 }
 
 /** Logical operation a run belongs to. */
@@ -154,11 +153,13 @@ export function aggregateUsage(entries: HistoryEntry[], by: UsageGroup): UsageRo
       if (!knownIds.has(r.operation_id) && typeof v === "number") estimates.set(r.operation_id, v);
     }
     const ops = new Set(list.map(operationOf));
+    // Completed runs with no receipt at all (ledger entries before receipts): cost unknown.
+    const unreceipted = new Set(list.filter((e) => e.ok && !receiptOf(e)).map(operationOf));
     const completed = list.filter((e) => e.ok);
     const completedOps = new Set(completed.map(operationOf));
     const allPriced =
       completed.length > 0 &&
-      spend.unknown + spend.uncertain === 0 &&
+      spend.unknown + spend.uncertain + unreceipted.size === 0 &&
       [...completedOps].every((id) => knownIds.has(id));
     const credits = list.reduce<number | undefined>(
       (s, e) => (e.usage?.credits === undefined ? s : (s ?? 0) + e.usage.credits),
@@ -185,7 +186,7 @@ export function aggregateUsage(entries: HistoryEntry[], by: UsageGroup): UsageRo
         estimated_usd: estimates.size
           ? round([...estimates.values()].reduce((a, b) => a + b, 0))
           : null,
-        unknown_operations: spend.unknown,
+        unknown_operations: spend.unknown + unreceipted.size,
         uncertain_operations: spend.uncertain,
         per_success_usd: allPriced ? round(sum(known) / completedOps.size) : null,
       },
