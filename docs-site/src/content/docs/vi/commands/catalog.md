@@ -44,7 +44,7 @@ phí (API trả theo mức dùng, gói credit hoặc subscription) và độ m�
 | `current` | Đã xác minh, nằm trong khoảng hiệu lực giá và được kiểm tra trong vòng 120 ngày. |
 | `stale` | Đã xác minh nhưng hơn 120 ngày chưa kiểm tra lại. |
 | `unverified` | Chỉ để tham khảo; không bao giờ dùng để tính giá một lần chạy. |
-| `expired` / `not_started` | Khoảng hiệu lực giá không bao gồm thời điểm được hỏi. |
+| `expired` / `not_started` | Khoảng hiệu lực giá không bao gồm thời điểm được hỏi; offering chỉ có những rate như vậy là `unknown`. |
 
 Giới hạn 120 ngày là `MAX_PRICE_AGE_DAYS` trong
 [`src/budget/pricing-catalog.ts`](https://github.com/mrgoonie/multix-cli/blob/main/src/budget/pricing-catalog.ts);
@@ -144,7 +144,8 @@ trong `--json`). Giá cho cùng cấu hình là tiêu chí cuối cùng, chỉ �
 khi hòa, nên offering rẻ nhất không bao giờ là câu trả lời mặc định. Điểm
 rating trung bình chỉ được tính khi có từ 3 rating trở lên, và tỉ lệ thành
 công quan sát được chỉ khi có từ 5 operation trở lên; bằng chứng mỏng hơn vẫn
-được hiển thị nhưng không thay đổi thứ tự. Ghi chú `use`/`avoid` của bạn cho
+được hiển thị nhưng được tính ở mức trung tính (3/5, 50%), nên không đẩy lên
+cũng không kéo xuống một offering. Ghi chú `use`/`avoid` của bạn cho
 use case được gắn nhãn là ghi chú cá nhân. Cách sắp xếp nằm ở
 [`src/catalog/recommend.ts`](https://github.com/mrgoonie/multix-cli/blob/main/src/catalog/recommend.ts).
 

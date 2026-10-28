@@ -159,8 +159,15 @@ const STATUS_RANK: Record<PriceStatus, number> = { priced: 3, stale: 2, unverifi
 function priceStatus(rates: RateView[]): PriceStatus {
   let best: PriceStatus = "unknown";
   for (const r of rates) {
+    // A rate outside its window prices nothing now: it leaves the offering unknown.
     const s: PriceStatus =
-      r.freshness === "current" ? "priced" : r.freshness === "stale" ? "stale" : "unverified";
+      r.freshness === "current"
+        ? "priced"
+        : r.freshness === "stale"
+          ? "stale"
+          : r.freshness === "unverified"
+            ? "unverified"
+            : "unknown";
     if (STATUS_RANK[s] > STATUS_RANK[best]) best = s;
   }
   return best;

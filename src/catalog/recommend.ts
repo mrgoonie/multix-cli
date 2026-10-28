@@ -19,6 +19,10 @@ import type { UsageRow } from "./usage-analytics.js";
 /** Operations needed before an observed success rate orders candidates. */
 export const MIN_RUNS_FOR_RELIABILITY = 5;
 
+/** Where an offering without enough ratings or runs sorts: the scale midpoints. */
+const NEUTRAL_RATING = 3;
+const NEUTRAL_SUCCESS = 0.5;
+
 export interface RecommendInput {
   task: Task;
   use_case?: string;
@@ -61,8 +65,8 @@ const RANKING_BASIS = [
   "provider key ready",
   "verified by multix (inputs checked against the provider schema)",
   "marked use in your notes for this use case",
-  `mean rating (only with ${MIN_RATINGS_FOR_MEAN}+ ratings)`,
-  `observed success rate (only with ${MIN_RUNS_FOR_RELIABILITY}+ operations)`,
+  `mean rating (only with ${MIN_RATINGS_FOR_MEAN}+ ratings; fewer count as ${NEUTRAL_RATING}/5)`,
+  `observed success rate (only with ${MIN_RUNS_FOR_RELIABILITY}+ operations; fewer count as ${NEUTRAL_SUCCESS * 100}%)`,
   "lower quoted price for the same configuration (tie-breaker only)",
 ];
 
@@ -124,15 +128,19 @@ export function recommend(input: RecommendInput): RecommendResult {
       };
     });
   const readyRank = (r: boolean | null) => (r === true ? 2 : r === null ? 1 : 0);
+  // Missing or too-thin evidence sits at the neutral point, so it neither lifts
+  // nor sinks a candidate: below a well-rated one, above a poorly rated one.
+  const ratingKey = (r: (typeof rows)[number]) => r.ratings.mean ?? NEUTRAL_RATING;
+  const reliabilityKey = (r: (typeof rows)[number]) =>
+    r.reliable ? (r.usage?.success_rate ?? NEUTRAL_SUCCESS) : NEUTRAL_SUCCESS;
   rows.sort(
     (a, b) =>
       Number(a.ownNote === "avoid") - Number(b.ownNote === "avoid") ||
       readyRank(b.ready) - readyRank(a.ready) ||
       Number(b.o.verified) - Number(a.o.verified) ||
       Number(b.ownNote === "use") - Number(a.ownNote === "use") ||
-      (b.ratings.mean ?? 0) - (a.ratings.mean ?? 0) ||
-      (b.reliable ? (b.usage?.success_rate ?? 0) : 0) -
-        (a.reliable ? (a.usage?.success_rate ?? 0) : 0) ||
+      ratingKey(b) - ratingKey(a) ||
+      reliabilityKey(b) - reliabilityKey(a) ||
       quoted(a.quote) - quoted(b.quote) ||
       a.o.ref.localeCompare(b.o.ref),
   );

@@ -45,7 +45,7 @@ subscription) and a freshness:
 | `current` | Verified, inside its price window, and checked within the last 120 days. |
 | `stale` | Verified but not re-checked for more than 120 days. |
 | `unverified` | On file for reference only; never used to price a run. |
-| `expired` / `not_started` | Its price window does not cover the time asked. |
+| `expired` / `not_started` | Its price window does not cover the time asked; an offering with only such rates is `unknown`. |
 
 The 120-day limit is `MAX_PRICE_AGE_DAYS` in
 [`src/budget/pricing-catalog.ts`](https://github.com/mrgoonie/multix-cli/blob/main/src/budget/pricing-catalog.ts);
@@ -140,8 +140,9 @@ each reported with its evidence, and the command prints that order
 (`ranking_basis` in `--json`). Price for the same configuration is the last
 criterion, a tie-breaker only, so the cheapest offering is never the default
 answer. A mean rating counts only with 3 or more ratings and an observed
-success rate only with 5 or more operations; thinner evidence is shown but does
-not move the order. Your own `use`/`avoid` notes for the use case are labelled
+success rate only with 5 or more operations; thinner evidence is shown but
+counts as the neutral midpoint (3/5, 50%), so it neither lifts nor sinks an
+offering. Your own `use`/`avoid` notes for the use case are labelled
 as personal notes. Ordering lives in
 [`src/catalog/recommend.ts`](https://github.com/mrgoonie/multix-cli/blob/main/src/catalog/recommend.ts).
 

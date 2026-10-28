@@ -30,15 +30,17 @@ export function sampleConfidence(n: number): SampleConfidence {
 
 /**
  * The entry's cost receipt; entries written before receipts existed get one
- * from their provider-reported cost (one operation per run).
+ * from their provider-reported cost. On a provider job that figure is the
+ * job's total, reported again by every poll or resume, so it is an
+ * observation of the job's operation (the latest one wins), not a new charge.
  */
 export function receiptOf(e: HistoryEntry): CostReceipt | undefined {
   if (e.cost) return e.cost;
   if (e.usage?.cost_usd === undefined) return undefined;
   return {
     schema: "multix.cost/v1",
-    operation_id: `run:${e.id}`,
-    role: "charge",
+    operation_id: operationOf(e),
+    role: e.job ? "observation" : "charge",
     status: "settled",
     currency: "USD",
     provider_reported: { cost_usd: e.usage.cost_usd, credits: e.usage.credits ?? null },
