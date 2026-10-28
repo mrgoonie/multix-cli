@@ -100,3 +100,69 @@ Branch `feat/site-obsidian-redesign`. Reviewer did not write the code.
 
 Status: DONE_WITH_CONCERNS
 Summary: One high finding, confirmed in a browser: below 900px the canvas overhang sits on top of the hero CTA buttons and takes their clicks, so "Connect MCP" toggles the senses instead of navigating. Also medium issues: docs deploy does not run on the root src changes the page now depends on, and the spin loop has a steady CPU cost. CSP, no-JS, reduced motion, overflow and provider data all check out.
+
+## Re-review: 5dd94e5..f626c40
+
+Reviewed only the fix commits: `deploy-docs.yml`, `landing.css`, `head-cloud.ts` and `head-spin.ts`. Source was not edited.
+
+### Verification
+- At f626c40: `npm run build` passes, `npm test` passes 23/23, `npx astro check` reports 0 errors, and Biome is clean.
+- At 5dd94e5 on its own, `astro check` reported 1 error: `startLevel` was inferred as `0 | 1`, so `levels[i] = Math.min(...)` did not type-check. f626c40 fixes it with `const startLevel: number`, and no other change is in that commit.
+- Headless Chromium against the rebuilt `dist/`: results per finding below.
+- Node comparison of the old and new `project()` on `public/hero/head-cloud.bin` (14,113 dots) at 720 yaws over the full turn: below.
+
+### Status of each finding
+| Finding | Status | Evidence |
+|---|---|---|
+| H1, CTA buttons hidden under the canvas | **Fixed** | `.mx-hero-copy { position: relative; z-index: 1 }` (`landing.css:241-245`). All 9 sample points on both `.mx-cta` buttons now hit the button at 360, 800 and 1280px. A click (mouse at 800 and 1280px, a touch tap 3px above the bottom edge at 360px) on "Connect MCP" opens `/guides/mcp-server/`. The canvas still receives pointer input at the head's centre (800 and 1280px), so dragging still works. `scrollWidth` equals the viewport width at every size. |
+| M1, docs deploy did not run on root `src/` changes | **Fixed** | `deploy-docs.yml` paths now include `src/capabilities/**` and `src/providers/**`. A walk of the import graph finds 3 more root files the landing pulls in: `src/core/errors.ts`, `src/core/redact.ts` and `src/core/env-default.ts`. None of them carries provider or model data, so a stale page from those is unlikely. Optionally add them, or `src/core/env-default.ts` at least. |
+| M2, spin CPU cost | **Partly addressed; accepted** | The inlined normal math is exact (details below). The draw cap is now `> 14` ms on fine pointers: 60 fps at 60 Hz, 60 at 120 Hz, about 48 at 144 Hz, about 45 at 90 Hz. That halves the cost on high-refresh displays. On 60 Hz desktops the cost is unchanged (about 9% of the main thread at x1, about 36% at x4 throttle, measured earlier), because I had suggested 30 fps. This is the author's judgement call and not blocking. |
+| L1, senses replayed on swap | **Not fully fixed** | Details below. |
+| L2, hidden SVG pulses | **Not fixed; the rule does not apply** | Details below. |
+| L3, L4, L5, L6 | Not changed, as stated | I accept the L3 reasoning: a changing name is a valid pattern, and adding `aria-pressed` to a changing label double-signals. L5 stays an open question for the owner. |
+
+### Inlined normal math matches `rotate()`
+- `rotate(p, yaw, PITCH)` computes `[cy·x + sy·z, cp·y − sp·z1, sp·y + cp·z1]` with `z1 = −sy·x + cy·z`.
+- The inline code uses `cy·nx + sy·nz` for x and `cp·ny − sp·nz1` for y.
+- For z it reuses `nzView`, computed in the first pass as `sp·ny + cp·nz1` and stored in the Float32 `scratch` array. The formula is the same.
+- Numerical check: over 720 yaws, the visible count and the dot index order are identical in every frame. The largest difference in `light` or `x` is 5.96e-8, which is Float32 rounding of `nzView`. No dot crosses the 0.04 cut-off, so the static SVG still matches the canvas's first frame.
+
+### L1: the replay is shorter but still happens
+- `head-spin.ts:62-64` starts `levels` at 1. However, `stage.classList.add("has-canvas")` still triggers the MutationObserver (`head-spin.ts:306-309`). The stage is unlocked, so it resets `unlockedAt` to now.
+- In `tick`, the target for sense `i` is then 0 until `i × 0.45` s have passed. Ears, mouth and crown fade down from 1 and then light up again in sequence, which is the replay the fix meant to prevent.
+- Measured with the spin paused, unlocking before the cloud loads (fetch delayed by 1.2s). Total canvas ink as a fraction of fully lit:
+  - right after the swap: 0.916, 0.913, 0.931, 0.936 at 0, 150, 300 and 500 ms;
+  - it reaches 1.000 only at about 1.6s.
+- With the old code (unlocking after load) the curve starts at 0.853, so the fix cuts the dip but does not remove it.
+- Fix: in the MutationObserver, update `unlockedAt` only when `is-unlocked` actually changes:
+
+```ts
+let wasUnlocked = stage.classList.contains("is-unlocked");
+new MutationObserver(() => {
+  const on = stage.classList.contains("is-unlocked");
+  if (on && !wasUnlocked) unlockedAt = performance.now() / 1000;
+  wasUnlocked = on;
+  wake();
+}).observe(stage, { attributes: true, attributeFilter: ["class"] });
+```
+
+  When the stage was unlocked before load, `unlockedAt` stays at `-Infinity`, so every target is 1 immediately. Without this, the `startLevel` change is mostly cosmetic.
+
+### L2: the new rule loses to the pulse rule
+- The new rule, `.mx-stage.has-canvas .mx-head * { animation: none }` (`landing.css:398`), has specificity (0,3,0).
+- The pulse rule, `.mx-stage.is-unlocked :is(.mx-fx-wave, .mx-fx-spark)` (`landing.css:440`), also has (0,3,0) and comes later in the file, so it wins.
+- In the browser, after unlocking with `has-canvas` set, all 11 `.mx-fx-wave` and `.mx-fx-spark` elements still have `animationName: mx-pulse`, and `document.getAnimations()` returns 24 running animations.
+- Fix, any one of:
+  - move the rule below line 440 (and below the reduced-motion block for tidiness);
+  - raise its specificity, for example `.mx-stage.has-canvas .mx-head :is(.mx-fx, .mx-r)`;
+  - use `.mx-stage.has-canvas .mx-head { display: none; }` (or `visibility: hidden`), which also drops the SVG's paint work. The SVG has no role after the swap, because `aria-label` is on the wrapper.
+
+### Re-review verdict
+- H1 is fixed and verified in the browser at 360 and 800px (and 1280px).
+- M1 is fixed. M2 is improved and the remaining cost is accepted as a judgement call. The normal math is exact.
+- L1 and L2 are not effective as written. Both are low severity and cosmetic or perf-only, and neither blocks landing. Each has a fix of a few lines above.
+
+No blocking findings.
+
+Status: DONE_WITH_CONCERNS
+Summary: H1 is fixed and verified in the browser at 360, 800 and 1280px, M1 is fixed, and the inlined normal math matches rotate() exactly over 720 yaws. The L1 and L2 fixes do not work as written: the MutationObserver still restarts the sense sequence, and the `animation: none` rule loses to the later pulse rule. Both are low severity and not blocking.

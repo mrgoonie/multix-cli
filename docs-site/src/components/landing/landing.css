@@ -394,11 +394,6 @@ html:not(.js) .mx-theme-switch {
   opacity: 0;
 }
 
-/* The hidden SVG's ornaments stop pulsing once the canvas draws its own. */
-.mx-stage.has-canvas .mx-head * {
-  animation: none;
-}
-
 /* Unlocking lights the senses in turn: eyes, ears, mouth, then the crown. Each dot path sets
    stroke-width: calc(var(--w) * var(--k, 1)) inline, so --k swells it. */
 .mx-r,
@@ -443,6 +438,12 @@ html:not(.js) .mx-theme-switch {
 
 .mx-stage.is-unlocked .mx-fx-spark {
   animation-duration: 2.6s;
+}
+
+/* The hidden SVG's ornaments stop pulsing once the canvas draws its own; this must follow the
+   pulse rules above, which have the same specificity. */
+.mx-stage.has-canvas .mx-head * {
+  animation: none;
 }
 
 @keyframes mx-pulse {

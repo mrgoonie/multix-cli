@@ -8,6 +8,7 @@ on:
       # The landing page lists providers and models read from these at build time.
       - "src/capabilities/**"
       - "src/providers/**"
+      - "src/core/**"
       - ".github/workflows/deploy-docs.yml"
   workflow_dispatch:
 

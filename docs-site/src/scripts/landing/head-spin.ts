@@ -303,8 +303,12 @@ export async function startHeadSpin(stage: HTMLElement): Promise<void> {
     spinButton.hidden = false;
   }
 
+  // Restart the sequence only when the senses actually flip, not on other class changes.
+  let wasUnlocked = startLevel === 1;
   new MutationObserver(() => {
-    if (stage.classList.contains("is-unlocked")) unlockedAt = performance.now() / 1000;
+    const unlocked = stage.classList.contains("is-unlocked");
+    if (unlocked && !wasUnlocked) unlockedAt = performance.now() / 1000;
+    wasUnlocked = unlocked;
     wake();
   }).observe(stage, { attributes: true, attributeFilter: ["class"] });
   new IntersectionObserver(([entry]) => {
