@@ -1,0 +1,70 @@
+---
+/**
+ * Hero: headline (the LCP element), install CTA and the dot-grid head.
+ * The poster is the default; the landing script swaps in the WebGL canvas
+ * after first paint unless motion is reduced or WebGL is missing.
+ */
+import { type LandingCopy, localePath } from "./landing-copy";
+
+interface Props {
+  t: LandingCopy;
+}
+
+const { t } = Astro.props;
+const lang = t.lang as "en" | "vi";
+const { hero } = t;
+const senses = [
+  { key: "eyes", flag: "--see", label: hero.labels.eyes },
+  { key: "ears", flag: "--hear", label: hero.labels.ears },
+  { key: "mouth", flag: "--speak", label: hero.labels.mouth },
+  { key: "create", flag: "--create", label: hero.labels.create },
+];
+---
+
+<section class="mx-hero" aria-labelledby="mx-headline">
+  <div class="mx-hero-copy">
+    <p class="mx-eyebrow"><i aria-hidden="true"></i>{hero.eyebrow}</p>
+    <h1 id="mx-headline">
+      {hero.headline.lead} <span class="mx-soft">{hero.headline.soft}</span>{" "}
+      <em>{hero.headline.em}</em>
+    </h1>
+    <p class="mx-lead"><strong>{hero.subline.strong}</strong>{hero.subline.rest}</p>
+    <div class="mx-cta">
+      <a class="mx-btn mx-btn-primary" href={hero.installHref}>{hero.install}</a>
+      <a class="mx-btn" href={localePath(lang, "/guides/mcp-server/")}
+        >{hero.mcp}<span aria-hidden="true">&nbsp;&nbsp;→</span></a
+      >
+    </div>
+  </div>
+  <div class="mx-stage" id="mx-stage" data-points="/hero/head-points.bin">
+    <img
+      class="mx-poster"
+      src="/hero/head-poster.svg"
+      alt={hero.posterAlt}
+      width="600"
+      height="612"
+      decoding="async"
+    />
+    {
+      senses.map((sense) => (
+        <span class="mx-sense" data-sense={sense.key} aria-hidden="true">
+          {sense.flag}
+          <small>{sense.label}</small>
+        </span>
+      ))
+    }
+    <div class="mx-hint">
+      <button
+        class="mx-btn mx-unlock"
+        id="mx-unlock"
+        type="button"
+        aria-pressed="false"
+        data-unlock={hero.unlock}
+        data-lock={hero.lock}
+        hidden
+      >
+        <i aria-hidden="true"></i><span>{hero.unlock}</span>
+      </button>
+    </div>
+  </div>
+</section>

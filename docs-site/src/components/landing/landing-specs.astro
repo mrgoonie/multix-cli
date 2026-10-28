@@ -1,0 +1,22 @@
+---
+import type { LandingCopy } from "./landing-copy";
+
+interface Props {
+  t: LandingCopy;
+}
+
+const { t } = Astro.props;
+---
+
+<section class="mx-specs" aria-label={t.specs.label}>
+  <dl>
+    {
+      t.specs.items.map((item) => (
+        <div>
+          <dt>{item.label}</dt>
+          <dd>{item.value}</dd>
+        </div>
+      ))
+    }
+  </dl>
+</section>

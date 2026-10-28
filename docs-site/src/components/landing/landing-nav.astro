@@ -1,0 +1,76 @@
+---
+/**
+ * Glass navigation bar: docs links, the EN/VI switch (plain links, remembered
+ * by the landing script) and the Auto/Light/Dark switch (needs JS, so it is
+ * hidden until the inline theme script marks <html class="js">).
+ */
+import { type LandingCopy, localePath } from "./landing-copy";
+import LandingLogo from "./landing-logo.astro";
+
+interface Props {
+  t: LandingCopy;
+}
+
+const { t } = Astro.props;
+const lang = t.lang as "en" | "vi";
+const home = lang === "vi" ? "/vi/" : "/";
+// Laptop, sun and moon outlines (stroked, 16×16).
+const themes = [
+  { value: "auto", label: t.nav.themeAuto, icon: "M2.5 3.5h11v7h-11zM1 12.5h14" },
+  {
+    value: "light",
+    label: t.nav.themeLight,
+    icon: "M8 5a3 3 0 1 0 0 6a3 3 0 1 0 0-6M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1",
+  },
+  {
+    value: "dark",
+    label: t.nav.themeDark,
+    icon: "M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7z",
+  },
+];
+---
+
+<header class="mx-nav-wrap">
+  <nav class="mx-nav" aria-label={t.nav.label}>
+    <a class="mx-logo" href={home} aria-label="multix">
+      <LandingLogo />
+      <span>multix</span>
+    </a>
+    <ul class="mx-nav-links">
+      <li><a href={localePath(lang, "/getting-started/")}>{t.nav.docs}</a></li>
+      <li class="mx-hide-sm"><a href={localePath(lang, "/guides/mcp-server/")}>{t.nav.mcp}</a></li>
+      <li class="mx-hide-sm"><a href={localePath(lang, "/guides/rest-api/")}>{t.nav.rest}</a></li>
+      <li class="mx-hide-sm"><a href="https://github.com/mrgoonie/multix-cli">{t.nav.github}</a></li>
+    </ul>
+    <div class="mx-nav-tools">
+      <div class="mx-seg" role="group" aria-label={t.nav.language}>
+        <a
+          href="/"
+          hreflang="en"
+          lang="en"
+          data-set-lang="en"
+          aria-current={lang === "en" ? "true" : undefined}>EN</a
+        >
+        <a
+          href="/vi/"
+          hreflang="vi"
+          lang="vi"
+          data-set-lang="vi"
+          aria-current={lang === "vi" ? "true" : undefined}>VI</a
+        >
+      </div>
+      <div class="mx-seg mx-theme-switch" role="group" aria-label={t.nav.theme}>
+        {
+          themes.map((theme) => (
+            <button type="button" data-set-theme={theme.value} aria-pressed="false" title={theme.label}>
+              <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+                <path d={theme.icon} />
+              </svg>
+              <span class="mx-sr">{theme.label}</span>
+            </button>
+          ))
+        }
+      </div>
+    </div>
+  </nav>
+</header>

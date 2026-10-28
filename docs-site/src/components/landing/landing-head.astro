@@ -1,0 +1,132 @@
+---
+import geistLatin from "@fontsource-variable/geist/files/geist-latin-wght-normal.woff2?url";
+import geistVietnamese from "@fontsource-variable/geist/files/geist-vietnamese-wght-normal.woff2?url";
+import serifLatin from "@fontsource-variable/newsreader/files/newsreader-latin-wght-italic.woff2?url";
+import serifVietnamese from "@fontsource-variable/newsreader/files/newsreader-vietnamese-wght-italic.woff2?url";
+import { type CaseStudy, youtubeId } from "./case-studies-data";
+/**
+ * <head> of the landing page: meta, alternates, structured data and the two
+ * blocking inline scripts. Inline scripts stay static so the CSP hash written
+ * by scripts/write-security-headers.mjs is the same on every build.
+ */
+import { type LandingCopy, SITE } from "./landing-copy";
+
+interface Props {
+  t: LandingCopy;
+  caseStudies: CaseStudy[];
+}
+
+const { t, caseStudies } = Astro.props;
+// The headline's fonts, fetched early so the swap does not reflow the hero.
+const fontPreloads =
+  t.lang === "vi"
+    ? [geistLatin, geistVietnamese, serifLatin, serifVietnamese]
+    : [geistLatin, serifLatin];
+const canonical = t.lang === "vi" ? `${SITE}/vi/` : `${SITE}/`;
+const ogImage = `${SITE}/images/multix-isometric-banner.png`;
+const absolute = (url: string) => new URL(url, SITE).href;
+// The logo mark inline, so the landing page needs no favicon request.
+const favicon = `data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 22"><rect width="22" height="22" rx="5" fill="#060709"/><g fill="#8f96a3"><circle cx="5" cy="5" r="1.4"/><circle cx="11" cy="5" r="1.4"/><circle cx="17" cy="5" r="1.4"/><circle cx="5" cy="11" r="1.4"/><circle cx="17" cy="11" r="1.4"/><circle cx="5" cy="17" r="1.4"/><circle cx="17" cy="17" r="1.4"/></g><circle cx="11" cy="11" r="2.6" fill="#fff"/><circle cx="11" cy="17" r="1.8" fill="#c9d2e2"/></svg>',
+)}`;
+
+// Same entities as the docs pages (astro.config.mjs), so both describe one product.
+const structuredData = [
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: "multix CLI documentation",
+    url: "https://multix.zuey.me",
+    inLanguage: ["en", "vi"],
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    name: "multix",
+    applicationCategory: "DeveloperApplication",
+    operatingSystem: "macOS, Linux, Windows",
+    url: "https://github.com/mrgoonie/multix-cli",
+    description:
+      "AI multimodal command-line interface for image, video, speech, music, document, and media workflows.",
+  },
+  ...caseStudies.map((item) => {
+    const id = youtubeId(item.url);
+    return {
+      "@context": "https://schema.org",
+      "@type": "VideoObject",
+      name: item.title,
+      description: item.description[t.lang as "en" | "vi"],
+      thumbnailUrl: absolute(item.poster),
+      ...(id
+        ? { embedUrl: `https://www.youtube-nocookie.com/embed/${id}`, url: item.url }
+        : { contentUrl: absolute(item.url) }),
+      ...(item.uploadDate ? { uploadDate: item.uploadDate } : {}),
+      inLanguage: t.htmlLang,
+    };
+  }),
+];
+---
+
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>{t.title}</title>
+<meta name="description" content={t.description} />
+{fontPreloads.map((href) => <link rel="preload" href={href} as="font" type="font/woff2" crossorigin />)}
+<link rel="canonical" href={canonical} />
+<link rel="alternate" hreflang="en" href={`${SITE}/`} />
+<link rel="alternate" hreflang="vi" href={`${SITE}/vi/`} />
+<link rel="alternate" hreflang="x-default" href={`${SITE}/`} />
+<link rel="icon" href={favicon} type="image/svg+xml" />
+<link rel="sitemap" href="/sitemap-index.xml" />
+<meta name="color-scheme" content="dark light" />
+<meta name="theme-color" content="#060709" media="(prefers-color-scheme: dark)" />
+<meta name="theme-color" content="#f5f5f2" media="(prefers-color-scheme: light)" />
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="multix" />
+<meta property="og:title" content={t.title} />
+<meta property="og:description" content={t.description} />
+<meta property="og:url" content={canonical} />
+<meta property="og:image" content={ogImage} />
+<meta property="og:locale" content={t.ogLocale} />
+<meta property="og:locale:alternate" content={t.lang === "vi" ? "en_US" : "vi_VN"} />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:site" content="@goon_nguyen" />
+<meta name="twitter:title" content={t.title} />
+<meta name="twitter:description" content={t.description} />
+<meta name="twitter:image" content={ogImage} />
+<script is:inline type="application/ld+json" set:html={JSON.stringify(structuredData)} />
+
+{/* Resolve Starlight's stored theme (auto | light | dark) before first paint. */}
+<script is:inline>
+(() => {
+  let stored = "";
+  try {
+    stored = localStorage.getItem("starlight-theme") || "";
+  } catch {}
+  const root = document.documentElement;
+  root.dataset.theme =
+    stored === "light" || stored === "dark"
+      ? stored
+      : matchMedia("(prefers-color-scheme: light)").matches
+        ? "light"
+        : "dark";
+  root.classList.add("js");
+})();
+</script>
+{
+  t.lang === "en" && (
+    /* First visit from a Vietnamese browser with no stored choice: go to /vi/. Crawlers without JS stay on English. */
+    <script is:inline>
+    (() => {
+      try {
+        if (localStorage.getItem("multix-lang")) return;
+      } catch {
+        return;
+      }
+      if (navigator.webdriver || /bot|crawl|spider|slurp|lighthouse/i.test(navigator.userAgent)) return;
+      const first = (navigator.languages && navigator.languages[0]) || navigator.language || "";
+      if (/^vi\b/i.test(first)) location.replace(`/vi/${location.search}${location.hash}`);
+    })();
+    </script>
+  )
+}
