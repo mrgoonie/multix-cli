@@ -98,6 +98,8 @@ export default defineConfig({
             { label: "Replicate", slug: "commands/replicate" },
             { label: "Runway", slug: "commands/runway" },
             { label: "HeyGen", slug: "commands/heygen" },
+            { label: "Sume", slug: "commands/sume" },
+            { label: "TopView", slug: "commands/topview" },
             {
               label: "Scenes (dialogue audio)",
               translations: { vi: "Scene (audio hội thoại)" },

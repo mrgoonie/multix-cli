@@ -22,6 +22,8 @@ description: Choose the multix command group that matches your media workflow.
 | [Replicate](/commands/replicate/) | Any Replicate model via the direct API, image/video wrappers, and prediction status/cancel. |
 | [Runway](/commands/runway/) | Gen-4.5 and Gen-4 Turbo video, Gen-4 images, and task status/cancel. |
 | [HeyGen](/commands/heygen/) | Video Agent prompt-to-video, scripted avatar videos, video translation, lipsync, and TTS. |
+| [Sume](/commands/sume/) | Images and video (including lip-sync and captions) from Sume's model catalog with one key, cost pre-flight, and job status/cancel. |
+| [TopView](/commands/topview/) | Product marketing videos, talking and product avatars, and product shots (Legacy API), plus API Platform models such as Seedance, Wan, and GPT Image 2. |
 | [Speech](/commands/speech/) | Text-to-speech on Gemini, OpenAI, ElevenLabs, MiniMax, Atlas Cloud, or Fish Audio with one set of flags, capability checks, and opt-in fallback. |
 | [Scenes](/commands/scene/) | Multi-character dialogue audio: voice profiles, per-line cached takes, approval, and stem export. |
 | `multix media` | Optimize, split, and batch-process files with ffmpeg/ImageMagick. |

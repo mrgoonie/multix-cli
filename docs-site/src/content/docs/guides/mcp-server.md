@@ -152,6 +152,22 @@ start with `@`, so put text before an `@tag` (`"a portrait of @hero"`).
 set `"wait": true` in `options` to get the video, or run
 `runway status <id> --wait --download` later.
 
+**Sume and TopView.** Both groups run remotely. Give file flags (Sume
+`--image`, `--end-image`, `--reference-image`, `--video` and `--audio`; the
+TopView Legacy file flags and the `topview upload` file) as `https://` URLs in
+`inputs`. `sume estimate` uploads nothing, so it takes its media as plain
+`https://` URLs. `sume image --num-images` is capped by
+`MULTIX_MCP_MAX_OUTPUTS`, and `sume video --duration` and `--resolution` by the
+video limits; pass a `--duration` the model's catalog row lists, because
+without one the server sends its own default length. `topview run --input`
+must be inline JSON, since `@file` values are rejected. `sume image`,
+`sume video`, `topview run` and the TopView Legacy commands other than
+`product-avatar` do not wait by default: set `"wait": true` in `options`, or
+resume later with `sume status <id> --wait --download`,
+`topview status <kind> <taskId> --wait --download` or
+`topview prediction <id> --wait --download`. See
+[Sume](/commands/sume/) and [TopView](/commands/topview/).
+
 **Speech.** `speech generate` must name `--provider`. The job gets only the
 keys of the providers named by `--provider` and `--fallback`, not every speech
 key you saved. Give `--text-file` as an `https://` URL in `inputs`.
@@ -193,8 +209,13 @@ Worker, and keys set there are ignored.
   (Gemini, OpenRouter, OpenAI, MiniMax, Leonardo.Ai, BytePlus with
   `ARK_API_KEY` as fallback, ElevenLabs, fal.ai, Atlas Cloud, Replicate with
   `REPLICATE_API_KEY` as fallback, Runway's `RUNWAYML_API_SECRET` as
-  "API secret", HeyGen), plus the Cloudflare Workers AI
+  "API secret", HeyGen, Sume, TopView with `TOPVIEW_API_KEY` and
+  `TOPVIEW_UID`, and TopView Platform), plus the Cloudflare Workers AI
   account ID, API token and optional AI Gateway ID.
+  `TOPVIEW_UID` is an account ID, not a secret, so it has a plain text input
+  instead of a password field. A `topview` job gets all three TopView values;
+  the Legacy commands need `TOPVIEW_API_KEY` and `TOPVIEW_UID`, the API
+  Platform commands `TOPVIEW_PLATFORM_API_KEY`.
 
 ### API keys for the REST API
 

@@ -148,6 +148,23 @@ bị giới hạn bởi `MULTIX_MCP_MAX_VIDEO_SECONDS`. Prompt không được b
 mặc định không chờ, nên job kết thúc chỉ với task ID: đặt `"wait": true` trong
 `options` để nhận video, hoặc chạy `runway status <id> --wait --download` sau.
 
+**Sume và TopView.** Cả hai nhóm lệnh chạy được từ xa. Truyền các flag file
+(của Sume là `--image`, `--end-image`, `--reference-image`, `--video` và
+`--audio`; của TopView là các flag file của Legacy API và file của
+`topview upload`) dưới dạng URL `https://` trong `inputs`. `sume estimate`
+không upload gì, nên nhận media dưới dạng URL `https://` thông thường.
+`sume image --num-images` bị giới hạn bởi `MULTIX_MCP_MAX_OUTPUTS`, còn
+`sume video --duration` và `--resolution` bị giới hạn bởi các giới hạn video;
+hãy truyền một `--duration` có trong dòng catalog của model, vì nếu thiếu,
+server sẽ gửi độ dài mặc định của riêng nó. `topview run --input` phải là JSON
+viết trực tiếp, vì giá trị `@file` bị từ chối. `sume image`, `sume video`,
+`topview run` và các lệnh Legacy của TopView trừ `product-avatar` mặc định
+không chờ: đặt `"wait": true` trong `options`, hoặc tiếp tục sau bằng
+`sume status <id> --wait --download`,
+`topview status <kind> <taskId> --wait --download` hoặc
+`topview prediction <id> --wait --download`. Xem
+[Sume](/vi/commands/sume/) và [TopView](/vi/commands/topview/).
+
 **Speech.** `speech generate` phải nêu `--provider`. Job chỉ nhận key của các
 provider được nêu trong `--provider` và `--fallback`, không phải mọi key speech
 bạn đã lưu. Truyền `--text-file` dưới dạng URL `https://` trong `inputs`.
@@ -188,8 +205,12 @@ bị bỏ qua.
   OpenRouter, OpenAI, MiniMax, Leonardo.Ai, BytePlus với `ARK_API_KEY` làm tên
   dự phòng, ElevenLabs, fal.ai, Atlas Cloud, Replicate với `REPLICATE_API_KEY`
   làm tên dự phòng, Runway với `RUNWAYML_API_SECRET` mang nhãn "API secret",
-  HeyGen), cùng account ID, API token và AI Gateway ID (tùy
-  chọn) của Cloudflare Workers AI.
+  HeyGen, Sume, TopView với `TOPVIEW_API_KEY` và `TOPVIEW_UID`, và TopView
+  Platform), cùng account ID, API token và AI Gateway ID (tùy chọn) của
+  Cloudflare Workers AI. `TOPVIEW_UID` là account ID chứ không phải secret,
+  nên được nhập bằng ô văn bản thường thay vì ô mật khẩu. Một job `topview`
+  nhận cả ba giá trị TopView; các lệnh Legacy cần `TOPVIEW_API_KEY` và
+  `TOPVIEW_UID`, các lệnh API Platform cần `TOPVIEW_PLATFORM_API_KEY`.
 
 ### API key cho REST API
 

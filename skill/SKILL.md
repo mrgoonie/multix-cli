@@ -1,6 +1,6 @@
 ---
 name: multix
-description: AI multimodal CLI — generate and edit images (OpenAI, Codex driver, Gemini Nano Banana, Imagen, MiniMax, OpenRouter, Leonardo, BytePlus Seedream, Cloudflare Workers AI FLUX.1 Schnell, fal.ai FLUX, Replicate FLUX, Runway Gen-4 Image), generate, edit and extend video (Gemini Omni Flash, plus legacy Gemini Veo), generate video (MiniMax Hailuo, OpenRouter via Veo/Seedance/Kling, Leonardo via Motion/Veo/Kling/Hailuo/Seedance/LTX, BytePlus Seedance, Cloudflare AI Gateway via Replicate, fal.ai queue models, Replicate direct API models incl. P-Video, Runway Gen-4.5 and Gen-4 Turbo, HeyGen Video Agent and scripted avatar videos), video translation and lipsync (HeyGen), TTS/STT/music (OpenAI, Gemini Flash TTS incl. Gemini 3.8 with delivery-style control, OpenRouter TTS (Gemini, ElevenLabs, Fish Audio, MiniMax routed) and STT (Whisper, GPT-4o transcribe, Gemini Transcribe, ElevenLabs Scribe, Voxtral, Deepgram, AssemblyAI routed), MiniMax, Cloudflare Workers AI MeloTTS, ElevenLabs, native Fish Audio Drama 3 TTS with multi-speaker turns and pronunciation dictionaries), multi-character dialogue audio with per-character voice profiles, cached per-line takes and stem export (multix scene), 3D models (BytePlus Hyper3D/Hitem3d), analyze/transcribe media, convert documents to Markdown, optimize media via ffmpeg/ImageMagick, inspect and verify media offline with sha256-bound QA receipts, and self-update the CLI. Use whenever the user wants to create, edit, or transform images/video/audio/3D/documents from a CLI, mentions any of: OpenAI, Codex image driver, image-to-image, i2i, image edit, watercolor/cyberpunk style transfer, reference image, OpenRouter, Nano Banana, Flux, Seedream, Gemini Omni, Omni Flash, Veo, Hailuo, Seedance, Kling, Cloudflare Workers AI, AI Gateway, fal.ai, Atlas Cloud, Replicate, replicate.com models, Replicate predictions, Runway, Gen-4.5, Gen-4 Turbo, Gen-4 Image, HeyGen, Fish Audio, Drama 3, avatar video, talking head, Video Agent, video translation, dubbing, lipsync, video generation, text-to-video, image-to-video, i2v, ElevenLabs voice cloning, updating/upgrading multix, or asks for batch media optimization.
+description: AI multimodal CLI — generate and edit images (OpenAI, Codex driver, Gemini Nano Banana, Imagen, MiniMax, OpenRouter, Leonardo, BytePlus Seedream, Cloudflare Workers AI FLUX.1 Schnell, fal.ai FLUX, Replicate FLUX, Runway Gen-4 Image), generate, edit and extend video (Gemini Omni Flash, plus legacy Gemini Veo), generate video (MiniMax Hailuo, OpenRouter via Veo/Seedance/Kling, Leonardo via Motion/Veo/Kling/Hailuo/Seedance/LTX, BytePlus Seedance, Cloudflare AI Gateway via Replicate, fal.ai queue models, Replicate direct API models incl. P-Video, Runway Gen-4.5 and Gen-4 Turbo, HeyGen Video Agent and scripted avatar videos, any model in Sume's catalog, TopView product marketing videos, talking/product avatars and API Platform models such as Seedance and Wan), video translation and lipsync (HeyGen, Sume), TTS/STT/music (OpenAI, Gemini Flash TTS incl. Gemini 3.8 with delivery-style control, OpenRouter TTS (Gemini, ElevenLabs, Fish Audio, MiniMax routed) and STT (Whisper, GPT-4o transcribe, Gemini Transcribe, ElevenLabs Scribe, Voxtral, Deepgram, AssemblyAI routed), MiniMax, Cloudflare Workers AI MeloTTS, ElevenLabs, native Fish Audio Drama 3 TTS with multi-speaker turns and pronunciation dictionaries), multi-character dialogue audio with per-character voice profiles, cached per-line takes and stem export (multix scene), 3D models (BytePlus Hyper3D/Hitem3d), analyze/transcribe media, convert documents to Markdown, optimize media via ffmpeg/ImageMagick, inspect and verify media offline with sha256-bound QA receipts, and self-update the CLI. Use whenever the user wants to create, edit, or transform images/video/audio/3D/documents from a CLI, mentions any of: OpenAI, Codex image driver, image-to-image, i2i, image edit, watercolor/cyberpunk style transfer, reference image, OpenRouter, Nano Banana, Flux, Seedream, Gemini Omni, Omni Flash, Veo, Hailuo, Seedance, Kling, Cloudflare Workers AI, AI Gateway, fal.ai, Atlas Cloud, Replicate, replicate.com models, Replicate predictions, Runway, Gen-4.5, Gen-4 Turbo, Gen-4 Image, HeyGen, Sume, TopView, product video, product avatar, product photos, Fish Audio, Drama 3, avatar video, talking head, Video Agent, video translation, dubbing, lipsync, video generation, text-to-video, image-to-video, i2v, ElevenLabs voice cloning, updating/upgrading multix, or asks for batch media optimization.
 version: 1.22.0-beta.2 # x-release-please-version
 ---
 
@@ -50,6 +50,8 @@ Activate this skill when the user asks to:
 - Run any Replicate model (official or versioned) via the direct API, generate Replicate images/video, or resume/cancel a Replicate prediction by id
 - Generate Runway Gen-4.5 / Gen-4 Turbo video or Gen-4 images (with tagged reference images), or check/resume/cancel a Runway task by id
 - Make HeyGen avatar videos from a prompt (Video Agent) or an exact script, translate/lipsync videos, HeyGen TTS
+- Generate images or video (incl. lip-sync and captions) with any model in Sume's catalog on one key, with catalog-checked flags, cost pre-flight, and resumable/cancellable jobs (`multix sume`)
+- Make TopView product marketing videos, talking or product avatar videos and product photos (Legacy API), or run TopView API Platform models such as Seedance, Wan and GPT Image 2 (`multix topview`)
 - Voice a multi-character dialogue (anime, film, audio drama) line by line with a fixed voice per character, approve takes, and export stems (`multix scene`)
 - Update multix itself to the latest (or a given dist-tag) npm version
 
@@ -77,6 +79,10 @@ ATLASCLOUD_API_KEY    # Atlas Cloud (any model: image, edit, video, audio, 3D)
 REPLICATE_API_TOKEN   # Replicate direct API (REPLICATE_API_KEY accepted as fallback)
 RUNWAYML_API_SECRET   # Runway API (Gen-4.5 / Gen-4 Turbo video, Gen-4 images)
 HEYGEN_API_KEY        # HeyGen v3 (avatar video, Video Agent, translation); API billed separately from web plans
+SUME_API_KEY          # Sume (image/video catalog, USD balance); https://app.sume.com
+TOPVIEW_API_KEY       # TopView Legacy API (plan credits), with TOPVIEW_UID; https://www.topview.ai/api-settings
+TOPVIEW_UID           # TopView account id sent with TOPVIEW_API_KEY
+TOPVIEW_PLATFORM_API_KEY # TopView API Platform (separate USD balance); https://platform.topview.ai
 CLOUDFLARE_ACCOUNT_ID # Cloudflare Workers AI / AI Gateway account
 CLOUDFLARE_API_TOKEN  # Cloudflare Workers AI / AI Gateway token
 # Video additionally requires CLOUDFLARE_AI_GATEWAY_ID and REPLICATE_API_TOKEN.
@@ -116,6 +122,7 @@ multix check [--verbose]
 | Atlas Cloud | `multix atlas image "<text>" [-m <model>] [--size <size>] [--aspect-ratio 1:1] [-n N] [--seed <n>]` | Default `black-forest-labs/flux-schnell`; flags are validated against the model's schema |
 | Replicate | `multix replicate image "<text>" [-m <owner/name>] [--aspect-ratio 16:9] [-n N] [--seed <n>]` | Default `black-forest-labs/flux-schnell`; also `multix replicate run <model> --input <json\|@file>` for any model |
 | Runway | `multix runway image "<text>" [-m gen4_image\|gen4_image_turbo] [--ratio 1920:1080] [--reference <path\|url> --reference-tag <tag>]` | Default `gen4_image`; up to 3 references cited as `@tag`; Turbo needs one |
+| Sume | `multix sume image "<text>" -m <model> [--aspect-ratio 16:9] [--num-images N] [--image <path\|url>] [--wait]` | No default model (`multix sume models --kind image`); prints a job ID unless `--wait` |
 
 Aspect ratios (most providers): `1:1 2:3 3:2 3:4 4:3 4:5 5:4 9:16 16:9 21:9`.
 
@@ -276,6 +283,51 @@ multix heygen status <id> --type agent|video|translation|lipsync|model-video --w
 - `<ref>` = `https://` URL, `asset:<asset_id>`, or a local file (uploaded, max 32 MB).
 - Commands wait and download by default. `--async` prints IDs and a resume command; `--type agent` resumes with the Video Agent `session_id`.
 - Failed jobs exit 1 with HeyGen's failure code. 402 means add API credits; 403 means a scope or entitlement is missing.
+
+## Sume
+
+Auth is `SUME_API_KEY` (base `https://api.sume.com`). One key reaches every image and video model in Sume's catalog; the catalog decides which models exist and which flags each takes. multix checks every flag against the model's catalog row before uploading or billing. There is no built-in default model and no fallback: pass `-m` or set `SUME_IMAGE_MODEL` / `SUME_VIDEO_MODEL`.
+
+```bash
+multix sume models [--kind image|video|lipsync|captions] [--refresh] [--json]   # public catalog, no key, cached
+multix sume image "<text>" -m <model> [--image <path|url>]... [--aspect-ratio 16:9] [--resolution 2K] [--num-images N] [--param key=value]
+multix sume video "<text>" -m <model> [--image <path|url>] [--end-image <path|url>] [--reference-image <path|url>]... [--duration 8] [--generate-audio]
+multix sume video -m <lipsync-model> --image ./face.png --audio ./speech.mp3 --duration 12   # lip-sync: --duration is the audio length
+multix sume status <job_id> [--wait] [--download]
+multix sume cancel <job_id>                      # only while queued; once generation starts the job is billed
+multix sume estimate "<text>" -m <model> [...]   # Sume's own quote (not billed; media must be https URLs)
+```
+
+- `image` and `video` print the job ID with check/resume/cancel commands unless `--wait`; `--output`, `--download` and `--no-download` need `--wait`.
+- Inputs: public `https://` URLs (Sume fetches them) or local files (uploaded first, up to 2 GiB); `data:` URIs are refused.
+- Cost: `--estimate` / `--max-cost` price the request from the cached catalog (unknown, never $0, when the cache is missing or older than 24 h). Sume reserves the price on submit; failed and canceled jobs are refunded.
+- Every submit carries an `Idempotency-Key`; if the outcome stays unknown, re-run with the printed `--idempotency-key` instead of submitting again.
+- Full reference: https://multix.zuey.me/commands/sume/
+
+## TopView
+
+Two APIs with separate keys and balances; neither key works on the other.
+- **Legacy API** (`TOPVIEW_API_KEY` + `TOPVIEW_UID`, plan credits): `url-to-video`, `materials-to-video`, `m2v-export`, `video-avatar`, `product-avatar`, `product-anyshoot`, `status`, `upload`, `credit`.
+- **API Platform** (`TOPVIEW_PLATFORM_API_KEY`, USD): `models`, `run`, `prediction`.
+
+```bash
+multix topview url-to-video <product-url> [--aspect-ratio 9:16] [--video-length-type 1-4] [--preview]
+multix topview materials-to-video --file <path|url>... --product-name "<name>" --product-description "<text>"
+multix topview video-avatar (--avatar-id <id> | --image <file> | --video <file>) (--tts-text "<text>" [--voice-id <id>] | --audio <file>)
+multix topview product-avatar --product-image <file> --avatar-id <id> --image-edit-prompt "<text>" --mode avatar2|avatar4|avatar4Fast --tts-text "<text>" --voice-id <id>
+multix topview product-anyshoot --mode try-on|background --product-image <file> ...
+multix topview status <kind> <taskId> [--wait] [--download]
+multix topview credit                        # remaining plan credits (a balance, not spend) and recent tasks
+multix topview models [--refresh]            # verified API Platform routes with live prices (no key)
+multix topview run <route> --input '<json>'|@body.json [--wait]
+multix topview prediction <id> [--wait] [--download]
+```
+
+- No cancel endpoint on either API: a submitted task runs to completion and is billed.
+- Legacy commands except `product-avatar` print the task ID unless `--wait`. `product-avatar` runs three paid tasks and always waits; after a failure, resume from the last good stage (`--bg-removed-file-id` or `--replace-image-id`) instead of starting over.
+- Legacy submits have no idempotency key: after a network error, timeout or 5xx, check `multix topview credit` before retrying. `topview run` sends an `Idempotency-Key`; retry with `--idempotency-key <key>`.
+- `payment_required` on a prediction means the workspace needs a top-up; do not resubmit, resume with `prediction <id> --wait`.
+- Full reference: https://multix.zuey.me/commands/topview/
 
 ## Scenes (multi-character dialogue)
 
@@ -576,7 +628,7 @@ Requires `cwebp` (libwebp: `brew install webp`, `apt install webp`) on `PATH`.
 | Variable | Purpose |
 |---|---|
 | `MULTIX_OUTPUT_DIR` | Override default output dir |
-| `MULTIX_MAX_DOWNLOAD_MB` | Size limit per downloaded Replicate, Runway or Atlas Cloud output file (default 2048) |
+| `MULTIX_MAX_DOWNLOAD_MB` | Size limit per downloaded Replicate, Runway, Atlas Cloud, Sume or TopView output file (default 2048) |
 | `MULTIX_UPLOAD_MIN_KBPS` | Slowest upload speed to allow for (Gemini Files API, Runway requests with inline images), in KB/s (default 1000); lower it on slow links |
 | `OPENAI_IMAGE_MODEL` / `OPENAI_TTS_MODEL` / `OPENAI_STT_MODEL` | OpenAI model defaults |
 | `OPENROUTER_IMAGE_MODEL` | Default OpenRouter image model |
@@ -608,6 +660,9 @@ Requires `cwebp` (libwebp: `brew install webp`, `apt install webp`) on `PATH`.
 | `REPLICATE_IMAGE_MODEL` / `REPLICATE_VIDEO_MODEL` | Replicate default models (default `black-forest-labs/flux-schnell`, `prunaai/p-video`) |
 | `RUNWAY_BASE_URL` | Override Runway API root (default `https://api.dev.runwayml.com`) |
 | `RUNWAY_VIDEO_MODEL` / `RUNWAY_IMAGE_MODEL` | Runway default models (default `gen4.5`, `gen4_image`) |
+| `SUME_BASE_URL` | Override Sume API root (default `https://api.sume.com`) |
+| `SUME_IMAGE_MODEL` / `SUME_VIDEO_MODEL` | Sume default models; no built-in default, so without these or `-m` the command refuses |
+| `TOPVIEW_BASE_URL` / `TOPVIEW_PLATFORM_BASE_URL` | Override TopView Legacy API root (default `https://api.topview.ai`) / API Platform root (default `https://platform-backend.topview.ai`) |
 | `CLOUDFLARE_AI_IMAGE_MODEL` / `CLOUDFLARE_AI_TTS_MODEL` | Fixed-model settings: only `@cf/black-forest-labs/flux-1-schnell` and `@cf/myshell-ai/melotts` respectively are accepted |
 | `MULTIX_DISABLE_HOME_ENV` | `1` to skip every home-directory env file (`~/.multix/.env`, `~/.claude/...`) |
 | `MULTIX_LEGACY_CLAUDE_ENV` | `1` to also read legacy `.claude` env files (credential names only); shell or `~/.multix/.env` only, ignored in a project `.env` |
@@ -663,6 +718,9 @@ multix replicate video "A sunset timelapse" --async   # then: multix replicate s
 # Runway
 multix runway image "A sunset over mountains"
 multix runway video "A sunset timelapse"   # prints the id; then: multix runway status <id> --wait --download
+
+# Sume (pick a model from `multix sume models`)
+multix sume image "A sunset over mountains" -m <model> --wait
 
 # Self-update
 multix update --check

@@ -81,6 +81,9 @@ Windows, việc kiểm tra không phân biệt hoa thường, giống hệ đi�
 | `REPLICATE_API_TOKEN` hoặc `REPLICATE_API_KEY` | Replicate (API trực tiếp) |
 | `RUNWAYML_API_SECRET` | Runway |
 | `HEYGEN_API_KEY` | HeyGen (credit API tính riêng với gói web) |
+| `SUME_API_KEY` | Sume (số dư USD, lấy từ [ứng dụng Sume](https://app.sume.com)) |
+| `TOPVIEW_API_KEY` và `TOPVIEW_UID` | TopView Legacy API (credit của gói, lấy ở [API Settings](https://www.topview.ai/api-settings)) |
+| `TOPVIEW_PLATFORM_API_KEY` | TopView API Platform (số dư USD riêng, lấy từ [platform.topview.ai](https://platform.topview.ai)) |
 
 ```bash
 export GEMINI_API_KEY="your-key"
@@ -205,6 +208,15 @@ trong các model liệt kê ở [Fish Audio](/vi/commands/fish/#model), viết c
 `HEYGEN_BASE_URL` ghi đè API base của HeyGen (mặc định
 `https://api.heygen.com`) cho proxy và test. Giá trị phải là `https://`;
 `http://` chỉ được chấp nhận cho `localhost`, `127.0.0.1` hoặc `[::1]`.
+
+Sume nhận `SUME_BASE_URL` (mặc định `https://api.sume.com`),
+`SUME_IMAGE_MODEL` và `SUME_VIDEO_MODEL`. Sume không có model mặc định sẵn:
+nếu không có `-m` hoặc biến tương ứng, `sume image` và `sume video` từ chối
+chạy; `multix sume models` liệt kê các ID. TopView nhận `TOPVIEW_BASE_URL` cho
+Legacy API (mặc định `https://api.topview.ai`) và `TOPVIEW_PLATFORM_BASE_URL`
+cho API Platform (mặc định `https://platform-backend.topview.ai`). Việc tải
+output của Sume và TopView cũng dừng ở `MULTIX_MAX_DOWNLOAD_MB`; xem
+[Sume](/vi/commands/sume/#kết-quả) và [TopView](/vi/commands/topview/#kết-quả-đầu-ra).
 
 ### Ghi đè base URL và độ tin cậy
 
