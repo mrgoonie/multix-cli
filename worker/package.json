@@ -4,11 +4,17 @@
   "type": "module",
   "description": "multix remote MCP server (Streamable HTTP) for Cloudflare Workers",
   "scripts": {
+    "skills": "tsx scripts/build-skill-catalog.ts",
+    "predev": "npm run skills",
     "dev": "wrangler dev --port 8787",
+    "predeploy": "npm run skills",
     "deploy": "wrangler deploy",
+    "prebuild": "npm run skills",
     "build": "wrangler deploy --dry-run --containers-rollout=none --outdir dist",
     "check:bundle": "npm run build && node scripts/check-bundle.mjs dist",
+    "pretypecheck": "npm run skills",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
+    "pretest": "npm run skills",
     "test": "vitest run",
     "catalog": "tsx scripts/build-cli-catalog.ts"
   },

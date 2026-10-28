@@ -66,14 +66,16 @@
     "bindings": [
       { "name": "MULTIX_JOBS", "class_name": "MultixJobContainer" },
       { "name": "MULTIX_JOB_QUOTA", "class_name": "AccountJobQuota" },
-      { "name": "MULTIX_EVENTS", "class_name": "AccountEvents" }
+      { "name": "MULTIX_EVENTS", "class_name": "AccountEvents" },
+      { "name": "MULTIX_SKILLS", "class_name": "AccountSkills" }
     ]
   },
   // Declarative Durable Object config (wrangler 4.149+); replaces `migrations`.
   "exports": {
     "MultixJobContainer": { "type": "durable-object", "storage": "sqlite" },
     "AccountJobQuota": { "type": "durable-object", "storage": "sqlite" },
-    "AccountEvents": { "type": "durable-object", "storage": "sqlite" }
+    "AccountEvents": { "type": "durable-object", "storage": "sqlite" },
+    "AccountSkills": { "type": "durable-object", "storage": "sqlite" }
   },
   "vars": {
     "MULTIX_PUBLIC_URL": "https://multix.zuey.me",
