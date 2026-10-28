@@ -62,7 +62,13 @@ Open a new issue for it (with evidence) rather than widening the current PR.
 
 ## Branches, commits, PRs
 
-- Branch from `main`: `feat/<scope>-<slug>`, `fix/<scope>-<slug>`, `docs/<slug>`, `chore/<slug>`.
+- Branch from `dev` and open feature and fix PRs against `dev` (the beta
+  channel, released by `release-please-beta.yml`); `main` only receives
+  promotion PRs from `dev`. Branch names: `feat/<scope>-<slug>`,
+  `fix/<scope>-<slug>`, `docs/<slug>`, `chore/<slug>`.
+- An issue is finished when its PR is merged into `dev`, the merged result is
+  verified, and the issue is closed with the `done` label; `shipped` follows
+  once the promotion to `main` merges.
 - Use a separate git worktree per issue when several issues are in flight.
 - Conventional commits (`feat(replicate): …`, `fix(gemini): …`); release-please builds the changelog from them.
 - One issue per PR; put `Closes #<n>` in the PR body.
