@@ -24,11 +24,12 @@ export function taskOpt(value: string | undefined): Task | undefined {
   return value;
 }
 
-function bounded(value: string | number | undefined, flag: string, max: number) {
+function bounded(value: string | number | undefined, flag: string, max: number, whole = false) {
   if (value === undefined) return undefined;
   const n = Number(value);
-  if (!Number.isFinite(n) || n <= 0 || n > max) {
-    throw new ValidationError(`${flag} must be a number above 0 and at most ${max}`);
+  if (!Number.isFinite(n) || n <= 0 || n > max || (whole && !Number.isInteger(n))) {
+    const kind = whole ? "a whole number" : "a number";
+    throw new ValidationError(`${flag} must be ${kind} above 0 and at most ${max}`);
   }
   return n;
 }
@@ -39,7 +40,7 @@ const ASPECT = /^\d{1,2}:\d{1,2}$/;
 export function quoteConfig(f: ConfigFlags): QuoteConfig {
   const task = taskOpt(f.task);
   const duration = bounded(f.duration, "--duration", 3600);
-  const count = bounded(f.count, "--count", 100);
+  const count = bounded(f.count, "--count", 100, true);
   if (f.resolution !== undefined && !RESOLUTION.test(f.resolution)) {
     throw new ValidationError("--resolution looks like 720p, 1080p or 4k");
   }

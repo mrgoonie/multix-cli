@@ -71,6 +71,7 @@ interface Json {
   scope: string;
   deleted?: string;
   ratings: { count: number };
+  feedback: unknown[];
   usage: unknown;
 }
 
@@ -345,6 +346,56 @@ describe("multix catalog rate, feedback, edit and delete", () => {
     ]);
     const saved = await catalog("rate", REF, "--score", "4", "--job", "req_done");
     expect(saved.verified_usage).toMatchObject({ history_id: "h_done", job_id: "req_done" });
+  });
+});
+
+describe("multix catalog rate --job for an async job", () => {
+  it("verifies usage when only the submit names the model and the status poll completed", async () => {
+    const job = { provider: "fal", id: "req_async", attempt: 1 };
+    writeHistory([
+      historyEntry({
+        id: "h_submit",
+        ts: "2026-10-27T10:00:00.000Z",
+        job,
+        model_resolved: "bytedance/seedance-2.0/text-to-video",
+      }),
+      historyEntry({ id: "h_status", ts: "2026-10-27T10:01:00.000Z", command: "fal status", job }),
+    ]);
+    const saved = await catalog("rate", REF, "--score", "4", "--job", "req_async");
+    expect(saved.verified_usage).toMatchObject({ history_id: "h_status", job_id: "req_async" });
+  });
+
+  it("matches an exact provider job id before a history id prefix", async () => {
+    writeHistory([
+      historyEntry({
+        id: "h_other_run",
+        ts: "2026-10-27T11:00:00.000Z",
+        provider: "byteplus",
+        model_resolved: "dreamina-seedance-2-0-260128",
+      }),
+      historyEntry({
+        id: "h_fal_run",
+        ts: "2026-10-27T10:00:00.000Z",
+        job: { provider: "fal", id: "h_", attempt: 1 },
+        model_resolved: "bytedance/seedance-2.0/text-to-video",
+      }),
+    ]);
+    const saved = await catalog("rate", REF, "--score", "4", "--job", "h_");
+    expect(saved.verified_usage).toMatchObject({ history_id: "h_fal_run" });
+  });
+});
+
+describe("multix catalog project feedback", () => {
+  it("applies a project note only in the project that wrote it", async () => {
+    const a = path.join(tmp, "a", "app");
+    const b = path.join(tmp, "b", "app");
+    fs.mkdirSync(a, { recursive: true });
+    fs.mkdirSync(b, { recursive: true });
+    const cwd = vi.spyOn(process, "cwd").mockReturnValue(a);
+    await catalog("note", REF, "--verdict", "avoid", "--use-case", "ugc", "--scope", "project");
+    expect((await catalog("show", REF)).feedback).toHaveLength(1);
+    cwd.mockReturnValue(b);
+    expect((await catalog("show", REF)).feedback).toHaveLength(0);
   });
 });
 

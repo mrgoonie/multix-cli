@@ -94,6 +94,11 @@ current ones. Only `quoted` rows are ranked, cheapest first. Offerings whose
 rates are not equivalent or are unpriced are listed with the reason, never
 ranked (`not_comparable` and `unpriced` in `--json`).
 
+When you leave out a condition that the family's rates price differently
+(for example `--resolution`, when one provider charges per tier), nothing is
+ranked: picking each provider's cheapest tier would compare 480p with 720p.
+The open conditions are listed in `needs`; give them and run the command again.
+
 BytePlus caveats for this example:
 
 - The per-second BytePlus figure is the pricing page's rounded example for

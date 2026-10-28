@@ -433,6 +433,16 @@ describe("compareFamily", () => {
     expect(c.note).toContain("List prices only");
   });
 
+  it("ranks nothing when a condition the rates price differently is left open", () => {
+    const c = compareFamily("seedance-2.0", { duration_s: 10 }, AT);
+    expect(c.needs).toEqual(["resolution"]);
+    expect(c.comparable).toEqual([]);
+    expect(c.not_comparable.every((q) => q.amount === null)).toBe(true);
+    expect(c.not_comparable.some((q) => q.reason?.startsWith("rates differ by resolution"))).toBe(
+      true,
+    );
+  });
+
   it("never includes the fast variant in the plain family", () => {
     const c = compareFamily("seedance-2.0", { resolution: "720p", duration_s: 10 }, AT);
     const refs = [...c.comparable, ...c.not_comparable].map((q) => q.ref);

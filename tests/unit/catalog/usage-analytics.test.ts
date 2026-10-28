@@ -378,3 +378,31 @@ describe("legacy receipts", () => {
     expect(report.rows[0]?.cost_per_success_usd).toBe(0.25);
   });
 });
+
+describe("an async job polled for its status", () => {
+  it("stays under its model when the later status poll names none", () => {
+    const job = { provider: "fal", id: "req_poll", attempt: 1 };
+    const report = usageReport(
+      [
+        entry({
+          command: "fal video",
+          provider: "fal",
+          model_resolved: "bytedance/seedance-2.0/text-to-video",
+          job,
+          ts: "2026-10-27T10:00:00.000Z",
+        }),
+        entry({
+          command: "fal status",
+          provider: "fal",
+          model_resolved: undefined,
+          job,
+          ts: "2026-10-27T10:01:00.000Z",
+        }),
+      ],
+      "model",
+    );
+    expect(report.rows.map((r) => [r.key, r.operations, r.runs])).toEqual([
+      ["fal:bytedance/seedance-2.0/text-to-video", 1, 2],
+    ]);
+  });
+});

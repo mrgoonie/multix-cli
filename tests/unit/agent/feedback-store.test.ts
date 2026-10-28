@@ -86,6 +86,14 @@ describe("round trip", () => {
     expect(deleteFeedback(saved.id)).toBe(false);
   });
 
+  it("replaces the other rating when an edit moves one onto its use case", () => {
+    const a = addFeedback(entry({ use_case: "product-ugc", score: 2 }));
+    const b = addFeedback(entry({ use_case: "explainer", score: 5 }));
+    expect(updateFeedback({ ...b, use_case: "product-ugc" })).toBe(true);
+    expect(readFeedback().map((e) => e.id)).toEqual([b.id]);
+    expect(findFeedback(a.id)).toBeUndefined();
+  });
+
   it("returns false when updating an entry that does not exist", () => {
     expect(updateFeedback(entry({ id: "fb_missing" }))).toBe(false);
     expect(findFeedback("fb_missing")).toBeUndefined();

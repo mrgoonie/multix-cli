@@ -54,9 +54,10 @@ describe("quoteConfig", () => {
   it("bounds the count at 100", () => {
     expect(quoteConfig({ count: "100" })).toEqual({ count: 100 });
     expect(() => quoteConfig({ count: "101" })).toThrow(
-      /--count must be a number above 0 and at most 100/,
+      /--count must be a whole number above 0 and at most 100/,
     );
     expect(() => quoteConfig({ count: "0" })).toThrow(ValidationError);
+    expect(() => quoteConfig({ count: "2.5" })).toThrow(/whole number/);
   });
 
   it.each(["7", "720 p", "720-p", "x", ""])("refuses resolution %j", (resolution) => {

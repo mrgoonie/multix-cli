@@ -85,6 +85,13 @@ describe("multix_price_book", () => {
     }
   });
 
+  it("ranks nothing and names the open condition when the resolution is left out", async () => {
+    const { comparison } = (await price({ view: "compare", family: "seedance-2.0", duration: 10 }))
+      .structuredContent;
+    expect(comparison.needs).toEqual(["resolution"]);
+    expect(comparison.comparable).toEqual([]);
+  });
+
   it("reports key readiness per provider and never a key value", async () => {
     const result = await price({ view: "providers" });
     const providers = result.structuredContent.providers as Json[];

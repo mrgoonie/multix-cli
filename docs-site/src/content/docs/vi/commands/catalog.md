@@ -94,6 +94,11 @@ hiện hành. Chỉ các dòng `quoted` được xếp hạng, rẻ nhất trư�
 giá không tương đương hoặc chưa có giá được liệt kê kèm lý do, không bao giờ
 được xếp hạng (`not_comparable` và `unpriced` trong `--json`).
 
+Khi bạn bỏ trống một điều kiện mà các mức giá của họ model tính khác nhau
+(ví dụ `--resolution`, khi một provider tính giá theo từng mức), sẽ không có
+gì được xếp hạng: lấy mức rẻ nhất của từng provider sẽ đem 480p so với 720p.
+Các điều kiện còn thiếu nằm trong `needs`; hãy cung cấp chúng rồi chạy lại lệnh.
+
 Lưu ý về BytePlus trong ví dụ này:
 
 - Con số theo giây của BytePlus là ví dụ đã làm tròn trên trang giá cho khung

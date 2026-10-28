@@ -104,13 +104,16 @@ export function findFeedback(id: string, entries = readFeedback()): Feedback | u
   return entries.find((e) => e.id === id);
 }
 
-/** Replace an entry by id; returns false when there is none. */
+/**
+ * Replace an entry by id; returns false when there is none. A rating edited onto
+ * a use case that already has one replaces that rating, as a new rating would.
+ */
 export function updateFeedback(updated: Feedback): boolean {
   const entries = readFeedback();
   const i = entries.findIndex((e) => e.id === updated.id);
   if (i < 0) return false;
   entries[i] = updated;
-  writeFeedback(entries);
+  writeFeedback(entries.filter((e) => e.id === updated.id || !sameRating(e, updated)));
   return true;
 }
 

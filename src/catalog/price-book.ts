@@ -459,7 +459,30 @@ export interface Comparison {
   not_comparable: Quote[];
   /** Offerings of the family with no rate on file at all. */
   unpriced: string[];
+  /**
+   * Conditions the configuration leaves open although the family's rates price
+   * them differently; nothing is ranked until they are given.
+   */
+  needs?: CompareCondition[];
   note: string;
+}
+
+const COMPARE_CONDITIONS = ["resolution", "aspect_ratio", "audio"] as const;
+export type CompareCondition = (typeof COMPARE_CONDITIONS)[number];
+
+/** Conditions left open by `config` on which the quotable rates disagree. */
+function openConditions(rates: RateView[], config: QuoteConfig): Map<CompareCondition, string[]> {
+  const open = new Map<CompareCondition, string[]>();
+  for (const key of COMPARE_CONDITIONS) {
+    if (config[key] !== undefined) continue;
+    const values = new Set<string>();
+    for (const r of rates) {
+      const v = r.conditions[key];
+      if (v !== undefined && v !== "any") values.add(String(v).toLowerCase());
+    }
+    if (values.size > 1) open.set(key, [...values].sort());
+  }
+  return open;
 }
 
 /** Compare one model family across providers at one configuration. */
@@ -473,9 +496,25 @@ export function compareFamily(
   // Exact family only: "seedance-2.0-fast" is another model, not a cheaper "seedance-2.0".
   const matches = (f: string) => f === fam;
   const rates = allRates(at, sources).filter((r) => matches(r.family));
+  const quoted = rates.filter((r) => quoteRate(r, config).status === "quoted");
+  // Picking each provider's cheapest tier while a condition is open would rank
+  // 480p against 720p; ask for the condition instead.
+  const open = openConditions(quoted, config);
+  const openReason = [...open]
+    .map(([key, values]) => `${key.replace("_", " ")} (${values.join(", ")})`)
+    .join(", ");
   const best = new Map<string, Quote>();
   for (const r of rates) {
-    const q = quoteRate(r, config);
+    let q = quoteRate(r, config);
+    if (open.size && q.status === "quoted") {
+      const { basis: _basis, assumed: _assumed, ...rest } = q;
+      q = {
+        ...rest,
+        status: "not_equivalent",
+        amount: null,
+        reason: `rates differ by ${openReason}; give it to compare like for like`,
+      };
+    }
     const prev = best.get(q.ref);
     if (!prev || betterQuote(q, prev)) best.set(q.ref, q);
   }
@@ -497,6 +536,7 @@ export function compareFamily(
     unpriced: listOfferings(at, sources)
       .filter((o) => matches(o.family) && !priced.has(o.ref))
       .map((o) => o.ref),
+    ...(open.size ? { needs: [...open.keys()] } : {}),
     note: "List prices only, for the configuration given. A lower price says nothing about output quality; credits are not converted to USD unless the provider publishes the rate.",
   };
 }

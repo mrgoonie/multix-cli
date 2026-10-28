@@ -226,17 +226,32 @@ function summarise(key: string, entries: HistoryEntry[], withIdentity: boolean):
 }
 
 /**
- * Group entries by `by`. Runs of one operation stay in one group: the group of
- * the operation's latest run decides, so a resume that resolves the model
- * moves the whole operation to the resolved model rather than splitting it.
+ * The run that decides an operation's group: its latest run that names a model,
+ * else its latest run. A resume that resolves the model moves the whole
+ * operation to the resolved model, and a later status poll, which usually
+ * names none, does not move it to "(unknown model)".
  */
-export function usageReport(entries: HistoryEntry[], by: UsageGroupBy): UsageReport {
-  const latest = new Map<string, HistoryEntry>();
+function operationOwners(entries: HistoryEntry[]): Map<string, HistoryEntry> {
+  const owners = new Map<string, HistoryEntry>();
   for (const e of entries) {
     const id = operationOf(e);
-    const prev = latest.get(id);
-    if (!prev || e.ts >= prev.ts) latest.set(id, e);
+    const prev = owners.get(id);
+    const named = resolvedModelOf(e) !== undefined;
+    const prevNamed = prev !== undefined && resolvedModelOf(prev) !== undefined;
+    if (!prev || (named === prevNamed ? e.ts >= prev.ts : named)) owners.set(id, e);
   }
+  return owners;
+}
+
+/** All runs of the operation `e` belongs to, oldest first. */
+export function operationRuns(e: HistoryEntry, entries: HistoryEntry[]): HistoryEntry[] {
+  const id = operationOf(e);
+  return entries.filter((x) => operationOf(x) === id);
+}
+
+/** Group entries by `by`; runs of one operation stay in one group (see operationOwners). */
+export function usageReport(entries: HistoryEntry[], by: UsageGroupBy): UsageReport {
+  const latest = operationOwners(entries);
   const groups = new Map<string, HistoryEntry[]>();
   for (const e of entries) {
     const owner = latest.get(operationOf(e)) ?? e;

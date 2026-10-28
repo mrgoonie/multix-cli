@@ -10,6 +10,7 @@
  * offering costs and how it has done.
  */
 
+import { createHash } from "node:crypto";
 import path from "node:path";
 import type { Command } from "commander";
 import {
@@ -49,7 +50,12 @@ import {
 } from "../../catalog/price-book.js";
 import { type ConfigFlags, quoteConfig, taskOpt } from "../../catalog/quote-config.js";
 import { recommend } from "../../catalog/recommend.js";
-import { type UsageGroupBy, resolvedModelOf, usageReport } from "../../catalog/usage-analytics.js";
+import {
+  type UsageGroupBy,
+  operationRuns,
+  resolvedModelOf,
+  usageReport,
+} from "../../catalog/usage-analytics.js";
 import { ValidationError } from "../../core/errors.js";
 import { groupKeyNames, groupReady } from "./provider-group-keys.js";
 
@@ -85,23 +91,28 @@ function requireRef(ref: string): { provider: string; model: string } {
 /** A local history run of this offering that succeeded, for `--job`. */
 function verifiedUsage(ref: { provider: string; model: string }, job: string) {
   const entries = readHistory();
+  // Exact ids first, so a provider job id is not read as a history id prefix.
   const entry =
-    findHistory(job, entries) ??
-    [...entries].reverse().find((e) => e.job?.id === job || e.provider_ids?.includes(job));
+    entries.find((e) => e.id === job) ??
+    [...entries].reverse().find((e) => e.job?.id === job || e.provider_ids?.includes(job)) ??
+    findHistory(job, entries);
   if (!entry) throw new ValidationError(`No run "${job}" in the local history`);
-  const model = resolvedModelOf(entry);
-  if (
-    entry.provider !== ref.provider ||
-    (model !== ref.model && entry.model_requested !== ref.model)
-  ) {
+  // A job's status polls usually name no model; any run of the job may name it.
+  const runs = operationRuns(entry, entries).filter((e) => e.provider === ref.provider);
+  const named = runs.find(
+    (e) => resolvedModelOf(e) === ref.model || e.model_requested === ref.model,
+  );
+  if (!named) {
+    const model = runs.map(resolvedModelOf).find((m) => m !== undefined);
     throw new ValidationError(
       `Run ${entry.id} used ${entry.provider}:${model ?? "(unknown model)"}, not ${ref.provider}:${ref.model}`,
     );
   }
-  if (!entry.ok || entry.dry_run || entry.estimate_only) {
+  const done = runs.filter((e) => e.ok && !e.dry_run && !e.estimate_only).at(-1);
+  if (!done) {
     throw new ValidationError(`Run ${entry.id} did not complete; only completed runs verify usage`);
   }
-  return { history_id: entry.id, ...(entry.job ? { job_id: entry.job.id } : {}), at: entry.ts };
+  return { history_id: done.id, ...(done.job ? { job_id: done.job.id } : {}), at: done.ts };
 }
 
 interface FeedbackFlags {
@@ -142,6 +153,18 @@ function fieldsOf(f: FeedbackFlags): FeedbackFields {
   };
 }
 
+/** This project's tag: the folder name plus a hash of its path, so two repos named "app" differ. */
+function projectKey(): string {
+  const dir = process.cwd();
+  return `${path.basename(dir)}@${createHash("sha256").update(dir).digest("hex").slice(0, 8)}`;
+}
+
+/** Private feedback, and project feedback from this project only. */
+function feedbackHere(): Feedback[] {
+  const project = projectKey();
+  return readFeedback().filter((f) => f.scope !== "project" || f.project === project);
+}
+
 function saveFeedback(kind: FeedbackKind, refText: string, f: FeedbackFlags): void {
   const ref = requireRef(refText);
   const known = listOfferings().some((o) => o.provider === ref.provider && o.model === ref.model);
@@ -164,7 +187,7 @@ function saveFeedback(kind: FeedbackKind, refText: string, f: FeedbackFlags): vo
     model: ref.model,
     ...fields,
     scope,
-    ...(scope === "project" ? { project: path.basename(process.cwd()) } : {}),
+    ...(scope === "project" ? { project: projectKey() } : {}),
     ...(f.job ? { verified_usage: verifiedUsage(ref, f.job) } : {}),
     created_at: now,
     updated_at: now,
@@ -261,7 +284,7 @@ export function registerCatalogCommand(program: Command): void {
     requireRef(refText);
     const detail = offeringWithQuotes(refText, flags);
     const quotes = detail.quotes;
-    const feedback = readFeedback().filter((f) => f.ref === detail.offering.ref);
+    const feedback = feedbackHere().filter((f) => f.ref === detail.offering.ref);
     const usage =
       usageReport(readHistory(), "model").rows.find((r) => r.key === detail.offering.ref) ?? null;
     const result = {
@@ -325,6 +348,10 @@ export function registerCatalogCommand(program: Command): void {
         console.log(`-  ${q.ref}  ${q.status}: ${q.reason ?? ""}`);
       }
       for (const ref of result.unpriced) console.log(`-  ${ref}  unknown: no sourced rate`);
+      if (result.needs) {
+        const flagsNeeded = result.needs.map((k) => `--${k.replace("_", "-")}`).join(", ");
+        console.log(`\nNothing ranked: give ${flagsNeeded} to compare like for like.`);
+      }
       console.log(`\n${result.note}`);
     });
   });
@@ -394,7 +421,7 @@ export function registerCatalogCommand(program: Command): void {
       offerings,
       quotes,
       usage,
-      feedback: readFeedback(),
+      feedback: feedbackHere(),
       ready: (g) => groupReady(g),
       limit: Math.max(1, Number.parseInt(flags.limit, 10) || 10),
     });

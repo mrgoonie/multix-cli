@@ -247,9 +247,12 @@ export async function handleApi(
     routeName = parts[0] ?? "root";
     const caller = await authenticate(app, request);
     if (caller instanceof Response) return caller;
-    // Only the catalog, the price book and jobs use the decrypted keys; the other routes must keep
-    // working (e.g. to revoke an API key) even if a stored key cannot be decrypted.
-    const needsKeys = routeName === "catalog" || routeName === "price-book" || routeName === "jobs";
+    // Only the catalog, the price book's providers view (readiness) and jobs use the decrypted
+    // keys; the other routes must keep working (e.g. to revoke an API key) even if a stored key
+    // cannot be decrypted.
+    const priceBookKeys =
+      routeName === "price-book" && (url.searchParams.get("view") ?? "providers") === "providers";
+    const needsKeys = routeName === "catalog" || priceBookKeys || routeName === "jobs";
     const keys: ProviderKeys = needsKeys ? await app.accounts.providerKeys(caller.account.id) : {};
     // Scrub the caller's own key values from any error message that echoes CLI output.
     secrets = secretValues(keys);
