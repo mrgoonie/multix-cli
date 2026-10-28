@@ -60,7 +60,7 @@ export async function startHeadSpin(stage: HTMLElement): Promise<void> {
   let clock = 0; // seconds of motion; frozen while paused
   let unlockedAt = Number.NEGATIVE_INFINITY;
   // Senses unlocked before the canvas arrived start fully lit, so the swap does not replay them.
-  const startLevel = stage.classList.contains("is-unlocked") ? 1 : 0;
+  const startLevel: number = stage.classList.contains("is-unlocked") ? 1 : 0;
   const levels = SENSE_NAMES.map(() => startLevel); // 0 … 1 per sense
 
   const readInk = () => {
