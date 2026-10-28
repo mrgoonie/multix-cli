@@ -136,6 +136,16 @@ export const COMMAND_CAPABILITIES: Readonly<Record<string, CommandCapability>> =
   "heygen lipsync": fixed(["video-edit"], ["video"]),
   "heygen tts": fixed(["speech"], ["audio"]),
   "heygen run": fixed(["any"], []),
+  "topview url-to-video": fixed(["avatar-video"], ["video"]),
+  "topview materials-to-video": fixed(["avatar-video"], ["video"]),
+  "topview export": fixed(["avatar-video"], ["video"]),
+  "topview video-avatar": fixed(["avatar-video"], ["video"]),
+  "topview product-avatar image": fixed(["image-edit"], ["image"]),
+  "topview product-avatar video": fixed(["avatar-video"], ["video"]),
+  "topview product-anyshoot model": fixed(["image-edit"], ["image"]),
+  "topview product-anyshoot background": fixed(["image-edit"], ["image"]),
+  // Only the API Platform routes its docs list (`topview models`) are accepted.
+  "topview generate": fixed(["video", "image-to-video", "image", "image-edit"], ["video", "image"]),
   "doc convert": fixed(["document"], ["text"]),
   // Routes to the one provider --provider names and checks --model against
   // that provider's documented TTS models before any request.
@@ -198,6 +208,9 @@ export const UTILITY_COMMANDS: ReadonlySet<string> = new Set([
   "heygen styles",
   "heygen languages",
   "heygen me",
+  "topview status",
+  "topview upload",
+  "topview models",
   "speech models",
   "media optimize",
   "media split",

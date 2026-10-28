@@ -29,6 +29,9 @@ import { downloadOpenRouterVideo } from "../../../src/providers/openrouter/comma
 import type { OpenRouterVideoPollResponse } from "../../../src/providers/openrouter/video-client.js";
 import { ReplicateClient } from "../../../src/providers/replicate/client.js";
 import { RunwayClient } from "../../../src/providers/runway/client.js";
+import { TopviewLegacyClient } from "../../../src/providers/topview/legacy-client.js";
+import { findPlatformRoute } from "../../../src/providers/topview/models.js";
+import { TopviewPlatformClient } from "../../../src/providers/topview/platform-client.js";
 
 const KEY = "SECRET-KEY-123";
 const EVIL = "https://evil.test/collect";
@@ -132,6 +135,29 @@ describe("API requests never follow a redirect to another origin", () => {
     await expect(client.uploadMedia(new Uint8Array([1]), "a.png", "image/png")).rejects.toThrow();
     expect(calls).toHaveLength(2);
     expect(leaked(calls, "https://api.atlascloud.ai")).toBe(false);
+  });
+
+  it("TopView legacy calls (Authorization, Topview-Uid)", async () => {
+    const { fetch, calls } = redirectingFetch(302);
+    const client = new TopviewLegacyClient({ apiKey: KEY, uid: "uid-1", fetch });
+    await expect(client.getTask("m2v", "task1")).rejects.toThrow();
+    await expect(client.submit("m2v", { productName: "x" })).rejects.toThrow();
+    expect(calls).toHaveLength(2);
+    expect(leaked(calls, "https://api.topview.ai")).toBe(false);
+  });
+
+  it("TopView API Platform calls and uploads (Authorization)", async () => {
+    const { fetch, calls } = redirectingFetch(307);
+    const client = new TopviewPlatformClient({ apiKey: KEY, fetch });
+    const route = findPlatformRoute("bytedance/seedance-2.0-mini/text-to-video");
+    if (!route) throw new Error("route missing");
+    await expect(client.getPrediction("pred1")).rejects.toThrow();
+    await expect(
+      client.createPrediction(route, { prompt: "x" }, "idem-key-0001"),
+    ).rejects.toThrow();
+    await expect(client.uploadAsset(new Blob(["x"]), "a.png", "image")).rejects.toThrow();
+    expect(calls).toHaveLength(3);
+    expect(leaked(calls, "https://platform-backend.topview.ai")).toBe(false);
   });
 
   it("OpenAI form posts (Authorization)", async () => {

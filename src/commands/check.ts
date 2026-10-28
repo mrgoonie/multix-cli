@@ -18,6 +18,7 @@ import {
   legacyClaudeEnvFiles,
   redact,
   resolveFirstKey,
+  resolveKey,
 } from "../core/env-loader.js";
 import { createLogger } from "../core/logger.js";
 import { ATLAS_ROUTING } from "../providers/atlascloud/models.js";
@@ -35,6 +36,11 @@ import { LEONARDO_ROUTING } from "../providers/leonardo/models.js";
 import { checkCodexAuthenticated } from "../providers/openai/codex-image-driver.js";
 import { REPLICATE_ROUTING } from "../providers/replicate/models.js";
 import { RUNWAY_ROUTING } from "../providers/runway/models.js";
+import {
+  TOPVIEW_LEGACY_ROUTING,
+  TOPVIEW_PLATFORM_ROUTING,
+  TOPVIEW_UID_ENV,
+} from "../providers/topview/models.js";
 import { checkBinary } from "./check-helpers/binary-check.js";
 import { pingGemini } from "./check-helpers/gemini-ping.js";
 import { FFMPEG_HINT, MAGICK_HINT, SETUP_HINTS } from "./check-helpers/setup-hints.js";
@@ -82,6 +88,8 @@ const BASE_URL_ROUTING: readonly BaseUrlRouting[] = [
   LEONARDO_ROUTING,
   REPLICATE_ROUTING,
   RUNWAY_ROUTING,
+  TOPVIEW_LEGACY_ROUTING,
+  TOPVIEW_PLATFORM_ROUTING,
 ];
 
 export type ReportLine = { level: "info" | "warn"; message: string };
@@ -230,6 +238,12 @@ export function registerCheckCommand(program: Command): void {
         } else {
           logger.warn(`${p.envPrimary} not set (${p.name} features unavailable)`);
         }
+      }
+
+      if (resolved.get("TopView (legacy API)")?.key && !resolveKey(TOPVIEW_UID_ENV)?.trim()) {
+        logger.warn(
+          `${TOPVIEW_UID_ENV} not set: TopView legacy commands need it with TOPVIEW_API_KEY`,
+        );
       }
 
       const cloudflare = cloudflareReadiness();

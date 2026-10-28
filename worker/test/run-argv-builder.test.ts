@@ -628,3 +628,59 @@ describe("helpers", () => {
     expect(safeFileName("https://a.example.com/..")).toBe("input");
   });
 });
+
+describe("prepareRun: topview", () => {
+  it("refuses a product link to a private host and passes a public one", () => {
+    rejects(
+      { command: "topview url-to-video", options: { "product-link": "https://169.254.169.254/x" } },
+      /private|public/,
+    );
+    const prepared = run({
+      command: "topview url-to-video",
+      options: { "product-link": "https://shop.example.com/p/1", async: true },
+    });
+    expect(prepared.argv).toContain("--product-link=https://shop.example.com/p/1");
+  });
+
+  it("passes asset references through and refuses a local path", async () => {
+    const prepared = run({
+      command: "topview materials-to-video",
+      options: { file: ["asset:f1"], "product-name": "Mug" },
+    });
+    expect(prepared.argv).toContain("--file=asset:f1");
+    const parsed = await parseWithCli(prepared.argv, "topview materials-to-video");
+    expect(parsed.opts.file).toEqual(["asset:f1"]);
+    expect(() =>
+      run({
+        command: "topview materials-to-video",
+        options: { file: "/etc/passwd", "product-name": "M" },
+      }),
+    ).toThrow(ValidationError);
+  }, 120_000);
+
+  it("rejects an @file JSON body", () => {
+    rejects(
+      {
+        command: "topview generate",
+        args: ["bytedance/seedance-2.0-mini/text-to-video"],
+        options: { input: "@/proc/self/environ" },
+      },
+      /@/,
+    );
+  });
+
+  it("gives a TopView job only the TopView keys and UID", () => {
+    const prepared = run({ command: "topview status", args: ["t1"], options: { task: "m2v" } });
+    const keys: ProviderKeys = {
+      TOPVIEW_API_KEY: "tv-legacy",
+      TOPVIEW_UID: "uid-1",
+      TOPVIEW_API_PLATFORM_KEY: "tv-platform",
+      HEYGEN_API_KEY: "hg",
+    };
+    expect(jobEnv(prepared.keyGroups, keys)).toEqual({
+      TOPVIEW_API_KEY: "tv-legacy",
+      TOPVIEW_UID: "uid-1",
+      TOPVIEW_API_PLATFORM_KEY: "tv-platform",
+    });
+  });
+});

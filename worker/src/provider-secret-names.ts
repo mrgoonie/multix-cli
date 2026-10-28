@@ -1,7 +1,8 @@
 /**
  * Every provider credential an account can store from the dashboard: the key
  * env names the CLI reads (src/providers/provider-keys.ts, primary then
- * fallback, in the CLI's order) plus the Cloudflare Workers AI names.
+ * fallback, in the CLI's order), TOPVIEW_UID (sent with the legacy TopView key)
+ * and the Cloudflare Workers AI names.
  *
  * Kept as a literal table rather than imported: provider-keys.ts type-imports
  * src/core/env-loader.ts, which pulls Node types into the Worker typecheck.
@@ -34,7 +35,12 @@ const CLI_KEY_NAMES = [
   "REPLICATE_API_KEY",
   "RUNWAYML_API_SECRET",
   "HEYGEN_API_KEY",
+  "TOPVIEW_API_KEY",
+  "TOPVIEW_API_PLATFORM_KEY",
 ] as const;
+
+/** Not a key but sent with TOPVIEW_API_KEY on every legacy TopView request (Topview-Uid). */
+const TOPVIEW_UID_NAMES = ["TOPVIEW_UID"] as const;
 
 const CLOUDFLARE_NAMES = [
   "CLOUDFLARE_ACCOUNT_ID",
@@ -43,7 +49,11 @@ const CLOUDFLARE_NAMES = [
 ] as const;
 
 /** Every name an account can store, in dashboard order. */
-export const PROVIDER_SECRET_NAMES = [...CLI_KEY_NAMES, ...CLOUDFLARE_NAMES] as const;
+export const PROVIDER_SECRET_NAMES = [
+  ...CLI_KEY_NAMES,
+  ...TOPVIEW_UID_NAMES,
+  ...CLOUDFLARE_NAMES,
+] as const;
 export type ProviderSecretName = (typeof PROVIDER_SECRET_NAMES)[number];
 
 /** Plaintext provider keys of one account, keyed by env name. */
@@ -92,11 +102,26 @@ export const CLI_PROVIDER_KEY_GROUPS: readonly ProviderKeyGroup[] = [
   },
   { provider: "Runway", link: "https://dev.runwayml.com/", names: ["RUNWAYML_API_SECRET"] },
   { provider: "HeyGen", link: "https://app.heygen.com/developers/api", names: ["HEYGEN_API_KEY"] },
+  {
+    provider: "TopView (legacy API)",
+    link: "https://www.topview.ai/dashboard/home",
+    names: ["TOPVIEW_API_KEY"],
+  },
+  {
+    provider: "TopView API Platform",
+    link: "https://platform.topview.ai",
+    names: ["TOPVIEW_API_PLATFORM_KEY"],
+  },
 ];
 
-/** Dashboard groups: the CLI providers, then Cloudflare Workers AI. */
+/** Dashboard groups: the CLI providers, the TopView UID, then Cloudflare Workers AI. */
 export const PROVIDER_KEY_GROUPS: readonly ProviderKeyGroup[] = [
   ...CLI_PROVIDER_KEY_GROUPS,
+  {
+    provider: "TopView (legacy API) UID",
+    link: "https://www.topview.ai/dashboard/home",
+    names: TOPVIEW_UID_NAMES,
+  },
   {
     provider: "Cloudflare Workers AI",
     link: "https://dash.cloudflare.com/profile/api-tokens",

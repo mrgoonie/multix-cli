@@ -18,6 +18,8 @@ To configure multix, set at least one provider API key:
     Replicate          : https://replicate.com/account/api-tokens
     Runway             : https://dev.runwayml.com/
     HeyGen             : https://app.heygen.com/developers/api
+    TopView (legacy)   : https://www.topview.ai/dashboard/home → API Settings (TOPVIEW_API_KEY + TOPVIEW_UID, plan credits)
+    TopView Platform   : https://platform.topview.ai → API keys (TOPVIEW_API_PLATFORM_KEY, separate USD balance)
 
   Option A — user global config (recommended):
     echo 'GEMINI_API_KEY=your-key' >> ~/.multix/.env
