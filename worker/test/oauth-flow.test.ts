@@ -283,11 +283,11 @@ describe("dashboard protections", () => {
       intent: "save",
     });
     expect(await (await browser.request("/dashboard")).text()).toContain(
-      `<span class="badge ok">Saved`,
+      `<span class="dot" aria-hidden="true"></span>Saved `,
     );
     await browser.post("/dashboard/secrets", { csrf, name: "HEYGEN_API_KEY", intent: "delete" });
     expect(await (await browser.request("/dashboard")).text()).not.toContain(
-      `<span class="badge ok">Saved`,
+      `<span class="dot" aria-hidden="true"></span>Saved `,
     );
   });
 
