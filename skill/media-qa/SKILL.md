@@ -1,7 +1,7 @@
 ---
 name: media-qa
 description: Optimize, compress, resize, convert, split and batch-process video, audio and image files with multix (ffmpeg + ImageMagick), and inspect or verify media offline against QA profiles (black or frozen frames, silence, clipping, truncation, loudness, duration, aspect) with sha256-bound receipts, frame extraction and receipt checks. Local only, no provider key or cost.
-version: 1.22.0-beta.2 # x-release-please-version
+version: 1.22.0-beta.3 # x-release-please-version
 license: MIT
 metadata:
   tasks: analysis
