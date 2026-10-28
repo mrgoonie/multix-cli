@@ -39,7 +39,13 @@ export type PriceMeter =
   /** Seconds of audio the model returns. */
   | "output_audio_seconds"
   /** Successful requests, whatever they return (Fish voice design). */
-  | "requests";
+  | "requests"
+  /** Seconds of video the model returns. */
+  | "output_video_seconds"
+  /** Video tokens: output frame area x seconds x frame rate / 1024 (Seedance). */
+  | "video_tokens"
+  /** Images the model returns. */
+  | "output_images";
 
 export interface PriceComponent {
   meter: PriceMeter;

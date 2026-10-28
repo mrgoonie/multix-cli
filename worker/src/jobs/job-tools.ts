@@ -14,6 +14,7 @@ import {
   parseCostPolicy,
 } from "../../../src/budget/command-cost.js";
 import { TASKS } from "../../../src/capabilities/capability-types.js";
+import { CATALOG_VIEWS, OFFERING_SORTS } from "../../../src/catalog/catalog-query.js";
 import { BudgetError } from "../../../src/core/errors.js";
 import type { Limits } from "../config.js";
 import type { ProviderKeys } from "../provider-secret-names.js";
@@ -24,6 +25,7 @@ import {
   type JobToolsContext,
   MAX_WAIT_SECONDS,
 } from "./job-runner.js";
+import { modelCatalogPayload } from "./model-catalog-view.js";
 import { prepareRun } from "./run-argv-builder.js";
 import { MAX_INPUT_FILES } from "./run-input-files.js";
 import { toolInput } from "./tool-input-schema.js";
@@ -111,6 +113,53 @@ export function registerJobTools(
         "multix_catalog",
         { group: args.group, task: args.task, model: args.model },
         async () => catalogPayload(keys, args.group, { task: args.task, model: args.model }),
+      ),
+  );
+
+  server.registerTool(
+    "multix_model_catalog",
+    {
+      title: "multix model & provider catalogue",
+      description:
+        "Compare models and providers before running one. view providers: provider links and whether you saved keys. view models: offerings (provider + model) with tasks, the multix command and prices per configuration (resolution, audio), each with its source URL and check date. view show: one offering. view compare: quote every offering for one exact request (task, resolution, duration_s, audio, aspect_ratio, images); only prices the source confirms for that configuration are ranked, the rest are not_comparable or unknown with the reason, never $0. Price says nothing about quality. Never returns key values.",
+      inputSchema: toolInput({
+        view: z.enum(CATALOG_VIEWS).describe("providers, models, show or compare"),
+        task: z.enum(TASKS).optional().describe("Task filter, e.g. video, image-to-video, speech"),
+        provider: z
+          .string()
+          .regex(/^[a-z0-9-]{1,40}$/)
+          .optional()
+          .describe("Provider group, e.g. fal, atlas"),
+        family: z
+          .string()
+          .regex(/^[a-z0-9.-]{1,60}$/)
+          .optional()
+          .describe("Model family, e.g. seedance-2.5"),
+        query: z.string().max(100).optional().describe("Text in the offering id, name or family"),
+        offering: z
+          .string()
+          .max(250)
+          .optional()
+          .describe("show: <provider>:<model>, e.g. fal:bytedance/seedance-2.5/text-to-video"),
+        priced: z.boolean().optional().describe("models: only offerings with a current price"),
+        ready: z.boolean().optional().describe("Only providers you saved keys for"),
+        resolution: z.string().max(20).optional().describe("480p, 720p, 1080p or 4k"),
+        duration_s: z.number().positive().max(3600).optional().describe("compare: video seconds"),
+        audio: z.boolean().optional().describe("Generated audio on or off"),
+        aspect_ratio: z.string().max(10).optional().describe("compare: e.g. 16:9"),
+        images: z.number().int().positive().max(100).optional().describe("compare: images"),
+        sort: z
+          .enum(OFFERING_SORTS as [string, ...string[]])
+          .optional()
+          .describe("models: sort"),
+      }),
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async (args) =>
+      runTool(
+        "multix_model_catalog",
+        { view: args.view, task: args.task, provider: args.provider, offering: args.offering },
+        async () => modelCatalogPayload(keys, args),
       ),
   );
 
