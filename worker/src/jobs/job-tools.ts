@@ -24,6 +24,7 @@ import {
   type JobToolsContext,
   MAX_WAIT_SECONDS,
 } from "./job-runner.js";
+import { priceBookArgsSchema, priceBookView } from "./price-book-view.js";
 import { prepareRun } from "./run-argv-builder.js";
 import { MAX_INPUT_FILES } from "./run-input-files.js";
 import { toolInput } from "./tool-input-schema.js";
@@ -111,6 +112,23 @@ export function registerJobTools(
         "multix_catalog",
         { group: args.group, task: args.task, model: args.model },
         async () => catalogPayload(keys, args.group, { task: args.task, model: args.model }),
+      ),
+  );
+
+  server.registerTool(
+    "multix_price_book",
+    {
+      title: "multix price book",
+      description:
+        "Providers, model offerings and their sourced list prices, the same data as `multix catalog --json`. view providers: each provider with tasks, docs, pricing page and whether you saved its keys. view models: offerings with price status (unknown prices stay unknown, never $0); filter by task, provider, family, priced, verified. view show (ref = provider:model): every rate with source, check date and freshness, quoted at the configuration you pass. view compare (family): one model family across providers at one configuration (resolution, duration, aspect_ratio, audio, count), cheapest first among like-for-like quotes; the rest are listed with the reason they cannot be ranked. List prices only; a lower price says nothing about quality. Never returns key values.",
+      inputSchema: toolInput(priceBookArgsSchema),
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async (args) =>
+      runTool(
+        "multix_price_book",
+        { view: args.view, ref: args.ref, family: args.family },
+        async () => priceBookView(keys, args),
       ),
   );
 

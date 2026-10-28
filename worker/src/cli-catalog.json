@@ -13150,6 +13150,845 @@
       ]
     },
     {
+      "group": "catalog",
+      "description": "Providers, model offerings, sourced prices, like-for-like price comparison, usage through multix, and your ratings, reviews and use-case notes",
+      "commands": [
+        {
+          "command": "catalog providers",
+          "description": "Providers with their tasks, docs, pricing page, key readiness and priced offerings",
+          "positionals": [],
+          "options": []
+        },
+        {
+          "command": "catalog models",
+          "description": "Model offerings (verified or priced) with their price status; unknown prices stay unknown",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--task",
+              "flags": "-t, --task <task>",
+              "description": "Only offerings for this task",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-t"
+            },
+            {
+              "long": "--provider",
+              "flags": "-p, --provider <group>",
+              "description": "Only this provider group",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-p"
+            },
+            {
+              "long": "--family",
+              "flags": "-f, --family <family>",
+              "description": "Only this model family, e.g. seedance-2.0",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-f"
+            },
+            {
+              "long": "--priced",
+              "flags": "--priced",
+              "description": "Only offerings with a current price",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--verified",
+              "flags": "--verified",
+              "description": "Only offerings verified by multix",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            }
+          ]
+        },
+        {
+          "command": "catalog show",
+          "description": "One offering (<provider>:<model>): capabilities, every rate with source and freshness, ratings and notes",
+          "positionals": [
+            {
+              "name": "ref",
+              "description": "",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--task",
+              "flags": "-t, --task <task>",
+              "description": "Task (image, image-edit, video, image-to-video, video-edit, speech, transcription, music, sfx, voice, 3d, analysis, document, avatar-video, any)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-t"
+            },
+            {
+              "long": "--resolution",
+              "flags": "--resolution <r>",
+              "description": "Output resolution, e.g. 720p",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--duration",
+              "flags": "--duration <s>",
+              "description": "Clip length in seconds",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--aspect-ratio",
+              "flags": "--aspect-ratio <r>",
+              "description": "Aspect ratio, e.g. 16:9",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--audio",
+              "flags": "--audio <on|off>",
+              "description": "Generated audio on or off",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--count",
+              "flags": "--count <n>",
+              "description": "Images per request",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            }
+          ]
+        },
+        {
+          "command": "catalog compare",
+          "description": "Compare one model family across providers at the same configuration; non-equivalent or unknown prices are listed, never ranked",
+          "positionals": [
+            {
+              "name": "family",
+              "description": "",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--task",
+              "flags": "-t, --task <task>",
+              "description": "Task (image, image-edit, video, image-to-video, video-edit, speech, transcription, music, sfx, voice, 3d, analysis, document, avatar-video, any)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-t"
+            },
+            {
+              "long": "--resolution",
+              "flags": "--resolution <r>",
+              "description": "Output resolution, e.g. 720p",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--duration",
+              "flags": "--duration <s>",
+              "description": "Clip length in seconds",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--aspect-ratio",
+              "flags": "--aspect-ratio <r>",
+              "description": "Aspect ratio, e.g. 16:9",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--audio",
+              "flags": "--audio <on|off>",
+              "description": "Generated audio on or off",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--count",
+              "flags": "--count <n>",
+              "description": "Images per request",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            }
+          ]
+        },
+        {
+          "command": "catalog usage",
+          "description": "Usage through multix from the local history: runs, operations, attempts, success, latency, actual vs estimated cost",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--by",
+              "flags": "--by <dim>",
+              "description": "provider, model, task or command",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "model"
+            },
+            {
+              "long": "--provider",
+              "flags": "-p, --provider <group>",
+              "description": "Only this provider group",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-p"
+            },
+            {
+              "long": "--since",
+              "flags": "--since <age>",
+              "description": "Only runs newer than 30m, 12h, 7d or an ISO date",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            }
+          ]
+        },
+        {
+          "command": "catalog recommend",
+          "description": "Suggest offerings for a task and use case, each with its reasons, caveats and evidence",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--use-case",
+              "flags": "-u, --use-case <slug>",
+              "description": "Use case to weigh your notes and ratings for",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-u"
+            },
+            {
+              "long": "--limit",
+              "flags": "-n, --limit <n>",
+              "description": "How many",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-n",
+              "default": "10"
+            },
+            {
+              "long": "--task",
+              "flags": "-t, --task <task>",
+              "description": "Task (image, image-edit, video, image-to-video, video-edit, speech, transcription, music, sfx, voice, 3d, analysis, document, avatar-video, any)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-t"
+            },
+            {
+              "long": "--resolution",
+              "flags": "--resolution <r>",
+              "description": "Output resolution, e.g. 720p",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--duration",
+              "flags": "--duration <s>",
+              "description": "Clip length in seconds",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--aspect-ratio",
+              "flags": "--aspect-ratio <r>",
+              "description": "Aspect ratio, e.g. 16:9",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--audio",
+              "flags": "--audio <on|off>",
+              "description": "Generated audio on or off",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--count",
+              "flags": "--count <n>",
+              "description": "Images per request",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            }
+          ]
+        },
+        {
+          "command": "catalog rate",
+          "description": "Rate an offering 1-5 (rating again for the same use case replaces it)",
+          "positionals": [
+            {
+              "name": "ref",
+              "description": "",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--score",
+              "flags": "-s, --score <n>",
+              "description": "1 to 5",
+              "required": true,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-s"
+            },
+            {
+              "long": "--aspect",
+              "flags": "--aspect <name=score>",
+              "description": "Aspect score: quality, fidelity, motion, audio, speed, value, reliability (repeatable)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--text",
+              "flags": "--text <text>",
+              "description": "Optional comment",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--task",
+              "flags": "-t, --task <task>",
+              "description": "Task the feedback is about",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-t"
+            },
+            {
+              "long": "--use-case",
+              "flags": "-u, --use-case <slug>",
+              "description": "Use case, e.g. product-ugc, vietnamese-tts",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-u"
+            },
+            {
+              "long": "--tag",
+              "flags": "--tag <tag>",
+              "description": "Tag (repeatable)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--model-version",
+              "flags": "--model-version <v>",
+              "description": "Model version or date you used",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--scope",
+              "flags": "--scope <scope>",
+              "description": "private (default) or project",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "private"
+            },
+            {
+              "long": "--job",
+              "flags": "--job <id>",
+              "description": "Local history run id or provider job id: marks the feedback as verified usage",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            }
+          ]
+        },
+        {
+          "command": "catalog review",
+          "description": "Write a review of an offering",
+          "positionals": [
+            {
+              "name": "ref",
+              "description": "",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--text",
+              "flags": "--text <text>",
+              "description": "Review text (no prompts, keys, signed URLs or personal data)",
+              "required": true,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--score",
+              "flags": "-s, --score <n>",
+              "description": "Optional 1 to 5",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-s"
+            },
+            {
+              "long": "--pro",
+              "flags": "--pro <text>",
+              "description": "Pro (repeatable)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--con",
+              "flags": "--con <text>",
+              "description": "Con (repeatable)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--task",
+              "flags": "-t, --task <task>",
+              "description": "Task the feedback is about",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-t"
+            },
+            {
+              "long": "--use-case",
+              "flags": "-u, --use-case <slug>",
+              "description": "Use case, e.g. product-ugc, vietnamese-tts",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-u"
+            },
+            {
+              "long": "--tag",
+              "flags": "--tag <tag>",
+              "description": "Tag (repeatable)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--model-version",
+              "flags": "--model-version <v>",
+              "description": "Model version or date you used",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--scope",
+              "flags": "--scope <scope>",
+              "description": "private (default) or project",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "private"
+            },
+            {
+              "long": "--job",
+              "flags": "--job <id>",
+              "description": "Local history run id or provider job id: marks the feedback as verified usage",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            }
+          ]
+        },
+        {
+          "command": "catalog note",
+          "description": "Record when to use or avoid an offering for a use case",
+          "positionals": [
+            {
+              "name": "ref",
+              "description": "",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--verdict",
+              "flags": "--verdict <use|avoid>",
+              "description": "use or avoid for --use-case",
+              "required": true,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--text",
+              "flags": "--text <text>",
+              "description": "Why",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--strength",
+              "flags": "--strength <text>",
+              "description": "Strength (repeatable)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--weakness",
+              "flags": "--weakness <text>",
+              "description": "Weakness (repeatable)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--limitation",
+              "flags": "--limitation <text>",
+              "description": "Limitation (repeatable)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--source",
+              "flags": "--source <text>",
+              "description": "Where the claim comes from (a run, a benchmark, a doc)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--task",
+              "flags": "-t, --task <task>",
+              "description": "Task the feedback is about",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-t"
+            },
+            {
+              "long": "--use-case",
+              "flags": "-u, --use-case <slug>",
+              "description": "Use case, e.g. product-ugc, vietnamese-tts",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-u"
+            },
+            {
+              "long": "--tag",
+              "flags": "--tag <tag>",
+              "description": "Tag (repeatable)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--model-version",
+              "flags": "--model-version <v>",
+              "description": "Model version or date you used",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--scope",
+              "flags": "--scope <scope>",
+              "description": "private (default) or project",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "private"
+            },
+            {
+              "long": "--job",
+              "flags": "--job <id>",
+              "description": "Local history run id or provider job id: marks the feedback as verified usage",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            }
+          ]
+        },
+        {
+          "command": "catalog feedback",
+          "description": "List your ratings, reviews and notes (all, or one offering); --json exports them",
+          "positionals": [
+            {
+              "name": "ref",
+              "description": "",
+              "required": false,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--use-case",
+              "flags": "-u, --use-case <slug>",
+              "description": "Only this use case",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-u"
+            },
+            {
+              "long": "--kind",
+              "flags": "--kind <kind>",
+              "description": "rating, review or note",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            }
+          ]
+        },
+        {
+          "command": "catalog edit",
+          "description": "Change fields of one of your ratings, reviews or notes",
+          "positionals": [
+            {
+              "name": "id",
+              "description": "",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--score",
+              "flags": "-s, --score <n>",
+              "description": "1 to 5",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-s"
+            },
+            {
+              "long": "--text",
+              "flags": "--text <text>",
+              "description": "Text",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--use-case",
+              "flags": "-u, --use-case <slug>",
+              "description": "Use case",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-u"
+            },
+            {
+              "long": "--verdict",
+              "flags": "--verdict <use|avoid>",
+              "description": "Note verdict",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--tag",
+              "flags": "--tag <tag>",
+              "description": "Replace tags (repeatable)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            }
+          ]
+        },
+        {
+          "command": "catalog delete",
+          "description": "Delete one of your ratings, reviews or notes",
+          "positionals": [
+            {
+              "name": "id",
+              "description": "",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": []
+        }
+      ]
+    },
+    {
       "group": "guide",
       "description": "Agent protocol in one screen: discover, dry-run, --json envelope, errors, history",
       "commands": [

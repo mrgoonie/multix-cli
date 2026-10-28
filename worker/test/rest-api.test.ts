@@ -257,6 +257,24 @@ describe("REST API jobs", () => {
     expect((await api(browser, key, "/catalog?task=telepathy")).status).toBe(400);
     expect((await api(browser, key, "/catalog?model=bad%20id")).status).toBe(400);
 
+    const compare = await body(
+      await api(
+        browser,
+        key,
+        "/price-book?view=compare&family=seedance-2.0&resolution=720p&duration=10",
+      ),
+    );
+    expect(compare.comparison.comparable[0]).toMatchObject({ provider: "byteplus", amount: 1.5 });
+    const providers = await body(await api(browser, key, "/price-book?view=providers"));
+    expect(providers.providers.find((p: Json) => p.provider === "gemini").ready).toBe(true);
+    expect(JSON.stringify(providers)).not.toContain(GEMINI_KEY);
+    expect((await api(browser, key, "/price-book?view=compare")).status).toBe(400);
+    expect((await api(browser, key, "/price-book?view=models&priced=maybe")).status).toBe(400);
+    expect((await api(browser, key, "/price-book?view=compare&family=x&duration=-1")).status).toBe(
+      400,
+    );
+    expect((await api(browser, key, "/price-book", { method: "POST" })).status).toBe(405);
+
     const run = await api(browser, key, "/jobs", {
       method: "POST",
       body: JSON.stringify({ command: "gemini generate", options: { prompt: "a cat" } }),

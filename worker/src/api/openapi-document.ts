@@ -6,6 +6,7 @@
  */
 
 import { TASKS } from "../../../src/capabilities/capability-types.js";
+import { PRICE_BOOK_VIEWS } from "../../../src/catalog/price-book-view.js";
 import { MAX_API_KEYS_PER_ACCOUNT } from "../accounts/api-key-store.js";
 import { EVENT_NAMES } from "../events/event-catalog.js";
 import {
@@ -210,6 +211,98 @@ export function openApiDocument(origin: string): Json {
             },
           ],
           responses: { ...ok("Catalog", { type: "object" }), ...ERRORS },
+        },
+      },
+      "/price-book": {
+        get: {
+          summary: "Providers, offerings and sourced list prices",
+          description:
+            "The same data as multix_price_book and `multix catalog --json`. view=providers: providers with tasks, docs, pricing page and whether your saved keys cover them. view=models: offerings with price status; unknown prices stay unknown, never 0. view=show&ref=provider:model: every rate with source, check date and freshness, quoted at the configuration given. view=compare&family=…: one model family across providers at one configuration, like-for-like quotes ranked cheapest first, the rest listed with the reason they are not comparable. List prices only.",
+          operationId: "getPriceBook",
+          parameters: [
+            {
+              name: "view",
+              in: "query",
+              required: true,
+              schema: { type: "string", enum: [...PRICE_BOOK_VIEWS] },
+              example: "compare",
+            },
+            {
+              name: "ref",
+              in: "query",
+              required: false,
+              schema: { type: "string" },
+              example: "fal:bytedance/seedance-2.0/text-to-video",
+              description: "view show: <provider>:<model>",
+            },
+            {
+              name: "family",
+              in: "query",
+              required: false,
+              schema: { type: "string" },
+              example: "seedance-2.0",
+              description: "view compare (required) or models",
+            },
+            {
+              name: "provider",
+              in: "query",
+              required: false,
+              schema: { type: "string" },
+              example: "fal",
+              description: "view models: one provider group",
+            },
+            {
+              name: "task",
+              in: "query",
+              required: false,
+              schema: { type: "string", enum: [...TASKS] },
+              example: "video",
+            },
+            {
+              name: "priced",
+              in: "query",
+              required: false,
+              schema: { type: "boolean" },
+              description: "view models: only offerings with a current price",
+            },
+            {
+              name: "verified",
+              in: "query",
+              required: false,
+              schema: { type: "boolean" },
+              description: "view models: only offerings verified by multix",
+            },
+            {
+              name: "resolution",
+              in: "query",
+              required: false,
+              schema: { type: "string" },
+              example: "720p",
+            },
+            {
+              name: "duration",
+              in: "query",
+              required: false,
+              schema: { type: "number", exclusiveMinimum: 0, maximum: 3600 },
+              example: 10,
+              description: "seconds",
+            },
+            {
+              name: "aspect_ratio",
+              in: "query",
+              required: false,
+              schema: { type: "string" },
+              example: "16:9",
+            },
+            { name: "audio", in: "query", required: false, schema: { type: "boolean" } },
+            {
+              name: "count",
+              in: "query",
+              required: false,
+              schema: { type: "integer", minimum: 1, maximum: 100 },
+            },
+          ],
+          responses: { ...ok("Price book view", { type: "object" }), ...ERRORS },
         },
       },
       "/jobs": {

@@ -42,6 +42,8 @@ export const PROJECT_ENV_EXCLUDED: ReadonlySet<string> = new Set([
   "MULTIX_LEGACY_CLAUDE_ENV",
   // Would let a repository choose where the run ledger (argv, prompts) is written.
   "MULTIX_HISTORY_FILE",
+  // Would let a repository choose (or seed) the ratings and notes `multix catalog recommend` reads.
+  "MULTIX_CATALOG_FEEDBACK_FILE",
   // Would let a repository choose (or seed) the model catalog cache `multix models --live` reads.
   "MULTIX_CACHE_DIR",
   // Per-run: one id in a project file would merge every run's spend into one operation.

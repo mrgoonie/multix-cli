@@ -44,7 +44,7 @@ import {
 import { jobIdentity, run, summarizeUsage } from "./run-state.js";
 
 /** Commands that are themselves agent tooling or setup: not recorded in history. */
-const UNRECORDED = /^(history|models|guide|rerun|check|update)\b/;
+const UNRECORDED = /^(history|models|catalog|guide|rerun|check|update)\b/;
 /** Read-only lookups that report another run's spend: counting it here would bill it twice in history. */
 const SPEND_LOOKUPS = /^openrouter generation\b/;
 /** Groups that run locally (ffmpeg/ImageMagick): dry run stops before the action. */
@@ -78,6 +78,7 @@ const NON_PROVIDER_GROUPS = new Set([
   "update",
   "media",
   "models",
+  "catalog",
   "guide",
   "history",
   "rerun",
@@ -107,7 +108,7 @@ function setCommand(names: string[]): void {
 }
 
 /** Groups where a dry run means nothing (no provider request, or their own flag). */
-const NO_DRY_RUN_GROUPS = new Set(["check", "models", "guide", "history", "rerun"]);
+const NO_DRY_RUN_GROUPS = new Set(["check", "models", "catalog", "guide", "history", "rerun"]);
 
 /**
  * Add --json to every command, and --dry-run plus the cost flags to every
