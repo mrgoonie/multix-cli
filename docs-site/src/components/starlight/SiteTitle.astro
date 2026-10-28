@@ -1,0 +1,63 @@
+---
+// Header brand: the "multix" wordmark and the positioning line, linking back
+// to the landing page of the current locale (siteTitleHref is "/" or "/vi/").
+const { siteTitle, siteTitleHref, lang } = Astro.locals.starlightRoute;
+// Starlight gives "/vi" for the Vietnamese root; the landing page lives at "/vi/".
+const homeHref = siteTitleHref.endsWith("/") ? siteTitleHref : `${siteTitleHref}/`;
+const positioning =
+  lang === "vi" ? "lớp đa phương thức cho AI agent" : "the multimodal layer for AI agents";
+---
+
+<a href={homeHref} class="site-title mx-brand">
+  <span class="mx-brand__mark" aria-hidden="true"></span>
+  <span class="mx-brand__name" translate="no">{siteTitle}</span>
+  <span class="mx-brand__line">{positioning}</span>
+</a>
+
+<style>
+  .mx-brand {
+    align-items: center;
+    color: var(--mx-text);
+    display: flex;
+    gap: 0.625rem;
+    min-width: 0;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  /* A single point of emitted light, the brand's only ornament. */
+  .mx-brand__mark {
+    background: var(--mx-accent);
+    border-radius: 50%;
+    box-shadow: 0 0 10px 1px var(--mx-glow);
+    flex: none;
+    height: 0.5rem;
+    width: 0.5rem;
+  }
+
+  .mx-brand__name {
+    font-size: 1.125rem;
+    font-weight: 600;
+    letter-spacing: var(--mx-tracking-tight);
+  }
+
+  .mx-brand__line {
+    color: var(--mx-text-muted);
+    display: none;
+    font-family: var(--mx-font-serif);
+    font-size: 1rem;
+    font-style: italic;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .mx-brand:hover .mx-brand__line {
+    color: var(--mx-text);
+  }
+
+  @media (min-width: 72rem) {
+    .mx-brand__line {
+      display: inline;
+    }
+  }
+</style>

@@ -1,0 +1,314 @@
+/*
+ * Docs chrome in the Obsidian style: page, glass header, search, pickers,
+ * sidebar, table of contents, focus, selection and scrollbars. Colours come
+ * from --mx-* tokens via the Starlight mapping in custom.css. No motion beyond
+ * short colour transitions, and none at all under reduced motion.
+ */
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  scrollbar-color: var(--mx-line-strong) transparent;
+}
+
+body {
+  background-color: var(--mx-bg);
+  /* A faint wash of light from above, static: the docs stay calm. */
+  background-image: radial-gradient(120% 60rem at 50% -24rem, var(--mx-glow-soft), transparent 70%);
+  background-repeat: no-repeat;
+  font-feature-settings: "ss01", "cv11";
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background-color: var(--mx-text);
+  color: var(--mx-bg);
+}
+
+:focus-visible {
+  outline: 2px solid var(--mx-focus);
+  outline-offset: 2px;
+  border-radius: var(--mx-radius-sm);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: var(--mx-line-strong);
+  background-clip: content-box;
+  border: 3px solid transparent;
+  border-radius: var(--mx-radius-pill);
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--mx-graphite-2);
+}
+
+/* Glass header */
+.page > .header {
+  background-color: var(--mx-surface-glass);
+  border-bottom: 1px solid var(--mx-line);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  backdrop-filter: blur(16px) saturate(140%);
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .page > .header {
+    background-color: var(--mx-bg);
+  }
+}
+
+.header .social-icons::after {
+  border-inline-end-color: var(--mx-line-strong);
+  height: 1.25rem;
+}
+
+.header .social-icons a {
+  color: var(--mx-text-muted);
+}
+.header .social-icons a:hover {
+  color: var(--mx-text);
+}
+
+/* Search trigger and dialog */
+site-search button[data-open-modal] {
+  color: var(--mx-text-muted);
+}
+
+@media (min-width: 50rem) {
+  site-search button[data-open-modal] {
+    background-color: var(--mx-surface);
+    border: 1px solid var(--mx-line-strong);
+    border-radius: var(--mx-radius-pill);
+    color: var(--mx-text-muted);
+    height: 2.25rem;
+    padding-inline: 0.875rem 0.375rem;
+  }
+  site-search button[data-open-modal]:hover {
+    border-color: var(--mx-graphite-2);
+    color: var(--mx-text);
+  }
+}
+
+site-search button[data-open-modal] > kbd {
+  background-color: var(--mx-surface-raised);
+  border: 1px solid var(--mx-line);
+  border-radius: var(--mx-radius-pill);
+  color: var(--mx-text-muted);
+  font-family: var(--mx-font-mono);
+}
+
+site-search dialog {
+  background-color: var(--mx-surface);
+  border: 1px solid var(--mx-line-strong);
+  box-shadow: var(--mx-shadow-lg);
+}
+
+@media (min-width: 50rem) {
+  site-search dialog {
+    border-radius: var(--mx-radius-lg);
+  }
+}
+
+site-search {
+  --pagefind-ui-primary: var(--mx-text);
+  --pagefind-ui-text: var(--sl-color-gray-2);
+  --pagefind-ui-background: var(--mx-surface);
+  --pagefind-ui-border: var(--mx-line-strong);
+  --pagefind-ui-tag: var(--mx-surface-raised);
+  --pagefind-ui-border-radius: var(--mx-radius-md);
+  --pagefind-ui-font: var(--mx-font-sans);
+}
+
+/* Theme and language pickers: quiet pills */
+starlight-theme-select label,
+starlight-lang-select label {
+  border: 1px solid var(--mx-line);
+  border-radius: var(--mx-radius-pill);
+  color: var(--mx-text-muted);
+  flex: none;
+}
+starlight-theme-select label:hover,
+starlight-lang-select label:hover,
+starlight-theme-select label:focus-within,
+starlight-lang-select label:focus-within {
+  border-color: var(--mx-line-strong);
+  color: var(--mx-text);
+}
+/* The select fills the pill; icons sit inside its border instead of on it. */
+starlight-theme-select select,
+starlight-lang-select select {
+  margin-inline: 0;
+  padding-block: 0.375rem;
+}
+/* Starlight sizes the language select for "English"; "Tiếng Việt" in Geist needs more room. */
+starlight-lang-select select {
+  width: 9.25em;
+}
+starlight-theme-select .label-icon,
+starlight-lang-select .label-icon {
+  inset-inline-start: 0.5rem;
+}
+starlight-theme-select .caret,
+starlight-lang-select .caret {
+  inset-inline-end: 0.375rem;
+}
+starlight-theme-select select:focus-visible,
+starlight-lang-select select:focus-visible {
+  outline: none;
+}
+starlight-theme-select label:has(select:focus-visible),
+starlight-lang-select label:has(select:focus-visible) {
+  outline: 2px solid var(--mx-focus);
+  outline-offset: 2px;
+}
+starlight-theme-select option,
+starlight-lang-select option {
+  background-color: var(--mx-surface);
+  color: var(--mx-text);
+}
+
+/* Sidebar */
+.sidebar-pane {
+  background-color: var(--mx-bg);
+}
+
+@media (min-width: 50rem) {
+  .sidebar-pane {
+    background-color: transparent;
+    border-inline-end: 1px solid var(--mx-line);
+  }
+}
+
+.sidebar-content summary .large,
+.sidebar-content .group-label .large {
+  color: var(--mx-text-faint);
+  font-family: var(--mx-font-mono);
+  font-size: var(--mx-text-xs);
+  font-weight: 500;
+  letter-spacing: var(--mx-tracking-caps);
+  text-transform: uppercase;
+}
+
+.sidebar-content ul ul li {
+  border-inline-start-color: var(--mx-line);
+}
+
+.sidebar-content a {
+  border-radius: var(--mx-radius-sm);
+  color: var(--mx-text-muted);
+  font-size: var(--mx-text-sm);
+}
+
+.sidebar-content a:hover {
+  background-color: var(--mx-glow-soft);
+  color: var(--mx-text);
+}
+
+.sidebar-content a[aria-current="page"],
+.sidebar-content a[aria-current="page"]:hover,
+.sidebar-content a[aria-current="page"]:focus {
+  background-color: var(--mx-surface-raised);
+  box-shadow: inset 2px 0 0 var(--mx-accent), 0 0 0 1px var(--mx-line);
+  color: var(--mx-text);
+  font-weight: 500;
+}
+
+[dir="rtl"] .sidebar-content a[aria-current="page"] {
+  box-shadow: inset -2px 0 0 var(--mx-accent), 0 0 0 1px var(--mx-line);
+}
+
+/* Mobile menu button: a quiet glass circle instead of Starlight's solid disc. */
+.sl-menu-button {
+  background-color: var(--mx-surface-raised);
+  border: 1px solid var(--mx-line-strong);
+  box-shadow: none;
+  color: var(--mx-text);
+}
+.sl-menu-button:has(~ :popover-open) {
+  background-color: var(--mx-accent);
+  border-color: var(--mx-accent);
+  color: var(--mx-accent-contrast);
+}
+
+.mobile-preferences {
+  border-top-color: var(--mx-line);
+}
+
+/* Right-hand table of contents */
+starlight-toc h2,
+mobile-starlight-toc .toggle {
+  color: var(--mx-text-faint);
+  font-family: var(--mx-font-mono);
+  font-size: var(--mx-text-xs);
+  font-weight: 500;
+  letter-spacing: var(--mx-tracking-caps);
+  text-transform: uppercase;
+}
+
+starlight-toc a {
+  color: var(--mx-text-muted);
+}
+starlight-toc a:hover {
+  color: var(--mx-text);
+}
+starlight-toc a[aria-current="true"],
+starlight-toc a[aria-current="true"]:hover,
+starlight-toc a[aria-current="true"]:focus {
+  color: var(--mx-text);
+  font-weight: 500;
+}
+
+mobile-starlight-toc nav {
+  background-color: var(--mx-surface-glass);
+  border-bottom-color: var(--mx-line);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+}
+
+mobile-starlight-toc .dropdown {
+  background-color: var(--mx-surface);
+  border-color: var(--mx-line-strong);
+}
+
+/* Prev / next */
+.pagination-links a {
+  background-color: var(--mx-surface);
+  border: 1px solid var(--mx-line);
+  border-radius: var(--mx-radius-lg);
+  box-shadow: none;
+  color: var(--mx-text-muted);
+}
+.pagination-links a:hover {
+  border-color: var(--mx-line-strong);
+  color: var(--mx-text);
+}
+.pagination-links .link-title {
+  color: var(--mx-text);
+  font-size: var(--mx-text-lg);
+  letter-spacing: -0.01em;
+}
+
+a,
+button,
+summary,
+label {
+  transition: color var(--mx-duration-fast) var(--mx-ease-out), background-color
+    var(--mx-duration-fast) var(--mx-ease-out), border-color var(--mx-duration-fast)
+    var(--mx-ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
