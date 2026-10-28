@@ -17,7 +17,14 @@
  * revision whose files are missing. Every read re-hashes the stored bytes.
  */
 
-import { fileSetProblem, manifestDigest, mediaTypeFor, sha256Digest } from "./skill-files.js";
+import {
+  decodeText,
+  fileSetProblem,
+  isTextMediaType,
+  manifestDigest,
+  mediaTypeFor,
+  sha256Digest,
+} from "./skill-files.js";
 import { type Frontmatter, FrontmatterError, parseFrontmatter } from "./skill-frontmatter.js";
 import {
   MAX_BYTES_PER_FILE,
@@ -65,6 +72,8 @@ export interface PublishInput {
 
 /** Most skills one account may hold. */
 export const MAX_SKILLS_PER_ACCOUNT = 200;
+/** Most team skills of other accounts listed for one account. */
+export const MAX_SHARES_PER_ACCOUNT = 200;
 const PUT_BATCH = 128;
 const TAG_RE = /^[a-z0-9][a-z0-9-]*$/;
 
@@ -116,15 +125,21 @@ export class SkillRegistry {
       },
     );
     if (problem) throw new SkillRegistryError(problem, "invalid");
+    for (const file of input.files) {
+      if (
+        isTextMediaType(mediaTypeFor(file.path) as string) &&
+        decodeText(file.bytes) === undefined
+      ) {
+        throw new SkillRegistryError(`${file.path} is not UTF-8 text without a BOM`, "invalid");
+      }
+    }
     const skillMd = input.files.find((f) => f.path === "SKILL.md") as { bytes: Uint8Array };
     let frontmatter: Frontmatter;
     try {
-      frontmatter = parseFrontmatter(
-        new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(skillMd.bytes),
-      );
+      frontmatter = parseFrontmatter(decodeText(skillMd.bytes) as string);
     } catch (error) {
-      const message = error instanceof FrontmatterError ? error.message : "SKILL.md is not UTF-8";
-      throw new SkillRegistryError(message, "invalid");
+      if (!(error instanceof FrontmatterError)) throw error;
+      throw new SkillRegistryError(error.message, "invalid");
     }
     const tags = cleanTags(input.tags, "tags");
     const capabilities = cleanTags(input.capabilities, "capabilities");
@@ -217,7 +232,10 @@ export class SkillRegistry {
 
   /** Other accounts' team skills shared with this account, as `{ownerId, name}`. */
   async shares(): Promise<{ ownerId: string; name: string }[]> {
-    const rows = await this.storage.list<{ ownerId: string; name: string }>({ prefix: "share:" });
+    const rows = await this.storage.list<{ ownerId: string; name: string }>({
+      prefix: "share:",
+      limit: MAX_SHARES_PER_ACCOUNT,
+    });
     return [...rows.values()];
   }
 

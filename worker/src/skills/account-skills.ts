@@ -34,8 +34,21 @@ export interface AccountSkillsNamespace {
 export class AccountSkills extends DurableObject implements SkillRegistryStub {
   private readonly registry = new SkillRegistry(this.ctx.storage as unknown as RegistryStorage);
 
-  publish(input: PublishInput): Promise<ServedSkill> {
-    return this.registry.publish(input);
+  /**
+   * The object is addressed by its owner's account id; refuse a call that
+   * names another owner so a wrong argument cannot mislabel or expose skills.
+   */
+  private owner(ownerId: string): void {
+    const name = this.ctx.id.name;
+    if (name !== undefined && name !== ownerId) {
+      throw new Error("Skill registry owner does not match the addressed account");
+    }
+  }
+
+  async publish(input: PublishInput): Promise<ServedSkill> {
+    this.owner(input.ownerId);
+    // Serialise publishes: revision numbering reads then writes across awaits.
+    return await this.ctx.blockConcurrencyWhile(() => this.registry.publish(input));
   }
 
   grant(name: string, principal: string): Promise<SkillAccess> {
@@ -50,20 +63,23 @@ export class AccountSkills extends DurableObject implements SkillRegistryStub {
     return this.registry.shares();
   }
 
-  served(ownerId: string, principal: string, name: string): Promise<ServedSkill | null> {
-    return this.registry.served(ownerId, principal, name);
+  async served(ownerId: string, principal: string, name: string): Promise<ServedSkill | null> {
+    this.owner(ownerId);
+    return await this.registry.served(ownerId, principal, name);
   }
 
-  listServed(ownerId: string, principal: string): Promise<ServedSkill[]> {
-    return this.registry.listServed(ownerId, principal);
+  async listServed(ownerId: string, principal: string): Promise<ServedSkill[]> {
+    this.owner(ownerId);
+    return await this.registry.listServed(ownerId, principal);
   }
 
-  readFile(
+  async readFile(
     ownerId: string,
     principal: string,
     name: string,
     path: string,
   ): Promise<{ file: SkillFile; bytes: Uint8Array } | null> {
-    return this.registry.readFile(ownerId, principal, name, path);
+    this.owner(ownerId);
+    return await this.registry.readFile(ownerId, principal, name, path);
   }
 }

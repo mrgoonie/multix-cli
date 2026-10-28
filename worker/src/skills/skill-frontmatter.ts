@@ -32,6 +32,8 @@ const MAX_FRONTMATTER_CHARS = 16_384;
 
 const NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const KEY_RE = /^[A-Za-z_][A-Za-z0-9_-]*$/;
+/** Keys that name Object.prototype members instead of own data when read back. */
+const RESERVED_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 const INDICATORS = new Set([..."-?:,[]{}#&*!|>'\"%@`"]);
 const ESCAPES: Record<string, string> = { '"': '"', "\\": "\\", "/": "/", n: "\n", t: "\t" };
 
@@ -61,6 +63,12 @@ function plainScalar(raw: string, line: number): FrontmatterValue {
     fail(line, `a plain value may not start with "${first}"; quote it`);
   }
   if (/:(\s|$)/.test(text)) fail(line, 'a plain value may not contain ": "; quote it');
+  // Forms YAML parsers disagree on (hex, octal, infinities, dates): quote them.
+  if (
+    /^[-+]?0[xXoO]|^[-+]?\.(inf|Inf|INF|nan|NaN|NAN)$|^[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}/.test(text)
+  ) {
+    fail(line, "ambiguous plain value; quote it");
+  }
   if (/^(true|True|TRUE)$/.test(text)) return true;
   if (/^(false|False|FALSE)$/.test(text)) return false;
   if (/^[-+]?[0-9]+$/.test(text)) return Number(text);
@@ -123,7 +131,9 @@ function keyValue(text: string, line: number): [string, string] {
   if (at <= 0) fail(line, "expected `key: value`");
   const key = text.slice(0, at);
   const rest = text.slice(at + 1);
-  if (!KEY_RE.test(key)) fail(line, `unsupported key "${key.slice(0, 32)}"`);
+  if (!KEY_RE.test(key) || RESERVED_KEYS.has(key)) {
+    fail(line, `unsupported key "${key.slice(0, 32)}"`);
+  }
   if (rest !== "" && !/^\s/.test(rest)) fail(line, "expected a space after the colon");
   return [key, rest.trim()];
 }

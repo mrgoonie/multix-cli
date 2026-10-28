@@ -52,6 +52,19 @@ export function mediaTypeFor(path: string): string | undefined {
 }
 
 /** Text files are returned as `text`, everything else as base64 `blob`. */
+/**
+ * The text of a served text file: valid UTF-8 without a byte-order mark, so
+ * the text handed to clients encodes back to exactly the hashed bytes.
+ */
+export function decodeText(bytes: Uint8Array): string | undefined {
+  if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) return undefined;
+  try {
+    return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
+  } catch {
+    return undefined;
+  }
+}
+
 export function isTextMediaType(mediaType: string): boolean {
   return (
     mediaType.startsWith("text/") ||

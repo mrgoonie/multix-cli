@@ -15,6 +15,7 @@ import { join } from "node:path";
 import { isTask } from "../../src/capabilities/capability-types.js";
 import type { BuiltinCatalog, BuiltinSkillMeta } from "../src/skills/builtin-skills.js";
 import {
+  decodeText,
   fileSetProblem,
   isTextMediaType,
   mediaTypeFor,
@@ -64,7 +65,8 @@ export async function buildSkillCatalog(skillDir: string): Promise<BuiltinCatalo
     if (!mediaType || !isTextMediaType(mediaType)) {
       throw new Error(`skill/${path}: built-in skills hold text files only`);
     }
-    const text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(bytes);
+    const text = decodeText(bytes);
+    if (text === undefined) throw new Error(`skill/${path}: not UTF-8 text without a BOM`);
     files.push({ path, mediaType, size: bytes.length, digest: await sha256Digest(bytes), text });
   }
   const problem = fileSetProblem(files, {

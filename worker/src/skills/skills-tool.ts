@@ -75,7 +75,7 @@ export function registerSkillsTool(server: McpServer, ctx: SkillsContext, runToo
     {
       title: "multix skills catalog",
       description:
-        "Read the agent skills this server publishes (how to use multix for a task), read-only. action=search: skills matching query and/or task, newest revision each. action=get: one skill's frontmatter and files (uri of its SKILL.md). action=read: one file's text by uri; pass revision (or digest) from an earlier get to fail with STALE_REVISION if the skill changed since. Never runs a skill.",
+        "Read the agent skills this server publishes (how to use multix for a task), read-only. action=search: skills matching query and/or task, newest revision each. action=get: one skill's frontmatter and files (uri of its SKILL.md). action=read: one file's text by uri; pass digest (or, for account skills, revision) from an earlier get to fail with STALE_REVISION if the file changed since; built-in skills stay at revision 1 across deploys, so only digest detects their changes. Never runs a skill.",
       inputSchema: toolInput({
         action: z.enum(["search", "get", "read"]),
         query: z.string().max(MAX_QUERY_CHARS).optional().describe("Words to match (search)"),

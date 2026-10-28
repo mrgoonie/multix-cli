@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -61,6 +61,10 @@ describe("SKILL.md frontmatter", () => {
     ["a missing description", skillMd("name: a")],
     ["an overlong description", skillMd(`name: a\ndescription: ${"x".repeat(1025)}`)],
     ["a flow collection", skillMd("name: a\ndescription: d\ntags: [a, b]")],
+    ["a reserved key", skillMd("name: a\ndescription: d\n__proto__: x")],
+    ["a hex-looking value", skillMd("name: a\ndescription: d\nversion: 0x10")],
+    ["a date-looking value", skillMd("name: a\ndescription: d\nreleased: 2026-10-28")],
+    ["an infinity value", skillMd("name: a\ndescription: d\nweight: .inf")],
   ])("refuses %s", (_label, markdown) => {
     expect(() => parseFrontmatter(markdown)).toThrow(FrontmatterError);
   });
@@ -173,6 +177,23 @@ describe("built-in skill catalog", () => {
     for (const skill of fresh.skills) expect(skill.capabilities.length).toBeGreaterThan(0);
   });
 
+  it("releases every SKILL.md with the package version in both release configs", async () => {
+    const repo = join(__dirname, "../..");
+    const fresh = await buildSkillCatalog(join(repo, "skill"));
+    const { version } = JSON.parse(readFileSync(join(repo, "package.json"), "utf8"));
+    for (const config of ["release-please-config.json", "release-please-beta-config.json"]) {
+      const parsed = JSON.parse(readFileSync(join(repo, config), "utf8"));
+      const extra = parsed.packages["."]["extra-files"].map((f: { path: string }) => f.path);
+      for (const skill of fresh.skills) {
+        const path = skill.dir ? `skill/${skill.dir}/SKILL.md` : "skill/SKILL.md";
+        expect(extra, `${config} releases ${path}`).toContain(path);
+        expect(readFileSync(join(repo, path), "utf8")).toContain(
+          `\nversion: ${version} # x-release-please-version\n`,
+        );
+      }
+    }
+  });
+
   it("names nested skills after their directory and reads their tasks", async () => {
     const root = skillTree({
       "SKILL.md": skillMd("name: multix\ndescription: root\nmetadata:\n  tasks: any"),
@@ -204,6 +225,14 @@ describe("built-in skill catalog", () => {
       "SKILL.md": skillMd("name: multix\ndescription: root\nmetadata:\n  tasks: teleport"),
     });
     await expect(buildSkillCatalog(root)).rejects.toThrow(/teleport/);
+  });
+
+  it("refuses text with a byte-order mark", async () => {
+    const root = skillTree({
+      "SKILL.md": skillMd("name: multix\ndescription: root\nmetadata:\n  tasks: any"),
+      "notes.md": "\uFEFFhello",
+    });
+    await expect(buildSkillCatalog(root)).rejects.toThrow(/BOM/);
   });
 
   it("refuses symlinks instead of following them", async () => {

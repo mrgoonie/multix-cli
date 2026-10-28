@@ -96,6 +96,12 @@ value); moving large assets to R2 is deferred.
 ## Next phases
 
 - Phase 2 (separate issue): skills CRUD, drafts and publishing with
-  ownership and revision control, writing to this registry.
+  ownership and revision control, writing to this registry. Carry over from
+  the phase 1 review (`plans/reports/code-reviewer-261028-0940-mcp-skills-extension.md`):
+  team URIs address the owner by raw account id; `grant` and `addShare` are
+  two writes on two objects, so a failed `addShare` leaves a grant nobody
+  can reach; revoking and re-granting must not revive a stale grant. Built-in
+  skills stay at revision 1 across deploys, so clients detect their changes
+  by digest.
 - Phase 3 (separate issue): manifest-defined skill script/workflow execution
   in a restrictive sandbox, only after explicit authorization.

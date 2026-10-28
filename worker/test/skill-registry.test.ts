@@ -63,6 +63,19 @@ describe("skills registry", () => {
       [{ path: "SKILL.md", bytes: new TextEncoder().encode("---\nname: Bad Name\n---\n") }],
     ],
     ["a non-UTF-8 SKILL.md", [{ path: "SKILL.md", bytes: new Uint8Array([0xff, 0xfe]) }]],
+    [
+      "a SKILL.md with a byte-order mark",
+      [
+        {
+          path: "SKILL.md",
+          bytes: new TextEncoder().encode("\uFEFF---\nname: a\ndescription: d\n---\n"),
+        },
+      ],
+    ],
+    [
+      "a non-UTF-8 text file",
+      [...skillFiles("a"), { path: "notes.md", bytes: new Uint8Array([0xc3, 0x28]) }],
+    ],
   ])("refuses %s", async (_label, files) => {
     const registry = fakeRegistries().getByName(OWNER);
     await expect(
