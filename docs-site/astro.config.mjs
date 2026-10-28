@@ -28,6 +28,14 @@ document.addEventListener("keydown", (event) => {
     document.querySelector("site-search button[data-open-modal]")?.click();
   }
 });
+// Starlight labels the search button "Search" while it shows "Search Ctrl K";
+// name it after what it shows so speech-input users can say the visible text.
+// Runs after Starlight's module script has picked Ctrl or the Mac command key.
+document.addEventListener("DOMContentLoaded", () => {
+  const button = document.querySelector("site-search button[data-open-modal]");
+  const keys = [...(button?.querySelectorAll("kbd kbd") ?? [])].map((key) => key.textContent).join(" ");
+  if (button && keys) button.setAttribute("aria-label", \`\${button.getAttribute("aria-label")} \${keys}\`);
+});
 `;
 
 export default defineConfig({
