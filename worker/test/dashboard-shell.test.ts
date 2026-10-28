@@ -130,6 +130,13 @@ describe("language and theme on the served pages", () => {
 });
 
 describe("app shell", () => {
+  it("leaves out the language and theme switches while a just-created key is shown", () => {
+    expect(dashboardPage(dashboardView())).toContain('class="prefs"');
+    const html = dashboardPage(dashboardView({ newApiKey: { name: "ci", key: "mx_test_key" } }));
+    expect(html).toContain("mx_test_key");
+    expect(html).not.toContain('class="prefs"');
+  });
+
   it("has a sidebar with the dashboard sections, the docs link and sign-out", () => {
     const html = dashboardPage(dashboardView());
     expect(html).toContain('<header class="sidebar">');

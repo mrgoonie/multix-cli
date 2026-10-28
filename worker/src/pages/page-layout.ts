@@ -31,8 +31,11 @@ export interface ShellAccount {
 export interface ShellOptions {
   title: string;
   prefs: Preferences;
-  /** This page's GET URL (path and query), the base of the language and theme links. */
-  here: string;
+  /**
+   * This page's GET URL (path and query), the base of the language and theme links.
+   * Omitted when a reload would lose what the page shows (a just-created key): no switches then.
+   */
+  here?: string;
   navLabel: string;
   nav: NavItem[];
   account?: ShellAccount;
@@ -114,7 +117,7 @@ export function appShell(options: ShellOptions, body: string): string {
 <header class="sidebar">
 ${brand(t)}
 <nav aria-label="${escapeHtml(options.navLabel)}"><ul>${navList(options.nav)}</ul></nav>
-<div class="sidebar-foot">${account}${preferenceSwitches(options.prefs, options.here)}</div>
+<div class="sidebar-foot">${account}${options.here ? preferenceSwitches(options.prefs, options.here) : ""}</div>
 </header>
 <main id="main" class="content">
 ${body}

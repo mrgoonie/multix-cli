@@ -94,7 +94,8 @@ export function dashboardPage(view: DashboardView): string {
     {
       title: t.overview.title,
       prefs,
-      here: DASHBOARD_PATH,
+      // A new key is shown only in this response; switching language or theme reloads and would lose it.
+      here: view.newApiKey ? undefined : DASHBOARD_PATH,
       navLabel: t.nav.label,
       nav: dashboardNav(t),
       account: { login: account.login, avatarUrl: account.avatarUrl, csrf: view.csrf },
