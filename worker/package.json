@@ -10,7 +10,8 @@
     "check:bundle": "npm run build && node scripts/check-bundle.mjs dist",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
     "test": "vitest run",
-    "catalog": "tsx scripts/build-cli-catalog.ts"
+    "catalog": "tsx scripts/build-cli-catalog.ts",
+    "tokens": "tsx scripts/sync-design-tokens.ts"
   },
   "dependencies": {
     "@cfworker/json-schema": "4.1.1",

@@ -1,0 +1,4 @@
+/* Self-hosted brand fonts (latin, latin-ext and vietnamese subsets load on demand by unicode-range). */
+@import "@fontsource-variable/geist/wght.css";
+@import "@fontsource-variable/geist-mono/wght.css";
+@import "@fontsource-variable/newsreader/wght-italic.css";
