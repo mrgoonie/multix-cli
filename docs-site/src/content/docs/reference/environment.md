@@ -81,6 +81,8 @@ not filtered. On Windows the check ignores case, as the OS does.
 | `REPLICATE_API_TOKEN` or `REPLICATE_API_KEY` | Replicate (direct API) |
 | `RUNWAYML_API_SECRET` | Runway |
 | `HEYGEN_API_KEY` | HeyGen (API credits are billed separately from web plans) |
+| `TOPVIEW_API_KEY` and `TOPVIEW_UID` | TopView legacy API (spends topview.ai web plan credits) |
+| `TOPVIEW_API_PLATFORM_KEY` | TopView API Platform (separate USD balance; never falls back to the legacy key) |
 
 ```bash
 export GEMINI_API_KEY="your-key"
@@ -205,6 +207,11 @@ default model (default `drama-3`). It must be one of the models listed on
 `HEYGEN_BASE_URL` overrides the HeyGen API base (default
 `https://api.heygen.com`) for proxies and tests. It must be `https://`; plain
 `http://` is accepted only for `localhost`, `127.0.0.1`, or `[::1]`.
+
+`TOPVIEW_BASE_URL` (default `https://api.topview.ai`) and
+`TOPVIEW_PLATFORM_BASE_URL` (default `https://platform-backend.topview.ai`)
+override the two TopView API bases for proxies and tests, with the same
+`https://` rule.
 
 ### Base URL overrides and trust
 

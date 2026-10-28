@@ -193,7 +193,8 @@ Worker, and keys set there are ignored.
   (Gemini, OpenRouter, OpenAI, MiniMax, Leonardo.Ai, BytePlus with
   `ARK_API_KEY` as fallback, ElevenLabs, fal.ai, Atlas Cloud, Replicate with
   `REPLICATE_API_KEY` as fallback, Runway's `RUNWAYML_API_SECRET` as
-  "API secret", HeyGen), plus the Cloudflare Workers AI
+  "API secret", HeyGen, TopView's legacy key with its `TOPVIEW_UID` and its
+  separate API Platform key), plus the Cloudflare Workers AI
   account ID, API token and optional AI Gateway ID.
 
 ### API keys for the REST API

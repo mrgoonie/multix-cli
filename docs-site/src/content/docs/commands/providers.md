@@ -21,6 +21,7 @@ description: Choose a source-backed command reference for any multix AI provider
 | Replicate | [Commands](/commands/replicate/) | Any model via the direct API, plus image/video convenience commands | Community models need a version; resume or cancel jobs by prediction ID. |
 | Runway | [Commands](/commands/runway/) | Gen-4.5 / Gen-4 Turbo video and Gen-4 images | `video` prints a task ID unless `--wait`; resume with `status <id> --wait --download`. |
 | HeyGen | [Commands](/commands/heygen/) | Video Agent (prompt-to-video), scripted avatar video, translation, lipsync, TTS, templates | API credits are billed separately from HeyGen web plans; use `status --type` matching the job (`agent` takes a session ID). |
+| TopView | [Commands](/commands/topview/) | Marketing video from a product link or materials, video avatar, product avatar, product shots (legacy API); Seedance, Wan, MiniMax, TopView T1 video and GPT Image 2 (API Platform) | Two separate APIs and keys: the legacy API spends topview.ai plan credits (`TOPVIEW_API_KEY` + `TOPVIEW_UID`), the API Platform a separate USD balance (`TOPVIEW_API_PLATFORM_KEY`). No cancel; resume with `status --task`. |
 
 Use `multix <provider> --help` and the specific subcommand's `--help` before
 automating a workflow. Those commands own current options and defaults.

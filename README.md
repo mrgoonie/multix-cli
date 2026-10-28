@@ -4,7 +4,7 @@ AI multimodal CLI — generate images/video/speech/music, analyze and transcribe
 
 ![Isometric technical illustration of multix media workflows](docs-site/public/images/multix-isometric-banner.png)
 
-Supports **OpenAI** (image, image edits, TTS, STT, optional Codex image driver), **Gemini** (analyze, transcribe, generate, Omni Flash video generation and editing, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation, image-to-video, TTS, STT), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), **Cloudflare** (Workers AI image and speech; AI Gateway-routed Replicate video), **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment), **Fish Audio** (native Drama 3 TTS, multi-speaker turns, pronunciation dictionaries, voice design, voice cloning, voice models), **fal.ai** (generic model runner, image, video, text-to-speech via the fal queue API), and **Atlas Cloud** (any model: image, image edit, video, audio, 3D, with resumable async predictions), **Replicate** (generic model runner, image, video, async prediction status/cancel via the direct Replicate API), **Runway** (Gen-4.5 and Gen-4 Turbo video, Gen-4 images, resumable task status/cancel), **HeyGen** (v3 Video Agent prompt-to-video, scripted avatar videos, video translation, lipsync, TTS).
+Supports **OpenAI** (image, image edits, TTS, STT, optional Codex image driver), **Gemini** (analyze, transcribe, generate, Omni Flash video generation and editing, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation, image-to-video, TTS, STT), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), **Cloudflare** (Workers AI image and speech; AI Gateway-routed Replicate video), **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment), **Fish Audio** (native Drama 3 TTS, multi-speaker turns, pronunciation dictionaries, voice design, voice cloning, voice models), **fal.ai** (generic model runner, image, video, text-to-speech via the fal queue API), and **Atlas Cloud** (any model: image, image edit, video, audio, 3D, with resumable async predictions), **Replicate** (generic model runner, image, video, async prediction status/cancel via the direct Replicate API), **Runway** (Gen-4.5 and Gen-4 Turbo video, Gen-4 images, resumable task status/cancel), **HeyGen** (v3 Video Agent prompt-to-video, scripted avatar videos, video translation, lipsync, TTS), **TopView** (marketing videos from a product link or materials, video and product avatars, product shots on plan credits; API Platform video/image models on a separate USD balance).
 
 ## Documentation
 
@@ -128,6 +128,9 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `FAL_VIDEO_MODEL` | No | Default fal text-to-video model (default `fal-ai/kling-video/v1.6/standard/text-to-video`) |
 | `HEYGEN_API_KEY` | For HeyGen | [HeyGen API settings](https://app.heygen.com/developers/api). API usage is billed separately from HeyGen web plans |
 | `HEYGEN_BASE_URL` | No | Override the HeyGen API base (default `https://api.heygen.com`; proxies/tests). Must be `https://`, except `http://` on `localhost`/`127.0.0.1`/`[::1]` |
+| `TOPVIEW_API_KEY` + `TOPVIEW_UID` | For TopView legacy API | [TopView API Settings](https://www.topview.ai/dashboard/home). Spends topview.ai web plan credits |
+| `TOPVIEW_API_PLATFORM_KEY` | For TopView API Platform | [platform.topview.ai](https://platform.topview.ai). A separate USD balance; never falls back to the legacy key |
+| `TOPVIEW_BASE_URL` / `TOPVIEW_PLATFORM_BASE_URL` | No | Override the TopView API bases (defaults `https://api.topview.ai`, `https://platform-backend.topview.ai`; proxies/tests). Same `https://` rule |
 | `FAL_TTS_MODEL` | No | Default fal text-to-speech model (default `google/gemini-3.8-flash-tts`) |
 | `FAL_VIDEO_IMAGE_MODEL` | No | Default fal image-to-video model, used when `--image-url` is passed without `-m` (default `fal-ai/kling-video/v1.6/standard/image-to-video`) |
 | `ATLASCLOUD_API_KEY` | For Atlas Cloud | [Atlas Cloud](https://www.atlascloud.ai/console/api-keys) |
@@ -811,6 +814,38 @@ multix heygen me
 - Failed, cancelled, or input-blocked jobs exit non-zero with HeyGen's `failure_code`/message. When several jobs run, every success is still downloaded before the command exits non-zero. 429 `Retry-After` is honoured, and `Idempotency-Key` is sent only on endpoints that document it.
 - `--callback-url` webhooks are signed with HMAC-SHA256 of the raw body (hex, `signature` header). The npm package does not export a verifier; copy `src/providers/heygen/webhook.ts` or the Node snippet in the [HeyGen docs](https://multix.zuey.me/commands/heygen/#webhooks).
 - Digital-twin creation and voice cloning are out of scope. Full reference: [HeyGen commands](https://multix.zuey.me/commands/heygen/).
+
+### `multix topview`
+
+[TopView](https://www.topview.ai) has two separate APIs with separate keys and money; each command uses exactly one:
+
+- **Legacy API** (`TOPVIEW_API_KEY` + `TOPVIEW_UID`, base `https://api.topview.ai`): spends your topview.ai web plan credits.
+- **API Platform** (`TOPVIEW_API_PLATFORM_KEY`, base `https://platform-backend.topview.ai`): a separate pay-as-you-go USD balance.
+
+```bash
+# Legacy API (plan credits)
+multix topview url-to-video --product-link https://shop.example.com/p/1 [--aspect-ratio 9:16] [--language en] [--preview]
+multix topview materials-to-video --file ./shot.jpg --file asset:<fileId> --product-name "Mug"
+multix topview export <taskId> --script-id <id>                      # after --preview
+multix topview video-avatar --avatar-source 1 --avatar-id <id> --tts-text "Hi!" --voice-id <id>
+multix topview product-avatar image --product ./mug.png --avatar-id <id>
+multix topview product-avatar video --image-id <imageId> --mode avatar4 --audio ./vo.mp3
+multix topview product-anyshoot model --product ./mug.png --template-mask ./mask.png --template-id <id>
+multix topview product-anyshoot background --product ./mug.png --mode prompt --prompt "marble kitchen"
+multix topview upload ./shot.jpg --api legacy                        # prints asset:<fileId>
+
+# API Platform (USD balance)
+multix topview models [--live]
+multix topview generate bytedance/seedance-2.0-mini/text-to-video --input @body.json [--idempotency-key <key>]
+
+# Either API: resume, wait, download
+multix topview status <id> --task m2v|video-avatar|product-avatar-image|product-avatar-video|anyshoot-model|anyshoot-background|platform [--wait] [--download]
+```
+
+**Notes:**
+- A submit is sent once and never retried. An unknown outcome (connection lost after sending, gateway error, timeout) fails with `UNKNOWN_REMOTE_STATE`; check the task list before resubmitting. On the Platform, resend with the `--idempotency-key` the error names to get the original task back.
+- Commands wait and download by default (`topview-<taskId>-NN.<ext>`); `--async` prints the task id and the `status ... --download` command that resumes it. Polling honours 429 `Retry-After`. Neither API documents a cancel endpoint.
+- Legacy tasks report the plan credits they used as `credits`; Platform tasks report `cost_usd` only once the charge is `CAPTURED` or `RELEASED`. Neither has a pre-run price bound, so `--max-cost` refuses TopView task commands. Full reference: [TopView commands](https://multix.zuey.me/commands/topview/).
 
 ### `multix speech`
 
