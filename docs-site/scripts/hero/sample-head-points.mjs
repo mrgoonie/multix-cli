@@ -315,7 +315,12 @@ const manifest = {
 
 mkdirSync(outDir, { recursive: true });
 writeFileSync(`${outDir}head-points.bin`, Buffer.from(data.buffer));
-writeFileSync(`${outDir}head-points.json`, `${JSON.stringify(manifest, null, 2)}\n`);
+// Short number arrays stay on one line, as Biome formats them, so a rerun leaves lint clean.
+const manifestJson = JSON.stringify(manifest, null, 2).replace(
+  /\[\s+([-\d.,\s]+?)\s+\]/g,
+  (_, items) => `[${items.split(/,\s*/).join(", ")}]`,
+);
+writeFileSync(`${outDir}head-points.json`, `${manifestJson}\n`);
 writeFileSync(
   `${outDir}head-poster-dark.png`,
   renderPoster(sample.points, sample.normals, [235, 240, 248]),
