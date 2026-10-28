@@ -11752,6 +11752,602 @@
       ]
     },
     {
+      "group": "sume",
+      "description": "Sume: image and video generation (catalog models), job status, result, cancel",
+      "commands": [
+        {
+          "command": "sume models",
+          "description": "List Sume models from the live public catalog (cached; --refresh to reread)",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--kind",
+              "flags": "--kind <kind>",
+              "description": "Only this kind (image, video, lipsync, captions)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--mode",
+              "flags": "--mode <mode>",
+              "description": "Only models listing this mode (e.g. text-to-video)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--model",
+              "flags": "--model <id>",
+              "description": "Full catalog entry for one model id",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--refresh",
+              "flags": "--refresh",
+              "description": "Reread the catalog even when the cached copy is fresh",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            }
+          ]
+        },
+        {
+          "command": "sume image",
+          "description": "Generate or edit images with a Sume catalog model (async job; downloads the result)",
+          "positionals": [
+            {
+              "name": "prompt",
+              "description": "",
+              "required": false,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--model",
+              "flags": "-m, --model <id>",
+              "description": "Sume model id from `multix sume models --kind image`",
+              "required": true,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-m"
+            },
+            {
+              "long": "--image",
+              "flags": "--image <pathOrUrl>",
+              "description": "Image to edit (https URL or local file; repeat for several)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--aspect-ratio",
+              "flags": "--aspect-ratio <ratio>",
+              "description": "Aspect ratio the model lists (e.g. 1:1, 16:9)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--resolution",
+              "flags": "--resolution <res>",
+              "description": "Resolution the model lists (e.g. 1K, 2K)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--quality",
+              "flags": "--quality <q>",
+              "description": "Quality the model lists (e.g. low, medium, high)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--num-images",
+              "flags": "-n, --num-images <n>",
+              "description": "Images to generate (up to the model's max_images)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-n"
+            },
+            {
+              "long": "--output-format",
+              "flags": "--output-format <fmt>",
+              "description": "Output format the model lists (e.g. png, jpeg, webp)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--async",
+              "flags": "--async",
+              "description": "Submit and exit; print the job id (resume with `multix sume status <id> --wait --download`)",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--wait-timeout",
+              "flags": "--wait-timeout <ms>",
+              "description": "Max time to wait for completion",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "300000"
+            },
+            {
+              "long": "--output",
+              "flags": "--output <path>",
+              "description": "Output file (one artifact), file stem (several) or directory",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--no-download",
+              "flags": "--no-download",
+              "description": "Do not download artifacts; print their URLs instead",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": true
+            },
+            {
+              "long": "--idempotency-key",
+              "flags": "--idempotency-key <key>",
+              "description": "Idempotency-Key for the submit (default: a new UUID). Resend a cut-off request with the same key to get the original job instead of a second charge",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--image-format",
+              "flags": "--image-format <mode>",
+              "description": "Final image format: webp (default, cwebp -q 85) | original (keep provider format/quality)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--no-webp",
+              "flags": "--no-webp",
+              "description": "Keep the provider's original image format and quality",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": true
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        },
+        {
+          "command": "sume video",
+          "description": "Generate a video with a Sume catalog model: text, image, references, video-to-video or lipsync",
+          "positionals": [
+            {
+              "name": "prompt",
+              "description": "",
+              "required": false,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--model",
+              "flags": "-m, --model <id>",
+              "description": "Sume model id from `multix sume models --kind video`",
+              "required": true,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-m"
+            },
+            {
+              "long": "--image",
+              "flags": "--image <pathOrUrl>",
+              "description": "First frame (image-to-video, or the face for image lipsync)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--end-image",
+              "flags": "--end-image <pathOrUrl>",
+              "description": "Last frame",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--ref-image",
+              "flags": "--ref-image <pathOrUrl>",
+              "description": "Reference image (repeatable)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--ref-video",
+              "flags": "--ref-video <pathOrUrl>",
+              "description": "Reference video (repeatable)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--ref-audio",
+              "flags": "--ref-audio <pathOrUrl>",
+              "description": "Reference audio (repeatable)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--video",
+              "flags": "--video <pathOrUrl>",
+              "description": "Source video (video-to-video, lipsync)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--audio",
+              "flags": "--audio <pathOrUrl>",
+              "description": "Speech track for a lipsync model",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--duration",
+              "flags": "--duration <seconds>",
+              "description": "Length in seconds, within the model's range",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--resolution",
+              "flags": "--resolution <res>",
+              "description": "Resolution the model lists (e.g. 720p)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--aspect-ratio",
+              "flags": "--aspect-ratio <ratio>",
+              "description": "Aspect ratio the model lists (e.g. 16:9)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--generate-audio",
+              "flags": "--generate-audio",
+              "description": "Ask for native audio (models with audio)",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--no-generate-audio",
+              "flags": "--no-generate-audio",
+              "description": "Ask for a silent clip (models with audio)",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": true
+            },
+            {
+              "long": "--async",
+              "flags": "--async",
+              "description": "Submit and exit; print the job id (resume with `multix sume status <id> --wait --download`)",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--wait-timeout",
+              "flags": "--wait-timeout <ms>",
+              "description": "Max time to wait for completion",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "1200000"
+            },
+            {
+              "long": "--output",
+              "flags": "--output <path>",
+              "description": "Output file (one artifact), file stem (several) or directory",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--no-download",
+              "flags": "--no-download",
+              "description": "Do not download artifacts; print their URLs instead",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": true
+            },
+            {
+              "long": "--idempotency-key",
+              "flags": "--idempotency-key <key>",
+              "description": "Idempotency-Key for the submit (default: a new UUID). Resend a cut-off request with the same key to get the original job instead of a second charge",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        },
+        {
+          "command": "sume status",
+          "description": "Get a Sume job's status; --wait to poll, --download to save its artifacts",
+          "positionals": [
+            {
+              "name": "jobId",
+              "description": "",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--wait",
+              "flags": "--wait",
+              "description": "Poll until the job finishes",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--wait-timeout",
+              "flags": "--wait-timeout <ms>",
+              "description": "Max time to wait (with --wait)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "1200000"
+            },
+            {
+              "long": "--download",
+              "flags": "--download",
+              "description": "Save artifacts when finished (implies --wait)",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--output",
+              "flags": "--output <path>",
+              "description": "Output file (one artifact), file stem (several) or directory",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--image-format",
+              "flags": "--image-format <mode>",
+              "description": "Final image format: webp (default, cwebp -q 85) | original (keep provider format/quality)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--no-webp",
+              "flags": "--no-webp",
+              "description": "Keep the provider's original image format and quality",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": true
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        },
+        {
+          "command": "sume result",
+          "description": "Save a finished Sume job's artifacts (or print their URLs with --no-download)",
+          "positionals": [
+            {
+              "name": "jobId",
+              "description": "",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--no-download",
+              "flags": "--no-download",
+              "description": "Print artifact URLs instead of saving them",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": true
+            },
+            {
+              "long": "--output",
+              "flags": "--output <path>",
+              "description": "Output file (one artifact), file stem (several) or directory",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--image-format",
+              "flags": "--image-format <mode>",
+              "description": "Final image format: webp (default, cwebp -q 85) | original (keep provider format/quality)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--no-webp",
+              "flags": "--no-webp",
+              "description": "Keep the provider's original image format and quality",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": true
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        },
+        {
+          "command": "sume cancel",
+          "description": "Cancel a Sume job before it starts generating (its reservation is refunded)",
+          "positionals": [
+            {
+              "name": "jobId",
+              "description": "",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": []
+        }
+      ]
+    },
+    {
       "group": "speech",
       "description": "Text-to-speech across providers with one request shape and explicit routing",
       "commands": [
