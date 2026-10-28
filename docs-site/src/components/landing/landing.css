@@ -238,6 +238,12 @@ html:not(.js) .mx-theme-switch {
 
 /* ---------- hero ---------- */
 
+/* Above the head, whose canvas overhangs its stage onto the buttons when the hero stacks. */
+.mx-hero-copy {
+  position: relative;
+  z-index: 1;
+}
+
 .mx-hero {
   display: grid;
   grid-template-columns: 1fr;
@@ -386,6 +392,11 @@ html:not(.js) .mx-theme-switch {
 
 .mx-stage.has-canvas .mx-head {
   opacity: 0;
+}
+
+/* The hidden SVG's ornaments stop pulsing once the canvas draws its own. */
+.mx-stage.has-canvas .mx-head * {
+  animation: none;
 }
 
 /* Unlocking lights the senses in turn: eyes, ears, mouth, then the crown. Each dot path sets

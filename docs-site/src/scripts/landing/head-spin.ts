@@ -59,7 +59,9 @@ export async function startHeadSpin(stage: HTMLElement): Promise<void> {
   let pointer: [number, number] | null = null;
   let clock = 0; // seconds of motion; frozen while paused
   let unlockedAt = Number.NEGATIVE_INFINITY;
-  const levels = SENSE_NAMES.map(() => 0); // 0 … 1 per sense
+  // Senses unlocked before the canvas arrived start fully lit, so the swap does not replay them.
+  const startLevel = stage.classList.contains("is-unlocked") ? 1 : 0;
+  const levels = SENSE_NAMES.map(() => startLevel); // 0 … 1 per sense
 
   const readInk = () => {
     ink = getComputedStyle(canvas).color;
@@ -225,8 +227,8 @@ export async function startHeadSpin(stage: HTMLElement): Promise<void> {
       const step = dt / SENSE_FADE;
       levels[i] = target ? Math.min(1, levels[i] + step) : Math.max(0, levels[i] - step);
     }
-    // Phones draw at 30 fps.
-    if (!coarse || now - lastDraw > 30) {
+    // Phones draw at 30 fps, everything else at up to 60 fps, whatever the display's rate.
+    if (now - lastDraw > (coarse ? 30 : 14)) {
       lastDraw = now;
       draw();
     }

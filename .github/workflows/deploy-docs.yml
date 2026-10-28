@@ -5,6 +5,9 @@ on:
     branches: [main]
     paths:
       - "docs-site/**"
+      # The landing page lists providers and models read from these at build time.
+      - "src/capabilities/**"
+      - "src/providers/**"
       - ".github/workflows/deploy-docs.yml"
   workflow_dispatch:
 

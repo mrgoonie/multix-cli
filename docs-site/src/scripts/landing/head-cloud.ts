@@ -248,8 +248,15 @@ export function project(cloud: HeadCloud, yaw: number, frame: Frame): Frame {
     const gy = Math.floor(y / cell);
     if (gx < 0 || gy < 0 || gx >= GRID || gy >= GRID) continue;
     if (depth[gy * GRID + gx] - scratch[i * 4 + 2] > tolerance) continue;
-    const nv = rotate([normal[i * 3], normal[i * 3 + 1], normal[i * 3 + 2]], yaw);
-    const lambert = Math.max(0, nv[0] * LIGHT[0] + nv[1] * LIGHT[1] + nv[2] * LIGHT[2]);
+    // The normal turned by yaw and pitch, inline: this runs for every dot on every frame.
+    const nx = normal[i * 3];
+    const ny = normal[i * 3 + 1];
+    const nz = normal[i * 3 + 2];
+    const nz1 = -sy * nx + cy * nz;
+    const lambert = Math.max(
+      0,
+      (cy * nx + sy * nz) * LIGHT[0] + (cp * ny - sp * nz1) * LIGHT[1] + nzView * LIGHT[2],
+    );
     const rim = (1 - nzView) ** 4 * 0.45;
     const lit = (0.06 + 0.98 * lambert ** 1.5) * (0.25 + 0.75 * occlusion[i] ** 1.5) + rim;
     // The neck fades out toward its cut.
