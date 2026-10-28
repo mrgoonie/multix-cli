@@ -19,7 +19,8 @@ export const GUIDE_TEXT = `multix agent protocol
    Price first: --estimate (range, units, rate source; nothing sent). --max-cost <usd> refuses to run
    unless the ceiling is proven under it (--cost-policy estimate accepts an estimated ceiling).
 3. Run with --json (or MULTIX_OUTPUT=json): stdout is ONE line, schema multix.result/v1:
-   ok, outputs[{path,bytes,mime,sha256,width,height,duration_s}], warnings[], text|data,
+   ok, model_requested, model_resolved (null = not reported), job{provider,id,attempt},
+   outputs[{path,bytes,mime,sha256,width,height,duration_s}], warnings[], text|data,
    error{code,retryable,retry_after_s,hint}, usage{tokens,cost_usd,credits,metrics,sources}, cost{status,actual_usd}, history_id, next[]
 4. Check the result yourself: ok=true AND outputs non-empty AND no warnings (EMPTY_OUTPUT,
    CONTENT_MISMATCH, UNREADABLE_MEDIA). Look at images/video only when it matters.

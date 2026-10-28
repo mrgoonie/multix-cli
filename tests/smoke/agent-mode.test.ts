@@ -19,6 +19,9 @@ const SPAWN_TIMEOUT = 15_000;
 // --import takes a URL; a bare Windows path (D:\...) reads as a URL scheme.
 const FAKE_CDN = pathToFileURL(path.resolve(__dirname, "fixtures/fake-atlas-cdn-fetch.mjs")).href;
 
+// Windows cannot deliver POSIX signals to a child process: kill() ends it outright.
+const describeSignals = process.platform === "win32" ? describe.skip : describe;
+
 describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
   let tmp: string;
   let env: NodeJS.ProcessEnv;
@@ -162,7 +165,7 @@ describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     }
   });
 
-  describe("a signal while atlas waits on a submitted prediction", () => {
+  describeSignals("a signal while atlas waits on a submitted prediction", () => {
     /** Fake Atlas API: submit returns a processing prediction that never finishes. */
     async function withPendingAtlas(
       fn: (baseUrl: string, seen: { posts: number; polled: Promise<void> }) => Promise<void>,
@@ -222,6 +225,11 @@ describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
         const out = envelope(result.stdout);
         expect(out).toMatchObject({ ok: false, command: "atlas image", exit_code: code });
         expect(out.provider_ids).toContain("pred_sig01");
+        expect(out.job).toEqual({ provider: "atlas", id: "pred_sig01", attempt: 1 });
+        const entry = JSON.parse(fs.readFileSync(path.join(tmp, "h.jsonl"), "utf8").trim());
+        expect(entry.job).toEqual(out.job);
+        expect(entry.model_requested).toBe(out.model_requested);
+        expect(entry.model_resolved).toBe(out.model_resolved);
         expect(out.next[0]).toBe(resume);
         expect(out.error).toMatchObject({ code: "CANCELLED", retryable: false });
         expect(out.error.hint).toContain("Do not rerun; resume it");
@@ -243,9 +251,9 @@ describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     });
   });
 
-  describe("a signal before or outside the wait on an atlas prediction", () => {
+  describeSignals("a signal before or outside the wait on an atlas prediction", () => {
     /**
-     * Fake Atlas API: uploads and submits hang until the run is killed, polls
+     * Fake Atlas API: the catalog, uploads and submits hang until the run is killed, polls
      * return a prediction that never finishes. `seen.hit` resolves on the first
      * request whose path ends with `stage`.
      */
@@ -264,7 +272,8 @@ describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
         const route = `${req.method} ${req.url}`;
         seen.requests.push(route);
         if (req.url?.endsWith(stage)) markHit();
-        if (req.method === "POST") return; // never answered: the signal comes first
+        // Never answered: the signal comes first.
+        if (req.method === "POST" || req.url?.endsWith("/models")) return;
         res.writeHead(200, { "content-type": "application/json" });
         res.end(
           JSON.stringify({
@@ -364,6 +373,24 @@ describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
         server.closeAllConnections();
         await new Promise((resolve) => server.close(resolve));
       }
+    });
+
+    it.each([
+      ["image", "a cat"],
+      ["run", "m/x", "--input", '{"prompt":"a cat"}'],
+    ])("a signal while atlas %s loads the schema is a clean cancel", async (...args) => {
+      await withHangingAtlas("/models", async (baseUrl, seen) => {
+        const child = start(baseUrl, args);
+        await seen.hit;
+        child.kill("SIGINT");
+        const result = await child;
+        expect(result.exitCode).toBe(130);
+        const out = envelope(result.stdout);
+        expect(out).toMatchObject({ ok: false, command: `atlas ${args[0]}`, exit_code: 130 });
+        expect(out.error).toMatchObject({ code: "CANCELLED", retryable: false });
+        expect(out.error.hint).toContain("no prediction was created or billed");
+        expect(seen.requests.some((r) => r.startsWith("POST"))).toBe(false);
+      });
     });
 
     it("a signal during a reference upload is a clean cancel with nothing submitted", async () => {
