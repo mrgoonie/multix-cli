@@ -32,7 +32,7 @@ test("headline and subline", () => {
   );
   assert.match(pages.vi, /<em>và trí tưởng tượng\.<\/em>/);
   assert.match(pages.en, /Unlock multimodal for every AI agent/);
-  assert.match(pages.en, /17 providers behind one CLI, one MCP server and one REST API/);
+  assert.match(pages.en, /14 providers behind one CLI, one MCP server and one REST API/);
 });
 
 test("canonical, hreflang alternates and social meta", () => {
@@ -76,31 +76,17 @@ test("JSON-LD describes the website and the application", () => {
   }
 });
 
-test("the hero poster is in the HTML, so it shows without JS or WebGL", async () => {
+test("the hero head is inline SVG, so it shows without JS", () => {
   for (const html of Object.values(pages)) {
-    for (const theme of ["dark", "light"]) {
-      assert.match(
-        html,
-        new RegExp(
-          `<img class="mx-poster mx-poster-${theme}" src="/hero/head-poster-${theme}\\.png" alt="[^"]+"`,
-        ),
-      );
+    assert.match(
+      html,
+      /<div class="mx-head-art" role="img" aria-label="[^"]+"><svg class="mx-head"/,
+    );
+    for (const sense of ["eyes", "ears", "mouth", "crown"]) {
+      assert.match(html, new RegExp(`class="mx-r mx-r-${sense}"><path style="--w:`));
     }
-    assert.match(html, /data-points="\/hero\/head-points\.bin"/);
     assert.match(html, /<button[^>]*id="mx-unlock"[^>]*hidden/);
-  }
-  const [points, manifest] = await Promise.all([
-    stat(new URL("../dist/hero/head-points.bin", import.meta.url)),
-    readDist("hero/head-points.json").then(JSON.parse),
-    stat(new URL("../dist/hero/head-poster-dark.png", import.meta.url)),
-    stat(new URL("../dist/hero/head-poster-light.png", import.meta.url)),
-  ]);
-  // Float32 [x, y, z, region] per point, with the anchors the renderer pins labels to.
-  assert.equal(manifest.version, 1);
-  assert.equal(manifest.stride, 4);
-  assert.equal(points.size, manifest.count * 16);
-  for (const anchor of ["eyes", "ears", "mouth", "crown"]) {
-    assert.equal(manifest.anchors[anchor].length, 3);
+    assert.doesNotMatch(html, /head-poster|head-points/);
   }
 });
 
@@ -131,5 +117,60 @@ test("an empty case-study list renders no section", () => {
   for (const html of Object.values(pages)) {
     assert.doesNotMatch(html, /id="case-studies"/);
     assert.ok(!jsonLd(html).some((item) => item["@type"] === "VideoObject"));
+  }
+});
+
+test("providers section lists every provider from the CLI source in both languages", async () => {
+  const readRoot = (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
+  // Command groups as classified in the CLI; doc, speech and scene are not providers.
+  const capabilities = await readRoot("src/capabilities/command-capabilities.ts");
+  const commandBlock = capabilities.slice(0, capabilities.indexOf("export const UTILITY_COMMANDS"));
+  const groups = new Set(
+    [...commandBlock.matchAll(/^\s*"([a-z0-9]+) [a-z0-9 -]+":/gm)].map(([, group]) => group),
+  );
+  for (const group of ["doc", "speech", "scene"]) groups.delete(group);
+  // Provider names as `multix check` prints them; Cloudflare is checked on its own there.
+  const keys = await readRoot("src/providers/provider-keys.ts");
+  const names = [...keys.matchAll(/^\s*name: "([^"]+)",/gm)].map(([, name]) => name);
+  assert.ok(groups.size >= 14 && names.length >= 13, "source lists were not found");
+
+  const titles = {
+    en: "Pick the provider, keep the command",
+    vi: "Chọn provider, giữ nguyên lệnh",
+  };
+  for (const [lang, html] of Object.entries(pages)) {
+    const start = html.indexOf('<section class="mx-section" id="providers"');
+    assert.ok(start > 0, `${lang}: providers section missing`);
+    const section = html.slice(start, html.indexOf("</section>", start));
+    assert.match(section, new RegExp(`<h2 id="providers-title">${titles[lang]}</h2>`));
+
+    const cards = section.split(/<li class="mx-card[^"]*" data-provider=/).slice(1);
+    assert.deepEqual(
+      cards.map((card) => /^"([^"]+)"/.exec(card)[1]).sort(),
+      [...groups].sort(),
+      `${lang}: one card per provider command group`,
+    );
+    for (const card of cards) {
+      const group = /^"([^"]+)"/.exec(card)[1];
+      assert.ok(card.includes(`<code>multix ${group}</code>`), `${lang}: ${group} command`);
+      const models = card.slice(card.indexOf("mx-provider-models")).match(/<li>/g) ?? [];
+      assert.ok(models.length >= 2 && models.length <= 4, `${lang}: ${group} has 2-4 models`);
+      // Headings stay in order inside the card: provider (h3), then its two lists (h4).
+      assert.match(card, /^[\s\S]*?<h3[^>]*>[^<]+<\/h3>[\s\S]*?<h4[\s\S]*?<h4/);
+    }
+    const headings = [...section.matchAll(/<h3[^>]*>([^<]+)<\/h3>/g)].map(([, name]) => name);
+    for (const name of names) assert.ok(headings.includes(name), `${lang}: ${name} heading`);
+
+    const prefix = lang === "vi" ? "/vi" : "";
+    for (const path of ["/commands/providers/", "/commands/gemini/", "/commands/atlascloud/"]) {
+      assert.ok(section.includes(`href="${prefix}${path}"`), `${lang}: ${path}`);
+      await stat(new URL(`../dist${prefix}${path}index.html`, import.meta.url));
+    }
+  }
+  assert.match(pages.vi, /Chuyển giọng nói thành chữ \(STT\)/);
+  // Placed after the senses, before the install block.
+  for (const html of Object.values(pages)) {
+    assert.ok(html.indexOf('id="senses"') < html.indexOf('id="providers"'));
+    assert.ok(html.indexOf('id="providers"') < html.indexOf('id="install"'));
   }
 });

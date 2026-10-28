@@ -1,0 +1,57 @@
+---
+/**
+ * Every provider multix ships, with its modalities and a few popular models.
+ * The data is derived from the CLI source at build time (landing-providers-data.ts).
+ */
+import { type LandingCopy, localePath } from "./landing-copy";
+import { landingProviders } from "./landing-providers-data";
+
+interface Props {
+  t: LandingCopy;
+}
+
+const { t } = Astro.props;
+const lang = t.lang as "en" | "vi";
+const { providers } = t;
+---
+
+<section class="mx-section" id="providers" aria-labelledby="providers-title">
+  <header class="mx-section-head">
+    <p class="mx-kicker">{providers.eyebrow}</p>
+    <h2 id="providers-title">{providers.title}</h2>
+    <p class="mx-section-lead">{providers.lead}</p>
+  </header>
+  <ul class="mx-grid mx-providers">
+    {
+      landingProviders.map((provider) => (
+        <li class="mx-card mx-tilt mx-provider" data-provider={provider.group}>
+          <h3>{provider.name}</h3>
+          <p class="mx-provider-cmd">
+            <code>multix {provider.group}</code>
+          </p>
+          <h4 class="mx-provider-label">{providers.modalitiesLabel}</h4>
+          <ul class="mx-provider-tags">
+            {provider.modalities.map((modality) => <li>{providers.modalities[modality]}</li>)}
+          </ul>
+          <h4 class="mx-provider-label">{providers.modelsLabel}</h4>
+          <ul class="mx-provider-models">
+            {provider.models.map((model) => (
+              <li>
+                <code>{model}</code>
+              </li>
+            ))}
+          </ul>
+          <a class="mx-card-link" href={localePath(lang, provider.href)}>
+            {providers.cta}
+            <span class="mx-sr">: {provider.name}</span> <span aria-hidden="true">→</span>
+          </a>
+        </li>
+      ))
+    }
+  </ul>
+  <p class="mx-providers-more">
+    <a href={localePath(lang, "/commands/providers/")}>
+      {providers.directory} <span aria-hidden="true">→</span>
+    </a>
+  </p>
+</section>

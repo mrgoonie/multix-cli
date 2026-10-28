@@ -1,6 +1,6 @@
 /**
  * Landing page behaviour: theme and language switches, copy button,
- * case-study players, pointer effects, and the lazy WebGL hero.
+ * case-study players, pointer effects, the hero head's unlock and its lazy spin.
  * Everything here is an enhancement; the page works without it.
  */
 
@@ -153,25 +153,31 @@ if (finePointer && !reducedMotion) {
   }
 }
 
-/* ---------- hero: start WebGL after first paint, once the stage is near the viewport ---------- */
+/* ---------- hero: unlock the senses; the head spins once the page has loaded ---------- */
 
 const stage = document.getElementById("mx-stage");
-if (stage && !reducedMotion) {
-  const idle = (fn: () => void) =>
-    "requestIdleCallback" in window
-      ? requestIdleCallback(fn, { timeout: 1500 })
-      : setTimeout(fn, 200);
-  const start = () => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry.isIntersecting) return;
-        observer.disconnect();
-        import("./hero-renderer").then(({ startHero }) => startHero(stage)).catch(() => {});
-      },
-      { rootMargin: "200px" },
-    );
-    observer.observe(stage);
+const unlockButton = document.querySelector<HTMLButtonElement>("#mx-unlock");
+if (stage && unlockButton) {
+  const label = unlockButton.querySelector("span");
+  const toggle = () => {
+    const on = stage.classList.toggle("is-unlocked");
+    unlockButton.setAttribute("aria-pressed", String(on));
+    if (label)
+      label.textContent = (on ? unlockButton.dataset.lock : unlockButton.dataset.unlock) ?? "";
   };
-  if (document.readyState === "complete") idle(start);
-  else addEventListener("load", () => idle(start), { once: true });
+  unlockButton.addEventListener("click", toggle);
+  stage.querySelector(".mx-head-art")?.addEventListener("click", toggle);
+  unlockButton.hidden = false;
+
+  // The canvas and its dot cloud stay off the critical path; the SVG is the picture until then.
+  if (!reducedMotion) {
+    const spin = () =>
+      import("./head-spin").then(({ startHeadSpin }) => startHeadSpin(stage)).catch(() => {});
+    const idle = () =>
+      "requestIdleCallback" in window
+        ? requestIdleCallback(spin, { timeout: 3000 })
+        : setTimeout(spin, 1);
+    if (document.readyState === "complete") idle();
+    else addEventListener("load", idle, { once: true });
+  }
 }

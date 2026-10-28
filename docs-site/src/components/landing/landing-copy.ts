@@ -3,6 +3,11 @@
  * real multix commands (see README.md and the docs) and stay untranslated.
  */
 
+import { type ProviderModality, landingProviders } from "./landing-providers-data";
+
+/** How many providers multix wraps, counted from the CLI's own command groups. */
+const PROVIDERS = landingProviders.length;
+
 export type Lang = "en" | "vi";
 
 export const SITE = "https://multix.zuey.me";
@@ -51,8 +56,7 @@ const en = {
   htmlLang: "en",
   ogLocale: "en_US",
   title: "multix — the multimodal layer for AI agents",
-  description:
-    "Unlock multimodal for every AI agent: 17 providers behind one CLI, one MCP server and one REST API for images, video, speech, music and documents.",
+  description: `Unlock multimodal for every AI agent: ${PROVIDERS} providers behind one CLI, one MCP server and one REST API for images, video, speech, music and documents.`,
   skip: "Skip to content",
   nav: {
     label: "Main",
@@ -75,14 +79,16 @@ const en = {
     },
     subline: {
       strong: "Unlock multimodal for every AI agent",
-      rest: " — 17 providers behind one CLI, one MCP server and one REST API",
+      rest: ` — ${PROVIDERS} providers behind one CLI, one MCP server and one REST API`,
     },
     install: "npm i -g @mrgoonie/multix",
     installHref: "#install",
     mcp: "Connect MCP",
     unlock: "Unlock senses",
     lock: "Lock senses",
-    posterAlt: "A digital head drawn in dots",
+    pause: "Pause rotation",
+    spin: "Resume rotation",
+    headAlt: "A sculpted head drawn as a grid of light dots",
     labels: {
       eyes: "image · video",
       ears: "stt · music",
@@ -93,7 +99,7 @@ const en = {
   specs: {
     label: "At a glance",
     items: [
-      { value: "17", label: "providers" },
+      { value: String(PROVIDERS), label: "providers" },
       { value: "5", label: "modalities" },
       { value: "CLI · MCP · REST", label: "three surfaces" },
       { value: "--dry-run", label: "free validation" },
@@ -133,6 +139,29 @@ const en = {
         command: senseCommands.create,
       },
     ] satisfies Sense[],
+  },
+  providers: {
+    eyebrow: "Providers & popular models",
+    title: "Pick the provider, keep the command",
+    lead: "Every provider is a command group in the same CLI, MCP server and REST API. The models below are the ones multix runs by default or picks from the provider's own list; run multix models for the full catalog.",
+    modalitiesLabel: "Modalities",
+    modelsLabel: "Popular models",
+    cta: "Command reference",
+    directory: "Open the provider directory",
+    modalities: {
+      image: "Image",
+      video: "Video",
+      avatar: "Avatar video",
+      speech: "Speech (TTS)",
+      transcription: "Transcription (STT)",
+      voice: "Voice design & cloning",
+      music: "Music",
+      sfx: "Sound effects",
+      "3d": "3D",
+      analysis: "Analysis",
+      document: "Documents",
+      catalog: "Any catalog model",
+    } satisfies Record<ProviderModality, string>,
   },
   install: {
     eyebrow: "Quick start",
@@ -194,8 +223,7 @@ const vi: LandingCopy = {
   htmlLang: "vi",
   ogLocale: "vi_VN",
   title: "multix — lớp đa phương thức cho AI agent",
-  description:
-    "Mở khóa đa phương thức cho mọi AI agent: 17 provider trong một CLI, một MCP server và một REST API cho ảnh, video, giọng nói, âm nhạc và tài liệu.",
+  description: `Mở khóa đa phương thức cho mọi AI agent: ${PROVIDERS} provider trong một CLI, một MCP server và một REST API cho ảnh, video, giọng nói, âm nhạc và tài liệu.`,
   skip: "Bỏ qua tới nội dung",
   nav: {
     label: "Chính",
@@ -218,14 +246,16 @@ const vi: LandingCopy = {
     },
     subline: {
       strong: "Mở khóa đa phương thức cho mọi AI agent",
-      rest: " — 17 provider trong một CLI, một MCP server và một REST API",
+      rest: ` — ${PROVIDERS} provider trong một CLI, một MCP server và một REST API`,
     },
     install: "npm i -g @mrgoonie/multix",
     installHref: "#install",
     mcp: "Kết nối MCP",
     unlock: "Mở khóa giác quan",
     lock: "Khóa giác quan",
-    posterAlt: "Một cái đầu kỹ thuật số vẽ bằng các chấm",
+    pause: "Dừng xoay",
+    spin: "Tiếp tục xoay",
+    headAlt: "Một bức tượng đầu vẽ bằng lưới chấm sáng",
     labels: {
       eyes: "ảnh · video",
       ears: "chuyển giọng nói · nhạc",
@@ -236,7 +266,7 @@ const vi: LandingCopy = {
   specs: {
     label: "Tóm tắt",
     items: [
-      { value: "17", label: "provider" },
+      { value: String(PROVIDERS), label: "provider" },
       { value: "5", label: "phương thức" },
       { value: "CLI · MCP · REST", label: "ba cách dùng" },
       { value: "--dry-run", label: "kiểm tra miễn phí" },
@@ -276,6 +306,29 @@ const vi: LandingCopy = {
         command: senseCommands.create,
       },
     ],
+  },
+  providers: {
+    eyebrow: "Provider và model phổ biến",
+    title: "Chọn provider, giữ nguyên lệnh",
+    lead: "Mỗi provider là một nhóm lệnh trong cùng một CLI, MCP server và REST API. Các model dưới đây là model multix chạy mặc định hoặc được chọn từ danh sách của chính provider; chạy multix models để xem toàn bộ danh mục.",
+    modalitiesLabel: "Phương thức",
+    modelsLabel: "Model phổ biến",
+    cta: "Tài liệu lệnh",
+    directory: "Mở danh mục provider",
+    modalities: {
+      image: "Ảnh",
+      video: "Video",
+      avatar: "Video avatar",
+      speech: "Đọc văn bản (TTS)",
+      transcription: "Chuyển giọng nói thành chữ (STT)",
+      voice: "Thiết kế và nhân bản giọng",
+      music: "Nhạc",
+      sfx: "Hiệu ứng âm thanh",
+      "3d": "3D",
+      analysis: "Phân tích",
+      document: "Tài liệu",
+      catalog: "Mọi model trong catalog",
+    },
   },
   install: {
     eyebrow: "Bắt đầu nhanh",

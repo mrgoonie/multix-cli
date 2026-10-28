@@ -244,6 +244,8 @@ html:not(.js) .mx-theme-switch {
   gap: var(--mx-space-4);
   align-items: center;
   padding: var(--mx-space-7) 0 var(--mx-space-5);
+  /* The head canvas overhangs its stage; never let that widen the page on a phone. */
+  overflow-x: clip;
 }
 
 .mx-eyebrow {
@@ -350,58 +352,105 @@ html:not(.js) .mx-theme-switch {
   aspect-ratio: 1;
 }
 
-.mx-poster,
-.mx-stage canvas {
+/* The halftone head: light dots on the dark theme, ink on the light theme. */
+.mx-head-art,
+.mx-head {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
 }
 
-.mx-poster {
+.mx-head {
+  overflow: visible;
+  color: var(--mx-text);
+  stroke-opacity: 0.82;
   transition: opacity var(--mx-duration-slow) var(--mx-ease-out);
 }
 
-/* Light dots on the dark theme, dark dots on the light theme. */
-.mx-poster-light,
-:root[data-theme="light"] .mx-poster-dark {
-  display: none;
+/* The spinning canvas overhangs the stage by 8% a side so the crown sparks fit. Its first frame
+   is the SVG's picture, so the swap is seamless; horizontal drags turn the head. */
+.mx-head-canvas {
+  position: absolute;
+  inset: -8%;
+  width: 116%;
+  height: 116%;
+  color: var(--mx-text);
+  touch-action: pan-y;
+  cursor: grab;
 }
 
-:root[data-theme="light"] .mx-poster-light {
-  display: block;
+.mx-head-canvas:active {
+  cursor: grabbing;
 }
 
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme]) .mx-poster-dark {
-    display: none;
-  }
-
-  :root:not([data-theme]) .mx-poster-light {
-    display: block;
-  }
-}
-
-.mx-stage canvas {
+.mx-stage.has-canvas .mx-head {
   opacity: 0;
-  cursor: crosshair;
-  touch-action: manipulation;
-  transition: opacity var(--mx-duration-slow) var(--mx-ease-out);
 }
 
-.mx-stage.is-live canvas {
+/* Unlocking lights the senses in turn: eyes, ears, mouth, then the crown. Each dot path sets
+   stroke-width: calc(var(--w) * var(--k, 1)) inline, so --k swells it. */
+.mx-r,
+.mx-fx {
+  opacity: 0;
+  transition: opacity 0.6s var(--mx-ease-out);
+}
+
+.mx-r {
+  --k: 1.4;
+  stroke-opacity: 1;
+}
+
+.mx-fx {
+  stroke-width: 1.4;
+}
+
+.mx-fx-eyes {
+  fill: currentColor;
+  stroke: none;
+}
+
+.mx-stage.is-unlocked :is(.mx-r, .mx-fx) {
   opacity: 1;
 }
 
-.mx-stage.is-live .mx-poster {
-  opacity: 0;
-  pointer-events: none;
+.mx-stage.is-unlocked :is(.mx-r-ears, .mx-fx-ears) {
+  transition-delay: 0.45s;
+}
+
+.mx-stage.is-unlocked :is(.mx-r-mouth, .mx-fx-mouth) {
+  transition-delay: 0.9s;
+}
+
+.mx-stage.is-unlocked :is(.mx-r-crown, .mx-fx-crown) {
+  transition-delay: 1.35s;
+}
+
+.mx-stage.is-unlocked :is(.mx-fx-wave, .mx-fx-spark) {
+  animation: mx-pulse 1.8s ease-in-out calc(var(--i) * 0.3s) infinite;
+}
+
+.mx-stage.is-unlocked .mx-fx-spark {
+  animation-duration: 2.6s;
+}
+
+@keyframes mx-pulse {
+  0%,
+  100% {
+    opacity: 0.15;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+.mx-head-art {
+  cursor: crosshair;
 }
 
 .mx-sense {
   position: absolute;
-  left: 0;
-  top: 0;
   padding: 5px 10px;
   border: 1px solid var(--mx-line-strong);
   border-radius: var(--mx-radius-sm);
@@ -417,8 +466,30 @@ html:not(.js) .mx-theme-switch {
   transition: opacity 0.5s;
 }
 
-.mx-sense.is-on {
+.mx-stage.is-unlocked .mx-sense {
   opacity: 1;
+}
+
+/* The sense has turned away from the camera. */
+.mx-stage.is-unlocked .mx-sense.is-away {
+  opacity: 0;
+  transition-delay: 0s;
+}
+
+.mx-stage.is-unlocked .mx-sense[data-sense="eyes"] {
+  transition-delay: 0.3s;
+}
+
+.mx-stage.is-unlocked .mx-sense[data-sense="ears"] {
+  transition-delay: 0.75s;
+}
+
+.mx-stage.is-unlocked .mx-sense[data-sense="mouth"] {
+  transition-delay: 1.2s;
+}
+
+.mx-stage.is-unlocked .mx-sense[data-sense="create"] {
+  transition-delay: 1.65s;
 }
 
 .mx-sense small {
@@ -431,6 +502,8 @@ html:not(.js) .mx-theme-switch {
   position: absolute;
   bottom: 3%;
   left: 50%;
+  display: flex;
+  gap: var(--mx-space-2);
   transform: translateX(-50%);
 }
 
@@ -446,7 +519,33 @@ html:not(.js) .mx-theme-switch {
   white-space: nowrap;
 }
 
-.mx-unlock[hidden] {
+.mx-spin {
+  width: 40px;
+  min-height: 40px;
+  padding: 0;
+  border-radius: var(--mx-radius-pill);
+  background: var(--mx-surface-glass);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+/* Two bars while it spins (pause), a triangle while paused (play). */
+.mx-spin i {
+  width: 10px;
+  height: 12px;
+  border-inline: 3px solid currentColor;
+}
+
+.mx-spin[data-state="paused"] i {
+  width: 0;
+  height: 0;
+  margin-left: 3px;
+  border-block: 6px solid transparent;
+  border-inline: 10px solid currentColor;
+  border-right-width: 0;
+}
+
+:is(.mx-unlock, .mx-spin)[hidden] {
   display: none;
 }
 
@@ -928,6 +1027,7 @@ html:not(.js) .mx-theme-switch {
   .mx-nav,
   .mx-sense,
   .mx-unlock,
+  .mx-spin,
   .mx-play {
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
@@ -935,5 +1035,16 @@ html:not(.js) .mx-theme-switch {
 
   .mx-nav {
     background: var(--mx-surface);
+  }
+}
+
+/* Reduced motion: the senses still light up on unlock, all at once and without pulsing. */
+@media (prefers-reduced-motion: reduce) {
+  .mx-stage.is-unlocked :is(.mx-fx-wave, .mx-fx-spark) {
+    animation: none;
+  }
+
+  .mx-stage.is-unlocked :is(.mx-r, .mx-fx, .mx-sense) {
+    transition-delay: 0s;
   }
 }

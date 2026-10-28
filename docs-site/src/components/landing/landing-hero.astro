@@ -1,9 +1,12 @@
 ---
 /**
- * Hero: headline (the LCP element), install CTA and the dot-grid head.
- * The poster is the default; the landing script swaps in the WebGL canvas
- * after first paint unless motion is reduced or WebGL is missing.
+ * Hero: headline (the LCP element), install CTA and the halftone dot head.
+ * The head is inline SVG drawn by scripts/hero/draw-head-dots.mjs, so it shows
+ * without JS; the landing script adds the unlock toggle, then swaps in the spinning
+ * canvas (head-spin.ts) with its pause button.
  */
+import anchors from "./head-anchors.json";
+import headSvg from "./head-dots.svg?raw";
 import { type LandingCopy, localePath } from "./landing-copy";
 
 interface Props {
@@ -36,30 +39,32 @@ const senses = [
       >
     </div>
   </div>
-  <div class="mx-stage" id="mx-stage" data-points="/hero/head-points.bin">
-    {
-      /* One poster per theme (CSS shows one); both load eagerly because the visible one is the LCP image. */
-      (["dark", "light"] as const).map((theme) => (
-        <img
-          class={`mx-poster mx-poster-${theme}`}
-          src={`/hero/head-poster-${theme}.png`}
-          alt={hero.posterAlt}
-          width="640"
-          height="640"
-          fetchpriority="high"
-          decoding="async"
-        />
-      ))
-    }
+  <div class="mx-stage" id="mx-stage">
+    <div class="mx-head-art" role="img" aria-label={hero.headAlt} set:html={headSvg} />
     {
       senses.map((sense) => (
-        <span class="mx-sense" data-sense={sense.key} aria-hidden="true">
+        <span
+          class="mx-sense"
+          data-sense={sense.key}
+          style={`left:${anchors[sense.key as keyof typeof anchors][0]}%;top:${anchors[sense.key as keyof typeof anchors][1]}%`}
+          aria-hidden="true"
+        >
           {sense.flag}
           <small>{sense.label}</small>
         </span>
       ))
     }
     <div class="mx-hint">
+      <button
+        class="mx-btn mx-spin"
+        id="mx-spin"
+        type="button"
+        data-pause={hero.pause}
+        data-spin={hero.spin}
+        hidden
+      >
+        <i aria-hidden="true"></i>
+      </button>
       <button
         class="mx-btn mx-unlock"
         id="mx-unlock"

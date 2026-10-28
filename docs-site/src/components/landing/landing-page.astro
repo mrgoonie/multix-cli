@@ -16,6 +16,8 @@ import LandingHead from "./landing-head.astro";
 import LandingHero from "./landing-hero.astro";
 import LandingInstall from "./landing-install.astro";
 import LandingNav from "./landing-nav.astro";
+import LandingProviders from "./landing-providers.astro";
+import providersCss from "./landing-providers.css?inline";
 import LandingSenses from "./landing-senses.astro";
 import LandingSpecs from "./landing-specs.astro";
 import LandingSurfaces from "./landing-surfaces.astro";
@@ -32,7 +34,7 @@ const t = copy[Astro.props.lang];
 <html lang={t.htmlLang} dir="ltr">
   <head>
     <LandingHead t={t} caseStudies={caseStudies} />
-    <style is:inline set:html={fontsCss + tokensCss + landingCss}></style>
+    <style is:inline set:html={fontsCss + tokensCss + landingCss + providersCss}></style>
   </head>
   <body class="mx-landing">
     <a class="mx-skip" href="#main">{t.skip}</a>
@@ -43,6 +45,7 @@ const t = copy[Astro.props.lang];
         <LandingHero t={t} />
         <LandingSpecs t={t} />
         <LandingSenses t={t} />
+        <LandingProviders t={t} />
         <LandingInstall t={t} />
         <LandingSurfaces t={t} />
         <CaseStudies t={t} items={caseStudies} />
