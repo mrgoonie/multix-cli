@@ -121,6 +121,14 @@ npm run check:mcp    # when worker/ or a client it imports changed
   not published with the CLI. When you change a client it uses, run
   `npm run check:mcp` (worker typecheck, tests, and a bundle check that fails
   on any `node:*` or bare Node built-in import, `commander`, `execa`, or CLI code).
+- `skill/` holds the `multix` entry skill and nested task skills
+  (`skill/<name>/SKILL.md`). The Worker bundles them as its built-in MCP
+  skills catalogue (`npm run skills` in `worker/`, run before dev, build,
+  typecheck, test and deploy; the generated JSON is gitignored). Each
+  SKILL.md needs `name` equal to its directory, a one-line `description`
+  that is valid YAML, the release-please `version:` line and
+  `metadata.tasks` with task ids from `src/capabilities/capability-types.ts`;
+  add a new task skill to `extra-files` in `release-please-config.json`.
 - The job container (`worker/container/`) is rolled out before the Worker
   (`worker/scripts/roll-out-job-container.mjs`, run by `deploy-mcp.yml`), so a
   new container must work with the Worker that is still live, in both
