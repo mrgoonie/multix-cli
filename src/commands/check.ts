@@ -35,6 +35,7 @@ import { LEONARDO_ROUTING } from "../providers/leonardo/models.js";
 import { checkCodexAuthenticated } from "../providers/openai/codex-image-driver.js";
 import { REPLICATE_ROUTING } from "../providers/replicate/models.js";
 import { RUNWAY_ROUTING } from "../providers/runway/models.js";
+import { SUME_ROUTING } from "../providers/sume/models.js";
 import { checkBinary } from "./check-helpers/binary-check.js";
 import { pingGemini } from "./check-helpers/gemini-ping.js";
 import { FFMPEG_HINT, MAGICK_HINT, SETUP_HINTS } from "./check-helpers/setup-hints.js";
@@ -82,6 +83,7 @@ const BASE_URL_ROUTING: readonly BaseUrlRouting[] = [
   LEONARDO_ROUTING,
   REPLICATE_ROUTING,
   RUNWAY_ROUTING,
+  SUME_ROUTING,
 ];
 
 export type ReportLine = { level: "info" | "warn"; message: string };

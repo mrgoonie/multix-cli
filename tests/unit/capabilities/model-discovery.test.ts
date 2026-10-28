@@ -8,13 +8,19 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { type FetchFn, readCatalog } from "../../../src/capabilities/model-discovery.js";
+import {
+  type FetchFn,
+  readCatalog,
+  sumeModelTasks,
+} from "../../../src/capabilities/model-discovery.js";
 import {
   DEFAULT_MODELS_TTL_S,
   MAX_MODELS_TTL_S,
   discoverCatalog,
+  discoverSumeCatalog,
   modelsTtlSeconds,
 } from "../../../src/commands/agent/model-discovery-cache.js";
+import { parseSumeCatalog } from "../../../src/providers/sume/catalog.js";
 
 type Route = { status?: number; body: unknown } | Error;
 
@@ -373,6 +379,71 @@ describe("catalog cache", () => {
       expect(ttl("999999999")).toBe(7 * 86_400);
     } finally {
       vi.unstubAllEnvs();
+    }
+  });
+});
+
+describe("Sume catalogue discovery", () => {
+  const SUME_CATALOG = JSON.parse(
+    fs.readFileSync(
+      path.join(import.meta.dirname, "../providers/sume/fixtures/sume-catalog.json"),
+      "utf8",
+    ),
+  ) as unknown;
+  const byId = (id: string) => {
+    const m = parseSumeCatalog(SUME_CATALOG).models.find((x) => x.id === id);
+    if (!m) throw new Error(`fixture lacks ${id}`);
+    return m;
+  };
+
+  it("maps catalogue capabilities to tasks", () => {
+    expect(sumeModelTasks(byId("gpt-image-2"))).toEqual(["image", "image-edit"]);
+    expect(sumeModelTasks(byId("recraft-v4"))).toEqual(["image"]);
+    expect(sumeModelTasks(byId("qwen-image-layered"))).toEqual(["image-edit"]);
+    expect(sumeModelTasks(byId("kling-4"))).toEqual(["video", "image-to-video"]);
+    expect(sumeModelTasks(byId("hailuo-h3-regen"))).toEqual(["video-edit"]);
+    expect(sumeModelTasks(byId("veed-fabric-1.0"))).toEqual(["avatar-video"]);
+    expect(sumeModelTasks(byId("sync-lipsync-3"))).toEqual([]);
+    expect(sumeModelTasks(byId("veed-subtitles"))).toEqual([]);
+    expect(sumeModelTasks(byId("sume-remix-restyle"))).toEqual([]);
+  });
+
+  it("lists models for a task with their USD price range", async () => {
+    const { fn, calls } = fakeFetch([["api.sume.com/v1/open/catalog", { body: SUME_CATALOG }]]);
+    const read = await readCatalog("sume", "image-to-video", fn);
+    expect(calls).toEqual(["https://api.sume.com/v1/open/catalog"]);
+    expect(read.models.map((m) => m.model).sort()).toEqual(["grok-imagine-video-1.5", "kling-4"]);
+    const kling = read.models.find((m) => m.model === "kling-4");
+    expect(kling).toMatchObject({ provider: "sume", task: "image-to-video" });
+    expect(kling?.pricing?.from_usd).toMatch(/^\d+(\.\d+)?$/);
+  });
+
+  it("caches the catalogue and serves a stale copy when a refresh fails", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "multix-sume-cache-"));
+    try {
+      const first = fakeFetch([["api.sume.com", { body: SUME_CATALOG }]]);
+      const fresh = await discoverSumeCatalog({ dir, fetchFn: first.fn });
+      expect(fresh.state).toBe("fresh");
+      expect(fresh.catalog?.models.length).toBeGreaterThan(5);
+
+      const none = fakeFetch([]);
+      const cached = await discoverSumeCatalog({ dir, fetchFn: none.fn });
+      expect(cached.state).toBe("cached");
+      expect(none.calls).toHaveLength(0);
+
+      const failing = fakeFetch([["api.sume.com", new TypeError("fetch failed")]]);
+      const stale = await discoverSumeCatalog({ dir, fetchFn: failing.fn, refresh: true });
+      expect(stale.state).toBe("stale");
+      expect(stale.error).toBeTruthy();
+      expect(stale.catalog?.models.map((m) => m.id)).toContain("kling-4");
+
+      fs.rmSync(dir, { recursive: true, force: true });
+      const down = fakeFetch([["api.sume.com", { status: 503, body: {} }]]);
+      const unavailable = await discoverSumeCatalog({ dir, fetchFn: down.fn });
+      expect(unavailable.state).toBe("unavailable");
+      expect(unavailable.catalog).toBeUndefined();
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
     }
   });
 });

@@ -1,9 +1,10 @@
 /**
  * Read provider model catalogs for one task. Runtime-neutral: the caller
- * passes fetch; caching lives in the CLI layer. Both catalogs are public, so
+ * passes fetch; caching lives in the CLI layer. Every catalog is public, so
  * no key is sent.
  */
 
+import { type SumeCatalogModel, ownRoutes, readSumeCatalog } from "../providers/sume/catalog.js";
 import type { DiscoveredModel, Task } from "./capability-types.js";
 
 export type FetchFn = typeof fetch;
@@ -33,12 +34,23 @@ const OPENROUTER_OUTPUTS: Partial<Record<Task, string>> = {
   "image-edit": "image",
 };
 
-export const DISCOVERY_PROVIDERS = ["fal", "openrouter"] as const;
+/** Tasks the Sume catalogue (https://api.sume.com/v1/open/catalog) states per model. */
+const SUME_TASKS: readonly Task[] = [
+  "image",
+  "image-edit",
+  "video",
+  "image-to-video",
+  "video-edit",
+  "avatar-video",
+];
+
+export const DISCOVERY_PROVIDERS = ["fal", "openrouter", "sume"] as const;
 export type DiscoveryProvider = (typeof DISCOVERY_PROVIDERS)[number];
 
 export function discoverySupported(provider: string, task: Task): boolean {
   if (provider === "fal") return FAL_CATEGORIES[task] !== undefined;
   if (provider === "openrouter") return OPENROUTER_OUTPUTS[task] !== undefined;
+  if (provider === "sume") return SUME_TASKS.includes(task);
   return false;
 }
 
@@ -142,11 +154,58 @@ async function readOpenRouter(task: Task, fetchFn: FetchFn): Promise<CatalogRead
   return { url, models };
 }
 
+/**
+ * The tasks one Sume catalogue model serves, only where the catalogue says
+ * so: its `kind` plus the capability flags (`text_to_image`, `image_edit`,
+ * `text_to_video`, `image_to_video`, `video_to_video`). A lipsync model that
+ * animates a still face from speech (`image-to-lipsync`) is an avatar video;
+ * video lipsync, captions and the Sume Remix models (own routes, not
+ * `multix sume`) map to no task.
+ */
+export function sumeModelTasks(m: SumeCatalogModel): Task[] {
+  if (ownRoutes(m).length > 0) return [];
+  const cap = m.capabilities;
+  const tasks: Task[] = [];
+  if (m.kind === "image") {
+    if (cap.text_to_image === true) tasks.push("image");
+    if (cap.image_edit === true) tasks.push("image-edit");
+  } else if (m.kind === "video") {
+    if (cap.text_to_video === true) tasks.push("video");
+    if (cap.image_to_video === true) tasks.push("image-to-video");
+    if (cap.video_to_video === true) tasks.push("video-edit");
+  } else if (m.kind === "lipsync" && m.modes.includes("image-to-lipsync")) {
+    tasks.push("avatar-video");
+  }
+  return tasks;
+}
+
+async function readSume(task: Task, fetchFn: FetchFn): Promise<CatalogRead> {
+  const { url, catalog } = await readSumeCatalog(fetchFn);
+  const models: DiscoveredModel[] = [];
+  for (const m of catalog.models) {
+    if (!sumeModelTasks(m).includes(task)) continue;
+    const pricing: Record<string, string> = {};
+    if (m.pricing?.from_usd) pricing.from_usd = m.pricing.from_usd;
+    if (m.pricing?.to_usd) pricing.to_usd = m.pricing.to_usd;
+    if (m.pricing?.unit) pricing.unit = m.pricing.unit;
+    models.push({
+      provider: "sume",
+      model: m.id,
+      task,
+      ...(m.name ? { name: m.name } : {}),
+      ...(Object.keys(pricing).length ? { pricing } : {}),
+    });
+  }
+  return { url, models };
+}
+
 /** One provider catalog for one task. Throws on network, HTTP or shape errors. */
 export function readCatalog(
   provider: DiscoveryProvider,
   task: Task,
   fetchFn: FetchFn,
 ): Promise<CatalogRead> {
-  return provider === "fal" ? readFal(task, fetchFn) : readOpenRouter(task, fetchFn);
+  if (provider === "fal") return readFal(task, fetchFn);
+  if (provider === "sume") return readSume(task, fetchFn);
+  return readOpenRouter(task, fetchFn);
 }

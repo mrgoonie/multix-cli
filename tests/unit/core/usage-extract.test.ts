@@ -200,3 +200,88 @@ describe("extractUsage", () => {
     expect(hasUsage(extractUsage({ status: "ok", url: "https://x" }))).toBe(false);
   });
 });
+
+describe("extractUsage for Sume job responses", () => {
+  const JOB = "job_0f0e0d0c-1111-4222-8333-444455556666";
+
+  it("counts the submit's data.usage.usd as the provider-reported cost", () => {
+    const usage = extractUsage({
+      data: {
+        request_id: JOB,
+        job: {
+          id: JOB,
+          status: "queued",
+          usage_summary: { status: "reserved", reserved_usd_cents: 79, reserved_credits: 79 },
+        },
+        usage: { credits: 79, usd: "0.79" },
+        idempotency_hit: false,
+      },
+    });
+    expect(usage.cost_usd).toBe(0.79);
+    expect(usage.credits).toBe(79);
+    expect(usage.sources).toEqual({
+      cost_usd: "body.data.usage.usd",
+      credits: "body.data.usage.credits",
+    });
+  });
+
+  it("does not count an idempotent replay or a still-reserved summary", () => {
+    const replay = extractUsage({
+      data: { job: { id: JOB, status: "queued" }, usage: { usd: "0.79" }, idempotency_hit: true },
+    });
+    expect(replay.cost_usd).toBeUndefined();
+    const reserved = extractUsage({
+      data: {
+        job_id: JOB,
+        sume_status: "processing",
+        job: {
+          id: JOB,
+          usage_summary: { status: "reserved", reserved_usd_cents: 120, final: false },
+        },
+      },
+    });
+    expect(reserved.cost_usd).toBeUndefined();
+    expect(reserved.credits).toBeUndefined();
+  });
+
+  it("reads a settled summary: captured cents, or 0 once refunded", () => {
+    const captured = extractUsage({
+      data: {
+        job_id: JOB,
+        sume_status: "completed",
+        job: {
+          id: JOB,
+          usage_summary: { status: "captured", captured_usd_cents: 168, captured_credits: 168 },
+        },
+      },
+    });
+    expect(captured.cost_usd).toBe(1.68);
+    expect(captured.credits).toBe(168);
+    const refunded = extractUsage({
+      data: {
+        job_id: JOB,
+        sume_status: "failed",
+        usage_summary: { status: "refunded", refunded_usd_cents: 79, final: true },
+      },
+    });
+    expect(refunded.cost_usd).toBe(0);
+  });
+
+  it("ignores the summary a result read repeats", () => {
+    const usage = extractUsage({
+      data: {
+        job_id: JOB,
+        job: { id: JOB, usage_summary: { status: "captured", captured_usd_cents: 79 } },
+        result: { artifacts: [] },
+      },
+    });
+    expect(usage.cost_usd).toBeUndefined();
+  });
+
+  it("leaves bodies without a Sume job id to the generic rules", () => {
+    const estimate = extractUsage({ data: { model: "kling-4", currency: "USD", usd: "1.68" } });
+    expect(estimate.cost_usd).toBeUndefined();
+    const other = extractUsage({ data: { id: "abc", usage: { cost: 0.5 } } });
+    expect(other.cost_usd).toBe(0.5);
+  });
+});

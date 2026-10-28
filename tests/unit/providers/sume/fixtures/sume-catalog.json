@@ -1,0 +1,832 @@
+{
+  "data": {
+    "currency": "USD",
+    "models": [
+      {
+        "id": "sume-remix-restyle",
+        "slug": "sume/sume-remix-restyle",
+        "name": "Remix Restyle",
+        "kind": "video",
+        "pricing": {
+          "currency": "USD",
+          "unit": "second",
+          "from_usd": "0.1230",
+          "from_usd_micros": 123000,
+          "options": [
+            {
+              "label": "480p \u00b7 per source second",
+              "usd": "0.1230",
+              "usd_micros": 123000,
+              "route": "r4fdc55",
+              "resolution": "480p"
+            },
+            {
+              "label": "720p \u00b7 per source second",
+              "usd": "0.2766",
+              "usd_micros": 276600,
+              "route": "r4fdc55",
+              "resolution": "720p"
+            },
+            {
+              "label": "1080p \u00b7 per source second",
+              "usd": "0.6804",
+              "usd_micros": 680400,
+              "route": "r4fdc55",
+              "resolution": "1080p"
+            }
+          ],
+          "qualifier": "from",
+          "to_usd": "0.6804"
+        },
+        "company": {
+          "slug": "sume",
+          "name": "Sume"
+        },
+        "description": "Restyles a whole source video in one of Sume's styles, keeping its motion and sound \u00b7 480p to 1080p \u00b7 source 4\u201315 s",
+        "modes": ["restyle"],
+        "capabilities": {
+          "text_to_video": false,
+          "image_to_video": false,
+          "end_frame": false,
+          "reference_images": false,
+          "reference_videos": false,
+          "video_to_video": true,
+          "audio": false,
+          "resolutions": ["480p", "720p", "1080p"],
+          "duration_seconds": {
+            "min": 4,
+            "max": 15
+          },
+          "aspect_ratios": [],
+          "max_reference_images": 0,
+          "routes": ["POST /v1/sume/remix/restyle/v1.0"]
+        },
+        "constraints": [
+          "Send the request to POST /v1/sume/remix/restyle/v1.0; preset_id picks one of the styles from GET /v1/sume/remix/restyle/v1.0/presets; image_urls is not taken.",
+          "duration is optional: the source video's length in seconds, 4\u201315, read from the file when left out.",
+          "The output follows the source's length and keeps the source video's sound.",
+          "A refusal fails the job and refunds it; it is not retried on another model."
+        ],
+        "request_fields": {
+          "preset_id": {
+            "required": true,
+            "type": "string",
+            "description": "One of Sume's styles (GET /v1/sume/remix/restyle/v1.0/presets). The source's first frame is redrawn in the style, with the prompt, and the edit restyles a depth video of the source from that frame and the style's plate.",
+            "options": [
+              "cel-shaded-cg-anime",
+              "chunky-textured-low-poly",
+              "comic-3d",
+              "expressive-2d-animation",
+              "expressive-gouache-fashion",
+              "felt-puppet-stop-motion",
+              "graphic-cel",
+              "grotesque-street-cgi",
+              "hand-painted-cel-animation",
+              "knitted-yarn-world",
+              "neon-graphic-cinematic-3d",
+              "nighttime-anime-pixel-art",
+              "outline-free-cel",
+              "painterly-cinematic-3d",
+              "painterly-sculpted-animation",
+              "retro-game-3d",
+              "rounded-toy-cgi",
+              "sculptural-3d-fashion",
+              "textured-gouache-character-illustration",
+              "warm-painterly-3d-animation"
+            ]
+          },
+          "prompt": {
+            "required": false,
+            "type": "string",
+            "description": "Optional, any language: added after the style's own prompt."
+          },
+          "video_url": {
+            "required": true,
+            "description": "The source video, 4\u201315 s, at most 200 MiB (HTTPS). The aspect ratio follows it.",
+            "media": "video"
+          },
+          "reference_image_urls": {
+            "omit": true
+          },
+          "image_urls": {
+            "omit": true
+          },
+          "duration": {
+            "required": false,
+            "type": "integer",
+            "description": "Optional: the source video's length in seconds, rounded up. Left out, the API reads it from the file. The output follows the source's length.",
+            "min": 4,
+            "max": 15,
+            "default": null
+          },
+          "resolution": {
+            "options": ["480p", "720p", "1080p"],
+            "default": "720p"
+          }
+        }
+      },
+      {
+        "id": "grok-imagine-video-1.5",
+        "slug": "xai/grok-imagine-video-1.5",
+        "name": "Grok Imagine Video 1.5",
+        "kind": "video",
+        "pricing": {
+          "currency": "USD",
+          "unit": "second",
+          "from_usd": "0.0800",
+          "from_usd_micros": 80000,
+          "options": [
+            {
+              "label": "480p",
+              "usd": "0.0800",
+              "usd_micros": 80000,
+              "route": "rc72d81",
+              "resolution": "480p"
+            },
+            {
+              "label": "720p",
+              "usd": "0.1400",
+              "usd_micros": 140000,
+              "route": "rc72d81",
+              "resolution": "720p"
+            }
+          ],
+          "qualifier": "from",
+          "to_usd": "0.1400"
+        },
+        "company": {
+          "slug": "xai",
+          "name": "xAI"
+        },
+        "description": "Generates video from an image \u00b7 480p to 720p \u00b7 4\u201315 s",
+        "modes": ["image-to-video"],
+        "capabilities": {
+          "text_to_video": false,
+          "image_to_video": true,
+          "end_frame": false,
+          "reference_images": false,
+          "reference_videos": false,
+          "reference_audios": false,
+          "video_to_video": false,
+          "audio": false,
+          "resolutions": ["480p", "720p"],
+          "duration_seconds": {
+            "min": 4,
+            "max": 15
+          },
+          "aspect_ratios": []
+        },
+        "constraints": [
+          "image_url or first_frame_url required",
+          "no end_frame",
+          "no reference_*_urls",
+          "no aspect_ratio / bitrate_mode / generate_audio"
+        ],
+        "request_fields": {
+          "prompt": {
+            "required": true
+          }
+        }
+      },
+      {
+        "id": "veo-3.1",
+        "slug": "google/veo-3.1",
+        "name": "Veo 3.1",
+        "kind": "video",
+        "pricing": {
+          "currency": "USD",
+          "unit": "second",
+          "from_usd": "0.2000",
+          "from_usd_micros": 200000,
+          "options": [
+            {
+              "label": "720p \u00b7 audio off",
+              "usd": "0.2000",
+              "usd_micros": 200000,
+              "route": "r702dfc",
+              "resolution": "720p",
+              "audio": false
+            },
+            {
+              "label": "720p \u00b7 audio on",
+              "usd": "0.4000",
+              "usd_micros": 400000,
+              "route": "r702dfc",
+              "resolution": "720p",
+              "audio": true
+            },
+            {
+              "label": "1080p \u00b7 audio off",
+              "usd": "0.2000",
+              "usd_micros": 200000,
+              "route": "r702dfc",
+              "resolution": "1080p",
+              "audio": false
+            },
+            {
+              "label": "1080p \u00b7 audio on",
+              "usd": "0.4000",
+              "usd_micros": 400000,
+              "route": "r702dfc",
+              "resolution": "1080p",
+              "audio": true
+            }
+          ],
+          "qualifier": "from",
+          "to_usd": "0.4000"
+        },
+        "company": {
+          "slug": "google",
+          "name": "Google"
+        },
+        "description": "Generates video from text \u00b7 720p to 1080p \u00b7 4\u20138 s \u00b7 native audio",
+        "modes": ["text-to-video"],
+        "capabilities": {
+          "text_to_video": true,
+          "image_to_video": false,
+          "end_frame": false,
+          "reference_images": false,
+          "reference_videos": false,
+          "reference_audios": false,
+          "video_to_video": false,
+          "audio": true,
+          "resolutions": ["720p", "1080p"],
+          "duration_seconds": {
+            "min": 4,
+            "max": 8
+          },
+          "duration_values": [4, 6, 8],
+          "aspect_ratios": ["16:9", "9:16"]
+        },
+        "constraints": [
+          "text-to-video only (no frame_images, image_url, reference or video_url inputs)",
+          "duration 4, 6 or 8 seconds (default 8); resolution 720p (default) or 1080p; aspect_ratio 16:9 (default) or 9:16",
+          "generate_audio defaults to true (synchronized sound); false makes a silent clip at the lower rate"
+        ]
+      },
+      {
+        "id": "kling-4",
+        "slug": "kling/kling-4",
+        "name": "Kling 4.0",
+        "kind": "video",
+        "pricing": {
+          "currency": "USD",
+          "unit": "second",
+          "from_usd": "0.1570",
+          "from_usd_micros": 157000,
+          "options": [
+            {
+              "label": "720p",
+              "usd": "0.1570",
+              "usd_micros": 157000,
+              "route": "r4fdc55",
+              "resolution": "720p"
+            },
+            {
+              "label": "1080p",
+              "usd": "0.2350",
+              "usd_micros": 235000,
+              "route": "r4fdc55",
+              "resolution": "1080p"
+            }
+          ],
+          "qualifier": "from",
+          "to_usd": "0.2350"
+        },
+        "company": {
+          "slug": "kling",
+          "name": "Kling"
+        },
+        "description": "Generates video from text, an image \u00b7 720p to 1080p \u00b7 3\u201330 s \u00b7 native audio",
+        "modes": ["text-to-video", "image-to-video"],
+        "capabilities": {
+          "text_to_video": true,
+          "image_to_video": true,
+          "end_frame": true,
+          "reference_images": false,
+          "reference_videos": false,
+          "reference_audios": false,
+          "video_to_video": false,
+          "audio": true,
+          "resolutions": ["720p", "1080p"],
+          "duration_seconds": {
+            "min": 3,
+            "max": 30
+          },
+          "aspect_ratios": ["16:9", "9:16", "1:1", "21:9"]
+        },
+        "constraints": [
+          "Text, a first frame (image_url), or a first and last frame (end_image_url); no video or audio inputs",
+          "resolution 720p / 1080p (default 1080p); duration 3\u201330 seconds (default 5); aspect_ratio 16:9 / 9:16 / 1:1 / 21:9 (default 16:9); a first frame sets the framing, so aspect_ratio applies to text and references only",
+          "generate_audio defaults to true (synchronized sound); false makes a silent clip at the same rate"
+        ]
+      },
+      {
+        "id": "hailuo-h3-regen",
+        "slug": "minimax/hailuo-h3-regen",
+        "name": "Hailuo H3 Regen",
+        "kind": "video",
+        "pricing": {
+          "currency": "USD",
+          "unit": "second",
+          "from_usd": "0.0500",
+          "from_usd_micros": 50000,
+          "options": [
+            {
+              "label": "2K",
+              "usd": "0.0500",
+              "usd_micros": 50000,
+              "route": "r4fdc55",
+              "resolution": "2K"
+            }
+          ],
+          "qualifier": "from",
+          "to_usd": "0.0500"
+        },
+        "company": {
+          "slug": "minimax",
+          "name": "MiniMax"
+        },
+        "description": "Generates video from a source video \u00b7 2K \u00b7 5\u201316 s",
+        "modes": ["video-to-video"],
+        "capabilities": {
+          "text_to_video": false,
+          "image_to_video": false,
+          "end_frame": false,
+          "reference_images": false,
+          "reference_videos": false,
+          "reference_audios": false,
+          "video_to_video": true,
+          "audio": false,
+          "resolutions": ["2K"],
+          "duration_seconds": {
+            "min": 5,
+            "max": 16
+          },
+          "aspect_ratios": []
+        },
+        "constraints": [
+          "Regenerates one H3 768p clip (video_url) under a new prompt, which is required. No frame, reference or aspect_ratio inputs.",
+          "video_url must be at most 1344\u00d7768 with an audio track, 4.5\u201315 s (an H3 768p output); the output keeps its length and framing",
+          "duration is the source length in seconds, rounded up (5\u201316), for the reservation only; resolution 2K"
+        ],
+        "request_fields": {
+          "prompt": {
+            "required": true
+          }
+        }
+      },
+      {
+        "id": "veed-fabric-1.0",
+        "slug": "veed/veed-fabric-1.0",
+        "name": "VEED Fabric 1.0",
+        "kind": "lipsync",
+        "pricing": {
+          "currency": "USD",
+          "unit": "second",
+          "from_usd": "0.0800",
+          "from_usd_micros": 80000,
+          "options": [
+            {
+              "label": "480p",
+              "usd": "0.0800",
+              "usd_micros": 80000,
+              "route": "rc72d81",
+              "resolution": "480p"
+            },
+            {
+              "label": "720p",
+              "usd": "0.1500",
+              "usd_micros": 150000,
+              "route": "rc72d81",
+              "resolution": "720p"
+            }
+          ],
+          "qualifier": "from",
+          "to_usd": "0.1500"
+        },
+        "company": {
+          "slug": "veed",
+          "name": "VEED"
+        },
+        "description": "Makes a face say an audio track \u00b7 480p to 720p",
+        "modes": ["image-to-lipsync"],
+        "capabilities": {
+          "text_to_video": false,
+          "image_to_video": true,
+          "end_frame": false,
+          "reference_images": false,
+          "reference_videos": false,
+          "reference_audios": false,
+          "video_to_video": false,
+          "audio": true,
+          "lipsync": true,
+          "resolutions": ["480p", "720p"],
+          "duration_seconds": {
+            "min": 2,
+            "max": 60
+          },
+          "aspect_ratios": []
+        },
+        "constraints": [
+          "lipsync from an image: image_url (the face) + audio_url (the speech)",
+          "no prompt",
+          "duration required: the clip's length in whole seconds, 2\u201360; the clip is as long as the audio",
+          "resolution 480p / 720p (default 720p)",
+          "no frames, references, aspect_ratio or generate_audio"
+        ],
+        "request_fields": {
+          "prompt": {
+            "omit": true
+          },
+          "duration": {
+            "required": true,
+            "type": "integer",
+            "description": "The audio's length in whole seconds.",
+            "min": 2,
+            "max": 60
+          }
+        }
+      },
+      {
+        "id": "sync-lipsync-3",
+        "slug": "sync/sync-lipsync-3",
+        "name": "Sync Lipsync 3",
+        "kind": "lipsync",
+        "pricing": {
+          "currency": "USD",
+          "unit": "second",
+          "from_usd": "0.133333",
+          "from_usd_micros": 133333,
+          "options": [
+            {
+              "label": "per second",
+              "usd": "0.133333",
+              "usd_micros": 133333,
+              "route": "rc72d81"
+            }
+          ],
+          "qualifier": "from",
+          "to_usd": "0.133333"
+        },
+        "company": {
+          "slug": "sync",
+          "name": "Sync Labs"
+        },
+        "description": "Makes a face say an audio track",
+        "modes": ["video-to-lipsync"],
+        "capabilities": {
+          "text_to_video": false,
+          "image_to_video": false,
+          "end_frame": false,
+          "reference_images": false,
+          "reference_videos": false,
+          "reference_audios": false,
+          "video_to_video": true,
+          "audio": true,
+          "lipsync": true,
+          "resolutions": [],
+          "duration_seconds": {
+            "min": 2,
+            "max": 60
+          },
+          "aspect_ratios": []
+        },
+        "constraints": [
+          "lipsync from a video: video_url (the clip) + audio_url (the new speech)",
+          "no prompt",
+          "duration required: the clip's length in whole seconds, 2\u201360",
+          "keeps the source's resolution; no resolution",
+          "no frames, references, aspect_ratio or generate_audio"
+        ],
+        "request_fields": {
+          "prompt": {
+            "omit": true
+          },
+          "duration": {
+            "required": true,
+            "type": "integer",
+            "description": "The audio's length in whole seconds.",
+            "min": 2,
+            "max": 60
+          }
+        }
+      },
+      {
+        "id": "veed-subtitles",
+        "slug": "veed/veed-subtitles",
+        "name": "VEED Subtitles",
+        "kind": "captions",
+        "pricing": {
+          "currency": "USD",
+          "unit": "second",
+          "from_usd": "0.001667",
+          "from_usd_micros": 1667,
+          "options": [
+            {
+              "label": "1080p",
+              "usd": "0.001667",
+              "usd_micros": 1667,
+              "route": "list",
+              "resolution": "1080p"
+            }
+          ],
+          "qualifier": "from",
+          "to_usd": "0.001667"
+        },
+        "company": {
+          "slug": "veed",
+          "name": "VEED"
+        },
+        "description": "Burns styled captions into a video \u00b7 1080p",
+        "modes": ["video-captions"],
+        "capabilities": {
+          "text_to_video": false,
+          "image_to_video": false,
+          "end_frame": false,
+          "reference_images": false,
+          "reference_videos": false,
+          "reference_audios": false,
+          "video_to_video": true,
+          "audio": true,
+          "captions": true,
+          "resolutions": ["1080p"],
+          "duration_seconds": {
+            "min": 2,
+            "max": 600
+          },
+          "aspect_ratios": []
+        },
+        "constraints": [
+          "captions from a video: video_url (the clip) + captions.style",
+          "captions.style one of glass, whisper, glide2, fusion, glide, terminal, handwritten, backdrop, backdrop2, simple, plain, beans, corpo, boo, shadeplay, casper, capri, lowkey, vinta, diego, ali, slay, kitty, hustle, karl, sprout, flex, mint, rizz, vegas; glass, whisper, glide2, fusion, glide, terminal, handwritten, backdrop, backdrop2 are dynamic and bill 2\u00d7",
+          "captions.srt: the lines as SRT text (omit it and the clip's speech is transcribed)",
+          "captions.position top / center / bottom",
+          "captions.shadow none / min / mid / max",
+          "duration required: the clip's length in whole seconds, 2\u2013600; billed for at least 60 s",
+          "resolution: 1080p; default 1080p",
+          "no prompt, frames, references, audio_url, aspect_ratio or generate_audio"
+        ],
+        "request_fields": {
+          "captions.style": {
+            "required": true,
+            "type": "string",
+            "description": "Caption style.",
+            "options": [
+              "glass",
+              "whisper",
+              "glide2",
+              "fusion",
+              "glide",
+              "terminal",
+              "handwritten",
+              "backdrop",
+              "backdrop2",
+              "simple",
+              "plain",
+              "beans",
+              "corpo",
+              "boo",
+              "shadeplay",
+              "casper",
+              "capri",
+              "lowkey",
+              "vinta",
+              "diego",
+              "ali",
+              "slay",
+              "kitty",
+              "hustle",
+              "karl",
+              "sprout",
+              "flex",
+              "mint",
+              "rizz",
+              "vegas"
+            ],
+            "default": "simple"
+          },
+          "duration": {
+            "required": true,
+            "type": "integer",
+            "description": "The clip's length in whole seconds.",
+            "min": 2,
+            "max": 600
+          }
+        }
+      },
+      {
+        "id": "gpt-image-2",
+        "slug": "openai/gpt-image-2",
+        "name": "ChatGPT Image 2",
+        "kind": "image",
+        "pricing": {
+          "currency": "USD",
+          "unit": "image",
+          "from_usd": "0.0060",
+          "from_usd_micros": 6000,
+          "options": [
+            {
+              "label": "1K \u00b7 low",
+              "usd": "0.0060",
+              "usd_micros": 6000,
+              "route": "r4fdc55",
+              "resolution": "1K",
+              "quality": "low"
+            },
+            {
+              "label": "1K \u00b7 medium",
+              "usd": "0.0530",
+              "usd_micros": 53000,
+              "route": "r4fdc55",
+              "resolution": "1K",
+              "quality": "medium"
+            },
+            {
+              "label": "1K \u00b7 high",
+              "usd": "0.2110",
+              "usd_micros": 211000,
+              "route": "r4fdc55",
+              "resolution": "1K",
+              "quality": "high"
+            },
+            {
+              "label": "2K \u00b7 low",
+              "usd": "0.0060",
+              "usd_micros": 6000,
+              "route": "r4fdc55",
+              "resolution": "2K",
+              "quality": "low"
+            },
+            {
+              "label": "2K \u00b7 medium",
+              "usd": "0.0530",
+              "usd_micros": 53000,
+              "route": "r4fdc55",
+              "resolution": "2K",
+              "quality": "medium"
+            },
+            {
+              "label": "2K \u00b7 high",
+              "usd": "0.2110",
+              "usd_micros": 211000,
+              "route": "r4fdc55",
+              "resolution": "2K",
+              "quality": "high"
+            },
+            {
+              "label": "4K \u00b7 low",
+              "usd": "0.0060",
+              "usd_micros": 6000,
+              "route": "r4fdc55",
+              "resolution": "4K",
+              "quality": "low"
+            },
+            {
+              "label": "4K \u00b7 medium",
+              "usd": "0.0530",
+              "usd_micros": 53000,
+              "route": "r4fdc55",
+              "resolution": "4K",
+              "quality": "medium"
+            },
+            {
+              "label": "4K \u00b7 high",
+              "usd": "0.2110",
+              "usd_micros": 211000,
+              "route": "r4fdc55",
+              "resolution": "4K",
+              "quality": "high"
+            }
+          ],
+          "qualifier": "from",
+          "to_usd": "0.2110"
+        },
+        "company": {
+          "slug": "openai",
+          "name": "OpenAI"
+        },
+        "description": "Generates and edits images \u00b7 up to 4K \u00b7 up to 4 per request",
+        "modes": ["text-to-image", "image-edit"],
+        "capabilities": {
+          "text_to_image": true,
+          "image_edit": true,
+          "aspect_ratios": ["auto", "1:1", "16:9", "9:16", "4:3", "3:4", "5:4", "9:8", "4:5"],
+          "resolutions": ["1K", "2K", "4K"],
+          "qualities": ["low", "medium", "high"],
+          "max_images": 4,
+          "output_formats": ["png", "jpeg", "webp"]
+        },
+        "constraints": [
+          "Admit uses an image-token estimate (quality + size); the listed rate is high quality at 1024"
+        ]
+      },
+      {
+        "id": "recraft-v4",
+        "slug": "recraft/recraft-v4",
+        "name": "Recraft V4",
+        "kind": "image",
+        "pricing": {
+          "currency": "USD",
+          "unit": "image",
+          "from_usd": "0.0400",
+          "from_usd_micros": 40000,
+          "options": [
+            {
+              "label": "per image",
+              "usd": "0.0400",
+              "usd_micros": 40000,
+              "route": "rb72473"
+            }
+          ],
+          "qualifier": "from",
+          "to_usd": "0.0400"
+        },
+        "company": {
+          "slug": "recraft",
+          "name": "Recraft"
+        },
+        "description": "Generates images from text \u00b7 up to 4 per request",
+        "modes": ["text-to-image"],
+        "capabilities": {
+          "text_to_image": true,
+          "image_edit": false,
+          "aspect_ratios": [
+            "1:1",
+            "16:9",
+            "9:16",
+            "4:3",
+            "3:4",
+            "4:5",
+            "5:4",
+            "3:2",
+            "2:3",
+            "21:9",
+            "9:21",
+            "1:2",
+            "2:1"
+          ],
+          "resolutions": [],
+          "qualities": [],
+          "max_images": 4,
+          "output_formats": ["webp"]
+        },
+        "constraints": ["text-to-image only; image_urls not accepted"]
+      },
+      {
+        "id": "qwen-image-layered",
+        "slug": "alibaba/qwen-image-layered",
+        "name": "Qwen Image Layered",
+        "kind": "image",
+        "pricing": {
+          "currency": "USD",
+          "unit": "image",
+          "from_usd": "0.0500",
+          "from_usd_micros": 50000,
+          "options": [
+            {
+              "label": "per image",
+              "usd": "0.0500",
+              "usd_micros": 50000,
+              "route": "rc72d81"
+            }
+          ],
+          "qualifier": "from",
+          "to_usd": "0.0500"
+        },
+        "company": {
+          "slug": "alibaba",
+          "name": "Alibaba"
+        },
+        "description": "Edits images \u00b7 up to 10 per request",
+        "modes": ["image-edit"],
+        "capabilities": {
+          "text_to_image": false,
+          "image_edit": true,
+          "aspect_ratios": [],
+          "resolutions": [],
+          "qualities": [],
+          "max_images": 10,
+          "output_formats": ["png"]
+        },
+        "constraints": [
+          "exactly one image in image_urls",
+          "n (2\u201310) is the number of layers; each layer is one billed image"
+        ],
+        "request_fields": {
+          "image_urls": {
+            "required": true,
+            "description": "The one image to split into layers (HTTPS)."
+          },
+          "num_images": {
+            "required": true,
+            "description": "Layers to make, 2\u201310.",
+            "min": 2,
+            "max": 10,
+            "default": 2
+          }
+        }
+      }
+    ]
+  }
+}

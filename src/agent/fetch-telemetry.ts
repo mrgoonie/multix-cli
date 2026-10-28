@@ -101,6 +101,20 @@ function describeRequest(input: string | URL | Request, init?: RequestInit): Dry
   return out;
 }
 
+/** globalThis.fetch as it was before the wrapper was installed. */
+let originalFetch: typeof globalThis.fetch | undefined;
+
+/**
+ * Fetch that bypasses the telemetry wrapper: never recorded as a provider
+ * call and never stopped by --dry-run. Only for free, keyless lookups made on
+ * the run's behalf (a provider's public price quote or model catalogue), so
+ * they neither count as billable requests nor end a dry run early.
+ */
+export const untrackedFetch = (
+  input: string | URL | Request,
+  init?: RequestInit,
+): Promise<Response> => (originalFetch ?? globalThis.fetch)(input, init);
+
 /**
  * Install the wrapper. `onDryRun` is called with the first request when the
  * run is a dry run; it must end the process (it never returns normally).
@@ -108,6 +122,7 @@ function describeRequest(input: string | URL | Request, init?: RequestInit): Dry
 export function installFetchTelemetry(onDryRun: (request: DryRunRequest) => never): void {
   const original = globalThis.fetch;
   if (typeof original !== "function") return;
+  originalFetch = original;
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     if (run.dryRun) onDryRun(describeRequest(input, init));
     const started = Date.now();

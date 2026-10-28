@@ -13,8 +13,10 @@ import {
   estimateCommand,
   parseCostPolicy,
 } from "../../../src/budget/command-cost.js";
+import { quoteCommand } from "../../../src/budget/provider-quote.js";
 import { TASKS } from "../../../src/capabilities/capability-types.js";
 import { BudgetError } from "../../../src/core/errors.js";
+import type { FetchLike } from "../../../src/core/fetch-json.js";
 import type { Limits } from "../config.js";
 import type { ProviderKeys } from "../provider-secret-names.js";
 import { MODEL_ID_RE, catalogPayload } from "./catalog-view.js";
@@ -45,18 +47,24 @@ const urlListSchema = z.union([
  * The CLI's --estimate / --max-cost for multix_run, from the same pricing
  * code: an estimate-only call returns the price and never starts a job; a
  * budget the run cannot be proven to fit throws (nothing is started).
+ * Commands with a live provider quote (Sume) are priced by it, with the
+ * https URLs from `inputs` standing in for their file options.
  */
-export function costPreflight(
+export async function costPreflight(
   command: string,
   args: {
     options?: Record<string, unknown>;
+    inputs?: Record<string, string | string[]>;
     estimate?: boolean;
     max_cost_usd?: number;
     cost_policy?: string;
   },
-): Record<string, unknown> | undefined {
+  fetchFn: FetchLike = (input, init) => globalThis.fetch(input, init),
+): Promise<Record<string, unknown> | undefined> {
   if (!args.estimate && args.max_cost_usd === undefined) return undefined;
-  const estimate = estimateCommand(command, args.options ?? {});
+  const estimate =
+    (await quoteCommand(command, { ...args.options, ...args.inputs }, { fetch: fetchFn })) ??
+    estimateCommand(command, args.options ?? {});
   let budget: Record<string, unknown> | undefined;
   if (args.max_cost_usd !== undefined) {
     const policy = parseCostPolicy(args.cost_policy);
@@ -150,7 +158,7 @@ export function registerJobTools(
       const fields = { command: args.command.slice(0, 100) };
       return runTool("multix_run", fields, async () => {
         const prepared = prepareRun(args, limits);
-        const preflight = costPreflight(prepared.command, args);
+        const preflight = await costPreflight(prepared.command, args);
         if (preflight) return preflight;
         return runner.run(prepared, args.wait_seconds ?? DEFAULT_WAIT_SECONDS);
       });

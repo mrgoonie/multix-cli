@@ -12,6 +12,7 @@ import { HEYGEN_ROUTING } from "./heygen/models.js";
 import { LEONARDO_ROUTING } from "./leonardo/models.js";
 import { REPLICATE_ROUTING } from "./replicate/models.js";
 import { RUNWAY_DASHBOARD_LINK, RUNWAY_ROUTING } from "./runway/models.js";
+import { SUME_DASHBOARD_LINK, SUME_ROUTING } from "./sume/models.js";
 
 export interface ProviderEntry {
   name: string;
@@ -99,6 +100,12 @@ export const PROVIDER_KEYS: readonly ProviderEntry[] = [
     ...keyNames(RUNWAY_ROUTING),
     optional: true,
     link: RUNWAY_DASHBOARD_LINK,
+  },
+  {
+    name: "Sume",
+    ...keyNames(SUME_ROUTING),
+    optional: true,
+    link: SUME_DASHBOARD_LINK,
   },
   {
     name: "HeyGen",

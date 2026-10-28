@@ -5,8 +5,9 @@
  * with no such copy the catalog is "unavailable" and every model it would have
  * confirmed stays unknown.
  *
- * Cache: ~/.multix/cache/models/<provider>-<task>.json (MULTIX_CACHE_DIR
- * overrides the directory, MULTIX_MODELS_TTL the TTL in seconds).
+ * Cache: ~/.multix/cache/models/<provider>-<task>.json, plus the whole Sume
+ * catalogue in sume-catalog.json (MULTIX_CACHE_DIR overrides the directory,
+ * MULTIX_MODELS_TTL the TTL in seconds).
  */
 
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
@@ -25,6 +26,8 @@ import {
   readCatalog,
 } from "../../capabilities/model-discovery.js";
 import type { CatalogResult } from "../../capabilities/model-views.js";
+import { type SumeCatalog, parseSumeCatalog } from "../../providers/sume/catalog.js";
+import { SUME_CATALOG_URL } from "../../providers/sume/models.js";
 
 export const DEFAULT_MODELS_TTL_S = 24 * 60 * 60;
 
@@ -168,5 +171,106 @@ export async function discoverCatalog(
       source: { provider, task, state: "unavailable", error: `${error}${tooOld}` },
       models: [],
     };
+  }
+}
+
+/** The whole Sume catalogue (every kind, with capabilities), cached for `multix sume`. */
+export interface SumeCatalogResult {
+  state: "fresh" | "cached" | "stale" | "unavailable";
+  url?: string;
+  fetched_at?: string;
+  error?: string;
+  catalog?: SumeCatalog;
+}
+
+interface SumeCacheFile {
+  schema: string;
+  provider: "sume";
+  url: string;
+  fetched_at: string;
+  /** The catalogue response body as Sume sent it; re-parsed on every read. */
+  body: unknown;
+}
+
+const SUME_CACHE_FILE = "sume-catalog.json";
+
+function readSumeCache(file: string): (SumeCacheFile & { catalog: SumeCatalog }) | undefined {
+  try {
+    const data = JSON.parse(readFileSync(file, "utf8")) as Partial<SumeCacheFile>;
+    if (
+      data.schema !== CAPABILITY_SCHEMA ||
+      data.provider !== "sume" ||
+      typeof data.url !== "string" ||
+      typeof data.fetched_at !== "string" ||
+      Number.isNaN(Date.parse(data.fetched_at))
+    ) {
+      return undefined;
+    }
+    return { ...(data as SumeCacheFile), catalog: parseSumeCatalog(data.body) };
+  } catch {
+    return undefined; // missing or corrupt: treat as no cache
+  }
+}
+
+/**
+ * The Sume catalogue with the same TTL and fallback rules as
+ * `discoverCatalog`: fresh, cached (younger than the TTL), stale (a failed
+ * read with a copy younger than MAX_MODELS_TTL_S) or unavailable. Never throws.
+ */
+export async function discoverSumeCatalog(opts: DiscoverOptions = {}): Promise<SumeCatalogResult> {
+  const now = opts.now ?? Date.now;
+  const file = path.join(opts.dir ?? modelsCacheDir(), SUME_CACHE_FILE);
+  const cached = readSumeCache(file);
+  const ttlMs = (opts.ttlSeconds ?? modelsTtlSeconds()) * 1000;
+  const age = cached ? now() - Date.parse(cached.fetched_at) : Number.NaN;
+  const fromSumeCache = (
+    c: NonNullable<typeof cached>,
+    state: "cached" | "stale",
+    error?: string,
+  ) => ({
+    state,
+    url: c.url,
+    fetched_at: c.fetched_at,
+    catalog: c.catalog,
+    ...(error ? { error } : {}),
+  });
+  if (cached && !opts.refresh && age >= 0 && age < ttlMs) return fromSumeCache(cached, "cached");
+  const fetchFn = opts.fetchFn ?? fetch;
+  try {
+    const res = await fetchFn(SUME_CATALOG_URL, {
+      headers: { accept: "application/json" },
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!res.ok) {
+      await res.body?.cancel().catch(() => {});
+      throw new Error(`HTTP ${res.status} from ${new URL(SUME_CATALOG_URL).host}`);
+    }
+    const body = (await res.json()) as unknown;
+    const catalog = parseSumeCatalog(body);
+    const fetched_at = new Date(now()).toISOString();
+    try {
+      mkdirSync(path.dirname(file), { recursive: true });
+      const tmp = `${file}.${process.pid}.tmp`;
+      const data: SumeCacheFile = {
+        schema: CAPABILITY_SCHEMA,
+        provider: "sume",
+        url: SUME_CATALOG_URL,
+        fetched_at,
+        body,
+      };
+      writeFileSync(tmp, `${JSON.stringify(data)}\n`);
+      renameSync(tmp, file);
+    } catch {
+      // An unwritable cache only costs a refetch next time.
+    }
+    return { state: "fresh", url: SUME_CATALOG_URL, fetched_at, catalog };
+  } catch (e) {
+    const error = e instanceof Error ? e.message : String(e);
+    if (cached && age >= 0 && age < MAX_MODELS_TTL_S * 1000) {
+      return fromSumeCache(cached, "stale", error);
+    }
+    const why = age < 0 ? "is dated in the future" : "is too old to use";
+    const tooOld = cached ? `; cached copy from ${cached.fetched_at} ${why}` : "";
+    return { state: "unavailable", error: `${error}${tooOld}` };
   }
 }

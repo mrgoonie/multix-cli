@@ -206,6 +206,71 @@ function walk(
   }
 }
 
+const SUME_JOB_ID = /^job_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** usage_summary states in which Sume has settled the job: captured, or refunded in full. */
+const SUME_SETTLED = new Set(["captured", "refunded"]);
+
+/**
+ * Sume (api.sume.com) job responses, wrapped in `data`, carry money in three
+ * places, only two of which are a charge:
+ * - submit: `data.usage.usd` (decimal string, the charge reserved for this
+ *   job) and `data.usage.credits`; a replay (`idempotency_hit: true`) charged
+ *   nothing new;
+ * - a settled `usage_summary` (on a status read, the full job or a cancel):
+ *   `captured_usd_cents` is what the job finally cost, 0 once refunded;
+ * - reserved/released/refunded amounts and a still-reserved summary, which
+ *   are never spend.
+ * Returns undefined for other bodies; otherwise replaces whatever the generic
+ * walk picked as cost or credits (it would take reserved_credits).
+ */
+function sumeMoney(
+  body: Record<string, unknown>,
+): Pick<ResponseUsage, "cost_usd" | "credits" | "sources"> | undefined {
+  const data = asRecord(body.data);
+  if (!data) return undefined;
+  const job = asRecord(data.job);
+  const id = [data.job_id, job?.id, data.id, data.request_id].find(
+    (v) => typeof v === "string" && SUME_JOB_ID.test(v),
+  );
+  const isSume =
+    id !== undefined &&
+    ("sume_status" in data || "idempotency_hit" in data || "usage_summary" in data || !!job);
+  if (!isSume) return undefined;
+  const out: Pick<ResponseUsage, "cost_usd" | "credits" | "sources"> = {};
+  const usage = asRecord(data.usage);
+  const usd = typeof usage?.usd === "string" ? usage.usd.trim() : undefined;
+  if (usage && data.idempotency_hit !== true && usd && /^\d+(\.\d+)?$/.test(usd)) {
+    out.cost_usd = Number(usd);
+    out.sources = { cost_usd: "body.data.usage.usd" };
+    const credits = num(usage.credits);
+    if (credits !== undefined) {
+      out.credits = credits;
+      out.sources.credits = "body.data.usage.credits";
+    }
+    return out;
+  }
+  // A result read repeats the job's summary next to the status read: count it once.
+  if (data.result !== undefined) return out;
+  const summaryPath = asRecord(data.usage_summary)
+    ? "data.usage_summary"
+    : "data.job.usage_summary";
+  const summary = asRecord(data.usage_summary) ?? asRecord(job?.usage_summary);
+  const status = typeof summary?.status === "string" ? summary.status.toLowerCase() : "";
+  if (summary && (summary.final === true || SUME_SETTLED.has(status))) {
+    const cents = num(summary.captured_usd_cents) ?? (status === "refunded" ? 0 : undefined);
+    if (cents !== undefined) {
+      out.cost_usd = Math.round(cents) / 100;
+      out.sources = { cost_usd: `body.${summaryPath}.captured_usd_cents` };
+    }
+    const credits = num(summary.captured_credits);
+    if (credits !== undefined) {
+      out.credits = credits;
+      out.sources = { ...out.sources, credits: `body.${summaryPath}.captured_credits` };
+    }
+  }
+  return out;
+}
+
 /** Extract usage from one parsed JSON response body and its headers. */
 export function extractUsage(body: unknown, headers?: Headers | null): ResponseUsage {
   const out: ResponseUsage = { tokens: {}, metrics: {}, ids: [] };
@@ -214,7 +279,8 @@ export function extractUsage(body: unknown, headers?: Headers | null): ResponseU
     tokensFrom(obj, out.tokens);
     walk(obj, "", 0, out);
   }
-  for (const kind of ["plain", "spend-in-balance"] as const) {
+  const sume = obj ? sumeMoney(obj) : undefined;
+  for (const kind of sume ? [] : (["plain", "spend-in-balance"] as const)) {
     for (const [path, value] of Object.entries(out.metrics)) {
       const leaf = path.split(".").pop() ?? path;
       // Balances never count; a spend inside a balance counts only when no plain one does.
@@ -234,6 +300,11 @@ export function extractUsage(body: unknown, headers?: Headers | null): ResponseU
         out.sources = { ...out.sources, credits: `body.${path}` };
       }
     }
+  }
+  if (sume) {
+    if (sume.cost_usd !== undefined) out.cost_usd = sume.cost_usd;
+    if (sume.credits !== undefined) out.credits = sume.credits;
+    if (sume.sources) out.sources = sume.sources;
   }
   if (headers) {
     for (const name of USAGE_HEADERS) {

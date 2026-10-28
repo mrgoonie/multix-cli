@@ -33,6 +33,7 @@ const CLI_KEY_NAMES = [
   "REPLICATE_API_TOKEN",
   "REPLICATE_API_KEY",
   "RUNWAYML_API_SECRET",
+  "SUME_API_KEY",
   "HEYGEN_API_KEY",
 ] as const;
 
@@ -91,6 +92,11 @@ export const CLI_PROVIDER_KEY_GROUPS: readonly ProviderKeyGroup[] = [
     names: ["REPLICATE_API_TOKEN", "REPLICATE_API_KEY"],
   },
   { provider: "Runway", link: "https://dev.runwayml.com/", names: ["RUNWAYML_API_SECRET"] },
+  {
+    provider: "Sume",
+    link: "https://www.sume.com/docs/authentication",
+    names: ["SUME_API_KEY"],
+  },
   { provider: "HeyGen", link: "https://app.heygen.com/developers/api", names: ["HEYGEN_API_KEY"] },
 ];
 

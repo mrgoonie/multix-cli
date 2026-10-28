@@ -17,6 +17,7 @@ To configure multix, set at least one provider API key:
     Atlas Cloud        : https://www.atlascloud.ai/console/api-keys
     Replicate          : https://replicate.com/account/api-tokens
     Runway             : https://dev.runwayml.com/
+    Sume               : https://www.sume.com/docs/authentication
     HeyGen             : https://app.heygen.com/developers/api
 
   Option A — user global config (recommended):

@@ -18,6 +18,7 @@ import {
 } from "../budget/command-cost.js";
 import type { CostEstimate } from "../budget/cost-estimate.js";
 import { type CostReceipt, buildCostReceipt, operationIdFor } from "../budget/cost-receipt.js";
+import { quoteCommand, quotedCommands } from "../budget/provider-quote.js";
 import { envDefault } from "../core/env-default.js";
 import { BudgetError } from "../core/errors.js";
 import { FAL_DEFAULTS } from "../providers/fal/models.js";
@@ -28,6 +29,7 @@ import {
   DEFAULT_OPENROUTER_TTS_MODEL,
   OPENROUTER_TTS_MODEL_ENV,
 } from "../providers/openrouter/speech-defaults.js";
+import { untrackedFetch } from "./fetch-telemetry.js";
 import { probeDuration } from "./output-file-inspect.js";
 import { run } from "./run-state.js";
 
@@ -119,16 +121,22 @@ function runtimeDefaults(command: string, options: Record<string, unknown>): Com
 
 /**
  * Before the action: price the run when asked (or when it is priceable) and
- * apply --max-cost. Throws BudgetError when the guard refuses; returns true
- * when the run is estimate-only and must stop here.
+ * apply --max-cost. Rejects with BudgetError when the guard refuses; resolves
+ * true when the run is estimate-only and must stop here.
  */
-export function preflightCost(): boolean {
+export async function preflightCost(): Promise<boolean> {
   const o = run.options;
   const estimateOnly = Boolean(o.estimate);
   const hasMax = o.maxCost !== undefined;
   const maxCost = hasMax ? parseMaxCost(o.maxCost) : undefined;
   const policy = parseCostPolicy(o.costPolicy);
-  if (estimateOnly || hasMax || pricedCommands().includes(run.command)) {
+  // A live quote is a network call: a plain --dry-run (which only shows the
+  // request) skips it. It goes around the fetch telemetry, so it is neither
+  // recorded as a billable call nor stopped by the dry run.
+  const quoted = quotedCommands().includes(run.command);
+  if (quoted && (estimateOnly || hasMax || !run.dryRun)) {
+    run.estimate = await quoteCommand(run.command, o, { fetch: untrackedFetch });
+  } else if (estimateOnly || hasMax || pricedCommands().includes(run.command)) {
     run.estimate = estimateCommand(run.command, o, runtimeDefaults(run.command, o));
   }
   if (maxCost !== undefined && run.estimate) {

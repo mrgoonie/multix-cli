@@ -21,6 +21,7 @@ export const GROUP_KEY_ROWS: Readonly<Record<string, readonly (readonly string[]
   atlas: [["ATLASCLOUD_API_KEY"]],
   replicate: [["REPLICATE_API_TOKEN", "REPLICATE_API_KEY"]],
   runway: [["RUNWAYML_API_SECRET"]],
+  sume: [["SUME_API_KEY"]],
   heygen: [["HEYGEN_API_KEY"]],
   // `multix speech` routes to one provider; any one of their keys makes it usable.
   speech: [

@@ -445,7 +445,7 @@ export function installAgentRuntime(program: Command, cliVersion: string): void 
     return realExit(finalizeRun({ exitCode: numeric }));
   }) as typeof process.exit;
 
-  program.hook("preAction", (_root, action) => {
+  program.hook("preAction", async (_root, action) => {
     const names = commandPath(action);
     setCommand(names);
     run.actionStarted = true;
@@ -455,7 +455,7 @@ export function installAgentRuntime(program: Command, cliVersion: string): void 
       realExit(finalizeRun({ exitCode: 0, dryRunLocal: true }));
     }
     // Throws BudgetError (classified, nothing sent) when --max-cost refuses.
-    if (preflightCost()) realExit(finalizeRun({ exitCode: 0, estimateOnly: true }));
+    if (await preflightCost()) realExit(finalizeRun({ exitCode: 0, estimateOnly: true }));
   });
   program.hook("postAction", async () => {
     await settleTelemetry();

@@ -58,7 +58,25 @@ async function models(...args: string[]): Promise<unknown> {
   return JSON.parse(stdout.join("\n"));
 }
 
-/** Answers fal and OpenRouter catalog reads; `down` providers fail like a lost connection. */
+/** A one-model Sume catalogue (the shape of https://api.sume.com/v1/open/catalog). */
+const SUME_CATALOG = {
+  data: {
+    currency: "USD",
+    models: [
+      {
+        id: "gpt-image-2",
+        name: "ChatGPT Image 2",
+        kind: "image",
+        modes: ["text-to-image", "image-edit"],
+        pricing: { currency: "USD", unit: "image", from_usd: "0.0060", to_usd: "0.2110" },
+        capabilities: { text_to_image: true, image_edit: true },
+        constraints: [],
+      },
+    ],
+  },
+};
+
+/** Answers fal, OpenRouter and Sume catalog reads; `down` providers fail like a lost connection. */
 function stubCatalogs(down: string[] = []) {
   const calls: string[] = [];
   vi.stubGlobal("fetch", async (input: string | URL | Request) => {
@@ -66,15 +84,17 @@ function stubCatalogs(down: string[] = []) {
     calls.push(url);
     const host = new URL(url).host;
     if (down.some((d) => host.includes(d))) throw new TypeError("fetch failed");
-    const body = host.includes("fal.ai")
-      ? {
-          models: [
-            { endpoint_id: "elevenlabs/tts/eleven-v4", metadata: { status: "active" } },
-            { endpoint_id: "vendor/new-tts", metadata: { display_name: "New TTS" } },
-          ],
-          has_more: false,
-        }
-      : { data: [{ id: "vendor/or-tts", name: "OR TTS", supported_voices: ["a"] }] };
+    const body = host.includes("sume.com")
+      ? SUME_CATALOG
+      : host.includes("fal.ai")
+        ? {
+            models: [
+              { endpoint_id: "elevenlabs/tts/eleven-v4", metadata: { status: "active" } },
+              { endpoint_id: "vendor/new-tts", metadata: { display_name: "New TTS" } },
+            ],
+            has_more: false,
+          }
+        : { data: [{ id: "vendor/or-tts", name: "OR TTS", supported_voices: ["a"] }] };
     return new Response(JSON.stringify(body), { status: 200 });
   });
   return calls;
@@ -153,7 +173,11 @@ describe("multix models --live", () => {
     const live = (await models("--task", "speech", "--live")) as Json;
     expect(live.schema).toBe("multix.capabilities/v1");
     expect(Array.isArray(live.commands)).toBe(true);
-    expect(live.sources.map((s: { state: string }) => s.state)).toEqual(["fresh", "fresh"]);
+    expect(live.sources.map((s: { state: string }) => s.state)).toEqual([
+      "fresh",
+      "fresh",
+      "unsupported",
+    ]);
     const byId = Object.fromEntries(live.models.map((m: { model: string }) => [m.model, m]));
     expect(byId["elevenlabs/tts/eleven-v4"]).toMatchObject({
       verified: true,
@@ -174,7 +198,11 @@ describe("multix models --live", () => {
     expect(calls).toHaveLength(2);
 
     const again = (await models("--task", "speech", "--live")) as Json;
-    expect(again.sources.map((s: { state: string }) => s.state)).toEqual(["cached", "cached"]);
+    expect(again.sources.map((s: { state: string }) => s.state)).toEqual([
+      "cached",
+      "cached",
+      "unsupported",
+    ]);
     expect(calls).toHaveLength(2);
     await models("--task", "speech", "--refresh");
     expect(calls).toHaveLength(4);
@@ -186,6 +214,7 @@ describe("multix models --live", () => {
     expect(live.sources.map((s: { state: string }) => s.state)).toEqual([
       "unavailable",
       "unavailable",
+      "unsupported",
     ]);
     expect(live.models.length).toBeGreaterThan(0);
     expect(
@@ -193,6 +222,17 @@ describe("multix models --live", () => {
         (m: { verified: boolean; listed: null }) => m.verified && m.listed === null,
       ),
     ).toBe(true);
+  });
+
+  it("reads the Sume catalogue for image tasks and lists its models with prices", async () => {
+    const calls = stubCatalogs();
+    const live = (await models("--task", "image", "--live")) as Json;
+    const sume = live.sources.find((src) => src.provider === "sume");
+    expect(sume?.state).toBe("fresh");
+    expect(calls.some((u) => u.startsWith("https://api.sume.com/v1/open/catalog"))).toBe(true);
+    expect(live.models).toContainEqual(
+      expect.objectContaining({ provider: "sume", model: "gpt-image-2" }),
+    );
   });
 
   it("limits --provider to that catalog and --model --live to the model's entries", async () => {
