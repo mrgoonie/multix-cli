@@ -483,3 +483,31 @@ describe("REST API documentation", () => {
     }
   });
 });
+
+describe("REST API model catalogue", () => {
+  it("compares offerings for one request and rejects bad parameters", async () => {
+    const { browser } = await signedInBrowser();
+    const key = await createApiKey(browser);
+    const compare = await api(
+      browser,
+      key,
+      "/model-catalog?view=compare&task=video&resolution=720p&duration_s=10&audio=true",
+    );
+    expect(compare.status).toBe(200);
+    const rows = (await body(compare)).comparison.rows as Json[];
+    const seedance = rows.find(
+      (r) =>
+        r.offering === "fal:bytedance/seedance-2.5/text-to-video" && r.price_rank !== undefined,
+    );
+    expect(seedance?.total_usd).toBeCloseTo(4.6224, 4);
+
+    const models = await body(await api(browser, key, "/model-catalog?task=video&priced=true"));
+    expect(models.offerings.length).toBeGreaterThan(0);
+    expect((await api(browser, key, "/model-catalog?duration_s=abc&view=compare")).status).toBe(
+      400,
+    );
+    expect((await api(browser, key, "/model-catalog?view=everything")).status).toBe(400);
+    expect((await api(browser, key, "/model-catalog?task=telepathy")).status).toBe(400);
+    expect((await api(browser, undefined, "/model-catalog")).status).toBe(401);
+  });
+});

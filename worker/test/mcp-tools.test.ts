@@ -12,10 +12,10 @@ describe("MCP protocol", () => {
     expect(body.result.capabilities.tools).toBeDefined();
   });
 
-  it("offers only multix_catalog when the job bindings are absent", async () => {
+  it("offers only the catalog tools when the job bindings are absent", async () => {
     const body = await rpc(fullEnv(), "tools/list");
     const names = body.result.tools.map((t: { name: string }) => t.name);
-    expect(names).toEqual(["multix_catalog"]);
+    expect(names).toEqual(["multix_catalog", "multix_model_catalog"]);
   });
 
   it("reports an unknown tool as an error", async () => {
