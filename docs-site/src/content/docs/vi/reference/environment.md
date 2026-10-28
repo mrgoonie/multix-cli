@@ -81,6 +81,7 @@ Windows, việc kiểm tra không phân biệt hoa thường, giống hệ đi�
 | `REPLICATE_API_TOKEN` hoặc `REPLICATE_API_KEY` | Replicate (API trực tiếp) |
 | `RUNWAYML_API_SECRET` | Runway |
 | `HEYGEN_API_KEY` | HeyGen (credit API tính riêng với gói web) |
+| `SUME_API_KEY` | Sume (REST API gốc) |
 
 ```bash
 export GEMINI_API_KEY="your-key"
@@ -205,6 +206,10 @@ trong các model liệt kê ở [Fish Audio](/vi/commands/fish/#model), viết c
 `HEYGEN_BASE_URL` ghi đè API base của HeyGen (mặc định
 `https://api.heygen.com`) cho proxy và test. Giá trị phải là `https://`;
 `http://` chỉ được chấp nhận cho `localhost`, `127.0.0.1` hoặc `[::1]`.
+
+`SUME_BASE_URL` ghi đè API base của Sume (mặc định `https://api.sume.com`)
+cho proxy và test. Giá trị phải là `https://`; `http://` chỉ được chấp nhận
+cho `localhost`, `127.0.0.1` hoặc `[::1]`.
 
 ### Ghi đè base URL và độ tin cậy
 

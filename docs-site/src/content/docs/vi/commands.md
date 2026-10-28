@@ -22,6 +22,7 @@ description: Chọn nhóm lệnh multix phù hợp với workflow media của b�
 | [Replicate](/vi/commands/replicate/) | Bất kỳ model Replicate nào qua API trực tiếp, lệnh tiện lợi image/video, cùng status/cancel prediction. |
 | [Runway](/vi/commands/runway/) | Video Gen-4.5 và Gen-4 Turbo, ảnh Gen-4, cùng status/cancel task. |
 | [HeyGen](/vi/commands/heygen/) | Video Agent tạo video từ prompt, video avatar theo kịch bản, dịch video, lipsync và TTS. |
+| [Sume](/vi/commands/sume/) | Mọi model trong catalog trực tiếp của Sume: ảnh, video, image-to-video, tham chiếu và lipsync, với job tiếp tục được và báo giá. |
 | [Speech](/vi/commands/speech/) | Text-to-speech trên Gemini, OpenAI, ElevenLabs, MiniMax, Atlas Cloud hoặc Fish Audio với một bộ flag, kiểm tra khả năng của model và fallback phải tự bật. |
 | [Scene](/vi/commands/scene/) | Audio hội thoại nhiều nhân vật: voice profile, take được cache theo từng câu, duyệt take và xuất stem. |
 | `multix media` | Tối ưu, cắt và batch file bằng ffmpeg/ImageMagick. |

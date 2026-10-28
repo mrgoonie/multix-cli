@@ -21,6 +21,7 @@ description: Choose a source-backed command reference for any multix AI provider
 | Replicate | [Commands](/commands/replicate/) | Any model via the direct API, plus image/video convenience commands | Community models need a version; resume or cancel jobs by prediction ID. |
 | Runway | [Commands](/commands/runway/) | Gen-4.5 / Gen-4 Turbo video and Gen-4 images | `video` prints a task ID unless `--wait`; resume with `status <id> --wait --download`. |
 | HeyGen | [Commands](/commands/heygen/) | Video Agent (prompt-to-video), scripted avatar video, translation, lipsync, TTS, templates | API credits are billed separately from HeyGen web plans; use `status --type` matching the job (`agent` takes a session ID). |
+| Sume | [Commands](/commands/sume/) | Image and video with any model in the live public catalog; t2i, i2i, t2v, i2v, references, lipsync | Uses the native REST API, not Sume's hosted MCP. A job's price is reserved at submit, captured on success and refunded on failure. |
 
 Use `multix <provider> --help` and the specific subcommand's `--help` before
 automating a workflow. Those commands own current options and defaults.

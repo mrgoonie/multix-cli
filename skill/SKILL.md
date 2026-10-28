@@ -1,6 +1,6 @@
 ---
 name: multix
-description: AI multimodal CLI — generate and edit images (OpenAI, Codex driver, Gemini Nano Banana, Imagen, MiniMax, OpenRouter, Leonardo, BytePlus Seedream, Cloudflare Workers AI FLUX.1 Schnell, fal.ai FLUX, Replicate FLUX, Runway Gen-4 Image), generate, edit and extend video (Gemini Omni Flash, plus legacy Gemini Veo), generate video (MiniMax Hailuo, OpenRouter via Veo/Seedance/Kling, Leonardo via Motion/Veo/Kling/Hailuo/Seedance/LTX, BytePlus Seedance, Cloudflare AI Gateway via Replicate, fal.ai queue models, Replicate direct API models incl. P-Video, Runway Gen-4.5 and Gen-4 Turbo, HeyGen Video Agent and scripted avatar videos), video translation and lipsync (HeyGen), TTS/STT/music (OpenAI, Gemini Flash TTS incl. Gemini 3.8 with delivery-style control, OpenRouter TTS (Gemini, ElevenLabs, Fish Audio, MiniMax routed) and STT (Whisper, GPT-4o transcribe, Gemini Transcribe, ElevenLabs Scribe, Voxtral, Deepgram, AssemblyAI routed), MiniMax, Cloudflare Workers AI MeloTTS, ElevenLabs, native Fish Audio Drama 3 TTS with multi-speaker turns and pronunciation dictionaries), multi-character dialogue audio with per-character voice profiles, cached per-line takes and stem export (multix scene), 3D models (BytePlus Hyper3D/Hitem3d), analyze/transcribe media, convert documents to Markdown, optimize media via ffmpeg/ImageMagick, inspect and verify media offline with sha256-bound QA receipts, and self-update the CLI. Use whenever the user wants to create, edit, or transform images/video/audio/3D/documents from a CLI, mentions any of: OpenAI, Codex image driver, image-to-image, i2i, image edit, watercolor/cyberpunk style transfer, reference image, OpenRouter, Nano Banana, Flux, Seedream, Gemini Omni, Omni Flash, Veo, Hailuo, Seedance, Kling, Cloudflare Workers AI, AI Gateway, fal.ai, Atlas Cloud, Replicate, replicate.com models, Replicate predictions, Runway, Gen-4.5, Gen-4 Turbo, Gen-4 Image, HeyGen, Fish Audio, Drama 3, avatar video, talking head, Video Agent, video translation, dubbing, lipsync, video generation, text-to-video, image-to-video, i2v, ElevenLabs voice cloning, updating/upgrading multix, or asks for batch media optimization.
+description: AI multimodal CLI — generate and edit images (OpenAI, Codex driver, Gemini Nano Banana, Imagen, MiniMax, OpenRouter, Leonardo, BytePlus Seedream, Cloudflare Workers AI FLUX.1 Schnell, fal.ai FLUX, Replicate FLUX, Runway Gen-4 Image), generate, edit and extend video (Gemini Omni Flash, plus legacy Gemini Veo), generate video (MiniMax Hailuo, OpenRouter via Veo/Seedance/Kling, Leonardo via Motion/Veo/Kling/Hailuo/Seedance/LTX, BytePlus Seedance, Cloudflare AI Gateway via Replicate, fal.ai queue models, Replicate direct API models incl. P-Video, Runway Gen-4.5 and Gen-4 Turbo, HeyGen Video Agent and scripted avatar videos, Sume catalog models), video translation and lipsync (HeyGen), TTS/STT/music (OpenAI, Gemini Flash TTS incl. Gemini 3.8 with delivery-style control, OpenRouter TTS (Gemini, ElevenLabs, Fish Audio, MiniMax routed) and STT (Whisper, GPT-4o transcribe, Gemini Transcribe, ElevenLabs Scribe, Voxtral, Deepgram, AssemblyAI routed), MiniMax, Cloudflare Workers AI MeloTTS, ElevenLabs, native Fish Audio Drama 3 TTS with multi-speaker turns and pronunciation dictionaries), multi-character dialogue audio with per-character voice profiles, cached per-line takes and stem export (multix scene), 3D models (BytePlus Hyper3D/Hitem3d), analyze/transcribe media, convert documents to Markdown, optimize media via ffmpeg/ImageMagick, inspect and verify media offline with sha256-bound QA receipts, and self-update the CLI. Use whenever the user wants to create, edit, or transform images/video/audio/3D/documents from a CLI, mentions any of: OpenAI, Codex image driver, image-to-image, i2i, image edit, watercolor/cyberpunk style transfer, reference image, OpenRouter, Nano Banana, Flux, Seedream, Gemini Omni, Omni Flash, Veo, Hailuo, Seedance, Kling, Cloudflare Workers AI, AI Gateway, fal.ai, Atlas Cloud, Replicate, replicate.com models, Replicate predictions, Runway, Gen-4.5, Gen-4 Turbo, Gen-4 Image, HeyGen, Fish Audio, Drama 3, Sume, avatar video, talking head, Video Agent, video translation, dubbing, lipsync, video generation, text-to-video, image-to-video, i2v, ElevenLabs voice cloning, updating/upgrading multix, or asks for batch media optimization.
 version: 1.22.0-beta.2 # x-release-please-version
 ---
 
@@ -50,6 +50,7 @@ Activate this skill when the user asks to:
 - Run any Replicate model (official or versioned) via the direct API, generate Replicate images/video, or resume/cancel a Replicate prediction by id
 - Generate Runway Gen-4.5 / Gen-4 Turbo video or Gen-4 images (with tagged reference images), or check/resume/cancel a Runway task by id
 - Make HeyGen avatar videos from a prompt (Video Agent) or an exact script, translate/lipsync videos, HeyGen TTS
+- Generate images and video with any model in Sume's live catalog, with cost quotes and resumable jobs
 - Voice a multi-character dialogue (anime, film, audio drama) line by line with a fixed voice per character, approve takes, and export stems (`multix scene`)
 - Update multix itself to the latest (or a given dist-tag) npm version
 
@@ -77,6 +78,7 @@ ATLASCLOUD_API_KEY    # Atlas Cloud (any model: image, edit, video, audio, 3D)
 REPLICATE_API_TOKEN   # Replicate direct API (REPLICATE_API_KEY accepted as fallback)
 RUNWAYML_API_SECRET   # Runway API (Gen-4.5 / Gen-4 Turbo video, Gen-4 images)
 HEYGEN_API_KEY        # HeyGen v3 (avatar video, Video Agent, translation); API billed separately from web plans
+SUME_API_KEY          # Sume native REST API (catalog models: image, video, lipsync)
 CLOUDFLARE_ACCOUNT_ID # Cloudflare Workers AI / AI Gateway account
 CLOUDFLARE_API_TOKEN  # Cloudflare Workers AI / AI Gateway token
 # Video additionally requires CLOUDFLARE_AI_GATEWAY_ID and REPLICATE_API_TOKEN.
@@ -276,6 +278,23 @@ multix heygen status <id> --type agent|video|translation|lipsync|model-video --w
 - `<ref>` = `https://` URL, `asset:<asset_id>`, or a local file (uploaded, max 32 MB).
 - Commands wait and download by default. `--async` prints IDs and a resume command; `--type agent` resumes with the Video Agent `session_id`.
 - Failed jobs exit 1 with HeyGen's failure code. 402 means add API credits; 403 means a scope or entitlement is missing.
+
+## Sume
+
+Native REST API with `Authorization: Bearer $SUME_API_KEY` (not Sume's hosted MCP). Pick the model id from the live catalog; there is no default and ids are never guessed.
+
+```bash
+multix sume models [--kind video] [--mode image-to-video] [--model <id>]
+multix sume image "<prompt>" -m <id> [--image <file|https>] [--estimate] [--max-cost 0.50]
+multix sume video "<prompt>" -m <id> --duration 5 [--image first.png] [--end-image last.png] [--ref-image a.png] [--audio a.mp3] [--async]
+multix sume status <jobId> --wait --download    # resume; never resubmit
+multix sume result <jobId> [--no-download]
+multix sume cancel <jobId>
+```
+
+- Flags the catalog entry does not confirm are refused before sending. Remix, captions, dubbing, webhooks and batch are not supported.
+- `UNKNOWN_REMOTE_STATE` after a submit: rerun the same command with the `--idempotency-key` it prints, never a fresh submit.
+- Failed or canceled jobs exit with `JOB_FAILED`; Sume refunds them and the receipt records `$0`.
 
 ## Scenes (multi-character dialogue)
 

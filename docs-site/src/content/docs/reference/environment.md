@@ -81,6 +81,7 @@ not filtered. On Windows the check ignores case, as the OS does.
 | `REPLICATE_API_TOKEN` or `REPLICATE_API_KEY` | Replicate (direct API) |
 | `RUNWAYML_API_SECRET` | Runway |
 | `HEYGEN_API_KEY` | HeyGen (API credits are billed separately from web plans) |
+| `SUME_API_KEY` | Sume (native REST API) |
 
 ```bash
 export GEMINI_API_KEY="your-key"
@@ -205,6 +206,10 @@ default model (default `drama-3`). It must be one of the models listed on
 `HEYGEN_BASE_URL` overrides the HeyGen API base (default
 `https://api.heygen.com`) for proxies and tests. It must be `https://`; plain
 `http://` is accepted only for `localhost`, `127.0.0.1`, or `[::1]`.
+
+`SUME_BASE_URL` overrides the Sume API base (default `https://api.sume.com`)
+for proxies and tests. It must be `https://`; plain `http://` is accepted only
+for `localhost`, `127.0.0.1`, or `[::1]`.
 
 ### Base URL overrides and trust
 

@@ -4,7 +4,7 @@ AI multimodal CLI — generate images/video/speech/music, analyze and transcribe
 
 ![Isometric technical illustration of multix media workflows](docs-site/public/images/multix-isometric-banner.png)
 
-Supports **OpenAI** (image, image edits, TTS, STT, optional Codex image driver), **Gemini** (analyze, transcribe, generate, Omni Flash video generation and editing, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation, image-to-video, TTS, STT), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), **Cloudflare** (Workers AI image and speech; AI Gateway-routed Replicate video), **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment), **Fish Audio** (native Drama 3 TTS, multi-speaker turns, pronunciation dictionaries, voice design, voice cloning, voice models), **fal.ai** (generic model runner, image, video, text-to-speech via the fal queue API), and **Atlas Cloud** (any model: image, image edit, video, audio, 3D, with resumable async predictions), **Replicate** (generic model runner, image, video, async prediction status/cancel via the direct Replicate API), **Runway** (Gen-4.5 and Gen-4 Turbo video, Gen-4 images, resumable task status/cancel), **HeyGen** (v3 Video Agent prompt-to-video, scripted avatar videos, video translation, lipsync, TTS).
+Supports **OpenAI** (image, image edits, TTS, STT, optional Codex image driver), **Gemini** (analyze, transcribe, generate, Omni Flash video generation and editing, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation, image-to-video, TTS, STT), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), **Cloudflare** (Workers AI image and speech; AI Gateway-routed Replicate video), **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment), **Fish Audio** (native Drama 3 TTS, multi-speaker turns, pronunciation dictionaries, voice design, voice cloning, voice models), **fal.ai** (generic model runner, image, video, text-to-speech via the fal queue API), and **Atlas Cloud** (any model: image, image edit, video, audio, 3D, with resumable async predictions), **Replicate** (generic model runner, image, video, async prediction status/cancel via the direct Replicate API), **Runway** (Gen-4.5 and Gen-4 Turbo video, Gen-4 images, resumable task status/cancel), **HeyGen** (v3 Video Agent prompt-to-video, scripted avatar videos, video translation, lipsync, TTS), **Sume** (any model in Sume's live catalog: image, image edit, video, image-to-video, references, lipsync, with cost quotes and resumable jobs over the native REST API).
 
 ## Documentation
 
@@ -128,6 +128,8 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `FAL_VIDEO_MODEL` | No | Default fal text-to-video model (default `fal-ai/kling-video/v1.6/standard/text-to-video`) |
 | `HEYGEN_API_KEY` | For HeyGen | [HeyGen API settings](https://app.heygen.com/developers/api). API usage is billed separately from HeyGen web plans |
 | `HEYGEN_BASE_URL` | No | Override the HeyGen API base (default `https://api.heygen.com`; proxies/tests). Must be `https://`, except `http://` on `localhost`/`127.0.0.1`/`[::1]` |
+| `SUME_API_KEY` | For Sume | [Sume authentication](https://www.sume.com/docs/authentication). Server-side only |
+| `SUME_BASE_URL` | No | Override the Sume API base (default `https://api.sume.com`; proxies/tests). Must be `https://`, except `http://` on `localhost`/`127.0.0.1`/`[::1]` |
 | `FAL_TTS_MODEL` | No | Default fal text-to-speech model (default `google/gemini-3.8-flash-tts`) |
 | `FAL_VIDEO_IMAGE_MODEL` | No | Default fal image-to-video model, used when `--image-url` is passed without `-m` (default `fal-ai/kling-video/v1.6/standard/image-to-video`) |
 | `ATLASCLOUD_API_KEY` | For Atlas Cloud | [Atlas Cloud](https://www.atlascloud.ai/console/api-keys) |
@@ -811,6 +813,24 @@ multix heygen me
 - Failed, cancelled, or input-blocked jobs exit non-zero with HeyGen's `failure_code`/message. When several jobs run, every success is still downloaded before the command exits non-zero. 429 `Retry-After` is honoured, and `Idempotency-Key` is sent only on endpoints that document it.
 - `--callback-url` webhooks are signed with HMAC-SHA256 of the raw body (hex, `signature` header). The npm package does not export a verifier; copy `src/providers/heygen/webhook.ts` or the Node snippet in the [HeyGen docs](https://multix.zuey.me/commands/heygen/#webhooks).
 - Digital-twin creation and voice cloning are out of scope. Full reference: [HeyGen commands](https://multix.zuey.me/commands/heygen/).
+
+### `multix sume`
+
+[Sume](https://www.sume.com) through its native REST API (Bearer `SUME_API_KEY`, base `https://api.sume.com`). multix does not use Sume's hosted MCP server.
+
+```bash
+multix sume models [--kind image|video|lipsync|captions] [--mode image-to-video] [--model <id>] [--refresh]
+multix sume image "a red fox in snow" -m <catalog-id> [--image ./photo.png] [--aspect-ratio 1:1] [-n 2]
+multix sume video "a lighthouse in a storm" -m <catalog-id> --duration 5 [--image first.png] [--end-image last.png] [--ref-image a.png] [--audio speech.mp3]
+multix sume status <jobId> [--wait] [--download]
+multix sume result <jobId> [--no-download]
+multix sume cancel <jobId>
+```
+
+- Model ids come only from the public catalog (`GET /v1/open/catalog`, cached with the `multix models --live` TTL and stale rules); there is no default model. Every flag is checked against the model's catalog entry before anything is sent.
+- `--estimate` / `--max-cost` use the non-billable `POST /v1/open/estimate` when a key is set (a proven cap), otherwise the catalog list price with its source and read time (an estimate, so `--max-cost` fails closed under the strict policy).
+- Each generate request is sent once with an `Idempotency-Key`. A cut-off submit fails with `UNKNOWN_REMOTE_STATE` and names the key; rerun with `--idempotency-key <key>` instead of resubmitting.
+- Receipts use the job's final usage ledger: captured charge, or `$0` when refunded. The reservation and the account balance are never counted as spend. Full reference: [Sume commands](https://multix.zuey.me/commands/sume/).
 
 ### `multix speech`
 

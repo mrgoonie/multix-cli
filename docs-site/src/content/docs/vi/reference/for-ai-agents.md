@@ -287,6 +287,7 @@ shell hoặc `~/.multix/.env`, không nhận từ `.env` của project).
 | Bất kỳ model Replicate, ảnh hoặc video; tiếp tục/hủy theo prediction ID | [Replicate](/vi/commands/replicate/) |
 | Video Runway Gen-4.5 / Gen-4 Turbo hoặc ảnh Gen-4; tiếp tục/hủy theo task ID | [Runway](/vi/commands/runway/) |
 | Video avatar từ prompt (Video Agent) hoặc kịch bản chính xác, dịch video, lipsync | [HeyGen](/vi/commands/heygen/) |
+| Mọi model trong catalog trực tiếp của Sume (ảnh, video, tham chiếu, lipsync); tiếp tục/hủy theo job ID | [Sume](/vi/commands/sume/) |
 | Convert tài liệu hoặc tối ưu media local | [Media và tài liệu](/vi/commands/media-and-documents/) |
 | Tự cập nhật CLI | [Tổng quan lệnh](/vi/commands/#tự-cập-nhật) |
 
