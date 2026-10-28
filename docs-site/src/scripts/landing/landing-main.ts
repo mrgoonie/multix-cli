@@ -69,6 +69,8 @@ for (const button of document.querySelectorAll<HTMLButtonElement>("[data-copy-ta
   if (!source || !navigator.clipboard) continue;
   const label = button.textContent ?? "";
   button.hidden = false;
+  // The button is a live region so screen readers hear "Copied" without losing focus.
+  button.setAttribute("aria-live", "polite");
   button.addEventListener("click", async () => {
     try {
       await navigator.clipboard.writeText(source.textContent ?? "");
@@ -76,7 +78,10 @@ for (const button of document.querySelectorAll<HTMLButtonElement>("[data-copy-ta
       setTimeout(() => {
         button.textContent = label;
       }, 1600);
-    } catch {}
+    } catch {
+      // Clipboard refused (permissions, insecure context): select the command to copy by hand.
+      getSelection()?.selectAllChildren(source);
+    }
   });
 }
 

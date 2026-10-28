@@ -3,6 +3,10 @@
  * Turns the head mesh generated with multix (`multix atlas image` → `multix atlas 3d --ref … --format GLB`)
  * into the landing hero's dot-grid point cloud and its no-WebGL posters.
  *
+ * The committed assets came from a front-facing bald bust made with Atlas Cloud's flux-schnell
+ * image model, turned into a mesh with hunyuan3d-rapid image-to-3D. The 9 MB GLB is not kept in
+ * the repo; a new generation gives a different head, so regenerate only to replace the assets.
+ *
  * Usage (from docs-site/): node scripts/hero/sample-head-points.mjs <head.glb> [--points 20000]
  *
  * Writes to public/hero/:

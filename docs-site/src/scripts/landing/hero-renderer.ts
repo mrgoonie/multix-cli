@@ -409,7 +409,8 @@ export async function startHero(stage: HTMLElement): Promise<boolean> {
   /* ---------- loop: runs only while the stage is visible and the tab is shown ---------- */
   let onScreen = true;
   let raf = 0;
-  const running = () => onScreen && document.visibilityState === "visible";
+  let lost = false;
+  const running = () => !lost && onScreen && document.visibilityState === "visible";
   function loop(ms: number) {
     if (!running()) {
       raf = 0;
@@ -427,6 +428,17 @@ export async function startHero(stage: HTMLElement): Promise<boolean> {
   }).observe(stage);
   document.addEventListener("visibilitychange", wake);
   new ResizeObserver(resize).observe(canvas);
+
+  // A lost context (GPU reset, too many contexts) leaves a blank canvas: fall back to the poster.
+  canvas.addEventListener("webglcontextlost", () => {
+    lost = true;
+    cancelAnimationFrame(raf);
+    raf = 0;
+    canvas.remove();
+    stage.classList.remove("is-live");
+    for (const el of labels) el.classList.remove("is-on");
+    if (button) button.hidden = true;
+  });
 
   stage.prepend(canvas);
   resize();

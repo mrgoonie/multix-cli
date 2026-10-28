@@ -28,6 +28,15 @@ document.addEventListener("keydown", (event) => {
     document.querySelector("site-search button[data-open-modal]")?.click();
   }
 });
+// Picking a language in the docs counts as a choice, like the landing page's
+// EN/VI links, so the home page stops sending a Vietnamese browser to /vi/.
+document.addEventListener("change", (event) => {
+  const select = event.target.closest?.("starlight-lang-select select");
+  if (!select) return;
+  try {
+    localStorage.setItem("multix-lang", select.value.startsWith("/vi/") ? "vi" : "en");
+  } catch {}
+});
 // Starlight labels the search button "Search" while it shows "Search Ctrl K";
 // name it after what it shows so speech-input users can say the visible text.
 // Runs after Starlight's module script has picked Ctrl or the Mac command key.
