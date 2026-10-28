@@ -55,8 +55,9 @@ function seedanceFal(resolution: string, usdPerK: number): RateCard {
     models: [SEEDANCE_25_FAL],
     family: "seedance-2.5",
     task: "video",
-    // The page's per-second table is "with audio"; it gives no audio-off price.
-    config: { resolution, audio: true },
+    // Billed by tokens; fal: "generate_audio does not change your token count".
+    config: { resolution },
+    config_independent: ["audio"],
     basis: "list",
     token_fps: 24,
     components: perKTokens(usdPerK),

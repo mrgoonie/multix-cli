@@ -65,7 +65,9 @@ describe("rate cards", () => {
       ["1080p", 0.0234],
     ]);
     for (const card of fal) {
-      expect(card.config.audio).toBe(true);
+      // fal: generate_audio does not change the token count.
+      expect(card.config.audio).toBeUndefined();
+      expect(card.config_independent).toEqual(["audio"]);
       expect(card.token_fps).toBe(24);
       expect(card.windows[0]?.components[0]).toMatchObject({ meter: "video_tokens", per: 1000 });
       expect(card.source).toBe("https://fal.ai/models/bytedance/seedance-2.5/text-to-video");
@@ -301,16 +303,20 @@ describe("compare: which configurations are ranked", () => {
     expect(standard.price_rank).toBe(1);
   });
 
-  it("holds back a Seedance row when audio was not pinned, since its card fixes audio on", () => {
-    const rows = compareOfferings(offerings, {
-      task: "video",
-      resolution: "720p",
-      duration_s: 10,
-      at: AT,
-    }).rows;
-    const fal = rowOf(rows, FAL_SEEDANCE);
-    expect(fal).toMatchObject({ status: "priced", total_usd: 4.6224, open_settings: ["audio on"] });
-    expect(fal.price_rank).toBeUndefined();
+  it("ranks the fal Seedance row with audio unpinned, on or off, since audio does not change its price", () => {
+    for (const audio of [undefined, true, false]) {
+      const rows = compareOfferings(offerings, {
+        task: "video",
+        resolution: "720p",
+        duration_s: 10,
+        ...(audio === undefined ? {} : { audio }),
+        at: AT,
+      }).rows;
+      const fal = rowOf(rows, FAL_SEEDANCE);
+      expect(fal).toMatchObject({ status: "priced", total_usd: 4.6224 });
+      expect(fal.price_rank).toBeGreaterThanOrEqual(1);
+      expect(fal.open_settings).toBeUndefined();
+    }
   });
 
   it("ranks cheaper quotes first and orders priced, then unknown, then not comparable", () => {

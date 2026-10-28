@@ -20,6 +20,7 @@ import {
   replaceNote,
   storeFile,
   upsertReview,
+  withStoreLock,
   writeStore,
 } from "../../../src/commands/agent/catalog-store.js";
 import { ValidationError } from "../../../src/core/errors.js";
@@ -233,5 +234,116 @@ describe("readAll", () => {
     const all = readAll();
     expect(all.reviews).toHaveLength(1);
     expect(all.notes).toHaveLength(1);
+  });
+});
+
+describe("records read back from a store file", () => {
+  const stamp = { created_at: "2026-10-27T10:00:00.000Z", updated_at: "2026-10-27T10:00:00.000Z" };
+
+  it("scrubs text, keeps valid records and drops malformed ones", () => {
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        reviews: [
+          {
+            id: "r_ok1",
+            offering: OFFERING,
+            scope: "project",
+            score: 4,
+            text: "good\u001b[2Jclear me@corp.example",
+            ...stamp,
+          },
+          { id: "r_bad1", offering: OFFERING, scope: "private", score: "5", ...stamp },
+          { id: "r_bad2", offering: OFFERING, scope: "private", score: 3319, ...stamp },
+          {
+            id: "r_bad3",
+            offering: OFFERING,
+            scope: "private",
+            aspects: { quality: "5" },
+            ...stamp,
+          },
+          { id: "../x", offering: OFFERING, scope: "private", score: 3, ...stamp },
+          "not a record",
+        ],
+        notes: [
+          {
+            id: "n_ok1",
+            offering: OFFERING,
+            use_case: "Product UGC",
+            verdict: "avoid",
+            scope: "private",
+            ...stamp,
+          },
+          {
+            id: "n_bad1",
+            offering: OFFERING,
+            use_case: "ugc",
+            verdict: "great",
+            scope: "private",
+            ...stamp,
+          },
+        ],
+      }),
+    );
+    const store = readStore("private");
+    expect(store.reviews).toEqual([
+      {
+        id: "r_ok1",
+        offering: OFFERING,
+        scope: "private",
+        score: 4,
+        text: "good[2Jclear [email]",
+        ...stamp,
+      },
+    ]);
+    expect(store.notes.map((n) => [n.id, n.use_case, n.scope])).toEqual([
+      ["n_ok1", "product-ugc", "private"],
+    ]);
+  });
+
+  it("refuses a project store that is a symbolic link", () => {
+    const cwd = process.cwd();
+    const project = fs.mkdtempSync(path.join(dir, "repo-"));
+    fs.mkdirSync(path.join(project, ".multix"));
+    fs.writeFileSync(file, JSON.stringify({ reviews: [], notes: [] }));
+    fs.symlinkSync(file, path.join(project, ".multix", "catalog-notes.json"));
+    process.chdir(project);
+    try {
+      expect(() => readStore("project")).toThrow(/symbolic link/);
+      expect(() =>
+        upsertReview(cleanReview({ offering: OFFERING, scope: "project", score: 4 })),
+      ).toThrow(/symbolic link/);
+    } finally {
+      process.chdir(cwd);
+    }
+    expect(JSON.parse(fs.readFileSync(file, "utf8")).reviews).toEqual([]);
+  });
+
+  it("waits for another command's lock and reports one that is held too long", () => {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(`${file}.lock`, "");
+    const started = Date.now();
+    expect(() => withStoreLock("private", () => 1)).toThrow(/locked by another multix command/);
+    expect(Date.now() - started).toBeGreaterThanOrEqual(4000);
+    fs.rmSync(`${file}.lock`);
+    expect(withStoreLock("private", () => 2)).toBe(2);
+    expect(fs.existsSync(`${file}.lock`)).toBe(false);
+  }, 10_000);
+
+  it("keeps the per-use-case note limit when an edit moves a note to another use case", () => {
+    for (let i = 0; i < LIMITS.notesPerUseCase; i++) {
+      addNote(
+        cleanNote({ offering: OFFERING, use_case: "ugc", verdict: "mixed", scope: "private" }),
+      );
+    }
+    const other = addNote(
+      cleanNote({ offering: OFFERING, use_case: "ads", verdict: "mixed", scope: "private" }),
+    );
+    expect(() =>
+      replaceNote(
+        other.id,
+        cleanNote({ offering: OFFERING, use_case: "ugc", verdict: "mixed", scope: "private" }),
+      ),
+    ).toThrow(ValidationError);
   });
 });

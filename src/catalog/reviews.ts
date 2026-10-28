@@ -271,3 +271,102 @@ export function summarizeReviews(reviews: Review[]): RatingSummary {
     latest_at: latest ?? null,
   };
 }
+
+const RECORD_ID_RE = /^[rn]_[a-z0-9]{1,30}$/;
+const ISO_TS_RE = /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/;
+
+type Raw = Record<string, unknown>;
+const str = (v: unknown) => (typeof v === "string" ? v : undefined);
+const strs = (v: unknown) =>
+  Array.isArray(v) && v.every((x) => typeof x === "string") ? (v as string[]) : undefined;
+
+/** Id and timestamps of a stored record, or undefined when they are malformed. */
+function stamps(r: Raw, prefix: "r" | "n") {
+  const id = str(r.id);
+  const created = str(r.created_at);
+  const updated = str(r.updated_at);
+  if (!id?.startsWith(`${prefix}_`) || !RECORD_ID_RE.test(id)) return undefined;
+  if (!created || !ISO_TS_RE.test(created) || !updated || !ISO_TS_RE.test(updated)) {
+    return undefined;
+  }
+  return { id, created_at: created, updated_at: updated };
+}
+
+function storedOffering(v: unknown): string | undefined {
+  const s = str(v);
+  return s && OFFERING_RE.test(s) ? s : undefined;
+}
+
+/**
+ * A review read back from a store file, validated and scrubbed like a new
+ * one (a project store is committed with the repository, so its content is
+ * whatever the repository says). Malformed records are dropped.
+ */
+export function loadReview(raw: unknown, scope: ReviewScope): Review | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const r = raw as Raw;
+  const meta = stamps(r, "r");
+  const offering = storedOffering(r.offering);
+  if (!meta || !offering) return undefined;
+  try {
+    const aspects =
+      r.aspects && typeof r.aspects === "object"
+        ? parseAspects(
+            Object.entries(r.aspects as Raw).map(([k, v]) =>
+              typeof v === "number" ? `${k}=${v}` : `${k}=`,
+            ),
+          )
+        : undefined;
+    if (r.score !== undefined && typeof r.score !== "number") return undefined;
+    const usage = r.verified_usage as Raw | undefined;
+    const historyId = str(usage?.history_id);
+    const ts = str(usage?.ts);
+    const fields = cleanReview({
+      offering,
+      scope,
+      ...(str(r.use_case) !== undefined ? { use_case: str(r.use_case) } : {}),
+      ...(r.score !== undefined ? { score: r.score as number } : {}),
+      ...(aspects ? { aspects } : {}),
+      ...(str(r.text) !== undefined ? { text: str(r.text) } : {}),
+      ...(strs(r.pros) ? { pros: strs(r.pros) } : {}),
+      ...(strs(r.cons) ? { cons: strs(r.cons) } : {}),
+      ...(strs(r.tags) ? { tags: strs(r.tags) } : {}),
+      ...(str(r.version) !== undefined ? { version: str(r.version) } : {}),
+      ...(historyId && ts && /^[\w-]{1,80}$/.test(historyId) && ISO_TS_RE.test(ts)
+        ? { verified_usage: { history_id: historyId, ts } }
+        : {}),
+    });
+    return { ...fields, ...meta };
+  } catch {
+    return undefined;
+  }
+}
+
+/** A use-case note read back from a store file; see loadReview. */
+export function loadNote(raw: unknown, scope: ReviewScope): UseCaseNote | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const r = raw as Raw;
+  const meta = stamps(r, "n");
+  const offering = storedOffering(r.offering);
+  const useCase = str(r.use_case);
+  const verdict = str(r.verdict);
+  if (!meta || !offering || !useCase || !verdict) return undefined;
+  try {
+    const fields = cleanNote({
+      offering,
+      use_case: useCase,
+      verdict,
+      scope,
+      ...(str(r.text) !== undefined ? { text: str(r.text) } : {}),
+      ...(strs(r.strengths) ? { strengths: strs(r.strengths) } : {}),
+      ...(strs(r.weaknesses) ? { weaknesses: strs(r.weaknesses) } : {}),
+      ...(strs(r.limitations) ? { limitations: strs(r.limitations) } : {}),
+      ...(strs(r.tags) ? { tags: strs(r.tags) } : {}),
+      ...(str(r.version) !== undefined ? { version: str(r.version) } : {}),
+      ...(str(r.source) !== undefined ? { source: str(r.source) } : {}),
+    });
+    return { ...fields, ...meta };
+  } catch {
+    return undefined;
+  }
+}

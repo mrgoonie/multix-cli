@@ -979,7 +979,8 @@ instance runs at `https://multix.zuey.me/mcp` (invited GitHub accounts only).
 - Tools: `multix_catalog` (runnable commands, their options and file inputs,
   and `has_keys` per group from the caller's saved keys; always listed),
   `multix_model_catalog` (offerings, prices per configuration and
-  comparisons, the same payload as the `data` of `multix catalog <view> --json`; always
+  comparisons, the same payload as the `data` of `multix catalog providers|models|compare --json`;
+  `show` there leaves out the local usage, ratings and notes the CLI adds; always
   listed),
   `multix_run` (run one CLI command, for example
   `gemini analyze` or `media optimize`, in its own Cloudflare Container with

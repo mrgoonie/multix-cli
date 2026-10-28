@@ -44,7 +44,7 @@ import {
 import { jobIdentity, run, summarizeUsage } from "./run-state.js";
 
 /** Commands that are themselves agent tooling or setup: not recorded in history. */
-const UNRECORDED = /^(history|models|guide|rerun|check|update)\b/;
+const UNRECORDED = /^(history|models|guide|rerun|check|update|catalog)\b/;
 /** Read-only lookups that report another run's spend: counting it here would bill it twice in history. */
 const SPEND_LOOKUPS = /^openrouter generation\b/;
 /** Groups that run locally (ffmpeg/ImageMagick): dry run stops before the action. */

@@ -40,12 +40,19 @@ function boolParam(url: URL, name: string): boolean | undefined {
   throw new ApiError(400, "bad_request", `${name} must be true or false`);
 }
 
-function numberParam(url: URL, name: string): number | undefined {
+/** Same bounds as the multix_model_catalog input schema. */
+function numberParam(url: URL, name: string, max: number, whole = false): number | undefined {
   const v = url.searchParams.get(name);
   if (v === null) return undefined;
-  if (!NUMBER_RE.test(v))
-    throw new ApiError(400, "bad_request", `${name} must be a positive number`);
-  return Number(v);
+  const n = Number(v);
+  if (!NUMBER_RE.test(v) || n <= 0 || n > max || (whole && !Number.isInteger(n))) {
+    throw new ApiError(
+      400,
+      "bad_request",
+      `${name} must be a positive ${whole ? "whole " : ""}number up to ${max}`,
+    );
+  }
+  return n;
 }
 
 /** GET /model-catalog: the same views as `multix catalog --json` and multix_model_catalog. */
@@ -71,8 +78,8 @@ export function getModelCatalog(keys: ProviderKeys, url: URL): Response {
     priced: boolParam(url, "priced"),
     ready: boolParam(url, "ready"),
     audio: boolParam(url, "audio"),
-    duration_s: numberParam(url, "duration_s"),
-    images: numberParam(url, "images"),
+    duration_s: numberParam(url, "duration_s", 3600),
+    images: numberParam(url, "images", 100, true),
   };
   const defined = Object.fromEntries(Object.entries(query).filter(([, v]) => v !== undefined));
   return json(200, modelCatalogPayload(keys, defined as typeof query));

@@ -507,6 +507,11 @@ describe("REST API model catalogue", () => {
       400,
     );
     expect((await api(browser, key, "/model-catalog?view=everything")).status).toBe(400);
+    expect((await api(browser, key, "/model-catalog?view=compare&images=2.5")).status).toBe(400);
+    expect((await api(browser, key, "/model-catalog?view=compare&duration_s=3601")).status).toBe(
+      400,
+    );
+    expect((await api(browser, key, "/model-catalog?view=compare&duration_s=0")).status).toBe(400);
     expect((await api(browser, key, "/model-catalog?task=telepathy")).status).toBe(400);
     expect((await api(browser, undefined, "/model-catalog")).status).toBe(401);
   });

@@ -5,8 +5,9 @@
  * usage at the provider.
  *
  * Counting rules:
- * - a request is one recorded run that sent something (dry runs and
- *   estimate-only runs are left out);
+ * - a request is one recorded run that sent something: dry runs,
+ *   estimate-only runs and failed runs that made no provider request (a
+ *   missing key, a bad flag) are left out;
  * - an operation is one logical piece of work: runs that share a cost
  *   receipt operation id (submit, status polls, result download, resume)
  *   count once, so polls and resumes never double the operation count;
@@ -73,6 +74,12 @@ export function keyOf(e: HistoryEntry, by: UsageGroup): string {
   return model ?? UNKNOWN_MODEL;
 }
 
+/** False for runs that never reached the provider. */
+export function sentRequest(e: HistoryEntry): boolean {
+  if (e.dry_run || e.estimate_only) return false;
+  return e.ok || Boolean(e.job || e.cost || e.provider_ids?.length) || (e.http?.requests ?? 0) > 0;
+}
+
 const isCancel = (e: HistoryEntry) => e.error?.code === "CANCELLED";
 
 function percentile(values: number[], p: number): number | null {
@@ -133,7 +140,7 @@ export interface UsageRow {
 export function aggregateUsage(entries: HistoryEntry[], by: UsageGroup): UsageRow[] {
   const groups = new Map<string, HistoryEntry[]>();
   for (const e of entries) {
-    if (e.dry_run || e.estimate_only) continue;
+    if (!sentRequest(e)) continue;
     const key = keyOf(e, by);
     groups.set(key, [...(groups.get(key) ?? []), e]);
   }

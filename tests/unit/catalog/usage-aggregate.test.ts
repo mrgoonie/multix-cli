@@ -154,13 +154,37 @@ describe("retries, failures and cancels", () => {
 
   it("counts a cancel separately from a failure, and both as requests", () => {
     const rows = [
-      entry({ ok: false, exit_code: 1, error: { code: "CANCELLED", message: "stopped" } }),
-      entry({ ok: false, exit_code: 1, error: { code: "PROVIDER_UNAVAILABLE", message: "down" } }),
+      entry({
+        ok: false,
+        exit_code: 1,
+        error: { code: "CANCELLED", message: "stopped" },
+        http: { requests: 2, errors: 0, ms: 900 },
+      }),
+      entry({
+        ok: false,
+        exit_code: 1,
+        error: { code: "PROVIDER_UNAVAILABLE", message: "down" },
+        http: { requests: 1, errors: 1, ms: 300 },
+      }),
       entry({}),
     ];
     const row = rowFor(rows);
     expect(row).toMatchObject({ requests: 3, completed: 1, failed: 1, canceled: 1 });
     expect(row.success_rate).toBeCloseTo(1 / 3, 3);
+  });
+
+  it("leaves out a failed run that never reached the provider (missing key, bad flag)", () => {
+    const rows = [
+      entry({ ok: false, exit_code: 2, error: { code: "MISSING_KEY", message: "no key" } }),
+      entry({
+        ok: false,
+        exit_code: 1,
+        error: { code: "VALIDATION", message: "bad" },
+        http: { requests: 0, errors: 0, ms: 0 },
+      }),
+      entry({}),
+    ];
+    expect(rowFor(rows)).toMatchObject({ requests: 1, completed: 1, failed: 0 });
   });
 
   it("reports no success rate without requests", () => {

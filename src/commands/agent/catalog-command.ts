@@ -7,6 +7,7 @@
  */
 
 import type { Command } from "commander";
+import { usd } from "../../agent/cost-preflight.js";
 import { findHistory, parseSince, readHistory } from "../../agent/history-store.js";
 import { run } from "../../agent/run-state.js";
 import { TASKS, type Task, isTask } from "../../capabilities/capability-types.js";
@@ -68,11 +69,6 @@ function collect(value: string, prev: string[] = []): string[] {
 const print = (payload: Record<string, unknown>) =>
   console.log(JSON.stringify({ schema: CATALOG_SCHEMA, ...payload }));
 
-const usd = (n: number | null | undefined) =>
-  n === null || n === undefined
-    ? "unknown"
-    : `$${n < 0.01 ? n.toFixed(4) : n.toFixed(n < 1 ? 4 : 2)}`;
-
 function parseTask(value: string | undefined): Task | undefined {
   if (value === undefined) return undefined;
   if (!isTask(value))
@@ -130,7 +126,7 @@ function verifiedUsage(ref: string, offering: string): Review["verified_usage"] 
     );
   }
   const model = resolvedModel(e);
-  if (`${e.provider}:${model}` !== offering) {
+  if (!model || `${e.provider}:${model}` !== offering) {
     throw new ValidationError(
       `Run ${e.id} used ${e.provider}:${model ?? "an unknown model"}, not ${offering}.`,
     );

@@ -70,8 +70,9 @@ run ledger (`~/.multix/history.jsonl`, see
 [Run history](/reference/for-ai-agents/#run-history)); it is not your provider
 account's usage. Group with `--by provider|model|offering|task|command`.
 
-- A **request** is one recorded run that sent something; dry runs and
-  estimate-only runs are left out.
+- A **request** is one recorded run that sent something; dry runs,
+  estimate-only runs and failed runs that never reached the provider (a missing
+  key, a bad flag) are left out.
 - An **operation** is one piece of work: a submit with its status polls,
   resumes and download counts once.
 - **Retries** are failed sends of a submit before the one that returned the job.
@@ -127,7 +128,9 @@ With `--use-case`, offerings noted `avoid` for it are excluded with the reason.
 
 The [remote MCP server](/guides/mcp-server/) tool `multix_model_catalog` and the
 [REST API](/guides/rest-api/) endpoint `GET /api/v1/model-catalog` serve the
-views `providers`, `models`, `show` and `compare` with the same payload as the
-`data` of `multix catalog <view> --json`. Readiness there reflects the keys you
+views `providers`, `models`, `show` and `compare`. For `providers`, `models` and
+`compare` the payload is the same as the `data` of `multix catalog <view> --json`;
+`show` there returns the offering alone, without the local usage, ratings, reviews
+and notes that the CLI adds. Readiness there reflects the keys you
 saved on the server. Usage, ratings, reviews and notes stay on your machine and
 are not served.

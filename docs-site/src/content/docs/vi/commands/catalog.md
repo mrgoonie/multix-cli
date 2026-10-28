@@ -73,7 +73,8 @@ chạy (`~/.multix/history.jsonl`, xem
 của tài khoản provider. Nhóm theo `--by provider|model|offering|task|command`.
 
 - Một **request** là một lần chạy đã ghi lại có gửi đi thứ gì đó; lần chạy
-  `--dry-run` và chỉ ước tính giá bị bỏ qua.
+  `--dry-run`, lần chạy chỉ ước tính giá và lần chạy lỗi trước khi tới provider
+  (thiếu key, sai flag) bị bỏ qua.
 - Một **operation** là một phần việc: một lần submit cùng các lần poll trạng
   thái, tiếp tục và tải file chỉ tính một lần.
 - **Retry** là các lần gửi submit thất bại trước lần trả về job.
@@ -130,7 +131,9 @@ nhiêu phần trọng số có bằng chứng, và mỗi yếu tố hiển thị
 
 Tool `multix_model_catalog` của [MCP server từ xa](/vi/guides/mcp-server/) và
 endpoint `GET /api/v1/model-catalog` của [REST API](/vi/guides/rest-api/) phục vụ
-các view `providers`, `models`, `show` và `compare` với cùng payload như phần
-`data` của `multix catalog <view> --json`. Trạng thái sẵn sàng ở đó dựa trên các
+các view `providers`, `models`, `show` và `compare`. Với `providers`, `models` và
+`compare`, payload giống phần `data` của `multix catalog <view> --json`; còn `show`
+ở đó chỉ trả về offering, không kèm usage, rating, review và ghi chú cục bộ mà CLI
+thêm vào. Trạng thái sẵn sàng ở đó dựa trên các
 key bạn đã lưu trên server. Usage, rating, review và ghi chú vẫn nằm trên máy
 của bạn và không được phục vụ.

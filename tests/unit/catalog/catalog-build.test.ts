@@ -183,7 +183,8 @@ describe("filterOfferings", () => {
     const off = filterOfferings(offerings, { audio: false, task: "video" }).map((o) => o.id);
     expect(off).toContain("fal:fal-ai/kling-video/v3/4k/text-to-video");
     expect(off).toContain("fal:fal-ai/kling-video/v3/pro/text-to-video");
-    expect(off).not.toContain("fal:bytedance/seedance-2.5/text-to-video");
+    expect(off).toContain("fal:bytedance/seedance-2.5/text-to-video");
+    expect(off).not.toContain("atlas:bytedance/seedance-2.5/text-to-video");
   });
 });
 
