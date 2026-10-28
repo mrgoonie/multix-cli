@@ -70,3 +70,19 @@ Reviewer: isolated code-reviewer (did not write the code). Date: 2026-10-28.
 ## Unresolved questions
 1. Is bouncing an English-docs reader back to `/vi/` acceptable product behaviour (M1), or should any docs visit count as a language choice?
 2. Licence/source of the head model used for the point cloud (L5)?
+
+## Re-review of 9ccb1c3
+
+Checked: `git show 9ccb1c3`, docs-site rebuild (`_headers` regenerated, 12 hashes, so the changed inline config script is still allowed), docs-site tests 22/22 pass, Biome clean on the changed files. Built language `<option>` values are `/getting-started/` and `/vi/getting-started/`, which matches the `startsWith("/vi/")` test. The theme select is `starlight-theme-select`, so the `starlight-lang-select select` selector cannot catch it.
+
+| Finding | Verdict |
+|---|---|
+| M1 language choice | Resolved. A delegated `change` listener stores `multix-lang` from the language select. Starlight's own handler only starts navigation, so the synchronous write lands first. Optional follow-up: no automated test covers it (the browser check was manual). |
+| M2 context loss | Resolved. `lost` stops the loop, the canvas is removed, `is-live` is dropped, labels are cleared and the unlock button is hidden. Later `readPalette` calls on the lost context are no-op GL calls. |
+| L1 no-JS token duplicate | Open, deferred as a follow-up (accepted). |
+| L2 CSP frame-src/media-src | Open, latent, deferred until case studies are added (accepted). |
+| L3 copy announcement | Resolved. The button is `aria-live="polite"`. On failure the command is selected, but nothing is announced: minor, acceptable. |
+| L4 404 shortcut | Resolved. The shortcut text is removed. |
+| L5 GLB provenance | Resolved. The generator header now records the source (Atlas flux-schnell, then hunyuan3d-rapid) and that the 9 MB GLB is not committed. Licence terms of the generated mesh are still not stated (question only). |
+
+No new issues found in the commit.
