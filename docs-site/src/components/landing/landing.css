@@ -347,7 +347,7 @@ html:not(.js) .mx-theme-switch {
   justify-self: center;
   width: 100%;
   max-width: 540px;
-  aspect-ratio: 1 / 1.02;
+  aspect-ratio: 1;
 }
 
 .mx-poster,
@@ -362,13 +362,23 @@ html:not(.js) .mx-theme-switch {
   transition: opacity var(--mx-duration-slow) var(--mx-ease-out);
 }
 
-:root[data-theme="light"] .mx-poster {
-  filter: brightness(0.2);
+/* Light dots on the dark theme, dark dots on the light theme. */
+.mx-poster-light,
+:root[data-theme="light"] .mx-poster-dark {
+  display: none;
+}
+
+:root[data-theme="light"] .mx-poster-light {
+  display: block;
 }
 
 @media (prefers-color-scheme: light) {
-  :root:not([data-theme]) .mx-poster {
-    filter: brightness(0.2);
+  :root:not([data-theme]) .mx-poster-dark {
+    display: none;
+  }
+
+  :root:not([data-theme]) .mx-poster-light {
+    display: block;
   }
 }
 

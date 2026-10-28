@@ -78,18 +78,30 @@ test("JSON-LD describes the website and the application", () => {
 
 test("the hero poster is in the HTML, so it shows without JS or WebGL", async () => {
   for (const html of Object.values(pages)) {
-    assert.match(html, /<img class="mx-poster" src="\/hero\/head-poster\.svg" alt="[^"]+"/);
+    for (const theme of ["dark", "light"]) {
+      assert.match(
+        html,
+        new RegExp(
+          `<img class="mx-poster mx-poster-${theme}" src="/hero/head-poster-${theme}\\.png" alt="[^"]+"`,
+        ),
+      );
+    }
     assert.match(html, /data-points="\/hero\/head-points\.bin"/);
     assert.match(html, /<button[^>]*id="mx-unlock"[^>]*hidden/);
   }
-  const [poster, points, manifest] = await Promise.all([
-    readDist("hero/head-poster.svg"),
+  const [points, manifest] = await Promise.all([
     stat(new URL("../dist/hero/head-points.bin", import.meta.url)),
     readDist("hero/head-points.json").then(JSON.parse),
+    stat(new URL("../dist/hero/head-poster-dark.png", import.meta.url)),
+    stat(new URL("../dist/hero/head-poster-light.png", import.meta.url)),
   ]);
-  assert.match(poster, /^<svg /);
-  assert.equal(manifest.format, "multix-head-points");
-  assert.equal(points.size, manifest.count * 13);
+  // Float32 [x, y, z, region] per point, with the anchors the renderer pins labels to.
+  assert.equal(manifest.version, 1);
+  assert.equal(manifest.stride, 4);
+  assert.equal(points.size, manifest.count * 16);
+  for (const anchor of ["eyes", "ears", "mouth", "crown"]) {
+    assert.equal(manifest.anchors[anchor].length, 3);
+  }
 });
 
 test("senses map to real commands and surfaces link to existing docs", async () => {

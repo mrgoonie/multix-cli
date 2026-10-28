@@ -37,14 +37,20 @@ const senses = [
     </div>
   </div>
   <div class="mx-stage" id="mx-stage" data-points="/hero/head-points.bin">
-    <img
-      class="mx-poster"
-      src="/hero/head-poster.svg"
-      alt={hero.posterAlt}
-      width="600"
-      height="612"
-      decoding="async"
-    />
+    {
+      /* One poster per theme; the hidden one is lazy, so only the visible one loads. */
+      (["dark", "light"] as const).map((theme) => (
+        <img
+          class={`mx-poster mx-poster-${theme}`}
+          src={`/hero/head-poster-${theme}.png`}
+          alt={hero.posterAlt}
+          width="900"
+          height="900"
+          loading="lazy"
+          decoding="async"
+        />
+      ))
+    }
     {
       senses.map((sense) => (
         <span class="mx-sense" data-sense={sense.key} aria-hidden="true">

@@ -3,24 +3,34 @@
  * It turns toward the pointer, ripples under it, and a click or the unlock
  * button lights eyes → ears → mouth → crown, pinning a DOM label to each.
  *
- * Points come from /hero/head-points.bin; the format is documented in
- * generate-head-points.mjs. Sound waves (region 4) and creation sparks
- * (region 6) are generated here. Rendering pauses offscreen and in hidden tabs.
+ * Points come from /hero/head-points.bin: little-endian Float32 [x, y, z, region]
+ * per point, longest axis in [-1, 1], y up, face toward +z (see
+ * docs-site/scripts/hero/sample-head-points.mjs). Sound waves (region 4) and
+ * creation sparks (region 6) are generated here. Rendering pauses offscreen
+ * and in hidden tabs.
  */
 
+type Vec3 = [number, number, number];
+
 interface Manifest {
-  format: string;
   version: number;
   count: number;
-  anchors: { eyes: number[]; ears: number[]; mouth: number[] };
+  stride: number;
+  /** Right-hand eye and ear; mirror x for the left. */
+  anchors: { eyes: Vec3; ears: Vec3; mouth: Vec3; crown: Vec3 };
 }
 
 const FLOATS_PER_POINT = 5; // x, y, z, region, seed
+// Resting camera, shared with the posters so the swap to WebGL does not jump.
+const REST_YAW = -0.35;
+const REST_PITCH = 0.08;
+const CAMERA_DIST = 4.3;
+const FRAME = 3.87; // projection scale: the bust fills about 90% of the stage height
 
 const vertexShader = `
 attribute vec3 aPos; attribute float aRegion; attribute float aSeed;
-uniform float uYaw, uPitch, uTime, uAspect, uDpr, uSize, uMouseOn, uPulse, uCreate;
-uniform vec2 uMouse; uniform vec3 uUnlock;
+uniform float uYaw, uPitch, uTime, uAspect, uDpr, uSize, uMouseOn, uPulse, uCreate, uInk;
+uniform vec2 uMouse; uniform vec3 uUnlock, uMouth, uCrown;
 uniform vec3 uBase, uHot, cImage, cVideo, cVoice, cMusic, cSpeak;
 varying vec3 vColor; varying float vAlpha;
 mat3 rotY(float a){float c=cos(a),s=sin(a);return mat3(c,0.,-s, 0.,1.,0., s,0.,c);}
@@ -30,26 +40,26 @@ void main(){
   vec3 p = aPos; float wave = -1.0;
   if (is(4.0)) {
     float t = fract(uTime*0.55 + aPos.y/3.0);
-    float r = 0.12 + t*0.95;
-    p = vec3(sin(aPos.x)*r, -0.52 + cos(aPos.x)*r*0.15, 0.92 + cos(aPos.x)*r*0.9);
+    float r = 0.08 + t*0.65;
+    p = uMouth + vec3(sin(aPos.x)*r, cos(aPos.x)*r*0.15, 0.06 + cos(aPos.x)*r*0.9);
     wave = t;
   }
   float spark = -1.0;
   if (is(6.0)) {
     float t = fract(uTime*0.22 + aPos.y);
-    float r = 0.08 + t*0.55 + aPos.z*0.12;
+    float r = 0.06 + t*0.38 + aPos.z*0.08;
     float ang = aPos.x + t*5.0;
-    p = vec3(cos(ang)*r, 1.08 + t*0.5, -0.05 + sin(ang)*r*0.7);
+    p = uCrown + vec3(cos(ang)*r, 0.04 + t*0.34, sin(ang)*r*0.7);
     spark = t;
   }
-  vec3 dir = normalize(p - vec3(0.0,-0.2,-0.05) + 1e-4);
+  vec3 dir = normalize(p + 1e-4);
   p += dir*sin(uTime*1.2 + aPos.y*3.0)*0.006;
   if (is(3.0)) p += dir*uUnlock.z*0.045*sin(uTime*16.0 + aSeed*6.28);
   if (is(2.0)) p += dir*uUnlock.y*0.035*sin(uTime*7.0 - aPos.y*14.0);
   if (is(1.0)) p += dir*uUnlock.x*0.02*(0.5+0.5*sin(uTime*3.0));
   p = rotX(uPitch)*(rotY(uYaw)*p);
-  float dist = 4.3 - p.z;
-  vec2 ndc = vec2(p.x*2.45/dist/uAspect, (p.y+0.2)*2.45/dist);
+  float dist = ${CAMERA_DIST.toFixed(2)} - p.z;
+  vec2 ndc = vec2(p.x*${FRAME.toFixed(2)}/dist/uAspect, p.y*${FRAME.toFixed(2)}/dist);
 
   vec2 dm = ndc - uMouse; dm.x *= uAspect;
   float md = length(dm);
@@ -58,12 +68,17 @@ void main(){
   vec2 push = normalize(dm + 1e-5)*field*0.06*(0.55 + 0.45*ripple);
   ndc += vec2(push.x/uAspect, push.y);
 
-  float sweepY = 1.25 - uPulse*1.5;
-  float sweep = (wave < 0.0 && spark < 0.0) ? exp(-pow((aPos.y - sweepY)*7.0, 2.0)) : 0.0;
+  float sweepY = 1.05 - uPulse*1.05;
+  float sweep = (wave < 0.0 && spark < 0.0) ? exp(-pow((aPos.y - sweepY)*10.0, 2.0)) : 0.0;
 
   float depth = clamp((p.z + 1.0)*0.5, 0.0, 1.0);
   vec3 col = uBase;
-  float a = mix(0.10, 0.85, depth*depth);
+  // Shade like the posters: a radial normal lit from the upper left; ink mode
+  // (light theme) puts more ink where the light falls away.
+  vec3 n = normalize(vec3(aPos.x, aPos.y*0.5, aPos.z) + 1e-4);
+  float lam = max(0.0, dot(n, vec3(-0.43, 0.53, 0.73)));
+  float shade = mix(0.3 + 1.05*lam, 1.0 - lam*0.85, uInk);
+  float a = (0.25 + 0.75*depth)*clamp(shade, 0.0, 1.0);
   float size = uSize*(0.6 + 0.7*depth);
   float flick = 0.5 + 0.5*sin(uTime*2.0 + aSeed*12.0);
   if (is(1.0)) { col = mix(col, mix(cImage, cVideo, flick), uUnlock.x); size *= 1.0 + uUnlock.x*0.9; a = mix(a, 1.0, uUnlock.x); }
@@ -73,11 +88,11 @@ void main(){
   col = mix(col, uHot, field*0.9); size *= 1.0 + field*1.4; a = max(a, field*0.95);
   col = mix(col, uHot, sweep*0.8); size *= 1.0 + sweep*1.2; a = max(a, sweep);
   a *= 0.8 + 0.2*sin(uTime*1.7 + aSeed*31.0);
-  a *= (wave >= 0.0 || spark >= 0.0) ? 1.0 : smoothstep(-1.7, -1.15, aPos.y);
+  a *= (wave >= 0.0 || spark >= 0.0) ? 1.0 : smoothstep(-1.0, -0.7, aPos.y);
   if (wave >= 0.0) { col = cSpeak; a = uUnlock.z*(1.0 - wave)*0.9; size = uSize*(1.6 - wave); }
   if (spark >= 0.0) { col = mix(uHot, cMusic, aSeed*0.6); a = uCreate*sin(spark*3.14159)*0.95; size = uSize*(0.8 + 1.4*aSeed); }
   vColor = col; vAlpha = clamp(a, 0.0, 1.0);
-  gl_PointSize = size*uDpr*(4.3/dist);
+  gl_PointSize = size*uDpr*(${CAMERA_DIST.toFixed(2)}/dist);
   gl_Position = vec4(ndc, 0.0, 1.0);
 }`;
 
@@ -95,8 +110,11 @@ const UNIFORMS = [
   "uMouseOn",
   "uPulse",
   "uCreate",
+  "uInk",
   "uMouse",
   "uUnlock",
+  "uMouth",
+  "uCrown",
   "uBase",
   "uHot",
   "cImage",
@@ -112,7 +130,7 @@ const seedOf = (i: number) => {
   return s - Math.floor(s);
 };
 
-/** Interleave the file's points with generated wave and spark particles. */
+/** Interleave the file's points (every `stride`-th) with generated wave and spark particles. */
 function buildVertices(bin: ArrayBuffer, count: number, stride: number): Float32Array {
   const view = new DataView(bin);
   const kept = Math.ceil(count / stride);
@@ -121,10 +139,7 @@ function buildVertices(bin: ArrayBuffer, count: number, stride: number): Float32
   const out = new Float32Array((kept + waves + sparks) * FLOATS_PER_POINT);
   let o = 0;
   for (let i = 0; i < count; i += stride) {
-    out[o++] = view.getFloat32(i * 12, true);
-    out[o++] = view.getFloat32(i * 12 + 4, true);
-    out[o++] = view.getFloat32(i * 12 + 8, true);
-    out[o++] = view.getUint8(count * 12 + i);
+    for (let k = 0; k < 4; k++) out[o++] = view.getFloat32((i * 4 + k) * 4, true);
     out[o++] = seedOf(i);
   }
   // Sound waves in front of the mouth: x = angle, y = ring index.
@@ -191,7 +206,7 @@ export async function startHero(stage: HTMLElement): Promise<boolean> {
   } catch {
     return false;
   }
-  if (manifest.format !== "multix-head-points" || bin.byteLength < manifest.count * 13)
+  if (manifest.version !== 1 || manifest.stride !== 4 || bin.byteLength < manifest.count * 16)
     return false;
 
   const small = matchMedia("(max-width: 860px)").matches;
@@ -253,6 +268,7 @@ export async function startHero(stage: HTMLElement): Promise<boolean> {
     gl.uniform3fv(U.cMusic, v("--mx-text-muted", [0.56, 0.59, 0.64]));
     gl.uniform3fv(U.cSpeak, v("--mx-sense-speak", [1, 1, 1]));
     // Additive light on dark paper; ordinary "ink" blending on light paper.
+    gl.uniform1f(U.uInk, dark ? 0 : 1);
     if (dark) gl.blendFunc(gl.ONE, gl.ONE);
     else gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
   }
@@ -264,10 +280,10 @@ export async function startHero(stage: HTMLElement): Promise<boolean> {
   let labelsShown = false;
   const button = stage.querySelector<HTMLButtonElement>("#mx-unlock");
   const buttonLabel = button?.querySelector("span");
-  let yaw = 0;
-  let pitch = 0;
-  let targetYaw = 0;
-  let targetPitch = 0;
+  let yaw = REST_YAW;
+  let pitch = REST_PITCH;
+  let targetYaw = REST_YAW;
+  let targetPitch = REST_PITCH;
   let mouse = [9, 9];
   let mouseOn = 0;
   let targetMouseOn = 0;
@@ -282,13 +298,13 @@ export async function startHero(stage: HTMLElement): Promise<boolean> {
     const ny = -(((event.clientY - r.top) / r.height) * 2 - 1);
     mouse = [nx, ny];
     targetMouseOn = 1;
-    targetYaw = nx * 0.55;
-    targetPitch = -ny * 0.22;
+    targetYaw = REST_YAW + nx * 0.55;
+    targetPitch = REST_PITCH - ny * 0.22;
   });
   canvas.addEventListener("pointerleave", () => {
     targetMouseOn = 0;
-    targetYaw = 0;
-    targetPitch = 0;
+    targetYaw = REST_YAW;
+    targetPitch = REST_PITCH;
   });
 
   function toggle() {
@@ -308,12 +324,15 @@ export async function startHero(stage: HTMLElement): Promise<boolean> {
   button?.addEventListener("click", toggle);
 
   /* ---------- projection, mirrored from the shader to pin the labels ---------- */
-  const { eyes, ears, mouth } = manifest.anchors;
-  const anchors: Record<string, number[]> = {
-    eyes: [eyes[0] + 0.32, eyes[1] + 0.18, eyes[2]],
-    ears: [-ears[0] - 0.12, ears[1] + 0.32, ears[2]],
-    mouth: [mouth[0] + 0.5, mouth[1] - 0.12, mouth[2]],
-    create: [-0.55, 1.05, 0.3],
+  // Labels sit just off each anchor so they do not cover the lit dots.
+  const { eyes, ears, mouth, crown } = manifest.anchors;
+  gl.uniform3fv(U.uMouth, mouth);
+  gl.uniform3fv(U.uCrown, crown);
+  const anchors: Record<string, Vec3> = {
+    eyes: [eyes[0] + 0.24, eyes[1] + 0.22, eyes[2]],
+    ears: [-ears[0] - 0.1, ears[1] + 0.22, ears[2]],
+    mouth: [mouth[0] + 0.36, mouth[1] - 0.08, mouth[2]],
+    create: [crown[0] - 0.36, crown[1] + 0.06, crown[2] + 0.2],
   };
   function project(x: number, y: number, z: number) {
     const cy = Math.cos(yaw);
@@ -324,14 +343,11 @@ export async function startHero(stage: HTMLElement): Promise<boolean> {
     const sp = Math.sin(pitch);
     const ry = cp * y - sp * pz;
     const rz = sp * y + cp * pz;
-    const dist = 4.3 - rz;
+    const dist = CAMERA_DIST - rz;
     const w = canvas.clientWidth;
     const h = canvas.clientHeight;
     const aspect = w / h;
-    return [
-      (((px * 2.45) / dist / aspect + 1) / 2) * w,
-      (1 - (((ry + 0.2) * 2.45) / dist + 1) / 2) * h,
-    ];
+    return [(((px * FRAME) / dist / aspect + 1) / 2) * w, (1 - ((ry * FRAME) / dist + 1) / 2) * h];
   }
 
   function resize() {
@@ -341,7 +357,7 @@ export async function startHero(stage: HTMLElement): Promise<boolean> {
     gl.viewport(0, 0, canvas.width, canvas.height);
     gl.uniform1f(U.uDpr, dpr);
     gl.uniform1f(U.uAspect, canvas.clientWidth / canvas.clientHeight || 1);
-    gl.uniform1f(U.uSize, small ? 2.6 : 2.2);
+    gl.uniform1f(U.uSize, small ? 3.2 : 2.8);
     labelWidths.fill(0);
     labelsShown = true;
   }
