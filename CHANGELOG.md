@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.24.0](https://github.com/mrgoonie/multix-cli/compare/v1.23.0...v1.24.0) (2026-10-28)
+
+
+### Added
+
+* **site:** obsidian redesign of the site and MCP dashboard ([#412](https://github.com/mrgoonie/multix-cli/issues/412)) ([3c1f85d](https://github.com/mrgoonie/multix-cli/commit/3c1f85d89845d49c6eec9b8286c39928e2603884))
+
 ## [1.23.0](https://github.com/mrgoonie/multix-cli/compare/v1.22.0...v1.23.0) (2026-10-28)
 
 
