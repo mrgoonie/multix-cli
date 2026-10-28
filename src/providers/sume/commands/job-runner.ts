@@ -140,7 +140,8 @@ export async function deliverJob(
       files: [],
       ...(job?.usage_summary ? { usage_summary: job.usage_summary } : {}),
     };
-    throw new ProviderError(`Sume job ${id} ${state}${why} (${refund}).`, SUME_PROVIDER);
+    const verb = state === "failed" ? "failed" : "was canceled";
+    throw new ProviderError(`Sume job ${verb} (${id})${why} (${refund}).`, SUME_PROVIDER);
   }
   if (note) o.logger.info(`Job ${id}: ${note}`);
   const result = await o.client.getResult(id);

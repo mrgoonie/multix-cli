@@ -11,6 +11,7 @@ import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { run as runState } from "../../../../src/agent/run-state.js";
 import { _resetEnvLoader } from "../../../../src/core/env-loader.js";
+import { classifyError } from "../../../../src/core/error-classify.js";
 import { type MultixError, ProviderError, ValidationError } from "../../../../src/core/errors.js";
 import { _resetOutputDir } from "../../../../src/core/output-dir.js";
 import { registerSumeCommands } from "../../../../src/providers/sume/commands/index.js";
@@ -224,7 +225,10 @@ describe("sume video", () => {
     });
     const err = await caught(sume("video", "a cat", "-m", "kling-3", "--duration", "5"));
     expect(err).toBeInstanceOf(ProviderError);
-    expect((err as Error).message).toMatch(/failed: content_policy.*refunded \$0\.03/);
+    expect((err as Error).message).toMatch(
+      /job failed \(job_f\): content_policy.*refunded \$0\.03/,
+    );
+    expect(classifyError(err).code).toBe("JOB_FAILED");
     expect(fake.calls.some((c) => c.url.includes("/result"))).toBe(false);
     expect(posts(fake.calls)).toHaveLength(1);
   });
