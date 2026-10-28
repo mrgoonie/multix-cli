@@ -14,7 +14,9 @@ import { AuthorizationError, CimdFetchError } from "@cloudflare/workers-oauth-pr
 import { type AppContext, oauthHelpers, sameOriginPost, signedInAccount } from "../app-context.js";
 import { html, redirect, text } from "../http-responses.js";
 import { consentPage } from "../pages/consent-page.js";
+import { messagesFor } from "../pages/i18n.js";
 import { messagePage } from "../pages/page-layout.js";
+import { resolvePreferences, selfPath, withPreferenceCookies } from "../pages/preferences.js";
 import { logEvent } from "../redaction.js";
 
 export const AUTHORIZE_PATH = "/oauth/authorize";
@@ -26,20 +28,27 @@ export interface GrantProps {
   userId: string;
 }
 
-function authorizationFailure(error: unknown): Response {
+function authorizationFailure(error: unknown, request: Request): Response {
   if (error instanceof AuthorizationError && error.redirectTo) {
     return redirect(error.redirectTo, {}, 302);
   }
   if (error instanceof AuthorizationError || error instanceof CimdFetchError) {
-    const message =
-      error instanceof AuthorizationError ? error.description : "This app could not be verified.";
-    return html(400, messagePage("Authorization failed", message));
+    const preferences = resolvePreferences(request);
+    const m = messagesFor(preferences.prefs.lang).messages;
+    // The library's description is protocol detail and stays in English.
+    const message = error instanceof AuthorizationError ? error.description : m.unverifiedApp;
+    return html(
+      400,
+      messagePage(m.authorizationFailed, message, undefined, preferences.prefs),
+      withPreferenceCookies(preferences),
+    );
   }
   throw error;
 }
 
 export async function handleAuthorize(ctx: AppContext, request: Request): Promise<Response> {
   const oauth = oauthHelpers(ctx.env);
+  const preferences = resolvePreferences(request);
   try {
     if (request.method === "GET") {
       const authRequest = await oauth.parseAuthRequest(request);
@@ -51,20 +60,19 @@ export async function handleAuthorize(ctx: AppContext, request: Request): Promis
       }
       const details = await oauth.describeConsent(authRequest);
       const consent = await oauth.beginConsent(authRequest);
-      return html(200, consentPage(details, consent.handle, account), consent.headers);
+      return html(
+        200,
+        consentPage(details, consent.handle, account, preferences.prefs, selfPath(request)),
+        withPreferenceCookies(preferences, consent.headers),
+      );
     }
 
     if (request.method === "POST") {
       if (!sameOriginPost(ctx, request)) return text(403, "Forbidden");
       const account = await signedInAccount(ctx, request);
       if (!account) {
-        return html(
-          401,
-          messagePage(
-            "Signed out",
-            "Your session ended. Start connecting from your MCP client again.",
-          ),
-        );
+        const m = messagesFor(preferences.prefs.lang).messages;
+        return html(401, messagePage(m.signedOut, m.signedOutBody, undefined, preferences.prefs));
       }
       const form = await request.formData();
       const handle = String(form.get("handle") ?? "");
@@ -89,6 +97,6 @@ export async function handleAuthorize(ctx: AppContext, request: Request): Promis
 
     return text(405, "Method Not Allowed", { allow: "GET, POST" });
   } catch (error) {
-    return authorizationFailure(error);
+    return authorizationFailure(error, request);
   }
 }

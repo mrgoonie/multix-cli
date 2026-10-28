@@ -6,7 +6,8 @@
  *
  * Only pages with a copy button include it (page-layout.ts). Without it (or
  * with JavaScript off) the buttons stay hidden and the values can still be
- * selected by hand. Results are announced through the #copy-status live region.
+ * selected by hand. Results are announced through the #copy-status live region,
+ * which carries the messages in the page's language (data-copied, data-failed).
  */
 
 export const COPY_SCRIPT = `document.documentElement.classList.add("js");
@@ -35,10 +36,11 @@ document.addEventListener("click", async (event) => {
   }
   // Clear our selection on success; on failure leave it so the user can copy by hand.
   if (copied && !(source instanceof HTMLInputElement)) window.getSelection()?.removeAllRanges();
-  const message = copied ? "Copied" : "Copy failed: the text is selected, copy it by hand";
+  // The page puts both messages, in its language, on the live region.
+  const status = document.getElementById("copy-status");
+  const message = (status && status.getAttribute(copied ? "data-copied" : "data-failed")) || (copied ? "Copied" : "Copy failed");
   button.setAttribute("data-state", copied ? "copied" : "failed");
   button.setAttribute("aria-label", message);
-  const status = document.getElementById("copy-status");
   if (status) status.textContent = message;
   clearTimeout(button._copyTimer);
   button._copyTimer = setTimeout(() => {
@@ -49,4 +51,4 @@ document.addEventListener("click", async (event) => {
 });`;
 
 /** `sha256-<base64>` of COPY_SCRIPT, as used in the CSP `script-src`. */
-export const COPY_SCRIPT_HASH = "sha256-DEhd3r+0eCagj9SvKL8MFQ1OriU6PmXpskB2BJw14E0=";
+export const COPY_SCRIPT_HASH = "sha256-wYeGU/O2ARa/l23331Ydh+tSTGaESrICpcUHkJGQeSw=";

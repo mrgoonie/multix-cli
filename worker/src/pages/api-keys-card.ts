@@ -8,6 +8,7 @@ import type { ApiKeyRecord } from "../accounts/api-key-store.js";
 import { MAX_API_KEYS_PER_ACCOUNT } from "../accounts/api-key-store.js";
 import { escapeHtml } from "../http-responses.js";
 import { copyField } from "./copy-button.js";
+import type { Lang, Messages } from "./i18n.js";
 import { formatDate } from "./page-layout.js";
 
 /** A key created by this request, shown once. */
@@ -21,35 +22,41 @@ function hidden(name: string, value: string): string {
 }
 
 /** The one-time display of a new key, placed at the top of the page. */
-export function newApiKeyNotice(created: NewApiKey): string {
-  return `<section class="card" id="new-api-key">
-<h2>API key created: ${escapeHtml(created.name)}</h2>
-<p>Copy it now. It is shown only once; if you lose it, revoke it and create another. Do not reload this page: that sends the form again and creates another key.</p>
-${copyField(created.key, "New API key", "new-api-key-value")}
+export function newApiKeyNotice(created: NewApiKey, t: Messages, lang: Lang): string {
+  return `<section class="card" id="new-api-key" aria-labelledby="new-api-key-h">
+<h2 id="new-api-key-h">${t.apiKeys.newHeading(created.name)}</h2>
+<p>${escapeHtml(t.apiKeys.newBody)}</p>
+${copyField(created.key, t.apiKeys.newLabel, "new-api-key-value", lang)}
 </section>`;
 }
 
-export function apiKeysCard(keys: ApiKeyRecord[], csrf: string, origin: string): string {
+export function apiKeysCard(
+  keys: ApiKeyRecord[],
+  csrf: string,
+  origin: string,
+  t: Messages,
+): string {
+  const a = t.apiKeys;
   const rows = keys
     .map(
       (
         k,
-      ) => `<tr><td><strong>${escapeHtml(k.name)}</strong> <span class="mono muted">${escapeHtml(k.prefix)}…</span><br><small class="muted">Created ${escapeHtml(formatDate(k.createdAt))}</small></td>
-<td style="text-align:right"><form method="post" action="/dashboard/api-keys">${hidden("csrf", csrf)}${hidden("id", k.id)}<button class="btn danger small" name="intent" value="revoke">Revoke</button></form></td></tr>`,
+      ) => `<tr><td><strong>${escapeHtml(k.name)}</strong> <span class="mono muted">${escapeHtml(k.prefix)}…</span><br><small class="muted">${a.created(formatDate(k.createdAt))}</small></td>
+<td class="end"><form method="post" action="/dashboard/api-keys">${hidden("csrf", csrf)}${hidden("id", k.id)}<button class="btn danger small" name="intent" value="revoke" aria-label="${escapeHtml(`${a.revoke} ${k.name}`)}">${escapeHtml(a.revoke)}</button></form></td></tr>`,
     )
     .join("");
-  const list = rows ? `<table>${rows}</table>` : `<p class="muted">No API keys yet.</p>`;
+  const list = rows ? `<table>${rows}</table>` : `<p class="muted">${escapeHtml(a.none)}</p>`;
   const create =
     keys.length < MAX_API_KEYS_PER_ACCOUNT
-      ? `<form method="post" action="/dashboard/api-keys" class="row" autocomplete="off" style="margin-top:12px">
+      ? `<form method="post" action="/dashboard/api-keys" class="row" autocomplete="off" style="margin-top:var(--mx-space-4)">
 ${hidden("csrf", csrf)}
-<input type="text" name="name" required maxlength="64" placeholder="Key name, e.g. laptop or CI" spellcheck="false">
-<button class="btn small" name="intent" value="create">Create API key</button>
+<input type="text" name="name" required maxlength="64" placeholder="${escapeHtml(a.namePlaceholder)}" aria-label="${escapeHtml(a.nameLabel)}" spellcheck="false">
+<button class="btn small" name="intent" value="create">${escapeHtml(a.create)}</button>
 </form>`
-      : `<p class="muted"><small>You have the maximum of ${MAX_API_KEYS_PER_ACCOUNT} keys; revoke one to create another.</small></p>`;
-  return `<section class="card">
-<h2>API keys</h2>
-<p class="muted"><small>For the REST API (<a href="/api/docs">reference</a>, base URL <span class="mono">${escapeHtml(origin)}/api/v1</span>). A key acts as your account: it can change provider keys and storage and run jobs. Only a hash is stored. A revoked key can keep working for up to a minute.</small></p>
+      : `<p class="muted"><small>${escapeHtml(a.limit(MAX_API_KEYS_PER_ACCOUNT))}</small></p>`;
+  return `<section class="card" id="api-keys" aria-labelledby="api-keys-h">
+<h2 id="api-keys-h">${escapeHtml(a.heading)}</h2>
+<p class="card-intro">${a.intro(origin)}</p>
 ${list}
 ${create}
 </section>`;
