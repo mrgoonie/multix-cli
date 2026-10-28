@@ -11,3 +11,5 @@ coverage/
 docs-site/.astro/
 .wrangler/
 .dev.vars
+# Generated from skill/ by `npm run skills --prefix worker`
+worker/src/skills/builtin-skills.json

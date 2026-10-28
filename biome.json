@@ -33,7 +33,8 @@
       "*.d.ts",
       "package.json",
       "docs-site/.astro/**",
-      "worker/.wrangler/**"
+      "worker/.wrangler/**",
+      "worker/src/skills/builtin-skills.json"
     ]
   }
 }

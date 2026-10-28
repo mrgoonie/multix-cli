@@ -90,7 +90,8 @@ async function handleAuthenticatedMcp(
   const toolEnv = toolEnvFor(serverSettings(env), keys);
   const jobs = jobsContextFor(env, app, account.id, keys, deps);
   const events = eventsContextFor(env, app, deps, account.id, auth.clientId);
-  return handleMcpRequest(request, toolEnv, { jobs, events });
+  const skills = { userId: account.id, registries: env.MULTIX_SKILLS };
+  return handleMcpRequest(request, toolEnv, { jobs, events, skills });
 }
 
 /** Everything that is not the protected /mcp resource or a library-owned OAuth endpoint. */
@@ -197,5 +198,6 @@ export function createWorker(deps: AppDeps = {}): ExportedHandler<WorkerEnv> {
 export { AccountEvents } from "./events/account-events.js";
 export { AccountJobQuota } from "./jobs/account-job-quota.js";
 export { MultixJobContainer } from "./jobs/multix-job-container.js";
+export { AccountSkills } from "./skills/account-skills.js";
 
 export default createWorker();

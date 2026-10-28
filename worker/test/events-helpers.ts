@@ -40,8 +40,9 @@ export function modernRequest(
   params: Record<string, unknown> = {},
   headers: Record<string, string> = {},
 ): Request {
-  const name: Record<string, string> =
-    typeof params.name === "string" && method === "tools/call" ? { "mcp-name": params.name } : {};
+  const target =
+    method === "tools/call" ? params.name : method === "resources/read" ? params.uri : undefined;
+  const name: Record<string, string> = typeof target === "string" ? { "mcp-name": target } : {};
   return new Request("https://mcp.example.com/mcp", {
     method: "POST",
     headers: {

@@ -136,8 +136,8 @@ describe("CLI runner tools", () => {
     const schemas = Object.fromEntries(
       list.result.tools.map((t: { name: string; inputSchema: unknown }) => [t.name, t.inputSchema]),
     );
-    // New tools and new optional parameters are allowed; anything a 2025
-    // client sends must still validate the same way.
+    // New tools and optional parameters are allowed; anything a 2025 client
+    // sends must still validate the same way.
     expect(Object.keys(schemas)).toEqual(expect.arrayContaining(Object.keys(legacySchemas)));
     for (const [name, legacy] of Object.entries(legacySchemas) as [string, JsonSchema][]) {
       const current = schemas[name] as JsonSchema;
@@ -163,13 +163,15 @@ describe("CLI runner tools", () => {
         "multix_run",
         "multix_job_status",
         "multix_job_cancel",
+        "multix_skills",
       ]),
     );
-    expect(names).toHaveLength(5);
+    expect(names).toHaveLength(6);
     const without = await rpc(env, "tools/list");
-    expect(without.result.tools.map((t: { name: string }) => t.name)).toEqual([
+    expect(without.result.tools.map((t: { name: string }) => t.name).sort()).toEqual([
       "multix_catalog",
       "multix_model_catalog",
+      "multix_skills",
     ]);
   });
 
