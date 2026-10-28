@@ -13,6 +13,12 @@ import { LEONARDO_ROUTING } from "./leonardo/models.js";
 import { REPLICATE_ROUTING } from "./replicate/models.js";
 import { RUNWAY_DASHBOARD_LINK, RUNWAY_ROUTING } from "./runway/models.js";
 import { SUME_KEY_URL, SUME_ROUTING } from "./sume/models.js";
+import {
+  TOPVIEW_KEY_URL,
+  TOPVIEW_LEGACY_ROUTING,
+  TOPVIEW_PLATFORM_KEY_URL,
+  TOPVIEW_PLATFORM_ROUTING,
+} from "./topview/models.js";
 
 export interface ProviderEntry {
   name: string;
@@ -112,5 +118,19 @@ export const PROVIDER_KEYS: readonly ProviderEntry[] = [
     ...keyNames(SUME_ROUTING),
     optional: true,
     link: SUME_KEY_URL,
+  },
+  {
+    // Spends topview.ai plan credits; TOPVIEW_UID is sent with it.
+    name: "TopView (legacy API)",
+    ...keyNames(TOPVIEW_LEGACY_ROUTING),
+    optional: true,
+    link: TOPVIEW_KEY_URL,
+  },
+  {
+    // A separate USD balance; never falls back to the legacy key.
+    name: "TopView API Platform",
+    ...keyNames(TOPVIEW_PLATFORM_ROUTING),
+    optional: true,
+    link: TOPVIEW_PLATFORM_KEY_URL,
   },
 ];

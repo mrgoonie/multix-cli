@@ -154,6 +154,19 @@ describe("multix --help (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     expect(result.stderr).toContain("ATLASCLOUD_API_KEY");
   });
 
+  it("topview url-to-video without TOPVIEW_API_KEY exits with a setup hint and sends nothing", async () => {
+    const result = await run(
+      ["topview", "url-to-video", "--product-link", "https://shop.example/p/1"],
+      {
+        cwd: path.resolve(__dirname, "../.."),
+        env: { TOPVIEW_API_KEY: "", TOPVIEW_UID: "", MULTIX_DISABLE_HOME_ENV: "1" },
+      },
+    );
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain("TOPVIEW_API_KEY is not set");
+    expect(result.stderr).not.toMatch(/\n\s+at /);
+  });
+
   it("lists elevenlabs subcommands", async () => {
     const result = await run(["elevenlabs", "--help"]);
     expect(result.exitCode).toBe(0);

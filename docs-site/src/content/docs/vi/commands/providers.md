@@ -22,6 +22,7 @@ description: Chọn tài liệu lệnh có đối chiếu source cho từng AI p
 | Runway | [Lệnh](/vi/commands/runway/) | Video Gen-4.5 / Gen-4 Turbo và ảnh Gen-4 | `video` chỉ in task ID trừ khi có `--wait`; tiếp tục bằng `status <id> --wait --download`. |
 | HeyGen | [Lệnh](/vi/commands/heygen/) | Video Agent (tạo video từ prompt), video avatar theo kịch bản, dịch video, lipsync, TTS, template | Credit API tính riêng với gói web của HeyGen; dùng `status --type` khớp với job (`agent` nhận session ID). |
 | Sume | [Lệnh](/vi/commands/sume/) | Ảnh và video với mọi model trong catalog công khai; t2i, i2i, t2v, i2v, tham chiếu, lipsync | Dùng REST API gốc, không dùng MCP do Sume host. Giá job được giữ khi gửi, thu khi thành công và hoàn khi thất bại. |
+| TopView | [Lệnh](/vi/commands/topview/) | Video marketing từ link sản phẩm hoặc tư liệu, video avatar, product avatar, ảnh sản phẩm (legacy API); video Seedance, Wan, MiniMax, TopView T1 và GPT Image 2 (API Platform) | Hai API và hai key riêng: legacy API tiêu credit gói topview.ai (`TOPVIEW_API_KEY` + `TOPVIEW_UID`), API Platform tiêu số dư USD riêng (`TOPVIEW_API_PLATFORM_KEY`). Không có lệnh hủy; tiếp tục bằng `status --task`. |
 
 Chạy `multix <provider> --help` và `--help` của từng subcommand trước khi tự
 động hóa. Đó là nguồn chuẩn cho option và default hiện tại.

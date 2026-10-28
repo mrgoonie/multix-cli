@@ -82,6 +82,8 @@ Windows, việc kiểm tra không phân biệt hoa thường, giống hệ đi�
 | `RUNWAYML_API_SECRET` | Runway |
 | `HEYGEN_API_KEY` | HeyGen (credit API tính riêng với gói web) |
 | `SUME_API_KEY` | Sume (REST API gốc) |
+| `TOPVIEW_API_KEY` và `TOPVIEW_UID` | Legacy API của TopView (tiêu credit gói web topview.ai) |
+| `TOPVIEW_API_PLATFORM_KEY` | API Platform của TopView (số dư USD riêng; không bao giờ dùng key legacy thay thế) |
 
 ```bash
 export GEMINI_API_KEY="your-key"
@@ -210,6 +212,10 @@ trong các model liệt kê ở [Fish Audio](/vi/commands/fish/#model), viết c
 `SUME_BASE_URL` ghi đè API base của Sume (mặc định `https://api.sume.com`)
 cho proxy và test. Giá trị phải là `https://`; `http://` chỉ được chấp nhận
 cho `localhost`, `127.0.0.1` hoặc `[::1]`.
+
+`TOPVIEW_BASE_URL` (mặc định `https://api.topview.ai`) và
+`TOPVIEW_PLATFORM_BASE_URL` (mặc định `https://platform-backend.topview.ai`)
+ghi đè hai API base của TopView cho proxy và test, cùng quy tắc `https://`.
 
 ### Ghi đè base URL và độ tin cậy
 

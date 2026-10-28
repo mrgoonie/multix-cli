@@ -23,6 +23,7 @@ description: Choose the multix command group that matches your media workflow.
 | [Runway](/commands/runway/) | Gen-4.5 and Gen-4 Turbo video, Gen-4 images, and task status/cancel. |
 | [HeyGen](/commands/heygen/) | Video Agent prompt-to-video, scripted avatar videos, video translation, lipsync, and TTS. |
 | [Sume](/commands/sume/) | Any model in Sume's live catalog: images, video, image-to-video, references and lipsync, with resumable jobs and cost quotes. |
+| [TopView](/commands/topview/) | Marketing videos from a product link or your materials, talking and product avatars, product shots (plan credits), and API Platform video/image models (USD balance). |
 | [Speech](/commands/speech/) | Text-to-speech on Gemini, OpenAI, ElevenLabs, MiniMax, Atlas Cloud, or Fish Audio with one set of flags, capability checks, and opt-in fallback. |
 | [Scenes](/commands/scene/) | Multi-character dialogue audio: voice profiles, per-line cached takes, approval, and stem export. |
 | `multix media` | Optimize, split, and batch-process files with ffmpeg/ImageMagick. |

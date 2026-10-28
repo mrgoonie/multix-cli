@@ -117,6 +117,7 @@ test("provider pages retain command caveats and asynchronous workflows", async (
     "runway",
     "heygen",
     "sume",
+    "topview",
   ]) {
     assert.match(agentGuide, new RegExp(`/commands/${provider}/`));
     assert.match(vietnameseAgentGuide, new RegExp(`/vi/commands/${provider}/`));

@@ -275,6 +275,39 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
     },
     caps: VIDEO_CAPS,
   },
+  // TopView legacy API: local files are uploaded by the CLI; `asset:<fileId>` is passed through.
+  "topview url-to-video": { urlOptions: ["product-link"] },
+  "topview materials-to-video": {
+    fileOptions: { file: "file" },
+    assetRefOptions: ["file"],
+    repeatable: ["file"],
+  },
+  "topview video-avatar": {
+    fileOptions: { video: "file", image: "file", audio: "file" },
+    assetRefOptions: ["video", "image", "audio"],
+  },
+  "topview product-avatar image": {
+    fileOptions: { product: "file", "template-image": "file" },
+    assetRefOptions: ["product", "template-image"],
+  },
+  "topview product-avatar video": {
+    fileOptions: { audio: "file" },
+    assetRefOptions: ["audio"],
+  },
+  "topview product-anyshoot model": {
+    fileOptions: {
+      product: "file",
+      "product-mask": "file",
+      "template-image": "file",
+      "template-mask": "file",
+    },
+    assetRefOptions: ["product", "product-mask", "template-image", "template-mask"],
+  },
+  "topview product-anyshoot background": {
+    fileOptions: { product: "file", "template-image": "file" },
+    assetRefOptions: ["product", "template-image"],
+  },
+  "topview upload": { filePositionals: ["file"] },
   "media optimize": { fileOptions: { input: "file" } },
   "media split": { fileOptions: { input: "file" } },
   "media batch": { fileOptions: { "input-dir": "dir" } },
@@ -320,6 +353,8 @@ export const GROUP_KEYS: Readonly<Record<string, readonly ProviderSecretName[]>>
   runway: ["RUNWAYML_API_SECRET"],
   heygen: ["HEYGEN_API_KEY"],
   sume: ["SUME_API_KEY"],
+  // Two separate TopView APIs; each command reads only its own key.
+  topview: ["TOPVIEW_API_KEY", "TOPVIEW_UID", "TOPVIEW_API_PLATFORM_KEY"],
   // Readiness only: a speech job gets the keys of the providers it routes to (keyOptions).
   speech: [
     "GEMINI_API_KEY",
@@ -341,6 +376,7 @@ export const GROUP_REQUIRED_KEYS: Readonly<
   byteplus: [["BYTEPLUS_API_KEY", "ARK_API_KEY"]],
   replicate: [["REPLICATE_API_TOKEN", "REPLICATE_API_KEY"]],
   cloudflare: [["CLOUDFLARE_ACCOUNT_ID"], ["CLOUDFLARE_API_TOKEN"]],
+  topview: [["TOPVIEW_API_KEY", "TOPVIEW_API_PLATFORM_KEY"]],
   speech: [
     [
       "GEMINI_API_KEY",

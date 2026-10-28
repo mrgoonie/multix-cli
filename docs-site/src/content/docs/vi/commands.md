@@ -23,6 +23,7 @@ description: Chọn nhóm lệnh multix phù hợp với workflow media của b�
 | [Runway](/vi/commands/runway/) | Video Gen-4.5 và Gen-4 Turbo, ảnh Gen-4, cùng status/cancel task. |
 | [HeyGen](/vi/commands/heygen/) | Video Agent tạo video từ prompt, video avatar theo kịch bản, dịch video, lipsync và TTS. |
 | [Sume](/vi/commands/sume/) | Mọi model trong catalog trực tiếp của Sume: ảnh, video, image-to-video, tham chiếu và lipsync, với job tiếp tục được và báo giá. |
+| [TopView](/vi/commands/topview/) | Video marketing từ link sản phẩm hoặc tư liệu của bạn, avatar nói và product avatar, ảnh sản phẩm (credit gói web), cùng model video/ảnh của API Platform (số dư USD). |
 | [Speech](/vi/commands/speech/) | Text-to-speech trên Gemini, OpenAI, ElevenLabs, MiniMax, Atlas Cloud hoặc Fish Audio với một bộ flag, kiểm tra khả năng của model và fallback phải tự bật. |
 | [Scene](/vi/commands/scene/) | Audio hội thoại nhiều nhân vật: voice profile, take được cache theo từng câu, duyệt take và xuất stem. |
 | `multix media` | Tối ưu, cắt và batch file bằng ffmpeg/ImageMagick. |

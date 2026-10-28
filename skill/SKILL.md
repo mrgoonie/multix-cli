@@ -1,6 +1,6 @@
 ---
 name: multix
-description: AI multimodal CLI — generate and edit images (OpenAI, Codex driver, Gemini Nano Banana, Imagen, MiniMax, OpenRouter, Leonardo, BytePlus Seedream, Cloudflare Workers AI FLUX.1 Schnell, fal.ai FLUX, Replicate FLUX, Runway Gen-4 Image), generate, edit and extend video (Gemini Omni Flash, plus legacy Gemini Veo), generate video (MiniMax Hailuo, OpenRouter via Veo/Seedance/Kling, Leonardo via Motion/Veo/Kling/Hailuo/Seedance/LTX, BytePlus Seedance, Cloudflare AI Gateway via Replicate, fal.ai queue models, Replicate direct API models incl. P-Video, Runway Gen-4.5 and Gen-4 Turbo, HeyGen Video Agent and scripted avatar videos, Sume catalog models), video translation and lipsync (HeyGen), TTS/STT/music (OpenAI, Gemini Flash TTS incl. Gemini 3.8 with delivery-style control, OpenRouter TTS (Gemini, ElevenLabs, Fish Audio, MiniMax routed) and STT (Whisper, GPT-4o transcribe, Gemini Transcribe, ElevenLabs Scribe, Voxtral, Deepgram, AssemblyAI routed), MiniMax, Cloudflare Workers AI MeloTTS, ElevenLabs, native Fish Audio Drama 3 TTS with multi-speaker turns and pronunciation dictionaries), multi-character dialogue audio with per-character voice profiles, cached per-line takes and stem export (multix scene), 3D models (BytePlus Hyper3D/Hitem3d), analyze/transcribe media, convert documents to Markdown, optimize media via ffmpeg/ImageMagick, inspect and verify media offline with sha256-bound QA receipts, and self-update the CLI. Use whenever the user wants to create, edit, or transform images/video/audio/3D/documents from a CLI, mentions any of: OpenAI, Codex image driver, image-to-image, i2i, image edit, watercolor/cyberpunk style transfer, reference image, OpenRouter, Nano Banana, Flux, Seedream, Gemini Omni, Omni Flash, Veo, Hailuo, Seedance, Kling, Cloudflare Workers AI, AI Gateway, fal.ai, Atlas Cloud, Replicate, replicate.com models, Replicate predictions, Runway, Gen-4.5, Gen-4 Turbo, Gen-4 Image, HeyGen, Fish Audio, Drama 3, Sume, avatar video, talking head, Video Agent, video translation, dubbing, lipsync, video generation, text-to-video, image-to-video, i2v, ElevenLabs voice cloning, updating/upgrading multix, or asks for batch media optimization.
+description: AI multimodal CLI — generate and edit images (OpenAI, Codex driver, Gemini Nano Banana, Imagen, MiniMax, OpenRouter, Leonardo, BytePlus Seedream, Cloudflare Workers AI FLUX.1 Schnell, fal.ai FLUX, Replicate FLUX, Runway Gen-4 Image), generate, edit and extend video (Gemini Omni Flash, plus legacy Gemini Veo), generate video (MiniMax Hailuo, OpenRouter via Veo/Seedance/Kling, Leonardo via Motion/Veo/Kling/Hailuo/Seedance/LTX, BytePlus Seedance, Cloudflare AI Gateway via Replicate, fal.ai queue models, Replicate direct API models incl. P-Video, Runway Gen-4.5 and Gen-4 Turbo, HeyGen Video Agent and scripted avatar videos, Sume catalog models, TopView marketing videos, avatars and API Platform models), video translation and lipsync (HeyGen), TTS/STT/music (OpenAI, Gemini Flash TTS incl. Gemini 3.8 with delivery-style control, OpenRouter TTS (Gemini, ElevenLabs, Fish Audio, MiniMax routed) and STT (Whisper, GPT-4o transcribe, Gemini Transcribe, ElevenLabs Scribe, Voxtral, Deepgram, AssemblyAI routed), MiniMax, Cloudflare Workers AI MeloTTS, ElevenLabs, native Fish Audio Drama 3 TTS with multi-speaker turns and pronunciation dictionaries), multi-character dialogue audio with per-character voice profiles, cached per-line takes and stem export (multix scene), 3D models (BytePlus Hyper3D/Hitem3d), analyze/transcribe media, convert documents to Markdown, optimize media via ffmpeg/ImageMagick, inspect and verify media offline with sha256-bound QA receipts, and self-update the CLI. Use whenever the user wants to create, edit, or transform images/video/audio/3D/documents from a CLI, mentions any of: OpenAI, Codex image driver, image-to-image, i2i, image edit, watercolor/cyberpunk style transfer, reference image, OpenRouter, Nano Banana, Flux, Seedream, Gemini Omni, Omni Flash, Veo, Hailuo, Seedance, Kling, Cloudflare Workers AI, AI Gateway, fal.ai, Atlas Cloud, Replicate, replicate.com models, Replicate predictions, Runway, Gen-4.5, Gen-4 Turbo, Gen-4 Image, HeyGen, Fish Audio, Drama 3, Sume, TopView, product marketing video, avatar video, talking head, Video Agent, video translation, dubbing, lipsync, video generation, text-to-video, image-to-video, i2v, ElevenLabs voice cloning, updating/upgrading multix, or asks for batch media optimization.
 version: 1.22.0-beta.2 # x-release-please-version
 ---
 
@@ -51,6 +51,7 @@ Activate this skill when the user asks to:
 - Generate Runway Gen-4.5 / Gen-4 Turbo video or Gen-4 images (with tagged reference images), or check/resume/cancel a Runway task by id
 - Make HeyGen avatar videos from a prompt (Video Agent) or an exact script, translate/lipsync videos, HeyGen TTS
 - Generate images and video with any model in Sume's live catalog, with cost quotes and resumable jobs
+- Make TopView marketing videos from a product link or materials, talking/product avatars and product shots (plan credits), or run TopView API Platform video/image models (USD balance)
 - Voice a multi-character dialogue (anime, film, audio drama) line by line with a fixed voice per character, approve takes, and export stems (`multix scene`)
 - Update multix itself to the latest (or a given dist-tag) npm version
 
@@ -79,6 +80,9 @@ REPLICATE_API_TOKEN   # Replicate direct API (REPLICATE_API_KEY accepted as fall
 RUNWAYML_API_SECRET   # Runway API (Gen-4.5 / Gen-4 Turbo video, Gen-4 images)
 HEYGEN_API_KEY        # HeyGen v3 (avatar video, Video Agent, translation); API billed separately from web plans
 SUME_API_KEY          # Sume native REST API (catalog models: image, video, lipsync)
+TOPVIEW_API_KEY       # TopView legacy API (spends topview.ai plan credits); needs TOPVIEW_UID too
+TOPVIEW_UID           # TopView user id, sent with TOPVIEW_API_KEY
+TOPVIEW_API_PLATFORM_KEY # TopView API Platform (separate USD balance; never uses the legacy key)
 CLOUDFLARE_ACCOUNT_ID # Cloudflare Workers AI / AI Gateway account
 CLOUDFLARE_API_TOKEN  # Cloudflare Workers AI / AI Gateway token
 # Video additionally requires CLOUDFLARE_AI_GATEWAY_ID and REPLICATE_API_TOKEN.
@@ -295,6 +299,32 @@ multix sume cancel <jobId>
 - Flags the catalog entry does not confirm are refused before sending. Remix, captions, dubbing, webhooks and batch are not supported.
 - `UNKNOWN_REMOTE_STATE` after a submit: rerun the same command with the `--idempotency-key` it prints, never a fresh submit.
 - Failed or canceled jobs exit with `JOB_FAILED`; Sume refunds them and the receipt records `$0`.
+
+## TopView
+
+Two separate APIs, keys and balances; pick the one the user pays with and never swap:
+- **Legacy API** (`TOPVIEW_API_KEY` + `TOPVIEW_UID`): marketing video, avatars, product shots; spends topview.ai plan credits.
+- **API Platform** (`TOPVIEW_API_PLATFORM_KEY`): `generate <owner/model/mode>` with the model's native JSON; separate USD balance.
+
+```bash
+multix topview url-to-video --product-link <https-url> [--aspect-ratio 9:16] [--language en] [--preview]
+multix topview materials-to-video --file <path|asset:id> [--file ...] --product-name "<name>"
+multix topview export <taskId> --script-id <id>
+multix topview video-avatar --avatar-source 0|1|2|3 --avatar-id <id> (--tts-text "<text>" --voice-id <id> | --audio <path|asset:id>)
+multix topview product-avatar image --product <path|asset:id> (--avatar-id <id> | --template-image <path|asset:id>)
+multix topview product-avatar video --image-id <id> --mode avatar2|avatar4|avatar4Fast (--tts-text "<text>" --voice-id <id> | --audio <ref>)
+multix topview product-anyshoot model --product <ref> --template-mask <ref> (--template-id <id> | --template-image <ref>)
+multix topview product-anyshoot background --product <ref> --mode image|prompt [--prompt "<scene>"]
+multix topview upload <file> --api legacy|platform
+multix topview models [--live]                         # verified Platform routes
+multix topview generate <owner/model/mode> --input <json|@file> [--idempotency-key <key>]
+multix topview status <id> --task <kind> [--wait] [--download]
+```
+
+- File options take a local file or `asset:<fileId>` (from `topview upload --api legacy`), never a URL.
+- Submits are never retried. `UNKNOWN_REMOTE_STATE` means a paid task may exist: check before resubmitting; on the Platform resend with the same `--idempotency-key`.
+- `--async` prints the task id; resume with `topview status <id> --task <kind> --download` (an export resumes as `m2v`). No cancel exists on either API.
+- `credits` (legacy) and `cost_usd` (Platform, once `CAPTURED`/`RELEASED`) are what the task spent, never the balance. `--max-cost` refuses TopView task commands because no pre-run bound exists.
 
 ## Scenes (multi-character dialogue)
 

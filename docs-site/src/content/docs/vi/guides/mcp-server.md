@@ -188,7 +188,8 @@ bị bỏ qua.
   OpenRouter, OpenAI, MiniMax, Leonardo.Ai, BytePlus với `ARK_API_KEY` làm tên
   dự phòng, ElevenLabs, fal.ai, Atlas Cloud, Replicate với `REPLICATE_API_KEY`
   làm tên dự phòng, Runway với `RUNWAYML_API_SECRET` mang nhãn "API secret",
-  HeyGen), cùng account ID, API token và AI Gateway ID (tùy
+  HeyGen, key legacy của TopView kèm `TOPVIEW_UID` và key API Platform riêng
+  của TopView), cùng account ID, API token và AI Gateway ID (tùy
   chọn) của Cloudflare Workers AI.
 
 ### API key cho REST API
