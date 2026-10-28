@@ -18,6 +18,8 @@ To configure multix, set at least one provider API key:
     Replicate          : https://replicate.com/account/api-tokens
     Runway             : https://dev.runwayml.com/
     Sume               : https://www.sume.com/docs/authentication
+    TopView            : https://www.topview.ai/openapi (key and UID)
+    TopView Platform   : https://platform.topview.ai
     HeyGen             : https://app.heygen.com/developers/api
 
   Option A — user global config (recommended):

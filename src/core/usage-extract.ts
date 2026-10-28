@@ -40,13 +40,15 @@ const SKIP_KEY =
   /(_at$|stamp|date|created|updated|expire|limit|max_|min_|width|height|seed|fps|index|count_?max)/i;
 /**
  * Keys that name what an account holds, not what a request spent: Leonardo /me
- * user_details[].apiCredit, HeyGen /v3/users/me usage_based.remaining_credits /
+ * user_details[].apiCredit, TopView remainCredit, HeyGen /v3/users/me usage_based.remaining_credits /
  * included_credits, generic balance fields. Leaves match by name; the parents
  * match whole segments so a spend leaf under e.g. subscription_job still counts.
  */
 const BALANCE_LEAF =
-  /(balance|remaining|available|allowance|included|quota|granted|purchased|unused|left|^api_?credits?$)/i;
+  /(balance|remain|available|allowance|included|quota|granted|purchased|unused|left|^api_?credits?$)/i;
 const BALANCE_PARENT = /^(wallet|subscription|user_details|balances?)$/i;
+/** Parents of account totals, never a spend of this request (TopView apiKeyMap[].costCredit). */
+const ACCOUNT_TOTALS_PARENT = /^api_?key_?map$/i;
 /**
  * Words that make a leaf a spend even when it also names a balance
  * (quota_credits_used, includedCreditsSpent, subscription.credits_used). Matched
@@ -74,6 +76,7 @@ type PathKind = "plain" | "balance" | "spend-in-balance";
 function pathKind(path: string): PathKind {
   const segments = path.split(".").map((segment) => segment.replace(/\[\d+\]$/, ""));
   const leaf = segments.pop() ?? "";
+  if (segments.some((segment) => ACCOUNT_TOTALS_PARENT.test(segment))) return "balance";
   const balance =
     BALANCE_LEAF.test(leaf) || segments.some((segment) => BALANCE_PARENT.test(segment));
   if (!balance) return "plain";
@@ -271,6 +274,27 @@ function sumeMoney(
   return out;
 }
 
+/**
+ * TopView API Platform predictions (`{code, data}`) report `data.charged_usd`,
+ * a decimal string. It is the charge only once `billing_state` is CAPTURED;
+ * RELEASED returns the whole hold (0) and RESERVED is a hold, not spend.
+ * Returns undefined for other bodies.
+ */
+function topviewPlatformMoney(
+  body: Record<string, unknown>,
+): Pick<ResponseUsage, "cost_usd" | "credits" | "sources"> | undefined {
+  const data = asRecord(body.data);
+  const charged = typeof data?.charged_usd === "string" ? data.charged_usd.trim() : undefined;
+  const state = typeof data?.billing_state === "string" ? data.billing_state.toUpperCase() : "";
+  if (!data || charged === undefined || !state) return undefined;
+  if (state === "RELEASED")
+    return { cost_usd: 0, sources: { cost_usd: "body.data.billing_state" } };
+  if (state === "CAPTURED" && /^\d+(\.\d+)?$/.test(charged)) {
+    return { cost_usd: Number(charged), sources: { cost_usd: "body.data.charged_usd" } };
+  }
+  return {};
+}
+
 /** Extract usage from one parsed JSON response body and its headers. */
 export function extractUsage(body: unknown, headers?: Headers | null): ResponseUsage {
   const out: ResponseUsage = { tokens: {}, metrics: {}, ids: [] };
@@ -279,8 +303,8 @@ export function extractUsage(body: unknown, headers?: Headers | null): ResponseU
     tokensFrom(obj, out.tokens);
     walk(obj, "", 0, out);
   }
-  const sume = obj ? sumeMoney(obj) : undefined;
-  for (const kind of sume ? [] : (["plain", "spend-in-balance"] as const)) {
+  const providerMoney = obj ? (sumeMoney(obj) ?? topviewPlatformMoney(obj)) : undefined;
+  for (const kind of providerMoney ? [] : (["plain", "spend-in-balance"] as const)) {
     for (const [path, value] of Object.entries(out.metrics)) {
       const leaf = path.split(".").pop() ?? path;
       // Balances never count; a spend inside a balance counts only when no plain one does.
@@ -301,10 +325,10 @@ export function extractUsage(body: unknown, headers?: Headers | null): ResponseU
       }
     }
   }
-  if (sume) {
-    if (sume.cost_usd !== undefined) out.cost_usd = sume.cost_usd;
-    if (sume.credits !== undefined) out.credits = sume.credits;
-    if (sume.sources) out.sources = sume.sources;
+  if (providerMoney) {
+    if (providerMoney.cost_usd !== undefined) out.cost_usd = providerMoney.cost_usd;
+    if (providerMoney.credits !== undefined) out.credits = providerMoney.credits;
+    if (providerMoney.sources) out.sources = providerMoney.sources;
   }
   if (headers) {
     for (const name of USAGE_HEADERS) {

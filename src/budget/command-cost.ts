@@ -14,6 +14,7 @@ import {
   DEFAULT_OPENROUTER_STT_MODEL,
   DEFAULT_OPENROUTER_TTS_MODEL,
 } from "../providers/openrouter/speech-defaults.js";
+import { estimateTopviewCommand } from "../providers/topview/cost.js";
 import { SPEECH_PROVIDERS, type SpeechProvider } from "../speech/speech-catalog.js";
 import { parseRouteSpec, resolveTarget } from "../speech/speech-request.js";
 import { type CostEstimate, type EstimateRequest, estimateCost } from "./cost-estimate.js";
@@ -117,7 +118,7 @@ const NEEDS: Record<string, string> = {
 
 /** Commands with a pre-flight estimator. */
 export function pricedCommands(): string[] {
-  return [...Object.keys(BUILDERS), "speech generate"];
+  return [...Object.keys(BUILDERS), "speech generate", "topview generate"];
 }
 
 function unknownEstimate(
@@ -284,6 +285,11 @@ export function estimateCommand(
     Object.entries(options).map(([k, v]) => [k.replace(/^-+/, ""), v]),
   );
   if (command === "speech generate") return estimateSpeech(named, defaults);
+  // TopView prices its own commands: USD for API Platform models, unknown for credit-billed ones.
+  if (command.startsWith("topview ")) {
+    const estimate = estimateTopviewCommand(command, named, defaults.at);
+    if (estimate) return estimate;
+  }
   const builder = BUILDERS[command];
   const req = builder?.(named, defaults);
   if (req) return estimateCost({ ...req, at: defaults.at });

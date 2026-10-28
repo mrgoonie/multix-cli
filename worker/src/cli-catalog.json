@@ -9735,6 +9735,1983 @@
       ]
     },
     {
+      "group": "sume",
+      "description": "Sume: image and video router (many vendors' models, USD pricing), models, job status, cancel and upload",
+      "commands": [
+        {
+          "command": "sume image",
+          "description": "Generate or edit images via Sume's Image Router; prints a job id unless --wait",
+          "positionals": [
+            {
+              "name": "prompt",
+              "description": "",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--model",
+              "flags": "-m, --model <id>",
+              "description": "Model id (required) from `multix sume models --kind image`",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-m"
+            },
+            {
+              "long": "--image",
+              "flags": "--image <path|url>",
+              "description": "Reference or source image to edit (repeatable; local files are uploaded)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--aspect-ratio",
+              "flags": "--aspect-ratio <ratio>",
+              "description": "Aspect ratio, e.g. 1:1, 16:9, auto (per model)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--image-size",
+              "flags": "--image-size <size>",
+              "description": "Size preset or WxH, e.g. square_hd, 1024x1536",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--quality",
+              "flags": "--quality <q>",
+              "description": "Quality, e.g. low|medium|high (per model)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--resolution",
+              "flags": "--resolution <r>",
+              "description": "Resolution, e.g. 1K, 2K, 4K (per model)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--num-images",
+              "flags": "--num-images <n>",
+              "description": "Number of images (per model, usually 1-4)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--input",
+              "flags": "--input <json>",
+              "description": "Extra request fields as a JSON object, e.g. '{\"output_format\":\"png\"}'",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--idempotency-key",
+              "flags": "--idempotency-key <key>",
+              "description": "Reuse the key of an earlier submit so it is not charged twice",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--wait",
+              "flags": "--wait",
+              "description": "Wait for the job to finish, then download the images",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--image-format",
+              "flags": "--image-format <mode>",
+              "description": "Final image format: webp (default, cwebp -q 85) | original (keep provider format/quality)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--no-webp",
+              "flags": "--no-webp",
+              "description": "Keep the provider's original image format and quality",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": true
+            },
+            {
+              "long": "--wait-timeout",
+              "flags": "--wait-timeout <ms>",
+              "description": "Polling timeout in milliseconds",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "600000"
+            },
+            {
+              "long": "--download",
+              "flags": "--download",
+              "description": "Download artifacts once the job completes (default when waiting)",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--no-download",
+              "flags": "--no-download",
+              "description": "Print artifact URLs instead of downloading",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": true
+            },
+            {
+              "long": "--output",
+              "flags": "--output <path>",
+              "description": "Output file path, or a directory for multiple artifacts",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        },
+        {
+          "command": "sume video",
+          "description": "Generate video via Sume's Video Router; prints a job id unless --wait",
+          "positionals": [
+            {
+              "name": "prompt",
+              "description": "",
+              "required": false,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--model",
+              "flags": "-m, --model <id>",
+              "description": "Model id (required) from `multix sume models --kind video`",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-m"
+            },
+            {
+              "long": "--image",
+              "flags": "--image <path|url>",
+              "description": "First frame (image-to-video, or the face for lipsync)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--end-image",
+              "flags": "--end-image <path|url>",
+              "description": "Last frame (needs --image)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--video",
+              "flags": "--video <path|url>",
+              "description": "Source video (video-to-video, video lipsync, captions)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--audio",
+              "flags": "--audio <path|url>",
+              "description": "Speech audio for lipsync models",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--reference-image",
+              "flags": "--reference-image <path|url>",
+              "description": "Reference image (repeatable)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--duration",
+              "flags": "--duration <seconds>",
+              "description": "Duration in whole seconds (per model)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--resolution",
+              "flags": "--resolution <r>",
+              "description": "Resolution, e.g. 720p, 1080p (per model)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--aspect-ratio",
+              "flags": "--aspect-ratio <ratio>",
+              "description": "Aspect ratio, e.g. 16:9, 9:16 (per model)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--generate-audio",
+              "flags": "--generate-audio",
+              "description": "Generate a soundtrack (models with audio)",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--no-generate-audio",
+              "flags": "--no-generate-audio",
+              "description": "Make a silent clip",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": true
+            },
+            {
+              "long": "--input",
+              "flags": "--input <json>",
+              "description": "Extra request fields as a JSON object, e.g. '{\"captions\":{\"style\":\"bold\"}}'",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--idempotency-key",
+              "flags": "--idempotency-key <key>",
+              "description": "Reuse the key of an earlier submit so it is not charged twice",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--wait",
+              "flags": "--wait",
+              "description": "Wait for the job to finish, then download the video",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--wait-timeout",
+              "flags": "--wait-timeout <ms>",
+              "description": "Polling timeout in milliseconds",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "1800000"
+            },
+            {
+              "long": "--download",
+              "flags": "--download",
+              "description": "Download artifacts once the job completes (default when waiting)",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--no-download",
+              "flags": "--no-download",
+              "description": "Print artifact URLs instead of downloading",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": true
+            },
+            {
+              "long": "--output",
+              "flags": "--output <path>",
+              "description": "Output file path, or a directory for multiple artifacts",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        },
+        {
+          "command": "sume status",
+          "description": "Get a Sume job's status; --wait/--download to resume it",
+          "positionals": [
+            {
+              "name": "jobId",
+              "description": "",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--wait",
+              "flags": "--wait",
+              "description": "Poll until the job reaches a terminal status",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--download",
+              "flags": "--download",
+              "description": "Download artifacts once completed",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--output",
+              "flags": "--output <path>",
+              "description": "Output file path, or a directory for multiple artifacts",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--wait-timeout",
+              "flags": "--wait-timeout <ms>",
+              "description": "Polling timeout in milliseconds",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "1800000"
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        },
+        {
+          "command": "sume cancel",
+          "description": "Cancel a Sume job before generation starts (refunded)",
+          "positionals": [
+            {
+              "name": "jobId",
+              "description": "",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        },
+        {
+          "command": "sume models",
+          "description": "List Sume's live model catalogue: ids, modes, capabilities and USD prices",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--kind",
+              "flags": "--kind <kind>",
+              "description": "Only one kind: image, video, lipsync, captions",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--refresh",
+              "flags": "--refresh",
+              "description": "Read the catalogue again instead of using the cached copy",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--json",
+              "flags": "--json",
+              "description": "Print JSON",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            }
+          ]
+        },
+        {
+          "command": "sume upload",
+          "description": "Upload a local media file to Sume and print its public URL",
+          "positionals": [
+            {
+              "name": "file",
+              "description": "",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "group": "topview",
+      "description": "TopView: marketing videos, avatars and product shots (credits), plus API Platform models (USD). TopView does not offer cancel",
+      "commands": [
+        {
+          "command": "topview url-to-video",
+          "description": "Avatar marketing video from a product page URL (legacy API, credits)",
+          "positionals": [
+            {
+              "name": "productUrl",
+              "description": "",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--product-name",
+              "flags": "--product-name <name>",
+              "description": "Product name",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--product-description",
+              "flags": "--product-description <text>",
+              "description": "Product description",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--aspect-ratio",
+              "flags": "--aspect-ratio <ratio>",
+              "description": "Aspect ratio: 9:16, 3:4, 1:1, 4:3, 16:9 (default 9:16)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--language",
+              "flags": "--language <code>",
+              "description": "Script language code, e.g. en, vi, ja (default en)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--voice-id",
+              "flags": "--voice-id <id>",
+              "description": "Voice id (TopView voice list)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--caption-id",
+              "flags": "--caption-id <id>",
+              "description": "Caption style id (TopView caption list)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--avatar-id",
+              "flags": "--avatar-id <id>",
+              "description": "AI avatar id (TopView aiAvatar list)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--video-length",
+              "flags": "--video-length <1-4>",
+              "description": "1: 30-50s, 2: 15-30s, 3: 30-45s, 4: 45-60s (default 1)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--endcard",
+              "flags": "--endcard <path|fileId>",
+              "description": "End card image",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--endcard-aspect-ratio",
+              "flags": "--endcard-aspect-ratio <ratio>",
+              "description": "End card ratio: all, 9:16, 3:4, 1:1, 4:3, 16:9",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--endcard-background",
+              "flags": "--endcard-background <color>",
+              "description": "End card background: black or white",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--logo",
+              "flags": "--logo <path|fileId>",
+              "description": "Logo image",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--music",
+              "flags": "--music <path|fileId>",
+              "description": "Background music",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--preview",
+              "flags": "--preview",
+              "description": "Generate previews only (export later with `topview export`)",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--script-style",
+              "flags": "--script-style <style>",
+              "description": "Preset script style, e.g. \"Auto-select by AI\" or \"Storytelling style\"",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--script-prompt",
+              "flags": "--script-prompt <prompt>",
+              "description": "Your own script instructions (instead of --script-style)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--target-audience",
+              "flags": "--target-audience <text>",
+              "description": "Target audience, to guide the script",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--wait",
+              "flags": "--wait",
+              "description": "Wait for the task to finish, then download the outputs",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--wait-timeout",
+              "flags": "--wait-timeout <ms>",
+              "description": "Polling timeout in milliseconds",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "1800000"
+            },
+            {
+              "long": "--download",
+              "flags": "--download",
+              "description": "Download outputs once the task succeeds (default when waiting)",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--no-download",
+              "flags": "--no-download",
+              "description": "Print output URLs instead of downloading",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": true
+            },
+            {
+              "long": "--output",
+              "flags": "--output <path>",
+              "description": "Output file path, or a directory for multiple outputs",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        },
+        {
+          "command": "topview materials-to-video",
+          "description": "Avatar marketing video from product images/videos (legacy API, credits)",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--file",
+              "flags": "--file <path|fileId>",
+              "description": "Product image or video (repeatable)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--product-name",
+              "flags": "--product-name <name>",
+              "description": "Product name",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--product-description",
+              "flags": "--product-description <text>",
+              "description": "Product description",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--aspect-ratio",
+              "flags": "--aspect-ratio <ratio>",
+              "description": "Aspect ratio: 9:16, 3:4, 1:1, 4:3, 16:9 (default 9:16)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--language",
+              "flags": "--language <code>",
+              "description": "Script language code, e.g. en, vi, ja (default en)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--voice-id",
+              "flags": "--voice-id <id>",
+              "description": "Voice id (TopView voice list)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--caption-id",
+              "flags": "--caption-id <id>",
+              "description": "Caption style id (TopView caption list)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--avatar-id",
+              "flags": "--avatar-id <id>",
+              "description": "AI avatar id (TopView aiAvatar list)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--video-length",
+              "flags": "--video-length <1-4>",
+              "description": "1: 30-50s, 2: 15-30s, 3: 30-45s, 4: 45-60s (default 1)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--endcard",
+              "flags": "--endcard <path|fileId>",
+              "description": "End card image",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--endcard-aspect-ratio",
+              "flags": "--endcard-aspect-ratio <ratio>",
+              "description": "End card ratio: all, 9:16, 3:4, 1:1, 4:3, 16:9",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--endcard-background",
+              "flags": "--endcard-background <color>",
+              "description": "End card background: black or white",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--logo",
+              "flags": "--logo <path|fileId>",
+              "description": "Logo image",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--music",
+              "flags": "--music <path|fileId>",
+              "description": "Background music",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--preview",
+              "flags": "--preview",
+              "description": "Generate previews only (export later with `topview export`)",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--script-style",
+              "flags": "--script-style <style>",
+              "description": "Preset script style, e.g. \"Auto-select by AI\" or \"Storytelling style\"",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--script-prompt",
+              "flags": "--script-prompt <prompt>",
+              "description": "Your own script instructions (instead of --script-style)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--target-audience",
+              "flags": "--target-audience <text>",
+              "description": "Target audience, to guide the script",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--wait",
+              "flags": "--wait",
+              "description": "Wait for the task to finish, then download the outputs",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--wait-timeout",
+              "flags": "--wait-timeout <ms>",
+              "description": "Polling timeout in milliseconds",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "1800000"
+            },
+            {
+              "long": "--download",
+              "flags": "--download",
+              "description": "Download outputs once the task succeeds (default when waiting)",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--no-download",
+              "flags": "--no-download",
+              "description": "Print output URLs instead of downloading",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": true
+            },
+            {
+              "long": "--output",
+              "flags": "--output <path>",
+              "description": "Output file path, or a directory for multiple outputs",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        },
+        {
+          "command": "topview export",
+          "description": "Export the final video of an m2v task (5 credits once exported)",
+          "positionals": [
+            {
+              "name": "taskId",
+              "description": "",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--script-id",
+              "flags": "--script-id <id>",
+              "description": "Script to export (see previewVideos[].scriptId)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--wait",
+              "flags": "--wait",
+              "description": "Wait for the task to finish, then download the outputs",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--wait-timeout",
+              "flags": "--wait-timeout <ms>",
+              "description": "Polling timeout in milliseconds",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "1800000"
+            },
+            {
+              "long": "--download",
+              "flags": "--download",
+              "description": "Download outputs once the task succeeds (default when waiting)",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--no-download",
+              "flags": "--no-download",
+              "description": "Print output URLs instead of downloading",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": true
+            },
+            {
+              "long": "--output",
+              "flags": "--output <path>",
+              "description": "Output file path, or a directory for multiple outputs",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        },
+        {
+          "command": "topview video-avatar",
+          "description": "Talking avatar video from a video, photo or avatar id (legacy API, credits)",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--video",
+              "flags": "--video <path|fileId>",
+              "description": "Your own avatar video (mp4, avi, mov)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--photo",
+              "flags": "--photo <path|fileId>",
+              "description": "Your own avatar photo",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--avatar-id",
+              "flags": "--avatar-id <id>",
+              "description": "A TopView avatar id (public, or yours with --custom-avatar)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--custom-avatar",
+              "flags": "--custom-avatar",
+              "description": "--avatar-id is one of your custom avatars",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--save-avatar",
+              "flags": "--save-avatar",
+              "description": "Save the --video avatar for reuse",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--mode",
+              "flags": "--mode <mode>",
+              "description": "avatar1 (default) or avatar2 (0.4 credits/s, max 28s)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--audio",
+              "flags": "--audio <path|fileId>",
+              "description": "Speech audio (mp3, wav, m4a)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--tts-text",
+              "flags": "--tts-text <text>",
+              "description": "Text to speak instead of --audio",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--voice-id",
+              "flags": "--voice-id <id>",
+              "description": "Voice for --tts-text (TopView voice list)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--voice-speed",
+              "flags": "--voice-speed <n>",
+              "description": "Speech speed for --tts-text, 0.8-1.2",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--caption-id",
+              "flags": "--caption-id <id>",
+              "description": "Caption style id (public avatars only)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--wait",
+              "flags": "--wait",
+              "description": "Wait for the task to finish, then download the outputs",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--wait-timeout",
+              "flags": "--wait-timeout <ms>",
+              "description": "Polling timeout in milliseconds",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "900000"
+            },
+            {
+              "long": "--download",
+              "flags": "--download",
+              "description": "Download outputs once the task succeeds (default when waiting)",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--no-download",
+              "flags": "--no-download",
+              "description": "Print output URLs instead of downloading",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": true
+            },
+            {
+              "long": "--output",
+              "flags": "--output <path>",
+              "description": "Output file path, or a directory for multiple outputs",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        },
+        {
+          "command": "topview product-avatar",
+          "description": "Avatar holding your product: remove background → place product → video (legacy API, credits; resumable)",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--product-image",
+              "flags": "--product-image <path|fileId>",
+              "description": "Product photo (starts at background removal)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--product-cutout",
+              "flags": "--product-cutout <fileId>",
+              "description": "Resume: product image without background (bgRemovedImageFileId)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--replace-image-id",
+              "flags": "--replace-image-id <imageId>",
+              "description": "Resume: an image from the replace step",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--avatar-id",
+              "flags": "--avatar-id <id>",
+              "description": "Public product avatar id",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--template",
+              "flags": "--template <path|fileId>",
+              "description": "Your own template image instead of --avatar-id",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--image-mode",
+              "flags": "--image-mode <mode>",
+              "description": "auto (default) or manual (needs --location)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--edit-prompt",
+              "flags": "--edit-prompt <text>",
+              "description": "Instructions for auto placement",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--location",
+              "flags": "--location <json>",
+              "description": "Manual placement: four [x, y] points, 0-1",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--image-index",
+              "flags": "--image-index <n>",
+              "description": "Which replace result to animate (default 1)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--replace-only",
+              "flags": "--replace-only",
+              "description": "Stop after the replace step",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--video-mode",
+              "flags": "--video-mode <mode>",
+              "description": "Video model: avatar2, avatar4, avatar4Fast",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--tts-text",
+              "flags": "--tts-text <text>",
+              "description": "Text to speak",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--voice-id",
+              "flags": "--voice-id <id>",
+              "description": "Voice for --tts-text",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--audio",
+              "flags": "--audio <path|fileId>",
+              "description": "Speech audio instead of --tts-text (avatar2 max 28s, avatar4 max 120s)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--caption-id",
+              "flags": "--caption-id <id>",
+              "description": "Caption style id",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--wait",
+              "flags": "--wait",
+              "description": "Wait for the task to finish, then download the outputs",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--wait-timeout",
+              "flags": "--wait-timeout <ms>",
+              "description": "Polling timeout in milliseconds",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "900000"
+            },
+            {
+              "long": "--download",
+              "flags": "--download",
+              "description": "Download outputs once the task succeeds (default when waiting)",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--no-download",
+              "flags": "--no-download",
+              "description": "Print output URLs instead of downloading",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": true
+            },
+            {
+              "long": "--output",
+              "flags": "--output <path>",
+              "description": "Output file path, or a directory for multiple outputs",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        },
+        {
+          "command": "topview product-anyshoot",
+          "description": "Product photos in a template scene (legacy API, credits: 1 per image)",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--product-image",
+              "flags": "--product-image <path|fileId>",
+              "description": "Product image (no WebP in easy mode)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--product-mask",
+              "flags": "--product-mask <path|fileId>",
+              "description": "Product mask (black and white, same size as the image)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--template-id",
+              "flags": "--template-id <id>",
+              "description": "TopView anyshoot template id",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--template",
+              "flags": "--template <path|fileId>",
+              "description": "Your own template image instead of --template-id",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--template-mask",
+              "flags": "--template-mask <path|fileId>",
+              "description": "Template mask: where the product goes",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--mode",
+              "flags": "--mode <mode>",
+              "description": "easy (default) or advanced",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--prompt",
+              "flags": "--prompt <text>",
+              "description": "Scene instructions (easyModePrompt)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--count",
+              "flags": "--count <n>",
+              "description": "Images to generate, 1-4 (default 1)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--wait",
+              "flags": "--wait",
+              "description": "Wait for the task to finish, then download the outputs",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--wait-timeout",
+              "flags": "--wait-timeout <ms>",
+              "description": "Polling timeout in milliseconds",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "900000"
+            },
+            {
+              "long": "--download",
+              "flags": "--download",
+              "description": "Download outputs once the task succeeds (default when waiting)",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--no-download",
+              "flags": "--no-download",
+              "description": "Print output URLs instead of downloading",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": true
+            },
+            {
+              "long": "--output",
+              "flags": "--output <path>",
+              "description": "Output file path, or a directory for multiple outputs",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        },
+        {
+          "command": "topview status",
+          "description": "Get a TopView task's status; --wait/--download to resume it. Kinds: url-to-video, materials-to-video, m2v, video-avatar, remove-background, product-avatar-replace, product-avatar-video, product-anyshoot, platform",
+          "positionals": [
+            {
+              "name": "kind",
+              "description": "",
+              "required": true,
+              "variadic": false
+            },
+            {
+              "name": "taskId",
+              "description": "",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--wait",
+              "flags": "--wait",
+              "description": "Poll until the task reaches a terminal status",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--download",
+              "flags": "--download",
+              "description": "Download outputs once finished",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--output",
+              "flags": "--output <path>",
+              "description": "Output file path, or a directory for multiple outputs",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--wait-timeout",
+              "flags": "--wait-timeout <ms>",
+              "description": "Polling timeout in milliseconds",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "1800000"
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        },
+        {
+          "command": "topview upload",
+          "description": "Upload a local image, audio or video file to TopView and print its fileId",
+          "positionals": [
+            {
+              "name": "file",
+              "description": "",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        },
+        {
+          "command": "topview credits",
+          "description": "Remaining legacy API credits (TopView API Platform balance: see its console)",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--json",
+              "flags": "--json",
+              "description": "Print JSON",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            }
+          ]
+        },
+        {
+          "command": "topview models",
+          "description": "API Platform models multix can generate with, and their USD prices",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--json",
+              "flags": "--json",
+              "description": "Print JSON (with schema fields, prices, source and verified_at)",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            }
+          ]
+        },
+        {
+          "command": "topview generate",
+          "description": "Run an API Platform model (USD); prints the prediction id unless --wait",
+          "positionals": [
+            {
+              "name": "model",
+              "description": "",
+              "required": false,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--model",
+              "flags": "-m, --model <vendor/model/mode>",
+              "description": "Model id (see `multix topview models`)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-m"
+            },
+            {
+              "long": "--prompt",
+              "flags": "--prompt <text>",
+              "description": "Prompt text",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--input",
+              "flags": "--input <json>",
+              "description": "Request body fields as JSON (the model's documented schema)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--image",
+              "flags": "--image <path|url>",
+              "description": "Input image: first/last frame, reference, or image to edit (repeatable)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--duration",
+              "flags": "--duration <seconds>",
+              "description": "Video duration in seconds (-1: automatic where supported)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--resolution",
+              "flags": "--resolution <res>",
+              "description": "Resolution, e.g. 720p, 1080P, 768P, 2k",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--ratio",
+              "flags": "--ratio <ratio>",
+              "description": "Aspect ratio, e.g. 16:9 or adaptive",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--idempotency-key",
+              "flags": "--idempotency-key <key>",
+              "description": "Reuse the key of an earlier attempt to retry it safely",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--wait",
+              "flags": "--wait",
+              "description": "Wait for the task to finish, then download the outputs",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--wait-timeout",
+              "flags": "--wait-timeout <ms>",
+              "description": "Polling timeout in milliseconds",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "1800000"
+            },
+            {
+              "long": "--download",
+              "flags": "--download",
+              "description": "Download outputs once the task succeeds (default when waiting)",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--no-download",
+              "flags": "--no-download",
+              "description": "Print output URLs instead of downloading",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": true
+            },
+            {
+              "long": "--output",
+              "flags": "--output <path>",
+              "description": "Output file path, or a directory for multiple outputs",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "group": "heygen",
       "description": "HeyGen v3: Video Agent prompt-to-video, scripted avatar videos, translation, lipsync, TTS",
       "commands": [

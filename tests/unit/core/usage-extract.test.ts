@@ -285,3 +285,37 @@ describe("extractUsage for Sume job responses", () => {
     expect(other.cost_usd).toBe(0.5);
   });
 });
+
+describe("extractUsage: TopView", () => {
+  const prediction = (data: Record<string, unknown>) =>
+    extractUsage({ code: 200, message: "ok", data: { id: "pred_1", outputs: [], ...data } });
+
+  it("counts API Platform charged_usd once captured", () => {
+    const usage = prediction({
+      status: "completed",
+      charged_usd: "0.824500000000",
+      billing_state: "CAPTURED",
+    });
+    expect(usage.cost_usd).toBe(0.8245);
+    expect(usage.sources?.cost_usd).toBe("body.data.charged_usd");
+  });
+
+  it("reports 0 for a released hold and nothing for a reservation", () => {
+    expect(
+      prediction({ status: "failed", charged_usd: "0.4", billing_state: "RELEASED" }).cost_usd,
+    ).toBe(0);
+    expect(
+      prediction({ status: "processing", charged_usd: "0.4", billing_state: "RESERVED" }).cost_usd,
+    ).toBeUndefined();
+  });
+
+  it("reads a legacy task's costCredit but not the account balance or per-key totals", () => {
+    const task = extractUsage({ code: "200", result: { taskId: "t1", costCredit: 5 } });
+    expect(task.credits).toBe(5);
+    const balance = extractUsage({
+      code: "200",
+      result: { remainCredit: 42, apiKeyMap: [{ apiKey: "k", costCredit: 3 }] },
+    });
+    expect(balance.credits).toBeUndefined();
+  });
+});

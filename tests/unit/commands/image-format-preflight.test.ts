@@ -61,9 +61,10 @@ describe("image format preflight", () => {
         "openai image-to-image",
         "replicate image",
         "runway image",
+        "sume image",
       ]),
     );
-    expect(targets).toHaveLength(20);
+    expect(targets).toHaveLength(21);
   });
 
   it.each(targets.map((t) => [t.path.join(" "), t] as const))(

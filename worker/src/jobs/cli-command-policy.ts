@@ -239,6 +239,26 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
     caps: VIDEO_CAPS,
   },
   "sume upload": { filePositionals: ["file"] },
+  // TopView options take a local file or a TopView fileId; remote callers pass URLs in `inputs`.
+  "topview url-to-video": { fileOptions: { endcard: "file", logo: "file", music: "file" } },
+  "topview materials-to-video": {
+    fileOptions: { file: "file", endcard: "file", logo: "file", music: "file" },
+  },
+  "topview video-avatar": { fileOptions: { video: "file", photo: "file", audio: "file" } },
+  "topview product-avatar": {
+    fileOptions: { "product-image": "file", template: "file", audio: "file" },
+  },
+  "topview product-anyshoot": {
+    fileOptions: {
+      "product-image": "file",
+      "product-mask": "file",
+      template: "file",
+      "template-mask": "file",
+    },
+    caps: { count: ["count"] },
+  },
+  "topview generate": { fileOptions: { image: "file" }, caps: { duration: ["duration"] } },
+  "topview upload": { filePositionals: ["file"] },
   "heygen video-agent": {
     fileOptions: { file: "file" },
     assetRefOptions: ["file"],
@@ -318,6 +338,7 @@ export const GROUP_KEYS: Readonly<Record<string, readonly ProviderSecretName[]>>
   replicate: ["REPLICATE_API_TOKEN", "REPLICATE_API_KEY"],
   runway: ["RUNWAYML_API_SECRET"],
   sume: ["SUME_API_KEY"],
+  topview: ["TOPVIEW_API_KEY", "TOPVIEW_UID", "TOPVIEW_PLATFORM_API_KEY"],
   heygen: ["HEYGEN_API_KEY"],
   // Readiness only: a speech job gets the keys of the providers it routes to (keyOptions).
   speech: [
@@ -340,6 +361,8 @@ export const GROUP_REQUIRED_KEYS: Readonly<
   byteplus: [["BYTEPLUS_API_KEY", "ARK_API_KEY"]],
   replicate: [["REPLICATE_API_TOKEN", "REPLICATE_API_KEY"]],
   cloudflare: [["CLOUDFLARE_ACCOUNT_ID"], ["CLOUDFLARE_API_TOKEN"]],
+  // Marketing commands use the legacy key with TOPVIEW_UID; generate uses the Platform key.
+  topview: [["TOPVIEW_API_KEY", "TOPVIEW_PLATFORM_API_KEY"]],
   speech: [
     [
       "GEMINI_API_KEY",

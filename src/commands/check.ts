@@ -36,6 +36,11 @@ import { checkCodexAuthenticated } from "../providers/openai/codex-image-driver.
 import { REPLICATE_ROUTING } from "../providers/replicate/models.js";
 import { RUNWAY_ROUTING } from "../providers/runway/models.js";
 import { SUME_ROUTING } from "../providers/sume/models.js";
+import {
+  TOPVIEW_PLATFORM_ROUTING,
+  TOPVIEW_ROUTING,
+  TOPVIEW_UID_ENV,
+} from "../providers/topview/models.js";
 import { checkBinary } from "./check-helpers/binary-check.js";
 import { pingGemini } from "./check-helpers/gemini-ping.js";
 import { FFMPEG_HINT, MAGICK_HINT, SETUP_HINTS } from "./check-helpers/setup-hints.js";
@@ -84,6 +89,8 @@ const BASE_URL_ROUTING: readonly BaseUrlRouting[] = [
   REPLICATE_ROUTING,
   RUNWAY_ROUTING,
   SUME_ROUTING,
+  TOPVIEW_ROUTING,
+  TOPVIEW_PLATFORM_ROUTING,
 ];
 
 export type ReportLine = { level: "info" | "warn"; message: string };
@@ -232,6 +239,13 @@ export function registerCheckCommand(program: Command): void {
         } else {
           logger.warn(`${p.envPrimary} not set (${p.name} features unavailable)`);
         }
+      }
+
+      // The TopView legacy API sends the account UID with the key.
+      if (resolveFirstKey(...TOPVIEW_ROUTING.keyEnvs) && !resolveFirstKey(TOPVIEW_UID_ENV)) {
+        logger.warn(
+          `${TOPVIEW_UID_ENV} not set: TopView marketing commands need it with TOPVIEW_API_KEY`,
+        );
       }
 
       const cloudflare = cloudflareReadiness();

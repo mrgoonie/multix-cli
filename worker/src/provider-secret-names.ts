@@ -34,6 +34,8 @@ const CLI_KEY_NAMES = [
   "REPLICATE_API_KEY",
   "RUNWAYML_API_SECRET",
   "SUME_API_KEY",
+  "TOPVIEW_API_KEY",
+  "TOPVIEW_PLATFORM_API_KEY",
   "HEYGEN_API_KEY",
 ] as const;
 
@@ -43,9 +45,13 @@ const CLOUDFLARE_NAMES = [
   "CLOUDFLARE_AI_GATEWAY_ID",
 ] as const;
 
-/** Every name an account can store, in dashboard order. */
-export const PROVIDER_SECRET_NAMES = [...CLI_KEY_NAMES, ...CLOUDFLARE_NAMES] as const;
-export type ProviderSecretName = (typeof PROVIDER_SECRET_NAMES)[number];
+/** Account identifiers a CLI provider reads with its key; shown in that provider's group. */
+const PROVIDER_ID_NAMES = { TopView: ["TOPVIEW_UID"] } as const;
+
+export type ProviderSecretName =
+  | (typeof CLI_KEY_NAMES)[number]
+  | (typeof PROVIDER_ID_NAMES)[keyof typeof PROVIDER_ID_NAMES][number]
+  | (typeof CLOUDFLARE_NAMES)[number];
 
 /** Plaintext provider keys of one account, keyed by env name. */
 export type ProviderKeys = Partial<Record<ProviderSecretName, string>>;
@@ -97,12 +103,21 @@ export const CLI_PROVIDER_KEY_GROUPS: readonly ProviderKeyGroup[] = [
     link: "https://www.sume.com/docs/authentication",
     names: ["SUME_API_KEY"],
   },
+  { provider: "TopView", link: "https://www.topview.ai/openapi", names: ["TOPVIEW_API_KEY"] },
+  {
+    provider: "TopView API Platform",
+    link: "https://platform.topview.ai",
+    names: ["TOPVIEW_PLATFORM_API_KEY"],
+  },
   { provider: "HeyGen", link: "https://app.heygen.com/developers/api", names: ["HEYGEN_API_KEY"] },
 ];
 
-/** Dashboard groups: the CLI providers, then Cloudflare Workers AI. */
+/** Dashboard groups: the CLI providers (with their account ids), then Cloudflare Workers AI. */
 export const PROVIDER_KEY_GROUPS: readonly ProviderKeyGroup[] = [
-  ...CLI_PROVIDER_KEY_GROUPS,
+  ...CLI_PROVIDER_KEY_GROUPS.map((group) => {
+    const ids = PROVIDER_ID_NAMES[group.provider as keyof typeof PROVIDER_ID_NAMES];
+    return ids ? { ...group, names: [...group.names, ...ids] } : group;
+  }),
   {
     provider: "Cloudflare Workers AI",
     link: "https://dash.cloudflare.com/profile/api-tokens",
@@ -110,8 +125,14 @@ export const PROVIDER_KEY_GROUPS: readonly ProviderKeyGroup[] = [
   },
 ];
 
+/** Every name an account can store, in dashboard order. */
+export const PROVIDER_SECRET_NAMES: readonly ProviderSecretName[] = PROVIDER_KEY_GROUPS.flatMap(
+  (group) => group.names,
+);
+
 /** Identifiers rather than credentials: rendered as plain text inputs and not scrubbed from errors. */
 export const NON_SECRET_NAMES: ReadonlySet<ProviderSecretName> = new Set<ProviderSecretName>([
+  "TOPVIEW_UID",
   "CLOUDFLARE_ACCOUNT_ID",
   "CLOUDFLARE_AI_GATEWAY_ID",
 ]);
