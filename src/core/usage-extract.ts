@@ -4,7 +4,9 @@
  * usage, Replicate/fal metrics, Leonardo apiCreditCost, Runway cost, MiniMax
  * extra_info, ElevenLabs character-cost header, ...), so besides the known
  * shapes this keeps any numeric leaf whose key names a token, cost, credit,
- * usage, duration or timing value. It never keeps strings other than ids.
+ * usage, duration or timing value. It never keeps strings other than ids and
+ * plain decimal amounts under a money key (Sume usage.usd "0.35", TopView
+ * charged_usd "0.4160" and costCredit "5.00").
  */
 
 export interface UsageTokens {
@@ -35,7 +37,7 @@ export interface UsageSources {
 }
 
 const METRIC_KEY =
-  /(token|cost|credit|price|usage|billing|duration|seconds|_time$|^time$|time_ms|latency|characters?_?(count|cost)|units?$|predict|inference)/i;
+  /(token|cost|credit|price|usage|billing|charged|duration|seconds|_time$|^time$|time_ms|latency|characters?_?(count|cost)|units?$|predict|inference)/i;
 const SKIP_KEY =
   /(_at$|stamp|date|created|updated|expire|limit|max_|min_|width|height|seed|fps|index|count_?max)/i;
 /**
@@ -45,7 +47,7 @@ const SKIP_KEY =
  * match whole segments so a spend leaf under e.g. subscription_job still counts.
  */
 const BALANCE_LEAF =
-  /(balance|remaining|available|allowance|included|quota|granted|purchased|unused|left|^api_?credits?$)/i;
+  /(balance|remain|available|allowance|included|quota|granted|purchased|unused|left|^api_?credits?$)/i;
 const BALANCE_PARENT = /^(wallet|subscription|user_details|balances?)$/i;
 /**
  * Words that make a leaf a spend even when it also names a balance
@@ -79,8 +81,12 @@ function pathKind(path: string): PathKind {
   if (!balance) return "plain";
   return leafWords(leaf).some((word) => SPEND_WORDS.has(word)) ? "spend-in-balance" : "balance";
 }
-/** Key paths that name a forecast, not a charge (Runway estimatedCost, quotes). */
-const ESTIMATE_PATH = /(estimat|quote|expected)/i;
+/**
+ * Key paths that name a forecast or a hold, not a charge: Runway estimatedCost,
+ * quotes, and the reserved / refunded / released parts of a charge (Sume
+ * usage_summary.reserved_credits), which are never what a run spent.
+ */
+const ESTIMATE_PATH = /(estimat|quote|expected|reserved|refunded|released)/i;
 const ID_KEYS = new Set([
   "id",
   "request_id",
@@ -113,6 +119,34 @@ const MAX_DEPTH = 5;
 
 function num(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+const MONEY_WORDS = new Set(["usd", "cost", "credit", "credits"]);
+const PLAIN_DECIMAL = /^\d{1,12}(\.\d{1,12})?$/;
+
+/**
+ * A money amount sent as a plain decimal string (Sume `usage.usd: "0.35"`,
+ * TopView `charged_usd: "0.4160"` and `costCredit: "5.00"`). Only keys whose
+ * words name USD, a cost or a credit qualify, and never an id; any other
+ * string (exponents, signs, units, text) stays out.
+ */
+function decimalAmount(key: string, value: unknown): number | undefined {
+  if (typeof value !== "string" || !PLAIN_DECIMAL.test(value)) return undefined;
+  const words = leafWords(key);
+  if (words.includes("id") || !words.some((word) => MONEY_WORDS.has(word))) return undefined;
+  return Number(value);
+}
+
+/**
+ * Billing states that mean the amount beside them was really charged. An
+ * object with any other billing_state (TopView RESERVED while a prediction
+ * runs, a release or refund) holds money that is not yet, or no longer, spent.
+ */
+const CAPTURED_STATE = /^(captured|charged|settled|billed|paid|completed?)$/i;
+
+function isHold(obj: Record<string, unknown>): boolean {
+  const state = obj.billing_state ?? obj.billingState;
+  return typeof state === "string" && !CAPTURED_STATE.test(state.trim());
 }
 
 function pick(obj: Record<string, unknown>, ...keys: string[]): number | undefined {
@@ -170,6 +204,7 @@ function walk(
   path: string,
   depth: number,
   out: ResponseUsage,
+  held: Set<string>,
   collectIds = true,
 ): void {
   if (depth > MAX_DEPTH || Object.keys(out.metrics).length >= MAX_METRICS) return;
@@ -177,14 +212,15 @@ function walk(
     // Arrays of outputs/images rarely carry usage; look at the first few only.
     // Ids in a list of several items name catalog entries (e.g. GET /models), not this request.
     const ids = collectIds && value.length === 1;
-    value.slice(0, 3).forEach((item, i) => walk(item, `${path}[${i}]`, depth + 1, out, ids));
+    value.slice(0, 3).forEach((item, i) => walk(item, `${path}[${i}]`, depth + 1, out, held, ids));
     return;
   }
   const obj = asRecord(value);
   if (!obj) return;
+  if (isHold(obj)) held.add(path);
   for (const [key, child] of Object.entries(obj)) {
     const childPath = path ? `${path}.${key}` : key;
-    const n = num(child);
+    const n = num(child) ?? decimalAmount(key, child);
     if (n !== undefined) {
       const inUsageObject = /usage|metrics|billing|extra_info/i.test(path);
       if ((METRIC_KEY.test(key) || inUsageObject) && !SKIP_KEY.test(key)) {
@@ -201,7 +237,7 @@ function walk(
     ) {
       if (out.ids.length < 5) out.ids.push(child);
     } else if (child && typeof child === "object") {
-      walk(child, childPath, depth + 1, out, collectIds);
+      walk(child, childPath, depth + 1, out, held, collectIds);
     }
   }
 }
@@ -209,23 +245,28 @@ function walk(
 /** Extract usage from one parsed JSON response body and its headers. */
 export function extractUsage(body: unknown, headers?: Headers | null): ResponseUsage {
   const out: ResponseUsage = { tokens: {}, metrics: {}, ids: [] };
+  /** Paths of objects whose billing_state says their amounts are held, not spent. */
+  const held = new Set<string>();
   const obj = asRecord(body);
   if (obj) {
     tokensFrom(obj, out.tokens);
-    walk(obj, "", 0, out);
+    walk(obj, "", 0, out, held);
   }
   for (const kind of ["plain", "spend-in-balance"] as const) {
     for (const [path, value] of Object.entries(out.metrics)) {
       const leaf = path.split(".").pop() ?? path;
       // Balances never count; a spend inside a balance counts only when no plain one does.
       if (pathKind(path) !== kind) continue;
-      // Estimates stay in metrics but are never reported as cost or credits spent.
+      // Estimates and holds stay in metrics but are never reported as cost or credits spent.
       if (ESTIMATE_PATH.test(path)) continue;
+      const dot = path.lastIndexOf(".");
+      if (held.has(dot === -1 ? "" : path.slice(0, dot))) continue;
       if (
         out.cost_usd === undefined &&
-        /^(cost|total_cost|cost_usd|usd)$/i.test(leaf) &&
-        // OpenRouter's GET /generation reports the charge as data.total_cost.
-        (/usage|^cost|billing/i.test(path) || path === "data.total_cost")
+        (/^charged_usd$/i.test(leaf) ||
+          (/^(cost|total_cost|cost_usd|usd)$/i.test(leaf) &&
+            // OpenRouter's GET /generation reports the charge as data.total_cost.
+            (/usage|^cost|billing/i.test(path) || path === "data.total_cost")))
       ) {
         out.cost_usd = value;
         out.sources = { ...out.sources, cost_usd: `body.${path}` };

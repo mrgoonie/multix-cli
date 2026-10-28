@@ -28,6 +28,8 @@ import {
   DEFAULT_OPENROUTER_TTS_MODEL,
   OPENROUTER_TTS_MODEL_ENV,
 } from "../providers/openrouter/speech-defaults.js";
+import { SUME_IMAGE_MODEL_ENV, SUME_VIDEO_MODEL_ENV } from "../providers/sume/models.js";
+import { sumeCatalogSnapshot } from "../providers/sume/node-catalog.js";
 import { probeDuration } from "./output-file-inspect.js";
 import { run } from "./run-state.js";
 
@@ -113,6 +115,14 @@ function runtimeDefaults(command: string, options: Record<string, unknown>): Com
       },
       ...(text !== undefined ? { text } : {}),
     };
+  }
+  if (command === "sume image" || command === "sume video") {
+    // No built-in model: --model or the env default, priced from the cached catalog row.
+    const flag = typeof options.model === "string" ? options.model.trim() : "";
+    const env = command === "sume image" ? SUME_IMAGE_MODEL_ENV : SUME_VIDEO_MODEL_ENV;
+    const model = flag || envDefault(env, "");
+    const sumeCatalog = sumeCatalogSnapshot(model || undefined);
+    return { ...(model ? { model } : {}), ...(sumeCatalog ? { sumeCatalog } : {}) };
   }
   return {};
 }

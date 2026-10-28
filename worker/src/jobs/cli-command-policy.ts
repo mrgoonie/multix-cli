@@ -261,6 +261,46 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
     urlOptions: ["callback-url"],
     caps: VIDEO_CAPS,
   },
+  "sume image": {
+    fileOptions: { image: "file" },
+    repeatable: ["image", "param"],
+    caps: { count: ["num-images"] },
+  },
+  "sume video": {
+    fileOptions: {
+      image: "file",
+      "end-image": "file",
+      "reference-image": "file",
+      video: "file",
+      audio: "file",
+    },
+    repeatable: ["image", "reference-image", "param"],
+    caps: VIDEO_CAPS,
+  },
+  // A quote takes only public URLs: nothing is uploaded or billed.
+  "sume estimate": {
+    urlOptions: ["image", "end-image", "reference-image", "video", "audio"],
+    repeatable: ["image", "reference-image", "param"],
+  },
+  // The product page URL is sent as given; the CLI accepts only http(s).
+  "topview url-to-video": { fileOptions: { logo: "file", music: "file" } },
+  "topview materials-to-video": {
+    fileOptions: { file: "file", logo: "file", music: "file" },
+    repeatable: ["file"],
+  },
+  "topview video-avatar": { fileOptions: { video: "file", image: "file", audio: "file" } },
+  "topview product-avatar": {
+    fileOptions: { "product-image": "file", "template-image": "file", audio: "file" },
+  },
+  "topview product-anyshoot": {
+    fileOptions: {
+      "product-image": "file",
+      "product-mask": "file",
+      "template-image": "file",
+      "template-mask": "file",
+    },
+  },
+  "topview upload": { filePositionals: ["file"] },
   "media optimize": { fileOptions: { input: "file" } },
   "media split": { fileOptions: { input: "file" } },
   "media batch": { fileOptions: { "input-dir": "dir" } },
@@ -305,6 +345,8 @@ export const GROUP_KEYS: Readonly<Record<string, readonly ProviderSecretName[]>>
   replicate: ["REPLICATE_API_TOKEN", "REPLICATE_API_KEY"],
   runway: ["RUNWAYML_API_SECRET"],
   heygen: ["HEYGEN_API_KEY"],
+  sume: ["SUME_API_KEY"],
+  topview: ["TOPVIEW_API_KEY", "TOPVIEW_UID", "TOPVIEW_PLATFORM_API_KEY"],
   // Readiness only: a speech job gets the keys of the providers it routes to (keyOptions).
   speech: [
     "GEMINI_API_KEY",
@@ -326,6 +368,8 @@ export const GROUP_REQUIRED_KEYS: Readonly<
   byteplus: [["BYTEPLUS_API_KEY", "ARK_API_KEY"]],
   replicate: [["REPLICATE_API_TOKEN", "REPLICATE_API_KEY"]],
   cloudflare: [["CLOUDFLARE_ACCOUNT_ID"], ["CLOUDFLARE_API_TOKEN"]],
+  // Legacy commands need TOPVIEW_API_KEY and TOPVIEW_UID; platform commands need the platform key.
+  topview: [["TOPVIEW_API_KEY", "TOPVIEW_PLATFORM_API_KEY"]],
   speech: [
     [
       "GEMINI_API_KEY",
