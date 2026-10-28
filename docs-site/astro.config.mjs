@@ -104,6 +104,11 @@ export default defineConfig({
               slug: "commands/scene",
             },
             {
+              label: "Catalog (prices, usage, reviews)",
+              translations: { vi: "Catalog (giá, mức sử dụng, đánh giá)" },
+              slug: "commands/catalog",
+            },
+            {
               label: "Provider directory",
               translations: { vi: "Danh mục provider" },
               slug: "commands/providers",

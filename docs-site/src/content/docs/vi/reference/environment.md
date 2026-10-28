@@ -48,6 +48,12 @@ chạy vào một thao tác.
 cache catalog mà `multix models` dựa vào để báo cáo. Hãy đặt biến này trong
 shell hoặc `~/.multix/.env`.
 
+`MULTIX_CATALOG_FEEDBACK_FILE` (nơi `multix catalog rate`, `review` và `note`
+lưu các mục của bạn, mặc định `~/.multix/catalog-feedback.json`) cũng bị từ
+chối vì cùng lý do: repository không được chọn, hay gieo sẵn, phản hồi mà
+`multix catalog recommend` và agent đọc. Hãy đặt biến này trong shell hoặc
+`~/.multix/.env`. Xem [Lệnh catalog](/vi/commands/catalog/#rating-review-và-ghi-chú).
+
 [`.env.example`](https://github.com/mrgoonie/multix-cli/blob/main/.env.example)
 liệt kê các biến này, cùng hai biến opt-in. Mọi tên khác, ví dụ `NODE_OPTIONS`, `npm_config_registry`,
 `LD_PRELOAD`, `HTTPS_PROXY` hay `NODE_TLS_REJECT_UNAUTHORIZED`, không được nạp,

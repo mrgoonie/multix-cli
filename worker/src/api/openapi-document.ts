@@ -223,8 +223,8 @@ export function openApiDocument(origin: string): Json {
             {
               name: "view",
               in: "query",
-              required: true,
-              schema: { type: "string", enum: [...PRICE_BOOK_VIEWS] },
+              required: false,
+              schema: { type: "string", enum: [...PRICE_BOOK_VIEWS], default: "providers" },
               example: "compare",
             },
             {

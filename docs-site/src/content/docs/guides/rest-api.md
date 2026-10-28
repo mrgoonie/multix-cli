@@ -68,6 +68,7 @@ All paths are relative to `/api/v1`.
 | `PUT` | `/storage` | Check access to the bucket, then save the R2 settings. |
 | `DELETE` | `/storage` | Remove the R2 settings. |
 | `GET` | `/catalog[?group=&task=&model=]` | CLI commands the server can run; same payload and filters as `multix_catalog`. |
+| `GET` | `/price-book?view=…` | Providers, offerings and sourced list prices; same views and arguments as `multix_price_book`, as query parameters: `view` (`providers` by default, `models`, `show`, `compare`), `ref`, `family`, `provider`, `task`, `priced`, `verified`, `resolution`, `duration`, `aspect_ratio`, `audio`, `count`. Booleans take `true`/`false` (or `1`/`0`). |
 | `POST` | `/jobs` | Run one CLI command; same input as `multix_run`. |
 | `GET` | `/jobs/{id}` | Job status, outputs, stdout and the tail of stderr. |
 | `POST` | `/jobs/{id}/cancel` | Stop a running job. |
@@ -80,6 +81,11 @@ All paths are relative to `/api/v1`.
 | `DELETE` | `/events/subscriptions/{id}` | Revoke a subscription. |
 | `GET` | `/events/dead-letters` | Deliveries that were given up (ids, reason, attempts; no payload). |
 | `GET` | `/events/audit` | Subscription audit log: created, revoked, disabled, expired. |
+
+```bash
+curl -s "https://multix.zuey.me/api/v1/price-book?view=compare&family=seedance-2.0&resolution=720p&duration=10" \
+  -H "Authorization: Bearer $MULTIX_API_KEY"
+```
 
 Provider key names are the env names the CLI reads (for example
 `GEMINI_API_KEY`), plus the Cloudflare Workers AI names; `GET /provider-keys`

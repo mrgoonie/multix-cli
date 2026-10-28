@@ -68,6 +68,7 @@ multix fal image "a red fox" --json           # one-line multix.result/v1 envelo
 multix elevenlabs tts --text "Hi" --estimate  # price range, units, rate and source; nothing is sent
 multix elevenlabs tts --text "Hi" --max-cost 0.01  # refuse before sending unless the cost fits
 multix history stats --by model               # runs, success rate, p50/p90 time, cost, credits, tokens
+multix catalog compare seedance-2.0 --resolution 720p --duration 10  # sourced list prices, like for like
 multix rerun last                             # repeat a recorded run
 ```
 
@@ -102,6 +103,35 @@ lists with status `missing` (unless the catalog was too long to read in full,
 `truncated`, when it stays unknown). Catalogs are cached for a day in `~/.multix/cache/models`
 (`--refresh` refetches); offline, a stale copy up to 7 days old is used, or the
 catalog is reported `unavailable` and nothing is claimed available.
+
+`multix catalog` (`multix.catalog/v1`) keeps prices, usage and opinions apart:
+
+```bash
+multix catalog providers                       # tasks, docs, pricing page, key readiness
+multix catalog models --family seedance-2.0    # offerings and price status
+multix catalog show fal:bytedance/seedance-2.0/text-to-video --resolution 720p --duration 10
+multix catalog compare seedance-2.0 --resolution 720p --duration 10
+multix catalog usage --by model --since 30d    # runs, operations, attempts, actual vs estimated cost
+multix catalog recommend --task video --use-case product-ugc
+multix catalog rate <provider>:<model> --score 4 --use-case product-ugc
+```
+
+Prices are list prices read from each provider's own pricing page, with source
+URL and check date; a rate not re-checked within 120 days is `stale`, and an
+offering without a usable rate is `unknown`, never $0. `compare` ranks only
+like-for-like quotes at your configuration and lists the rest with the reason;
+a lower price says nothing about quality. (The BytePlus per-second figure is
+the pricing page's 16:9 example, and whether the `seedance-2.0` alias maps to
+BytePlus's dated model id is not confirmed.) `usage` covers only traffic run
+through multix on this machine, from the local history. `recommend` orders by
+a fixed list of criteria and uses price only as the final tie-breaker.
+Ratings, reviews and use-case notes stay private in
+`~/.multix/catalog-feedback.json` (mode 0600); `project` scope is allowed,
+`team`/`public` are refused until shared moderation exists, secrets and
+personal data are rejected, and readers get the text marked
+`content_trust: "user-authored"`. A remote usage ledger dashboard (Phase 2)
+and shared reviews are not available yet. Details:
+[Catalog commands](https://multix.zuey.me/commands/catalog/).
 
 ## Environment variables
 
@@ -166,6 +196,7 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `MULTIX_OUTPUT` | No | `json` prints one `multix.result/v1` envelope per run, as `--json` does |
 | `MULTIX_HISTORY` | No | `0` stops recording runs in `~/.multix/history.jsonl` |
 | `MULTIX_HISTORY_FILE` | No | Run ledger path (shell or `~/.multix/.env` only) |
+| `MULTIX_CATALOG_FEEDBACK_FILE` | No | Where `multix catalog` ratings, reviews and notes are kept (default `~/.multix/catalog-feedback.json`; shell or `~/.multix/.env` only) |
 | `MULTIX_CACHE_DIR` | No | Cache root for `multix models --live` catalogs (default `~/.multix/cache`; shell or `~/.multix/.env` only) |
 | `MULTIX_MODELS_TTL` | No | Seconds a cached catalog stays fresh (default `86400`, at most `604800`) |
 | `OPENROUTER_IMAGE_MODEL` | No | Default OpenRouter model |
@@ -965,6 +996,9 @@ instance runs at `https://multix.zuey.me/mcp` (invited GitHub accounts only).
 
 - Tools: `multix_catalog` (runnable commands, their options and file inputs,
   and `has_keys` per group from the caller's saved keys; always listed),
+  `multix_price_book` (providers, offerings and sourced list prices with
+  views `providers`, `models`, `show` and `compare`, the same data as
+  `multix catalog --json`; read-only, always listed),
   `multix_run` (run one CLI command, for example
   `gemini analyze` or `media optimize`, in its own Cloudflare Container with
   ffmpeg and ImageMagick; waits up to `wait_seconds`, default 25, max 40,
@@ -1047,7 +1081,8 @@ Full guide: [Remote MCP server](https://multix.zuey.me/guides/mcp-server/).
 ### REST API
 
 The same server exposes a JSON REST API at `/api/v1` for scripts and CI
-(manage provider keys and R2 storage, read the catalog, run and poll jobs).
+(manage provider keys and R2 storage, read the catalog and the price book at
+`GET /api/v1/price-book`, run and poll jobs).
 Create an account API key (`mxk_…`, shown once) in the **API keys** card at
 `/dashboard` and send it as `Authorization: Bearer <key>`:
 
