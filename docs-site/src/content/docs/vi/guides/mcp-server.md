@@ -481,11 +481,12 @@ cả hai phiên bản giao thức, đảm nhận phần còn lại:
   như `skills/get`.
 - `{"action": "read", "uri": "…", "revision": 3}`: một file văn bản. Truyền
   `revision` hoặc `digest` từ lần `get` trước để nhận `STALE_REVISION: …` nếu
-  file đã thay đổi từ đó. File nhị phân trả về `BINARY_FILE: …`; hãy đọc chúng
-  bằng `resources/read`.
+  file đã thay đổi từ đó. File nhị phân trả về `BINARY_FILE: …`, file văn bản
+  lớn hơn 256 KiB trả về `PAYLOAD_TOO_LARGE: …`; hãy đọc chúng bằng
+  `resources/read`.
 
-Lỗi của tool bắt đầu bằng cùng các mã ổn định, cộng thêm `STALE_REVISION` và
-`BINARY_FILE`.
+Lỗi của tool bắt đầu bằng cùng các mã ổn định, cộng thêm `STALE_REVISION`,
+`BINARY_FILE` và `PAYLOAD_TOO_LARGE`.
 
 ### Skill nào mô tả CLI nào
 

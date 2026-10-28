@@ -483,11 +483,11 @@ offered on both protocol revisions, covers the rest:
   entry as `skills/get`.
 - `{"action": "read", "uri": "…", "revision": 3}`: one text file. Pass the
   `revision` or `digest` from an earlier `get` to get `STALE_REVISION: …` if it
-  changed since. Binary files answer `BINARY_FILE: …`; read them with
-  `resources/read`.
+  changed since. Binary files answer `BINARY_FILE: …` and text files over
+  256 KiB `PAYLOAD_TOO_LARGE: …`; read those with `resources/read`.
 
-Tool errors start with the same stable codes, plus `STALE_REVISION` and
-`BINARY_FILE`.
+Tool errors start with the same stable codes, plus `STALE_REVISION`,
+`BINARY_FILE` and `PAYLOAD_TOO_LARGE`.
 
 ### Which skill describes which CLI
 
