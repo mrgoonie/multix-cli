@@ -18,6 +18,7 @@ To configure multix, set at least one provider API key:
     Replicate          : https://replicate.com/account/api-tokens
     Runway             : https://dev.runwayml.com/
     HeyGen             : https://app.heygen.com/developers/api
+    Sume               : https://www.sume.com/docs/authentication
 
   Option A — user global config (recommended):
     echo 'GEMINI_API_KEY=your-key' >> ~/.multix/.env

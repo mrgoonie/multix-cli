@@ -34,6 +34,7 @@ const CLI_KEY_NAMES = [
   "REPLICATE_API_KEY",
   "RUNWAYML_API_SECRET",
   "HEYGEN_API_KEY",
+  "SUME_API_KEY",
 ] as const;
 
 const CLOUDFLARE_NAMES = [
@@ -92,6 +93,7 @@ export const CLI_PROVIDER_KEY_GROUPS: readonly ProviderKeyGroup[] = [
   },
   { provider: "Runway", link: "https://dev.runwayml.com/", names: ["RUNWAYML_API_SECRET"] },
   { provider: "HeyGen", link: "https://app.heygen.com/developers/api", names: ["HEYGEN_API_KEY"] },
+  { provider: "Sume", link: "https://www.sume.com/docs/authentication", names: ["SUME_API_KEY"] },
 ];
 
 /** Dashboard groups: the CLI providers, then Cloudflare Workers AI. */

@@ -30,6 +30,7 @@ import { LEONARDO_ROUTING } from "./providers/leonardo/models.js";
 import { PROVIDER_KEYS } from "./providers/provider-keys.js";
 import { REPLICATE_ROUTING } from "./providers/replicate/models.js";
 import { RUNWAY_ROUTING } from "./providers/runway/models.js";
+import { SUME_ROUTING } from "./providers/sume/models.js";
 
 /**
  * Names multix reads that a project `.env` may NOT set: opt-ins that widen
@@ -118,6 +119,7 @@ const ROUTING = [
   LEONARDO_ROUTING,
   REPLICATE_ROUTING,
   RUNWAY_ROUTING,
+  SUME_ROUTING,
 ];
 
 /** Every fixed name a project `.env` may set (numbered Gemini keys are matched by pattern). */

@@ -36,6 +36,8 @@ import { requireLeonardoKey } from "../../../src/providers/leonardo/client.js";
 import { LEONARDO_ROUTING } from "../../../src/providers/leonardo/models.js";
 import { REPLICATE_ROUTING } from "../../../src/providers/replicate/models.js";
 import { requireReplicateToken } from "../../../src/providers/replicate/node-client.js";
+import { requireSumeKey } from "../../../src/providers/sume/commands/env.js";
+import { SUME_ROUTING } from "../../../src/providers/sume/models.js";
 
 /**
  * These tests use made-up variable names, so they accept every name. The real
@@ -211,6 +213,7 @@ describe("env-loader", () => {
       HEYGEN_ROUTING,
       LEONARDO_ROUTING,
       REPLICATE_ROUTING,
+      SUME_ROUTING,
     ];
     const VARS = [
       NAME,
@@ -768,6 +771,7 @@ describe("env-loader", () => {
         [HEYGEN_ROUTING.name, requireHeygenKey],
         [LEONARDO_ROUTING.name, requireLeonardoKey],
         [REPLICATE_ROUTING.name, requireReplicateToken],
+        [SUME_ROUTING.name, requireSumeKey],
       ]);
       for (const routing of ROUTINGS) {
         const read = readers.get(routing.name);

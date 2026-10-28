@@ -206,6 +206,37 @@ function walk(
   }
 }
 
+const SUME_LEDGER_PATH = "data.job.usage_summary";
+
+/**
+ * Sume jobs carry a reservation ledger (`data.job.usage_summary`): the price
+ * is reserved at submit, captured on completion and refunded on failure or
+ * cancel. Only a final ledger is a charge (captured cents, rounded up by Sume);
+ * a pending one, and the submit's `data.usage` hold, are never spend.
+ * Returns false when the body is not a Sume job.
+ */
+function sumeLedger(obj: Record<string, unknown>, out: ResponseUsage): boolean {
+  const data = asRecord(obj.data);
+  const job = asRecord(data?.job);
+  // The ledger is nullable; a submit answer also names its job's status_url.
+  if (!job || !("usage_summary" in job || typeof data?.status_url === "string")) return false;
+  const ledger = asRecord(job.usage_summary);
+  if (ledger?.final !== true) return true;
+  const credits = num(ledger.captured_credits);
+  const cents = num(ledger.captured_usd_cents);
+  if (credits !== undefined) {
+    out.credits = credits;
+    out.sources = { ...out.sources, credits: `body.${SUME_LEDGER_PATH}.captured_credits` };
+  }
+  if (cents !== undefined || credits === 0) {
+    // Nothing captured (refunded or released) is a proven $0.
+    out.cost_usd = cents !== undefined ? cents / 100 : 0;
+    const leaf = cents !== undefined ? "captured_usd_cents" : "captured_credits";
+    out.sources = { ...out.sources, cost_usd: `body.${SUME_LEDGER_PATH}.${leaf}` };
+  }
+  return true;
+}
+
 /** Extract usage from one parsed JSON response body and its headers. */
 export function extractUsage(body: unknown, headers?: Headers | null): ResponseUsage {
   const out: ResponseUsage = { tokens: {}, metrics: {}, ids: [] };
@@ -214,7 +245,9 @@ export function extractUsage(body: unknown, headers?: Headers | null): ResponseU
     tokensFrom(obj, out.tokens);
     walk(obj, "", 0, out);
   }
-  for (const kind of ["plain", "spend-in-balance"] as const) {
+  // A known ledger replaces the generic scan, which would read a hold as spend.
+  const ledgerKinds = obj && sumeLedger(obj, out) ? [] : (["plain", "spend-in-balance"] as const);
+  for (const kind of ledgerKinds) {
     for (const [path, value] of Object.entries(out.metrics)) {
       const leaf = path.split(".").pop() ?? path;
       // Balances never count; a spend inside a balance counts only when no plain one does.

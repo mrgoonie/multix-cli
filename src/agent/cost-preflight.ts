@@ -28,6 +28,7 @@ import {
   DEFAULT_OPENROUTER_TTS_MODEL,
   OPENROUTER_TTS_MODEL_ENV,
 } from "../providers/openrouter/speech-defaults.js";
+import { estimateSumeRun } from "../providers/sume/commands/estimate.js";
 import { probeDuration } from "./output-file-inspect.js";
 import { run } from "./run-state.js";
 
@@ -118,17 +119,32 @@ function runtimeDefaults(command: string, options: Record<string, unknown>): Com
 }
 
 /**
+ * Commands priced by the provider's own live pricing (catalog or a free
+ * estimate endpoint) instead of the local catalog. Called only for
+ * `--estimate` / `--max-cost`, with the action's options and positionals.
+ */
+const REMOTE_ESTIMATORS: Readonly<
+  Record<string, (options: Record<string, unknown>, args: string[]) => Promise<CostEstimate>>
+> = {
+  "sume image": (o, args) => estimateSumeRun("image", args[0], o),
+  "sume video": (o, args) => estimateSumeRun("video", args[0], o),
+};
+
+/**
  * Before the action: price the run when asked (or when it is priceable) and
  * apply --max-cost. Throws BudgetError when the guard refuses; returns true
  * when the run is estimate-only and must stop here.
  */
-export function preflightCost(): boolean {
+export async function preflightCost(args: string[] = []): Promise<boolean> {
   const o = run.options;
   const estimateOnly = Boolean(o.estimate);
   const hasMax = o.maxCost !== undefined;
   const maxCost = hasMax ? parseMaxCost(o.maxCost) : undefined;
   const policy = parseCostPolicy(o.costPolicy);
-  if (estimateOnly || hasMax || pricedCommands().includes(run.command)) {
+  const remote = REMOTE_ESTIMATORS[run.command];
+  if (remote && (estimateOnly || hasMax)) {
+    run.estimate = await remote(o, args);
+  } else if (estimateOnly || hasMax || pricedCommands().includes(run.command)) {
     run.estimate = estimateCommand(run.command, o, runtimeDefaults(run.command, o));
   }
   if (maxCost !== undefined && run.estimate) {

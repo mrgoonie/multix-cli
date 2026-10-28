@@ -136,6 +136,16 @@ export const COMMAND_CAPABILITIES: Readonly<Record<string, CommandCapability>> =
   "heygen lipsync": fixed(["video-edit"], ["video"]),
   "heygen tts": fixed(["speech"], ["audio"]),
   "heygen run": fixed(["any"], []),
+  "sume image": catalog(
+    ["image", "image-edit"],
+    ["image"],
+    "Sume image model ids from its live catalog (multix sume models --kind image)",
+  ),
+  "sume video": catalog(
+    ["video", "image-to-video", "video-edit"],
+    ["video"],
+    "Sume video and lipsync model ids from its live catalog (multix sume models)",
+  ),
   "doc convert": fixed(["document"], ["text"]),
   // Routes to the one provider --provider names and checks --model against
   // that provider's documented TTS models before any request.
@@ -198,6 +208,10 @@ export const UTILITY_COMMANDS: ReadonlySet<string> = new Set([
   "heygen styles",
   "heygen languages",
   "heygen me",
+  "sume models",
+  "sume status",
+  "sume result",
+  "sume cancel",
   "speech models",
   "media optimize",
   "media split",

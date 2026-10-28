@@ -261,6 +261,20 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
     urlOptions: ["callback-url"],
     caps: VIDEO_CAPS,
   },
+  // Media options take a local file (uploaded by the CLI to Sume) or a public https URL.
+  "sume image": { fileOptions: { image: "file" }, caps: IMAGE_COUNT },
+  "sume video": {
+    fileOptions: {
+      image: "file",
+      "end-image": "file",
+      "ref-image": "file",
+      "ref-video": "file",
+      "ref-audio": "file",
+      video: "file",
+      audio: "file",
+    },
+    caps: VIDEO_CAPS,
+  },
   "media optimize": { fileOptions: { input: "file" } },
   "media split": { fileOptions: { input: "file" } },
   "media batch": { fileOptions: { "input-dir": "dir" } },
@@ -305,6 +319,7 @@ export const GROUP_KEYS: Readonly<Record<string, readonly ProviderSecretName[]>>
   replicate: ["REPLICATE_API_TOKEN", "REPLICATE_API_KEY"],
   runway: ["RUNWAYML_API_SECRET"],
   heygen: ["HEYGEN_API_KEY"],
+  sume: ["SUME_API_KEY"],
   // Readiness only: a speech job gets the keys of the providers it routes to (keyOptions).
   speech: [
     "GEMINI_API_KEY",
