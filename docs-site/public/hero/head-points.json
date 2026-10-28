@@ -1,33 +1,35 @@
 {
-  "format": "multix-head-points",
   "version": 1,
-  "count": 23400,
-  "layout": [
-    {
-      "name": "position",
-      "type": "float32",
-      "components": 3,
-      "offset": 0
-    },
-    {
-      "name": "region",
-      "type": "uint8",
-      "components": 1,
-      "offset": 280800
-    }
-  ],
-  "littleEndian": true,
+  "count": 19994,
+  "stride": 4,
   "regions": {
-    "skin": 0,
-    "eyes": 1,
-    "ears": 2,
-    "mouth": 3,
-    "crown": 5
+    "0": "skin",
+    "1": "eyes",
+    "2": "ears",
+    "3": "mouth",
+    "5": "crown"
   },
   "anchors": {
-    "eyes": [0.29, 0.05, 0.72],
-    "ears": [0.81, -0.04, 0],
-    "mouth": [0, -0.52, 0.85]
+    "eyes": [
+      0.233,
+      0.332,
+      0.474
+    ],
+    "ears": [
+      0.597,
+      0.146,
+      -0.177
+    ],
+    "mouth": [
+      0,
+      -0.126,
+      0.598
+    ],
+    "crown": [
+      0,
+      0.96,
+      0
+    ]
   },
-  "source": "procedural signed distance field (placeholder)"
+  "source": "multix atlas image → multix atlas 3d (tencent/hunyuan3d-rapid/image-to-3d), sampled by scripts/hero/sample-head-points.mjs"
 }
