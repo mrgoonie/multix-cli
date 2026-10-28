@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.23.0](https://github.com/mrgoonie/multix-cli/compare/v1.22.0...v1.23.0) (2026-10-28)
+
+
+### Added
+
+* **agent:** record requested vs resolved model and job identity in receipts ([#394](https://github.com/mrgoonie/multix-cli/issues/394)) ([1bad7f4](https://github.com/mrgoonie/multix-cli/commit/1bad7f45cbd9fbafcdf5213d78a4ebaac42254f8)), closes [#389](https://github.com/mrgoonie/multix-cli/issues/389)
+* **fal:** check tts dialogue and --input fields before submit, refuse sample-less WAV ([#370](https://github.com/mrgoonie/multix-cli/issues/370)) ([5afbd26](https://github.com/mrgoonie/multix-cli/commit/5afbd26cae374d124f03b64626c821cb539893b8))
+* **media:** offline media inspect, verify, frames and receipts ([#373](https://github.com/mrgoonie/multix-cli/issues/373)) ([2ca8047](https://github.com/mrgoonie/multix-cli/commit/2ca8047886e2d958d8cb961a5416e9b288ebeaed))
+* **speech:** route OpenRouter and fal TTS through multix speech ([#372](https://github.com/mrgoonie/multix-cli/issues/372)) ([ad2a41f](https://github.com/mrgoonie/multix-cli/commit/ad2a41f366c80950d87a033ed6bbad3863e377cc)), closes [#334](https://github.com/mrgoonie/multix-cli/issues/334)
+
+
+### Fixed
+
+* **agent:** count a request cut off by a signal in the cost receipt ([#395](https://github.com/mrgoonie/multix-cli/issues/395)) ([980f4c7](https://github.com/mrgoonie/multix-cli/commit/980f4c70afe6953732f43a82e3f25f020e9ab3a6)), closes [#388](https://github.com/mrgoonie/multix-cli/issues/388)
+* **agent:** report a signal-cancelled run as CANCELLED with its real exit code ([#379](https://github.com/mrgoonie/multix-cli/issues/379)) ([1ba0b4a](https://github.com/mrgoonie/multix-cli/commit/1ba0b4a139635c44e7bf53761a67411d78874b4d))
+* **atlas:** report a signal during the schema fetch as a clean cancel ([#402](https://github.com/mrgoonie/multix-cli/issues/402)) ([9ebbf20](https://github.com/mrgoonie/multix-cli/commit/9ebbf207244a456d1b2b0c9929990d65f50c0879)), closes [#392](https://github.com/mrgoonie/multix-cli/issues/392)
+* **atlas:** report signals during submit, uploads and status --wait ([#391](https://github.com/mrgoonie/multix-cli/issues/391)) ([3c06554](https://github.com/mrgoonie/multix-cli/commit/3c06554f6282e6d40635bdc01347b59c37bac108)), closes [#388](https://github.com/mrgoonie/multix-cli/issues/388)
+* **atlas:** report the prediction id and resume command when a signal stops the wait ([#386](https://github.com/mrgoonie/multix-cli/issues/386)) ([0cbd52f](https://github.com/mrgoonie/multix-cli/commit/0cbd52f9a0c3262f46df3db0e105daea7b15e9c5))
+* **media:** a second signal no longer reports a clean CANCELLED after skipping cleanup ([#390](https://github.com/mrgoonie/multix-cli/issues/390)) ([69cc2ee](https://github.com/mrgoonie/multix-cli/commit/69cc2ee649a1d64c05208d5ec465273da76a3fba)), closes [#385](https://github.com/mrgoonie/multix-cli/issues/385)
+* **media:** fail media verify on a WAV cut short of its declared data size ([#380](https://github.com/mrgoonie/multix-cli/issues/380)) ([6c1b8e9](https://github.com/mrgoonie/multix-cli/commit/6c1b8e90d9f17d96f981a60e279d6b7dd5f8d1fc)), closes [#374](https://github.com/mrgoonie/multix-cli/issues/374)
+* **media:** pass piped WAVs and cover a cut WAV by its declared duration ([#382](https://github.com/mrgoonie/multix-cli/issues/382)) ([67b5273](https://github.com/mrgoonie/multix-cli/commit/67b5273eca07493516341c9f32cfd5cefdc81367))
+* **media:** refuse a URL in media verify before checking for ffmpeg ([#409](https://github.com/mrgoonie/multix-cli/issues/409)) ([7e9289f](https://github.com/mrgoonie/multix-cli/commit/7e9289f3bc3ae545373e4fd24372eb22e8013a37)), closes [#408](https://github.com/mrgoonie/multix-cli/issues/408)
+* **media:** report the verify engine of a receipt in check-receipt ([#387](https://github.com/mrgoonie/multix-cli/issues/387)) ([ba94ac9](https://github.com/mrgoonie/multix-cli/commit/ba94ac995c91d54635aca7e7cde0e9fbe0cb1044)), closes [#381](https://github.com/mrgoonie/multix-cli/issues/381)
+
 ## [1.22.0](https://github.com/mrgoonie/multix-cli/compare/v1.21.1...v1.22.0) (2026-10-27)
 
 
