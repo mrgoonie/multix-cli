@@ -44,7 +44,12 @@ test("build includes Vietnamese, structured data, the required footer, and the b
   assert.match(english, /@goon_nguyen \(X\)/);
   assert.match(vietnamese, /lang="vi"/);
   assert.match(vietnameseMarkdown, /^---\ntitle: Cài đặt và cấu hình/m);
-  assert.match(overview, /images\/multix-isometric-banner\.png/);
+  // The landing page replaced the splash banner; it remains the social preview image.
+  assert.doesNotMatch(overview, /<img[^>]*multix-isometric-banner\.png/);
+  assert.match(
+    overview,
+    /<meta property="og:image" content="[^"]*images\/multix-isometric-banner\.png"/,
+  );
   assert.match(readme, /docs-site\/public\/images\/multix-isometric-banner\.png/);
   assert.ok(banner.size > 0);
 });
