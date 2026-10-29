@@ -372,6 +372,81 @@ describe("retries, failures and cancels", () => {
     expect(row).toMatchObject({ operations: 1, completed: 1, failed: 0, canceled: 0 });
   });
 
+  it("counts a job whose status run reports the provider failed it as failed, though the submit was ok", () => {
+    // Submit and status share the operation id built from the job's provider id.
+    const entries = [
+      entry({
+        provider_ids: ["req_1"],
+        cost: receipt({ operation_id: "fal:req_1", status: "unknown" }),
+      }),
+      entry({
+        ts: "2026-10-27T10:01:00.000Z",
+        command: "fal status",
+        model_resolved: undefined,
+        provider_ids: ["req_1"],
+        ok: false,
+        exit_code: 1,
+        error: { code: "JOB_FAILED", message: "prediction failed" },
+        cost: receipt({ operation_id: "fal:req_1", role: "observation", status: "unknown" }),
+      }),
+    ];
+    const [row] = aggregateUsage(entries, "provider");
+    expect(row).toMatchObject({ requests: 2, operations: 1, completed: 0, failed: 1, canceled: 0 });
+    expect(row?.success_rate).toBe(0);
+    // Each grouping agrees: the job is failed in every row it lands in.
+    for (const by of USAGE_GROUPS) {
+      for (const r of aggregateUsage(entries, by)) {
+        expect(r, `${by} ${r.key}`).toMatchObject({ completed: 0, failed: r.operations });
+      }
+    }
+  });
+
+  it("decides a job failure without receipts by the job id the runs share", () => {
+    const job = { provider: "fal", id: "req_2", attempt: 1 };
+    const row = rowFor([
+      entry({ job }),
+      entry({
+        job,
+        ts: "2026-10-27T10:02:00.000Z",
+        ok: false,
+        exit_code: 1,
+        error: { code: "JOB_FAILED", message: "status: failed" },
+      }),
+    ]);
+    expect(row).toMatchObject({ operations: 1, completed: 0, failed: 1, success_rate: 0 });
+  });
+
+  it("keeps a job completed when its poll only failed in transit, even after a timeout", () => {
+    const job = { provider: "fal", id: "req_3", attempt: 1 };
+    const row = rowFor([
+      entry({ job }),
+      entry({
+        job,
+        ts: "2026-10-27T10:02:00.000Z",
+        ok: false,
+        exit_code: 1,
+        error: { code: "TIMEOUT", message: "poll timed out" },
+      }),
+    ]);
+    expect(row).toMatchObject({ operations: 1, completed: 1, failed: 0, success_rate: 1 });
+  });
+
+  it("lets a run that succeeded after a reported job failure decide the job completed", () => {
+    const job = { provider: "fal", id: "req_4", attempt: 1 };
+    const row = rowFor([
+      entry({ job }),
+      entry({
+        job,
+        ts: "2026-10-27T10:01:00.000Z",
+        ok: false,
+        exit_code: 1,
+        error: { code: "JOB_FAILED", message: "job failed" },
+      }),
+      entry({ job, ts: "2026-10-27T10:05:00.000Z" }),
+    ]);
+    expect(row).toMatchObject({ operations: 1, completed: 1, failed: 0 });
+  });
+
   it("lets the later ledger line decide between runs with the same timestamp", () => {
     const job = (id: string) => ({ provider: "fal", id, attempt: 1 });
     const failed = { ok: false, exit_code: 1 } as const;

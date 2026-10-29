@@ -91,8 +91,11 @@ của tài khoản provider. Nhóm theo `--by provider|model|offering|task|comma
 - Một **operation** là một phần việc: một lần submit cùng các lần poll trạng
   thái, tiếp tục và tải file chỉ tính một lần.
 - Kết quả được tính theo operation trên mọi dòng: operation **hoàn tất** khi có
-  ít nhất một lần chạy thành công, nên một lần poll trạng thái lỗi được ghi dưới
-  operation của job không bị tính là lỗi. Nếu không, lần chạy gần nhất quyết
+  ít nhất một lần chạy thành công, nên một lần poll trạng thái lỗi giữa đường
+  (lỗi mạng, hết thời gian chờ) được ghi dưới operation của job không bị tính là
+  lỗi. Một lần chạy báo provider đã làm job thất bại (`JOB_FAILED`) khiến
+  operation thành **lỗi**, dù lần submit được provider chấp nhận đã thành công,
+  trừ khi có một lần chạy thành công sau đó. Nếu không, lần chạy gần nhất quyết
   định operation **lỗi** hay **bị hủy**. Tỉ lệ thành công là số operation hoàn
   tất chia cho số operation.
 - Lần poll lỗi chưa từng nhận được provider id của job (request đầu tiên đã
