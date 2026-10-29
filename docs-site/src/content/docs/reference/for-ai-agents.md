@@ -236,7 +236,9 @@ once: status polls and downloads add nothing, a replayed receipt counts once,
 a provider-reported figure settles the operation, and only each distinct paid
 submit (a resubmit is billed again) adds its cost. A run that sent nothing never
 lowers the operation's cost. The default is
-`<provider>:<job id>`, or `run:<history id>` when the provider returned no id.
+`<provider>:<id>`, where the id is the run's `job` (which never names an
+uploaded input file or a rejected call), else the first id any response
+returned, or `run:<history id>` when the provider returned no id.
 Set it in the shell for the run; a project `.env` cannot set it.
 
 ## Run history
@@ -257,7 +259,9 @@ multix rerun h_mfz3k2ab1c9d         # run it again (extra args are appended)
 ```
 
 `history stats` skips `--dry-run` and `--estimate` runs and counts each
-operation's cost once, from known figures only; `cost_uncertain_ops` and
+operation's cost and credits once (a task's cost and credits show once,
+normally on its submit run's row, however many `status` runs repeat them), from
+known figures only; `cost_uncertain_ops` and
 `cost_unknown_ops` count the operations whose cost is uncertain or unknown, so
 `cost_usd` is a lower bound when either is present.
 

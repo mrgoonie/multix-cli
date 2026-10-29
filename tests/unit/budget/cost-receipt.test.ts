@@ -271,6 +271,35 @@ describe("settlement", () => {
     expect(mixed.operations[0]).toMatchObject({ status: "uncertain", actual_usd: 0.1 });
   });
 
+  it("counts a task's credits once when its status read repeats them", () => {
+    const credits = (n: number | null) => ({ cost_usd: null, credits: n });
+    const submit = receipt({
+      operation_id: "runway:t1",
+      status: "unknown",
+      provider_reported: credits(40),
+    });
+    const status = receipt({
+      operation_id: "runway:t1",
+      role: "observation",
+      status: "unknown",
+      provider_reported: credits(40),
+      at: "2026-10-26T12:05:00.000Z",
+    });
+    const once = settleOperations([submit, status]);
+    expect(once.total_credits).toBe(40);
+    expect(once.operations[0]).toMatchObject({ credits: 40, runs: 2 });
+    // The latest status read settles the figure; a distinct resubmit adds up.
+    const corrected = { ...status, provider_reported: credits(45), at: "2026-10-26T12:06:00.000Z" };
+    expect(settleOperations([submit, status, corrected]).total_credits).toBe(45);
+    const resubmit = { ...submit, at: "2026-10-26T12:07:00.000Z" };
+    expect(settleOperations([submit, resubmit]).total_credits).toBe(80);
+    // A status read of a task submitted outside the ledger still counts once.
+    expect(settleOperations([status, status]).total_credits).toBe(40);
+    expect(settleOperations([receipt({ operation_id: "a", actual_usd: 0.1 })]).total_credits).toBe(
+      null,
+    );
+  });
+
   it("excludes uncertain operations from the total but counts them", () => {
     const summary = settleOperations([
       receipt({ operation_id: "a", status: "uncertain" }),

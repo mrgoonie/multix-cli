@@ -4142,7 +4142,7 @@
             {
               "long": "--audio",
               "flags": "--audio",
-              "description": "Enable audio track",
+              "description": "Generate an audio track (model default when omitted)",
               "required": false,
               "takesValue": false,
               "valueOptional": false,
@@ -4152,7 +4152,7 @@
             {
               "long": "--no-audio",
               "flags": "--no-audio",
-              "description": "Disable audio track",
+              "description": "Generate no audio track",
               "required": false,
               "takesValue": false,
               "valueOptional": false,
@@ -4313,7 +4313,7 @@
             {
               "long": "--audio",
               "flags": "--audio",
-              "description": "Enable audio",
+              "description": "Generate an audio track (model default when omitted)",
               "required": false,
               "takesValue": false,
               "valueOptional": false,
@@ -4323,7 +4323,7 @@
             {
               "long": "--no-audio",
               "flags": "--no-audio",
-              "description": "Disable audio",
+              "description": "Generate no audio track",
               "required": false,
               "takesValue": false,
               "valueOptional": false,
@@ -4520,7 +4520,7 @@
             {
               "long": "--audio",
               "flags": "--audio",
-              "description": "Enable audio",
+              "description": "Generate an audio track (model default when omitted)",
               "required": false,
               "takesValue": false,
               "valueOptional": false,
@@ -4530,7 +4530,7 @@
             {
               "long": "--no-audio",
               "flags": "--no-audio",
-              "description": "Disable audio",
+              "description": "Generate no audio track",
               "required": false,
               "takesValue": false,
               "valueOptional": false,

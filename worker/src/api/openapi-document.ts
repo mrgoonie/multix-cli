@@ -15,6 +15,8 @@ import {
   MIN_SUBSCRIPTION_TTL_SECONDS,
 } from "../events/event-hub.js";
 import { MAX_WAIT_SECONDS } from "../jobs/job-runner.js";
+import { MAX_WORKFLOW_COST_USD } from "../skills/workflow-manager.js";
+import { MAX_ACTIVE_RUNS, MAX_AUTHORIZATIONS } from "../skills/workflow-store.js";
 
 type Json = Record<string, unknown>;
 
@@ -103,6 +105,14 @@ const JOB_ID = {
   required: true,
   schema: { type: "string", format: "uuid" },
   description: "Job id returned by POST /api/v1/jobs",
+};
+
+const WORKFLOW_RUN_ID = {
+  name: "id",
+  in: "path",
+  required: true,
+  schema: { type: "string" },
+  description: "Run id returned by POST /api/v1/workflow-runs",
 };
 
 export function openApiDocument(origin: string): Json {
@@ -852,6 +862,164 @@ export function openApiDocument(origin: string): Json {
           },
         },
       },
+      "/workflows": {
+        get: {
+          summary: "Describe a skill's workflow",
+          description:
+            "The workflow (`multix.workflow.json`) the skill serves to you: inputs, steps, revision and digest, and whether your account authorized exactly that revision and digest. Review the steps before authorizing them. 404 when the skill serves no workflow.",
+          operationId: "describeWorkflow",
+          parameters: [
+            {
+              name: "uri",
+              in: "query",
+              required: true,
+              schema: { type: "string", maxLength: 512 },
+              description:
+                "skill://private/<name>/SKILL.md or skill://team/<owner>/<name>/SKILL.md",
+            },
+          ],
+          responses: {
+            ...ok("Workflow", ref("Workflow")),
+            ...ERRORS,
+            ...SKILL_ERRORS,
+          },
+        },
+      },
+      "/workflow-authorizations": {
+        get: {
+          summary: "Workflows you authorized",
+          operationId: "listWorkflowAuthorizations",
+          responses: {
+            ...ok("Authorizations", {
+              type: "object",
+              properties: {
+                authorizations: { type: "array", items: ref("WorkflowAuthorization") },
+              },
+            }),
+            ...ERRORS,
+            ...SKILL_ERRORS,
+          },
+        },
+        post: {
+          summary: "Authorize a workflow",
+          description: `Lets your account run the workflow the skill serves now. revision and digest must be the ones GET /workflows returns (409 otherwise); a new revision, another digest or a recreated skill voids the authorization. Only this endpoint can authorize: MCP clients cannot. Optional max_cost_usd (0 to ${MAX_WORKFLOW_COST_USD}) caps a whole run: each step then needs a known price that fits what is left. Replaces your earlier authorization of the same skill (at most ${MAX_AUTHORIZATIONS}).`,
+          operationId: "authorizeWorkflow",
+          requestBody: jsonBody(
+            {
+              type: "object",
+              required: ["uri", "revision", "digest"],
+              properties: {
+                uri: { type: "string" },
+                revision: { type: "integer", minimum: 1 },
+                digest: { type: "string", pattern: "^sha256:[0-9a-f]{64}$" },
+                max_cost_usd: { type: "number", minimum: 0, maximum: MAX_WORKFLOW_COST_USD },
+                cost_policy: { type: "string", enum: ["strict", "estimate"] },
+              },
+            },
+            {
+              uri: "skill://private/storyboard/SKILL.md",
+              revision: 3,
+              digest: `sha256:${"0".repeat(64)}`,
+              max_cost_usd: 2,
+            },
+          ),
+          responses: {
+            ...ok(
+              "Authorized",
+              { type: "object", properties: { authorization: ref("WorkflowAuthorization") } },
+              "201",
+            ),
+            ...ERRORS,
+            ...BODY_ERRORS,
+            ...SKILL_ERRORS,
+          },
+        },
+      },
+      "/workflow-authorizations/{owner}/{skill}": {
+        parameters: [
+          {
+            name: "owner",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+            description: "Owner account id (`gh-<digits>`); your own id for a private skill",
+          },
+          SKILL_NAME,
+        ],
+        delete: {
+          summary: "Withdraw an authorization",
+          description: "Runs under it stop before their next step.",
+          operationId: "revokeWorkflowAuthorization",
+          responses: {
+            ...ok("Revoked", { type: "object", properties: { revoked: { type: "boolean" } } }),
+            ...ERRORS,
+            ...SKILL_ERRORS,
+          },
+        },
+      },
+      "/workflow-runs": {
+        get: {
+          summary: "Your workflow runs and authorizations",
+          operationId: "listWorkflowRuns",
+          responses: {
+            ...ok("Runs", {
+              type: "object",
+              properties: {
+                runs: { type: "array", items: ref("WorkflowRunSummary") },
+                authorizations: { type: "array", items: ref("WorkflowAuthorization") },
+              },
+            }),
+            ...ERRORS,
+            ...SKILL_ERRORS,
+          },
+        },
+        post: {
+          summary: "Run an authorized workflow",
+          description: `Starts the run and its first step. 403 when your account has not authorized the served revision and digest. Each step is one job with the same command policy, caps, URL guard and cost checks as POST /jobs. A run advances when it is read: poll GET /workflow-runs/{id}. 429 \`busy\` with ${MAX_ACTIVE_RUNS} runs active.`,
+          operationId: "startWorkflowRun",
+          requestBody: jsonBody(
+            {
+              type: "object",
+              required: ["uri"],
+              properties: { uri: { type: "string" }, inputs: { type: "object" } },
+            },
+            { uri: "skill://private/storyboard/SKILL.md", inputs: { subject: "a red fox" } },
+          ),
+          responses: {
+            ...ok("Run", ref("WorkflowRun"), "201"),
+            ...ERRORS,
+            ...BODY_ERRORS,
+            ...SKILL_ERRORS,
+          },
+        },
+      },
+      "/workflow-runs/{id}": {
+        parameters: [WORKFLOW_RUN_ID],
+        get: {
+          summary: "Read a run",
+          description:
+            "Advances the run first: collects a finished step's outputs and starts the next step.",
+          operationId: "getWorkflowRun",
+          responses: {
+            ...ok("Run", ref("WorkflowRun")),
+            ...ERRORS,
+            ...SKILL_ERRORS,
+          },
+        },
+      },
+      "/workflow-runs/{id}/cancel": {
+        parameters: [WORKFLOW_RUN_ID],
+        post: {
+          summary: "Cancel a run",
+          description: "Stops the run and the job of its current step.",
+          operationId: "cancelWorkflowRun",
+          responses: {
+            ...ok("Run", ref("WorkflowRun")),
+            ...ERRORS,
+            ...SKILL_ERRORS,
+          },
+        },
+      },
     },
     components: {
       securitySchemes: {
@@ -1300,6 +1468,85 @@ export function openApiDocument(origin: string): Json {
         ServedSkill: {
           type: "object",
           properties: { skill: ref("Skill"), revision: ref("SkillRevisionSummary") },
+        },
+        Workflow: {
+          type: "object",
+          properties: {
+            uri: { type: "string" },
+            owner: { type: "string" },
+            skill: { type: "string" },
+            revision: { type: "integer" },
+            digest: { type: "string" },
+            description: { type: ["string", "null"] },
+            inputs: { type: "object", description: "Declared inputs by name" },
+            steps: { type: "array", items: { type: "object" } },
+            authorized: { type: "boolean" },
+            authorization: { oneOf: [ref("WorkflowAuthorization"), { type: "null" }] },
+            authorize: {
+              type: "object",
+              description: "Present when not authorized: the request that would authorize it",
+            },
+          },
+        },
+        WorkflowAuthorization: {
+          type: "object",
+          properties: {
+            authorization_id: { type: "string" },
+            uri: { type: "string" },
+            owner: { type: "string" },
+            skill: { type: "string" },
+            revision: { type: "integer" },
+            digest: { type: "string" },
+            max_cost_usd: { type: ["number", "null"] },
+            cost_policy: { type: "string" },
+            granted_at: { type: "string", format: "date-time" },
+          },
+        },
+        WorkflowRunSummary: {
+          type: "object",
+          properties: {
+            run_id: { type: "string" },
+            status: { type: "string", enum: ["running", "succeeded", "failed", "canceled"] },
+            uri: { type: "string" },
+            current_step: { type: ["string", "null"] },
+            created_at: { type: "string", format: "date-time" },
+          },
+        },
+        WorkflowRun: {
+          type: "object",
+          properties: {
+            run_id: { type: "string" },
+            status: { type: "string", enum: ["running", "succeeded", "failed", "canceled"] },
+            uri: { type: "string" },
+            revision: { type: "integer" },
+            digest: { type: "string" },
+            inputs: { type: "object" },
+            current_step: { type: ["string", "null"] },
+            steps: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  id: { type: "string" },
+                  command: { type: "string" },
+                  status: { type: "string" },
+                  job_id: { type: ["string", "null"] },
+                  outputs: { type: "array", items: { type: "object" } },
+                  estimate_usd: { type: ["number", "null"] },
+                  error: { type: "string" },
+                  note: { type: "string" },
+                },
+              },
+            },
+            max_cost_usd: { type: ["number", "null"] },
+            spent_usd: {
+              type: "number",
+              description: "Sum of the started steps' price ceilings (only under max_cost_usd)",
+            },
+            error: { type: "string" },
+            created_at: { type: "string", format: "date-time" },
+            updated_at: { type: "string", format: "date-time" },
+          },
         },
       },
     },
