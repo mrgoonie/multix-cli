@@ -87,6 +87,8 @@ describe("multix catalog (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
       "10",
       "--audio",
       "on",
+      "--aspect-ratio",
+      "16:9",
     ]);
     expect(body.ok).toBe(true);
     expect(body.data.schema).toBe("multix.catalog/v1");
@@ -101,6 +103,34 @@ describe("multix catalog (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     } else {
       expect(row).toMatchObject({ status: "unknown", total_usd: null });
       expect(row.reasons[0]).toMatch(/last checked 2026-10-28, over 120 days ago/);
+    }
+  });
+
+  it("prints why a priced compare row is not ranked behind one prefix", async () => {
+    const args = [
+      "catalog",
+      "compare",
+      "--task",
+      "video",
+      "--resolution",
+      "720p",
+      "--duration",
+      "5",
+    ];
+    const atlas = (await envelope(args)).data.comparison.rows.find(
+      (r: { offering: string }) => r.offering === "atlas:bytedance/seedance-2.5/text-to-video",
+    );
+    const text = await run(args);
+    expect(text.exitCode).toBe(0);
+    const line = text.stdout.split("\n").find((l) => l.includes("atlas:bytedance/seedance-2.5"));
+    if (atlas.status === "priced") {
+      expect(line).toMatch(
+        /^\s+-\s+\$1\.5023 .* priced: not ranked: the provider shows this price as an estimate/,
+      );
+      expect(line?.match(/not ranked:/g)).toHaveLength(1);
+    } else {
+      // Once the price book is past its 120-day window the price is unknown, never $0.
+      expect(line).toMatch(/^\s+-\s+unknown .* unknown: /);
     }
   });
 

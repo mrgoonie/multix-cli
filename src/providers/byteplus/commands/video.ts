@@ -31,8 +31,8 @@ export function registerBytePlusVideoCommand(parent: Command): void {
       "Aspect ratio (16:9, 9:16, 1:1, ...)",
       BYTEPLUS_DEFAULTS.videoAspectRatio,
     )
-    .option("--audio", "Enable audio track")
-    .option("--no-audio", "Disable audio track")
+    .option("--audio", "Generate an audio track (model default when omitted)")
+    .option("--no-audio", "Generate no audio track")
     .option("--seed <n>", "Fixed seed")
     .option("--negative <text>", "Negative prompt")
     .option("--camera-fixed", "Lock camera (no motion)")

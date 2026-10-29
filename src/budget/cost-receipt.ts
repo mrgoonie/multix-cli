@@ -10,7 +10,9 @@
  * runs (submit, status polls, result download, a webhook replay); spend is
  * counted once per operation by `settleOperations`: distinct charge runs add
  * up, verbatim replays do not, a provider-reported figure settles the
- * operation, and adjustments (refunds, corrections) apply once. The reservation/settlement pair is the contract a
+ * operation, and adjustments (refunds, corrections) apply once. Credits follow
+ * the same rule, so a status read that repeats a task's credits does not
+ * count them a second time. The reservation/settlement pair is the contract a
  * budget ledger (the remote dashboard) uses to hold the high estimate before a
  * run and release it once the actual cost is known.
  */
@@ -266,6 +268,8 @@ export interface OperationSpend {
   /** Provider-reported figure, else the sum of the known charges; adjustments included. */
   actual_usd: number | null;
   adjustments_usd: number;
+  /** Provider-reported credits, counted like actual_usd; null when none were reported. */
+  credits: number | null;
   runs: number;
 }
 
@@ -276,6 +280,12 @@ export interface SpendSummary {
   /** Operations whose cost is uncertain or unknown: the total excludes them. */
   uncertain: number;
   unknown: number;
+  /**
+   * Reported credits, each operation once; null when no receipt reported any.
+   * Includes operations known only from a status read, which have no entry in
+   * `operations` (they carry no spend of their own).
+   */
+  total_credits: number | null;
 }
 
 /** Lower is less certain: an operation is only as certain as its least certain charge. */
@@ -292,6 +302,9 @@ const isNoSpend = (r: CostReceipt) =>
  * carries the provider's own figure settles the whole operation and replaces
  * the charges' sum. Runs that sent nothing or were refused never lower a
  * figure. The operation's status is that of its least certain charge.
+ * Credits are settled the same way, by the latest status read that reports
+ * them, else by the sum of the distinct charges; an operation known only from
+ * a status read still counts its credits once.
  */
 export function settleOperations(
   receipts: CostReceipt[],
@@ -301,6 +314,7 @@ export function settleOperations(
     runs: number;
     charges: Map<string, CostReceipt>;
     reported?: CostReceipt;
+    reportedCredits?: CostReceipt;
     noSpendOnly: boolean;
   };
   const ops = new Map<string, Op>();
@@ -312,8 +326,13 @@ export function settleOperations(
     op.noSpendOnly = false;
     if (r.role === "charge") {
       op.charges.set(`${r.at}|${r.status}|${r.actual_usd}`, r);
-    } else if (r.status === "settled" && r.actual_usd !== null) {
-      if (!op.reported || r.at >= op.reported.at) op.reported = r;
+    } else {
+      if (r.status === "settled" && r.actual_usd !== null) {
+        if (!op.reported || r.at >= op.reported.at) op.reported = r;
+      }
+      if (r.provider_reported.credits !== null) {
+        if (!op.reportedCredits || r.at >= op.reportedCredits.at) op.reportedCredits = r;
+      }
     }
   }
   const adjusted = new Map<string, number>();
@@ -325,9 +344,17 @@ export function settleOperations(
     adjusted.set(a.operation_id, round6((adjusted.get(a.operation_id) ?? 0) + a.usd));
   }
   const operations: OperationSpend[] = [];
+  let totalCredits: number | null = null;
   for (const [operation_id, op] of ops) {
     if (op.noSpendOnly) continue;
     const charges = [...op.charges.values()];
+    const chargedCredits = charges.filter((r) => r.provider_reported.credits !== null);
+    const credits =
+      op.reportedCredits?.provider_reported.credits ??
+      (chargedCredits.length
+        ? round6(chargedCredits.reduce((sum, r) => sum + (r.provider_reported.credits ?? 0), 0))
+        : null);
+    if (credits !== null) totalCredits = round6((totalCredits ?? 0) + credits);
     if (charges.length === 0 && !op.reported) continue;
     let status: CostStatus;
     let actual: number | null;
@@ -348,6 +375,7 @@ export function settleOperations(
       status,
       actual_usd: actual === null ? null : round6(actual + adjustments_usd),
       adjustments_usd,
+      credits,
       runs: op.runs,
     });
   }
@@ -356,6 +384,7 @@ export function settleOperations(
     total_usd: round6(operations.reduce((s, op) => s + (op.actual_usd ?? 0), 0)),
     uncertain: operations.filter((op) => op.status === "uncertain").length,
     unknown: operations.filter((op) => op.status === "unknown").length,
+    total_credits: totalCredits,
   };
 }
 

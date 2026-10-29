@@ -16,7 +16,7 @@ import {
 } from "../../agent/history-store.js";
 import { run } from "../../agent/run-state.js";
 import { type CostReceipt, settleOperations } from "../../budget/cost-receipt.js";
-import { receiptOf } from "../../catalog/usage-aggregate.js";
+import { creditsByEntry, receiptOf } from "../../catalog/usage-aggregate.js";
 import { ValidationError } from "../../core/errors.js";
 
 export { receiptOf };
@@ -100,8 +100,10 @@ function percentile(values: number[], p: number): number {
 
 export function historyStats(entries: HistoryEntry[], by: "provider" | "model" | "command") {
   const buckets = new Map<string, Bucket>();
-  for (const e of entries) {
-    if (e.dry_run || e.estimate_only) continue;
+  const counted = entries.filter((e) => !e.dry_run && !e.estimate_only);
+  // Each operation's credits once, on its submit run, whatever bucket a status run lands in.
+  const creditsOf = creditsByEntry(counted);
+  for (const e of counted) {
     const key = (by === "model" ? e.model : by === "command" ? e.command : e.provider) || "(none)";
     const b = buckets.get(key) ?? {
       key,
@@ -117,7 +119,8 @@ export function historyStats(entries: HistoryEntry[], by: "provider" | "model" |
     b.outputs += e.outputs?.length ?? 0;
     const receipt = receiptOf(e);
     if (receipt) b.receipts.push(receipt);
-    if (e.usage?.credits !== undefined) b.credits = (b.credits ?? 0) + e.usage.credits;
+    const credits = creditsOf.get(e);
+    if (credits !== undefined) b.credits = (b.credits ?? 0) + credits;
     const tok =
       e.usage?.tokens?.total ?? (e.usage?.tokens?.input ?? 0) + (e.usage?.tokens?.output ?? 0);
     if (tok) b.tokens = (b.tokens ?? 0) + tok;
