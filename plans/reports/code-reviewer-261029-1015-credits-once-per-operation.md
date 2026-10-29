@@ -328,3 +328,88 @@ Summary: Tests and typecheck pass, but the new legacy-job path never runs on rea
 - M2 (USD across rows): still tracked in #444. The PR body links it.
 - L1 (second charge under one id is swallowed): accepted. The `receiptOf` docstring states it.
 - Gates: lint, typecheck, build, full test suite (2518 passed), verify:docs and check:mcp are clean.
+
+## Review of 335f133 + merge (261029)
+
+Scope: `git show 335f133` (src/catalog/usage-aggregate.ts, both test files, docs) and `git diff 335f133 HEAD -- src/catalog/usage-aggregate.ts` (dev's #448 `operationOutcomes`, `sentRequest`, per-operation outcome counts).
+
+Verification:
+- `vitest run` on usage-aggregate, history-store and cost-receipt tests: 69 passed. `tsc --noEmit` is clean. Biome on the touched files is clean.
+- Ledger shape checked against history: `cost` was added in 1a1e1b3 (#327, 10-26) and `job` in 1bad7f4 (#394, 10-27). So pre-receipt entries have `provider_ids` and no `job`, as the commit says. At 1a1e1b3^, `run.ids` is filled in call order (`fetch-telemetry.ts:194` at that revision). It holds body ids first and then `x-request-id`/`request-id`/`x-amzn-requestid` header ids, there is no `trackInFlight` unshift, and non-ok bodies are not parsed.
+- Live receipts build their id the same way (`cost-preflight.ts:177-181`, `operationIdFor` over `run.ids`). So the legacy path now matches what receipts do, and a pre-receipt submit joins a post-receipt status run of the same job.
+- Scratch probes (vitest, outside the repo) on real legacy shapes:
+  - P1: an ok submit plus a JOB_FAILED status run, both with `provider_ids: ["J"]`, gives operations 1, completed 1, failed 0.
+  - P3: a submit with no credits, then status runs reporting 5 and then 8 credits. The owner is the first status run, with amount 8.
+  - P4: `historyStats` by model, with cost 3 / credits 4 on both runs. Credits appear once. `cost_usd` 3 appears in both buckets (#444).
+  - P6: two legacy runs share a first id at $1 and $2. Result: 1 operation, known $2.
+
+### 1. Fix correctness on real ledger shapes
+
+This is correct for the common shape. A submit whose first response body names the job, and a `status` run whose first GET body names the same id, now share `<provider>:<id>` (`usage-aggregate.ts:50-56`). They settle as observations (`:73`), so $3 + $3 settles to $3 and 12 + 12 credits to 12. The `e.job` branch is dead on real ledgers, because every entry with `job` also has `cost`. It is harmless, and the synthetic test at `usage-aggregate.test.ts:173-182` covers it.
+
+### High
+
+None.
+
+### Medium
+
+**M1. A job that failed at the provider is counted as completed once its legacy status run joins the submit (merge interaction with #448).**
+- `operationOutcomes` (`usage-aggregate.ts:172-188`) groups runs by `operationOf`, which falls back to `legacyOperationId` (`:143`). It marks the operation completed when any run is `ok` (`:180`).
+- Before 335f133, a legacy status run without a job had the id `run:<id>`, so a JOB_FAILED status read was counted as a failed operation of its own.
+- After 335f133 the status run's `provider_ids[0]` is the job id. That is the normal case, because the failed-status GET returns 200 with a body naming the request. The run joins the submit, the submit was `ok` (the job was accepted), and the operation reads as completed.
+- Probe P1 shows the result: failed 0, success_rate 1 for a job the provider reported as failed.
+- So yes, a legacy failed status run now flips an outcome: it removes a real failure.
+- The same masking already applies to receipted entries under #448, because their receipt joins by `run.ids[0]` too. 335f133 extends it to the whole pre-receipt ledger. The #448 rule "a failed poll recorded under the job's operation is not a failure" (`:15-18`) is right for transport failures (NETWORK_ERROR, timeout). It is wrong for a terminal provider verdict.
+- Fix: open a separate issue rather than widening this PR. In `operationOutcomes`, let a terminal job verdict decide, for example:
+  ```ts
+  const terminal = ops.filter((e) => e.error?.code === "JOB_FAILED");
+  if (terminal.length && !ops.some((e) => e.ok && e.ts > latestTs(terminal))) outcomes.set(id, "failed");
+  ```
+  Alternatively, do not count a submit-only `ok` (a run that returned a job id without outputs) as completion when a later run reports JOB_FAILED. Add a test with an ok submit plus a JOB_FAILED status run.
+
+### Low
+
+**L1. Legacy `provider_ids[0]` is not always the job id, so some pre-receipt jobs still double count.**
+- At 1a1e1b3^, ids are appended in call order with no in-flight unshift. If the submit was preceded by any response that carries an id, `provider_ids[0]` is that id and not the job, and the status run (`fal:<job>`) does not join. Examples are a failed POST retry with an `x-request-id` header, or an upload that returns `id`.
+- Same root cause as #439 (the op id ignores job identity), applied to legacy data. Note it on #439 instead of fixing it here.
+
+**L2. The credits owner is not always the submit.**
+- When the submit reported no credits, the owner is the earliest status run that did (`usage-aggregate.ts:111-113`, probe P3). Its row usually has no resolved model.
+- The amount is the latest run's figure (`settleOperations` `reportedCredits`, `cost-receipt.ts:333-335`), which is correct.
+- The code comment and docs say "earliest run that reported credits", which is accurate. The author's resolution note ("This is the submit, which names the model") holds only when the submit reported credits. No code change is needed. Do not repeat that claim in the PR body.
+
+**L3. Test gaps for the new join.**
+- `tests/unit/catalog/usage-aggregate.test.ts` has no legacy-shape outcome test: an ok legacy submit plus a failed legacy status run with the same `provider_ids[0]`. That case now gives 1 completed operation where it gave 1 completed + 1 failed before, and nothing pins it.
+- There is no JOB_FAILED case (M1).
+- There is no case for the `run:` prefix role switch on a legacy entry that has `provider_ids` but failed before any body id, where only a header id is present.
+- The credits test at `:218-241` covers only the owner when the submit reported credits.
+- `tests/unit/agent/history-store.test.ts:164-176` covers the bucket case. Its `provider` grouping hides the cross-bucket USD duplication (#444), which is fine since that is out of scope.
+
+Accepted earlier, not re-raised: two legacy runs billed under one shared first id count only the latest figure (P6). This is stated in the `receiptOf` docstring (`:63-64`).
+
+### 3. `historyStats` (src/commands/agent/history-command.ts)
+
+No regression found.
+- Within a bucket, legacy receipts now join and settle once (`:120-121`, `:133`).
+- Credits come from `creditsByEntry` over the filtered set (`:105`, `:122-123`) and appear once (P4).
+- `success_rate` is still per run (`:138`) and does not use `operationOutcomes`, so M1 does not reach `history stats`.
+- Remaining differences are already known: USD repeated across model/command buckets (#444), and credits moving to a status run when `--since`/`--command` filters exclude the submit (documented).
+
+### Checklist
+
+- Concurrency: n/a (pure functions over a ledger snapshot).
+- Error boundaries: no new throws.
+- API contracts: the shapes of `receiptOf`/`operationOf` are unchanged. Values change for legacy entries, and nothing is persisted.
+- Backwards compatibility: the ledger is read-only here.
+- Trust boundaries: no new input or output surface. `operation_id` still truncates at 200.
+- Query efficiency: still O(n) with array-spread appends per key, unchanged.
+
+Status: DONE_WITH_CONCERNS
+Summary: 335f133 now joins real pre-receipt submits and status runs, so USD and credits are counted once. Tests, typecheck and lint pass. Combined with #448's outcome rule, a legacy JOB_FAILED status run now joins its ok submit and the failed job counts as completed (M1). This needs its own issue.
+
+## Resolution of the 335f133 + merge review (author)
+
+- M1 (JOB_FAILED status joined to an ok submit counts as completed): the rule that decides it is #448's (any ok run means completed), and it already held for receipted entries. Filed as #471, to be fixed in its own PR.
+- L1 (`provider_ids[0]` is not always the job id): same cause as #439; noted there.
+- L2: the PR body says the owner is "the submit, or the earliest run that reported credits", which matches the code. Corrected here: the owner is the submit only when the submit reported credits.
+- L3: the JOB_FAILED test goes with #471; the other cases are covered by the rules in place and are left out.
