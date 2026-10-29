@@ -4,6 +4,8 @@
  *
  *   wfauth:<ownerId>:<name>  the account allowed running this skill's workflow
  *   wfrun:<runId>            one run; run ids sort by start time
+ *   wfruns                   index of the runs, oldest first (listing and limits
+ *                            read it instead of every full run)
  *
  * A run is saved with a version check, so two requests that read the same run
  * cannot both start its next step (see WorkflowManager).
@@ -85,12 +87,37 @@ export interface WorkflowRun {
   steps: StepState[];
   spentUsd: number;
   error?: string;
-  /** Held while one request starts the current step's job. */
-  lease?: { id: string; until: number };
+  /**
+   * Held while one request starts the current step's job. `jobId` is chosen
+   * before the job starts, so a reader that finds the lease expired can adopt
+   * a job that started but was never recorded instead of starting another.
+   */
+  lease?: { id: string; until: number; jobId: string; estimateUsd: number | null };
   version: number;
   createdAt: number;
   updatedAt: number;
 }
+
+/** What listing and the run limits need of a run. */
+export interface WorkflowRunSummary {
+  id: string;
+  status: RunStatus;
+  uri: string;
+  currentStep: string | null;
+  createdAt: number;
+}
+
+export function summarize(run: WorkflowRun): WorkflowRunSummary {
+  return {
+    id: run.id,
+    status: run.status,
+    uri: run.uri,
+    currentStep: run.status === "running" ? (run.steps[run.step]?.id ?? null) : null,
+    createdAt: run.createdAt,
+  };
+}
+
+const INDEX_KEY = "wfruns";
 
 export const authKey = (ownerId: string, name: string) => `wfauth:${ownerId}:${name}`;
 const runKey = (runId: string) => `wfrun:${runId}`;
@@ -139,10 +166,13 @@ export class WorkflowStore {
     return (await this.storage.get<WorkflowRun>(runKey(runId))) ?? null;
   }
 
+  private async index(): Promise<WorkflowRunSummary[]> {
+    return (await this.storage.get<WorkflowRunSummary[]>(INDEX_KEY)) ?? [];
+  }
+
   /** Newest first. */
-  async runs(limit = MAX_STORED_RUNS): Promise<WorkflowRun[]> {
-    const rows = await this.storage.list<WorkflowRun>({ prefix: "wfrun:", reverse: true, limit });
-    return [...rows.values()];
+  async runs(): Promise<WorkflowRunSummary[]> {
+    return (await this.index()).reverse();
   }
 
   /**
@@ -150,15 +180,21 @@ export class WorkflowStore {
    * beyond MAX_STORED_RUNS the oldest finished runs are dropped.
    */
   async createRun(run: WorkflowRun): Promise<boolean> {
-    const all = await this.storage.list<WorkflowRun>({ prefix: "wfrun:" });
-    const runs = [...all.values()];
-    if (runs.filter((r) => !isFinished(r)).length >= MAX_ACTIVE_RUNS) return false;
-    const drop = runs
-      .filter(isFinished)
-      .slice(0, Math.max(0, runs.length + 1 - MAX_STORED_RUNS))
-      .map((r) => runKey(r.id));
-    if (drop.length > 0) await this.storage.delete(drop);
-    await this.storage.put({ [runKey(run.id)]: { ...run, version: 1 } });
+    const index = await this.index();
+    if (index.filter((r) => r.status === "running").length >= MAX_ACTIVE_RUNS) return false;
+    const excess = Math.max(0, index.length + 1 - MAX_STORED_RUNS);
+    const drop = new Set(
+      index
+        .filter((r) => r.status !== "running")
+        .slice(0, excess)
+        .map((r) => r.id),
+    );
+    if (drop.size > 0) await this.storage.delete([...drop].map(runKey));
+    const kept = index.filter((r) => !drop.has(r.id));
+    await this.storage.put({
+      [runKey(run.id)]: { ...run, version: 1 },
+      [INDEX_KEY]: [...kept, summarize(run)],
+    });
     return true;
   }
 
@@ -170,7 +206,8 @@ export class WorkflowStore {
     const stored = await this.storage.get<WorkflowRun>(runKey(run.id));
     if (!stored || stored.version !== run.version) return null;
     const next = { ...run, version: run.version + 1 };
-    await this.storage.put({ [runKey(run.id)]: next });
+    const index = (await this.index()).map((r) => (r.id === run.id ? summarize(next) : r));
+    await this.storage.put({ [runKey(run.id)]: next, [INDEX_KEY]: index });
     return next;
   }
 }

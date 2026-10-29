@@ -126,7 +126,7 @@ function checkValueText(
   if (text.length > MAX_VALUE_CHARS) fail(`${where}: longer than ${MAX_VALUE_CHARS} characters`);
   for (const match of text.matchAll(TEMPLATE_RE)) {
     const ref = parseRef(match[1] as string, where);
-    if ("input" in ref && !(ref.input in inputs)) {
+    if ("input" in ref && !Object.hasOwn(inputs, ref.input)) {
       fail(`${where}: input "${ref.input}" is not declared`);
     }
     if ("step" in ref && !earlier.has(ref.step)) {
@@ -269,7 +269,20 @@ function parseStep(
     }
     return value.map((v, n) => text(v, `${at}[${n}]`));
   };
-  if (raw.args !== undefined) step.args = list(raw.args, `${where}.args`, MAX_ARGS);
+  if (raw.args !== undefined) {
+    step.args = list(raw.args, `${where}.args`, MAX_ARGS);
+    // A left-out positional would shift the ones after it into its place.
+    step.args.forEach((arg, n) => {
+      const whole = WHOLE_TEMPLATE_RE.exec(arg);
+      const ref = whole ? parseRef(whole[1] as string, `${where}.args[${n}]`) : null;
+      const input = ref && "input" in ref ? inputs[ref.input] : undefined;
+      if (input && !input.required && input.default === undefined) {
+        fail(
+          `${where}.args[${n}]: positional "${arg}" needs a required input or one with a default`,
+        );
+      }
+    });
+  }
   if (raw.options !== undefined) {
     if (!isObject(raw.options) || Object.keys(raw.options).length > MAX_OPTIONS) {
       fail(`${where}.options must be an object of at most ${MAX_OPTIONS} options`);
@@ -361,7 +374,7 @@ export function validateRunInputs(
   manifest: WorkflowManifest,
   given: Record<string, unknown> = {},
 ): Record<string, InputValue> {
-  const unknown = Object.keys(given).find((name) => !(name in manifest.inputs));
+  const unknown = Object.keys(given).find((name) => !Object.hasOwn(manifest.inputs, name));
   if (unknown !== undefined) fail(`unknown input "${unknown.slice(0, 40)}"`);
   const values: Record<string, InputValue> = {};
   for (const [name, input] of Object.entries(manifest.inputs)) {
@@ -389,7 +402,7 @@ export function renderStep(
 ): RunRequest {
   const resolve = (raw: string, where: string): InputValue | undefined => {
     const ref = parseRef(raw, where);
-    if ("input" in ref) return inputs[ref.input];
+    if ("input" in ref) return Object.hasOwn(inputs, ref.input) ? inputs[ref.input] : undefined;
     const urls = outputs[ref.step];
     if (!urls) fail(`${where}: step "${ref.step}" has not finished`);
     if (ref.index >= urls.length) {

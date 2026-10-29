@@ -28,7 +28,12 @@ import type {
   SkillRevision,
   SkillShare,
 } from "./skill-types.js";
-import { type WorkflowAuthorization, type WorkflowRun, WorkflowStore } from "./workflow-store.js";
+import {
+  type WorkflowAuthorization,
+  type WorkflowRun,
+  type WorkflowRunSummary,
+  WorkflowStore,
+} from "./workflow-store.js";
 
 type OwnFile = { file: SkillFile; bytes: Uint8Array } | null;
 
@@ -56,7 +61,7 @@ export interface WorkflowStoreStub {
   putWorkflowAuthorization(accountId: string, auth: WorkflowAuthorization): Promise<boolean>;
   deleteWorkflowAuthorization(accountId: string, ownerId: string, name: string): Promise<boolean>;
   workflowRun(accountId: string, runId: string): Promise<WorkflowRun | null>;
-  workflowRuns(accountId: string): Promise<WorkflowRun[]>;
+  workflowRuns(accountId: string): Promise<WorkflowRunSummary[]>;
   createWorkflowRun(accountId: string, run: WorkflowRun): Promise<boolean>;
   saveWorkflowRun(accountId: string, run: WorkflowRun): Promise<WorkflowRun | null>;
 }
@@ -297,7 +302,7 @@ export class AccountSkills extends DurableObject implements SkillAuthoringStub {
     return await this.workflows.run(runId);
   }
 
-  async workflowRuns(accountId: string): Promise<WorkflowRun[]> {
+  async workflowRuns(accountId: string): Promise<WorkflowRunSummary[]> {
     this.owner(accountId);
     return await this.workflows.runs();
   }

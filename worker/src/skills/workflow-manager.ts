@@ -49,6 +49,7 @@ import {
   type StepStatus,
   type WorkflowAuthorization,
   type WorkflowRun,
+  type WorkflowRunSummary,
   isFinished,
   newRunId,
 } from "./workflow-store.js";
@@ -166,11 +167,11 @@ export function runView(run: WorkflowRun) {
   };
 }
 
-const runSummary = (run: WorkflowRun) => ({
+const runSummary = (run: WorkflowRunSummary) => ({
   run_id: run.id,
   status: run.status,
   uri: run.uri,
-  current_step: run.status === "running" ? (run.steps[run.step]?.id ?? null) : null,
+  current_step: run.currentStep,
   created_at: iso(run.createdAt),
 });
 
@@ -239,6 +240,8 @@ export class WorkflowManager {
     }
     return {
       ...ref,
+      // The URI form that matches the skill's visibility, whichever form the caller used.
+      uri: skillUri({ name: ref.name, ownerId: ref.ownerId, visibility: served.skill.visibility }),
       skill: served.skill,
       revision: served.revision.revision,
       digest: file.digest,
@@ -391,7 +394,8 @@ export class WorkflowManager {
       const run = await this.getRun(runId);
       if (isFinished(run)) return runView(run);
       const state = run.steps[run.step] as StepState;
-      const jobId = state.jobId;
+      // A step being started has its job id in the lease only.
+      const jobId = state.jobId ?? run.lease?.jobId;
       state.status = "canceled";
       run.status = "canceled";
       run.updatedAt = this.now();
@@ -463,7 +467,9 @@ export class WorkflowManager {
       run.step += 1;
       if (run.step >= run.steps.length) run.status = "succeeded";
     } else {
-      this.fail(run, state, status, (payload.error as string | undefined) ?? `the job ${status}`);
+      const secrets = this.ctx.jobs ? secretValues(this.ctx.jobs.keys) : [];
+      const error = (payload.error as string | undefined) ?? `the job ${status}`;
+      this.fail(run, state, status, sanitizeText(error, secrets));
     }
     run.updatedAt = this.now();
     return (await this.own.saveWorkflowRun(this.me, run)) ?? (await this.reload(run));
@@ -497,66 +503,121 @@ export class WorkflowManager {
 
   /**
    * Start the current step's job under a lease, so two readers of the same
-   * run cannot both start it. A busy job slot leaves the step pending.
+   * run cannot both start it. The lease records the job id before the job
+   * starts: a reader that finds it expired adopts that job when it exists and
+   * starts the step again only when it never did. A busy job slot leaves the
+   * step pending.
    */
   private async startStep(run: WorkflowRun): Promise<WorkflowRun> {
+    const runner = this.runner();
     const now = this.now();
     if (run.lease && run.lease.until > now) return run;
+    if (run.lease) {
+      const adopted = await this.adopt(run, run.lease);
+      if (adopted) return adopted;
+    }
     const leasing = structuredClone(run);
-    leasing.lease = { id: crypto.randomUUID(), until: now + STEP_LEASE_MS };
-    (leasing.steps[leasing.step] as StepState).status = "starting";
-    const leased = await this.own.saveWorkflowRun(this.me, leasing);
-    if (!leased) return this.reload(run);
+    const lease = {
+      id: crypto.randomUUID(),
+      until: now + STEP_LEASE_MS,
+      jobId: crypto.randomUUID(),
+      estimateUsd: null as number | null,
+    };
+    leasing.lease = lease;
+    const leasingState = leasing.steps[leasing.step] as StepState;
+    leasingState.status = "starting";
+    leasingState.note = undefined;
+    let current = await this.own.saveWorkflowRun(this.me, leasing);
+    if (!current) return this.reload(run);
 
-    const runner = this.runner();
-    const state = leased.steps[leased.step] as StepState;
-    const definition = leased.manifest.steps[leased.step];
-    state.note = undefined;
+    let started = false;
     try {
+      const definition = current.manifest.steps[current.step];
       if (!definition) throw new WorkflowError("the run has no such step", "invalid");
-      await this.recheck(leased);
+      await this.recheck(current);
       const outputs = Object.fromEntries(
-        leased.steps.slice(0, leased.step).map((s) => [s.id, (s.outputs ?? []).map((o) => o.url)]),
+        current.steps
+          .slice(0, current.step)
+          .map((s) => [s.id, (s.outputs ?? []).map((o) => o.url)]),
       );
-      const request = renderStep(definition, leased.inputs, outputs);
+      const request = renderStep(definition, current.inputs, outputs);
       const prepared = prepareRun(request, this.ctx.limits);
       const remaining =
-        leased.maxCostUsd === undefined
+        current.maxCostUsd === undefined
           ? undefined
-          : Math.max(0, leased.maxCostUsd - leased.spentUsd);
-      assertSpendGuard(prepared.command, prepared.uncappedSpend, this.ctx.limits, remaining);
-      let estimateUsd: number | null = null;
+          : Math.max(0, current.maxCostUsd - current.spentUsd);
+      try {
+        assertSpendGuard(prepared.command, prepared.uncappedSpend, this.ctx.limits, remaining);
+      } catch (error) {
+        // A workflow takes its cost cap from the authorization, not from the call.
+        if (!(error instanceof MultixError)) throw error;
+        throw new WorkflowError(
+          error.message.replace(
+            "Pass max_cost_usd:",
+            "Authorize the workflow again with max_cost_usd:",
+          ),
+          "invalid",
+        );
+      }
       if (remaining !== undefined) {
         // The estimate cannot see an uncapped part, so only a proven ceiling counts then.
         const estimate = estimateCommand(prepared.command, request.options ?? {});
-        checkBudget(estimate, remaining, prepared.uncappedSpend ? "strict" : leased.costPolicy);
-        estimateUsd = estimate.high_usd;
+        checkBudget(estimate, remaining, prepared.uncappedSpend ? "strict" : current.costPolicy);
+        lease.estimateUsd = estimate.high_usd;
       }
-      const payload = await runner.run(prepared, 0);
+      // Record the estimate, and stop here if the run was canceled meanwhile.
+      const ready = await this.own.saveWorkflowRun(this.me, { ...current, lease });
+      if (!ready) return this.reload(run);
+      current = ready;
+      started = true;
+      const payload = await runner.run(prepared, 0, lease.jobId);
+      const state = current.steps[current.step] as StepState;
       state.jobId = payload.job_id as string;
       state.status = payload.status as StepStatus;
-      state.estimateUsd = estimateUsd;
-      leased.spentUsd += estimateUsd ?? 0;
+      state.estimateUsd = lease.estimateUsd;
+      current.spentUsd += lease.estimateUsd ?? 0;
     } catch (error) {
+      const state = current.steps[current.step] as StepState;
       if (error instanceof JobCapacityError) {
         state.status = "pending";
         state.note = `waiting for a free job slot (${error.message}); read the run again later`;
-      } else if (error instanceof MultixError) {
+      } else if (error instanceof MultixError && !started) {
         const secrets = this.ctx.jobs ? secretValues(this.ctx.jobs.keys) : [];
-        this.fail(leased, state, "failed", sanitizeText(error.message, secrets));
+        this.fail(current, state, "failed", sanitizeText(error.message, secrets));
       } else {
-        state.status = "pending";
-        leased.lease = undefined;
-        await this.own.saveWorkflowRun(this.me, leased);
+        // The job may have started: keep the lease, so a later reader adopts it or starts again.
         throw error;
       }
     }
-    leased.lease = undefined;
-    leased.updatedAt = this.now();
-    const saved = await this.own.saveWorkflowRun(this.me, leased);
+    current.lease = undefined;
+    current.updatedAt = this.now();
+    const saved = await this.own.saveWorkflowRun(this.me, current);
     if (saved) return saved;
     // Canceled while the job started: stop the job too.
-    if (state.jobId) await runner.cancel(state.jobId).catch(() => undefined);
+    if (started) await runner.cancel(lease.jobId).catch(() => undefined);
     return this.reload(run);
+  }
+
+  /** Record the job an expired lease started; null when it never started. */
+  private async adopt(
+    run: WorkflowRun,
+    lease: NonNullable<WorkflowRun["lease"]>,
+  ): Promise<WorkflowRun | null> {
+    let payload: Record<string, unknown>;
+    try {
+      payload = await this.runner().status(lease.jobId);
+    } catch (error) {
+      if (error instanceof JobNotFoundError) return null;
+      throw error;
+    }
+    const next = structuredClone(run);
+    const state = next.steps[next.step] as StepState;
+    state.jobId = lease.jobId;
+    state.status = payload.status as StepStatus;
+    state.estimateUsd = lease.estimateUsd;
+    next.spentUsd += lease.estimateUsd ?? 0;
+    next.lease = undefined;
+    next.updatedAt = this.now();
+    return (await this.own.saveWorkflowRun(this.me, next)) ?? (await this.reload(run));
   }
 }

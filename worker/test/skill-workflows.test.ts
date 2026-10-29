@@ -10,6 +10,7 @@ import type { JobToolsContext } from "../src/jobs/job-runner.js";
 import { type JobBackend, JobStore } from "../src/jobs/job-store.js";
 import { prepareRun } from "../src/jobs/run-argv-builder.js";
 import { WorkflowManager } from "../src/skills/workflow-manager.js";
+import { STEP_LEASE_MS } from "../src/skills/workflow-manager.js";
 import {
   WORKFLOW_FILE,
   WorkflowManifestError,
@@ -17,7 +18,11 @@ import {
   renderStep,
   validateRunInputs,
 } from "../src/skills/workflow-manifest.js";
-import { MAX_ACTIVE_RUNS } from "../src/skills/workflow-store.js";
+import {
+  MAX_ACTIVE_RUNS,
+  MAX_STORED_RUNS,
+  type WorkflowRun,
+} from "../src/skills/workflow-store.js";
 import { fakeKv } from "./fake-kv.js";
 import { callTool, fullEnv, rpc } from "./helpers.js";
 import { OTHER, OWNER, fakeRegistries, skillFiles } from "./skills-helpers.js";
@@ -56,10 +61,16 @@ class FakeBackend implements JobBackend {
   readonly canceled: string[] = [];
   private readonly polls = new Map<string, number>();
   fail = false;
+  /** The next start throws before the job exists, like a lost connection. */
+  failStart = false;
 
   constructor(private readonly runningPolls = 0) {}
 
   async start(jobId: string, spec: JobSpec): Promise<JobView> {
+    if (this.failStart) {
+      this.failStart = false;
+      throw new Error("connection lost");
+    }
     this.specs.set(jobId, spec);
     this.started.push(jobId);
     return { status: "running", createdAt: 1 };
@@ -149,6 +160,31 @@ async function authorize(manager: WorkflowManager, uri: string, extra: object = 
     digest: described.digest,
     ...extra,
   });
+}
+
+/**
+ * The registries with `onSave` run around every saveWorkflowRun of `owner`,
+ * to break or interleave saves.
+ */
+function intercepted(
+  registries: ReturnType<typeof fakeRegistries>,
+  onSave: (
+    run: WorkflowRun,
+    save: () => Promise<WorkflowRun | null>,
+  ) => Promise<WorkflowRun | null>,
+) {
+  return {
+    getByName(accountId: string) {
+      const real = registries.getByName(accountId);
+      return new Proxy(real, {
+        get(target, prop, receiver) {
+          if (prop !== "saveWorkflowRun") return Reflect.get(target, prop, receiver);
+          return (id: string, run: WorkflowRun) =>
+            onSave(run, () => target.saveWorkflowRun(id, run));
+        },
+      });
+    },
+  };
 }
 
 const URI = "skill://private/studio/SKILL.md";
@@ -251,6 +287,35 @@ describe("workflow manifest", () => {
 });
 
 describe("workflow publishing", () => {
+  it("refuses a positional that an absent optional input would leave out", () => {
+    const manifest = {
+      version: 1,
+      inputs: { a: { type: "string" }, b: { type: "string", required: true } },
+      steps: [{ id: "x", command: "gemini generate", args: ["{{inputs.a}}", "{{inputs.b}}"] }],
+    };
+    expect(() => parseWorkflowManifest(JSON.stringify(manifest))).toThrow(
+      /args\[0\]: positional .* needs a required input or one with a default/,
+    );
+    manifest.inputs.a = { type: "string", default: "A" } as never;
+    expect(parseWorkflowManifest(JSON.stringify(manifest)).steps[0]?.args).toHaveLength(2);
+  });
+
+  it("does not take inherited object keys for declared inputs", () => {
+    const manifest = {
+      ...TWO_STEPS,
+      steps: [
+        { id: "x", command: "gemini generate", options: { prompt: "{{inputs.constructor}}" } },
+      ],
+    };
+    expect(() => parseWorkflowManifest(JSON.stringify(manifest))).toThrow(
+      /input "constructor" is not declared/,
+    );
+    const parsed = parseWorkflowManifest(JSON.stringify(TWO_STEPS));
+    expect(() => validateRunInputs(parsed, { subject: "x", hasOwnProperty: "y" })).toThrow(
+      /unknown input "hasOwnProperty"/,
+    );
+  });
+
   it("refuses to publish a skill with an invalid manifest, in full or from a draft", async () => {
     const registries = fakeRegistries();
     const own = registries.getByName(OWNER);
@@ -355,6 +420,112 @@ describe("workflow runs", () => {
     const reads = await Promise.all([1, 2, 3].map(() => manager().status(run.run_id)));
     expect(backend.started).toHaveLength(2);
     expect(reads.some((r) => r.current_step === "restyle")).toBe(true);
+  });
+
+  it("adopts a job whose start was not recorded once the lease expires", async () => {
+    const { registries, backend, jobs, manager } = setup();
+    await publishWorkflow(registries);
+    await authorize(manager(), URI);
+    // The save that records the started job fails, as when the object resets.
+    let broken = true;
+    const flaky = intercepted(registries, async (run, save) => {
+      if (broken && !run.lease && run.steps[0]?.jobId) {
+        broken = false;
+        throw new Error("storage reset");
+      }
+      return save();
+    });
+    const at = (now: number) =>
+      new WorkflowManager({ userId: OWNER, registries: flaky, jobs, limits, now: () => now });
+    const t0 = Date.now();
+    await expect(at(t0).start(URI, { subject: "a fox", style: "ink" })).rejects.toThrow(
+      "storage reset",
+    );
+    const [run] = (await at(t0).list()).runs;
+    const runId = run?.run_id as string;
+    expect((await at(t0).status(runId)).steps[0]).toMatchObject({ status: "starting" });
+    expect(backend.started).toHaveLength(1);
+
+    const later = at(t0 + STEP_LEASE_MS + 1);
+    const adopted = await later.status(runId);
+    expect(adopted.steps[0]).toMatchObject({ job_id: backend.started[0] });
+    expect(backend.started).toHaveLength(1);
+    const next = await later.status(runId);
+    expect(next.current_step).toBe("restyle");
+    expect(backend.started).toHaveLength(2);
+  });
+
+  it("starts the step again when an expired lease's job never started", async () => {
+    const { registries, backend, jobs, manager } = setup();
+    await publishWorkflow(registries);
+    await authorize(manager(), URI);
+    backend.failStart = true;
+    await expect(manager().start(URI, { subject: "a fox" })).rejects.toThrow("connection lost");
+    const runId = (await manager().list()).runs[0]?.run_id as string;
+    expect(backend.started).toHaveLength(0);
+    const later = new WorkflowManager({
+      userId: OWNER,
+      registries,
+      jobs,
+      limits,
+      now: () => Date.now() + STEP_LEASE_MS + 1,
+    });
+    const restarted = await later.status(runId);
+    expect(restarted.steps[0]).toMatchObject({ job_id: backend.started[0] });
+    expect(backend.started).toHaveLength(1);
+  });
+
+  it("starts no job when the run is canceled while its step is being started", async () => {
+    const { registries, backend, jobs, manager } = setup();
+    await publishWorkflow(registries);
+    await authorize(manager(), URI);
+    let leases = 0;
+    const racing = intercepted(registries, async (run, save) => {
+      const saved = await save();
+      // Right after the lease is taken, another request cancels the run.
+      if (saved && run.lease && !run.steps[0]?.jobId && leases++ === 0) {
+        await manager().cancel(run.id);
+      }
+      return saved;
+    });
+    const run = await new WorkflowManager({
+      userId: OWNER,
+      registries: racing,
+      jobs,
+      limits,
+    }).start(URI, { subject: "a fox" });
+    expect(run.status).toBe("canceled");
+    expect(backend.started).toHaveLength(0);
+  });
+
+  it("leaves a step pending, not leased, when jobs are unavailable", async () => {
+    const { registries, backend, quota, manager } = setup();
+    await publishWorkflow(registries);
+    await authorize(manager(), URI);
+    quota.busy = true;
+    const run = await manager().start(URI, { subject: "a fox" });
+    quota.busy = false;
+    const noJobs = new WorkflowManager({ userId: OWNER, registries, limits });
+    await expect(noJobs.status(run.run_id)).rejects.toMatchObject({ reason: "unavailable" });
+    expect((await manager().status(run.run_id)).steps[0]).toMatchObject({ status: "running" });
+    expect(backend.started).toHaveLength(1);
+  });
+
+  it("keeps the newest runs and drops the oldest finished ones", async () => {
+    const { registries, manager } = setup();
+    const oneStep = { version: 1, steps: [TWO_STEPS.steps[0]], inputs: TWO_STEPS.inputs };
+    await publishWorkflow(registries, oneStep);
+    await authorize(manager(), URI);
+    const ids: string[] = [];
+    for (let i = 0; i < MAX_STORED_RUNS + 2; i++) {
+      const run = await manager().start(URI, { subject: `s${i}` });
+      expect((await manager().status(run.run_id)).status).toBe("succeeded");
+      ids.push(run.run_id);
+    }
+    const listed = (await manager().list()).runs.map((r) => r.run_id);
+    expect(listed).toHaveLength(MAX_STORED_RUNS);
+    expect(listed[0]).toBe(ids.at(-1));
+    await expect(manager().status(ids[0] as string)).rejects.toMatchObject({ reason: "not_found" });
   });
 
   it("voids the authorization when a new revision is published", async () => {
