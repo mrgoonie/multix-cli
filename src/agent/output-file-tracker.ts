@@ -66,17 +66,21 @@ function realDir(dir: string): string | undefined {
 }
 
 function isInside(dir: string, parent: string): boolean {
-  return dir === parent || dir.startsWith(`${parent}${path.sep}`);
+  return (
+    dir === parent || dir.startsWith(parent.endsWith(path.sep) ? parent : `${parent}${path.sep}`)
+  );
 }
 
 /**
  * Files this run produced that still exist, excluding temp and ~/.multix state.
- * The output directory counts even when it lives under the OS temp dir (an
- * agent working in /tmp), so its files are never dropped as scratch files.
+ * An output directory strictly inside the OS temp dir (an agent working in /tmp)
+ * still counts; one at or above the temp dir itself would let scratch files in.
  */
 export function producedFiles(extra: string[] = []): string[] {
   const tmp = fs.realpathSync(os.tmpdir());
-  const outDir = realDir(resolveOutputDir());
+  const resolvedOut = realDir(resolveOutputDir());
+  const outDir =
+    resolvedOut && resolvedOut !== tmp && isInside(resolvedOut, tmp) ? resolvedOut : undefined;
   const state = path.join(os.homedir(), ".multix");
   const extras = new Set(extra.map((p) => path.resolve(p)));
   const all = new Set([...run.written, ...extras]);

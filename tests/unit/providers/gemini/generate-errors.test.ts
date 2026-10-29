@@ -118,6 +118,31 @@ describe("gemini generate failures", () => {
     }
   });
 
+  it("counts saved images, not requests, when one response had no image", async () => {
+    const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "multix-gen-"));
+    const savedOutputDir = process.env.MULTIX_OUTPUT_DIR;
+    process.env.MULTIX_OUTPUT_DIR = outDir;
+    _resetOutputDir();
+    const image = { inlineData: { mimeType: "image/png", data: "iVBORw0KGgo=" } };
+    const replies = [
+      () => new Response(JSON.stringify({ candidates: [{ content: { parts: [] } }] })),
+      () => new Response(JSON.stringify({ candidates: [{ content: { parts: [image] } }] })),
+      () => new Response("{}", { status: 503 }),
+    ];
+    let calls = 0;
+    vi.stubGlobal("fetch", async () => (replies[calls++] as () => Response)());
+    try {
+      await runAndCatch(["--num-images", "3"]);
+      expect(fs.readdirSync(outDir)).toHaveLength(1);
+      expect(run.partial?.rerunArgs).toEqual(["--num-images", "2"]);
+    } finally {
+      if (savedOutputDir === undefined) Reflect.deleteProperty(process.env, "MULTIX_OUTPUT_DIR");
+      else process.env.MULTIX_OUTPUT_DIR = savedOutputDir;
+      _resetOutputDir();
+      fs.rmSync(outDir, { recursive: true, force: true });
+    }
+  });
+
   it("adds no saved-images warning when the first request fails", async () => {
     vi.stubGlobal("fetch", async () => new Response("{}", { status: 503 }));
     await runAndCatch(["--num-images", "3"]);

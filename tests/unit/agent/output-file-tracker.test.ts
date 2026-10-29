@@ -41,9 +41,19 @@ describe("producedFiles", () => {
 
   it("still drops scratch files elsewhere under the OS temp dir", () => {
     process.env.MULTIX_OUTPUT_DIR = path.join(root, "out");
+    fs.mkdirSync(path.join(root, "out"));
     write(path.join(root, "scratch", "frame.png"));
     write(path.join(root, "out-sibling", "frame.png"));
     expect(producedFiles()).toEqual([]);
+  });
+
+  it("drops scratch files when the output directory is the temp dir or above it", () => {
+    const scratch = write(path.join(root, "multix-stdin-1", "stdin.png"));
+    for (const dir of [os.tmpdir(), path.dirname(fs.realpathSync(os.tmpdir()))]) {
+      process.env.MULTIX_OUTPUT_DIR = dir;
+      _resetOutputDir();
+      expect(producedFiles()).not.toContain(scratch);
+    }
   });
 
   it("keeps an explicit --output path under the OS temp dir", () => {

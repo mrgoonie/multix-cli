@@ -107,8 +107,9 @@ export function registerGenerateCommand(parent: Command): void {
           } catch (error) {
             // Images saved by earlier requests are paid for and stay on disk (and in
             // the envelope's outputs): say so, so a rerun asks only for the rest.
-            if (savedFiles.length > 0) {
-              const rest = numImages - i;
+            // Count saved images, not requests: a response with no image saved nothing.
+            const rest = numImages - savedFiles.length;
+            if (savedFiles.length > 0 && rest > 0) {
               logger.warn(
                 `Request ${i + 1} of ${numImages} failed after ${savedFiles.length} image(s) were saved: ${savedFiles.join(", ")}. Keep them and rerun with --num-images ${rest} for the rest.`,
               );

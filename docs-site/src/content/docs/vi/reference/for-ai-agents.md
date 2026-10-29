@@ -88,7 +88,7 @@ https://multix.zuey.me/llms.txt
 
 | Trường | Ý nghĩa |
 | --- | --- |
-| `outputs[]` | File lần chạy đã ghi: path tương đối, kích thước, MIME đoán từ nội dung, SHA-256, `width`/`height` của ảnh, `duration_s` của media (cần ffprobe). Lần chạy lỗi vẫn liệt kê các file đã lưu trước khi lỗi: hãy giữ lại. File trong thư mục output vẫn được tính kể cả khi thư mục đó nằm trong thư mục tạm của hệ điều hành; các file tạm khác thì không. |
+| `outputs[]` | File lần chạy đã ghi: path tương đối, kích thước, MIME đoán từ nội dung, SHA-256, `width`/`height` của ảnh, `duration_s` của media (cần ffprobe). Lần chạy lỗi vẫn liệt kê các file đã lưu trước khi lỗi: hãy giữ lại. File trong thư mục output (`MULTIX_OUTPUT_DIR` hoặc `./multix-output`) và file `--output` chỉ định rõ vẫn được tính kể cả khi nằm trong thư mục tạm của hệ điều hành; các file tạm khác thì không. |
 | `warnings[]` | Vấn đề tìm thấy trong output, ví dụ file rỗng hoặc nội dung không khớp phần mở rộng. |
 | `data` / `text` | stdout của lệnh: JSON đã parse, hoặc text tối đa 32 KB. |
 | `error` | `code`, `message`, `retryable`, `retry_after_s`, `hint`, `http_status`, `env` (tên key khi thiếu key). Query string của URL trong `message` và `log` đều bị che, kể cả URL đầu vào đã ký mà provider lặp lại trong thông báo lỗi. |

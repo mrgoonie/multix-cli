@@ -88,7 +88,7 @@ https://multix.zuey.me/llms.txt
 
 | Field | Meaning |
 | --- | --- |
-| `outputs[]` | Files the run wrote: relative path, size, MIME type sniffed from the content, SHA-256, image `width`/`height`, media `duration_s` (with ffprobe). A failed run still lists the files it saved before the failure: keep them. Files in the output directory count even when it is under the OS temp dir; other temp files do not. |
+| `outputs[]` | Files the run wrote: relative path, size, MIME type sniffed from the content, SHA-256, image `width`/`height`, media `duration_s` (with ffprobe). A failed run still lists the files it saved before the failure: keep them. Files in the output directory (`MULTIX_OUTPUT_DIR` or `./multix-output`) and an explicit `--output` count even under the OS temp dir; other temp files do not. |
 | `warnings[]` | Problems found in the outputs, such as an empty file or content that does not match its extension. |
 | `data` / `text` | The command's stdout: parsed JSON, or text capped at 32 KB. |
 | `error` | `code`, `message`, `retryable`, `retry_after_s`, `hint`, `http_status`, `env` (the key name when one is missing). URL query strings in `message` and `log` are redacted, including a pre-signed input URL a provider echoes back in its error. |
