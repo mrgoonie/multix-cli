@@ -123,9 +123,28 @@ export interface WaitForResultOptions {
   pollIntervalMs?: number;
 }
 
+/** Longest a single status or result request may take; fal's client default. */
+const MAX_REQUEST_TIMEOUT_MS = 120_000;
+/** Shortest timeout a request is started with, even right at the wait deadline. */
+const MIN_REQUEST_TIMEOUT_MS = 10_000;
+
+/** A request's timeout: the time left before the deadline, within the bounds above. */
+function requestTimeoutMs(deadline: number): number {
+  return Math.min(MAX_REQUEST_TIMEOUT_MS, Math.max(MIN_REQUEST_TIMEOUT_MS, deadline - Date.now()));
+}
+
+/** Wait before retrying a transient failure: Retry-After, at least the poll interval, never past the deadline. */
+function retryDelayMs(error: unknown, intervalMs: number, deadline: number): number {
+  const retryAfterMs = error instanceof HttpError ? error.retryAfterMs : undefined;
+  const delay = Math.max(retryAfterMs ?? 0, intervalMs);
+  return Math.min(delay, Math.max(1, deadline - Date.now()));
+}
+
 /**
  * Poll a submitted request's status_url until COMPLETED (bounded by a real
- * deadline, retrying transient network/5xx errors), then fetch response_url.
+ * deadline, retrying transient network/408/429/5xx errors), then fetch
+ * response_url, retrying the same errors until the deadline. Each request's
+ * timeout is bounded by the time left (see requestTimeoutMs).
  * Uses the URLs fal itself returned from submit rather than reconstructing
  * them, since the queue's status/result URLs are keyed by app id (first two
  * path segments of the model id), not the full endpoint id. Never submits.
@@ -156,7 +175,10 @@ export async function waitForFalResult(opts: WaitForResultOptions): Promise<FalR
     attempt++;
     let statusRes: FalStatusResponse;
     try {
-      statusRes = await client.getAbsolute<FalStatusResponse>(submit.status_url, logger);
+      statusRes = await client.requestAbsolute<FalStatusResponse>(submit.status_url, {
+        logger,
+        timeoutMs: requestTimeoutMs(deadline),
+      });
       lastError = undefined;
     } catch (e) {
       // The job is already submitted: a network error, 408, 429 or retryable 5xx is waited out
@@ -165,9 +187,7 @@ export async function waitForFalResult(opts: WaitForResultOptions): Promise<FalR
         lastError = e;
         const msg = e instanceof Error ? e.message : String(e);
         logger.debug(`attempt ${attempt} — transient error, retrying: ${msg}`);
-        const retryAfterMs = e instanceof HttpError ? e.retryAfterMs : undefined;
-        const delay = Math.max(retryAfterMs ?? 0, intervalMs);
-        await sleep(Math.min(delay, Math.max(1, deadline - Date.now())));
+        await sleep(retryDelayMs(e, intervalMs, deadline));
         continue;
       }
       const msg = e instanceof Error ? e.message : String(e);
@@ -181,13 +201,28 @@ export async function waitForFalResult(opts: WaitForResultOptions): Promise<FalR
     await sleep(intervalMs);
   }
 
-  try {
-    return await client.getAbsolute<FalResultResponse>(submit.response_url, logger);
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    throw new Error(`Failed to fetch result for fal request ${requestId}: ${msg}. ${resumeHint}`, {
-      cause: e,
-    });
+  // The job is finished and billed: a transient failure fetching its result is retried while
+  // the deadline allows; the last one is rethrown with its own class (e.g. RATE_LIMITED).
+  for (;;) {
+    try {
+      return await client.requestAbsolute<FalResultResponse>(submit.response_url, {
+        logger,
+        timeoutMs: requestTimeoutMs(deadline),
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (isTransientHttpError(e) && deadline - Date.now() > 0) {
+        logger.debug(`result fetch — transient error, retrying: ${msg}`);
+        await sleep(retryDelayMs(e, intervalMs, deadline));
+        continue;
+      }
+      throw new Error(
+        `Failed to fetch result for fal request ${requestId}: ${msg}. ${resumeHint}`,
+        {
+          cause: e,
+        },
+      );
+    }
   }
 }
 

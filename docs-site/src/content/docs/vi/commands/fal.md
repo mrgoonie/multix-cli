@@ -217,7 +217,9 @@ cũng dùng được ở đây.
   URL này cũng báo lỗi provider.
 - Polling bị giới hạn bởi `--wait-timeout` (deadline theo thời gian thực, đơn
   vị mili-giây) và tự retry lỗi network, 408, 429 (chờ theo `Retry-After`, không bao giờ quá hạn chót)
-  và phản hồi 5xx (trừ 501 và 505). Khi timeout hoặc gặp lỗi
+  và phản hồi 5xx (trừ 501 và 505), cả khi poll trạng thái lẫn khi lấy kết quả
+  sau khi job hoàn tất. Timeout của từng request bằng thời gian còn lại trước
+  hạn chót (tối thiểu 10 giây, tối đa 120 giây). Khi timeout hoặc gặp lỗi
   không khôi phục được, lệnh in request ID để bạn resume bằng
   `multix fal status` hoặc `multix fal result`.
 - Trích xuất media ưu tiên các field kết quả đã biết (`images[].url`,
