@@ -476,7 +476,41 @@ describe("prepareRun: rejections", () => {
       { command: "gemini edit-video", options: { prompt: "p", video: "/etc/passwd" } },
       /video/,
     ],
+    [
+      "count in exponent form the CLI reads as 100",
+      { command: "fal image", args: ["p"], options: { "num-images": "100e-2" } },
+      /--num-images must be a plain decimal number of at least 1/,
+    ],
+    [
+      "duration in exponent form the CLI reads as 60",
+      { command: "byteplus video", options: { prompt: "p", duration: "60e-1" } },
+      /--duration must be a plain decimal number of at least 1/,
+    ],
+    [
+      "fractional duration the CLI reads as 0",
+      { command: "byteplus video", options: { prompt: "p", duration: "0.5" } },
+      /--duration must be a plain decimal number of at least 1/,
+    ],
+    [
+      "hex count",
+      { command: "fal image", args: ["p"], options: { "num-images": "0x2" } },
+      /--num-images must be a plain decimal number/,
+    ],
+    [
+      "signed count",
+      { command: "fal image", args: ["p"], options: { "num-images": "+2" } },
+      /--num-images must be a plain decimal number/,
+    ],
   ])("rejects %s", (_label, request, message) => rejects(request, message));
+
+  it("accepts padded and fractional values within the caps", () => {
+    expect(() =>
+      run({ command: "fal image", args: ["p"], options: { "num-images": " 2 " } }),
+    ).not.toThrow();
+    expect(() =>
+      run({ command: "byteplus video", options: { prompt: "p", duration: "4.9" } }),
+    ).not.toThrow();
+  });
 });
 
 describe("prepareRun: speech", () => {
@@ -776,6 +810,40 @@ describe("prepareRun: runs the caps cannot bound", () => {
     expect(run({ command: "elevenlabs music", options: { prompt: "lofi" } }).uncappedSpend).toBe(
       "billed by the track length, which no server cap bounds",
     );
+  });
+
+  it("marks Sume and TopView runs the caps cannot bound", () => {
+    expect(
+      run({ command: "sume image", args: ["a cat"], options: { model: "m" } }).uncappedSpend,
+    ).toContain("--num-images is omitted");
+    expect(
+      run({ command: "sume image", args: ["a cat"], options: { model: "m", "num-images": 2 } }),
+    ).not.toHaveProperty("uncappedSpend");
+    expect(
+      run({
+        command: "sume image",
+        args: ["a cat"],
+        options: { model: "m", "num-images": 1, param: ["seed=1"] },
+      }).uncappedSpend,
+    ).toBe("with --param, the request reaches the provider as given");
+    const video = run({ command: "sume video", args: ["a wave"], options: { model: "m" } });
+    expect(video.uncappedSpend).toContain("catalog row sets the price");
+    expect(video.argv).not.toContain("--duration");
+    expect(
+      run({ command: "topview run", args: ["route"], options: { input: "{}" } }).uncappedSpend,
+    ).toBe("the request body is passed to the provider as given");
+    expect(
+      run({
+        command: "topview video-avatar",
+        options: { "avatar-id": "a", "tts-text": "hi", "voice-id": "v" },
+      }).uncappedSpend,
+    ).toBe("billed by the length of the script or audio");
+    expect(
+      run({
+        command: "topview product-anyshoot",
+        options: { mode: "background", count: 2 },
+      }),
+    ).not.toHaveProperty("uncappedSpend");
   });
 
   it("leaves capped commands unmarked and caps the voice-design count", () => {

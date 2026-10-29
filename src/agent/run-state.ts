@@ -36,6 +36,13 @@ export interface RunState {
   /** Usage from POST responses (summed) and the latest GET responses (last wins). */
   postUsage: ResponseUsage[];
   getUsage: Map<string, ResponseUsage>;
+  /**
+   * The run's POST responses report an amount the provider reserves, not one
+   * it charged (Sume refunds a submit's usage when the job fails or is
+   * canceled): they stay in metrics but never count as cost or credits. The
+   * charge comes from a later read of the job.
+   */
+  postAmountsReserved?: boolean;
   ids: string[];
   /** Index in calls[] of the response that first returned each id in ids. */
   idCalls: Map<string, number>;
@@ -199,7 +206,7 @@ export function summarizeUsage(state: RunState = run): UsageSummary | undefined 
   for (const [i, r] of records.entries()) {
     const isPost = i < state.postUsage.length;
     const settled = (key: "cost_usd" | "credits") =>
-      isPost && r.ids.some((id) => charged[key].has(id));
+      isPost && (state.postAmountsReserved === true || r.ids.some((id) => charged[key].has(id)));
     for (const key of ["cost_usd", "credits"] as const) {
       const src = r.sources?.[key];
       if (src && r[key] !== undefined && !settled(key) && !sources[key]?.includes(src)) {

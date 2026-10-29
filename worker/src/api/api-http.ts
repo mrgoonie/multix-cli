@@ -11,6 +11,7 @@ import { BodyTooLargeError, readBodyLimited } from "../http-guards.js";
 import { json } from "../http-responses.js";
 import { JobCapacityError, JobNotFoundError } from "../jobs/job-runner.js";
 import { logEvent, sanitizeText } from "../redaction.js";
+import { registryRefusal } from "../skills/skill-registry.js";
 
 export type ApiErrorCode =
   | "bad_request"
@@ -18,6 +19,7 @@ export type ApiErrorCode =
   | "forbidden"
   | "not_found"
   | "method_not_allowed"
+  | "conflict"
   | "payload_too_large"
   | "unsupported_media_type"
   | "rate_limited"
@@ -49,22 +51,21 @@ export function apiError(
   return json(status, { error: { code, message } }, headers);
 }
 
-/** Parse a JSON object body (application/json, at most MAX_BODY_BYTES). */
-export async function readJsonObject(request: Request): Promise<Record<string, unknown>> {
+/** Parse a JSON object body (application/json, at most `maxBytes`, MAX_BODY_BYTES by default). */
+export async function readJsonObject(
+  request: Request,
+  maxBytes = MAX_BODY_BYTES,
+): Promise<Record<string, unknown>> {
   const type = request.headers.get("content-type") ?? "";
   if (!/^application\/json\b/i.test(type)) {
     throw new ApiError(415, "unsupported_media_type", "Send the body as application/json");
   }
   let body: unknown;
   try {
-    body = JSON.parse(await readBodyLimited(request, MAX_BODY_BYTES));
+    body = JSON.parse(await readBodyLimited(request, maxBytes));
   } catch (error) {
     if (error instanceof BodyTooLargeError) {
-      throw new ApiError(
-        413,
-        "payload_too_large",
-        `The body must be at most ${MAX_BODY_BYTES} bytes`,
-      );
+      throw new ApiError(413, "payload_too_large", `The body must be at most ${maxBytes} bytes`);
     }
     throw new ApiError(400, "bad_request", "The body is not valid JSON");
   }
@@ -91,6 +92,13 @@ export function errorResponse(
   if (error instanceof JobNotFoundError) return apiError(404, "not_found", error.message);
   if (error instanceof JobCapacityError) {
     return apiError(429, "busy", error.message, { "retry-after": "60" });
+  }
+  const refusal = registryRefusal(error);
+  if (refusal && refusal !== "corrupt") {
+    const message = (error as Error).message;
+    if (refusal === "not_found") return apiError(404, "not_found", message);
+    if (refusal === "conflict") return apiError(409, "conflict", message);
+    return apiError(400, "bad_request", message);
   }
   if (error instanceof MultixError) {
     return apiError(400, "bad_request", sanitizeText(error.message, secrets));

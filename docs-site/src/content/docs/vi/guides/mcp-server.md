@@ -25,10 +25,12 @@ thay đổi cách `multix` chạy trên máy bạn.
 | `multix_job_status` | Đọc job `multix_run`: trạng thái, URL output, stdout và phần cuối của stderr. |
 | `multix_job_cancel` | Dừng job đang chạy cùng container của nó. |
 | `multix_skills` | Đọc (chỉ đọc) [danh mục skill](#skill): `search` để tìm skill, `get` để lấy mục của một skill, `read` để đọc một file văn bản của skill. |
+| `multix_skills_manage` | [Tự tạo skill của bạn](#tự-tạo-skill-của-bạn): bản nháp, xuất bản, revision, cài đặt và chia sẻ trong nhóm. Tool này không bao giờ chạy skill. |
 
 `multix_catalog`, `multix_model_catalog` và `multix_skills` luôn được liệt kê. `multix_run`,
 `multix_job_status` và `multix_job_cancel` chỉ xuất hiện khi Worker có các binding chạy job
-(`MULTIX_JOBS` và `MULTIX_JOB_QUOTA`, xem [Triển khai](#triển-khai)).
+(`MULTIX_JOBS` và `MULTIX_JOB_QUOTA`, xem [Triển khai](#triển-khai)). `multix_skills_manage` chỉ
+xuất hiện khi Worker có binding `MULTIX_SKILLS`.
 
 ## Chạy lệnh CLI
 
@@ -141,23 +143,27 @@ các giới hạn trên nhìn thấy. `multix_catalog` đánh dấu chúng bằn
 hạn):
 
 - body request chuyển thẳng tới provider: `fal run`, `replicate run`,
-  `atlas run`, `heygen run`, `--input` của `replicate image` và
-  `replicate video`, `--input` / `--text-field` của `fal tts`,
-  `--provider-options` của `openrouter tts`, và `--flags` của
-  `byteplus generate-3d`;
+  `atlas run`, `heygen run`, `topview run`, `--input` của `replicate image`
+  và `replicate video`, `--input` / `--text-field` của `fal tts`, `--param`
+  của `sume image`, `--provider-options` của `openrouter tts`, và `--flags`
+  của `byteplus generate-3d`;
 - lần chạy tính tiền theo độ dài nguồn hoặc kịch bản: `heygen video`,
-  `heygen translate`, `heygen lipsync`, `elevenlabs dub`, và `heygen
-  video-agent` / `heygen template`, nơi agent hoặc template quyết định độ dài;
-- `atlas image`, `atlas image-to-image` và `replicate image` khi không có
-  `--num-images` / `--num-outputs`, lúc đó model tự chọn số output. Truyền số
-  lượng (tối đa `MULTIX_MCP_MAX_OUTPUTS`) giúp lần chạy được giới hạn trở lại;
+  `heygen translate`, `heygen lipsync`, `elevenlabs dub`, `topview
+  video-avatar`, `topview product-avatar`, và `heygen video-agent` /
+  `heygen template`, nơi agent hoặc template quyết định độ dài;
+- `sume video`, nơi dòng catalog của model quyết định giá, còn model lip-sync
+  và phụ đề tính tiền theo độ dài media nguồn;
+- `atlas image`, `atlas image-to-image`, `sume image` và `replicate image` khi
+  không có `--num-images` / `--num-outputs`, lúc đó model tự chọn số output.
+  Truyền số lượng (tối đa `MULTIX_MCP_MAX_OUTPUTS`) giúp lần chạy được giới hạn
+  trở lại;
 - `atlas video`, `atlas image-to-video`, `replicate video`, `openrouter
   image-to-video` và `heygen model-video` khi không có `--resolution`, lúc đó
   model tự chọn độ phân giải. Truyền một độ phân giải được phép giúp lần chạy
   được giới hạn trở lại, trừ `replicate video --model`, vì model đó có thể
-  không đọc giá trị này (model mặc định thì có). `fal video` không có option độ phân giải: các model
-  mặc định của nó xuất 720p, còn với `--model` thì model tự chọn độ phân giải,
-  nên lần chạy không bị giới hạn;
+  không đọc giá trị này (model mặc định thì có). `fal video` không có option
+  độ phân giải: các model mặc định của nó xuất 720p, còn với `--model` thì
+  model tự chọn độ phân giải, nên lần chạy không bị giới hạn;
 - độ dài âm thanh mà không giới hạn nào chặn được: `elevenlabs music` (tính
   tiền theo độ dài bản nhạc) và `--duration-seconds` của `elevenlabs sfx`.
 
@@ -186,6 +192,24 @@ bị giới hạn bởi `MULTIX_MCP_MAX_VIDEO_SECONDS`. Prompt không được b
 `@`, nên hãy đặt chữ trước `@tag` (`"a portrait of @hero"`). `runway video`
 mặc định không chờ, nên job kết thúc chỉ với task ID: đặt `"wait": true` trong
 `options` để nhận video, hoặc chạy `runway status <id> --wait --download` sau.
+
+**Sume và TopView.** Cả hai nhóm lệnh chạy được từ xa. Truyền các flag file
+(của Sume là `--image`, `--end-image`, `--reference-image`, `--video` và
+`--audio`; của TopView là các flag file của Legacy API và file của
+`topview upload`) dưới dạng URL `https://` trong `inputs`. `sume estimate`
+không upload gì, nên nhận media dưới dạng URL `https://` thông thường.
+`sume image --num-images` và `topview product-anyshoot --count` bị giới hạn
+bởi `MULTIX_MCP_MAX_OUTPUTS`, còn
+`sume video --duration` và `--resolution` bị giới hạn bởi các giới hạn video;
+hãy truyền một `--duration` có trong dòng catalog của model, vì nếu thiếu,
+server sẽ gửi độ dài mặc định của riêng nó. `topview run --input` phải là JSON
+viết trực tiếp, vì giá trị `@file` bị từ chối. `sume image`, `sume video`,
+`topview run` và các lệnh Legacy của TopView trừ `product-avatar` mặc định
+không chờ: đặt `"wait": true` trong `options`, hoặc tiếp tục sau bằng
+`sume status <id> --wait --download`,
+`topview status <kind> <taskId> --wait --download` hoặc
+`topview prediction <id> --wait --download`. Xem
+[Sume](/vi/commands/sume/) và [TopView](/vi/commands/topview/).
 
 **Speech.** `speech generate` phải nêu `--provider`. Job chỉ nhận key của các
 provider được nêu trong `--provider` và `--fallback`, không phải mọi key speech
@@ -229,8 +253,12 @@ bị bỏ qua.
   OpenRouter, OpenAI, MiniMax, Leonardo.Ai, BytePlus với `ARK_API_KEY` làm tên
   dự phòng, ElevenLabs, fal.ai, Atlas Cloud, Replicate với `REPLICATE_API_KEY`
   làm tên dự phòng, Runway với `RUNWAYML_API_SECRET` mang nhãn "API secret",
-  HeyGen), cùng account ID, API token và AI Gateway ID (tùy
-  chọn) của Cloudflare Workers AI.
+  HeyGen, Sume, TopView với `TOPVIEW_API_KEY` và `TOPVIEW_UID`, và TopView
+  Platform), cùng account ID, API token và AI Gateway ID (tùy chọn) của
+  Cloudflare Workers AI. `TOPVIEW_UID` là account ID chứ không phải secret,
+  nên được nhập bằng ô văn bản thường thay vì ô mật khẩu. Một job `topview`
+  nhận cả ba giá trị TopView; các lệnh Legacy cần `TOPVIEW_API_KEY` và
+  `TOPVIEW_UID`, các lệnh API Platform cần `TOPVIEW_PLATFORM_API_KEY`.
 
 ### API key cho REST API
 
@@ -307,7 +335,8 @@ Cloudflare.
    `/api/v1/events` trả về `503` và `server/discover` không cung cấp events.
    Binding `MULTIX_SKILLS` (class `AccountSkills`) giữ các
    [skill](#skill) riêng tư và skill nhóm của từng tài khoản; thiếu binding
-   này, server chỉ cung cấp skill dựng sẵn.
+   này, server chỉ cung cấp skill dựng sẵn, `multix_skills_manage` không được
+   liệt kê và các route `/api/v1/skills` trả về `503`.
 4. **Đặt secret** và triển khai:
 
    ```bash
@@ -479,10 +508,10 @@ Hai không gian URI nữa được dành cho skill của tài khoản, lưu theo
 khoản trong Durable Object `AccountSkills` dưới dạng các revision bất biến với
 file định địa chỉ theo nội dung (SHA-256): `skill://private/<name>/<file>` cho
 skill của riêng bạn và `skill://team/<ownerId>/<name>/<file>` cho skill nhóm
-bạn sở hữu hoặc được cấp quyền. Hiện chưa có API để xuất bản hay chia sẻ skill,
-nên trên thực tế mọi tài khoản đều chỉ thấy skill dựng sẵn. Skill của tài khoản
-khác không bao giờ hiện ra: skill không tồn tại và skill bị cấm nhận cùng một
-câu trả lời.
+bạn sở hữu hoặc được cấp quyền. Bạn tự xuất bản và chia sẻ chúng (xem
+[Tự tạo skill của bạn](#tự-tạo-skill-của-bạn)). Skill của tài khoản khác không
+bao giờ hiện ra, trừ khi tài khoản đó cấp cho bạn một skill nhóm và bạn đã thêm
+nó: skill không tồn tại và skill bị cấm nhận cùng một câu trả lời.
 
 ### Client giao thức 2026-07-28
 
@@ -535,6 +564,73 @@ Skill cài kèm package npm khớp với CLI bạn đã cài. Danh mục từ xa
 frontmatter và trong `_meta`) là phiên bản CLI của Worker đó. Khi hai bên khác
 nhau, agent dùng server này nên theo danh mục từ xa, còn agent chạy CLI trên
 máy nên theo skill cục bộ.
+
+### Tự tạo skill của bạn
+
+`multix_skills_manage` và các route REST dưới
+[`/api/v1/skills`](/vi/guides/rest-api/#skill) tạo, xuất bản và chia sẻ skill
+của riêng bạn. Cả hai dùng chung một đoạn code, nên cách kiểm tra, xung đột và
+giới hạn đều giống nhau. Mọi thao tác ghi đều vào registry của chính bạn: không
+tài khoản nào sửa được skill của tài khoản khác. Không thao tác nào ở đây chạy
+skill; việc đọc vẫn dùng các method ở trên.
+
+Quy trình, theo `action` của MCP (route REST trong ngoặc):
+
+1. `save_draft` (`PUT /skills/{skill}/draft`): thêm hoặc thay `files` (một
+   `path` kèm `text`, hoặc `base64` cho mọi loại file) và xóa các path trong
+   `delete`. Bản nháp mới bắt đầu từ revision đang phục vụ, từ
+   `from_revision`, hoặc từ chỗ không có file nào với `replace`. Bản nháp không
+   bao giờ được phục vụ.
+2. `get_draft` và `read_file` (`GET …/draft`, `GET …/files?path=`) hiển thị
+   bản nháp; `read_file` kèm `revision` thì đọc một revision đã lưu.
+3. `publish` (`POST …/publish`): bản nháp trở thành revision bất biến tiếp
+   theo, được phục vụ tại `skill://private/<name>/SKILL.md`, hoặc tại
+   `skill://team/<id tài khoản của bạn>/<name>/SKILL.md` khi `visibility` là
+   `team`. `name` trong frontmatter của `SKILL.md` phải trùng tên skill. Có thể
+   đặt `visibility`, `tags` và `capabilities` (task id hoặc `any`) cùng lúc;
+   skill mới mặc định là `private`.
+
+Số revision tăng dần theo từng skill và không bao giờ được dùng lại, kể cả sau
+khi revision đó bị xóa. `revisions` và `revision` liệt kê và xem chi tiết
+chúng; `set_current` (`POST …/current`) phục vụ một revision đã lưu khác (quay
+lui hoặc tiến lên); `unpublish` ngừng phục vụ skill nhưng giữ các revision;
+`delete_revision` xóa bất kỳ revision nào trừ revision đang phục vụ; `delete`
+xóa skill cùng mọi revision, bản nháp và các quyền đã cấp. `update`
+(`PATCH /skills/{skill}`) đổi `visibility`, `tags` và `capabilities`; đổi
+visibility sẽ chuyển skill sang URI còn lại và thu hồi mọi quyền đã cấp.
+
+Để không ghi đè thay đổi đồng thời, hãy gửi giá trị bạn đọc lần gần nhất
+(`get` trả về `draft.digest` và `skill.current_revision`); nếu không khớp, thao
+tác thất bại với `CONFLICT` (REST `409`):
+
+- `expected_digest`: digest của bản nháp, trên `save_draft`, `discard_draft`
+  và `publish`. Qua REST, `null` khi cập nhật bản nháp nghĩa là bạn cho rằng
+  chưa có bản nháp.
+- `expected_revision`: revision đang phục vụ, trên `publish`, `set_current`,
+  `unpublish` và `update`. "Không có revision nào được phục vụ" là `0` qua MCP
+  và `null` qua REST.
+
+Chia sẻ trong nhóm là tùy chọn của người nhận. Chủ của một skill nhóm gọi
+`grant` với một id tài khoản (`gh-<digits>`, chính là `id` của
+`GET /api/v1/me`); `grants` liệt kê các quyền đã cấp và `revoke` thu hồi một
+quyền. Việc cấp quyền không thêm gì vào danh mục của người nhận: người nhận gọi
+`add_shared` với `uri` của skill (`skill://team/<owner>/<name>/SKILL.md`) để
+liệt kê nó trong `skills/list` và `multix_skills`, và `remove_shared` để bỏ
+nó. Trong `list`, skill được chia sẻ có `available: false` khi chủ skill đã thu
+hồi quyền, ngừng phục vụ hoặc xóa skill. Một lần thu hồi chấm dứt việc liệt kê
+đó, kể cả khi chủ skill cấp quyền lại; khi đó người nhận phải thêm lại.
+
+Lỗi của tool bắt đầu bằng `INVALID_INPUT`, `NOT_FOUND` hoặc `CONFLICT` (REST
+`400`, `404`, `409`). Giới hạn:
+
+- mỗi tài khoản: 200 skill, 200 bản nháp và 200 skill được chia sẻ đã thêm;
+- mỗi skill: 100 revision đã lưu (xóa bớt revision cũ để xuất bản thêm), 100
+  quyền đã cấp, 512 file và 16 MiB, 1 MiB mỗi file;
+- mỗi lần cập nhật bản nháp mang tối đa 8 MiB file sau khi giải mã.
+
+Request MCP bị giới hạn 64 KiB, nên hãy chia file ra nhiều lần gọi
+`save_draft`, và tải một file không vừa trong một request lên bằng
+`PUT /api/v1/skills/{skill}/draft` (body tối đa khoảng 11 MiB).
 
 ## Cấu hình
 

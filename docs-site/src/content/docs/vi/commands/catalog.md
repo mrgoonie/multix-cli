@@ -73,17 +73,27 @@ chạy (`~/.multix/history.jsonl`, xem
 của tài khoản provider. Nhóm theo `--by provider|model|offering|task|command`.
 
 - Một **request** là một lần chạy đã ghi lại có gửi đi thứ gì đó; lần chạy
-  `--dry-run`, lần chạy chỉ ước tính giá và lần chạy lỗi trước khi tới provider
-  (thiếu key, sai flag) bị bỏ qua.
+  `--dry-run`, lần chạy chỉ ước tính giá và lần chạy không tới provider (thiếu
+  key, sai flag, lần tiếp tục chỉ đọc trạng thái cục bộ) bị bỏ qua.
 - Một **operation** là một phần việc: một lần submit cùng các lần poll trạng
   thái, tiếp tục và tải file chỉ tính một lần.
+- Kết quả được tính theo operation trên mọi dòng: operation **hoàn tất** khi có
+  ít nhất một lần chạy thành công, nên một lần poll trạng thái lỗi được ghi dưới
+  operation của job không bị tính là lỗi. Nếu không, lần chạy gần nhất quyết
+  định operation **lỗi** hay **bị hủy**. Tỉ lệ thành công là số operation hoàn
+  tất chia cho số operation.
+- Lần poll lỗi chưa từng nhận được provider id của job (request đầu tiên đã
+  lỗi) vẫn được ghi thành một operation riêng, nên có thể bị tính là lỗi. Việc
+  nhận diện operation qua nhiều lần chạy được theo dõi ở
+  [#424](https://github.com/mrgoonie/multix-cli/issues/424).
 - **Retry** là các lần gửi submit thất bại trước lần trả về job.
 - Chi tiêu tính mỗi operation một lần, chỉ từ các con số đã biết. Operation có
   chi phí không rõ hoặc không chắc chắn được đếm riêng, không bao giờ cộng như
   $0.
 - Model là model provider báo đã chạy; lần chạy không có thông tin này được gom
   vào `(unknown model)`.
-- Mỗi dòng hiển thị cỡ mẫu và mức tin cậy (none, low, medium, high).
+- Mỗi dòng hiển thị cỡ mẫu (số operation) và mức tin cậy (none, low, medium,
+  high).
 
 ## Rating, review và ghi chú
 
@@ -118,7 +128,7 @@ multix catalog note list -u product-ugc
 
 | Yếu tố | Trọng số | Được tính khi |
 | --- | --- | --- |
-| Độ tin cậy (tỉ lệ thành công qua multix) | 0.35 | ít nhất 5 lần chạy |
+| Độ tin cậy (tỉ lệ thành công qua multix) | 0.35 | ít nhất 5 operation |
 | Rating của bạn | 0.25 | ít nhất 3 rating |
 | Ghi chú use case của bạn | 0.2 | có ghi chú |
 | Giá tương đối cho đúng request này | 0.2 | có báo giá được xếp hạng |

@@ -14,6 +14,10 @@ import {
 import { PROVIDER_SECRET_NAMES } from "../src/provider-secret-names.js";
 import { loadCliProgram } from "./cli-program.js";
 
+// https://docs.topview.ai/reference/rules-for-consumption-rules.md
+const M2V_FLAT =
+  "TopView charges a marketing video a flat 5 credits on export, whatever its length or size";
+
 describe("CLI catalog", () => {
   it("matches the CLI's current commands (run `npm run catalog` in worker/ when this fails)", async () => {
     const program = await loadCliProgram();
@@ -72,7 +76,9 @@ describe("CLI catalog", () => {
     const fileish = /\b(?:file|files|path|paths|dir|directory|folder|filename|prefix|local)\b/i;
     const notPaths = new Set([
       "<json>", // inline JSON; a leading @ (read a file) is rejected for every value
+      "<json|@file>", // same as <json>
       "<id>", // provider-side IDs (e.g. a HeyGen destination folder)
+      "<fileId>", // a file already uploaded to the provider (TopView)
       "<str>", // plain text (e.g. align --text "... or pass --text-file")
       "<MB>", // a size
     ]);
@@ -137,19 +143,25 @@ describe("CLI catalog", () => {
       /pass-?through|request body|input fields|raw flags/i.test(description);
     // Groups that run locally in the container and bill no provider.
     const localGroups = new Set(["media"]);
+    // Commands that only quote a price: nothing is billed.
+    const quoteOnly = new Set(["sume estimate"]);
     const notSpend: Record<string, string> = {
       "elevenlabs transcribe num-speakers": "a hint for diarisation, not an output count",
       "fish tts chunk-length": "splits the text into requests; the text sets the price",
       "atlas image resolution": "an image resolution tier; image sizes are not capped (#447)",
       "atlas image-to-image resolution":
         "an image resolution tier; image sizes are not capped (#447)",
+      "sume image resolution": "an image resolution tier; image sizes are not capped (#447)",
+      "topview url-to-video video-length-type": M2V_FLAT,
+      "topview materials-to-video video-length-type": M2V_FLAT,
+      "topview product-anyshoot location": "where the product goes (four points), not a raw body",
     };
     const missing: string[] = [];
     const used = new Set<string>();
     for (const group of CLI_CATALOG.groups) {
       if (localGroups.has(group.group)) continue;
       for (const command of group.commands) {
-        if (EXCLUDED_COMMANDS.has(command.command)) continue;
+        if (EXCLUDED_COMMANDS.has(command.command) || quoteOnly.has(command.command)) continue;
         const policy = policyFor(command.command);
         if (policy.uncappedSpend) continue;
         const caps = policy.caps;
@@ -186,6 +198,9 @@ describe("CLI catalog", () => {
     // marked uncapped (or the model that sets it listed with the reason).
     const fixedResolution: Record<string, string> = {
       "runway video": "--ratio is checked against each model's fixed list (at most 1920x1080)",
+      "topview url-to-video": M2V_FLAT,
+      "topview materials-to-video": M2V_FLAT,
+      "topview m2v-export": M2V_FLAT,
     };
     const missing: string[] = [];
     for (const group of CLI_CATALOG.groups) {
