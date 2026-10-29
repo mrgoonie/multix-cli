@@ -130,6 +130,8 @@ export function trackInFlight(id: string, resume: string, state: RunState = run)
  * result read), so the run joins that job's operation; its id goes in provider_ids.
  */
 export function nameJob(id: string, state: RunState = run): void {
+  // Same bound as an id read from a response: a longer argument is not a job id.
+  if (!id || id.length > 128) return;
   state.namedJob = id;
   if (!state.ids.includes(id)) state.ids.unshift(id);
 }
