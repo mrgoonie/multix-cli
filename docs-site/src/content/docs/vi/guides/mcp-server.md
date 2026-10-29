@@ -149,15 +149,16 @@ hạn):
 - `atlas image`, `atlas image-to-image` và `replicate image` khi không có
   `--num-images` / `--num-outputs`, lúc đó model tự chọn số output. Truyền số
   lượng (tối đa `MULTIX_MCP_MAX_OUTPUTS`) giúp lần chạy được giới hạn trở lại.
-- kích thước, chất lượng, mức phân giải hoặc hệ số upscale ảnh do người gọi
-  đặt, vì chúng thay đổi giá mỗi ảnh mà không giới hạn nào chặn được: `--size`
-  của `gemini generate`, `byteplus generate` và `byteplus image-to-image`;
+- kích thước, chất lượng, mức phân giải, hệ số upscale ảnh hoặc chế độ model
+  đắt hơn do người gọi đặt, vì chúng thay đổi giá mỗi ảnh mà không giới hạn
+  nào chặn được: `--size` của `gemini generate`, `byteplus generate` và `byteplus image-to-image`;
   `--size` / `--quality` của `openai generate` và `openai image-to-image`;
   `--size` / `--resolution` của `atlas image` và `atlas image-to-image`;
-  `--image-size` của `openrouter generate` và `fal image`; `--width` /
-  `--height` của `leonardo generate` và `leonardo image-to-image`; và
-  `--multiplier` của `leonardo upscale`. Bỏ option đó thì giữ mặc định của
-  model và lần chạy vẫn được giới hạn.
+  `--image-size` của `openrouter generate` và `fal image`; `--ratio` của
+  `runway image`; `--width` / `--height` của `leonardo generate` và
+  `leonardo image-to-image`, và `--ultra` / `--alchemy` của `leonardo
+  generate`; và `--multiplier` của `leonardo upscale`. Bỏ option đó, hoặc
+  truyền đúng giá trị mặc định của CLI, thì lần chạy vẫn được giới hạn.
 
 Operator quyết định điều kiện cho các lần chạy này bằng
 `MULTIX_MCP_UNCAPPED_SPEND`. Ở chế độ `budget` (mặc định), lệnh gọi phải có

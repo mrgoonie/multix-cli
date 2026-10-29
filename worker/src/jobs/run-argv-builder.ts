@@ -219,7 +219,7 @@ export function prepareRun(
     else for (const v of value) argv.push(`--${name}=${v}`);
   }
   if (positionals.length > 0) argv.push("--", ...positionals);
-  const uncappedSpend = uncappedReason(policy, values, limits);
+  const uncappedSpend = uncappedReason(policy, options, values, limits);
   return {
     command: path,
     group,

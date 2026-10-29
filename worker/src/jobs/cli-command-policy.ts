@@ -69,9 +69,10 @@ export interface CommandPolicy {
   /** Options that make a run uncapped when given (a JSON body merged into the request). */
   uncappedOptions?: string[];
   /**
-   * Options that set an image's size, quality, resolution tier or upscale
-   * factor. They change the price per image and no operator cap bounds them,
-   * so a run that sets one is uncapped; omitting it keeps the model default.
+   * Options that set an image's size, quality, resolution tier, upscale factor
+   * or a pricier model mode. They change the price per image and no operator
+   * cap bounds them, so a run that sets one (to other than the CLI default) is
+   * uncapped; omitting it keeps the model default.
    */
   imageSizeOptions?: string[];
   /**
@@ -222,7 +223,10 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   },
   "fish voice-design": { caps: { count: ["count"] } },
   "fish clone": { fileOptions: { sample: "file", "transcript-file": "file" } },
-  "leonardo generate": { caps: { count: ["num"] }, imageSizeOptions: PIXEL_SIZE },
+  "leonardo generate": {
+    caps: { count: ["num"] },
+    imageSizeOptions: [...PIXEL_SIZE, "ultra", "alchemy"],
+  },
   "leonardo image-to-image": { caps: { count: ["num"] }, imageSizeOptions: PIXEL_SIZE },
   "leonardo upscale": { imageSizeOptions: ["multiplier"] },
   "leonardo video": { caps: { resolution: ["resolution"] } },
@@ -305,8 +309,10 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   },
   // --ratio is checked against each model's fixed list by the CLI (at most 1920x1080).
   "runway video": { fileOptions: { image: "file" }, caps: { duration: ["duration"] } },
+  // gen4_image is billed by output resolution (720p or 1080p), set by --ratio.
   "runway image": {
     fileOptions: { reference: "file" },
+    imageSizeOptions: ["ratio"],
     repeatable: ["reference", "reference-tag"],
   },
   "heygen video-agent": {

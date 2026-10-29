@@ -696,16 +696,33 @@ describe("prepareRun: runs the caps cannot bound", () => {
       ["byteplus generate", [], { prompt: "a cat", size: "4K" }, "size"],
       ["leonardo generate", ["a cat"], { width: 1536 }, "width"],
       ["leonardo upscale", ["img-1"], { multiplier: 2 }, "multiplier"],
+      ["leonardo generate", ["a cat"], { ultra: true }, "ultra"],
+      ["leonardo image-to-image", [], { prompt: "a cat", ref: "img-1", height: 1536 }, "height"],
+      ["openai image-to-image", [], { prompt: "a cat", quality: "high" }, "quality"],
+      ["byteplus image-to-image", [], { prompt: "a cat", size: "4K" }, "size"],
+      ["runway image", ["a cat"], { ratio: "1920:1080" }, "ratio"],
       ["atlas image", ["a cat"], { "num-images": 1, resolution: "4k" }, "resolution"],
       ["atlas image", ["a cat"], { "num-images": 1, size: "2048*2048" }, "size"],
     ];
+    const ref = { ref: "https://cdn.example.com/in.png" };
     for (const [command, args, options, flag] of cases) {
-      expect(run({ command, args, options }).uncappedSpend, command).toBe(sized(flag));
+      const inputs =
+        command.endsWith("image-to-image") && !command.startsWith("leonardo") ? ref : {};
+      expect(run({ command, args, options, inputs }).uncappedSpend, command).toBe(sized(flag));
     }
-    // The model default stays capped.
+    // The model default stays capped, also when the caller repeats the CLI default.
     expect(run({ command: "openai generate", options: { prompt: "a cat" } })).not.toHaveProperty(
       "uncappedSpend",
     );
+    expect(
+      run({
+        command: "openai generate",
+        options: { prompt: "a cat", size: "1024x1024", quality: "medium" },
+      }),
+    ).not.toHaveProperty("uncappedSpend");
+    expect(
+      run({ command: "leonardo upscale", args: ["img-1"], options: { multiplier: 1.5 } }),
+    ).not.toHaveProperty("uncappedSpend");
     expect(
       run({ command: "atlas image", args: ["a cat"], options: { "num-images": 1 } }),
     ).not.toHaveProperty("uncappedSpend");

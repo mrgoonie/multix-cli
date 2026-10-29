@@ -153,15 +153,16 @@ the option that makes a run uncapped):
   `--num-images` / `--num-outputs`, where the model picks the number of
   outputs. Passing the count (at most `MULTIX_MCP_MAX_OUTPUTS`) makes the run
   capped again.
-- an image size, quality, resolution tier or upscale factor set by the
-  caller, which changes the price per image and no cap bounds: `--size` of
+- an image size, quality, resolution tier, upscale factor or pricier model
+  mode set by the caller, which changes the price per image and no cap bounds: `--size` of
   `gemini generate`, `byteplus generate` and `byteplus image-to-image`;
   `--size` / `--quality` of `openai generate` and `openai image-to-image`;
   `--size` / `--resolution` of `atlas image` and `atlas image-to-image`;
-  `--image-size` of `openrouter generate` and `fal image`; `--width` /
-  `--height` of `leonardo generate` and `leonardo image-to-image`; and
-  `--multiplier` of `leonardo upscale`. Omitting the option keeps the model
-  default and the run capped.
+  `--image-size` of `openrouter generate` and `fal image`; `--ratio` of
+  `runway image`; `--width` / `--height` of `leonardo generate` and
+  `leonardo image-to-image`, and `--ultra` / `--alchemy` of `leonardo
+  generate`; and `--multiplier` of `leonardo upscale`. Omitting the option,
+  or repeating the CLI default, keeps the run capped.
 
 The operator decides what such a run needs with `MULTIX_MCP_UNCAPPED_SPEND`.
 In `budget` mode (the default) the call must give `max_cost_usd`, and the job
