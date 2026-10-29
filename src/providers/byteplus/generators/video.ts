@@ -5,8 +5,8 @@
  *
  * Param encoding:
  *   - flags (default): append `--rs 1080p --dur 8 --rt 16:9 ...` inside content[0].text
- *   Audio is always the top-level `generate_audio` field.
  *   - structured: emit top-level `parameters` object
+ * Audio is always the top-level `generate_audio` field.
  */
 
 import { downloadFile } from "../../../core/http-client.js";
