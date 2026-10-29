@@ -203,3 +203,57 @@ carry no `id`, and Leonardo's status body does not carry `apiCreditCost`. Worth 
 - L3 kept: it is the same rule USD already uses, and a shared `MULTIX_OPERATION_ID` declares the runs to be one operation.
 - L4 kept: refused and no_request runs carry no usage, because error bodies are not parsed for it.
 - Residual risk filed as #439: the default operation id can name an upload id.
+
+## Re-review (261029)
+
+Date: 2026-10-29 (UTC). Scope: `git diff origin/dev...HEAD` (1a482ce, 045091f). Isolated reviewer; no source or test file modified.
+
+### Verification
+
+- `npx vitest run tests/unit`: 125 files passed, 8 skipped; 2195 tests passed, 22 skipped.
+- `npx tsc --noEmit`: clean. `biome check` on the 6 changed TS files: clean.
+- Offline probe (esbuild bundle of `src/` run from the session scratchpad, outside the repo), results quoted below.
+
+### Assessment
+
+The #424 path is fixed. A submit run and any number of `status` runs that share an `operation_id` count the credits once in every grouping of `catalog usage` and `history stats`, including when the status run lands in `(unknown model)` or in another command row. Each run's `usage` is only read, never mutated. The `Map<HistoryEntry, number>` identity is safe: both callers pass the same object references they then iterate (`entries.filter` keeps references), and `readHistory()` returns fresh objects per call. USD spend is unchanged: the new `credits` / `total_credits` fields are additive, and the `charges.length === 0 && !op.reported` skip still runs after credits are tallied, so `operations[]`, `total_usd`, `uncertain` and `unknown` are the same as before.
+
+### Findings
+
+**M1 (new regression). With a shared `MULTIX_OPERATION_ID`, credits move to another provider's row and can be lost.** `src/catalog/usage-aggregate.ts:83-88` and `src/budget/cost-receipt.ts:348-352`.
+Ledger-wide settlement places all of an operation's credits on its first charge run. The latest status read replaces the sum of the charges. Before this branch, each run kept its credits in its own row. Path: an agent exports `MULTIX_OPERATION_ID=job-42` for a pipeline: `leonardo generate` (10 credits), `runway video --no-wait`, `runway status` (40 credits). Probe result for `catalog usage --by provider` and `history stats --by provider`: `[["runway",null],["leonardo",40]]`. On `origin/dev` it was leonardo 10, runway 40. Leonardo's 10 credits disappear, and Runway's 40 credits are shown as Leonardo credits. These are different units, so summing them across providers means nothing. The default id `<provider>:<job id>` cannot cross providers, so only the explicit env var triggers this. The skill describes that variable as grouping "submit/poll/download runs", but nothing stops a pipeline-wide value. Fix: key the credit settlement by `(provider, operation_id)`, or by job id where one is present, before attributing. Or at least settle within a provider, so units never mix and never move between providers. Add a test with two providers under one operation id.
+
+**L1 (docs). "on its submit run's row" is not always true.** `docs-site/src/content/docs/reference/for-ai-agents.md:260-261`, `docs-site/src/content/docs/commands/catalog.md:81-84`, and the VI copies `vi/reference/for-ai-agents.md:259-260` and `vi/commands/catalog.md:84-87`.
+Attribution runs over the entries left after the caller's filters (`filterEntries` in `history-command.ts:32-41`, `--provider` / `--since` in `catalog-command.ts:358-362`). When `--since`, `-c status` or `--failed` leaves out the submit, or when the operation has no charge run, the credits appear on the latest status run that reported them. The count is still once per view, so no credits are lost or doubled. Only the wording overstates. Suggested wording: "on its submit run's row, or on its latest status run when the submit is outside the filtered runs". The VI text mirrors the EN text accurately.
+
+**L2 (pre-existing, now inconsistent with credits). USD can still be counted in two rows.** `src/catalog/usage-aggregate.ts:190-191` and `src/commands/agent/history-command.ts:133`.
+Spend is still settled per row. A status read that reports `cost_usd` (a settled observation) counts again in its own row. Probe: submit `fal:m1` at $0.50, plus a status read with no model reporting $0.50 → `[["fal:(unknown model)",0.5],["fal:m1",0.5]]`. This is not a regression. But in the same table, credits are now attributed ledger-wide while USD is not, and `for-ai-agents.md:259` says `history stats` "counts each operation's cost and credits once". Open a follow-up issue to give USD the same attribution, rather than widening this PR.
+
+**L3 (pre-existing, edge). Mixed ledger across the receipt upgrade.** `src/catalog/usage-aggregate.ts:71-74`.
+Say a submit was written before receipts existed (no `cost`, `usage.credits` 40) and its `status` ran after the upgrade (receipt with credits 40). The submit keeps its own credits, and the status operation counts again. Probe: `[["runway",80]]`. This needs a receipt-less entry next to a receipted one for the same job, so it is very unlikely today. No action needed.
+
+**Info (pre-existing performance, not introduced).** `src/catalog/usage-aggregate.ts:183`.
+`groups.set(key, [...(groups.get(key) ?? []), e])` copies the array on every append, so a group costs O(n^2). Probe on 100k entries (`--by command`, 2 groups): `aggregateUsage` 47 s. The new `creditsByEntry` costs 263 ms for the same input, and 80 ms for one operation with 5,000 runs. Line 76 has the same copy pattern, but only per operation, so it is harmless. A 20 MB ledger (rotation limit) can hold tens of thousands of entries, so `catalog usage` and `catalog offering` can take seconds. Worth a separate issue (use `push`).
+
+### Checked and correct
+
+- `--failed`: a failed (uncertain) submit plus an ok status read. All runs give `[["runway video",40],["runway status",null]]`. With `--failed` the result is `[["runway video",null]]`, which matches `origin/dev` because the failed submit reported no credits.
+- `--since` excluding the submit: the credits land once on the status row, never twice.
+- Entries without a receipt keep `usage.credits` (legacy). Synthesized legacy receipts (`run:<id>`) are owned by the entry itself.
+- The owner fallback `reduce` without an initial value cannot see an empty array: non-null `total_credits` implies a non-noSpend receipt with credits, and that receipt passes the filter.
+- `aggregateUsage` attributes over `sent`. `historyStats` attributes over `counted`. Every receipted, non-dry entry is in both, so no owner is dropped from a row it should be in.
+- Tests are offline and assert real behaviour (two of them fail on 1a482ce, per the author's note). Gaps: no `history stats --by model` case where the status run has no `model`, no filtered-input case, and no multi-provider operation id case (M1).
+
+### Recommended actions
+
+1. M1: settle credits per provider (or per job) within an operation id, and add a cross-provider test.
+2. L1: adjust the EN and VI wording for filtered views.
+3. Open follow-up issues for L2 (cross-row USD) and the O(n^2) grouping.
+
+## Re-review resolution (author)
+
+- M1 fixed: `creditsByEntry` keys operations by provider and operation id, so a shared `MULTIX_OPERATION_ID` never mixes providers' credits. New test: leonardo 10 + runway 40 under one id. It fails without the key and passes with it.
+- L1 fixed: the docs say credits show "normally" on the submit row, or on the latest status run when a filter leaves the submit out.
+- L2 (USD across rows, predates this change) filed as #444.
+- L3 (a submit written before receipts, with a status run after) kept: the mixed ledger only exists across the upgrade boundary.
+- Info (quadratic grouping) filed as #445.

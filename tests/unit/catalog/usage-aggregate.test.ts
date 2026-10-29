@@ -353,6 +353,33 @@ describe("credits", () => {
     // A task known only from a status read still counts its credits once.
     expect(aggregateUsage([entries[1] as HistoryEntry], "offering")[0]?.credits).toBe(40);
   });
+
+  it("keeps each provider's credits apart under one shared operation id", () => {
+    const shared = (role: "charge" | "observation", credits: number, at = T0) =>
+      receipt({
+        operation_id: "job-42",
+        role,
+        status: "unknown",
+        provider_reported: { cost_usd: null, credits },
+        at,
+      });
+    const rows = aggregateUsage(
+      [
+        entry({ provider: "leonardo", command: "leonardo generate", cost: shared("charge", 10) }),
+        entry({ provider: "runway", command: "runway video", cost: shared("charge", 0) }),
+        entry({
+          provider: "runway",
+          command: "runway status",
+          cost: shared("observation", 40, "2026-10-27T10:05:00.000Z"),
+        }),
+      ],
+      "provider",
+    );
+    expect(rows.map((r) => [r.key, r.credits])).toEqual([
+      ["runway", 40],
+      ["leonardo", 10],
+    ]);
+  });
 });
 
 describe("grouping by model", () => {

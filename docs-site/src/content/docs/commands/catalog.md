@@ -78,7 +78,8 @@ account's usage. Group with `--by provider|model|offering|task|command`.
 - **Retries** are failed sends of a submit before the one that returned the job.
 - Spend counts each operation once from known figures. Operations whose cost is
   unknown or uncertain are counted separately, never added as $0.
-- Credits count each operation once too, in the row of its submit run: a
+- Credits count each operation once too, in the row of its submit run (or of
+  its latest status run when a filter leaves the submit out): a
   status run that repeats a task's credits keeps them in its own `usage`, but no
   row adds them again, even when the status run lands in another row (for
   example `(unknown model)`).

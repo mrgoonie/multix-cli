@@ -62,6 +62,8 @@ export function receiptOf(e: HistoryEntry): CostReceipt | undefined {
  * (the submit, which names the model), else on its latest run that reported
  * credits. A status run of the same task then adds nothing to any row, even
  * when it is grouped apart from its submit (no model, another command).
+ * Credits are settled per provider within an operation: one MULTIX_OPERATION_ID
+ * shared across providers never mixes their credits, which are different units.
  * Entries without a receipt keep their own credits.
  */
 export function creditsByEntry(entries: HistoryEntry[]): Map<HistoryEntry, number> {
@@ -73,7 +75,8 @@ export function creditsByEntry(entries: HistoryEntry[]): Map<HistoryEntry, numbe
       if (entry.usage?.credits !== undefined) out.set(entry, entry.usage.credits);
       continue;
     }
-    byOp.set(receipt.operation_id, [...(byOp.get(receipt.operation_id) ?? []), { entry, receipt }]);
+    const key = `${entry.provider}|${receipt.operation_id}`;
+    byOp.set(key, [...(byOp.get(key) ?? []), { entry, receipt }]);
   }
   for (const runs of byOp.values()) {
     const credits = settleOperations(runs.map((r) => r.receipt)).total_credits;
