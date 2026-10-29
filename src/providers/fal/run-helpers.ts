@@ -5,6 +5,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { trackInFlight } from "../../agent/run-state.js";
 import {
   PollTimeoutError,
   isRetryableServerStatus,
@@ -17,6 +18,7 @@ import { parseJsonInput } from "../../core/json-input.js";
 import type { Logger } from "../../core/logger.js";
 import { redactUrl } from "../../core/redact.js";
 import { type FalClient, HttpError, createFalClient, submitPath } from "./client.js";
+import { resultCommand } from "./request-receipt.js";
 import type { FalResultResponse, FalStatusResponse, FalSubmitResponse } from "./types.js";
 
 /** Parse `--input` as inline JSON or `@path/to/file.json`. */
@@ -121,6 +123,11 @@ export interface WaitForResultOptions {
   waitTimeoutMs?: number;
   /** Poll interval override — mainly for tests. Defaults to 3000ms. */
   pollIntervalMs?: number;
+  /**
+   * Command that fetches the accepted job's output without submitting it again
+   * (default `multix fal result <model> <id> --download`).
+   */
+  resume?: string;
 }
 
 /** Longest a single status or result request may take; fal's client default. */
@@ -150,10 +157,13 @@ function retryDelayMs(error: unknown, intervalMs: number, deadline: number): num
  * path segments of the model id), not the full endpoint id. Never submits.
  * A failed poll or fetch is rethrown with the request id and resume hint, and
  * the original error as `cause` so classifyError keeps its class and Retry-After.
+ * The job is tracked as in flight first: it is billed, so a run that fails or
+ * stops from here reports the resume command instead of a rerun.
  */
 export async function waitForFalResult(opts: WaitForResultOptions): Promise<FalResultResponse> {
   const { client, model, submit, logger } = opts;
   const requestId = submit.request_id;
+  trackInFlight(requestId, opts.resume ?? resultCommand(model, requestId));
   logger.info("Polling for completion...");
 
   const waitTimeoutMs = opts.waitTimeoutMs ?? 480_000;

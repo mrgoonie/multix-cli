@@ -15,7 +15,13 @@ import { type Logger, createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import { createFalClient, requireFalKey } from "../client.js";
 import { applyFileFlags, parseFileFlags } from "../local-files.js";
-import { type FalReceipt, buildReceipt, persistReceipt } from "../request-receipt.js";
+import {
+  type FalReceipt,
+  buildReceipt,
+  persistReceipt,
+  resultCommand,
+  resumeCommand,
+} from "../request-receipt.js";
 import {
   downloadResultMedia,
   extractMediaUrls,
@@ -124,6 +130,10 @@ export function registerFalRunCommand(parent: Command): void {
         submit,
         logger,
         waitTimeoutMs: Number.parseInt(opts.waitTimeout, 10) || 480_000,
+        resume: resumeCommand(
+          receipt?.result_command ?? resultCommand(model, submit.request_id),
+          opts.outputDir ? path.resolve(opts.outputDir) : undefined,
+        ),
       });
 
       if (opts.download === false) {

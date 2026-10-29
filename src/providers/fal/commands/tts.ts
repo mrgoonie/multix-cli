@@ -14,7 +14,13 @@ import { type Logger, createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import { appIdFromModel, createFalClient } from "../client.js";
 import { FAL_DEFAULTS } from "../models.js";
-import { type FalReceipt, buildReceipt, persistReceipt } from "../request-receipt.js";
+import {
+  type FalReceipt,
+  buildReceipt,
+  persistReceipt,
+  resultCommand,
+  resumeCommand,
+} from "../request-receipt.js";
 import { parseInputArg, submitFalRequest, waitForFalResult } from "../run-helpers.js";
 import { type SpeechFlags, buildSpeechRequest } from "../speech-input.js";
 import { FAL_SPEECH_MODELS, expectedAudioExt } from "../speech-models.js";
@@ -124,6 +130,10 @@ export async function runFalTts(flags: SpeechFlags, opts: FalTtsRun): Promise<Fa
     submit,
     logger,
     waitTimeoutMs: opts.waitTimeoutMs,
+    resume: resumeCommand(
+      receipt?.result_command ?? resultCommand(model, submit.request_id),
+      opts.outDir,
+    ),
   });
   const done = { requestId: submit.request_id, ...(receipt ? { receipt } : {}), result };
   if (!opts.download) return done;

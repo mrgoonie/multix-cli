@@ -10,6 +10,7 @@ import os from "node:os";
 import path from "node:path";
 import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { run } from "../../../../src/agent/run-state.js";
 import { classifyError } from "../../../../src/core/error-classify.js";
 import { MultixError, ValidationError } from "../../../../src/core/errors.js";
 import { _resetOutputDir } from "../../../../src/core/output-dir.js";
@@ -54,6 +55,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  run.inFlight = undefined;
+  run.ids = [];
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
@@ -474,5 +477,58 @@ describe("fal result failures", () => {
     const error = await resultError();
     expect(String(error)).not.toMatch(/process\.exit/);
     expect(classifyError(error).code).toBe("NETWORK_ERROR");
+  });
+});
+
+describe("a run that fails after fal accepted the job", () => {
+  const rateLimited = {
+    status: 429,
+    json: { detail: "slow down" },
+    headers: { "retry-after": "30" },
+  };
+
+  it("fal run tracks the job with a resume that keeps --output-dir", async () => {
+    const fake = stub({
+      ...submitRoute,
+      [`GET https://queue.fal.run/${MODEL}/requests/${REQUEST_ID}/status`]: [
+        { json: { status: "COMPLETED" } },
+      ],
+      [`GET https://queue.fal.run/${MODEL}/requests/${REQUEST_ID}`]: [rateLimited],
+    });
+    const outDir = path.join(tmp, "my clips");
+    const error = await cli("run", MODEL, "--input", '{"prompt":"x"}', "--output-dir", outDir).then(
+      () => expect.unreachable("fal run should fail"),
+      (e: unknown) => e,
+    );
+    expect(classifyError(error)).toMatchObject({ code: "RATE_LIMITED", retry_after_s: 30 });
+    expect(run.inFlight).toEqual({
+      id: REQUEST_ID,
+      resume: `multix fal result ${MODEL} ${REQUEST_ID} --download --output-dir '${outDir}'`,
+    });
+    expect(fake.calls.filter((c) => c.method === "POST")).toHaveLength(1);
+  });
+
+  it("fal image (submitAndWait) tracks the job with the default resume", async () => {
+    const model = "fal-ai/flux/schnell";
+    const app = "fal-ai/flux";
+    stub({
+      [`POST https://queue.fal.run/${model}`]: [
+        { json: { request_id: REQUEST_ID, status: "IN_QUEUE", ...queueUrls(app) } },
+      ],
+      [`GET https://queue.fal.run/${app}/requests/${REQUEST_ID}/status`]: [
+        { status: 400, json: { detail: "bad request" } },
+      ],
+    });
+    await expect(cli("image", "a cat", "-m", model)).rejects.toThrow(/Failed to poll status/);
+    expect(run.inFlight).toEqual({
+      id: REQUEST_ID,
+      resume: `multix fal result ${model} ${REQUEST_ID} --download`,
+    });
+  });
+
+  it("--detach tracks nothing: it returns once fal queued the job", async () => {
+    stub(submitRoute);
+    await cli("run", MODEL, "--input", '{"prompt":"x"}', "--detach");
+    expect(run.inFlight).toBeUndefined();
   });
 });

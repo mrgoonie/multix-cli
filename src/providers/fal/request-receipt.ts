@@ -54,6 +54,22 @@ export function hashInput(input: Record<string, unknown>): string {
   return `sha256:${digest.digest("hex")}`;
 }
 
+/**
+ * `multix fal result <model> <id> --download` plus extra arguments (quoted when
+ * needed): fetches a submitted request's output without submitting it again.
+ */
+export function resultCommand(model: string, requestId: string, extraArgs: string[] = []): string {
+  return [
+    `multix fal result ${shellQuote(model)} ${shellQuote(requestId)} --download`,
+    ...extraArgs.map(shellQuote),
+  ].join(" ");
+}
+
+/** The resume command of a waiting run: `base`, saving into `outputDir` when one was given. */
+export function resumeCommand(base: string, outputDir?: string): string {
+  return outputDir ? `${base} --output-dir ${shellQuote(outputDir)}` : base;
+}
+
 export function buildReceipt(opts: {
   model: string;
   requestId: string;
@@ -72,9 +88,7 @@ export function buildReceipt(opts: {
     submitted_at: (opts.now ?? new Date()).toISOString(),
     input_hash: hashInput(opts.input),
     status_command: `multix fal status ${target}`,
-    result_command: ["multix fal result", target, "--download", ...(opts.resultArgs ?? [])]
-      .map((a, i) => (i < 3 ? a : shellQuote(a)))
-      .join(" "),
+    result_command: resultCommand(opts.model, opts.requestId, opts.resultArgs),
   };
 }
 

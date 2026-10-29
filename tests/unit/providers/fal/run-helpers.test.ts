@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { run as runState } from "../../../../src/agent/run-state.js";
 import { classifyError } from "../../../../src/core/error-classify.js";
 import { HttpError, ProviderError, ValidationError } from "../../../../src/core/errors.js";
 import type { FalClient } from "../../../../src/providers/fal/client.js";
@@ -107,6 +108,8 @@ describe("submitAndWait", () => {
     globalThis.fetch = originalFetch;
     if (originalKey === undefined) process.env.FAL_KEY = undefined;
     else process.env.FAL_KEY = originalKey;
+    runState.inFlight = undefined;
+    runState.ids = [];
   });
 
   const STATUS_URL = "https://queue.fal.run/fal-ai/flux/requests/req-1/status";
@@ -316,6 +319,19 @@ describe("submitAndWait", () => {
       (e: unknown) => e,
     );
   }
+
+  it("tracks the accepted job as in flight, resumable with fal result", async () => {
+    mockQueue(
+      () => new Response(JSON.stringify({ status: "COMPLETED" }), { status: 200 }),
+      () => new Response("Too Many Requests", { status: 429, headers: { "retry-after": "30" } }),
+    );
+    await waitError();
+    expect(runState.inFlight).toEqual({
+      id: "req-1",
+      resume: "multix fal result fal-ai/flux/schnell req-1 --download",
+    });
+    expect(runState.ids).toContain("req-1");
+  });
 
   it("keeps Retry-After and the HTTP class of a 429 on the result fetch", async () => {
     mockQueue(
