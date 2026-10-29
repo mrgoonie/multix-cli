@@ -55,6 +55,8 @@ export interface AudioLengthRule {
    * the cap, the server sends the cap instead.
    */
   omittedSeconds: number;
+  /** Options with which the provider rejects this one: no value is filled when one is given. */
+  notWith?: string[];
 }
 
 export interface CommandPolicy {
@@ -250,13 +252,16 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   "elevenlabs clone": { fileOptions: { files: "file", audio: "file" } },
   "elevenlabs voice-changer": { fileOptions: { input: "file" } },
   "elevenlabs transcribe": { fileOptions: { input: "file" } },
-  // Billed by length: --music-length-ms sets it (30 s when omitted), and a
-  // --plan's section durations, which the caps cannot see.
+  // Billed by length: --music-length-ms sets it (the model picks up to 10 min
+  // when omitted, so the cap is sent), or a --plan's section durations, which
+  // the caps cannot see and with which the API rejects a length.
   "elevenlabs music": {
     fileOptions: { plan: "file" },
     uncappedOptions: ["plan"],
     caps: {
-      audioLength: [{ option: "music-length-ms", unitsPerSecond: 1000, omittedSeconds: 30 }],
+      audioLength: [
+        { option: "music-length-ms", unitsPerSecond: 1000, omittedSeconds: 600, notWith: ["plan"] },
+      ],
     },
   },
   // An omitted --duration-seconds lets the model pick, up to ElevenLabs' 30 s.

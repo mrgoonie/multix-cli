@@ -1,7 +1,8 @@
 /**
  * Operator caps for `multix_run`, the same limits the Worker's own image and
  * video tools enforce (MULTIX_MCP_MAX_OUTPUTS, MULTIX_MCP_MAX_VIDEO_SECONDS,
- * MULTIX_MCP_ALLOWED_RESOLUTIONS), plus MULTIX_MCP_MAX_AUDIO_SECONDS. Applied to the value the CLI would really
+ * MULTIX_MCP_ALLOWED_RESOLUTIONS), plus MULTIX_MCP_MAX_AUDIO_SECONDS for
+ * generated audio. Applied to the value the CLI would really
  * use: the caller's value, or else the CLI default.
  */
 
@@ -70,7 +71,8 @@ export function applyCaps(
       values.set(name, [String(limits.defaultVideoSeconds)]);
     }
   }
-  for (const { option: name, unitsPerSecond, omittedSeconds } of rules?.audioLength ?? []) {
+  for (const rule of rules?.audioLength ?? []) {
+    const { option: name, unitsPerSecond, omittedSeconds, notWith } = rule;
     const given = single(values, name);
     const maxUnits = limits.maxAudioSeconds * unitsPerSecond;
     if (given !== undefined) {
@@ -79,7 +81,10 @@ export function applyCaps(
           `--${name} must be at most ${maxUnits} (${limits.maxAudioSeconds} seconds) on this server`,
         );
       }
-    } else if (omittedSeconds > limits.maxAudioSeconds) {
+    } else if (
+      omittedSeconds > limits.maxAudioSeconds &&
+      !notWith?.some((other) => values.has(other))
+    ) {
       // The provider's own length could exceed the cap: send the cap instead.
       values.set(name, [String(maxUnits)]);
     }

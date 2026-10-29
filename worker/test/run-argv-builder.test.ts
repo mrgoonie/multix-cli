@@ -782,12 +782,23 @@ describe("prepareRun: runs the caps cannot bound", () => {
     });
     expect(sfx.argv).toContain("--duration-seconds=2.5");
     expect(sfx).not.toHaveProperty("uncappedSpend");
-    // Within the default cap, an omitted length is left to the provider (auto, or 30 s of music).
+    // Within the default cap, an omitted sfx length is left to the provider (auto, at most 30 s).
     expect(run({ command: "elevenlabs sfx", options: { text: "rain" } }).argv).toEqual([
       "elevenlabs",
       "sfx",
       "--text=rain",
     ]);
+    // The music model picks up to 10 minutes on its own, so an omitted length gets the cap.
+    const song = run({ command: "elevenlabs music", options: { prompt: "jazz" } });
+    expect(song.argv).toContain("--music-length-ms=30000");
+    expect(song).not.toHaveProperty("uncappedSpend");
+    // The API rejects a length next to a composition plan: none is filled, and the run is uncapped.
+    const planned = prepareRun(
+      { command: "elevenlabs music", inputs: { plan: "https://cdn.example.com/plan.json" } },
+      limitsFrom({ MULTIX_MCP_MAX_AUDIO_SECONDS: "10" }),
+    );
+    expect(planned.argv.some((a) => a.startsWith("--music-length-ms"))).toBe(false);
+    expect(planned.uncappedSpend).toBe("with --plan, the server caps do not bound the request");
     const tight = limitsFrom({ MULTIX_MCP_MAX_AUDIO_SECONDS: "10" });
     const music = prepareRun({ command: "elevenlabs music", options: { prompt: "jazz" } }, tight);
     expect(music.argv).toContain("--music-length-ms=10000");

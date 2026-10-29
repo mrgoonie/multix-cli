@@ -121,9 +121,9 @@ const VIDEO_SECONDS_DEFAULT = 10;
 const VIDEO_SECONDS_CEILING = 15;
 /** Duration sent when the caller omits one, so a provider default can never exceed the cap. */
 const VIDEO_SECONDS_WHEN_OMITTED = 5;
-/** ElevenLabs bounds a sound effect at 30 s and a song left without a length at 30 s. */
+/** ElevenLabs' longest sound effect. */
 const AUDIO_SECONDS_DEFAULT = 30;
-/** ElevenLabs Music's longest song is 5 minutes. */
+/** Half of ElevenLabs Music's 10-minute maximum. */
 const AUDIO_SECONDS_CEILING = 300;
 /** 768p is a HeyGen Video resolution between 720p and 1080p. */
 const RESOLUTIONS_DEFAULT = ["480p", "720p", "768p", "1080p"];

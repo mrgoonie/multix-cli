@@ -130,8 +130,8 @@ Server limits apply to `multix_run` too: the output count
 sent when a video command's default is unknown or longer), resolution
 (`MULTIX_MCP_ALLOWED_RESOLUTIONS`) and generated audio length
 (`MULTIX_MCP_MAX_AUDIO_SECONDS`: `elevenlabs sfx --duration-seconds` and
-`elevenlabs music --music-length-ms`, also sent when the provider's own length
-for an omitted value, 30 s, is longer). The server chooses the output directory,
+`elevenlabs music --music-length-ms`; an omitted music length is sent as the
+cap, since the model would otherwise pick up to 10 minutes). The server chooses the output directory,
 `--output` must be a plain file name, options the CLI turns into part of a
 file name (such as `elevenlabs voices design --output-prefix` or a dub
 language) accept only letters, digits, `_` and `-`, the OpenAI image commands
@@ -559,7 +559,7 @@ Set these as `vars` in `worker/wrangler.jsonc`:
 | `MULTIX_PUBLIC_URL` | — (required) | Public origin, for example `https://mcp.example.com`. Used for OAuth metadata, redirects and the GitHub callback. |
 | `MULTIX_MCP_MAX_OUTPUTS` | `4` (ceiling 10) | Maximum output count (for example `--num-images`) per `multix_run` call. |
 | `MULTIX_MCP_MAX_VIDEO_SECONDS` | `10` (ceiling 15) | Maximum video duration per call (for `gemini extend-video`, the new continuation). When a caller omits it and the command's default is unknown or longer, the server sends `min(5, cap)` seconds. |
-| `MULTIX_MCP_MAX_AUDIO_SECONDS` | `30` (ceiling 300) | Maximum generated audio length per call: `elevenlabs sfx --duration-seconds` and `elevenlabs music --music-length-ms`. When a caller omits it and the provider's own length (30 s) is longer, the server sends the cap. |
+| `MULTIX_MCP_MAX_AUDIO_SECONDS` | `30` (ceiling 300) | Maximum generated audio length per call: `elevenlabs sfx --duration-seconds` and `elevenlabs music --music-length-ms`. An omitted music length is sent as the cap (the model would pick up to 10 minutes), except with a `--plan`; an omitted sound effect length is sent as the cap only when the cap is below the 30 s provider maximum. |
 | `MULTIX_MCP_ALLOWED_RESOLUTIONS` | `480p,720p,768p,1080p` | Video resolutions a caller may request (`768p` is a HeyGen Video size). Anything else (for example `4k`), given or the command's default, is rejected before the job starts. |
 | `MULTIX_MCP_UNCAPPED_SPEND` | `budget` | Runs the caps above cannot bound (marked `uncapped_spend` in `multix_catalog`): `budget` runs one only with a `max_cost_usd` its price estimate proves (an unknown price is refused), `deny` refuses it, `allow` runs it. Any other value means `budget`. |
 | `MULTIX_MCP_ALLOWED_ORIGINS` | none | Exact browser origins (for example `https://app.example.com`) allowed to call `/mcp`. `*` and other wildcards are not supported: `*` only matches a literal `*` origin, which browsers never send. After the access token is checked, requests with any other `Origin` header get `403`; requests without an `Origin` (server-side clients) are allowed. Listed origins get CORS headers. `OPTIONS` preflights are answered for any origin by the OAuth layer. |
