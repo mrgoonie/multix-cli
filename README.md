@@ -985,8 +985,9 @@ instance runs at `https://multix.zuey.me/mcp` (invited GitHub accounts only).
   `multix_run` (run one CLI command, for example
   `gemini analyze` or `media optimize`, in its own Cloudflare Container with
   ffmpeg and ImageMagick; waits up to `wait_seconds`, default 25, max 40,
-  container start included), `multix_job_status`, `multix_job_cancel`, and
-  `multix_skills` (read-only skills catalogue; always listed).
+  container start included), `multix_job_status`, `multix_job_cancel`,
+  `multix_skills` (read-only skills catalogue; always listed), and
+  `multix_skills_manage` (author your own skills; listed with `MULTIX_SKILLS`).
   Each account runs at most `MULTIX_MAX_JOBS_PER_ACCOUNT` jobs at once
   (default 2; `busy: …` otherwise) and the server at most
   `MULTIX_MAX_JOBS_TOTAL` (default 10, keep it at or below the container
@@ -1011,8 +1012,10 @@ instance runs at `https://multix.zuey.me/mcp` (invited GitHub accounts only).
   `io.modelcontextprotocol/skills` extension (`skills/list`, `skills/get`,
   `resources/read`, `resources/directory/read`); 2025 clients use
   `resources/list`, `resources/read` and `multix_skills`. Reading a skill never
-  runs it. Private and team skills have a per-account store (`MULTIX_SKILLS`)
-  but no publish API yet. See
+  runs it. Private and team skills have a per-account store (`MULTIX_SKILLS`):
+  `multix_skills_manage` and the REST routes `/api/v1/skills` and
+  `/api/v1/skill-shares` draft, publish, roll back and share them (owner-only
+  writes; a grantee adds a shared team skill before it is listed). See
   [Skills](https://multix.zuey.me/guides/mcp-server/#skills).
 - Auth: OAuth 2.1 (dynamic client registration, PKCE) with GitHub sign-in.
   Only GitHub logins or verified emails in the `MULTIX_ALLOWED_USERS` secret

@@ -218,6 +218,12 @@ goes through the CLI runner. `multix_catalog`, `multix_model_catalog` and `multi
 listed; `multix_run`, `multix_job_status` and `multix_job_cancel` need the job
 container. `multix_skills` (search/get/read) serves the server's own skills
 (`skill://multix/...`); prefer them to this file when their versions differ.
+`multix_skills_manage` (when listed) authors the user's own skills: `save_draft`
+→ `publish` (immutable revisions; `set_current` rolls back), with
+`expected_digest`/`expected_revision` to get `CONFLICT` instead of overwriting.
+A team skill reaches another account only after `grant` (owner) and
+`add_shared` (grantee). It never runs a skill. MCP requests are capped at
+64 KiB; upload larger files with REST `PUT /api/v1/skills/{skill}/draft`.
 1. `multix_catalog` lists groups and whether the user saved keys
    (`has_keys`); `multix_catalog {"group": "gemini"}` shows each command's
    options and which ones take files.

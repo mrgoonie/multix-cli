@@ -16,7 +16,7 @@ phase 1 surfaces (`skills/list|get`, `resources/read`, `multix_skills`).
 - Same validation as phase 1 publishing (paths, media types, UTF-8 without BOM,
   frontmatter, 512 files / 16 MiB per skill, 1 MiB per file).
 - Optimistic concurrency: `expected_revision` (served revision) and
-  `expected_draft_digest`; a mismatch is a conflict (MCP `CONFLICT`, REST 409).
+  `expected_digest`; a mismatch is a conflict (MCP `CONFLICT`, REST 409).
 - No execution (phase 3). Built-ins stay read-only.
 
 ## Design
@@ -38,7 +38,7 @@ owner's object) and `removeShare`.
 Limits:
 
 - at most 100 revisions per skill;
-- a draft patch carries at most 8 MiB of decoded bytes (REST body cap 12 MiB
+- a draft patch carries at most 8 MiB of decoded bytes (REST body cap about 11 MiB
   on skill routes; MCP transport limits apply to the tool).
 
 Blob GC: deleting a skill, a revision or a draft removes the blobs that no
