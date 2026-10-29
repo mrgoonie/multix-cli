@@ -52,14 +52,9 @@ export function registerFalResultCommand(parent: Command): void {
         // The result body need not carry request_id: name the job so the run joins its operation.
         nameJob(requestId);
 
-        let result: FalResultResponse;
-        try {
-          result = await client.get<FalResultResponse>(resultPath(model, requestId), logger);
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : String(e);
-          logger.error(`Failed to fetch result for fal request ${requestId}: ${msg}`);
-          process.exit(1);
-        }
+        // A failed fetch throws: the run is classified from the error itself, not a log line.
+        // The request id is in an HttpError's URL and in the run's job id (nameJob above).
+        const result = await client.get<FalResultResponse>(resultPath(model, requestId), logger);
 
         if (!opts.download) {
           console.log(JSON.stringify(result, null, 2));
