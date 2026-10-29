@@ -257,7 +257,8 @@ multix rerun h_mfz3k2ab1c9d         # run it again (extra args are appended)
 ```
 
 `history stats` skips `--dry-run` and `--estimate` runs and counts each
-operation's cost once, from known figures only; `cost_uncertain_ops` and
+operation's cost and credits once (a submit and a later `status` of the same
+task count once), from known figures only; `cost_uncertain_ops` and
 `cost_unknown_ops` count the operations whose cost is uncertain or unknown, so
 `cost_usd` is a lower bound when either is present.
 

@@ -15,7 +15,8 @@
  *   the job (`job.attempt - 1`);
  * - spend is settled per operation (settleOperations): provider-reported
  *   figures settle it, uncertain or unknown costs stay out of the total and
- *   are counted instead, never added as $0;
+ *   are counted instead, never added as $0; credits are settled the same way,
+ *   so a status read that repeats a task's credits counts them once;
  * - the model is the resolved model the provider ran; runs without one are
  *   grouped under "(unknown model)" rather than guessed from the command.
  *
@@ -168,9 +169,10 @@ export function aggregateUsage(entries: HistoryEntry[], by: UsageGroup): UsageRo
       completed.length > 0 &&
       spend.unknown + spend.uncertain + unreceipted.size === 0 &&
       [...completedOps].every((id) => knownIds.has(id));
+    // Runs without a receipt (old ledger entries) add their own credits.
     const credits = list.reduce<number | undefined>(
-      (s, e) => (e.usage?.credits === undefined ? s : (s ?? 0) + e.usage.credits),
-      undefined,
+      (s, e) => (e.usage?.credits === undefined || receiptOf(e) ? s : (s ?? 0) + e.usage.credits),
+      spend.total_credits ?? undefined,
     );
     const durations = list.map((e) => e.duration_ms);
     const times = list.map((e) => e.ts).sort();

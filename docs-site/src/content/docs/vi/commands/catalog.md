@@ -81,6 +81,9 @@ của tài khoản provider. Nhóm theo `--by provider|model|offering|task|comma
 - Chi tiêu tính mỗi operation một lần, chỉ từ các con số đã biết. Operation có
   chi phí không rõ hoặc không chắc chắn được đếm riêng, không bao giờ cộng như
   $0.
+- Credits cũng tính mỗi operation một lần: lần chạy `status` lặp lại credits
+  của một task vẫn giữ chúng trong `usage` của nó, nhưng tổng không cộng lại lần
+  nữa.
 - Model là model provider báo đã chạy; lần chạy không có thông tin này được gom
   vào `(unknown model)`.
 - Mỗi dòng hiển thị cỡ mẫu và mức tin cậy (none, low, medium, high).

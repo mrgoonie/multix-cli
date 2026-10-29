@@ -293,6 +293,34 @@ describe("spend is known, unknown or uncertain, never $0", () => {
   });
 });
 
+describe("credits", () => {
+  it("counts a task's credits once across its submit run and a later status run", () => {
+    const row = rowFor([
+      entry({
+        usage: { credits: 40 } as HistoryEntry["usage"],
+        cost: receipt({
+          operation_id: "fal:t1",
+          status: "unknown",
+          provider_reported: { cost_usd: null, credits: 40 },
+        }),
+      }),
+      entry({
+        command: "fal status",
+        ts: "2026-10-27T10:05:00.000Z",
+        usage: { credits: 40 } as HistoryEntry["usage"],
+        cost: receipt({
+          operation_id: "fal:t1",
+          role: "observation",
+          status: "unknown",
+          provider_reported: { cost_usd: null, credits: 40 },
+          at: "2026-10-27T10:05:00.000Z",
+        }),
+      }),
+    ]);
+    expect(row).toMatchObject({ requests: 2, operations: 1, credits: 40 });
+  });
+});
+
 describe("grouping by model", () => {
   it("groups a run by the model the provider resolved", () => {
     expect(rowFor([entry({ model_resolved: "bytedance/seedance-2.5/text-to-video" })]).key).toBe(

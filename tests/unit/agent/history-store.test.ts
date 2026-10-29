@@ -11,6 +11,7 @@ import {
   readHistory,
   redactArgv,
 } from "../../../src/agent/history-store.js";
+import type { CostReceipt } from "../../../src/budget/cost-receipt.js";
 import { historyStats } from "../../../src/commands/agent/history-command.js";
 
 function entry(over: Partial<HistoryEntry>): HistoryEntry {
@@ -133,5 +134,30 @@ describe("historyStats", () => {
       credits: 5,
     });
     expect(rows[1]).toMatchObject({ provider: "gemini", runs: 1, tokens: 15 });
+  });
+
+  it("counts a task's credits once across its submit run and a later status run", () => {
+    const receipt = (role: "charge" | "observation", at: string): CostReceipt => ({
+      schema: "multix.cost/v1",
+      operation_id: "runway:t1",
+      role,
+      status: "unknown",
+      currency: "USD",
+      provider_reported: { cost_usd: null, credits: 40 },
+      actual_usd: null,
+      actual_source: null,
+      variance_usd: null,
+      at,
+    });
+    const rows = historyStats(
+      [
+        entry({ usage: { credits: 40 }, cost: receipt("charge", "2026-10-28T10:00:00.000Z") }),
+        entry({ usage: { credits: 40 }, cost: receipt("observation", "2026-10-28T10:05:00.000Z") }),
+        // An entry written before receipts existed keeps its own credits.
+        entry({ usage: { credits: 2 } }),
+      ],
+      "provider",
+    );
+    expect(rows[0]).toMatchObject({ provider: "fal", runs: 3, credits: 42 });
   });
 });

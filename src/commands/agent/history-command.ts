@@ -117,7 +117,8 @@ export function historyStats(entries: HistoryEntry[], by: "provider" | "model" |
     b.outputs += e.outputs?.length ?? 0;
     const receipt = receiptOf(e);
     if (receipt) b.receipts.push(receipt);
-    if (e.usage?.credits !== undefined) b.credits = (b.credits ?? 0) + e.usage.credits;
+    // Runs with a receipt have their credits settled per operation below.
+    else if (e.usage?.credits !== undefined) b.credits = (b.credits ?? 0) + e.usage.credits;
     const tok =
       e.usage?.tokens?.total ?? (e.usage?.tokens?.input ?? 0) + (e.usage?.tokens?.output ?? 0);
     if (tok) b.tokens = (b.tokens ?? 0) + tok;
@@ -129,6 +130,10 @@ export function historyStats(entries: HistoryEntry[], by: "provider" | "model" |
       // Spend counts each operation once (submit, polls and result reads share one).
       const spend = settleOperations(b.receipts);
       const priced = spend.operations.some((op) => op.actual_usd !== null);
+      const credits =
+        spend.total_credits === null && b.credits === undefined
+          ? undefined
+          : (spend.total_credits ?? 0) + (b.credits ?? 0);
       return {
         [by]: b.key,
         runs: b.runs,
@@ -139,7 +144,7 @@ export function historyStats(entries: HistoryEntry[], by: "provider" | "model" |
         ...(priced ? { cost_usd: Math.round(spend.total_usd * 1e4) / 1e4 } : {}),
         ...(spend.uncertain ? { cost_uncertain_ops: spend.uncertain } : {}),
         ...(spend.unknown ? { cost_unknown_ops: spend.unknown } : {}),
-        ...(b.credits !== undefined ? { credits: Math.round(b.credits * 1e6) / 1e6 } : {}),
+        ...(credits !== undefined ? { credits: Math.round(credits * 1e6) / 1e6 } : {}),
         ...(b.tokens !== undefined ? { tokens: b.tokens } : {}),
       };
     });
