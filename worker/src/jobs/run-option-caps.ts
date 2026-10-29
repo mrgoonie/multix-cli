@@ -2,8 +2,9 @@
  * Operator caps for `multix_run`, the same limits the Worker's own image and
  * video tools enforce (MULTIX_MCP_MAX_OUTPUTS, MULTIX_MCP_MAX_VIDEO_SECONDS,
  * MULTIX_MCP_ALLOWED_RESOLUTIONS), plus MULTIX_MCP_MAX_AUDIO_SECONDS for
- * generated audio and MULTIX_MCP_ALLOWED_IMAGE_MODELS for image models. Applied to the value the CLI would really
- * use: the caller's value, or else the CLI default.
+ * generated audio and MULTIX_MCP_ALLOWED_IMAGE_MODELS for image models.
+ * Applied to the value the CLI would really use: the caller's value, or else
+ * the CLI default.
  */
 
 import { commandCapability } from "../../../src/capabilities/command-capabilities.js";
