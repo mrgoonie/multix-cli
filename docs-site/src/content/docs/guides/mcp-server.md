@@ -136,7 +136,10 @@ file name (such as `elevenlabs voices design --output-prefix` or a dub
 language) accept only letters, digits, `_` and `-`, the OpenAI image commands
 always use the API driver, the Gemini video commands always use Gemini Omni
 Flash (an allowed resolution, 720p when permitted, is sent when the caller
-omits it), and `@file` values are rejected. Commands that
+omits it), the BytePlus Seedance video commands refuse a `--prompt`,
+`--negative` or `--aspect-ratio` that carries its own model flag (such as
+`--dur 12` or `--rs 1080p`, which Seedance would read from the prompt text
+past the caps), and `@file` values are rejected. Commands that
 change your own provider account (for example deleting an ElevenLabs voice)
 run like any other, with your key.
 

@@ -501,7 +501,54 @@ describe("prepareRun: rejections", () => {
       { command: "fal image", args: ["p"], options: { "num-images": "+2" } },
       /--num-images must be a plain decimal number/,
     ],
+    [
+      "Seedance duration and resolution written into the prompt",
+      { command: "byteplus video", options: { prompt: "a cat --dur 12 --rs 1080p" } },
+      /--prompt must not contain model flags/,
+    ],
+    [
+      "Seedance model flag with a space after the dashes",
+      { command: "byteplus video", options: { prompt: "a cat -- dur 12" } },
+      /--prompt must not contain model flags/,
+    ],
+    [
+      "Seedance model flag in the image-to-video prompt",
+      {
+        command: "byteplus image-to-video",
+        options: { prompt: "pan left --DURATION 12" },
+        inputs: { image: "https://example.com/a.png" },
+      },
+      /--prompt must not contain model flags/,
+    ],
+    [
+      "Seedance model flag in the reference-to-video prompt",
+      { command: "byteplus reference-to-video", options: { prompt: "p --frames 300" } },
+      /--prompt must not contain model flags/,
+    ],
+    [
+      "Seedance model flag in the negative prompt",
+      { command: "byteplus video", options: { prompt: "p", negative: 'blur" --dur 12' } },
+      /--negative must not contain model flags/,
+    ],
+    [
+      "Seedance model flag in the aspect ratio",
+      { command: "byteplus video", options: { prompt: "p", "aspect-ratio": "16:9 --rs 1080p" } },
+      /--aspect-ratio must not contain model flags/,
+    ],
   ])("rejects %s", (_label, request, message) => rejects(request, message));
+
+  it("keeps Seedance prompts with plain dashes", () => {
+    const prepared = run({
+      command: "byteplus video",
+      options: { prompt: "a well-known cat - running fast—at night", "aspect-ratio": "16:9" },
+    });
+    expect(prepared.argv).toEqual([
+      "byteplus",
+      "video",
+      "--prompt=a well-known cat - running fast—at night",
+      "--aspect-ratio=16:9",
+    ]);
+  });
 
   it("accepts padded and fractional values within the caps", () => {
     expect(() =>

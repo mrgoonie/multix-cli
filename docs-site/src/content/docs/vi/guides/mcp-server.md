@@ -133,8 +133,10 @@ phải là tên file thuần, option mà CLI ghép vào tên file (như
 `elevenlabs voices design --output-prefix` hoặc mã ngôn ngữ khi lồng tiếng) chỉ
 nhận chữ cái, chữ số, `_` và `-`, các lệnh ảnh OpenAI luôn dùng API driver,
 các lệnh video Gemini luôn dùng Gemini Omni Flash (khi người gọi bỏ trống độ
-phân giải, server gửi một giá trị được phép, ưu tiên 720p), và giá trị `@file`
-bị từ chối. Lệnh thay đổi chính tài khoản provider của bạn (ví
+phân giải, server gửi một giá trị được phép, ưu tiên 720p), các lệnh video
+BytePlus Seedance từ chối `--prompt`, `--negative` hoặc `--aspect-ratio` có
+chứa model flag riêng (như `--dur 12` hay `--rs 1080p`, mà Seedance sẽ đọc từ
+nội dung prompt và vượt qua giới hạn), và giá trị `@file` bị từ chối. Lệnh thay đổi chính tài khoản provider của bạn (ví
 dụ xóa một giọng ElevenLabs) chạy như mọi lệnh khác, bằng key của bạn.
 
 **Lần chạy giới hạn không chặn được.** Một số lần chạy tốn nhiều hơn những gì

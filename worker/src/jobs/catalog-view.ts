@@ -68,6 +68,7 @@ function commandDetail(command: CliCommand): Record<string, unknown> {
       if (policy.urlOptions?.includes(name)) view.https_url = true;
       if (policy.forced?.[name] !== undefined) view.forced = policy.forced[name];
       if (policy.nameOptions?.includes(name)) view.format = "letters, digits, _ and - only";
+      if (policy.inlineFlagOptions?.includes(name)) view.format = "no model flags such as --dur";
       if (name === OUTPUT_FILE_OPTION) view.output = "plain file name inside the job output";
       if (policy.uncappedOptions?.includes(name))
         view.uncapped_spend = "with this option, the request reaches the provider as given";

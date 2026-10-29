@@ -55,6 +55,8 @@ const OUTPUT_FILE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const ASSET_REF_RE = /^asset:[A-Za-z0-9_-]{1,128}$/;
 /** Values the CLI turns into part of a file name (see CommandPolicy.nameOptions). */
 export const NAME_PART_RE = /^[A-Za-z0-9_-]{1,64}$/;
+/** A model flag inside prompt text (see CommandPolicy.inlineFlagOptions), with or without a space after `--`. */
+export const INLINE_FLAG_RE = /--\s*[A-Za-z]/;
 
 const defaultIndex = new CatalogIndex();
 
@@ -153,6 +155,7 @@ export function prepareRun(
   const assetRefs = new Set(policy.assetRefOptions ?? []);
   const urlOptions = new Set(policy.urlOptions ?? []);
   const nameOptions = new Set(policy.nameOptions ?? []);
+  const inlineFlagOptions = new Set(policy.inlineFlagOptions ?? []);
   for (const [rawName, raw] of Object.entries(request.options ?? {})) {
     const name = rawName.replace(/^-+/, "");
     const option = OPTION_NAME_RE.test(name) ? options.get(name) : undefined;
@@ -172,6 +175,15 @@ export function prepareRun(
     if (value === null) continue;
     if (nameOptions.has(name) && value !== true && !value.every((v) => NAME_PART_RE.test(v))) {
       throw new ValidationError(`--${name} may contain only letters, digits, _ and - (at most 64)`);
+    }
+    if (
+      inlineFlagOptions.has(name) &&
+      value !== true &&
+      value.some((v) => INLINE_FLAG_RE.test(v))
+    ) {
+      throw new ValidationError(
+        `--${name} must not contain model flags such as --dur or --rs; set them with their own options`,
+      );
     }
     if (targets.has(name)) {
       const refs = value === true ? [] : value;
