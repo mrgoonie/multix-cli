@@ -212,10 +212,12 @@ mặc định không chờ, nên job kết thúc chỉ với task ID: đặt `"w
 `topview upload`) dưới dạng URL `https://` trong `inputs`. `sume estimate`
 không upload gì, nên nhận media dưới dạng URL `https://` thông thường.
 `sume image --num-images` và `topview product-anyshoot --count` bị giới hạn
-bởi `MULTIX_MCP_MAX_OUTPUTS`, còn
-`sume video --duration` và `--resolution` bị giới hạn bởi các giới hạn video;
-hãy truyền một `--duration` có trong dòng catalog của model, vì nếu thiếu,
-server sẽ gửi độ dài mặc định của riêng nó. `topview run --input` phải là JSON
+bởi `MULTIX_MCP_MAX_OUTPUTS`, còn `sume video --resolution` bị giới hạn bởi
+các độ phân giải được phép. `sume video --duration` không bị giới hạn (model
+không có thời lượng sẽ từ chối giá trị được điền, còn model lip-sync hiểu nó là
+độ dài audio), nên mọi lần chạy `sume video` đều đi qua
+`MULTIX_MCP_UNCAPPED_SPEND`; hãy truyền một `--duration` có trong dòng catalog
+của model. `topview run --input` phải là JSON
 viết trực tiếp, vì giá trị `@file` bị từ chối. `sume image`, `sume video`,
 `topview run` và các lệnh Legacy của TopView trừ `product-avatar` mặc định
 không chờ: đặt `"wait": true` trong `options`, hoặc tiếp tục sau bằng
