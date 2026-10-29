@@ -82,6 +82,7 @@ const NON_PROVIDER_GROUPS = new Set([
   "history",
   "rerun",
   "help",
+  "catalog",
 ]);
 
 /**
@@ -107,7 +108,7 @@ function setCommand(names: string[]): void {
 }
 
 /** Groups where a dry run means nothing (no provider request, or their own flag). */
-const NO_DRY_RUN_GROUPS = new Set(["check", "models", "guide", "history", "rerun"]);
+const NO_DRY_RUN_GROUPS = new Set(["check", "models", "guide", "history", "rerun", "catalog"]);
 
 /**
  * Add --json to every command, and --dry-run plus the cost flags to every
