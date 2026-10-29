@@ -492,6 +492,28 @@ describe("prepareRun: rejections", () => {
       /--duration must be a plain decimal number of at least 1/,
     ],
     [
+      "a Seedance prompt carrying its own duration and resolution",
+      { command: "byteplus video", options: { prompt: "a cat --dur 12 --rs 1080p" } },
+      /--prompt may not contain "--" followed by a letter/,
+    ],
+    [
+      "a Seedance negative prompt carrying a model flag",
+      {
+        command: "byteplus image-to-video",
+        inputs: { image: "https://example.com/a.png" },
+        options: { prompt: "p", negative: "blur --DUR 12" },
+      },
+      /--negative may not contain/,
+    ],
+    [
+      "a Seedance aspect ratio carrying a model flag",
+      {
+        command: "byteplus reference-to-video",
+        options: { prompt: "p", "aspect-ratio": "16:9 --dur 12" },
+      },
+      /--aspect-ratio may not contain/,
+    ],
+    [
       "hex count",
       { command: "fal image", args: ["p"], options: { "num-images": "0x2" } },
       /--num-images must be a plain decimal number/,
@@ -509,6 +531,10 @@ describe("prepareRun: rejections", () => {
     ).not.toThrow();
     expect(() =>
       run({ command: "byteplus video", options: { prompt: "p", duration: "4.9" } }),
+    ).not.toThrow();
+    // Dashes that are not a model-parameter token stay allowed in Seedance text.
+    expect(() =>
+      run({ command: "byteplus video", options: { prompt: "a cat -- then a dog—slowly, 2-3 s" } }),
     ).not.toThrow();
   });
 });

@@ -179,6 +179,15 @@ see a stored interaction's length, so it does not bound a chain beyond
 Google's own limit of 40 seconds in total; every call is billed to your own
 Gemini key.
 
+**BytePlus Seedance.** `byteplus video`, `byteplus image-to-video` and
+`byteplus reference-to-video` send `--resolution`, `--duration` and
+`--aspect-ratio` to BytePlus as `--rs`, `--dur` and `--rt` tokens inside the
+prompt text, where BytePlus reads them as model parameters. So that a prompt
+cannot override the capped values, the server refuses a `--prompt`,
+`--negative` or `--aspect-ratio` value that contains `--` followed by a letter
+(such as `--dur 12`); set the length and resolution with the command's own
+options instead.
+
 **Runway.** `runway video` and `runway image` can run remotely; give
 `--image` and each `--reference` as `https://` URLs in `inputs`, and
 `--duration` is capped by `MULTIX_MCP_MAX_VIDEO_SECONDS`. A prompt must not

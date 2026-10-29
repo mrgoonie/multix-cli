@@ -57,6 +57,13 @@ export interface CommandPolicy {
    * language code): letters, digits, `_` and `-` only, so it cannot add a path.
    */
   nameOptions?: string[];
+  /**
+   * Options the CLI writes into the prompt text, where the provider reads
+   * `--name value` tokens as model parameters (BytePlus Seedance's default
+   * encoding). A value with such a token is refused, so it cannot override a
+   * capped duration or resolution.
+   */
+  promptFlagOptions?: string[];
   /** Options the CLI collects when repeated but the catalog cannot tell (custom parser, no array default). */
   repeatable?: string[];
   caps?: CapRules;
@@ -123,6 +130,8 @@ export const OUTPUT_FILE_OPTION = "output";
 export const OUTPUT_DIR_OPTION = "output-dir";
 
 const VIDEO_CAPS: CapRules = { duration: ["duration"], resolution: ["resolution"] };
+/** Seedance puts these into the prompt text with `--rs`, `--dur`, `--rt` … appended. */
+const SEEDANCE_PROMPT_FLAGS = ["prompt", "negative", "aspect-ratio"];
 const OMNI_VIDEO_CAPS: CapRules = { ...VIDEO_CAPS, fillResolution: true };
 /** Veo leaves the Gemini API on 2026-10-22 and rejects --duration, which the caps always send. */
 const OMNI_MODEL = { model: "gemini-omni-1.1-flash" };
@@ -211,15 +220,17 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   "leonardo image-to-video": { caps: VIDEO_CAPS },
   "byteplus generate": { fileOptions: { "input-image": "file" }, caps: IMAGE_COUNT },
   "byteplus image-to-image": { fileOptions: { ref: "file" }, caps: IMAGE_COUNT },
-  "byteplus video": { caps: VIDEO_CAPS },
+  "byteplus video": { caps: VIDEO_CAPS, promptFlagOptions: SEEDANCE_PROMPT_FLAGS },
   "byteplus image-to-video": {
     filePositionals: ["image"],
     fileOptions: { "last-frame": "file" },
     caps: VIDEO_CAPS,
+    promptFlagOptions: SEEDANCE_PROMPT_FLAGS,
   },
   "byteplus reference-to-video": {
     fileOptions: { "ref-image": "file", "ref-video": "file", "ref-audio": "file" },
     caps: VIDEO_CAPS,
+    promptFlagOptions: SEEDANCE_PROMPT_FLAGS,
   },
   "byteplus generate-3d": { fileOptions: { "input-image": "file" } },
   "cloudflare generate-video": { caps: VIDEO_CAPS },
