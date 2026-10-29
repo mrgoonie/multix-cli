@@ -9,7 +9,7 @@
  */
 
 import type { Offering, QuoteRequest, Review, UseCaseNote } from "./catalog-types.js";
-import { compareOfferings } from "./price-compare.js";
+import { compareOfferings, notRankedReasons } from "./price-compare.js";
 import { summarizeReviews } from "./reviews.js";
 import type { UsageRow } from "./usage-aggregate.js";
 
@@ -42,7 +42,10 @@ export interface Recommendation {
   /** Share of the total weight backed by evidence (0–1). */
   coverage: number;
   factors: Partial<Record<Factor, { value: number; weight: number; evidence: string }>>;
+  /** Cheapest ranked quote; null when there is none. */
   quote_usd: number | null;
+  /** Cheapest priced quote that is not ranked, and why, when there is no ranked one. */
+  unranked_quote?: { usd: number; reasons: string[] };
   reasons: string[];
 }
 
@@ -72,11 +75,20 @@ export function recommend(input: RecommendInput): RecommendResult {
     return !avoid;
   });
 
-  // Cheapest comparable quote per offering for this exact request.
+  // Cheapest ranked quote per offering for this exact request. An unranked
+  // quote (estimate, assumption, unstated or open setting) gets no price factor.
   const comparison = compareOfferings(kept, request);
   const quote = new Map<string, number>();
+  const unranked = new Map<string, { usd: number; reasons: string[] }>();
   for (const r of comparison.rows) {
-    if (r.price_rank === undefined || r.total_usd === null) continue;
+    if (r.total_usd === null) continue;
+    if (r.price_rank === undefined) {
+      const prev = unranked.get(r.offering);
+      if (prev === undefined || r.total_usd < prev.usd) {
+        unranked.set(r.offering, { usd: r.total_usd, reasons: notRankedReasons(r) });
+      }
+      continue;
+    }
     const prev = quote.get(r.offering);
     if (prev === undefined || r.total_usd < prev) quote.set(r.offering, r.total_usd);
   }
@@ -129,7 +141,14 @@ export function recommend(input: RecommendInput): RecommendResult {
         weight: WEIGHTS.price,
         evidence: `quoted $${q} for this request (range $${lo}–$${hi})`,
       };
-    } else reasons.push("price: no comparable quote for this request");
+    } else {
+      const u = unranked.get(o.id);
+      reasons.push(
+        u
+          ? `price: quote not ranked: ${u.reasons.join("; ")}`
+          : "price: no comparable quote for this request",
+      );
+    }
 
     const used = Object.values(factors);
     const coverage = used.reduce((s, f) => s + f.weight, 0);
@@ -145,6 +164,7 @@ export function recommend(input: RecommendInput): RecommendResult {
       coverage: round(coverage),
       factors,
       quote_usd: q ?? null,
+      ...(q === undefined && unranked.has(o.id) ? { unranked_quote: unranked.get(o.id) } : {}),
       reasons,
     };
   });
