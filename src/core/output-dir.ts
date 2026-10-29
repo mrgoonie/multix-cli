@@ -16,13 +16,18 @@ let cachedOutputDir: string | undefined;
 export function getOutputDir(): string {
   if (cachedOutputDir) return cachedOutputDir;
 
-  const dir = process.env.MULTIX_OUTPUT_DIR
-    ? path.resolve(process.env.MULTIX_OUTPUT_DIR)
-    : path.resolve(process.cwd(), "multix-output");
-
+  const dir = resolveOutputDir();
   fs.mkdirSync(dir, { recursive: true });
   cachedOutputDir = dir;
   return dir;
+}
+
+/** The output directory getOutputDir() uses, without creating it. */
+export function resolveOutputDir(): string {
+  if (cachedOutputDir) return cachedOutputDir;
+  return process.env.MULTIX_OUTPUT_DIR
+    ? path.resolve(process.env.MULTIX_OUTPUT_DIR)
+    : path.resolve(process.cwd(), "multix-output");
 }
 
 /** Reset memoized dir — for testing only. */

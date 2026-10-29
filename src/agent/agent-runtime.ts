@@ -262,9 +262,12 @@ export function finalizeRun(input: FinalizeInput): number {
 
   const warnings: OutputWarning[] = [];
   const extra = typeof run.options.output === "string" ? [run.options.output] : [];
+  const outputDirs = [run.options.outputDir, run.options.outDir].filter(
+    (dir): dir is string => typeof dir === "string",
+  );
   const outputs: OutputFile[] = notSent
     ? []
-    : producedFiles(extra).flatMap((file) => {
+    : producedFiles(extra, outputDirs).flatMap((file) => {
         try {
           return [inspectOutput(file, warnings)];
         } catch {
