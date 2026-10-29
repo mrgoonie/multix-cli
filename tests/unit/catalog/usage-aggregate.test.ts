@@ -132,7 +132,60 @@ describe("operations, polls and resumes", () => {
       entry({ job: { ...job, id: "job-3" } }),
     ];
     expect(rowFor(rows).operations).toBe(2);
-    expect(operationOf(rows[0] as HistoryEntry)).toBe("job:fal:job-2");
+    expect(operationOf(rows[0] as HistoryEntry)).toBe("fal:job-2");
+  });
+
+  it("counts a job's cost once across ledger entries written before receipts", () => {
+    const job = { provider: "fal", id: "req_1", attempt: 1 };
+    const row = rowFor([
+      entry({ job, usage: { cost_usd: 3 } as HistoryEntry["usage"] }),
+      entry({
+        job,
+        command: "fal status",
+        ts: "2026-10-27T10:05:00.000Z",
+        usage: { cost_usd: 3 } as HistoryEntry["usage"],
+      }),
+    ]);
+    expect(row).toMatchObject({ operations: 1, cost: { known_usd: 3, per_success_usd: 3 } });
+  });
+
+  it("joins an old entry without a receipt to a newer receipt of the same job", () => {
+    const job = { provider: "fal", id: "req_2", attempt: 1 };
+    const row = rowFor([
+      entry({ job }),
+      entry({
+        job,
+        command: "fal status",
+        ts: "2026-10-27T10:05:00.000Z",
+        cost: receipt({
+          operation_id: "fal:req_2",
+          role: "observation",
+          actual_usd: 0.5,
+          actual_source: "provider_reported",
+        }),
+      }),
+    ]);
+    expect(row).toMatchObject({
+      operations: 1,
+      cost: { known_usd: 0.5, unknown_operations: 0, per_success_usd: 0.5 },
+    });
+  });
+
+  it("counts a job's credits once across ledger entries written before receipts", () => {
+    const job = { provider: "leonardo", id: "gen_1", attempt: 1 };
+    const rows = aggregateUsage(
+      [
+        entry({ provider: "leonardo", job, usage: { credits: 12 } as HistoryEntry["usage"] }),
+        entry({
+          provider: "leonardo",
+          job,
+          ts: "2026-10-27T10:05:00.000Z",
+          usage: { credits: 12 } as HistoryEntry["usage"],
+        }),
+      ],
+      "provider",
+    );
+    expect(rows[0]?.credits).toBe(12);
   });
 
   it("gives a run with no job and no receipt its own operation", () => {
