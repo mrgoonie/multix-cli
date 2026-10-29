@@ -6,6 +6,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Command } from "commander";
+import { run } from "../../../agent/run-state.js";
 import { ValidationError } from "../../../core/errors.js";
 import {
   finalizeGeneratedImages,
@@ -86,21 +87,30 @@ export function registerGenerateCommand(parent: Command): void {
         };
 
         const savedFiles: string[] = [];
+        let failure: { error: unknown; remaining: number } | undefined;
 
         for (let i = 0; i < numImages; i++) {
           // A failed call throws: the run is classified from the error itself, not a log line.
-          const resp = await withGeminiKey(
-            (apiKey) =>
-              generateContent(
-                {
-                  model,
-                  contents: [{ parts: [{ text: opts.prompt }] }],
-                  generationConfig,
-                },
-                { apiKey, logger },
-              ),
-            { logger },
-          );
+          let resp: Awaited<ReturnType<typeof generateContent>>;
+          try {
+            resp = await withGeminiKey(
+              (apiKey) =>
+                generateContent(
+                  {
+                    model,
+                    contents: [{ parts: [{ text: opts.prompt }] }],
+                    generationConfig,
+                  },
+                  { apiKey, logger },
+                ),
+              { logger },
+            );
+          } catch (error) {
+            if (savedFiles.length === 0) throw error;
+            // Images already paid for stay reported; the error is rethrown once they are finished.
+            failure = { error, remaining: numImages - i };
+            break;
+          }
 
           const images = extractImages(resp);
           if (images.length === 0) {
@@ -136,6 +146,16 @@ export function registerGenerateCommand(parent: Command): void {
         const finalImages = finalizeGeneratedImages(savedFiles, { ...opts, logger });
         console.log(`\nGenerated ${finalImages.length} image(s):`);
         for (const f of finalImages) console.log(`  ${f}`);
+
+        if (failure) {
+          logger.warn(
+            `Request ${numImages - failure.remaining + 1} of ${numImages} failed after ${finalImages.length} image(s) were saved; ${failure.remaining} request(s) remain`,
+          );
+          run.partial = {
+            options: { "--num-images": String(failure.remaining), "--output": null },
+          };
+          throw failure.error;
+        }
       },
     );
 }

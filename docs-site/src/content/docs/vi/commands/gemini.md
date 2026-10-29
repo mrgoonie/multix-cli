@@ -44,7 +44,10 @@ curl -s https://example.com/talk.mp3 | multix gemini transcribe --files - --stdi
 có thể chọn `gemini-3.1-flash-lite-image`, `gemini-3-pro-image` hoặc
 `gemini-nano-banana-2.1`. Imagen 4 không còn chạy trên Gemini API, và các id ảnh
 `-preview` đã qua ngày ngừng hoạt động sớm nhất mà Google công bố và có thể bị
-tắt bất cứ lúc nào. `image-to-image` (alias `i2i`) nhận nhiều input `--ref`.
+tắt bất cứ lúc nào. Với `--num-images` lớn hơn 1, ảnh được yêu cầu lần lượt;
+nếu một request sau bị lỗi, các ảnh đã lưu được giữ lại (và chép sang
+`--output`), và lỗi gợi ý lần chạy với `--num-images` bằng số còn thiếu.
+`image-to-image` (alias `i2i`) nhận nhiều input `--ref`.
 
 ```bash
 multix gemini generate --prompt "A mountain lake" --aspect-ratio 16:9 --size 2K

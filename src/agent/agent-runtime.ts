@@ -156,6 +156,19 @@ function withoutCostLimit(argv: string[]): string[] {
   return out;
 }
 
+/** argv with each option replaced by its new value, or dropped when the value is null. */
+export function withOptions(argv: string[], options: Record<string, string | null>): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i] ?? "";
+    const name = arg.split("=")[0] ?? "";
+    if (!(name in options)) out.push(arg);
+    else if (!arg.includes("=")) i++;
+  }
+  for (const [name, value] of Object.entries(options)) if (value !== null) out.push(name, value);
+  return out;
+}
+
 function captureStreams(): void {
   process.stdout.write = ((chunk: unknown, ...rest: unknown[]) => {
     if (run.json) {
@@ -294,9 +307,24 @@ export function finalizeRun(input: FinalizeInput): number {
   const duration = Date.now() - run.startedAt;
   const cost = costReceiptFor({ failed, notSent, historyId, model, usage });
 
+  // Files saved before a later request failed are kept: ask only for the rest, never a full rerun.
+  const partial = info && !inFlight && outputs.length ? run.partial : undefined;
+  if (info && partial) {
+    info = {
+      ...info,
+      hint: `${outputs.length} file(s) were saved before the failure; keep them and request only the rest with the next command. ${info.hint}`,
+    };
+  }
   const next = [
     ...(inFlight ? [inFlight.resume] : []),
-    ...(info ? nextForError(info, run.command, run.group, historyId) : []),
+    ...(partial
+      ? [`multix ${redactArgv(withOptions(run.argv, partial.options)).map(shellQuote).join(" ")}`]
+      : []),
+    ...(info
+      ? nextForError(info, run.command, run.group, historyId).filter(
+          (cmd) => !partial || !cmd.startsWith("multix rerun "),
+        )
+      : []),
     ...suggestedCommands([...run.stdout, ...run.stderr], run.command, knownGroups),
   ];
   if (info?.code === "BUDGET_EXCEEDED" || info?.code === "BUDGET_UNPROVEN") {
