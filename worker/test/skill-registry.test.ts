@@ -97,8 +97,8 @@ describe("skills registry", () => {
   it("refuses to share a private skill", async () => {
     const registry = fakeRegistries().getByName(OWNER);
     await registry.publish({ ownerId: OWNER, visibility: "private", files: skillFiles("mine") });
-    await expect(registry.grant("mine", OTHER)).rejects.toThrow(/team/);
-    await expect(registry.grant("missing", OTHER)).rejects.toThrow(/no skill/);
+    await expect(registry.grant(OWNER, "mine", OTHER)).rejects.toThrow(/team/);
+    await expect(registry.grant(OWNER, "missing", OTHER)).rejects.toThrow(/no skill/);
   });
 });
 
@@ -166,8 +166,8 @@ describe("skills catalog", () => {
 
   it("serves a team skill to a granted account", async () => {
     const registries = await seeded();
-    await registries.getByName(OWNER).grant("team-style", OTHER);
-    await registries.getByName(OTHER).addShare(OWNER, "team-style");
+    const { grantId } = await registries.getByName(OWNER).grant(OWNER, "team-style", OTHER);
+    await registries.getByName(OTHER).addShare(OTHER, OWNER, "team-style", grantId);
     const other = new SkillCatalog({ userId: OTHER, registries });
     const teamUri = `skill://team/${OWNER}/team-style/SKILL.md`;
     expect((await other.list()).map((s) => s.uri)).toContain(teamUri);
@@ -179,7 +179,7 @@ describe("skills catalog", () => {
       "NOT_FOUND",
     );
     // A share record without a grant shows nothing.
-    await registries.getByName(OTHER).addShare(OWNER, "secret-recipe");
+    await registries.getByName(OTHER).addShare(OTHER, OWNER, "secret-recipe", grantId);
     expect((await other.list()).map((s) => s.uri)).not.toContain(
       `skill://team/${OWNER}/secret-recipe/SKILL.md`,
     );

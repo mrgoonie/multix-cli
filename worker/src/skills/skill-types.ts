@@ -34,6 +34,8 @@ export interface Skill {
   updatedAt: number;
   /** Revision number currently served, or null when nothing is published. */
   currentRevision: number | null;
+  /** Highest revision number ever stored, so a deleted revision's number is never reused. */
+  lastRevision?: number;
 }
 
 export interface SkillFile {
@@ -66,6 +68,31 @@ export interface SkillAccess {
   principal: string;
   permissions: "read"[];
   grantedAt: number;
+  /**
+   * Random id of this grant. A grantee's share remembers it, so a share
+   * accepted under a revoked grant stays dead after a later re-grant.
+   */
+  grantId: string;
+}
+
+/** An unpublished working copy of a skill's files, owned by the skill's account. */
+export interface SkillDraft {
+  name: string;
+  /** Revision the draft started from, or null for a new skill or an empty start. */
+  baseRevision: number | null;
+  /** manifestDigest of the draft's files; callers pass it back to detect concurrent edits. */
+  digest: string;
+  files: SkillFile[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** A team skill of another account that this account chose to list. */
+export interface SkillShare {
+  ownerId: string;
+  name: string;
+  grantId: string;
+  addedAt: number;
 }
 
 /** Per-skill limits of the Skills extension (every conforming host accepts these). */
@@ -75,3 +102,9 @@ export const MAX_BYTES_PER_SKILL = 16 * 1024 * 1024;
 export const MAX_BYTES_PER_FILE = 1024 * 1024;
 export const MAX_TAGS = 16;
 export const MAX_TAG_CHARS = 32;
+/** Revisions one skill may keep; delete old ones to publish more. */
+export const MAX_REVISIONS_PER_SKILL = 100;
+/** Accounts one team skill may be granted to. */
+export const MAX_GRANTS_PER_SKILL = 100;
+/** Account ids as the Worker issues them (GitHub sign-in). */
+export const ACCOUNT_ID_RE = /^gh-\d{1,20}$/;

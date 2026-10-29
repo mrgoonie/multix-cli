@@ -10,8 +10,10 @@
  *
  * A URI is resolved for the caller alone: `private/` always means the
  * caller's own registry, and a team URI is answered only after the owner's
- * registry confirms the caller's grant. Anything the caller cannot read gets
- * the same answer as a URI that does not exist.
+ * registry confirms the caller's grant. A shared team skill is listed only
+ * after the grantee added it (so no account can push skills into another's
+ * list), and only while the grant it was added under stands. Anything the
+ * caller cannot read gets the same answer as a URI that does not exist.
  *
  * Read-only: nothing here writes, fetches a URL or runs a file.
  */
@@ -21,7 +23,7 @@ import { BUILTIN_CATALOG, type BuiltinCatalog } from "./builtin-skills.js";
 import { isTextMediaType, manifestDigest, sha256Digest } from "./skill-files.js";
 import type { Frontmatter } from "./skill-frontmatter.js";
 import { type ServedSkill, SkillRegistryError } from "./skill-registry.js";
-import type { SkillFile, SkillVisibility } from "./skill-types.js";
+import { ACCOUNT_ID_RE, type SkillFile, type SkillVisibility } from "./skill-types.js";
 
 export const SKILL_SCHEME = "skill://";
 /** `_meta` key for this server's registry fields on entries (own reverse-domain prefix). */
@@ -130,7 +132,8 @@ function locate(uri: string): Located {
   if (head === "private" && rest[0]) {
     return { kind: "private", name: rest[0], rel: rest.slice(1).join("/") };
   }
-  if (head === "team" && rest[0] && rest[1]) {
+  // Team URIs name the owner by account id; anything else cannot address a registry.
+  if (head === "team" && rest[0] && rest[1] && ACCOUNT_ID_RE.test(rest[0])) {
     return { kind: "team", ownerId: rest[0], name: rest[1], rel: rest.slice(2).join("/") };
   }
   throw new SkillCatalogError("UNKNOWN_SKILL", `No skill is served at ${uri}`);
@@ -287,7 +290,13 @@ export class SkillCatalog {
     const shared: CatalogSkill[] = [];
     for (const share of await own.shares()) {
       if (share.ownerId === me) continue;
-      const served = await this.registry(share.ownerId)?.served(share.ownerId, me, share.name);
+      // Only under the grant the share was accepted with: a revoke ends it for good.
+      const served = await this.registry(share.ownerId)?.served(
+        share.ownerId,
+        me,
+        share.name,
+        share.grantId,
+      );
       if (served && served.skill.visibility === "team") shared.push(fromServed(served));
     }
     out.push(...shared.sort((a, b) => (a.uri < b.uri ? -1 : 1)));
