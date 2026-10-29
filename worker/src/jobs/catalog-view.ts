@@ -71,6 +71,12 @@ function commandDetail(command: CliCommand): Record<string, unknown> {
       if (name === OUTPUT_FILE_OPTION) view.output = "plain file name inside the job output";
       if (policy.uncappedOptions?.includes(name))
         view.uncapped_spend = "with this option, the request reaches the provider as given";
+      if (policy.priceOptions?.includes(name)) {
+        view.uncapped_spend =
+          option.default === undefined
+            ? "when given, this option sets the price of each output"
+            : "a value other than the default sets the price of each output";
+      }
       if (policy.caps?.countFromModel && policy.caps.count?.includes(name)) {
         view.uncapped_spend = "when omitted, the model picks the number of outputs";
       }

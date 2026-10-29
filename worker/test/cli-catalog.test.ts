@@ -35,6 +35,8 @@ describe("CLI catalog", () => {
         ...(policy.caps?.count ?? []),
         ...(policy.caps?.duration ?? []),
         ...(policy.caps?.resolution ?? []),
+        ...(policy.uncappedOptions ?? []),
+        ...(policy.priceOptions ?? []),
       ];
       for (const name of named) expect(options.has(name), `${path} --${name}`).toBe(true);
       for (const name of policy.filePositionals ?? []) {

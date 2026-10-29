@@ -94,16 +94,27 @@ export function applyCaps(
 /**
  * Why the caps cannot bound this run, or undefined when they do: the command
  * is marked uncapped, the caller used an option that merges a raw request
- * body, or the model picks the number of outputs.
+ * body, changed an option that sets the price of each output, or the model
+ * picks the number of outputs.
  */
 export function uncappedReason(
   policy: CommandPolicy,
+  options: ReadonlyMap<string, CliOption>,
   values: OptionValues,
   limits: Limits,
 ): string | undefined {
   if (policy.uncappedSpend) return policy.uncappedSpend;
   const merged = policy.uncappedOptions?.find((name) => values.has(name));
   if (merged) return `with --${merged}, the request reaches the provider as given`;
+  const priced = policy.priceOptions?.find((name) => {
+    const given = single(values, name);
+    if (given === undefined) return false;
+    const fallback = defaultString(options.get(name));
+    return fallback === undefined || given.trim().toLowerCase() !== fallback.toLowerCase();
+  });
+  if (priced) {
+    return `--${priced} sets the price of each output, which this server's caps do not bound (omit it to use the default)`;
+  }
   if (policy.caps?.countFromModel) {
     const omitted = policy.caps.count?.find((name) => !values.has(name));
     if (omitted) {

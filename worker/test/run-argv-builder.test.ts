@@ -700,6 +700,38 @@ describe("prepareRun: runs the caps cannot bound", () => {
     );
   });
 
+  it("marks an image size, quality or tier the caller changes from the default", () => {
+    const priced = (command: string, options: Record<string, string | number>, args?: string[]) =>
+      run({ command, args, options }).uncappedSpend;
+    expect(priced("gemini generate", { prompt: "a cat", size: "4K" })).toBe(
+      "--size sets the price of each output, which this server's caps do not bound (omit it to use the default)",
+    );
+    expect(priced("openai generate", { prompt: "a cat", quality: "high" })).toContain("--quality");
+    expect(priced("openai generate", { prompt: "a cat", size: "1536x1024" })).toContain("--size");
+    expect(priced("openrouter generate", { prompt: "a cat", "image-size": "2K" })).toContain(
+      "--image-size",
+    );
+    expect(priced("fal image", { "image-size": "square_hd" }, ["a cat"])).toContain("--image-size");
+    expect(priced("byteplus generate", { prompt: "a cat", size: "4K" })).toContain("--size");
+    expect(priced("atlas image", { "num-images": 1, resolution: "4k" }, ["a cat"])).toContain(
+      "--resolution",
+    );
+    expect(priced("leonardo generate", { width: 1536 }, ["a cat"])).toContain("--width");
+    expect(priced("leonardo upscale", { multiplier: 2 }, ["abc"])).toContain("--multiplier");
+  });
+
+  it("keeps a run capped when the price option is omitted or repeats the CLI default", () => {
+    expect(run({ command: "openai generate", options: { prompt: "a cat" } })).not.toHaveProperty(
+      "uncappedSpend",
+    );
+    expect(
+      run({ command: "openai generate", options: { prompt: "a cat", quality: "MEDIUM" } }),
+    ).not.toHaveProperty("uncappedSpend");
+    expect(
+      run({ command: "atlas image", args: ["a cat"], options: { "num-images": 1 } }),
+    ).not.toHaveProperty("uncappedSpend");
+  });
+
   it("leaves capped commands unmarked and caps the voice-design count", () => {
     expect(run({ command: "gemini generate", options: { prompt: "a cat" } })).not.toHaveProperty(
       "uncappedSpend",
