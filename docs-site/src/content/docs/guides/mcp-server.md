@@ -129,8 +129,12 @@ the CLI prints) is returned either way. Keys never appear in `stdout` or
 
 Server limits apply to `multix_run` too: the output count
 (`MULTIX_MCP_MAX_OUTPUTS`), video length (`MULTIX_MCP_MAX_VIDEO_SECONDS`, also
-sent when a video command's default is unknown or longer) and resolution
-(`MULTIX_MCP_ALLOWED_RESOLUTIONS`). The server chooses the output directory,
+sent when a video command's default is unknown or longer), resolution
+(`MULTIX_MCP_ALLOWED_RESOLUTIONS`) and generated audio length
+(`MULTIX_MCP_MAX_AUDIO_SECONDS`: `elevenlabs sfx --duration-seconds` and
+`elevenlabs music --music-length-ms`; an omitted music length is sent as the
+cap, since the model would otherwise pick up to 10 minutes).
+The server chooses the output directory,
 `--output` must be a plain file name, options the CLI turns into part of a
 file name (such as `elevenlabs voices design --output-prefix` or a dub
 language) accept only letters, digits, `_` and `-`, the OpenAI image commands
@@ -152,11 +156,10 @@ the option that makes a run uncapped):
 - runs billed by the length of their source or script: `heygen video`,
   `heygen translate`, `heygen lipsync`, `elevenlabs dub`, `topview
   video-avatar`, `topview product-avatar`, and `heygen video-agent` /
-  `heygen template`, where the agent or template sets the length;
+  `heygen template`, where the agent or template sets the length, and
+  `elevenlabs music` with a `--plan`, whose section durations set the length;
 - runs longer than the duration cap can bound: `topview url-to-video` and
-  `topview materials-to-video` (15-60 s videos), and `elevenlabs music`,
-  whose length (up to 10 minutes) the model picks unless `--music-length-ms`
-  or a `--plan` sets it;
+  `topview materials-to-video` (15-60 s videos);
 - `sume video`, where the model's catalog row sets the price and lip-sync and
   captions models bill by the length of the source media;
 - `atlas image`, `atlas image-to-image`, `sume image` and `replicate image`
@@ -182,6 +185,22 @@ the caller's own keys. An `estimate: true` call is answered in every mode, since
 starts nothing. The REST API (`POST /api/v1/jobs`) takes the same
 `max_cost_usd` and `cost_policy` fields and applies the same rule.
 
+**Image models.** The model sets the price of each image, often by an order
+of magnitude between models, so `--model` is not marked uncapped: that would
+send almost every image run through `MULTIX_MCP_UNCAPPED_SPEND`. The operator
+bounds it with `MULTIX_MCP_ALLOWED_IMAGE_MODELS` instead, a comma-separated
+list of `<group>:<model>` entries such as
+`fal:fal-ai/flux/schnell,openai:gpt-image-2`. The group is part of the entry
+because one model id can cost more on another provider. When it is set, a
+command that outputs images and takes `--model` runs only with a model listed
+for its group: the caller's `--model`, or else the `default` `multix_catalog`
+lists. When the CLI picks the model at run time (no listed default), the
+caller must pass a listed `--model`, and a group with no entry is refused.
+Unset, any model runs. The pass-through `run` commands (`fal run`, `replicate
+run`, ...) take the model as a positional and stay under
+`MULTIX_MCP_UNCAPPED_SPEND`, not this list. `cloudflare generate --steps` also
+changes the price, by a smaller margin, and is not bounded.
+
 **Gemini edit and extend.** `gemini extend-video --duration` is the length of
 the new continuation and is capped like any other duration, but the returned
 video also contains the source. The cap therefore bounds each call, not the
@@ -190,6 +209,13 @@ each time, and `gemini edit-video` keeps the source's length. The server cannot
 see a stored interaction's length, so it does not bound a chain beyond
 Google's own limit of 40 seconds in total; every call is billed to your own
 Gemini key.
+
+**Leonardo.** `leonardo video` has no `--duration`: the CLI asks the
+lower-case models (`kling-2.6`, `hailuo-2_3`, `seedance-2.0` and the others
+listed by `leonardo video-models`) for 8 seconds, and the upper-case models
+(`MOTION2`, `VEO3`, `KLING2_1`, ...) pick their own length, up to 10 seconds
+for Kling 2.1 and 2.5. The server therefore refuses it when
+`MULTIX_MCP_MAX_VIDEO_SECONDS` is below 10.
 
 **Runway.** `runway video` and `runway image` can run remotely; give
 `--image` and each `--reference` as `https://` URLs in `inputs`, and
@@ -204,9 +230,11 @@ set `"wait": true` in `options` to get the video, or run
 TopView Legacy file flags and the `topview upload` file) as `https://` URLs in
 `inputs`. `sume estimate` uploads nothing, so it takes its media as plain
 `https://` URLs. `sume image --num-images` and `topview product-anyshoot
---count` are capped by `MULTIX_MCP_MAX_OUTPUTS`, and `sume video --duration` and `--resolution` by the
-video limits; pass a `--duration` the model's catalog row lists, because
-without one the server sends its own default length. `topview run --input`
+--count` are capped by `MULTIX_MCP_MAX_OUTPUTS`, and `sume video --resolution`
+by the allowed resolutions. `sume video --duration` is neither capped nor filled (models
+without one refuse a filled value, and lip-sync models read it as the audio
+length), so every `sume video` run goes through `MULTIX_MCP_UNCAPPED_SPEND`;
+pass a `--duration` the model's catalog row lists. `topview run --input`
 must be inline JSON, since `@file` values are rejected. `sume image`,
 `sume video`, `topview run` and the TopView Legacy commands other than
 `product-avatar` do not wait by default: set `"wait": true` in `options`, or
@@ -654,7 +682,9 @@ Set these as `vars` in `worker/wrangler.jsonc`:
 | `MULTIX_PUBLIC_URL` | — (required) | Public origin, for example `https://mcp.example.com`. Used for OAuth metadata, redirects and the GitHub callback. |
 | `MULTIX_MCP_MAX_OUTPUTS` | `4` (ceiling 10) | Maximum output count (for example `--num-images`) per `multix_run` call. |
 | `MULTIX_MCP_MAX_VIDEO_SECONDS` | `10` (ceiling 15) | Maximum video duration per call (for `gemini extend-video`, the new continuation). When a caller omits it and the command's default is unknown or longer, the server sends `min(5, cap)` seconds. |
+| `MULTIX_MCP_MAX_AUDIO_SECONDS` | `30` (ceiling 300) | Maximum generated audio length per call: `elevenlabs sfx --duration-seconds` and `elevenlabs music --music-length-ms`. An omitted music length is sent as the cap (the model would pick up to 10 minutes), except with a `--plan`; an omitted sound effect length is sent as the cap only when the cap is below the 30 s provider maximum. |
 | `MULTIX_MCP_ALLOWED_RESOLUTIONS` | `480p,720p,768p,1080p` | Video resolutions a caller may request (`768p` is a HeyGen Video size). Anything else (for example `4k`), given or the command's default, is rejected before the job starts. |
+| `MULTIX_MCP_ALLOWED_IMAGE_MODELS` | any | Comma-separated `<group>:<model>` entries (for example `fal:fal-ai/flux/schnell`, exact match) that image commands of `multix_run` may use, given as `--model` or as the command's catalog default. When the CLI picks the model at run time, the caller must pass a listed `--model`; a group with no entry is refused. `run` pass-through commands are governed by `MULTIX_MCP_UNCAPPED_SPEND` instead. |
 | `MULTIX_MCP_UNCAPPED_SPEND` | `budget` | Runs the caps above cannot bound (marked `uncapped_spend` in `multix_catalog`): `budget` runs one only with a `max_cost_usd` its price estimate proves (an unknown price is refused), `deny` refuses it, `allow` runs it. Any other value means `budget`. |
 | `MULTIX_MCP_ALLOWED_ORIGINS` | none | Exact browser origins (for example `https://app.example.com`) allowed to call `/mcp`. `*` and other wildcards are not supported: `*` only matches a literal `*` origin, which browsers never send. After the access token is checked, requests with any other `Origin` header get `403`; requests without an `Origin` (server-side clients) are allowed. Listed origins get CORS headers. `OPTIONS` preflights are answered for any origin by the OAuth layer. |
 | `MULTIX_MAX_JOBS_PER_ACCOUNT` | `2` (ceiling 50) | `multix_run` jobs one account may run at the same time. |

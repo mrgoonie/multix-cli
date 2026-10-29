@@ -224,6 +224,7 @@ describe("compare: which configurations are ranked", () => {
       resolution: "720p",
       duration_s: 10,
       audio: true,
+      aspect_ratio: "16:9",
       at: AT,
     });
     const fal = rowOf(result.rows, FAL_SEEDANCE);
@@ -309,6 +310,7 @@ describe("compare: which configurations are ranked", () => {
         task: "video",
         resolution: "720p",
         duration_s: 10,
+        aspect_ratio: "16:9",
         ...(audio === undefined ? {} : { audio }),
         at: AT,
       }).rows;
@@ -361,6 +363,156 @@ describe("compare: which configurations are ranked", () => {
     const result = compareOfferings(offerings, { task: "video", duration_s: 1, at: AT });
     expect(result.request.at).toBe(AT.toISOString());
     expect(result.note).toContain("price says nothing about output quality");
+  });
+});
+
+describe("compare: only list prices the source confirms are ranked", () => {
+  const SEEDANCE_720P = { task: "video", resolution: "720p", duration_s: 5, at: AT } as const;
+
+  it("prices an estimate but does not rank it against a list price", () => {
+    const rows = compareOfferings(offerings, { ...SEEDANCE_720P, aspect_ratio: "16:9" }).rows;
+    const atlas = rowOf(rows, ATLAS_SEEDANCE);
+    expect(atlas).toMatchObject({ status: "priced", basis: "estimated", total_usd: 1.50228 });
+    expect(atlas.price_rank).toBeUndefined();
+    expect(atlas.reasons).toContain(
+      "the provider shows this price as an estimate and bills the final amount from the usage it measures",
+    );
+    // The confirmed list price is ranked first even though the estimate is lower.
+    expect(rowOf(rows, FAL_SEEDANCE)).toMatchObject({ basis: "list", price_rank: 1 });
+  });
+
+  it("does not rank an estimate even when every other row is an estimate too", () => {
+    const offs = [
+      syntheticOffering("a:one", [syntheticRate(1, { basis: "estimated" })]),
+      syntheticOffering("b:two", [syntheticRate(2, { basis: "estimated" })]),
+    ];
+    const rows = compareOfferings(offs, { task: "video", duration_s: 1 }).rows;
+    expect(rows.map((r) => [r.status, r.total_usd, r.price_rank])).toEqual([
+      ["priced", 1, undefined],
+      ["priced", 2, undefined],
+    ]);
+  });
+
+  it("does not rank a card that leaves audio unstated against one whose price covers audio", () => {
+    // A list price silent on audio (Atlas-like) next to fal, whose token price is the same with or without audio.
+    const silent = syntheticOffering("x:silent", [
+      syntheticRate(0.1, { config: { resolution: "720p" } }),
+    ]);
+    const rows = compareOfferings([...offerings, silent], {
+      ...SEEDANCE_720P,
+      aspect_ratio: "16:9",
+    }).rows;
+    const row = rowOf(rows, "x:silent");
+    expect(row).toMatchObject({ status: "priced", total_usd: 0.5 });
+    expect(row.price_rank).toBeUndefined();
+    expect(row.reasons).toEqual([
+      "source does not state whether this price includes audio, while other prices here do",
+    ]);
+    expect(rowOf(rows, ATLAS_SEEDANCE).reasons).toContain(
+      "source does not state whether this price includes audio, while other prices here do",
+    );
+    expect(rowOf(rows, FAL_SEEDANCE).price_rank).toBe(1);
+  });
+
+  it("still ranks cards that are all silent on audio against each other", () => {
+    const offs = [
+      syntheticOffering("a:one", [syntheticRate(1)]),
+      syntheticOffering("b:two", [syntheticRate(2)]),
+    ];
+    const rows = compareOfferings(offs, { task: "video", duration_s: 1 }).rows;
+    expect(rows.map((r) => [r.offering, r.price_rank, r.reasons])).toEqual([
+      ["a:one", 1, undefined],
+      ["b:two", 2, undefined],
+    ]);
+  });
+
+  it("reports a card silent on audio as not_comparable once audio is pinned", () => {
+    const silent = syntheticOffering("x:silent", [
+      syntheticRate(0.1, { config: { resolution: "720p" } }),
+    ]);
+    const rows = compareOfferings([...offerings, silent], {
+      ...SEEDANCE_720P,
+      aspect_ratio: "16:9",
+      audio: true,
+    }).rows;
+    expect(rowOf(rows, "x:silent")).toMatchObject({
+      status: "not_comparable",
+      total_usd: null,
+      reasons: ["source does not state the price for audio on"],
+    });
+    expect(rowOf(rows, FAL_SEEDANCE).price_rank).toBe(1);
+  });
+
+  it("keeps ranking cards silent on audio when the only card that covers audio is itself unranked", () => {
+    const silent = [
+      syntheticOffering("a:one", [syntheticRate(1)]),
+      syntheticOffering("b:two", [syntheticRate(2)]),
+    ];
+    const covers = (over: Partial<RateView>) =>
+      syntheticOffering("k:covers", [
+        syntheticRate(0.5, { config_independent: ["audio"], ...over }),
+      ]);
+    for (const k of [covers({ config: { resolution: "4k" } }), covers({ basis: "estimated" })]) {
+      const rows = compareOfferings([...silent, k], { task: "video", duration_s: 1 }).rows;
+      expect(rows.map((r) => [r.offering, r.price_rank, r.reasons])).toEqual([
+        ["a:one", 1, undefined],
+        ["b:two", 2, undefined],
+        [
+          "k:covers",
+          undefined,
+          k.rates[0]?.basis === "estimated" ? [expect.any(String)] : undefined,
+        ],
+      ]);
+    }
+  });
+
+  it("applies the audio rule only to video cards", () => {
+    const image = syntheticOffering(
+      "i:image",
+      [syntheticRate(0.04, { components: [{ meter: "output_images", usd: 0.04, per: 1 }] })],
+      ["image"],
+    );
+    const silentVideo = syntheticOffering("v:silent", [syntheticRate(0.1)]);
+    const covering = syntheticOffering("v:covers", [
+      syntheticRate(0.2, { config_independent: ["audio"] }),
+    ]);
+    const rows = compareOfferings([image, silentVideo, covering], { duration_s: 1 }).rows;
+    expect(rowOf(rows, "i:image")).toMatchObject({ status: "priced", price_rank: 1 });
+    expect(rowOf(rows, "i:image").reasons).toBeUndefined();
+    expect(rowOf(rows, "v:silent").reasons).toEqual([
+      "source does not state whether this price includes audio, while other prices here do",
+    ]);
+    expect(rowOf(rows, "v:covers").price_rank).toBe(2);
+  });
+
+  it("prices a quote that assumes a setting but does not rank it until the setting is pinned", () => {
+    const open = rowOf(compareOfferings(offerings, SEEDANCE_720P).rows, FAL_SEEDANCE);
+    expect(open).toMatchObject({
+      status: "priced",
+      total_usd: 2.3112,
+      assumptions: ["aspect ratio 16:9 (frame size of the token formula)"],
+      reasons: [
+        "the quote assumes aspect ratio 16:9 (frame size of the token formula); pin that setting to rank it",
+      ],
+    });
+    expect(open.price_rank).toBeUndefined();
+
+    const pinnedRow = rowOf(
+      compareOfferings(offerings, { ...SEEDANCE_720P, aspect_ratio: "16:9" }).rows,
+      FAL_SEEDANCE,
+    );
+    expect(pinnedRow).toMatchObject({ status: "priced", total_usd: 2.3112, price_rank: 1 });
+    expect(pinnedRow.assumptions).toBeUndefined();
+    expect(pinnedRow.reasons).toBeUndefined();
+  });
+
+  it("ranks nothing in the 720p Seedance comparison when nothing is confirmed", () => {
+    const rows = compareOfferings(offerings, SEEDANCE_720P).rows;
+    expect(rows.filter((r) => r.price_rank !== undefined)).toEqual([]);
+    for (const r of rows.filter((x) => x.status === "priced")) {
+      expect(r.total_usd).toBeGreaterThan(0);
+      expect(r.reasons?.length).toBeGreaterThan(0);
+    }
   });
 });
 

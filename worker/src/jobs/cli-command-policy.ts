@@ -23,6 +23,13 @@ export type FileInputKind = "file" | "dir";
 export interface CapRules {
   /** Video length in seconds: at most `maxVideoSeconds`. */
   duration?: string[];
+  /**
+   * The command has no length option and always renders up to this many
+   * seconds: refused when it is above `maxVideoSeconds`.
+   */
+  fixedSeconds?: number;
+  /** Generated audio length: at most `maxAudioSeconds`. */
+  audioLength?: AudioLengthRule[];
   /** Number of outputs: at most `maxOutputs`. */
   count?: string[];
   /**
@@ -42,6 +49,21 @@ export interface CapRules {
    * can be above `allowedResolutions`: such a run is uncapped.
    */
   resolutionFromModel?: boolean;
+}
+
+export interface AudioLengthRule {
+  option: string;
+  /** Option units in one second: 1 for seconds, 1000 for milliseconds. */
+  unitsPerSecond: number;
+  /**
+   * Longest length the provider produces when the option is omitted; above
+   * the cap, the server sends the cap instead.
+   */
+  omittedSeconds: number;
+  /** Options with which the provider rejects this one: no value is filled when one is given. */
+  notWith?: string[];
+  /** Smallest value below 1 the CLI keeps (it parses the option with parseFloat). */
+  min?: number;
 }
 
 export interface CommandPolicy {
@@ -220,7 +242,9 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   "fish clone": { fileOptions: { sample: "file", "transcript-file": "file" } },
   "leonardo generate": { caps: { count: ["num"] } },
   "leonardo image-to-image": { caps: { count: ["num"] } },
-  "leonardo video": { caps: { resolution: ["resolution"] } },
+  // No --duration: a v2 model gets duration: 8 and a v1 model picks its own length
+  // (Leonardo documents Kling 2.1 and 2.5 at 5 or 10 s), so a run can reach 10 s.
+  "leonardo video": { caps: { resolution: ["resolution"], fixedSeconds: 10 } },
   "leonardo image-to-video": { caps: VIDEO_CAPS },
   "byteplus generate": { fileOptions: { "input-image": "file" }, caps: IMAGE_COUNT },
   "byteplus image-to-image": { fileOptions: { ref: "file" }, caps: IMAGE_COUNT },
@@ -240,10 +264,25 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   "elevenlabs clone": { fileOptions: { files: "file", audio: "file" } },
   "elevenlabs voice-changer": { fileOptions: { input: "file" } },
   "elevenlabs transcribe": { fileOptions: { input: "file" } },
-  // Billed by length: --music-length-ms or a --plan sets it, else the model picks it.
+  // Billed by length: --music-length-ms sets it (the model picks up to 10 min
+  // when omitted, so the cap is sent), or a --plan's section durations, which
+  // the caps cannot see and with which the API rejects a length.
   "elevenlabs music": {
-    uncappedSpend: "billed by length, which the model picks (up to 10 minutes) unless given",
     fileOptions: { plan: "file" },
+    uncappedOptions: ["plan"],
+    caps: {
+      audioLength: [
+        { option: "music-length-ms", unitsPerSecond: 1000, omittedSeconds: 600, notWith: ["plan"] },
+      ],
+    },
+  },
+  // An omitted --duration-seconds lets the model pick, up to ElevenLabs' 30 s.
+  "elevenlabs sfx": {
+    caps: {
+      audioLength: [
+        { option: "duration-seconds", unitsPerSecond: 1, omittedSeconds: 30, min: 0.5 },
+      ],
+    },
   },
   "elevenlabs dub": {
     uncappedSpend: SOURCE_LENGTH,
