@@ -14,6 +14,7 @@ import { type Session, readSession } from "./auth/signed-cookies.js";
 import { MIN_SESSION_SECRET_LENGTH, type WorkerEnv } from "./config.js";
 import type { AccountEventsNamespace } from "./events/account-events.js";
 import type { JobBackend } from "./jobs/job-store.js";
+import type { AccountSkillsNamespace } from "./skills/account-skills.js";
 
 export interface AppDeps {
   /** Injected for tests; defaults to the Worker's fetch (GitHub sign-in and R2 checks). */
@@ -22,6 +23,8 @@ export interface AppDeps {
   jobBackend?: JobBackend;
   /** Injected for tests; defaults to the MULTIX_EVENTS Durable Object namespace. */
   events?: AccountEventsNamespace;
+  /** Injected for tests; defaults to the MULTIX_SKILLS Durable Object namespace. */
+  skills?: AccountSkillsNamespace;
 }
 
 export interface AppContext {

@@ -6,7 +6,7 @@ import {
   paginate,
   parseSkillUri,
 } from "../src/skills/skill-catalog.js";
-import { MAX_SKILLS_PER_ACCOUNT, SkillRegistryError } from "../src/skills/skill-registry.js";
+import { MAX_SKILLS_PER_ACCOUNT } from "../src/skills/skill-registry.js";
 import { MAX_BYTES_PER_FILE } from "../src/skills/skill-types.js";
 import { OTHER, OWNER, fakeRegistries, skillFiles } from "./skills-helpers.js";
 
@@ -80,7 +80,7 @@ describe("skills registry", () => {
     const registry = fakeRegistries().getByName(OWNER);
     await expect(
       registry.publish({ ownerId: OWNER, visibility: "private", files }),
-    ).rejects.toThrow(SkillRegistryError);
+    ).rejects.toMatchObject({ name: "SkillRegistryError", reason: "invalid" });
   });
 
   it("caps the number of skills per account", async () => {
@@ -97,8 +97,8 @@ describe("skills registry", () => {
   it("refuses to share a private skill", async () => {
     const registry = fakeRegistries().getByName(OWNER);
     await registry.publish({ ownerId: OWNER, visibility: "private", files: skillFiles("mine") });
-    await expect(registry.grant("mine", OTHER)).rejects.toThrow(/team/);
-    await expect(registry.grant("missing", OTHER)).rejects.toThrow(/no skill/);
+    await expect(registry.grant(OWNER, "mine", OTHER)).rejects.toThrow(/team/);
+    await expect(registry.grant(OWNER, "missing", OTHER)).rejects.toThrow(/no skill/);
   });
 });
 
@@ -166,8 +166,8 @@ describe("skills catalog", () => {
 
   it("serves a team skill to a granted account", async () => {
     const registries = await seeded();
-    await registries.getByName(OWNER).grant("team-style", OTHER);
-    await registries.getByName(OTHER).addShare(OWNER, "team-style");
+    const { grantId } = await registries.getByName(OWNER).grant(OWNER, "team-style", OTHER);
+    await registries.getByName(OTHER).addShare(OTHER, OWNER, "team-style", grantId);
     const other = new SkillCatalog({ userId: OTHER, registries });
     const teamUri = `skill://team/${OWNER}/team-style/SKILL.md`;
     expect((await other.list()).map((s) => s.uri)).toContain(teamUri);
@@ -179,7 +179,7 @@ describe("skills catalog", () => {
       "NOT_FOUND",
     );
     // A share record without a grant shows nothing.
-    await registries.getByName(OTHER).addShare(OWNER, "secret-recipe");
+    await registries.getByName(OTHER).addShare(OTHER, OWNER, "secret-recipe", grantId);
     expect((await other.list()).map((s) => s.uri)).not.toContain(
       `skill://team/${OWNER}/secret-recipe/SKILL.md`,
     );
