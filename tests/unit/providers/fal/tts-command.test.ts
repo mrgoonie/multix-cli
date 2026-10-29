@@ -328,7 +328,7 @@ describe("fal tts — queue receipts and resume", () => {
           { json: { status: "COMPLETED" } },
         ],
         [`GET https://queue.fal.run/${app}/requests/${REQUEST_ID}`]: [
-          { error: new TypeError("fetch failed") },
+          { status: 401, json: { detail: "unauthorized" } },
         ],
       }).fetch,
     );

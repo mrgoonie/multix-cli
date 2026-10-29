@@ -481,11 +481,8 @@ describe("fal result failures", () => {
 });
 
 describe("a run that fails after fal accepted the job", () => {
-  const rateLimited = {
-    status: 429,
-    json: { detail: "slow down" },
-    headers: { "retry-after": "30" },
-  };
+  // Not retried (unlike a 429 or a network error), yet a resume can fix it once the key is.
+  const unauthorized = { status: 401, json: { detail: "unauthorized" } };
 
   it("fal run tracks the job with a resume that keeps --output-dir", async () => {
     const fake = stub({
@@ -493,14 +490,14 @@ describe("a run that fails after fal accepted the job", () => {
       [`GET https://queue.fal.run/${MODEL}/requests/${REQUEST_ID}/status`]: [
         { json: { status: "COMPLETED" } },
       ],
-      [`GET https://queue.fal.run/${MODEL}/requests/${REQUEST_ID}`]: [rateLimited],
+      [`GET https://queue.fal.run/${MODEL}/requests/${REQUEST_ID}`]: [unauthorized],
     });
     const outDir = path.join(tmp, "my clips");
     const error = await cli("run", MODEL, "--input", '{"prompt":"x"}', "--output-dir", outDir).then(
       () => expect.unreachable("fal run should fail"),
       (e: unknown) => e,
     );
-    expect(classifyError(error)).toMatchObject({ code: "RATE_LIMITED", retry_after_s: 30 });
+    expect(classifyError(error)).toMatchObject({ code: "INVALID_KEY", http_status: 401 });
     expect(run.inFlight).toEqual({
       id: REQUEST_ID,
       resume: `multix fal result ${MODEL} ${REQUEST_ID} --download --output-dir '${outDir}'`,
@@ -514,7 +511,7 @@ describe("a run that fails after fal accepted the job", () => {
       [`GET https://queue.fal.run/${MODEL}/requests/${REQUEST_ID}/status`]: [
         { json: { status: "COMPLETED" } },
       ],
-      [`GET https://queue.fal.run/${MODEL}/requests/${REQUEST_ID}`]: [rateLimited],
+      [`GET https://queue.fal.run/${MODEL}/requests/${REQUEST_ID}`]: [unauthorized],
     });
     await expect(
       cli("run", MODEL, "--input", '{"prompt":"x"}', "--no-download", "--output-dir", tmp),
