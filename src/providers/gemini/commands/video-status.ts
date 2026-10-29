@@ -13,7 +13,7 @@
 
 import path from "node:path";
 import type { Command } from "commander";
-import { ProviderError } from "../../../core/errors.js";
+import { ProviderJobFailedError } from "../../../core/errors.js";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import { outputStamp } from "../../../core/output-name.js";
@@ -74,7 +74,9 @@ export function registerGeminiVideoStatusCommands(parent: Command): void {
       if (!isTerminalInteraction(interaction.status)) {
         logger.info(`Still running. Resume with: ${resumeCommand(id)}`);
       } else if (interaction.status !== "completed") {
-        throw new ProviderError(interactionFailureMessage(interaction), "gemini");
+        throw new ProviderJobFailedError(interactionFailureMessage(interaction), "gemini", {
+          terminal: interaction.status !== "cancelled",
+        });
       }
     });
 

@@ -416,6 +416,141 @@ describe("retries, failures and cancels", () => {
     });
   });
 
+  it("fails a job whose status run reports JOB_FAILED even though its submit was accepted", () => {
+    const op = "fal:req_1";
+    const entries = [
+      entry({ provider_ids: ["req_1"], cost: receipt({ operation_id: op }) }),
+      entry({
+        ts: "2026-10-27T10:01:00.000Z",
+        command: "fal status",
+        model_resolved: undefined,
+        provider_ids: ["req_1"],
+        ok: false,
+        exit_code: 5,
+        error: { code: "JOB_FAILED", message: "the provider failed the job" },
+        cost: receipt({ operation_id: op, role: "observation", status: "unknown" }),
+      }),
+    ];
+    for (const by of USAGE_GROUPS) {
+      for (const r of aggregateUsage(entries, by)) {
+        expect(r, `${by} ${r.key}`).toMatchObject({ completed: 0, canceled: 0, success_rate: 0 });
+        expect(r.failed, `${by} ${r.key}`).toBe(r.operations);
+      }
+    }
+    expect(aggregateUsage(entries, "provider")).toMatchObject([
+      { key: "fal", requests: 2, operations: 1, completed: 0, failed: 1, success_rate: 0 },
+    ]);
+  });
+
+  it("fails a job from the ledger before receipts when its status run reports JOB_FAILED", () => {
+    // The repro of #471: no receipts, one fal job named by its provider id.
+    const entries = [
+      entry({ provider_ids: ["req_1"] }),
+      entry({
+        ts: "2026-10-27T10:01:00.000Z",
+        command: "fal status",
+        model_resolved: undefined,
+        provider_ids: ["req_1"],
+        ok: false,
+        exit_code: 5,
+        error: { code: "JOB_FAILED", message: "fal request req_1 failed" },
+      }),
+    ];
+    expect(aggregateUsage(entries, "provider")).toMatchObject([
+      { key: "fal", operations: 1, completed: 0, failed: 1, success_rate: 0 },
+    ]);
+  });
+
+  it("fails a job identified by its job record when a later run reports JOB_FAILED", () => {
+    const job = { provider: "fal", id: "j-f", attempt: 1 };
+    const row = rowFor([
+      entry({ job }),
+      entry({
+        job,
+        ts: "2026-10-27T10:05:00.000Z",
+        ok: false,
+        exit_code: 5,
+        error: { code: "JOB_FAILED", message: "the provider failed the job" },
+      }),
+    ]);
+    expect(row).toMatchObject({ operations: 1, completed: 0, failed: 1, success_rate: 0 });
+  });
+
+  it("keeps a job failed when a later read-only status poll exits ok", () => {
+    const job = { provider: "byteplus", id: "j-r", attempt: 1 };
+    const row = rowFor([
+      entry({ job }),
+      entry({
+        job,
+        ts: "2026-10-27T10:01:00.000Z",
+        ok: false,
+        exit_code: 5,
+        error: { code: "JOB_FAILED", message: "the provider failed the job" },
+      }),
+      entry({ job, ts: "2026-10-27T10:05:00.000Z" }),
+    ]);
+    expect(row).toMatchObject({ operations: 1, completed: 0, failed: 1, success_rate: 0 });
+  });
+
+  it("completes an operation when a resubmit under the same operation id returned another job that succeeded", () => {
+    const op = "agent-op-1";
+    const row = rowFor([
+      entry({ provider_ids: ["J1"], cost: receipt({ operation_id: op }) }),
+      entry({
+        ts: "2026-10-27T10:01:00.000Z",
+        provider_ids: ["J1"],
+        ok: false,
+        exit_code: 5,
+        error: { code: "JOB_FAILED", message: "the provider failed the job" },
+        cost: receipt({ operation_id: op, role: "observation", status: "unknown" }),
+      }),
+      entry({
+        ts: "2026-10-27T10:05:00.000Z",
+        provider_ids: ["J2"],
+        job: { provider: "fal", id: "J2", attempt: 1 },
+        cost: receipt({ operation_id: op }),
+      }),
+    ]);
+    expect(row).toMatchObject({ operations: 1, completed: 1, failed: 0 });
+  });
+
+  it("does not let an upload under the same operation id complete a failed job", () => {
+    const op = "agent-op-2";
+    const row = rowFor([
+      entry({ provider_ids: ["file_9"], cost: receipt({ operation_id: op }) }),
+      entry({
+        ts: "2026-10-27T10:01:00.000Z",
+        provider_ids: ["J1"],
+        job: { provider: "fal", id: "J1", attempt: 1 },
+        cost: receipt({ operation_id: op }),
+      }),
+      entry({
+        ts: "2026-10-27T10:02:00.000Z",
+        provider_ids: ["J1"],
+        ok: false,
+        exit_code: 5,
+        error: { code: "JOB_FAILED", message: "the provider failed the job" },
+        cost: receipt({ operation_id: op, role: "observation", status: "unknown" }),
+      }),
+    ]);
+    expect(row).toMatchObject({ operations: 1, completed: 0, failed: 1 });
+  });
+
+  it("does not fail a job when a poll got a gateway page that says blocked", () => {
+    const job = { provider: "fal", id: "j-w", attempt: 1 };
+    const row = rowFor([
+      entry({ job }),
+      entry({
+        job,
+        ts: "2026-10-27T10:01:00.000Z",
+        ok: false,
+        exit_code: 5,
+        error: { code: "CONTENT_BLOCKED", message: "HTTP 403: you have been blocked" },
+      }),
+    ]);
+    expect(row).toMatchObject({ operations: 1, completed: 1, failed: 0 });
+  });
+
   it("counts an operation with a successful run as completed even when another run was canceled", () => {
     const job = { provider: "fal", id: "j-c", attempt: 1 };
     const row = rowFor([
