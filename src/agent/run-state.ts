@@ -91,6 +91,11 @@ export interface RunState {
    * still in flight may have been accepted under an id the run never saw.
    */
   interrupted?: { hint: string; retryable: boolean };
+  /**
+   * A failure after some outputs were already saved and paid for: what to tell
+   * the caller, and the args a rerun appends so it asks only for the rest.
+   */
+  partial?: { hint: string; rerunArgs: string[] };
   /** True once a command action started (help and parse errors never get there). */
   actionStarted: boolean;
   finalized: boolean;
@@ -134,6 +139,11 @@ export function nameJob(id: string, state: RunState = run): void {
   if (!id || id.length > 128) return;
   state.namedJob = id;
   if (!state.ids.includes(id)) state.ids.unshift(id);
+}
+
+/** Record that a failing run already saved part of what it was asked for. */
+export function recordPartialRun(hint: string, rerunArgs: string[], state: RunState = run): void {
+  state.partial = { hint, rerunArgs };
 }
 
 export interface UsageSummary {

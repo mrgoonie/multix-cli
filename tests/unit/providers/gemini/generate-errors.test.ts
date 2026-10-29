@@ -1,6 +1,11 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { run } from "../../../../src/agent/run-state.js";
 import { classifyError } from "../../../../src/core/error-classify.js";
+import { _resetOutputDir } from "../../../../src/core/output-dir.js";
 import { registerGenerateCommand } from "../../../../src/providers/gemini/commands/generate.js";
 import { _resetGeminiKeyCooldowns } from "../../../../src/providers/gemini/key-pool.js";
 
@@ -14,9 +19,9 @@ function program(): Command {
   return root;
 }
 
-async function runAndCatch(): Promise<unknown> {
+async function runAndCatch(extra: string[] = []): Promise<unknown> {
   try {
-    await program().parseAsync(["generate", "--prompt", "a cat", "--model", "gemini-x"], {
+    await program().parseAsync(["generate", "--prompt", "a cat", "--model", "gemini-x", ...extra], {
       from: "user",
     });
   } catch (error) {
@@ -27,6 +32,7 @@ async function runAndCatch(): Promise<unknown> {
 
 beforeEach(() => {
   logged = [];
+  run.partial = undefined;
   _resetGeminiKeyCooldowns();
   for (const k of Object.keys(process.env)) {
     if (k.startsWith("GEMINI_API_KEY")) {
@@ -39,6 +45,9 @@ beforeEach(() => {
     logged.push(String(msg));
   });
   vi.spyOn(console, "log").mockImplementation(() => {});
+  vi.spyOn(console, "warn").mockImplementation((msg?: unknown) => {
+    logged.push(String(msg));
+  });
   vi.spyOn(process, "exit").mockImplementation((code?: unknown) => {
     throw new Error(`process.exit(${String(code)})`);
   });
@@ -73,5 +82,46 @@ describe("gemini generate failures", () => {
     );
     const info = classifyError(await runAndCatch());
     expect(info).toMatchObject({ code: "PROVIDER_REJECTED", http_status: 400 });
+  });
+
+  it("names the images saved before a later request fails and keeps its error", async () => {
+    const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "multix-gen-"));
+    const savedOutputDir = process.env.MULTIX_OUTPUT_DIR;
+    process.env.MULTIX_OUTPUT_DIR = outDir;
+    _resetOutputDir();
+    let calls = 0;
+    vi.stubGlobal("fetch", async () => {
+      calls++;
+      if (calls === 1) {
+        const image = { inlineData: { mimeType: "image/png", data: "iVBORw0KGgo=" } };
+        return new Response(JSON.stringify({ candidates: [{ content: { parts: [image] } }] }), {
+          status: 200,
+        });
+      }
+      return new Response(JSON.stringify({ error: { message: "overloaded" } }), { status: 503 });
+    });
+    try {
+      const info = classifyError(await runAndCatch(["--num-images", "3"]));
+      expect(info).toMatchObject({ code: "PROVIDER_UNAVAILABLE", http_status: 503 });
+      const saved = fs.readdirSync(outDir);
+      expect(saved).toHaveLength(1);
+      const warning = logged.join("\n");
+      expect(warning).toContain("Request 2 of 3 failed after 1 image(s) were saved");
+      expect(warning).toContain(path.join(outDir, saved[0] as string));
+      expect(warning).toContain("--num-images 2");
+      expect(run.partial?.rerunArgs).toEqual(["--num-images", "2"]);
+    } finally {
+      if (savedOutputDir === undefined) Reflect.deleteProperty(process.env, "MULTIX_OUTPUT_DIR");
+      else process.env.MULTIX_OUTPUT_DIR = savedOutputDir;
+      _resetOutputDir();
+      fs.rmSync(outDir, { recursive: true, force: true });
+    }
+  });
+
+  it("adds no saved-images warning when the first request fails", async () => {
+    vi.stubGlobal("fetch", async () => new Response("{}", { status: 503 }));
+    await runAndCatch(["--num-images", "3"]);
+    expect(logged.join("\n")).not.toMatch(/were saved/);
+    expect(run.partial).toBeUndefined();
   });
 });

@@ -10,6 +10,7 @@ import fs from "node:fs";
 import { syncBuiltinESMExports } from "node:module";
 import os from "node:os";
 import path from "node:path";
+import { resolveOutputDir } from "../core/output-dir.js";
 import { run } from "./run-state.js";
 
 function track(target: unknown): void {
@@ -56,16 +57,35 @@ export function installOutputFileTracker(): void {
   syncBuiltinESMExports();
 }
 
-/** Files this run produced that still exist, excluding temp and ~/.multix state. */
+function realDir(dir: string): string | undefined {
+  try {
+    return fs.realpathSync(dir);
+  } catch {
+    return undefined;
+  }
+}
+
+function isInside(dir: string, parent: string): boolean {
+  return dir === parent || dir.startsWith(`${parent}${path.sep}`);
+}
+
+/**
+ * Files this run produced that still exist, excluding temp and ~/.multix state.
+ * The output directory counts even when it lives under the OS temp dir (an
+ * agent working in /tmp), so its files are never dropped as scratch files.
+ */
 export function producedFiles(extra: string[] = []): string[] {
   const tmp = fs.realpathSync(os.tmpdir());
+  const outDir = realDir(resolveOutputDir());
   const state = path.join(os.homedir(), ".multix");
   const extras = new Set(extra.map((p) => path.resolve(p)));
   const all = new Set([...run.written, ...extras]);
   return [...all].filter((file) => {
     if (file.startsWith(state) || /\.tmp-\d+|\.part$|\.tmp$/.test(file)) return false;
     try {
-      if (fs.realpathSync(path.dirname(file)).startsWith(tmp) && !extras.has(file)) return false;
+      const dir = fs.realpathSync(path.dirname(file));
+      const kept = extras.has(file) || (outDir !== undefined && isInside(dir, outDir));
+      if (isInside(dir, tmp) && !kept) return false;
       return fs.statSync(file).isFile();
     } catch {
       return false;

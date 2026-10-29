@@ -88,7 +88,7 @@ https://multix.zuey.me/llms.txt
 
 | Field | Meaning |
 | --- | --- |
-| `outputs[]` | Files the run wrote: relative path, size, MIME type sniffed from the content, SHA-256, image `width`/`height`, media `duration_s` (with ffprobe). |
+| `outputs[]` | Files the run wrote: relative path, size, MIME type sniffed from the content, SHA-256, image `width`/`height`, media `duration_s` (with ffprobe). A failed run still lists the files it saved before the failure: keep them. Files in the output directory count even when it is under the OS temp dir; other temp files do not. |
 | `warnings[]` | Problems found in the outputs, such as an empty file or content that does not match its extension. |
 | `data` / `text` | The command's stdout: parsed JSON, or text capped at 32 KB. |
 | `error` | `code`, `message`, `retryable`, `retry_after_s`, `hint`, `http_status`, `env` (the key name when one is missing). URL query strings in `message` and `log` are redacted, including a pre-signed input URL a provider echoes back in its error. |
@@ -101,7 +101,7 @@ https://multix.zuey.me/llms.txt
 | `estimate` | Pre-flight price of the run (with `--estimate`, `--max-cost`, or on a priced command). `estimate_only: true` marks an `--estimate` run. |
 | `budget` | With `--max-cost`: `ok`, `max_cost_usd`, `policy`, and the refusal `code` and `message`. |
 | `cost` | The run's cost receipt (`multix.cost/v1`); see [Cost receipt](#cost-receipt). |
-| `next[]` | Commands to run next: a status command for an async job, `multix check` for a key problem, `multix rerun <id>` for a temporary failure. |
+| `next[]` | Commands to run next: a status command for an async job, `multix check` for a key problem, `multix rerun <id>` for a temporary failure. When part of the work was already saved (for example 1 of 3 images), the rerun asks only for the rest (`multix rerun <id> --num-images 2`) and `error.hint` says so. |
 
 ## Exit codes and error codes
 

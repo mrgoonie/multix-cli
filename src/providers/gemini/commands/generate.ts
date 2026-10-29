@@ -6,6 +6,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Command } from "commander";
+import { recordPartialRun } from "../../../agent/run-state.js";
 import { ValidationError } from "../../../core/errors.js";
 import {
   finalizeGeneratedImages,
@@ -89,18 +90,35 @@ export function registerGenerateCommand(parent: Command): void {
 
         for (let i = 0; i < numImages; i++) {
           // A failed call throws: the run is classified from the error itself, not a log line.
-          const resp = await withGeminiKey(
-            (apiKey) =>
-              generateContent(
-                {
-                  model,
-                  contents: [{ parts: [{ text: opts.prompt }] }],
-                  generationConfig,
-                },
-                { apiKey, logger },
-              ),
-            { logger },
-          );
+          let resp: Awaited<ReturnType<typeof generateContent>>;
+          try {
+            resp = await withGeminiKey(
+              (apiKey) =>
+                generateContent(
+                  {
+                    model,
+                    contents: [{ parts: [{ text: opts.prompt }] }],
+                    generationConfig,
+                  },
+                  { apiKey, logger },
+                ),
+              { logger },
+            );
+          } catch (error) {
+            // Images saved by earlier requests are paid for and stay on disk (and in
+            // the envelope's outputs): say so, so a rerun asks only for the rest.
+            if (savedFiles.length > 0) {
+              const rest = numImages - i;
+              logger.warn(
+                `Request ${i + 1} of ${numImages} failed after ${savedFiles.length} image(s) were saved: ${savedFiles.join(", ")}. Keep them and rerun with --num-images ${rest} for the rest.`,
+              );
+              recordPartialRun(
+                `${savedFiles.length} image(s) were already saved (see outputs); keep them and ask only for the remaining ${rest} with --num-images ${rest}.`,
+                ["--num-images", String(rest)],
+              );
+            }
+            throw error;
+          }
 
           const images = extractImages(resp);
           if (images.length === 0) {

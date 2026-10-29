@@ -88,7 +88,7 @@ https://multix.zuey.me/llms.txt
 
 | Trường | Ý nghĩa |
 | --- | --- |
-| `outputs[]` | File lần chạy đã ghi: path tương đối, kích thước, MIME đoán từ nội dung, SHA-256, `width`/`height` của ảnh, `duration_s` của media (cần ffprobe). |
+| `outputs[]` | File lần chạy đã ghi: path tương đối, kích thước, MIME đoán từ nội dung, SHA-256, `width`/`height` của ảnh, `duration_s` của media (cần ffprobe). Lần chạy lỗi vẫn liệt kê các file đã lưu trước khi lỗi: hãy giữ lại. File trong thư mục output vẫn được tính kể cả khi thư mục đó nằm trong thư mục tạm của hệ điều hành; các file tạm khác thì không. |
 | `warnings[]` | Vấn đề tìm thấy trong output, ví dụ file rỗng hoặc nội dung không khớp phần mở rộng. |
 | `data` / `text` | stdout của lệnh: JSON đã parse, hoặc text tối đa 32 KB. |
 | `error` | `code`, `message`, `retryable`, `retry_after_s`, `hint`, `http_status`, `env` (tên key khi thiếu key). Query string của URL trong `message` và `log` đều bị che, kể cả URL đầu vào đã ký mà provider lặp lại trong thông báo lỗi. |
@@ -101,7 +101,7 @@ https://multix.zuey.me/llms.txt
 | `estimate` | Giá ước tính trước khi chạy (với `--estimate`, `--max-cost`, hoặc với lệnh có bảng giá). `estimate_only: true` đánh dấu lần chạy `--estimate`. |
 | `budget` | Với `--max-cost`: `ok`, `max_cost_usd`, `policy`, cùng `code` và `message` khi bị từ chối. |
 | `cost` | Biên nhận chi phí của lần chạy (`multix.cost/v1`); xem [Biên nhận chi phí](#biên-nhận-chi-phí). |
-| `next[]` | Lệnh nên chạy tiếp: lệnh status của job async, `multix check` khi lỗi key, `multix rerun <id>` khi lỗi tạm thời. |
+| `next[]` | Lệnh nên chạy tiếp: lệnh status của job async, `multix check` khi lỗi key, `multix rerun <id>` khi lỗi tạm thời. Khi một phần kết quả đã được lưu (ví dụ 1 trên 3 ảnh), lệnh rerun chỉ yêu cầu phần còn lại (`multix rerun <id> --num-images 2`) và `error.hint` ghi rõ điều đó. |
 
 ## Exit code và mã lỗi
 

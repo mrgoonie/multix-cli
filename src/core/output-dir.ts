@@ -9,6 +9,14 @@ import path from "node:path";
 
 let cachedOutputDir: string | undefined;
 
+/** The output directory path, without creating it. Respects MULTIX_OUTPUT_DIR. */
+export function resolveOutputDir(): string {
+  if (cachedOutputDir) return cachedOutputDir;
+  return process.env.MULTIX_OUTPUT_DIR
+    ? path.resolve(process.env.MULTIX_OUTPUT_DIR)
+    : path.resolve(process.cwd(), "multix-output");
+}
+
 /**
  * Returns the absolute path to the output directory, creating it if needed.
  * Respects MULTIX_OUTPUT_DIR environment variable.
@@ -16,9 +24,7 @@ let cachedOutputDir: string | undefined;
 export function getOutputDir(): string {
   if (cachedOutputDir) return cachedOutputDir;
 
-  const dir = process.env.MULTIX_OUTPUT_DIR
-    ? path.resolve(process.env.MULTIX_OUTPUT_DIR)
-    : path.resolve(process.cwd(), "multix-output");
+  const dir = resolveOutputDir();
 
   fs.mkdirSync(dir, { recursive: true });
   cachedOutputDir = dir;

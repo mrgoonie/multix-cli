@@ -255,6 +255,10 @@ export function finalizeRun(input: FinalizeInput): number {
   ) {
     info = { ...info, ...run.interrupted };
   }
+  // Outputs saved before the failure stay paid for: a plain rerun would buy them again.
+  if (info && !notSent && run.partial) {
+    info = { ...info, hint: `${info.hint} ${run.partial.hint}` };
+  }
   // Exit classes (2-6) are part of agent mode; plain runs keep the historical exit 1.
   // An unclassified failure keeps the command's own status in both modes.
   const jsonExitCode = info?.code === "UNKNOWN" ? input.exitCode || 1 : (info?.exit_code ?? 1);
@@ -296,7 +300,11 @@ export function finalizeRun(input: FinalizeInput): number {
 
   const next = [
     ...(inFlight ? [inFlight.resume] : []),
-    ...(info ? nextForError(info, run.command, run.group, historyId) : []),
+    ...(info ? nextForError(info, run.command, run.group, historyId) : []).map((step) =>
+      run.partial && historyId && step === `multix rerun ${historyId}`
+        ? [step, ...run.partial.rerunArgs.map(shellQuote)].join(" ")
+        : step,
+    ),
     ...suggestedCommands([...run.stdout, ...run.stderr], run.command, knownGroups),
   ];
   if (info?.code === "BUDGET_EXCEEDED" || info?.code === "BUDGET_UNPROVEN") {
