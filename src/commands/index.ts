@@ -19,6 +19,7 @@ import { registerOpenAICommands } from "../providers/openai/commands/index.js";
 import { registerOpenRouterCommands } from "../providers/openrouter/commands/index.js";
 import { registerReplicateCommands } from "../providers/replicate/commands/index.js";
 import { registerRunwayCommands } from "../providers/runway/commands/index.js";
+import { registerCatalogCommands } from "./agent/catalog-command.js";
 import { registerGuideCommand } from "./agent/guide-command.js";
 import { registerHistoryCommands } from "./agent/history-command.js";
 import { registerModelsCommand } from "./agent/models-command.js";
@@ -54,4 +55,5 @@ export function registerCommands(program: Command): void {
   registerModelsCommand(program);
   registerGuideCommand(program);
   registerHistoryCommands(program);
+  registerCatalogCommands(program);
 }

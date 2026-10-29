@@ -24,6 +24,7 @@ description: Chọn nhóm lệnh multix phù hợp với workflow media của b�
 | [HeyGen](/vi/commands/heygen/) | Video Agent tạo video từ prompt, video avatar theo kịch bản, dịch video, lipsync và TTS. |
 | [Speech](/vi/commands/speech/) | Text-to-speech trên Gemini, OpenAI, ElevenLabs, MiniMax, Atlas Cloud hoặc Fish Audio với một bộ flag, kiểm tra khả năng của model và fallback phải tự bật. |
 | [Scene](/vi/commands/scene/) | Audio hội thoại nhiều nhân vật: voice profile, take được cache theo từng câu, duyệt take và xuất stem. |
+| [Danh mục](/vi/commands/catalog/) | So sánh provider và model trước khi chạy: giá theo từng cấu hình kèm nguồn và ngày kiểm tra, usage của bạn qua multix, rating, review và ghi chú use case. |
 | `multix media` | Tối ưu, cắt và batch file bằng ffmpeg/ImageMagick. |
 | `multix doc` | Chuyển tài liệu sang Markdown qua Gemini. |
 | `multix update` | Tự cập nhật multix lên version mới nhất, hoặc một version cụ thể đã publish. |

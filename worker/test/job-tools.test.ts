@@ -159,16 +159,18 @@ describe("CLI runner tools", () => {
     expect(names).toEqual(
       expect.arrayContaining([
         "multix_catalog",
+        "multix_model_catalog",
         "multix_run",
         "multix_job_status",
         "multix_job_cancel",
         "multix_skills",
       ]),
     );
-    expect(names).toHaveLength(5);
+    expect(names).toHaveLength(6);
     const without = await rpc(env, "tools/list");
     expect(without.result.tools.map((t: { name: string }) => t.name).sort()).toEqual([
       "multix_catalog",
+      "multix_model_catalog",
       "multix_skills",
     ]);
   });

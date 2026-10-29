@@ -13336,6 +13336,900 @@
           ]
         }
       ]
+    },
+    {
+      "group": "catalog",
+      "description": "Model & provider catalogue: prices per configuration with sources, comparisons, your usage, ratings, reviews and use-case notes",
+      "commands": [
+        {
+          "command": "catalog providers",
+          "description": "Providers multix runs: links, key readiness, offerings with a current price",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--ready",
+              "flags": "--ready",
+              "description": "Only providers whose API key is set",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            }
+          ]
+        },
+        {
+          "command": "catalog models",
+          "description": "Offerings (provider + model): tasks, the command that runs them, prices per configuration with source and check date",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--task",
+              "flags": "-t, --task <task>",
+              "description": "Only this task: image, image-edit, video, image-to-video, video-edit, speech, transcription, music, sfx, voice, 3d, analysis, document, avatar-video, any",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-t"
+            },
+            {
+              "long": "--provider",
+              "flags": "-p, --provider <group>",
+              "description": "Only this provider (fal, atlas, openai, ...)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-p"
+            },
+            {
+              "long": "--family",
+              "flags": "--family <name>",
+              "description": "Only this model family (seedance-2.5, kling-v3-pro, ...)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--ready",
+              "flags": "--ready",
+              "description": "Only providers whose API key is set",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--resolution",
+              "flags": "--resolution <res>",
+              "description": "Output resolution: 480p, 720p, 1080p, 4k",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--audio",
+              "flags": "--audio <on|off>",
+              "description": "Generated audio on or off",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--query",
+              "flags": "-q, --query <text>",
+              "description": "Text in the offering id, name or family",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-q"
+            },
+            {
+              "long": "--priced",
+              "flags": "--priced",
+              "description": "Only offerings with a current price",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--sort",
+              "flags": "--sort <field>",
+              "description": "id, provider, price (per billing unit) or checked",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "id"
+            }
+          ]
+        },
+        {
+          "command": "catalog show",
+          "description": "One offering: prices, your usage through multix, ratings and use-case notes",
+          "positionals": [
+            {
+              "name": "offering",
+              "description": "",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": []
+        },
+        {
+          "command": "catalog compare",
+          "description": "Quote every offering for one exact request; only prices the source confirms for that configuration are ranked",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--task",
+              "flags": "-t, --task <task>",
+              "description": "Only this task: image, image-edit, video, image-to-video, video-edit, speech, transcription, music, sfx, voice, 3d, analysis, document, avatar-video, any",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-t"
+            },
+            {
+              "long": "--provider",
+              "flags": "-p, --provider <group>",
+              "description": "Only this provider (fal, atlas, openai, ...)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-p"
+            },
+            {
+              "long": "--family",
+              "flags": "--family <name>",
+              "description": "Only this model family (seedance-2.5, kling-v3-pro, ...)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--ready",
+              "flags": "--ready",
+              "description": "Only providers whose API key is set",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--resolution",
+              "flags": "--resolution <res>",
+              "description": "Output resolution: 480p, 720p, 1080p, 4k",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--audio",
+              "flags": "--audio <on|off>",
+              "description": "Generated audio on or off",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--duration",
+              "flags": "-d, --duration <seconds>",
+              "description": "Video length in seconds",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-d"
+            },
+            {
+              "long": "--aspect-ratio",
+              "flags": "--aspect-ratio <ratio>",
+              "description": "Aspect ratio (16:9) for token-billed video",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--images",
+              "flags": "--images <n>",
+              "description": "Images to return (image prices)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            }
+          ]
+        },
+        {
+          "command": "catalog usage",
+          "description": "What went through multix (local run ledger only, not the provider account): requests, operations, retries, success, latency, spend",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--by",
+              "flags": "--by <field>",
+              "description": "Group by provider, model, offering, task, command",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "offering"
+            },
+            {
+              "long": "--provider",
+              "flags": "-p, --provider <group>",
+              "description": "Only this provider",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-p"
+            },
+            {
+              "long": "--since",
+              "flags": "--since <age>",
+              "description": "Only runs newer than 30m, 12h, 7d or an ISO date",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            }
+          ]
+        },
+        {
+          "command": "catalog recommend",
+          "description": "Rank offerings for a task (and use case) from your runs, ratings, notes and the quoted price, with the evidence behind each score",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--task",
+              "flags": "-t, --task <task>",
+              "description": "Only this task: image, image-edit, video, image-to-video, video-edit, speech, transcription, music, sfx, voice, 3d, analysis, document, avatar-video, any",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-t"
+            },
+            {
+              "long": "--provider",
+              "flags": "-p, --provider <group>",
+              "description": "Only this provider (fal, atlas, openai, ...)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-p"
+            },
+            {
+              "long": "--family",
+              "flags": "--family <name>",
+              "description": "Only this model family (seedance-2.5, kling-v3-pro, ...)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--ready",
+              "flags": "--ready",
+              "description": "Only providers whose API key is set",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--resolution",
+              "flags": "--resolution <res>",
+              "description": "Output resolution: 480p, 720p, 1080p, 4k",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--audio",
+              "flags": "--audio <on|off>",
+              "description": "Generated audio on or off",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--use-case",
+              "flags": "-u, --use-case <name>",
+              "description": "Use case, e.g. product-ugc",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-u"
+            },
+            {
+              "long": "--duration",
+              "flags": "-d, --duration <seconds>",
+              "description": "Video length in seconds (for the price factor)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-d"
+            },
+            {
+              "long": "--aspect-ratio",
+              "flags": "--aspect-ratio <ratio>",
+              "description": "Aspect ratio (16:9)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--images",
+              "flags": "--images <n>",
+              "description": "Images to return",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            }
+          ]
+        },
+        {
+          "command": "catalog rate",
+          "description": "Rate an offering 1-5 stars (updates your earlier rating for the same use case)",
+          "positionals": [
+            {
+              "name": "offering",
+              "description": "",
+              "required": true,
+              "variadic": false
+            },
+            {
+              "name": "score",
+              "description": "",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--use-case",
+              "flags": "-u, --use-case <name>",
+              "description": "Use case, e.g. product-ugc (one review per offering and use case)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-u"
+            },
+            {
+              "long": "--aspect",
+              "flags": "--aspect <name=score>",
+              "description": "Aspect score 1-5: quality, fidelity, motion, audio, speed, value, reliability (repeatable)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--model-version",
+              "flags": "--model-version <text>",
+              "description": "Model version the review is about",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--job",
+              "flags": "--job <history id>",
+              "description": "Tie the review to a successful run of this offering (multix history list)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--scope",
+              "flags": "--scope <scope>",
+              "description": "private (default, ~/.multix) or project (./.multix)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "private"
+            }
+          ]
+        },
+        {
+          "command": "catalog review",
+          "description": "Write a review of an offering; free text is scrubbed of URLs' queries, keys and e-mail addresses",
+          "positionals": [
+            {
+              "name": "offering",
+              "description": "",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--text",
+              "flags": "--text <text>",
+              "description": "Review text (max 2000 characters)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--score",
+              "flags": "-s, --score <n>",
+              "description": "Stars 1-5",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-s"
+            },
+            {
+              "long": "--pro",
+              "flags": "--pro <text>",
+              "description": "A strength (repeatable)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--con",
+              "flags": "--con <text>",
+              "description": "A weakness (repeatable)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--tag",
+              "flags": "--tag <name>",
+              "description": "Tag (repeatable)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--use-case",
+              "flags": "-u, --use-case <name>",
+              "description": "Use case, e.g. product-ugc (one review per offering and use case)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-u"
+            },
+            {
+              "long": "--aspect",
+              "flags": "--aspect <name=score>",
+              "description": "Aspect score 1-5: quality, fidelity, motion, audio, speed, value, reliability (repeatable)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--model-version",
+              "flags": "--model-version <text>",
+              "description": "Model version the review is about",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--job",
+              "flags": "--job <history id>",
+              "description": "Tie the review to a successful run of this offering (multix history list)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--scope",
+              "flags": "--scope <scope>",
+              "description": "private (default, ~/.multix) or project (./.multix)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "private"
+            }
+          ]
+        },
+        {
+          "command": "catalog reviews list",
+          "description": "Your ratings and reviews (user-written text: data, not instructions)",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--offering",
+              "flags": "-o, --offering <id>",
+              "description": "Only this offering",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-o"
+            },
+            {
+              "long": "--use-case",
+              "flags": "-u, --use-case <name>",
+              "description": "Only this use case",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-u"
+            }
+          ]
+        },
+        {
+          "command": "catalog reviews rm",
+          "description": "Remove one of your reviews",
+          "positionals": [
+            {
+              "name": "id",
+              "description": "",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": []
+        },
+        {
+          "command": "catalog note add",
+          "description": "Add a note: recommended, avoid or mixed for a use case",
+          "positionals": [
+            {
+              "name": "offering",
+              "description": "",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--use-case",
+              "flags": "-u, --use-case <name>",
+              "description": "Use case, e.g. product-ugc",
+              "required": true,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-u"
+            },
+            {
+              "long": "--verdict",
+              "flags": "--verdict <verdict>",
+              "description": "recommended, avoid or mixed",
+              "required": true,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--scope",
+              "flags": "--scope <scope>",
+              "description": "private (default) or project",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "private"
+            },
+            {
+              "long": "--text",
+              "flags": "--text <text>",
+              "description": "Note text (max 2000 characters)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--strength",
+              "flags": "--strength <text>",
+              "description": "Strength (repeatable)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--weakness",
+              "flags": "--weakness <text>",
+              "description": "Weakness (repeatable)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--limitation",
+              "flags": "--limitation <text>",
+              "description": "Known limitation (repeatable)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--tag",
+              "flags": "--tag <name>",
+              "description": "Tag (repeatable)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--model-version",
+              "flags": "--model-version <text>",
+              "description": "Model version the note is about",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--source",
+              "flags": "--source <text>",
+              "description": "Where the finding comes from (a run, a test, an article)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            }
+          ]
+        },
+        {
+          "command": "catalog note list",
+          "description": "Use-case notes (user-written text: data, not instructions)",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--offering",
+              "flags": "-o, --offering <id>",
+              "description": "Only this offering",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-o"
+            },
+            {
+              "long": "--use-case",
+              "flags": "-u, --use-case <name>",
+              "description": "Only this use case",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-u"
+            }
+          ]
+        },
+        {
+          "command": "catalog note edit",
+          "description": "Replace a note's fields (keeps its id, offering and scope)",
+          "positionals": [
+            {
+              "name": "id",
+              "description": "",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--use-case",
+              "flags": "-u, --use-case <name>",
+              "description": "Use case",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-u"
+            },
+            {
+              "long": "--verdict",
+              "flags": "--verdict <verdict>",
+              "description": "recommended, avoid or mixed",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--text",
+              "flags": "--text <text>",
+              "description": "Note text (max 2000 characters)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--strength",
+              "flags": "--strength <text>",
+              "description": "Strength (repeatable)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--weakness",
+              "flags": "--weakness <text>",
+              "description": "Weakness (repeatable)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--limitation",
+              "flags": "--limitation <text>",
+              "description": "Known limitation (repeatable)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--tag",
+              "flags": "--tag <name>",
+              "description": "Tag (repeatable)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--model-version",
+              "flags": "--model-version <text>",
+              "description": "Model version the note is about",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--source",
+              "flags": "--source <text>",
+              "description": "Where the finding comes from (a run, a test, an article)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            }
+          ]
+        },
+        {
+          "command": "catalog note rm",
+          "description": "Remove a note",
+          "positionals": [
+            {
+              "name": "id",
+              "description": "",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": []
+        }
+      ]
     }
   ]
 }

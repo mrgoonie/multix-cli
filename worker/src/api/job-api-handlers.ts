@@ -10,6 +10,7 @@ import { MODEL_ID_RE, catalogPayload } from "../jobs/catalog-view.js";
 import { type JobStatus, isTerminal } from "../jobs/job-protocol.js";
 import { DEFAULT_WAIT_SECONDS, JobRunner, MAX_WAIT_SECONDS } from "../jobs/job-runner.js";
 import type { JobToolsContext } from "../jobs/job-runner.js";
+import { modelCatalogPayload } from "../jobs/model-catalog-view.js";
 import { type RunRequest, prepareRun } from "../jobs/run-argv-builder.js";
 import type { ProviderKeys } from "../provider-secret-names.js";
 import { ApiError, readJsonObject } from "./api-http.js";
@@ -27,6 +28,61 @@ export function getCatalog(keys: ProviderKeys, url: URL): Response {
     throw new ApiError(400, "bad_request", "model must be a provider model id");
   }
   return json(200, catalogPayload(keys, group, { task, model }));
+}
+
+const NUMBER_RE = /^\d+(\.\d+)?$/;
+
+function boolParam(url: URL, name: string): boolean | undefined {
+  const v = url.searchParams.get(name);
+  if (v === null) return undefined;
+  if (v === "true" || v === "on" || v === "1") return true;
+  if (v === "false" || v === "off" || v === "0") return false;
+  throw new ApiError(400, "bad_request", `${name} must be true or false`);
+}
+
+/** Same bounds as the multix_model_catalog input schema. */
+function numberParam(url: URL, name: string, max: number, whole = false): number | undefined {
+  const v = url.searchParams.get(name);
+  if (v === null) return undefined;
+  const n = Number(v);
+  if (!NUMBER_RE.test(v) || n <= 0 || n > max || (whole && !Number.isInteger(n))) {
+    throw new ApiError(
+      400,
+      "bad_request",
+      `${name} must be a positive ${whole ? "whole " : ""}number up to ${max}`,
+    );
+  }
+  return n;
+}
+
+/** GET /model-catalog: the same views as `multix catalog --json` and multix_model_catalog. */
+export function getModelCatalog(keys: ProviderKeys, url: URL): Response {
+  const p = url.searchParams;
+  const text = (name: string, max: number) => {
+    const v = p.get(name) ?? undefined;
+    if (v !== undefined && v.length > max) {
+      throw new ApiError(400, "bad_request", `${name} is longer than ${max} characters`);
+    }
+    return v;
+  };
+  const query = {
+    view: (text("view", 20) ?? "models") as "models",
+    task: text("task", 40),
+    provider: text("provider", 40),
+    family: text("family", 60),
+    query: text("q", 100),
+    offering: text("offering", 250),
+    resolution: text("resolution", 20),
+    aspect_ratio: text("aspect_ratio", 10),
+    sort: text("sort", 20),
+    priced: boolParam(url, "priced"),
+    ready: boolParam(url, "ready"),
+    audio: boolParam(url, "audio"),
+    duration_s: numberParam(url, "duration_s", 3600),
+    images: numberParam(url, "images", 100, true),
+  };
+  const defined = Object.fromEntries(Object.entries(query).filter(([, v]) => v !== undefined));
+  return json(200, modelCatalogPayload(keys, defined as typeof query));
 }
 
 function requireJobs(jobs: JobToolsContext | undefined): JobToolsContext {

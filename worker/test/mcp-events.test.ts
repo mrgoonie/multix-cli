@@ -111,6 +111,7 @@ describe("protocol negotiation", () => {
     const list = await modernRpc(fullEnv(), "tools/list");
     expect(list.result.tools.map((t: { name: string }) => t.name).sort()).toEqual([
       "multix_catalog",
+      "multix_model_catalog",
       "multix_skills",
     ]);
     const call = await modernRpc(fullEnv(), "tools/call", {

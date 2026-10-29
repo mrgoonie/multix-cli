@@ -104,7 +104,10 @@ export function appendHistory(entry: HistoryEntry): void {
   }
 }
 
-/** All entries, oldest first (current file only). Malformed lines are skipped. */
+/**
+ * All entries, oldest first (current file only). Malformed lines are skipped,
+ * including valid JSON that is not an object with a string `id` and `ts`.
+ */
 export function readHistory(): HistoryEntry[] {
   let text: string;
   try {
@@ -115,11 +118,21 @@ export function readHistory(): HistoryEntry[] {
   const entries: HistoryEntry[] = [];
   for (const line of text.split("\n")) {
     if (!line.trim()) continue;
+    let value: unknown;
     try {
-      entries.push(JSON.parse(line) as HistoryEntry);
-    } catch {}
+      value = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (isEntryShape(value)) entries.push(value);
   }
   return entries;
+}
+
+function isEntryShape(value: unknown): value is HistoryEntry {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const v = value as Record<string, unknown>;
+  return typeof v.id === "string" && typeof v.ts === "string";
 }
 
 /** Find by id, id prefix, or `last` / `last-N` (1 = most recent). */
