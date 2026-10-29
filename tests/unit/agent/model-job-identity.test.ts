@@ -184,6 +184,75 @@ describe("job identity", () => {
     expect(out.cost.operation_id).toBe("replicate:pred-xyz");
   });
 
+  it("names the prediction after more uploads than provider_ids keeps", async () => {
+    const uploads = Array.from({ length: 12 }, (_, i) => json({ id: `file-${i}` }, 201));
+    const out = await runWith(
+      "replicate",
+      [...uploads, json({ id: "pred-xyz", model: "o/m" }, 201), json({ id: "pred-2" }, 201)],
+      async () => {
+        for (let i = 0; i < 12; i++) {
+          await fetch("https://api.replicate.com/v1/files", { method: "POST" });
+        }
+        await post("https://api.replicate.com/v1/predictions", { version: "o/m" });
+        await post("https://api.replicate.com/v1/predictions", { version: "o/m" });
+      },
+    );
+    expect(out.job).toEqual({ provider: "replicate", id: "pred-xyz", attempt: 1 });
+    expect(out.cost.operation_id).toBe("replicate:pred-xyz");
+    // Only the job's id goes past the cap: ten upload ids, then the prediction.
+    expect(out.provider_ids).toHaveLength(11);
+  });
+
+  it("gives no extra id slot to a submit that came before the cap", async () => {
+    const uploads = Array.from({ length: 12 }, (_, i) => json({ id: `file-${i}` }, 201));
+    const out = await runWith(
+      "replicate",
+      [json({ id: "pred-xyz", model: "o/m" }, 201), ...uploads],
+      async () => {
+        await post("https://api.replicate.com/v1/predictions", { version: "o/m" });
+        for (let i = 0; i < 12; i++) {
+          await fetch("https://api.replicate.com/v1/files", { method: "POST" });
+        }
+      },
+    );
+    expect(out.job?.id).toBe("pred-xyz");
+    expect(out.provider_ids).toHaveLength(10);
+  });
+
+  it("names the job fal result was given when the body carries no id", async () => {
+    vi.stubEnv("FAL_KEY", "test-key");
+    const out = await runWith("fal", [json({ images: [] })], async () => {
+      const { Command } = await import("commander");
+      const { registerFalResultCommand } = await import(
+        "../../../src/providers/fal/commands/result.js"
+      );
+      const fal = new Command("fal");
+      registerFalResultCommand(fal);
+      const log = vi.spyOn(console, "log").mockImplementation(() => {});
+      try {
+        await fal.parseAsync(["result", "fal-ai/flux", "req-9"], { from: "user" });
+      } finally {
+        log.mockRestore();
+      }
+    });
+    expect(out.job).toEqual({ provider: "fal", id: "req-9", attempt: 1 });
+    // The submit run of the same job files under the same operation.
+    expect(out.cost.operation_id).toBe("fal:req-9");
+  });
+
+  it("keeps a named job when its read fails, so the read joins the job's operation", async () => {
+    const out = await runWith("fal", [json({ detail: "not found" }, 404)], async () => {
+      const { nameJob } = await import("../../../src/agent/run-state.js");
+      nameJob("req-9");
+      nameJob("x".repeat(129));
+      await fetch("https://queue.fal.run/fal-ai/flux/requests/req-9");
+    });
+    expect(out.job).toEqual({ provider: "fal", id: "req-9", attempt: 1 });
+    expect(out.cost.operation_id).toBe("fal:req-9");
+    // An argument longer than any provider id is not taken as a job.
+    expect(out.provider_ids).toEqual(["req-9"]);
+  });
+
   it("keeps an explicit MULTIX_OPERATION_ID over the job", async () => {
     vi.stubEnv("MULTIX_OPERATION_ID", "batch-7");
     const out = await runWith("replicate", [json({ id: "pred-1", model: "o/m" }, 201)], () =>

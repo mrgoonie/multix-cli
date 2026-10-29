@@ -12,7 +12,7 @@
  */
 
 import { PollTimeoutError, isTransientHttpError, pollUntil } from "../../core/async-poll.js";
-import { HttpError, ProviderError } from "../../core/errors.js";
+import { HttpError, ProviderError, ProviderJobFailedError } from "../../core/errors.js";
 import { toFetchError } from "../../core/fetch-error.js";
 import { type FetchLike, fetchJson, httpErrorFromResponse } from "../../core/fetch-json.js";
 import { fetchSameOrigin } from "../../core/redirect-fetch.js";
@@ -45,12 +45,13 @@ export class ReplicateApiError extends ProviderError {
 }
 
 /** A prediction reached failed/canceled/aborted — never a success. */
-export class ReplicatePredictionError extends ProviderError {
+export class ReplicatePredictionError extends ProviderJobFailedError {
   constructor(public readonly prediction: ReplicatePrediction) {
     const detail = formatPredictionError(prediction.error);
     super(
       `Replicate prediction ${prediction.id} ${prediction.status}${detail ? `: ${detail}` : ""}`,
       PROVIDER,
+      { terminal: prediction.status === "failed" },
     );
     this.name = "ReplicatePredictionError";
   }

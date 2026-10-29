@@ -6,9 +6,12 @@
  * here rather than silently kept local.
  *
  * Free text is scrubbed before it is stored: URL queries (signed media URLs),
- * key-shaped tokens and e-mail addresses are replaced, control characters
- * removed. Text read back is user-written data: callers mark it untrusted so
- * an agent never follows instructions inside a review.
+ * key-shaped tokens and e-mail addresses are replaced, invisible characters
+ * removed and look-alike forms folded (NFKC). Text read back is user-written
+ * data: callers mark it untrusted so an agent never follows instructions
+ * inside a review. A project store arrives with the repository, so a run it
+ * claims as verified usage counts only when this machine's run ledger has it
+ * and no other review references the same run.
  */
 
 import { ValidationError } from "../core/errors.js";
@@ -42,33 +45,171 @@ export const USER_CONTENT_NOTICE =
 const OFFERING_RE = /^([a-z0-9-]{1,40}):([A-Za-z0-9][\w.\/:@+-]{0,199})$/;
 const SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
 
-const SECRET_PATTERNS: RegExp[] = [
-  // Bearer / Authorization values.
-  /\b(bearer|basic)\s+[A-Za-z0-9._~+\/=-]{8,}/gi,
-  // Common key prefixes (OpenAI, Anthropic, Google, GitHub, fal, multix, Replicate, Slack).
-  /\b(sk|pk|rk)-[A-Za-z0-9_-]{12,}/g,
-  /\bAIza[0-9A-Za-z_-]{20,}/g,
-  /\bgh[pousr]_[A-Za-z0-9]{20,}/g,
-  /\b(mxk|r8|xox[abpr])_[A-Za-z0-9_-]{12,}/g,
-  // key=value / key: value pairs naming a secret.
-  /\b([\w-]*(api[_-]?key|token|secret|password))\s*[:=]\s*\S+/gi,
-  // Long opaque strings that mix letters and digits (32+ chars).
-  /\b(?=[A-Za-z0-9_-]{32,}\b)(?=[A-Za-z_-]*\d)(?=\d*[A-Za-z])[A-Za-z0-9_-]{32,}\b/g,
-];
-const EMAIL = /\b[\w.+-]+@[\w-]+(\.[\w-]+)+\b/g;
-// biome-ignore lint/suspicious/noControlCharactersInRegex: stripping them is the point
-const CONTROL = /[\u0000-\u0009\u000b-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g;
+/**
+ * Lookbehind that lets a pattern start only where a run of word characters
+ * and dashes starts; starting inside the run would rescan it from every dash.
+ */
+const TOKEN_START = "(?<![\\w-])";
+/** Names of key=value pairs that always hold a secret. */
+const SECRET_NAME = /(?:secret|token|password|credentials?)$/i;
+/**
+ * Names ending in a joined key word (FAL_KEY, api_key, x-api-key, accesskey).
+ * `image-key` is an image id (Leonardo), not a credential.
+ */
+const KEY_NAME = /(?:[_-]|api|access|secret|private|auth)key$/i;
+const NOT_KEY_NAME = /(?:^|[_-])image[_-]key$/i;
+/** Any other name ending in "key" ("Key", "hotkey") holds a secret only with a token-like value. */
+const TOKEN_LIKE = /^(?=.{16})(?=.*\d)(?=.*[A-Za-z])/s;
 
-/** Text with secrets, URL queries, e-mail addresses and control characters removed. */
+function secretPair(name: string, value: string): boolean {
+  if (SECRET_NAME.test(name)) return true;
+  if (!/key$/i.test(name)) return false;
+  return (KEY_NAME.test(name) && !NOT_KEY_NAME.test(name)) || TOKEN_LIKE.test(value);
+}
+
+/**
+ * A word with a letter outside a-f (not a hex group), a short version part
+ * ("v2", "1080p", "a14b") or a release date (YYMMDD or YYYYMMDD).
+ */
+const MODEL_ID_PART =
+  /^(?=[a-z]*[g-z])[a-z]+$|^[a-z]?\d{1,4}[a-z]?$|^(?:\d\d){1,2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])$/;
+
+/** A dash-joined token made of lower-case words and short version parts ("kling-v2-1-master"). */
+function looksLikeModelId(token: string): boolean {
+  const parts = token.split(/[-_]/);
+  return parts.every((p) => MODEL_ID_PART.test(p)) && parts.some((p) => /^[a-z]{3,}$/.test(p));
+}
+
+const HEX_SHA = /^[0-9a-f]{40}$/;
+
+function looksLikeBase64Secret(token: string): boolean {
+  return (
+    /[+/]/.test(token) &&
+    /\d/.test(token) &&
+    /[A-Z]/.test(token) &&
+    /[a-z]/.test(token) &&
+    !token.split(/[+/]/).some((p) => /^[a-z]{3,}$/.test(p))
+  );
+}
+
+const PAIR_NAME = new RegExp(`${TOKEN_START}([\\w-]+)\\s*[:=]\\s*`, "g");
+const PAIR_VALUE = /\S+/y;
+/**
+ * Enough of a value to judge it, so a run of non-secret names is not rescanned.
+ * A value that fills the whole peek is long enough to count as a token.
+ */
+const PAIR_PEEK = /\S{1,64}/y;
+
+/**
+ * key=value / key: value pairs whose name holds a secret. A pair with another
+ * name is stepped over without its value, so a secret pair glued to it
+ * ("user=bob&password=…", "Note:password=…") is still found.
+ */
+function redactSecretPairs(text: string): string {
+  let out = "";
+  let last = 0;
+  PAIR_NAME.lastIndex = 0;
+  for (let m = PAIR_NAME.exec(text); m; m = PAIR_NAME.exec(text)) {
+    if (!/(?:key|secret|token|password|credentials?)$/i.test(m[1] as string)) continue;
+    PAIR_PEEK.lastIndex = PAIR_NAME.lastIndex;
+    const peek = PAIR_PEEK.exec(text);
+    if (!peek || !(peek[0].length === 64 || secretPair(m[1] as string, peek[0]))) continue;
+    PAIR_VALUE.lastIndex = PAIR_NAME.lastIndex;
+    PAIR_VALUE.exec(text);
+    out += `${text.slice(last, m.index)}[redacted]`;
+    last = PAIR_NAME.lastIndex = PAIR_VALUE.lastIndex;
+  }
+  return out + text.slice(last);
+}
+
+/** A pattern replaced everywhere in the text. */
+const swap =
+  (re: RegExp, to: string | ((match: string) => string)) =>
+  (text: string): string =>
+    typeof to === "string" ? text.replace(re, to) : text.replace(re, to);
+
+/**
+ * Secret shapes, replaced in this order. Every pattern starts at a fixed
+ * prefix or at the start of a token run, so scrubbing stays linear in the
+ * text length (a project store is read on every catalog command).
+ */
+const SECRET_STEPS: Array<(text: string) => string> = [
+  // Private keys in PEM form, through the END line (or the end of a truncated paste).
+  swap(
+    /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|$)/gi,
+    "[redacted]",
+  ),
+  // Bearer / Authorization values.
+  swap(/\b(bearer|basic)\s+[A-Za-z0-9._~+\/=-]{8,}/gi, "[redacted]"),
+  swap(
+    /\b(authorization\s*[:=]\s*)[A-Za-z]+\s+(?=[A-Za-z0-9._~+\/=-]*\d)[A-Za-z0-9._~+\/=-]{8,}/gi,
+    "$1[redacted]",
+  ),
+  // JSON Web Tokens (header.payload.signature).
+  swap(
+    new RegExp(`${TOKEN_START}eyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]*`, "g"),
+    "[redacted]",
+  ),
+  // Signed-URL parameters pasted without their URL.
+  swap(/\bx-(amz|goog)-(signature|credential|security-token)\s*[:=]\s*[^\s&"']+/gi, "[redacted]"),
+  // Common key prefixes (OpenAI, Anthropic, Google, GitHub, Hugging Face, fal, multix, Replicate, Slack, AWS).
+  swap(new RegExp(`${TOKEN_START}(sk|pk|rk)-[A-Za-z0-9_-]{12,}`, "gi"), "[redacted]"),
+  swap(new RegExp(`${TOKEN_START}AIza[0-9A-Za-z_-]{20,}`, "g"), "[redacted]"),
+  swap(new RegExp(`${TOKEN_START}gh[pousr]_[A-Za-z0-9]{20,}`, "g"), "[redacted]"),
+  swap(new RegExp(`${TOKEN_START}hf_[A-Za-z0-9]{20,}`, "g"), "[redacted]"),
+  swap(new RegExp(`${TOKEN_START}(mxk|r8|xox[abpr])_[A-Za-z0-9_-]{12,}`, "g"), "[redacted]"),
+  swap(/\b(AKIA|ASIA)[A-Z0-9]{16}\b/g, "[redacted]"),
+  // key=value pairs (api_key, FAL_KEY, AWS_SECRET_ACCESS_KEY, token, password).
+  redactSecretPairs,
+  // UUID-shaped keys.
+  swap(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, "[redacted]"),
+  // A bare 40-character base64 secret (an AWS secret access key). A hex SHA has
+  // no "/" or "+", and a path has a lower-case word between its slashes.
+  swap(/(?<![A-Za-z0-9+\/])[A-Za-z0-9+\/]{40}(?![A-Za-z0-9+\/=])/g, (m) =>
+    looksLikeBase64Secret(m) ? "[redacted]" : m,
+  ),
+  // Long opaque strings (32+ chars) that mix letters and digits, unless they
+  // read as a model id or a 40-character hex commit or file hash.
+  swap(/[A-Za-z0-9_-]{32,}/g, (m) =>
+    /\d/.test(m) && /[A-Za-z]/.test(m) && !looksLikeModelId(m) && !HEX_SHA.test(m)
+      ? "[redacted]"
+      : m,
+  ),
+];
+const EMAIL = /(?<![\w.+-])[\w.+-]+@[\w-]+(\.[\w-]+)+\b/g;
+/**
+ * Characters a reader cannot see: controls (newline aside), format characters
+ * (zero-width, bidi, soft hyphen, word joiner, BOM), variation selectors,
+ * Unicode tag characters (which can spell hidden ASCII instructions), other
+ * default-ignorable code points and line/paragraph separators. They are
+ * removed before any pattern runs, so they cannot split a key to hide it.
+ */
+const INVISIBLE =
+  /(?!\n)[\p{Cc}\p{Cf}\p{Default_Ignorable_Code_Point}\p{Zl}\p{Zp}\u{E0000}-\u{E007F}]/gu;
+/** Hyphens, dashes and the minus sign, read as "-" so a key cannot hide behind one. */
+const DASHES = /[\u2010-\u2015\u2212]/g;
+
+/**
+ * Text with secrets, URL queries, e-mail addresses and invisible characters
+ * removed. Linear in the text length; callers bound the length first.
+ */
 export function scrubText(text: string): string {
-  let out = redactUrlsInText(text.normalize("NFC").replace(CONTROL, ""));
+  // NFKC folds look-alikes (fullwidth "ｓｋ-") into the ASCII the patterns match;
+  // it never yields an invisible character, so stripping first is enough.
+  let out = text.replace(/\t/g, " ").replace(INVISIBLE, "").normalize("NFKC").replace(DASHES, "-");
+  out = redactUrlsInText(out);
   out = out.replace(/\bdata:[\w.+-]+\/[\w.+-]+;base64,[A-Za-z0-9+\/=]+/gi, "data:[redacted]");
-  for (const re of SECRET_PATTERNS) out = out.replace(re, "[redacted]");
+  for (const step of SECRET_STEPS) out = step(out);
   return out.replace(EMAIL, "[email]").trim();
 }
 
+/** Raw text longer than this many times its limit is refused before any pattern runs. */
+const RAW_FACTOR = 8;
+
 function boundedText(name: string, value: string | undefined, max: number): string | undefined {
   if (value === undefined) return undefined;
+  if (value.length > max * RAW_FACTOR)
+    throw new ValidationError(`${name} is ${value.length} characters; the limit is ${max}.`);
   const v = scrubText(value);
   if (!v) return undefined;
   if (v.length > max)
@@ -297,10 +438,38 @@ function storedOffering(v: unknown): string | undefined {
   return s && OFFERING_RE.test(s) ? s : undefined;
 }
 
+/** Whether this machine's run ledger holds the run a review claims for an offering. */
+export type RunCheck = (usage: NonNullable<Review["verified_usage"]>, offering: string) => boolean;
+
+/**
+ * Reviews whose run references can be trusted. A project review keeps its run
+ * only when `isLocalRun` confirms it (the file arrives with the repository and
+ * cannot vouch for its own runs), and a run referenced by more than one review
+ * backs none of them: a copied reference can deny a run, never take it over.
+ * Pass the reviews of every store read together, after validation, so a
+ * dropped record claims nothing.
+ */
+export function checkRuns(reviews: Review[], isLocalRun: RunCheck): Review[] {
+  const uses = new Map<string, number>();
+  for (const r of reviews) {
+    const id = r.verified_usage?.history_id;
+    if (id) uses.set(id, (uses.get(id) ?? 0) + 1);
+  }
+  return reviews.map((r) => {
+    const run = r.verified_usage;
+    if (!run) return r;
+    const unique = uses.get(run.history_id) === 1;
+    if (unique && (r.scope !== "project" || isLocalRun(run, r.offering))) return r;
+    const { verified_usage: _unverified, ...rest } = r;
+    return rest;
+  });
+}
+
 /**
  * A review read back from a store file, validated and scrubbed like a new
  * one (a project store is committed with the repository, so its content is
- * whatever the repository says). Malformed records are dropped.
+ * whatever the repository says). Malformed records are dropped. A run
+ * reference is kept as stored; `checkRuns` decides whether it counts.
  */
 export function loadReview(raw: unknown, scope: ReviewScope): Review | undefined {
   if (!raw || typeof raw !== "object") return undefined;
@@ -321,6 +490,10 @@ export function loadReview(raw: unknown, scope: ReviewScope): Review | undefined
     const usage = r.verified_usage as Raw | undefined;
     const historyId = str(usage?.history_id);
     const ts = str(usage?.ts);
+    const run =
+      historyId && ts && /^[\w-]{1,80}$/.test(historyId) && ISO_TS_RE.test(ts)
+        ? { history_id: historyId, ts }
+        : undefined;
     const fields = cleanReview({
       offering,
       scope,
@@ -332,9 +505,7 @@ export function loadReview(raw: unknown, scope: ReviewScope): Review | undefined
       ...(strs(r.cons) ? { cons: strs(r.cons) } : {}),
       ...(strs(r.tags) ? { tags: strs(r.tags) } : {}),
       ...(str(r.version) !== undefined ? { version: str(r.version) } : {}),
-      ...(historyId && ts && /^[\w-]{1,80}$/.test(historyId) && ISO_TS_RE.test(ts)
-        ? { verified_usage: { history_id: historyId, ts } }
-        : {}),
+      ...(run ? { verified_usage: run } : {}),
     });
     return { ...fields, ...meta };
   } catch {

@@ -8,6 +8,7 @@
 
 import path from "node:path";
 import type { Command } from "commander";
+import { nameJob } from "../../../agent/run-state.js";
 import { ValidationError } from "../../../core/errors.js";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
@@ -48,6 +49,8 @@ export function registerFalResultCommand(parent: Command): void {
         // Progress goes to stderr so stdout stays the result JSON or the saved paths.
         const logger = createLogger({ verbose: opts.verbose ?? false, stderr: true });
         const client = createFalClient();
+        // The result body need not carry request_id: name the job so the run joins its operation.
+        nameJob(requestId);
 
         let result: FalResultResponse;
         try {

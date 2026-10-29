@@ -31,10 +31,21 @@ export function redactUrl(url: string): string {
   }
 }
 
-/** URLs of any scheme; stops at whitespace, quotes, angle brackets and backslashes (JSON escapes). */
-const URL_IN_TEXT = /\b[a-z][a-z0-9+.-]*:\/\/[^\s"'<>\\]+/gi;
-/** A `?key=value` or `#key=value` tail left over (e.g. after a URL containing a space). */
-const QUERY_TAIL = /[?#](?!\[redacted\])[^\s"'<>\\]*=[^\s"'<>\\]*/g;
+/**
+ * URLs of any scheme; stops at whitespace, quotes, angle brackets and backslashes (JSON escapes).
+ * The scheme is bounded so a long dash-joined word is not rescanned from every word start.
+ */
+const URL_IN_TEXT = /\b[a-z][a-z0-9+.-]{0,31}:\/\/[^\s"'<>\\]+/gi;
+/**
+ * A `?…` or `#…` tail left over (e.g. after a URL containing a space); from
+ * its first `?` or `#` not already redacted, it is redacted when a `=` follows.
+ * Matched whole and decided in a callback, so a long tail is scanned once.
+ */
+const QUERY_TAIL = /[?#][^\s"'<>\\]*/g;
+function redactTail(tail: string): string {
+  const start = tail.search(/[?#](?!\[redacted\])/);
+  return start >= 0 && tail.includes("=", start) ? `${tail.slice(0, start)}?[redacted]` : tail;
+}
 /**
  * The rest of a query cut short at a JSON escape (`\u0026` for "&", `\/`),
  * as Go and PHP encoders write them. Stops before `\"` so JSON stays valid.
@@ -50,6 +61,6 @@ const ESCAPED_REST = /\?\[redacted\](?=\\[^"])(?:\\[^"\s]|[^\s"'<>\\])*/g;
 export function redactUrlsInText(text: string): string {
   return text
     .replace(URL_IN_TEXT, (u) => (u.includes("?[redacted]") ? u : redactUrl(u)))
-    .replace(QUERY_TAIL, "?[redacted]")
+    .replace(QUERY_TAIL, redactTail)
     .replace(ESCAPED_REST, "?[redacted]");
 }

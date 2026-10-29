@@ -83,6 +83,8 @@ export interface RunState {
    * signal reports how to resume it instead of a rerun that would pay twice.
    */
   inFlight?: { id: string; resume: string };
+  /** A job the command named itself (a read of a job given on the command line). */
+  namedJob?: string;
   /**
    * What a signal left behind, recorded by the handler of a phase that knows better
    * than request counting: an upload before submit billed nothing, while a submit
@@ -123,6 +125,17 @@ export function trackInFlight(id: string, resume: string, state: RunState = run)
   if (!state.ids.includes(id)) state.ids.unshift(id);
 }
 
+/**
+ * Name the job a command acts on when its responses may not carry the id (a
+ * result read), so the run joins that job's operation; its id goes in provider_ids.
+ */
+export function nameJob(id: string, state: RunState = run): void {
+  // Same bound as an id read from a response: a longer argument is not a job id.
+  if (!id || id.length > 128) return;
+  state.namedJob = id;
+  if (!state.ids.includes(id)) state.ids.unshift(id);
+}
+
 export interface UsageSummary {
   tokens?: UsageTokens;
   cost_usd?: number;
@@ -150,24 +163,27 @@ export interface JobIdentity {
 /** Upload endpoints: the id they return names an input file, not the job. */
 const UPLOAD_PATH = /upload|\/(files|assets)(\/|$)/i;
 
+/** A call whose returned id can name the job: it succeeded and is not an upload (a GET only when `submit` is false). */
+export function namesJob(call: HttpCall | undefined, submit: boolean): boolean {
+  if (!call || call.status === 0 || call.status >= 400 || UPLOAD_PATH.test(call.path)) return false;
+  return !submit || call.method !== "GET";
+}
+
 /**
  * The provider job or request this run is about: the in-flight job when one
- * was tracked, else the first id a successful submit (non-GET, not an upload)
+ * was tracked, else the job the command named, else the first id a successful submit (non-GET, not an upload)
  * returned, else the first id a successful GET returned. Ids from failed calls
  * stay in provider_ids but never name the job.
  */
 export function jobIdentity(state: RunState = run): JobIdentity | undefined {
   if (!state.group) return undefined;
-  const callOf = (id: string) => state.calls[state.idCalls.get(id) ?? -1];
-  const ok = (id: string, submit: boolean) => {
-    const call = callOf(id);
-    if (!call || call.status === 0 || call.status >= 400 || UPLOAD_PATH.test(call.path)) {
-      return false;
-    }
-    return !submit || call.method !== "GET";
-  };
+  const ok = (id: string, submit: boolean) =>
+    namesJob(state.calls[state.idCalls.get(id) ?? -1], submit);
   const id =
-    state.inFlight?.id ?? state.ids.find((i) => ok(i, true)) ?? state.ids.find((i) => ok(i, false));
+    state.inFlight?.id ??
+    state.namedJob ??
+    state.ids.find((i) => ok(i, true)) ??
+    state.ids.find((i) => ok(i, false));
   if (!id) return undefined;
   const at = state.idCalls.get(id) ?? -1;
   const call = state.calls[at];

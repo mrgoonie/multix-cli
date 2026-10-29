@@ -117,6 +117,24 @@ describe("redactUrlsInText", () => {
     expect(redactUrlsInText(once)).toBe(once);
   });
 
+  it.each([
+    ["see https://x.y/a b?TOKEN?sig=1", "see https://x.y/a b?[redacted]"],
+    ["path?a?b=c", "path?[redacted]"],
+    ["x#frag?sig=1", "x?[redacted]"],
+    ["a?[redacted]?b=c", "a?[redacted]?[redacted]"],
+    ["anchor #intro only", "anchor #intro only"],
+  ])("redacts a query tail from its first ? or #: %s", (input, expected) => {
+    expect(redactUrlsInText(input)).toBe(expected);
+  });
+
+  it("scans long ?, # and dash-joined runs in linear time", () => {
+    for (const text of ["?".repeat(60_000), "#a".repeat(30_000), "a1-".repeat(20_000)]) {
+      const started = performance.now();
+      redactUrlsInText(text);
+      expect(performance.now() - started).toBeLessThan(200);
+    }
+  });
+
   it("redacts the whole query when a raw JSON body escapes & or /", () => {
     const goStyle = String.raw`{"error":"cannot fetch https://s3.example.com/a.wav?X-Amz-Algorithm=A\u0026X-Amz-Signature=SECRET5"}`;
     const phpStyle = String.raw`{"error":"cannot fetch https:\/\/s3.example.com\/a.wav?a=1\/2\u0026sig=SECRET6 now"}`;
