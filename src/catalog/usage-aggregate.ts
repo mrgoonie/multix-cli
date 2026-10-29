@@ -213,7 +213,9 @@ function operationOutcomes(list: HistoryEntry[]): Map<string, Outcome> {
   const runs = new Map<string, HistoryEntry[]>();
   for (const e of list) {
     const id = operationOf(e);
-    runs.set(id, [...(runs.get(id) ?? []), e]);
+    const ops = runs.get(id);
+    if (ops) ops.push(e);
+    else runs.set(id, [e]);
   }
   const outcomes = new Map<string, Outcome>();
   for (const [id, ops] of runs) {
