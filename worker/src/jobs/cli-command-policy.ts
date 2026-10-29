@@ -10,7 +10,7 @@
  *   directory (MULTIX_OUTPUT_DIR) and are uploaded from there.
  * - Caps reuse the operator limits of the Worker tools (MULTIX_MCP_*).
  *   A run the caps cannot bound is marked (`uncappedSpend`, `uncappedOptions`,
- *   `countFromModel`) and goes through MULTIX_MCP_UNCAPPED_SPEND instead.
+ *   `countFromModel`, `resolutionFromModel`) and goes through MULTIX_MCP_UNCAPPED_SPEND instead.
  *
  * Option names are long flags without the leading `--`.
  */
@@ -37,6 +37,11 @@ export interface CapRules {
    * picks one, or an edit keeps the source's), send an allowed one instead.
    */
   fillResolution?: boolean;
+  /**
+   * When the resolution is omitted the model's own default applies, which
+   * can be above `allowedResolutions`: such a run is uncapped.
+   */
+  resolutionFromModel?: boolean;
 }
 
 export interface CommandPolicy {
@@ -66,7 +71,7 @@ export interface CommandPolicy {
    * subject to MULTIX_MCP_UNCAPPED_SPEND.
    */
   uncappedSpend?: string;
-  /** Options that make a run uncapped when given (a JSON body merged into the request). */
+  /** Options that make a run uncapped when given (a raw body or flags, a length the caps do not cover). */
   uncappedOptions?: string[];
   /**
    * The job gets the keys of the provider groups these options name (the part
@@ -124,6 +129,8 @@ export const OUTPUT_DIR_OPTION = "output-dir";
 
 const VIDEO_CAPS: CapRules = { duration: ["duration"], resolution: ["resolution"] };
 const OMNI_VIDEO_CAPS: CapRules = { ...VIDEO_CAPS, fillResolution: true };
+/** The resolution values are model-dependent, so none can be filled in: an omitted one is uncapped. */
+const MODEL_VIDEO_CAPS: CapRules = { ...VIDEO_CAPS, resolutionFromModel: true };
 /** Veo leaves the Gemini API on 2026-10-22 and rejects --duration, which the caps always send. */
 const OMNI_MODEL = { model: "gemini-omni-1.1-flash" };
 const IMAGE_COUNT: CapRules = { count: ["num-images"] };
@@ -194,9 +201,13 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   "openrouter image-to-image": { fileOptions: { ref: "file" } },
   "openrouter image-to-video": {
     urlOptions: ["image-url", "last-frame-url"],
-    caps: VIDEO_CAPS,
+    caps: MODEL_VIDEO_CAPS,
   },
-  "openrouter tts": { fileOptions: { "text-file": "file", "turns-file": "file" } },
+  // --provider-options merges any provider field into the request.
+  "openrouter tts": {
+    fileOptions: { "text-file": "file", "turns-file": "file" },
+    uncappedOptions: ["provider-options"],
+  },
   "openrouter transcribe": { fileOptions: { input: "file" } },
   "fish tts": {
     fileOptions: { "text-file": "file", "turns-file": "file", "dictionary-file": "file" },
@@ -220,12 +231,17 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
     fileOptions: { "ref-image": "file", "ref-video": "file", "ref-audio": "file" },
     caps: VIDEO_CAPS,
   },
-  "byteplus generate-3d": { fileOptions: { "input-image": "file" } },
+  // --flags appends raw model flags (`--resolution 1536pro`, `--hd_texture true`) to the prompt.
+  "byteplus generate-3d": { fileOptions: { "input-image": "file" }, uncappedOptions: ["flags"] },
   "cloudflare generate-video": { caps: VIDEO_CAPS },
   "elevenlabs clone": { fileOptions: { files: "file", audio: "file" } },
   "elevenlabs voice-changer": { fileOptions: { input: "file" } },
   "elevenlabs transcribe": { fileOptions: { input: "file" } },
-  "elevenlabs music": { fileOptions: { plan: "file" } },
+  // Billed by length: --music-length-ms and a --plan's section durations set it (30 s otherwise).
+  "elevenlabs music": {
+    fileOptions: { plan: "file" },
+    uncappedOptions: ["music-length-ms", "plan"],
+  },
   "elevenlabs dub": {
     uncappedSpend: SOURCE_LENGTH,
     fileOptions: { input: "file" },
@@ -241,7 +257,11 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   "fal run": { unsupported: ["file", "receipt"], uncappedSpend: PASS_THROUGH },
   "fal upload": { filePositionals: ["file"] },
   "fal image": { caps: IMAGE_COUNT },
-  "fal video": { urlOptions: ["image-url"], caps: { duration: ["duration"] } },
+  "fal video": {
+    uncappedSpend: "the model picks the resolution (fal video has no --resolution)",
+    urlOptions: ["image-url"],
+    caps: { duration: ["duration"] },
+  },
   // The text file comes from `inputs`; `--receipt` takes a local path (the
   // detached receipt is still printed, and `fal status` / `fal result` resume it).
   // An unlisted model needs --text-field, and then any fal model runs with the
@@ -254,8 +274,8 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   // An omitted --num-images leaves the count to the model's schema default.
   "atlas image": { caps: MODEL_IMAGE_COUNT },
   "atlas image-to-image": { fileOptions: { ref: "file" }, caps: MODEL_IMAGE_COUNT },
-  "atlas video": { caps: VIDEO_CAPS },
-  "atlas image-to-video": { fileOptions: { ref: "file" }, caps: VIDEO_CAPS },
+  "atlas video": { caps: MODEL_VIDEO_CAPS },
+  "atlas image-to-video": { fileOptions: { ref: "file" }, caps: MODEL_VIDEO_CAPS },
   "atlas audio": { fileOptions: { audio: "file" } },
   "atlas 3d": { fileOptions: { ref: "file" } },
   "atlas upload": { filePositionals: ["file"] },
@@ -269,7 +289,7 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   },
   "replicate video": {
     fileOptions: { image: "file" },
-    caps: VIDEO_CAPS,
+    caps: MODEL_VIDEO_CAPS,
     uncappedOptions: EXTRA_INPUT,
   },
   // --ratio is checked against each model's fixed list by the CLI (at most 1920x1080).
@@ -315,7 +335,7 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
     assetRefOptions: ["image", "reference-image", "reference-video", "reference-audio"],
     repeatable: ["reference-image", "reference-video", "reference-audio"],
     urlOptions: ["callback-url"],
-    caps: VIDEO_CAPS,
+    caps: MODEL_VIDEO_CAPS,
   },
   "heygen template": { uncappedSpend: "the template decides the video length" },
   "heygen run": { uncappedSpend: PASS_THROUGH },

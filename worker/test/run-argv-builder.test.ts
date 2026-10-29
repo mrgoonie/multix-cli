@@ -665,14 +665,14 @@ describe("prepareRun: runs the caps cannot bound", () => {
         args: ["a cat"],
         options: { "num-outputs": 1, input: '{"num_outputs": 8}' },
       }).uncappedSpend,
-    ).toBe("with --input, the request reaches the provider as given");
+    ).toBe("with --input, the server caps do not bound the request");
     expect(
       run({
         command: "replicate video",
         args: ["a wave"],
         options: { input: "{}" },
       }).uncappedSpend,
-    ).toBe("with --input, the request reaches the provider as given");
+    ).toBe("with --input, the server caps do not bound the request");
     expect(run({ command: "fal tts", options: { text: "hi" } })).not.toHaveProperty(
       "uncappedSpend",
     );
@@ -681,7 +681,7 @@ describe("prepareRun: runs the caps cannot bound", () => {
         command: "fal tts",
         options: { text: "hi", model: "fal-ai/veo3", "text-field": "prompt" },
       }).uncappedSpend,
-    ).toBe("with --text-field, the request reaches the provider as given");
+    ).toBe("with --text-field, the server caps do not bound the request");
   });
 
   it("marks an omitted count the model picks, and accepts one within the cap", () => {
@@ -698,6 +698,60 @@ describe("prepareRun: runs the caps cannot bound", () => {
     expect(run({ command: "replicate image", args: ["a cat"] }).uncappedSpend).toContain(
       "--num-outputs is omitted",
     );
+  });
+
+  it("marks an omitted resolution the model picks, and accepts an allowed one", () => {
+    expect(run({ command: "atlas video", args: ["a wave"] }).uncappedSpend).toBe(
+      "--resolution is omitted, so the model picks the resolution (pass --resolution: 480p, 720p, 768p, 1080p)",
+    );
+    expect(
+      run({ command: "atlas video", args: ["a wave"], options: { resolution: "720p" } }),
+    ).not.toHaveProperty("uncappedSpend");
+    rejects(
+      { command: "atlas video", args: ["a wave"], options: { resolution: "4k" } },
+      /--resolution must be one of/,
+    );
+    for (const request of [
+      { command: "replicate video", args: ["a wave"] },
+      { command: "heygen model-video", args: ["a wave"] },
+      { command: "atlas image-to-video" },
+      {
+        command: "openrouter image-to-video",
+        options: { prompt: "a wave", "image-url": "https://example.com/a.png" },
+      },
+    ]) {
+      expect(run(request).uncappedSpend, request.command).toMatch(/^--resolution is omitted/);
+    }
+    // The CLI default (1080p) is checked, so an omitted resolution stays capped.
+    expect(run({ command: "byteplus video", options: { prompt: "a wave" } })).not.toHaveProperty(
+      "uncappedSpend",
+    );
+  });
+
+  it("marks fal video and the raw provider options uncapped", () => {
+    expect(run({ command: "fal video", args: ["a wave"] }).uncappedSpend).toBe(
+      "the model picks the resolution (fal video has no --resolution)",
+    );
+    expect(run({ command: "openrouter tts", options: { text: "hi" } })).not.toHaveProperty(
+      "uncappedSpend",
+    );
+    expect(
+      run({
+        command: "openrouter tts",
+        options: { text: "hi", "provider-options": '{"openai":{"model":"x"}}' },
+      }).uncappedSpend,
+    ).toBe("with --provider-options, the server caps do not bound the request");
+    expect(
+      run({ command: "byteplus generate-3d", options: { prompt: "a cube", flags: "--ff 2" } })
+        .uncappedSpend,
+    ).toBe("with --flags, the server caps do not bound the request");
+    expect(run({ command: "elevenlabs music", options: { prompt: "jazz" } })).not.toHaveProperty(
+      "uncappedSpend",
+    );
+    expect(
+      run({ command: "elevenlabs music", options: { prompt: "jazz", "music-length-ms": 300000 } })
+        .uncappedSpend,
+    ).toBe("with --music-length-ms, the server caps do not bound the request");
   });
 
   it("leaves capped commands unmarked and caps the voice-design count", () => {

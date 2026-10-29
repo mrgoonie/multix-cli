@@ -143,24 +143,30 @@ see. `multix_catalog` marks them with `uncapped_spend` (on the command, or on
 the option that makes a run uncapped):
 
 - pass-through request bodies: `fal run`, `replicate run`, `atlas run`,
-  `heygen run`, `--input` of `replicate image` and `replicate video`, and
-  `--input` / `--text-field` of `fal tts`;
+  `heygen run`, `--input` of `replicate image` and `replicate video`,
+  `--input` / `--text-field` of `fal tts`, `--provider-options` of
+  `openrouter tts`, and the raw model `--flags` of `byteplus generate-3d`;
 - runs billed by the length of their source or script: `heygen video`,
   `heygen translate`, `heygen lipsync`, `elevenlabs dub`, and `heygen
   video-agent` / `heygen template`, where the agent or template sets the
-  length;
+  length, and `elevenlabs music` with `--music-length-ms` or a `--plan` (30 s
+  otherwise);
+- `fal video`, which has no `--resolution`: the model picks it;
 - `atlas image`, `atlas image-to-image` and `replicate image` without
   `--num-images` / `--num-outputs`, where the model picks the number of
   outputs. Passing the count (at most `MULTIX_MCP_MAX_OUTPUTS`) makes the run
-  capped again.
+  capped again;
+- `atlas video`, `atlas image-to-video`, `replicate video`,
+  `openrouter image-to-video` and `heygen model-video` without `--resolution`,
+  where the model's default resolution applies. Passing one of
+  `MULTIX_MCP_ALLOWED_RESOLUTIONS` makes the run capped again.
 
 The operator decides what such a run needs with `MULTIX_MCP_UNCAPPED_SPEND`.
 In `budget` mode (the default) the call must give `max_cost_usd`, and the job
 starts only when the price estimate proves the run fits (`cost_policy` is
 treated as `strict` for these runs, since the estimate cannot see the uncapped
-part). None of these
-commands is priced yet, so in practice `budget` refuses them, closed rather
-than open. `deny` always refuses them; `allow` runs them as before, on the
+part). Of these, only `openrouter tts` has a price estimate, so in practice
+`budget` refuses the others, closed rather than open. `deny` always refuses them; `allow` runs them as before, on the
 caller's own keys. An `estimate: true` call is answered in every mode, since it
 starts nothing. The REST API (`POST /api/v1/jobs`) takes the same
 `max_cost_usd` and `cost_policy` fields and applies the same rule.
@@ -606,7 +612,7 @@ within your Cloudflare account. If another Worker already uses `1001` or
   resolution on the options the server knows for each command (see
   [Running CLI commands](#running-cli-commands)). A run those caps cannot
   bound (a pass-through JSON body, a price set by the source length, a count
-  the model picks) is refused unless `max_cost_usd` proves its price, or as
+  or resolution the model picks) is refused unless `max_cost_usd` proves its price, or as
   `MULTIX_MCP_UNCAPPED_SPEND` sets. A caller can also set `max_cost_usd` to
   refuse any run that may cost more.
 - **Logging and redaction:** successful calls are logged at `info` with tool

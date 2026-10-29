@@ -142,20 +142,30 @@ hạn):
 
 - body request chuyển thẳng tới provider: `fal run`, `replicate run`,
   `atlas run`, `heygen run`, `--input` của `replicate image` và
-  `replicate video`, và `--input` / `--text-field` của `fal tts`;
+  `replicate video`, `--input` / `--text-field` của `fal tts`,
+  `--provider-options` của `openrouter tts`, và `--flags` (cờ model thô) của
+  `byteplus generate-3d`;
 - lần chạy tính tiền theo độ dài nguồn hoặc kịch bản: `heygen video`,
   `heygen translate`, `heygen lipsync`, `elevenlabs dub`, và `heygen
-  video-agent` / `heygen template`, nơi agent hoặc template quyết định độ dài;
+  video-agent` / `heygen template`, nơi agent hoặc template quyết định độ dài,
+  và `elevenlabs music` khi có `--music-length-ms` hoặc `--plan` (mặc định
+  30 giây);
+- `fal video`, lệnh không có `--resolution`: model tự chọn độ phân giải;
 - `atlas image`, `atlas image-to-image` và `replicate image` khi không có
   `--num-images` / `--num-outputs`, lúc đó model tự chọn số output. Truyền số
-  lượng (tối đa `MULTIX_MCP_MAX_OUTPUTS`) giúp lần chạy được giới hạn trở lại.
+  lượng (tối đa `MULTIX_MCP_MAX_OUTPUTS`) giúp lần chạy được giới hạn trở lại;
+- `atlas video`, `atlas image-to-video`, `replicate video`,
+  `openrouter image-to-video` và `heygen model-video` khi không có
+  `--resolution`, lúc đó độ phân giải mặc định của model được dùng. Truyền một
+  giá trị trong `MULTIX_MCP_ALLOWED_RESOLUTIONS` giúp lần chạy được giới hạn
+  trở lại.
 
 Operator quyết định điều kiện cho các lần chạy này bằng
 `MULTIX_MCP_UNCAPPED_SPEND`. Ở chế độ `budget` (mặc định), lệnh gọi phải có
 `max_cost_usd` và job chỉ khởi động khi ước tính giá chứng minh lần chạy nằm
 trong mức đó (`cost_policy` được coi là `strict` với các lần chạy này, vì ước
-tính không nhìn thấy phần không bị giới hạn). Hiện chưa lệnh nào trong số này có bảng giá, nên trên thực tế
-`budget` từ chối chúng (đóng thay vì mở). `deny` luôn từ chối; `allow` chạy như
+tính không nhìn thấy phần không bị giới hạn). Trong số này chỉ `openrouter tts` có ước tính giá, nên trên thực tế
+`budget` từ chối các lệnh còn lại (đóng thay vì mở). `deny` luôn từ chối; `allow` chạy như
 trước, bằng key của chính người gọi. Lệnh gọi `estimate: true` luôn được trả
 lời ở mọi chế độ vì nó không khởi động gì. REST API (`POST /api/v1/jobs`) nhận
 cùng các trường `max_cost_usd` và `cost_policy` và áp dụng cùng quy tắc.
@@ -602,7 +612,8 @@ chung bộ đếm.
 - **Giới hạn chi phí:** `multix_run` giới hạn số output, thời lượng video và
   độ phân giải video trên các option mà server biết cho từng lệnh (xem
   [Chạy lệnh CLI](#chạy-lệnh-cli)). Lần chạy mà các giới hạn đó không chặn
-  được (body JSON chuyển thẳng, giá theo độ dài nguồn, số output do model chọn)
+  được (body JSON chuyển thẳng, giá theo độ dài nguồn, số output hoặc độ phân
+  giải do model chọn)
   bị từ chối trừ khi `max_cost_usd` chứng minh được giá, hoặc theo
   `MULTIX_MCP_UNCAPPED_SPEND`. Người gọi cũng có thể đặt `max_cost_usd` để từ
   chối mọi lần chạy có thể tốn hơn mức đó.
