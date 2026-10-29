@@ -51,6 +51,7 @@ export class ReplicatePredictionError extends ProviderJobFailedError {
     super(
       `Replicate prediction ${prediction.id} ${prediction.status}${detail ? `: ${detail}` : ""}`,
       PROVIDER,
+      { terminal: prediction.status === "failed" },
     );
     this.name = "ReplicatePredictionError";
   }

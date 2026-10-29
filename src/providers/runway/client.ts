@@ -66,7 +66,9 @@ export class RunwayTaskError extends ProviderJobFailedError {
   constructor(public readonly task: RunwayTask) {
     const code = task.failureCode ? ` [${task.failureCode}]` : "";
     const detail = task.failure ? `: ${task.failure.slice(0, DETAIL_MAX)}` : "";
-    super(`Runway task ${task.id} ${task.status.toLowerCase()}${code}${detail}`, PROVIDER);
+    super(`Runway task ${task.id} ${task.status.toLowerCase()}${code}${detail}`, PROVIDER, {
+      terminal: task.status === "FAILED",
+    });
     this.name = "RunwayTaskError";
   }
 }

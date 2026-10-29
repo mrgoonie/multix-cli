@@ -74,7 +74,9 @@ export function registerGeminiVideoStatusCommands(parent: Command): void {
       if (!isTerminalInteraction(interaction.status)) {
         logger.info(`Still running. Resume with: ${resumeCommand(id)}`);
       } else if (interaction.status !== "completed") {
-        throw new ProviderJobFailedError(interactionFailureMessage(interaction), "gemini");
+        throw new ProviderJobFailedError(interactionFailureMessage(interaction), "gemini", {
+          terminal: interaction.status !== "cancelled",
+        });
       }
     });
 

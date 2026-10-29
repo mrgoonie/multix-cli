@@ -513,7 +513,7 @@ export async function completeJobs(
 
   const states: HeygenJobState[] = [];
   const failures: string[] = [];
-  // Only failures HeyGen itself reported for a job; a poll or download failure is not one.
+  // Only jobs HeyGen itself failed; a pause, cancel, poll or download failure is not one.
   let providerFailures = 0;
   for (const [i, r] of settled.entries()) {
     if (r.status === "fulfilled") {
@@ -523,7 +523,7 @@ export async function completeJobs(
           assertJobSucceeded(r.value);
         } catch (e) {
           failures.push(e instanceof Error ? e.message : String(e));
-          providerFailures++;
+          if (e instanceof HeygenJobFailedError && e.terminal) providerFailures++;
         }
       }
     } else {

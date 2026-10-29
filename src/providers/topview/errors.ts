@@ -47,15 +47,21 @@ export class TopviewTaskError extends ProviderJobFailedError {
     detail?: string,
   ) {
     const why = detail ?? (task.errorMsg ? `: ${task.errorMsg.slice(0, DETAIL_MAX)}` : "");
-    super(`TopView ${task.kind} task ${task.taskId} ${task.status}${why}`, PROVIDER);
+    // A task that succeeded but whose output the next step cannot use is not a failed job.
+    super(`TopView ${task.kind} task ${task.taskId} ${task.status}${why}`, PROVIDER, {
+      terminal: task.status === "fail",
+    });
     this.name = "TopviewTaskError";
   }
 }
 
 /** A prediction ended `failed` or `payment_required`: never a success. */
-export class TopviewPredictionError extends ProviderError {
+export class TopviewPredictionError extends ProviderJobFailedError {
   constructor(public readonly prediction: PlatformPrediction) {
-    super(predictionFailureMessage(prediction), PROVIDER);
+    // payment_required resumes after a top-up: not a failed job.
+    super(predictionFailureMessage(prediction), PROVIDER, {
+      terminal: prediction.status === "failed",
+    });
     this.name = "TopviewPredictionError";
   }
 }

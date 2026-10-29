@@ -100,7 +100,9 @@ export class SumeJobError extends ProviderJobFailedError {
       status === "failed" || status === "canceled"
         ? ". Sume refunds the reserved charge of failed and canceled jobs"
         : "";
-    super(`Sume job ${jobId} ${status}${code}${why}${refund}`, PROVIDER);
+    super(`Sume job ${jobId} ${status}${code}${why}${refund}`, PROVIDER, {
+      terminal: status === "failed",
+    });
     this.name = "SumeJobError";
   }
 }

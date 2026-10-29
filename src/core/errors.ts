@@ -51,15 +51,17 @@ export class ProviderError extends MultixError {
 }
 
 /**
- * The provider itself ended a job (failed, canceled, aborted): a terminal
- * verdict on the job, never a transient failure to read its state.
+ * A job that ended without a usable result. `terminal` (the default) marks
+ * the provider's own verdict that the job failed; pass false when it was
+ * canceled, paused for input, needs payment, or finished but its output does
+ * not fit the next step, so the run is not reported as a failed job.
  */
 export class ProviderJobFailedError extends ProviderError {
   constructor(
     message: string,
     provider: string,
     options?: ErrorOptions & {
-      /** False when the error also reports failures that are not the provider's verdict (a poll or a download). */
+      /** False unless the provider itself failed the job (see the class comment). */
       terminal?: boolean;
     },
   ) {

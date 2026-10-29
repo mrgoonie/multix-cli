@@ -59,7 +59,9 @@ const PREDICTION_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
 export class AtlasPredictionFailedError extends ProviderJobFailedError {
   constructor(public readonly prediction: AtlasPrediction) {
     const reason = predictionErrorMessage(prediction.error) || `status "${prediction.status}"`;
-    super(`Atlas Cloud prediction ${prediction.id} failed: ${reason}`, ATLAS_PROVIDER);
+    super(`Atlas Cloud prediction ${prediction.id} failed: ${reason}`, ATLAS_PROVIDER, {
+      terminal: !/^cancell?ed$/i.test(String(prediction.status).trim()),
+    });
     this.name = "AtlasPredictionFailedError";
   }
 }

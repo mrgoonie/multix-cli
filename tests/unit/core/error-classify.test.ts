@@ -19,7 +19,7 @@ import { HeygenJobFailedError } from "../../../src/providers/heygen/heygen-error
 import { ReplicatePredictionError } from "../../../src/providers/replicate/client.js";
 import { RunwayTaskError } from "../../../src/providers/runway/client.js";
 import { SumeJobError } from "../../../src/providers/sume/client.js";
-import { TopviewTaskError } from "../../../src/providers/topview/errors.js";
+import { TopviewPredictionError, TopviewTaskError } from "../../../src/providers/topview/errors.js";
 
 describe("codeFromHttp", () => {
   it("maps statuses to codes, refined by the body", () => {
@@ -112,8 +112,9 @@ describe("classifyError", () => {
       } as never),
       new AtlasPredictionFailedError({ id: "a1", status: "failed", error: "bad input" } as never),
       new RunwayTaskError({ id: "t-1", status: "FAILED", failureCode: "INTERNAL" } as never),
-      new SumeJobError("j1", "canceled"),
+      new SumeJobError("j1", "failed"),
       new TopviewTaskError({ kind: "avatar", taskId: "t9", status: "fail" } as never),
+      new TopviewPredictionError({ id: "tp1", status: "failed", outputs: [] } as never),
       new HeygenJobFailedError('HeyGen video v1 ended with status "failed"', "render_error"),
       new ProviderJobFailedError("Task 77 failed: {}", "minimax"),
       new ProviderJobFailedError("Gemini Omni interaction i1 failed", "gemini"),
@@ -124,6 +125,26 @@ describe("classifyError", () => {
         exit_code: EXIT_CODES.rejected,
       });
     }
+  });
+
+  it("does not report a canceled, paused, unpaid or unusable job as a failed job", () => {
+    const notFailures = [
+      new ReplicatePredictionError({ id: "p2x9", status: "canceled" } as never),
+      new AtlasPredictionFailedError({ id: "a2", status: "cancelled" } as never),
+      new RunwayTaskError({ id: "t-3", status: "CANCELLED" } as never),
+      new SumeJobError("j2", "canceled"),
+      new HeygenJobFailedError(
+        'HeyGen Video Agent session s1 ended with status "waiting_for_input"',
+        "waiting_for_input",
+        false,
+      ),
+      new TopviewPredictionError({ id: "tp2", status: "payment_required", outputs: [] } as never),
+      new TopviewTaskError(
+        { kind: "product_avatar", taskId: "t10", status: "success" } as never,
+        ": no replaced image has a face",
+      ),
+    ];
+    for (const e of notFailures) expect(classifyError(e).code, e.message).not.toBe("JOB_FAILED");
   });
 
   it("keeps a moderation verdict on a failed job as CONTENT_BLOCKED", () => {
@@ -148,6 +169,13 @@ describe("classifyError", () => {
     expect(classifyMessage("Request failed: fetch failed").code).toBe("NETWORK_ERROR");
     expect(classifyMessage("request failed: ECONNRESET").code).toBe("NETWORK_ERROR");
     expect(classifyMessage("Generation failed: {}").code).toBe("JOB_FAILED");
+    expect(classifyMessage("task polling failed: reset").code).not.toBe("JOB_FAILED");
+  });
+
+  it("reads a logged job failure that names the job id", () => {
+    // MiniMax video logs the poll failure as text; HeyGen quotes the status.
+    expect(classifyMessage('Task 3091846 failed: {"status":"Fail"}').code).toBe("JOB_FAILED");
+    expect(classifyMessage('HeyGen video v1 ended with status "failed"').code).toBe("JOB_FAILED");
   });
 
   it("reports a missing ffmpeg or ffprobe as a binary to install, not bad input", () => {

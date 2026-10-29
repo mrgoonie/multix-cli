@@ -440,9 +440,9 @@ export async function runOmniVideo(
   if (interaction.status !== "completed") {
     record.error = interactionFailureMessage(interaction);
     writeRecord(recordPath, record);
-    throw isTerminalInteraction(interaction.status)
-      ? new ProviderJobFailedError(record.error, "gemini")
-      : new ProviderError(record.error, "gemini");
+    throw new ProviderJobFailedError(record.error, "gemini", {
+      terminal: isTerminalInteraction(interaction.status) && interaction.status !== "cancelled",
+    });
   }
 
   const dest = path.join(outDir, `${base}.mp4`);

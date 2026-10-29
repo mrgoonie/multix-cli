@@ -414,6 +414,42 @@ describe("retries, failures and cancels", () => {
     expect(row).toMatchObject({ operations: 1, completed: 0, failed: 1, success_rate: 0 });
   });
 
+  it("completes an operation when a resubmit under the same operation id returned another job that succeeded", () => {
+    const op = "agent-op-1";
+    const row = rowFor([
+      entry({ provider_ids: ["J1"], cost: receipt({ operation_id: op }) }),
+      entry({
+        ts: "2026-10-27T10:01:00.000Z",
+        provider_ids: ["J1"],
+        ok: false,
+        exit_code: 5,
+        error: { code: "JOB_FAILED", message: "the provider failed the job" },
+        cost: receipt({ operation_id: op, role: "observation", status: "unknown" }),
+      }),
+      entry({
+        ts: "2026-10-27T10:05:00.000Z",
+        provider_ids: ["J2"],
+        cost: receipt({ operation_id: op }),
+      }),
+    ]);
+    expect(row).toMatchObject({ operations: 1, completed: 1, failed: 0 });
+  });
+
+  it("does not fail a job when a poll got a gateway page that says blocked", () => {
+    const job = { provider: "fal", id: "j-w", attempt: 1 };
+    const row = rowFor([
+      entry({ job }),
+      entry({
+        job,
+        ts: "2026-10-27T10:01:00.000Z",
+        ok: false,
+        exit_code: 5,
+        error: { code: "CONTENT_BLOCKED", message: "HTTP 403: you have been blocked" },
+      }),
+    ]);
+    expect(row).toMatchObject({ operations: 1, completed: 1, failed: 0 });
+  });
+
   it("fails a job whose status run reports the provider blocked its content", () => {
     const job = { provider: "runway", id: "j-b", attempt: 1 };
     const row = rowFor([
