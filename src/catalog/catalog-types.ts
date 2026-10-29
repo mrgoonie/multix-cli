@@ -132,10 +132,11 @@ export interface QuoteRow {
   assumptions?: string[];
   /** Settings the rate card fixes that the request left open; pin them to rank this row. */
   open_settings?: string[];
+  /** Why the row has no price or is not comparable; on a priced row, why it is not ranked. */
   reasons?: string[];
   source?: string;
   last_checked?: string;
-  /** 1 = lowest quote among priced rows; absent for rows that are not ranked. */
+  /** 1 = lowest quote among ranked rows; absent for rows that are not ranked. */
   price_rank?: number;
 }
 
