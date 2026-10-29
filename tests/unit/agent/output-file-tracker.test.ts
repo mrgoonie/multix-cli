@@ -1,8 +1,9 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { producedFiles } from "../../../src/agent/output-file-tracker.js";
+import { installOutputFileTracker, producedFiles } from "../../../src/agent/output-file-tracker.js";
 import { run } from "../../../src/agent/run-state.js";
 import { _resetOutputDir } from "../../../src/core/output-dir.js";
 
@@ -110,5 +111,18 @@ describe("producedFiles", () => {
     vi.stubEnv("MULTIX_OUTPUT_DIR", base);
     write(".multix");
     expect(producedFiles()).toEqual([]);
+  });
+
+  it("records a file: URL target as its decoded path, and untracks a renamed URL", () => {
+    installOutputFileTracker();
+    vi.stubEnv("MULTIX_OUTPUT_DIR", path.join(base, "out"));
+    fs.mkdirSync(path.join(base, "out"));
+    const first = path.join(base, "out", "a b.png");
+    const renamed = path.join(base, "out", "c d.png");
+    fs.writeFileSync(pathToFileURL(first), "x");
+    expect(producedFiles()).toEqual([first]);
+    fs.renameSync(pathToFileURL(first), pathToFileURL(renamed));
+    expect([...run.written]).toEqual([renamed]);
+    expect(producedFiles()).toEqual([renamed]);
   });
 });

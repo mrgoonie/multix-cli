@@ -10,16 +10,25 @@ import fs from "node:fs";
 import { syncBuiltinESMExports } from "node:module";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { resolveOutputDir } from "../core/output-dir.js";
 import { run } from "./run-state.js";
 
+/** The absolute path an fs call writes to: a string path or a `file:` URL (decoded, OS form). */
+function targetPath(target: unknown): string | undefined {
+  if (typeof target === "string") return path.resolve(target);
+  if (target instanceof URL && target.protocol === "file:") return fileURLToPath(target);
+  return undefined;
+}
+
 function track(target: unknown): void {
-  if (typeof target === "string") run.written.add(path.resolve(target));
-  else if (target instanceof URL && target.protocol === "file:") run.written.add(target.pathname);
+  const file = targetPath(target);
+  if (file) run.written.add(file);
 }
 
 function untrack(target: unknown): void {
-  if (typeof target === "string") run.written.delete(path.resolve(target));
+  const file = targetPath(target);
+  if (file) run.written.delete(file);
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: wraps arbitrary fs signatures
