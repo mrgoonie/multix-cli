@@ -6,7 +6,12 @@
 import { describe, expect, it } from "vitest";
 import type { HistoryEntry } from "../../../src/agent/history-store.js";
 import type { CostReceipt } from "../../../src/budget/cost-receipt.js";
-import { aggregateUsage, confidence, operationOf } from "../../../src/catalog/usage-aggregate.js";
+import {
+  USAGE_GROUPS,
+  aggregateUsage,
+  confidence,
+  operationOf,
+} from "../../../src/catalog/usage-aggregate.js";
 
 const T0 = "2026-10-27T10:00:00.000Z";
 
@@ -24,6 +29,8 @@ function entry(over: Partial<HistoryEntry> = {}): HistoryEntry {
     ok: true,
     exit_code: 0,
     model_resolved: "bytedance/seedance-2.5/text-to-video",
+    // One recorded HTTP call: the proof of a send for a run without a receipt.
+    http: { requests: 1, errors: 0, ms: 1000 },
     ...over,
   };
 }
@@ -62,6 +69,49 @@ describe("what counts as a request", () => {
     expect(rows[0]?.requests).toBe(1);
   });
 
+  it("leaves out a successful run whose receipt says no request was sent", () => {
+    const row = rowFor([
+      entry({
+        id: "h_none",
+        http: { requests: 0, errors: 0, ms: 0 },
+        cost: receipt({
+          operation_id: "run:h_none",
+          role: "none",
+          actual_usd: 0,
+          actual_source: "no_request",
+        }),
+      }),
+      entry({}),
+    ]);
+    expect(row).toMatchObject({ requests: 1, operations: 1, completed: 1 });
+  });
+
+  it("counts a successful run without a receipt only when it made HTTP calls or got provider ids", () => {
+    const rows = aggregateUsage(
+      [
+        entry({ http: undefined }),
+        entry({ http: { requests: 0, errors: 0, ms: 0 } }),
+        entry({ http: undefined, provider_ids: ["req-1"] }),
+        entry({}),
+      ],
+      "offering",
+    );
+    expect(rows.map((r) => [r.key, r.requests])).toEqual([[OFFERING, 2]]);
+  });
+
+  it("counts a failed run with a receipt that sent something even without recorded HTTP calls", () => {
+    const row = rowFor([
+      entry({
+        ok: false,
+        exit_code: 1,
+        error: { code: "NETWORK_ERROR", message: "cut" },
+        http: undefined,
+        cost: receipt({ operation_id: "op-f", role: "charge", status: "uncertain" }),
+      }),
+    ]);
+    expect(row).toMatchObject({ requests: 1, operations: 1, failed: 1 });
+  });
+
   it("sorts the busiest group first and breaks ties by key", () => {
     const rows = aggregateUsage(
       [
@@ -98,12 +148,7 @@ describe("operations, polls and resumes", () => {
         id: "h_poll",
         ts: "2026-10-27T10:01:00.000Z",
         job: { provider: "fal", id: "job-1", attempt: 1 },
-        cost: receipt({
-          operation_id: op,
-          role: "none",
-          status: "settled",
-          actual_source: "no_request",
-        }),
+        cost: receipt({ operation_id: op, role: "observation", status: "unknown" }),
       }),
       entry({
         id: "h_resume",
@@ -118,7 +163,8 @@ describe("operations, polls and resumes", () => {
       }),
     ];
     const row = rowFor(entries);
-    expect(row.requests).toBe(3);
+    // The resume read local state only (role "none"): not a request, still the same operation.
+    expect(row.requests).toBe(2);
     expect(row.operations).toBe(1);
     expect(row.cost.known_usd).toBe(0.5);
     expect(row.cost.per_success_usd).toBe(0.5);
@@ -234,7 +280,12 @@ describe("retries, failures and cancels", () => {
 
   it("leaves out a failed run that never reached the provider (missing key, bad flag)", () => {
     const rows = [
-      entry({ ok: false, exit_code: 2, error: { code: "MISSING_KEY", message: "no key" } }),
+      entry({
+        ok: false,
+        exit_code: 2,
+        error: { code: "MISSING_KEY", message: "no key" },
+        http: undefined,
+      }),
       entry({
         ok: false,
         exit_code: 1,
@@ -244,6 +295,154 @@ describe("retries, failures and cancels", () => {
       entry({}),
     ];
     expect(rowFor(rows)).toMatchObject({ requests: 1, completed: 1, failed: 0 });
+  });
+
+  it("counts a job whose status poll failed but which then completed as one completed operation", () => {
+    const op = "fal:J1";
+    const at = (m: number) => `2026-10-27T10:0${m}:00.000Z`;
+    const rows = [
+      entry({
+        ts: at(0),
+        provider_ids: ["J1"],
+        cost: receipt({
+          operation_id: op,
+          actual_usd: 0.56,
+          actual_source: "provider_reported",
+          provider_reported: { cost_usd: 0.56, credits: null },
+        }),
+      }),
+      entry({
+        ts: at(1),
+        ok: false,
+        exit_code: 1,
+        error: { code: "NETWORK_ERROR", message: "poll cut off" },
+        cost: receipt({ operation_id: op, role: "observation", status: "unknown" }),
+      }),
+      entry({
+        ts: at(2),
+        cost: receipt({ operation_id: op, role: "observation", status: "unknown" }),
+      }),
+      entry({
+        ts: at(3),
+        cost: receipt({ operation_id: op, role: "observation", status: "unknown" }),
+      }),
+    ];
+    const row = rowFor(rows);
+    expect(row).toMatchObject({ requests: 4, operations: 1, completed: 1, failed: 0, canceled: 0 });
+    expect(row.success_rate).toBe(1);
+    expect(row.sample).toEqual({ n: 1, confidence: "low" });
+  });
+
+  it("decides an operation with no successful run by its latest run", () => {
+    const fail = { ok: false, exit_code: 1 } as const;
+    const down = { code: "PROVIDER_UNAVAILABLE", message: "down" };
+    const cancel = { code: "CANCELLED", message: "stopped" };
+    const job = (id: string) => ({ provider: "fal", id, attempt: 1 });
+    const rows = [
+      // Failed, then canceled on resume: canceled.
+      entry({ ...fail, job: job("a"), ts: "2026-10-27T10:00:00.000Z", error: down }),
+      entry({ ...fail, job: job("a"), ts: "2026-10-27T10:05:00.000Z", error: cancel }),
+      // Canceled, then failed on resume (ledger out of time order): failed.
+      entry({ ...fail, job: job("b"), ts: "2026-10-27T10:05:00.000Z", error: down }),
+      entry({ ...fail, job: job("b"), ts: "2026-10-27T10:00:00.000Z", error: cancel }),
+    ];
+    const row = rowFor(rows);
+    expect(row).toMatchObject({ requests: 4, operations: 2, completed: 0, failed: 1, canceled: 1 });
+    expect(row.success_rate).toBe(0);
+  });
+
+  it("does not report a failed poll as a failure in another row when its job completed", () => {
+    // Status reads carry no resolved model and a different command than the submit.
+    const entries = [
+      entry({
+        provider_ids: ["J1"],
+        cost: receipt({
+          operation_id: "fal:J1",
+          actual_usd: 0.56,
+          actual_source: "provider_reported",
+          provider_reported: { cost_usd: 0.56, credits: null },
+        }),
+      }),
+      entry({
+        ts: "2026-10-27T10:01:00.000Z",
+        command: "fal status",
+        model_resolved: undefined,
+        ok: false,
+        exit_code: 1,
+        error: { code: "NETWORK_ERROR", message: "poll cut off" },
+        cost: receipt({ operation_id: "fal:J1", role: "observation", status: "unknown" }),
+      }),
+    ];
+    for (const by of USAGE_GROUPS) {
+      const rows = aggregateUsage(entries, by);
+      expect(
+        rows.reduce((n, r) => n + r.requests, 0),
+        by,
+      ).toBe(2);
+      for (const r of rows) {
+        expect(r, `${by} ${r.key}`).toMatchObject({ failed: 0, canceled: 0, success_rate: 1 });
+        expect(r.completed, `${by} ${r.key}`).toBe(r.operations);
+      }
+    }
+  });
+
+  it("still counts a failed poll recorded under its own run id as a failed operation (#424)", () => {
+    // A poll whose first request failed captures no provider id, so its receipt names
+    // the run, not the job. Operation identity across runs is tracked in #424.
+    const entries = [
+      entry({
+        provider_ids: ["J1"],
+        cost: receipt({
+          operation_id: "fal:J1",
+          actual_usd: 0.56,
+          actual_source: "provider_reported",
+        }),
+      }),
+      entry({
+        id: "h_poll",
+        ts: "2026-10-27T10:01:00.000Z",
+        ok: false,
+        exit_code: 1,
+        error: { code: "NETWORK_ERROR", message: "poll cut off" },
+        cost: receipt({ operation_id: "run:h_poll", role: "observation", status: "unknown" }),
+      }),
+    ];
+    expect(rowFor(entries)).toMatchObject({
+      requests: 2,
+      operations: 2,
+      completed: 1,
+      failed: 1,
+      success_rate: 0.5,
+    });
+  });
+
+  it("counts an operation with a successful run as completed even when another run was canceled", () => {
+    const job = { provider: "fal", id: "j-c", attempt: 1 };
+    const row = rowFor([
+      entry({ job }),
+      entry({
+        job,
+        ts: "2026-10-27T10:05:00.000Z",
+        ok: false,
+        exit_code: 1,
+        error: { code: "CANCELLED", message: "stopped" },
+      }),
+    ]);
+    expect(row).toMatchObject({ operations: 1, completed: 1, failed: 0, canceled: 0 });
+  });
+
+  it("lets the later ledger line decide between runs with the same timestamp", () => {
+    const job = (id: string) => ({ provider: "fal", id, attempt: 1 });
+    const failed = { ok: false, exit_code: 1 } as const;
+    const down = { code: "PROVIDER_UNAVAILABLE", message: "down" };
+    const cancel = { code: "CANCELLED", message: "stopped" };
+    const row = rowFor([
+      entry({ ...failed, job: job("t1"), error: down }),
+      entry({ ...failed, job: job("t1"), error: cancel }),
+      entry({ ...failed, job: job("t2"), error: cancel }),
+      entry({ ...failed, job: job("t2"), error: down }),
+    ]);
+    expect(row).toMatchObject({ operations: 2, failed: 1, canceled: 1 });
   });
 
   it("reports no success rate without requests", () => {

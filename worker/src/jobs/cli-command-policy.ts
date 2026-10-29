@@ -10,7 +10,7 @@
  *   directory (MULTIX_OUTPUT_DIR) and are uploaded from there.
  * - Caps reuse the operator limits of the Worker tools (MULTIX_MCP_*).
  *   A run the caps cannot bound is marked (`uncappedSpend`, `uncappedOptions`,
- *   `countFromModel`) and goes through MULTIX_MCP_UNCAPPED_SPEND instead.
+ *   `countFromModel`, `resolutionFromModel`) and goes through MULTIX_MCP_UNCAPPED_SPEND instead.
  *
  * Option names are long flags without the leading `--`.
  */
@@ -37,6 +37,11 @@ export interface CapRules {
    * picks one, or an edit keeps the source's), send an allowed one instead.
    */
   fillResolution?: boolean;
+  /**
+   * When the resolution is omitted the model's own default applies, which
+   * can be above `allowedResolutions`: such a run is uncapped.
+   */
+  resolutionFromModel?: boolean;
 }
 
 export interface CommandPolicy {
@@ -66,7 +71,7 @@ export interface CommandPolicy {
    * subject to MULTIX_MCP_UNCAPPED_SPEND.
    */
   uncappedSpend?: string;
-  /** Options that make a run uncapped when given (a JSON body merged into the request). */
+  /** Options that make a run uncapped when given (a raw request body or raw model flags). */
   uncappedOptions?: string[];
   /**
    * The job gets the keys of the provider groups these options name (the part
@@ -124,12 +129,17 @@ export const OUTPUT_DIR_OPTION = "output-dir";
 
 const VIDEO_CAPS: CapRules = { duration: ["duration"], resolution: ["resolution"] };
 const OMNI_VIDEO_CAPS: CapRules = { ...VIDEO_CAPS, fillResolution: true };
+/** The resolution values are model-dependent, so none can be filled in: an omitted one is uncapped. */
+const MODEL_VIDEO_CAPS: CapRules = { ...VIDEO_CAPS, resolutionFromModel: true };
 /** Veo leaves the Gemini API on 2026-10-22 and rejects --duration, which the caps always send. */
 const OMNI_MODEL = { model: "gemini-omni-1.1-flash" };
 const IMAGE_COUNT: CapRules = { count: ["num-images"] };
 const MODEL_IMAGE_COUNT: CapRules = { ...IMAGE_COUNT, countFromModel: true };
 const PASS_THROUGH = "the request body is passed to the provider as given";
 const SOURCE_LENGTH = "billed by the length of the source media";
+const SCRIPT_LENGTH = "billed by the length of the script or audio";
+/** m2v's --video-length-type picks a 15-60 s range, past what the duration cap can bound. */
+const M2V_LENGTH = "the video runs 15-60 s (--video-length-type), longer than the duration cap";
 const EXTRA_INPUT = ["input"];
 const SPEECH_KEY_GROUPS = [
   "gemini",
@@ -194,9 +204,13 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   "openrouter image-to-image": { fileOptions: { ref: "file" } },
   "openrouter image-to-video": {
     urlOptions: ["image-url", "last-frame-url"],
-    caps: VIDEO_CAPS,
+    caps: MODEL_VIDEO_CAPS,
   },
-  "openrouter tts": { fileOptions: { "text-file": "file", "turns-file": "file" } },
+  // --provider-options merges any provider field into the request.
+  "openrouter tts": {
+    fileOptions: { "text-file": "file", "turns-file": "file" },
+    uncappedOptions: ["provider-options"],
+  },
   "openrouter transcribe": { fileOptions: { input: "file" } },
   "fish tts": {
     fileOptions: { "text-file": "file", "turns-file": "file", "dictionary-file": "file" },
@@ -220,12 +234,17 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
     fileOptions: { "ref-image": "file", "ref-video": "file", "ref-audio": "file" },
     caps: VIDEO_CAPS,
   },
-  "byteplus generate-3d": { fileOptions: { "input-image": "file" } },
+  // --flags appends raw model flags (`--resolution 1536pro`, `--hd_texture true`) to the prompt.
+  "byteplus generate-3d": { fileOptions: { "input-image": "file" }, uncappedOptions: ["flags"] },
   "cloudflare generate-video": { caps: VIDEO_CAPS },
   "elevenlabs clone": { fileOptions: { files: "file", audio: "file" } },
   "elevenlabs voice-changer": { fileOptions: { input: "file" } },
   "elevenlabs transcribe": { fileOptions: { input: "file" } },
-  "elevenlabs music": { fileOptions: { plan: "file" } },
+  // Billed by length: --music-length-ms or a --plan sets it, else the model picks it.
+  "elevenlabs music": {
+    uncappedSpend: "billed by length, which the model picks (up to 10 minutes) unless given",
+    fileOptions: { plan: "file" },
+  },
   "elevenlabs dub": {
     uncappedSpend: SOURCE_LENGTH,
     fileOptions: { input: "file" },
@@ -241,7 +260,11 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   "fal run": { unsupported: ["file", "receipt"], uncappedSpend: PASS_THROUGH },
   "fal upload": { filePositionals: ["file"] },
   "fal image": { caps: IMAGE_COUNT },
-  "fal video": { urlOptions: ["image-url"], caps: { duration: ["duration"] } },
+  "fal video": {
+    uncappedSpend: "the model picks the resolution (fal video has no --resolution)",
+    urlOptions: ["image-url"],
+    caps: { duration: ["duration"] },
+  },
   // The text file comes from `inputs`; `--receipt` takes a local path (the
   // detached receipt is still printed, and `fal status` / `fal result` resume it).
   // An unlisted model needs --text-field, and then any fal model runs with the
@@ -254,8 +277,8 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   // An omitted --num-images leaves the count to the model's schema default.
   "atlas image": { caps: MODEL_IMAGE_COUNT },
   "atlas image-to-image": { fileOptions: { ref: "file" }, caps: MODEL_IMAGE_COUNT },
-  "atlas video": { caps: VIDEO_CAPS },
-  "atlas image-to-video": { fileOptions: { ref: "file" }, caps: VIDEO_CAPS },
+  "atlas video": { caps: MODEL_VIDEO_CAPS },
+  "atlas image-to-video": { fileOptions: { ref: "file" }, caps: MODEL_VIDEO_CAPS },
   "atlas audio": { fileOptions: { audio: "file" } },
   "atlas 3d": { fileOptions: { ref: "file" } },
   "atlas upload": { filePositionals: ["file"] },
@@ -269,7 +292,7 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   },
   "replicate video": {
     fileOptions: { image: "file" },
-    caps: VIDEO_CAPS,
+    caps: MODEL_VIDEO_CAPS,
     uncappedOptions: EXTRA_INPUT,
   },
   // --ratio is checked against each model's fixed list by the CLI (at most 1920x1080).
@@ -286,7 +309,7 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
     urlOptions: ["callback-url"],
   },
   "heygen video": {
-    uncappedSpend: "billed by the length of the script or audio",
+    uncappedSpend: SCRIPT_LENGTH,
     fileOptions: { audio: "file", "background-image": "file" },
     assetRefOptions: ["audio", "background-image"],
     urlOptions: ["callback-url"],
@@ -315,10 +338,68 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
     assetRefOptions: ["image", "reference-image", "reference-video", "reference-audio"],
     repeatable: ["reference-image", "reference-video", "reference-audio"],
     urlOptions: ["callback-url"],
-    caps: VIDEO_CAPS,
+    caps: MODEL_VIDEO_CAPS,
   },
   "heygen template": { uncappedSpend: "the template decides the video length" },
   "heygen run": { uncappedSpend: PASS_THROUGH },
+  // An omitted --num-images leaves the count to the model's catalog default;
+  // --param sets any other request field the model's catalog row lists.
+  "sume image": {
+    fileOptions: { image: "file" },
+    repeatable: ["image", "param"],
+    caps: { count: ["num-images"], countFromModel: true },
+    uncappedOptions: ["param"],
+  },
+  "sume video": {
+    fileOptions: {
+      image: "file",
+      "end-image": "file",
+      "reference-image": "file",
+      video: "file",
+      audio: "file",
+    },
+    repeatable: ["image", "reference-image", "param"],
+    // No duration cap: a filled --duration is refused by models without one and
+    // means the audio length on lip-sync models.
+    uncappedSpend:
+      "the model's catalog row sets the price; lip-sync and captions bill by the length of the source media",
+    caps: { resolution: ["resolution"] },
+  },
+  // A quote takes only public URLs: nothing is uploaded or billed.
+  "sume estimate": {
+    urlOptions: ["image", "end-image", "reference-image", "video", "audio"],
+    repeatable: ["image", "reference-image", "param"],
+  },
+  // The product page URL is sent as given; the CLI accepts only http(s).
+  "topview url-to-video": {
+    uncappedSpend: M2V_LENGTH,
+    fileOptions: { logo: "file", music: "file" },
+  },
+  "topview materials-to-video": {
+    uncappedSpend: M2V_LENGTH,
+    fileOptions: { file: "file", logo: "file", music: "file" },
+    repeatable: ["file"],
+  },
+  "topview video-avatar": {
+    uncappedSpend: SCRIPT_LENGTH,
+    fileOptions: { video: "file", image: "file", audio: "file" },
+  },
+  "topview product-avatar": {
+    uncappedSpend: SCRIPT_LENGTH,
+    fileOptions: { "product-image": "file", "template-image": "file", audio: "file" },
+  },
+  "topview product-anyshoot": {
+    fileOptions: {
+      "product-image": "file",
+      "product-mask": "file",
+      "template-image": "file",
+      "template-mask": "file",
+    },
+    // try-on bills each generated image (--count 1-4).
+    caps: { count: ["count"] },
+  },
+  "topview upload": { filePositionals: ["file"] },
+  "topview run": { uncappedSpend: PASS_THROUGH },
   "media optimize": { fileOptions: { input: "file" } },
   "media split": { fileOptions: { input: "file" } },
   "media batch": { fileOptions: { "input-dir": "dir" } },
@@ -363,6 +444,8 @@ export const GROUP_KEYS: Readonly<Record<string, readonly ProviderSecretName[]>>
   replicate: ["REPLICATE_API_TOKEN", "REPLICATE_API_KEY"],
   runway: ["RUNWAYML_API_SECRET"],
   heygen: ["HEYGEN_API_KEY"],
+  sume: ["SUME_API_KEY"],
+  topview: ["TOPVIEW_API_KEY", "TOPVIEW_UID", "TOPVIEW_PLATFORM_API_KEY"],
   // Readiness only: a speech job gets the keys of the providers it routes to (keyOptions).
   speech: [
     "GEMINI_API_KEY",
@@ -384,6 +467,8 @@ export const GROUP_REQUIRED_KEYS: Readonly<
   byteplus: [["BYTEPLUS_API_KEY", "ARK_API_KEY"]],
   replicate: [["REPLICATE_API_TOKEN", "REPLICATE_API_KEY"]],
   cloudflare: [["CLOUDFLARE_ACCOUNT_ID"], ["CLOUDFLARE_API_TOKEN"]],
+  // Legacy commands need TOPVIEW_API_KEY and TOPVIEW_UID; platform commands need the platform key.
+  topview: [["TOPVIEW_API_KEY", "TOPVIEW_PLATFORM_API_KEY"]],
   speech: [
     [
       "GEMINI_API_KEY",

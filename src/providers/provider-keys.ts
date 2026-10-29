@@ -12,6 +12,14 @@ import { HEYGEN_ROUTING } from "./heygen/models.js";
 import { LEONARDO_ROUTING } from "./leonardo/models.js";
 import { REPLICATE_ROUTING } from "./replicate/models.js";
 import { RUNWAY_DASHBOARD_LINK, RUNWAY_ROUTING } from "./runway/models.js";
+import { SUME_DASHBOARD_LINK, SUME_ROUTING } from "./sume/models.js";
+import {
+  TOPVIEW_API_SETTINGS_LINK,
+  TOPVIEW_PLATFORM_CONSOLE_LINK,
+  TOPVIEW_PLATFORM_ROUTING,
+  TOPVIEW_ROUTING,
+  TOPVIEW_UID_ENV,
+} from "./topview/models.js";
 
 export interface ProviderEntry {
   name: string;
@@ -19,6 +27,8 @@ export interface ProviderEntry {
   envFallback?: string;
   optional: boolean;
   link: string;
+  /** Non-secret settings the key is useless without (an account id sent alongside it). */
+  companions?: readonly string[];
 }
 
 /** Key names of a provider that exports its BaseUrlRouting, in the order it reads them. */
@@ -105,5 +115,24 @@ export const PROVIDER_KEYS: readonly ProviderEntry[] = [
     ...keyNames(HEYGEN_ROUTING),
     optional: true,
     link: "https://app.heygen.com/developers/api",
+  },
+  {
+    name: "Sume",
+    ...keyNames(SUME_ROUTING),
+    optional: true,
+    link: SUME_DASHBOARD_LINK,
+  },
+  {
+    name: "TopView",
+    ...keyNames(TOPVIEW_ROUTING),
+    optional: true,
+    link: TOPVIEW_API_SETTINGS_LINK,
+    companions: [TOPVIEW_UID_ENV],
+  },
+  {
+    name: "TopView Platform",
+    ...keyNames(TOPVIEW_PLATFORM_ROUTING),
+    optional: true,
+    link: TOPVIEW_PLATFORM_CONSOLE_LINK,
   },
 ];

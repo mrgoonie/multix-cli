@@ -71,10 +71,19 @@ run ledger (`~/.multix/history.jsonl`, see
 account's usage. Group with `--by provider|model|offering|task|command`.
 
 - A **request** is one recorded run that sent something; dry runs,
-  estimate-only runs and failed runs that never reached the provider (a missing
-  key, a bad flag) are left out.
+  estimate-only runs and runs that never reached the provider (a missing key, a
+  bad flag, a resume that only read local state) are left out.
 - An **operation** is one piece of work: a submit with its status polls,
   resumes and download counts once.
+- Outcomes are counted per operation across all rows: it is **completed** when
+  any of its runs succeeded, so a failed status poll recorded under the job's
+  operation is not a failure. Otherwise its latest run decides whether it
+  **failed** or was **canceled**. The success rate is completed operations
+  divided by operations.
+- A failed poll whose run never received the job's provider id (its first
+  request failed) is still recorded as an operation of its own, so it can count
+  as a failure. Operation identity across runs is tracked in
+  [#424](https://github.com/mrgoonie/multix-cli/issues/424).
 - **Retries** are failed sends of a submit before the one that returned the job.
 - Spend counts each operation once from known figures. Operations whose cost is
   unknown or uncertain are counted separately, never added as $0.
@@ -85,8 +94,8 @@ account's usage. Group with `--by provider|model|offering|task|command`.
   example `(unknown model)`).
 - The model is the one the provider reported running; runs without one are
   grouped under `(unknown model)`.
-- Each row shows its sample size and a confidence level (none, low, medium,
-  high).
+- Each row shows its sample size (operations) and a confidence level (none,
+  low, medium, high).
 
 ## Ratings, reviews and notes
 
@@ -120,7 +129,7 @@ multix catalog note list -u product-ugc
 
 | Factor | Weight | Counts when |
 | --- | --- | --- |
-| Reliability (success rate through multix) | 0.35 | at least 5 runs |
+| Reliability (success rate through multix) | 0.35 | at least 5 operations |
 | Your rating | 0.25 | at least 3 ratings |
 | Your use-case notes | 0.2 | a note exists |
 | Relative price for this exact request | 0.2 | a ranked quote exists |

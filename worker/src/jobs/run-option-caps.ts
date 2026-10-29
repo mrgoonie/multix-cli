@@ -30,10 +30,18 @@ export function normaliseResolution(raw: string): string {
   return digits ? `${digits[1]}p` : lower;
 }
 
+/**
+ * Plain decimals of at least 1 only. Every CLI parser (parseInt, Number, a
+ * digits check, or the provider reading the raw string) then reads at most the
+ * value checked here, and never 0: a form like `100e-2` would pass as 1 and
+ * reach the provider as 100, and `0.5` would reach it as 0.
+ */
+const PLAIN_NUMBER_RE = /^\d+(\.\d+)?$/;
+
 function positiveNumber(raw: string, name: string): number {
   const n = Number(raw);
-  if (!Number.isFinite(n) || n <= 0)
-    throw new ValidationError(`--${name} must be a positive number`);
+  if (!PLAIN_NUMBER_RE.test(raw.trim()) || n < 1)
+    throw new ValidationError(`--${name} must be a plain decimal number of at least 1`);
   return n;
 }
 
@@ -94,7 +102,7 @@ export function applyCaps(
 /**
  * Why the caps cannot bound this run, or undefined when they do: the command
  * is marked uncapped, the caller used an option that merges a raw request
- * body, or the model picks the number of outputs.
+ * body, or the model picks the number of outputs or the resolution.
  */
 export function uncappedReason(
   policy: CommandPolicy,
@@ -103,11 +111,17 @@ export function uncappedReason(
 ): string | undefined {
   if (policy.uncappedSpend) return policy.uncappedSpend;
   const merged = policy.uncappedOptions?.find((name) => values.has(name));
-  if (merged) return `with --${merged}, the request reaches the provider as given`;
+  if (merged) return `with --${merged}, the server caps do not bound the request`;
   if (policy.caps?.countFromModel) {
     const omitted = policy.caps.count?.find((name) => !values.has(name));
     if (omitted) {
       return `--${omitted} is omitted, so the model picks the number of outputs (pass --${omitted}, at most ${limits.maxOutputs})`;
+    }
+  }
+  if (policy.caps?.resolutionFromModel) {
+    const omitted = policy.caps.resolution?.find((name) => !values.has(name));
+    if (omitted) {
+      return `--${omitted} is omitted, so the model picks the resolution (pass --${omitted}: ${limits.allowedResolutions.join(", ")})`;
     }
   }
   return undefined;

@@ -104,6 +104,23 @@ describe("history file", () => {
     }
   });
 
+  it("skips valid JSON lines that are not entries (null, arrays, scalars, missing id or ts)", () => {
+    const file = path.join(dir, "h.jsonl");
+    const lines = [
+      "null",
+      "[]",
+      "42",
+      '"text"',
+      "{}",
+      JSON.stringify({ id: 1, ts: "2026-10-27T10:00:00.000Z" }),
+      JSON.stringify({ id: "h_no_ts" }),
+    ];
+    fs.writeFileSync(file, `${lines.join("\n")}\n`);
+    appendHistory(entry({ id: "h_ok1" }));
+    expect(readHistory().map((e) => e.id)).toEqual(["h_ok1"]);
+    expect(findHistory("last")?.id).toBe("h_ok1");
+  });
+
   it("writes nothing when MULTIX_HISTORY=0", () => {
     process.env.MULTIX_HISTORY = "0";
     appendHistory(entry({}));

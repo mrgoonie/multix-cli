@@ -6,11 +6,17 @@
  *
  * Counting rules:
  * - a request is one recorded run that sent something: dry runs,
- *   estimate-only runs and failed runs that made no provider request (a
- *   missing key, a bad flag) are left out;
+ *   estimate-only runs and runs that made no provider request (a missing key,
+ *   a bad flag, a receipt with role "none") are left out;
  * - an operation is one logical piece of work: runs that share a cost
  *   receipt operation id (submit, status polls, result download, resume)
  *   count once, so polls and resumes never double the operation count;
+ * - outcomes are per operation, decided over the whole ledger before
+ *   grouping: completed when any of its runs succeeded, otherwise failed or
+ *   canceled by its latest run. A failed poll recorded under the job's
+ *   operation is not a failure, even when it lands in another row (no
+ *   resolved model, a status command); success rate and sample size count
+ *   operations;
  * - retries are failed sends of the same submit before the one that returned
  *   the job (`job.attempt - 1`);
  * - spend is settled per operation (settleOperations): provider-reported
@@ -146,13 +152,40 @@ export function keyOf(e: HistoryEntry, by: UsageGroup): string {
   return model ?? UNKNOWN_MODEL;
 }
 
-/** False for runs that never reached the provider. */
+/**
+ * False for runs that never reached the provider. A receipt states it (role
+ * "none" sent nothing); without one, only recorded HTTP calls or provider ids
+ * prove a send, whatever the outcome.
+ */
 export function sentRequest(e: HistoryEntry): boolean {
   if (e.dry_run || e.estimate_only) return false;
-  return e.ok || Boolean(e.job || e.cost || e.provider_ids?.length) || (e.http?.requests ?? 0) > 0;
+  const receipt = receiptOf(e);
+  if (receipt) return receipt.role !== "none";
+  return (e.http?.requests ?? 0) > 0 || Boolean(e.provider_ids?.length);
 }
 
 const isCancel = (e: HistoryEntry) => e.error?.code === "CANCELLED";
+
+type Outcome = "completed" | "failed" | "canceled";
+
+/** Outcome of each operation: completed if any run succeeded, else its latest run decides. */
+function operationOutcomes(list: HistoryEntry[]): Map<string, Outcome> {
+  const runs = new Map<string, HistoryEntry[]>();
+  for (const e of list) {
+    const id = operationOf(e);
+    runs.set(id, [...(runs.get(id) ?? []), e]);
+  }
+  const outcomes = new Map<string, Outcome>();
+  for (const [id, ops] of runs) {
+    if (ops.some((e) => e.ok)) outcomes.set(id, "completed");
+    else {
+      // Latest by timestamp; ledger order breaks ties (it is append order).
+      const latest = ops.reduce((a, b) => (b.ts >= a.ts ? b : a));
+      outcomes.set(id, isCancel(latest) ? "canceled" : "failed");
+    }
+  }
+  return outcomes;
+}
 
 function percentile(values: number[], p: number): number | null {
   if (values.length === 0) return null;
@@ -177,10 +210,13 @@ export interface UsageRow {
   requests: number;
   /** Logical operations (a job and its polls/resumes count once). */
   operations: number;
+  /** Operations with a successful run. */
   completed: number;
+  /** Operations with no successful run whose latest run failed. */
   failed: number;
+  /** Operations with no successful run whose latest run was canceled. */
   canceled: number;
-  /** completed / requests, null without requests. */
+  /** completed / operations, null without operations. */
   success_rate: number | null;
   /** Failed sends of a submit before the one that returned the job. */
   retries: number;
@@ -210,8 +246,10 @@ export interface UsageRow {
 
 /** Aggregate ledger entries by one dimension, busiest first. */
 export function aggregateUsage(entries: HistoryEntry[], by: UsageGroup): UsageRow[] {
-  const groups = new Map<string, HistoryEntry[]>();
   const sent = entries.filter(sentRequest);
+  // Decided once over every row: the runs of one operation can fall under different keys.
+  const outcomes = operationOutcomes(sent);
+  const groups = new Map<string, HistoryEntry[]>();
   const creditsOf = creditsByEntry(sent);
   for (const e of sent) {
     const key = keyOf(e, by);
@@ -232,7 +270,9 @@ export function aggregateUsage(entries: HistoryEntry[], by: UsageGroup): UsageRo
       const v = r.estimate?.expected_usd;
       if (!knownIds.has(r.operation_id) && typeof v === "number") estimates.set(r.operation_id, v);
     }
-    const ops = new Set(list.map(operationOf));
+    const opIds = [...new Set(list.map(operationOf))];
+    const ops = opIds.length;
+    const count = (o: Outcome) => opIds.filter((id) => outcomes.get(id) === o).length;
     // Completed runs with no receipt at all (ledger entries before receipts): cost unknown.
     // An operation another run's receipt already accounts for is not unknown.
     const accounted = new Set(spend.operations.map((op) => op.operation_id));
@@ -242,10 +282,9 @@ export function aggregateUsage(entries: HistoryEntry[], by: UsageGroup): UsageRo
         .map(operationOf)
         .filter((id) => !accounted.has(id)),
     );
-    const completed = list.filter((e) => e.ok);
-    const completedOps = new Set(completed.map(operationOf));
+    const completedOps = new Set(opIds.filter((id) => outcomes.get(id) === "completed"));
     const allPriced =
-      completed.length > 0 &&
+      completedOps.size > 0 &&
       spend.unknown + spend.uncertain + unreceipted.size === 0 &&
       [...completedOps].every((id) => knownIds.has(id));
     const credits = list.reduce<number | undefined>((s, e) => {
@@ -257,11 +296,11 @@ export function aggregateUsage(entries: HistoryEntry[], by: UsageGroup): UsageRo
     rows.push({
       key,
       requests: list.length,
-      operations: ops.size,
-      completed: completed.length,
-      failed: list.filter((e) => !e.ok && !isCancel(e)).length,
-      canceled: list.filter(isCancel).length,
-      success_rate: list.length ? round(completed.length / list.length, 3) : null,
+      operations: ops,
+      completed: completedOps.size,
+      failed: count("failed"),
+      canceled: count("canceled"),
+      success_rate: ops ? round(completedOps.size / ops, 3) : null,
       retries: list.reduce((s, e) => s + Math.max(0, (e.job?.attempt ?? 1) - 1), 0),
       p50_s: percentile(durations, 50),
       p95_s: percentile(durations, 95),
@@ -280,7 +319,7 @@ export function aggregateUsage(entries: HistoryEntry[], by: UsageGroup): UsageRo
       ...(credits !== undefined ? { credits: round(credits) } : {}),
       first_at: times[0] ?? "",
       last_at: times.at(-1) ?? "",
-      sample: { n: list.length, confidence: confidence(list.length) },
+      sample: { n: ops, confidence: confidence(ops) },
     });
   }
   return rows.sort((a, b) => b.requests - a.requests || a.key.localeCompare(b.key));
