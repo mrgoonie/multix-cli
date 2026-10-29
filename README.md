@@ -1031,7 +1031,8 @@ instance runs at `https://multix.zuey.me/mcp` (invited GitHub accounts only).
   chained extends grew, nor a `gemini edit-video` of it),
   `MULTIX_MCP_ALLOWED_RESOLUTIONS` (default `480p,720p,768p,1080p`),
   `MULTIX_MCP_UNCAPPED_SPEND` (default `budget`: runs those caps cannot bound,
-  such as `fal run` or `heygen translate`, start only with a `max_cost_usd`
+  such as `fal run`, `heygen translate` or an image `--size` / `--quality` the
+  caller sets, start only with a `max_cost_usd`
   their price estimate proves; `deny` refuses them, `allow` runs them),
   `MULTIX_MCP_ALLOWED_ORIGINS` (exact browser origins, with CORS), and the
   approximate per-account rate limiter. JSON-RPC batches are rejected.

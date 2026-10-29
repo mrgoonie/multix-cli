@@ -94,7 +94,8 @@ export function applyCaps(
 /**
  * Why the caps cannot bound this run, or undefined when they do: the command
  * is marked uncapped, the caller used an option that merges a raw request
- * body, or the model picks the number of outputs.
+ * body or sets an image's size or quality, or the model picks the number of
+ * outputs.
  */
 export function uncappedReason(
   policy: CommandPolicy,
@@ -104,6 +105,10 @@ export function uncappedReason(
   if (policy.uncappedSpend) return policy.uncappedSpend;
   const merged = policy.uncappedOptions?.find((name) => values.has(name));
   if (merged) return `with --${merged}, the request reaches the provider as given`;
+  const sized = policy.imageSizeOptions?.find((name) => values.has(name));
+  if (sized) {
+    return `--${sized} sets the image size or quality, which sets the price per image and no cap on this server bounds (omit it to keep the model default)`;
+  }
   if (policy.caps?.countFromModel) {
     const omitted = policy.caps.count?.find((name) => !values.has(name));
     if (omitted) {

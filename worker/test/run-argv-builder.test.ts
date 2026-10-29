@@ -684,6 +684,33 @@ describe("prepareRun: runs the caps cannot bound", () => {
     ).toBe("with --text-field, the request reaches the provider as given");
   });
 
+  it("marks an image size, quality, tier or upscale factor the caller sets", () => {
+    const sized = (flag: string) =>
+      `--${flag} sets the image size or quality, which sets the price per image and no cap on this server bounds (omit it to keep the model default)`;
+    const cases: [string, string[], RunRequest["options"], string][] = [
+      ["gemini generate", [], { prompt: "a cat", size: "4K" }, "size"],
+      ["openai generate", [], { prompt: "a cat", quality: "high" }, "quality"],
+      ["openai generate", [], { prompt: "a cat", size: "1536x1024" }, "size"],
+      ["openrouter generate", [], { prompt: "a cat", "image-size": "4K" }, "image-size"],
+      ["fal image", ["a cat"], { "image-size": "landscape_16_9" }, "image-size"],
+      ["byteplus generate", [], { prompt: "a cat", size: "4K" }, "size"],
+      ["leonardo generate", ["a cat"], { width: 1536 }, "width"],
+      ["leonardo upscale", ["img-1"], { multiplier: 2 }, "multiplier"],
+      ["atlas image", ["a cat"], { "num-images": 1, resolution: "4k" }, "resolution"],
+      ["atlas image", ["a cat"], { "num-images": 1, size: "2048*2048" }, "size"],
+    ];
+    for (const [command, args, options, flag] of cases) {
+      expect(run({ command, args, options }).uncappedSpend, command).toBe(sized(flag));
+    }
+    // The model default stays capped.
+    expect(run({ command: "openai generate", options: { prompt: "a cat" } })).not.toHaveProperty(
+      "uncappedSpend",
+    );
+    expect(
+      run({ command: "atlas image", args: ["a cat"], options: { "num-images": 1 } }),
+    ).not.toHaveProperty("uncappedSpend");
+  });
+
   it("marks an omitted count the model picks, and accepts one within the cap", () => {
     expect(run({ command: "atlas image", args: ["a cat"] }).uncappedSpend).toBe(
       "--num-images is omitted, so the model picks the number of outputs (pass --num-images, at most 4)",
