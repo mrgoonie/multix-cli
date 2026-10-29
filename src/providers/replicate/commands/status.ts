@@ -5,6 +5,7 @@
  */
 
 import type { Command } from "commander";
+import { nameJob } from "../../../agent/run-state.js";
 import { createLogger } from "../../../core/logger.js";
 import { ReplicatePredictionError } from "../client.js";
 import { isTerminalStatus } from "../models.js";
@@ -37,6 +38,8 @@ export function registerReplicateStatusCommand(parent: Command): void {
     .action(async (predictionId: string, opts: StatusOpts) => {
       const logger = createLogger({ verbose: opts.verbose ?? false });
       const client = createReplicateClient();
+      // Name the job read here, so a failed read still joins its operation.
+      nameJob(predictionId);
 
       if (opts.wait) {
         await completePrediction(client, predictionId, {

@@ -129,7 +129,9 @@ export function trackInFlight(id: string, resume: string, state: RunState = run)
  * Name the job a command acts on when its responses may not carry the id (a
  * result read), so the run joins that job's operation; its id goes in provider_ids.
  */
-export function nameJob(id: string, state: RunState = run): void {
+export function nameJob(given: string, state: RunState = run): void {
+  // Clients trim the id they send, so name the job by the same trimmed form.
+  const id = given.trim();
   // Same bound as an id read from a response: a longer argument is not a job id.
   if (!id || id.length > 128) return;
   state.namedJob = id;
