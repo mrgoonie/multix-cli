@@ -303,8 +303,11 @@ export function classifyError(error: unknown): ErrorInfo {
   } else if (error instanceof Error && error.cause instanceof MultixError) {
     // A plain Error that adds context (a request id, a resume hint) to a typed error keeps
     // the typed error's code, HTTP status and Retry-After, and reports its own message.
+    // A job the provider did not fail stays off JOB_FAILED, whatever the wrapper's text says.
     const info = classifyError(error.cause);
-    if (info.code !== "UNKNOWN") return { ...info, message: redactUrlsInText(message) };
+    if (info.code !== "UNKNOWN" || error.cause instanceof ProviderJobFailedError) {
+      return { ...info, message: redactUrlsInText(message) };
+    }
   }
   return classifyMessage(message);
 }

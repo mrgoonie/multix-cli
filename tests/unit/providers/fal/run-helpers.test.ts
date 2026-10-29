@@ -339,6 +339,7 @@ describe("submitAndWait", () => {
     );
     const err = await waitError();
     expect((err as Error).message).toMatch(/Failed to poll status for fal request req-1/);
+    expect((err as Error).cause).toBeInstanceOf(HttpError);
     expect(classifyError(err)).toMatchObject({ code: "INVALID_KEY", http_status: 401 });
   });
 

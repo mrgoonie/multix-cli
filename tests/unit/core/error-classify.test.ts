@@ -106,6 +106,13 @@ describe("classifyError", () => {
     );
   });
 
+  it("never reports a wrapped job the provider did not fail as a failed job", () => {
+    const cause = new ProviderJobFailedError("job canceled", "fal", { terminal: false });
+    const info = classifyError(new Error("fal job failed: job canceled", { cause }));
+    expect(info.code).toBe("UNKNOWN");
+    expect(info.message).toBe("fal job failed: job canceled");
+  });
+
   it("falls back to the wrapper's text when its typed cause says nothing", () => {
     const cause = new ProviderError("something odd", "fal");
     const info = classifyError(new Error("Failed: rate limit exceeded", { cause }));
