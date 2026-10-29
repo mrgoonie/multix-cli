@@ -2,7 +2,7 @@
  * multix openrouter video-status <jobId> — poll an OpenRouter video job.
  *
  * Default: single GET (backward-compatible).
- * --wait: polls until status is `completed` / `failed`.
+ * --wait: polls until the job completes, fails, is cancelled or expires.
  * --download: streams the video to MULTIX_OUTPUT_DIR (or --output <path>).
  *   Auto-detects a thumbnail URL in the response and saves it as `<base>_thumb.<ext>`.
  */
@@ -66,6 +66,18 @@ export async function downloadOpenRouterVideo(opts: OpenRouterDownloadOpts): Pro
 }
 
 /**
+ * Statuses a video job never leaves without completing. Only "failed" is the
+ * provider failing the job; "cancelled" and "expired" (past its time to live)
+ * are documented poll statuses that end the wait without a result.
+ */
+const STOPPED_STATUSES = new Set(["failed", "cancelled", "expired"]);
+
+/** True once a polled job stopped without completing, so a wait ends now. */
+export function isStoppedVideoJob(job: OpenRouterVideoPollResponse): boolean {
+  return STOPPED_STATUSES.has(job.status);
+}
+
+/**
  * Map a failed or timed-out video job wait onto the CLI errors. The resume
  * command downloads the video when the interrupted run would have.
  */
@@ -77,7 +89,11 @@ export function toVideoJobError(error: unknown, jobId: string, download: boolean
     resumeCommand: `multix openrouter video-status ${jobId} --wait${download ? " --download" : ""}`,
     describe: (value) => {
       const job = (value ?? {}) as { status?: unknown; error?: unknown };
-      return { status: job.status, reason: failureReason(job.error), terminal: true };
+      return {
+        status: job.status,
+        reason: failureReason(job.error),
+        terminal: job.status === "failed",
+      };
     },
   });
 }
@@ -86,7 +102,7 @@ export function registerOpenRouterVideoStatusCommand(parent: Command): void {
   parent
     .command("video-status <jobId>")
     .description("Poll or download an OpenRouter video generation job by job ID")
-    .option("--wait", "Poll until status is 'completed' or 'failed'")
+    .option("--wait", "Poll until the job completes, fails, is cancelled or expires")
     .option("--wait-timeout <ms>", "Poll timeout in ms (with --wait)", "600000")
     .option("--download", "If completed, download the video (implies --wait)")
     .option("--output <path>", "Copy downloaded video to this path")
@@ -113,7 +129,7 @@ export function registerOpenRouterVideoStatusCommand(parent: Command): void {
             ? await poll<OpenRouterVideoPollResponse>({
                 fetch: () => pollVideoJob(jobId),
                 done: (v) => v.status === "completed",
-                failed: (v) => v.status === "failed",
+                failed: isStoppedVideoJob,
                 intervalMs: 5000,
                 maxAttempts: Math.max(
                   1,

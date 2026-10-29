@@ -183,6 +183,23 @@ describe("openrouter video job waits", () => {
     });
   });
 
+  it.each(
+    commands.flatMap(([name, argv]) => [
+      [name, argv, "cancelled", "Job was cancelled."],
+      [name, argv, "expired", "Job exceeded maximum time to live."],
+    ]),
+  )(
+    "%s stops at a %s job without reading it as a failed job or a timeout",
+    async (_name, argv, status, reason) => {
+      stubFetch({ id: "job-9", status, error: reason }, SUBMITTED);
+      const error = await runAndCatch(argv as string[]);
+      expect(classifyError(error)).toMatchObject({
+        code: "UNKNOWN",
+        message: `Job job-9 ${status}`,
+      });
+    },
+  );
+
   it.each(commands)(
     "%s throws a timeout with the command that finishes it",
     async (_name, argv, resume) => {

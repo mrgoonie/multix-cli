@@ -163,8 +163,13 @@ multix catalog note list -u product-ugc
   ký tự tag Unicode) bị loại bỏ, tab được đổi thành dấu cách, các dạng trông
   giống nhau như chữ fullwidth được quy về dạng chuẩn (NFKC) và các dấu gạch
   Unicode được đọc là `-`, sau đó query string của URL, chuỗi trông như key
-  (API key, JWT, mã định danh khóa và secret key của AWS, private key, tham số
-  của URL đã ký, giá trị `Authorization`, cặp `name=value` có tên kết thúc bằng
+  (API key, JWT, mã định danh khóa và secret key của AWS, key base64 đứng riêng
+  dài 32 hoặc 64 byte như key HMAC-SHA256 hay key lưu trữ Azure, private key,
+  tham số của URL đã ký, giá trị `Authorization`, cặp viết dạng `name=value`,
+  `name: value`, `name => value`, `name == value` hoặc đặt trong dấu nháy như
+  JSON (`"password": "…"`, `'token': '…'`; toàn bộ giá trị trong dấu nháy bị
+  xóa, còn tên trong dấu nháy được giữ lại với giá trị `"[redacted]"` để JSON
+  vẫn hợp lệ) có tên kết thúc bằng
   `secret`, `token`, `password` hoặc `credential`, hoặc bằng một từ key ghép
   như `FAL_KEY`, `api_key`, `x-api-key` hay `accesskey`; tên khác kết thúc bằng
   `key` chỉ được tính khi giá trị trông như token, dài từ 16 ký tự trở lên, có
