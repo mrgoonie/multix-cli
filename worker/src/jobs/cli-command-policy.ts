@@ -301,10 +301,12 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
     caps: { count: ["num-outputs"], countFromModel: true },
     uncappedOptions: EXTRA_INPUT,
   },
+  // --resolution is sent as a `resolution` field, which a model given with
+  // --model may not read; the default (prunaai/p-video) does.
   "replicate video": {
     fileOptions: { image: "file" },
     caps: VIDEO_CAPS,
-    uncappedOptions: EXTRA_INPUT,
+    uncappedOptions: { ...EXTRA_INPUT, model: "the model may ignore --resolution" },
   },
   // --ratio is checked against each model's fixed list by the CLI (at most 1920x1080).
   "runway video": { fileOptions: { image: "file" }, caps: { duration: ["duration"] } },

@@ -51,7 +51,10 @@ function commandDetail(command: CliCommand): Record<string, unknown> {
   const policy = policyFor(command.command);
   const unsupported = new Set([...GLOBALLY_UNSUPPORTED_OPTIONS, ...(policy.unsupported ?? [])]);
   const byName = new Map(command.options.map((o) => [optionName(o), o]));
-  const modelResolutions = modelResolutionOptions(policy.caps, byName, () => false);
+  // A command that is uncapped as a whole stays so whatever its options say.
+  const modelResolutions = policy.uncappedSpend
+    ? []
+    : modelResolutionOptions(policy.caps, byName, () => false);
   const options = command.options
     .filter((o) => !unsupported.has(optionName(o)) && optionName(o) !== OUTPUT_DIR_OPTION)
     .map((option) => {

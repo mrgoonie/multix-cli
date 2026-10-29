@@ -154,7 +154,8 @@ hạn):
 - `atlas video`, `atlas image-to-video`, `replicate video`, `openrouter
   image-to-video` và `heygen model-video` khi không có `--resolution`, lúc đó
   model tự chọn độ phân giải. Truyền một độ phân giải được phép giúp lần chạy
-  được giới hạn trở lại. `fal video` không có option độ phân giải: các model
+  được giới hạn trở lại, trừ `replicate video --model`, vì model đó có thể
+  không đọc giá trị này (model mặc định thì có). `fal video` không có option độ phân giải: các model
   mặc định của nó xuất 720p, còn với `--model` thì model tự chọn độ phân giải,
   nên lần chạy không bị giới hạn;
 - độ dài âm thanh mà không giới hạn nào chặn được: `elevenlabs music` (tính

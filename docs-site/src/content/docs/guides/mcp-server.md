@@ -157,7 +157,8 @@ the option that makes a run uncapped):
 - `atlas video`, `atlas image-to-video`, `replicate video`, `openrouter
   image-to-video` and `heygen model-video` without `--resolution`, where the
   model picks the resolution. Passing an allowed resolution makes the run
-  capped again. `fal video` has no resolution option: its default models
+  capped again, except with `replicate video --model`, whose model may not
+  read it (the default model does). `fal video` has no resolution option: its default models
   render 720p, and with `--model` the model picks the resolution, so the run
   is uncapped;
 - audio lengths no cap bounds: `elevenlabs music` (billed by the track

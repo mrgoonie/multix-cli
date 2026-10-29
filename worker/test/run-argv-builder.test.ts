@@ -731,6 +731,16 @@ describe("prepareRun: runs the caps cannot bound", () => {
     );
   });
 
+  it("marks a replicate video model that may ignore --resolution", () => {
+    expect(
+      run({
+        command: "replicate video",
+        args: ["a wave"],
+        options: { model: "a/b", resolution: "720p" },
+      }).uncappedSpend,
+    ).toBe("with --model, the model may ignore --resolution");
+  });
+
   it("marks fal video with a model that picks its own resolution", () => {
     expect(run({ command: "fal video", args: ["a wave"] })).not.toHaveProperty("uncappedSpend");
     expect(

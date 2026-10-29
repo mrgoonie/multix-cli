@@ -140,12 +140,12 @@ describe("CLI catalog", () => {
     const notSpend: Record<string, string> = {
       "elevenlabs transcribe num-speakers": "a hint for diarisation, not an output count",
       "fish tts chunk-length": "splits the text into requests; the text sets the price",
-      "speech generate extra": "named per-provider settings (speed, stability…), not a raw body",
       "atlas image resolution": "an image resolution tier; image sizes are not capped (#447)",
       "atlas image-to-image resolution":
         "an image resolution tier; image sizes are not capped (#447)",
     };
     const missing: string[] = [];
+    const used = new Set<string>();
     for (const group of CLI_CATALOG.groups) {
       if (localGroups.has(group.group)) continue;
       for (const command of group.commands) {
@@ -160,18 +160,24 @@ describe("CLI catalog", () => {
           const raw =
             policy.fileOptions?.[name] === undefined && rawBody(option.flags, option.description);
           if (!kind && !raw) continue;
+          const key = `${command.command} ${name}`;
+          if (notSpend[key] !== undefined) {
+            used.add(key);
+            continue;
+          }
           const covered =
             policy.uncappedOptions?.[name] !== undefined ||
             policy.unsupported?.includes(name) ||
             (kind === "count" && caps?.count?.includes(name)) ||
             (kind === "length" && caps?.duration?.includes(name)) ||
-            (kind === "resolution" && caps?.resolution?.includes(name)) ||
-            notSpend[`${command.command} ${name}`] !== undefined;
+            (kind === "resolution" && caps?.resolution?.includes(name));
           if (!covered) missing.push(`${command.command} --${name} (${kind ?? "raw body"})`);
         }
       }
     }
     expect(missing).toEqual([]);
+    // A stale exception would hide a later option of the same name.
+    expect(Object.keys(notSpend).filter((key) => !used.has(key))).toEqual([]);
   });
 
   it("bounds or marks the resolution of every video-generating command", () => {
@@ -217,6 +223,12 @@ describe("multix_catalog uncapped_spend marks", () => {
     );
     expect(option("byteplus", "byteplus video", "resolution").option).not.toHaveProperty(
       "uncapped_spend",
+    );
+    expect(option("heygen", "heygen video", "resolution").option).not.toHaveProperty(
+      "uncapped_spend",
+    );
+    expect(option("replicate", "replicate video", "model").option?.uncapped_spend).toBe(
+      "with this option, the model may ignore --resolution",
     );
     expect(option("fal", "fal video", "model").option?.uncapped_spend).toBe(
       "with this option, the model picks the video resolution",
