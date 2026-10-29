@@ -300,6 +300,28 @@ describe("REST API jobs", () => {
     expect((await api(other, otherKey, `/jobs/${job.job_id}`)).status).toBe(404);
   });
 
+  it("refuses a run the caps cannot bound unless its price is proven within max_cost_usd", async () => {
+    const { namespace, specs } = fakeNamespace();
+    const { browser } = await signedInBrowser({
+      MULTIX_JOBS: namespace,
+      MULTIX_JOB_QUOTA: fakeQuotaNamespace(),
+    });
+    const key = await createApiKey(browser);
+    const falRun = { command: "fal run", args: ["fal-ai/any-model"], options: { input: "{}" } };
+    const post = (extra: Record<string, unknown>) =>
+      api(browser, key, "/jobs", { method: "POST", body: JSON.stringify({ ...falRun, ...extra }) });
+
+    const missing = await post({});
+    expect(missing.status).toBe(400);
+    expect((await body(missing)).error.message).toContain("Pass max_cost_usd");
+    const unknown = await post({ max_cost_usd: 1 });
+    expect(unknown.status).toBe(400);
+    expect((await body(unknown)).error.message).toMatch(/^Refusing to run: cost of .* is unknown/);
+    expect((await post({ max_cost_usd: "1" })).status).toBe(400);
+    expect((await post({ max_cost_usd: 1, cost_policy: "loose" })).status).toBe(400);
+    expect(specs.size).toBe(0);
+  });
+
   it("reports jobs as unavailable without the job bindings", async () => {
     const { browser } = await signedInBrowser();
     const key = await createApiKey(browser);

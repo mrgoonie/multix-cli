@@ -8,7 +8,7 @@
 import { ValidationError } from "../../../src/core/errors.js";
 import type { Limits } from "../config.js";
 import type { CliOption } from "./cli-catalog-types.js";
-import type { CapRules } from "./cli-command-policy.js";
+import type { CapRules, CommandPolicy } from "./cli-command-policy.js";
 
 /** Values per option name after validation: strings, or `true` for a bare flag. */
 export type OptionValues = Map<string, string[] | true>;
@@ -88,5 +88,50 @@ export function applyCaps(
         `--${name} must be one of ${limits.allowedResolutions.join(", ")} on this server`,
       );
     }
+  }
+}
+
+/**
+ * Why the caps cannot bound this run, or undefined when they do: the command
+ * is marked uncapped, the caller used an option that merges a raw request
+ * body, or the model picks the number of outputs.
+ */
+export function uncappedReason(
+  policy: CommandPolicy,
+  values: OptionValues,
+  limits: Limits,
+): string | undefined {
+  if (policy.uncappedSpend) return policy.uncappedSpend;
+  const merged = policy.uncappedOptions?.find((name) => values.has(name));
+  if (merged) return `--${merged} is passed to the provider as given`;
+  if (policy.caps?.countFromModel) {
+    const omitted = policy.caps.count?.find((name) => !values.has(name));
+    if (omitted) {
+      return `--${omitted} is omitted, so the model picks the number of outputs (pass --${omitted}, at most ${limits.maxOutputs})`;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Apply MULTIX_MCP_UNCAPPED_SPEND to a run the caps cannot bound. In `budget`
+ * mode the caller must give max_cost_usd; the cost check then refuses any run
+ * whose price is unknown or above it, so the run is bounded or never starts.
+ */
+export function assertSpendGuard(
+  command: string,
+  reason: string | undefined,
+  limits: Limits,
+  maxCostUsd: number | undefined,
+): void {
+  if (reason === undefined || limits.uncappedSpend === "allow") return;
+  const why = `"${command}" is not bounded by this server's caps: ${reason}`;
+  if (limits.uncappedSpend === "deny") {
+    throw new ValidationError(`${why}. This server does not run such commands.`);
+  }
+  if (maxCostUsd === undefined) {
+    throw new ValidationError(
+      `${why}. Pass max_cost_usd: the run starts only when its price is known and fits.`,
+    );
   }
 }

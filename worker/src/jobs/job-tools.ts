@@ -28,6 +28,7 @@ import {
 import { modelCatalogPayload } from "./model-catalog-view.js";
 import { prepareRun } from "./run-argv-builder.js";
 import { MAX_INPUT_FILES } from "./run-input-files.js";
+import { assertSpendGuard } from "./run-option-caps.js";
 import { toolInput } from "./tool-input-schema.js";
 
 export type RunToolFn = (
@@ -79,6 +80,14 @@ export function costPreflight(
   if (!args.estimate) return undefined;
   return { estimate_only: true, command, estimate, ...(budget ? { budget } : {}) };
 }
+
+/** How multix_run treats a run the caps cannot bound (multix_catalog marks them `uncapped_spend`). */
+export const UNCAPPED_SPEND_NOTE: Record<Limits["uncappedSpend"], string> = {
+  budget:
+    "Runs the caps cannot bound (uncapped_spend in multix_catalog) need max_cost_usd and start only when their price is known and fits.",
+  deny: "Runs the caps cannot bound (uncapped_spend in multix_catalog) are refused.",
+  allow: "Runs the caps cannot bound (uncapped_spend in multix_catalog) are allowed.",
+};
 
 export function registerJobTools(
   server: McpServer,
@@ -170,7 +179,7 @@ export function registerJobTools(
     "multix_run",
     {
       title: "Run a multix CLI command",
-      description: `Run one multix CLI command in an isolated container with your saved keys. command: e.g. "gemini generate". options: by long name without dashes ({"prompt": "...", "num-images": 2, "no-webp": true}). args: positionals in order. inputs: https URLs for file options or positionals (downloaded for the CLI). Output files go to your R2 bucket (configure it in /dashboard) and come back as URLs. Waits up to wait_seconds (max ${MAX_WAIT_SECONDS}, container start included); if still running, poll multix_job_status. At most ${jobs.caps.perAccount} running jobs per account. Caps: ${limits.maxOutputs} outputs, ${limits.maxVideoSeconds} s video, resolutions ${limits.allowedResolutions.join("/")}.`,
+      description: `Run one multix CLI command in an isolated container with your saved keys. command: e.g. "gemini generate". options: by long name without dashes ({"prompt": "...", "num-images": 2, "no-webp": true}). args: positionals in order. inputs: https URLs for file options or positionals (downloaded for the CLI). Output files go to your R2 bucket (configure it in /dashboard) and come back as URLs. Waits up to wait_seconds (max ${MAX_WAIT_SECONDS}, container start included); if still running, poll multix_job_status. At most ${jobs.caps.perAccount} running jobs per account. Caps: ${limits.maxOutputs} outputs, ${limits.maxVideoSeconds} s video, resolutions ${limits.allowedResolutions.join("/")}. ${UNCAPPED_SPEND_NOTE[limits.uncappedSpend]}`,
       inputSchema: toolInput({
         command: z.string().min(1).max(100).describe("Command path from multix_catalog"),
         args: z.array(z.string()).max(20).optional(),
@@ -199,6 +208,10 @@ export function registerJobTools(
       const fields = { command: args.command.slice(0, 100) };
       return runTool("multix_run", fields, async () => {
         const prepared = prepareRun(args, limits);
+        // An estimate-only call starts nothing, so the guard does not apply to it.
+        if (!args.estimate) {
+          assertSpendGuard(prepared.command, prepared.uncappedSpend, limits, args.max_cost_usd);
+        }
         const preflight = costPreflight(prepared.command, args);
         if (preflight) return preflight;
         return runner.run(prepared, args.wait_seconds ?? DEFAULT_WAIT_SECONDS);

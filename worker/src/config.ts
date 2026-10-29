@@ -39,6 +39,12 @@ export interface ServerSettings {
   MULTIX_MCP_ALLOWED_RESOLUTIONS?: string;
   /** Comma-separated browser origins allowed to call /mcp. Requests with other Origins get 403. */
   MULTIX_MCP_ALLOWED_ORIGINS?: string;
+  /**
+   * Runs the caps above cannot bound (pass-through `run` bodies, spend set by
+   * the length of the source media): `budget` (default) runs one only with a
+   * max_cost_usd its price estimate proves, `deny` refuses it, `allow` runs it.
+   */
+  MULTIX_MCP_UNCAPPED_SPEND?: string;
 }
 
 export {
@@ -96,6 +102,7 @@ export function serverSettings(env: ServerSettings): ServerSettings {
     MULTIX_MCP_MAX_VIDEO_SECONDS: env.MULTIX_MCP_MAX_VIDEO_SECONDS,
     MULTIX_MCP_ALLOWED_RESOLUTIONS: env.MULTIX_MCP_ALLOWED_RESOLUTIONS,
     MULTIX_MCP_ALLOWED_ORIGINS: env.MULTIX_MCP_ALLOWED_ORIGINS,
+    MULTIX_MCP_UNCAPPED_SPEND: env.MULTIX_MCP_UNCAPPED_SPEND,
   };
 }
 
@@ -134,6 +141,17 @@ export interface Limits {
   defaultVideoSeconds: number;
   /** Lower-case resolutions callers may request. */
   allowedResolutions: string[];
+  /** What a run the caps cannot bound needs (see MULTIX_MCP_UNCAPPED_SPEND). */
+  uncappedSpend: UncappedSpendMode;
+}
+
+export type UncappedSpendMode = "budget" | "deny" | "allow";
+const UNCAPPED_SPEND_MODES: readonly UncappedSpendMode[] = ["budget", "deny", "allow"];
+
+/** An unknown value falls back to `budget`, so a typo never opens the guard. */
+function uncappedSpendMode(raw: string | undefined): UncappedSpendMode {
+  const mode = raw?.trim().toLowerCase();
+  return UNCAPPED_SPEND_MODES.find((m) => m === mode) ?? "budget";
 }
 
 export function limitsFrom(env: Env): Limits {
@@ -148,6 +166,7 @@ export function limitsFrom(env: Env): Limits {
     maxVideoSeconds,
     defaultVideoSeconds: Math.min(VIDEO_SECONDS_WHEN_OMITTED, maxVideoSeconds),
     allowedResolutions: resolutions.length > 0 ? resolutions : RESOLUTIONS_DEFAULT,
+    uncappedSpend: uncappedSpendMode(env.MULTIX_MCP_UNCAPPED_SPEND),
   };
 }
 

@@ -4,7 +4,7 @@ import { limitsFrom } from "../src/config.js";
 import { jobEnv } from "../src/jobs/job-runner.js";
 import { type RunRequest, prepareRun } from "../src/jobs/run-argv-builder.js";
 import { safeFileName } from "../src/jobs/run-input-files.js";
-import { normaliseResolution } from "../src/jobs/run-option-caps.js";
+import { assertSpendGuard, normaliseResolution } from "../src/jobs/run-option-caps.js";
 import type { ProviderKeys } from "../src/provider-secret-names.js";
 import { parseWithCli } from "./cli-program.js";
 
@@ -626,5 +626,86 @@ describe("helpers", () => {
     expect(safeFileName("https://a.example.com/x/..%2F..%2Fetc%2Fpasswd")).toBe("_.._etc_passwd");
     expect(safeFileName("https://a.example.com/")).toBe("input");
     expect(safeFileName("https://a.example.com/..")).toBe("input");
+  });
+});
+
+describe("prepareRun: runs the caps cannot bound", () => {
+  it("marks pass-through and source-length commands", () => {
+    expect(run({ command: "fal run", args: ["a/b"], options: { input: "{}" } }).uncappedSpend).toBe(
+      "the request body is passed to the provider as given",
+    );
+    expect(
+      run({ command: "replicate run", args: ["a/b"], options: { input: "{}" } }).uncappedSpend,
+    ).toBeDefined();
+    expect(
+      run({ command: "atlas run", args: ["a/b"], options: { input: "{}" } }).uncappedSpend,
+    ).toBeDefined();
+    expect(
+      run({ command: "heygen run", args: ["/v3/videos"], options: { input: "{}" } }).uncappedSpend,
+    ).toBeDefined();
+    expect(
+      run({
+        command: "heygen translate",
+        options: { languages: "es" },
+        inputs: { source: "https://cdn.example.com/in.mp4" },
+      }).uncappedSpend,
+    ).toBe("billed by the length of the source media");
+    expect(run({ command: "elevenlabs dub", options: { "target-lang": "es" } }).uncappedSpend).toBe(
+      "billed by the length of the source media",
+    );
+  });
+
+  it("marks a raw --input body merged under a convenience command", () => {
+    expect(
+      run({ command: "replicate image", args: ["a cat"], options: { "num-outputs": 1 } }),
+    ).not.toHaveProperty("uncappedSpend");
+    expect(
+      run({
+        command: "replicate image",
+        args: ["a cat"],
+        options: { "num-outputs": 1, input: '{"num_outputs": 8}' },
+      }).uncappedSpend,
+    ).toBe("--input is passed to the provider as given");
+  });
+
+  it("marks an omitted count the model picks, and accepts one within the cap", () => {
+    expect(run({ command: "atlas image", args: ["a cat"] }).uncappedSpend).toBe(
+      "--num-images is omitted, so the model picks the number of outputs (pass --num-images, at most 4)",
+    );
+    expect(
+      run({ command: "atlas image", args: ["a cat"], options: { "num-images": 2 } }),
+    ).not.toHaveProperty("uncappedSpend");
+    rejects(
+      { command: "atlas image", args: ["a cat"], options: { "num-images": 5 } },
+      /--num-images must be at most 4/,
+    );
+    expect(run({ command: "replicate image", args: ["a cat"] }).uncappedSpend).toContain(
+      "--num-outputs is omitted",
+    );
+  });
+
+  it("leaves capped commands unmarked and caps the voice-design count", () => {
+    expect(run({ command: "gemini generate", options: { prompt: "a cat" } })).not.toHaveProperty(
+      "uncappedSpend",
+    );
+    rejects(
+      { command: "fish voice-design", options: { instruction: "warm", count: 9 } },
+      /--count must be at most 4/,
+    );
+  });
+
+  it("applies MULTIX_MCP_UNCAPPED_SPEND, with budget for unknown values", () => {
+    const why = "the request body is passed to the provider as given";
+    const mode = (value?: string) => limitsFrom({ MULTIX_MCP_UNCAPPED_SPEND: value });
+    expect(mode().uncappedSpend).toBe("budget");
+    expect(mode(" DENY ").uncappedSpend).toBe("deny");
+    expect(mode("yes please").uncappedSpend).toBe("budget");
+    expect(() => assertSpendGuard("fal run", why, mode(), undefined)).toThrow(/Pass max_cost_usd/);
+    expect(() => assertSpendGuard("fal run", why, mode(), 1)).not.toThrow();
+    expect(() => assertSpendGuard("fal run", why, mode("deny"), 1)).toThrow(
+      /does not run such commands/,
+    );
+    expect(() => assertSpendGuard("fal run", why, mode("allow"), undefined)).not.toThrow();
+    expect(() => assertSpendGuard("gemini generate", undefined, mode(), undefined)).not.toThrow();
   });
 });
