@@ -442,6 +442,25 @@ describe("retries, failures and cancels", () => {
     ]);
   });
 
+  it("fails a job from the ledger before receipts when its status run reports JOB_FAILED", () => {
+    // The repro of #471: no receipts, one fal job named by its provider id.
+    const entries = [
+      entry({ provider_ids: ["req_1"] }),
+      entry({
+        ts: "2026-10-27T10:01:00.000Z",
+        command: "fal status",
+        model_resolved: undefined,
+        provider_ids: ["req_1"],
+        ok: false,
+        exit_code: 5,
+        error: { code: "JOB_FAILED", message: "fal request req_1 failed" },
+      }),
+    ];
+    expect(aggregateUsage(entries, "provider")).toMatchObject([
+      { key: "fal", operations: 1, completed: 0, failed: 1, success_rate: 0 },
+    ]);
+  });
+
   it("fails a job identified by its job record when a later run reports JOB_FAILED", () => {
     const job = { provider: "fal", id: "j-f", attempt: 1 };
     const row = rowFor([
