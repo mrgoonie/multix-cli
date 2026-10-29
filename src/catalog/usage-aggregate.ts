@@ -19,12 +19,12 @@
  *   operations;
  * - retries are failed sends of the same submit before the one that returned
  *   the job (`job.attempt - 1`);
- * - spend is settled per operation (settleOperations): provider-reported
- *   figures settle it, uncertain or unknown costs stay out of the total and
- *   are counted instead, never added as $0; credits are settled the same way
- *   over the whole ledger and shown on the operation's submit run
- *   (creditsByEntry), so a status read that repeats a task's credits counts
- *   them once, in whichever row it lands;
+ * - spend (USD and credits) is settled per operation over the whole ledger
+ *   (settleOperations) and shown on the operation's submit run
+ *   (spendByEntry), so a status read that repeats a task's cost counts it
+ *   once, in whichever row it lands; provider-reported figures settle it,
+ *   uncertain or unknown costs stay out of the total and are counted
+ *   instead, never added as $0;
  * - the model is the resolved model the provider ran; runs without one are
  *   grouped under "(unknown model)" rather than guessed from the command.
  *
@@ -32,7 +32,7 @@
  */
 
 import type { HistoryEntry } from "../agent/history-store.js";
-import type { CostReceipt } from "../budget/cost-receipt.js";
+import type { CostReceipt, OperationSpend } from "../budget/cost-receipt.js";
 import { operationIdFor, settleOperations } from "../budget/cost-receipt.js";
 import { commandCapability } from "../capabilities/command-capabilities.js";
 
@@ -81,37 +81,56 @@ export function receiptOf(e: HistoryEntry): CostReceipt | undefined {
   };
 }
 
+/** What one operation spent, shown on the one ledger entry that owns it. */
+export interface OwnedSpend {
+  /** Settled USD of the operation; absent when no run reported or charged any. */
+  spend?: OperationSpend;
+  /** Settled credits of the operation; absent when no run reported any. */
+  credits?: number;
+}
+
 /**
- * Credits per ledger entry, each operation's credits counted once: settled
- * over all of its runs (settleOperations) and placed on its first charge run
- * (the submit, which names the model), else on its earliest run that
- * reported credits. A status run of the same task then adds nothing to any row, even
- * when it is grouped apart from its submit (no model, another command).
- * Credits are settled per provider within an operation: one MULTIX_OPERATION_ID
- * shared across providers never mixes their credits, which are different units.
+ * Each operation's spend (USD and credits) settled once over all of its runs
+ * (settleOperations) and placed on one run: its first charge run (the submit,
+ * which names the model), else its earliest run that reported a figure. A
+ * status run of the same task then adds nothing to any row, even when it is
+ * grouped apart from its submit (no model, another command). Spend is
+ * settled per provider within an operation: one MULTIX_OPERATION_ID shared
+ * across providers never mixes their credits, which are different units.
  * Entries without a receipt read as status reads of their job (or of their
  * own run when they have none).
  */
-export function creditsByEntry(entries: HistoryEntry[]): Map<HistoryEntry, number> {
-  const out = new Map<HistoryEntry, number>();
+export function spendByEntry(entries: HistoryEntry[]): Map<HistoryEntry, OwnedSpend> {
+  const out = new Map<HistoryEntry, OwnedSpend>();
   const byOp = new Map<string, { entry: HistoryEntry; receipt: CostReceipt }[]>();
   for (const entry of entries) {
     const receipt = receiptOf(entry) ?? legacyCreditsReceipt(entry);
     if (!receipt) continue;
     const key = `${entry.provider}|${receipt.operation_id}`;
-    byOp.set(key, [...(byOp.get(key) ?? []), { entry, receipt }]);
+    const runs = byOp.get(key);
+    if (runs) runs.push({ entry, receipt });
+    else byOp.set(key, [{ entry, receipt }]);
   }
+  const sentNothing = (r: CostReceipt) =>
+    r.actual_source === "no_request" || r.actual_source === "refused";
+  const reported = (r: CostReceipt) =>
+    !sentNothing(r) &&
+    (r.provider_reported.credits !== null || (r.status === "settled" && r.actual_usd !== null));
   for (const runs of byOp.values()) {
-    const credits = settleOperations(runs.map((r) => r.receipt)).total_credits;
-    if (credits === null) continue;
-    const sentNothing = (r: CostReceipt) =>
-      r.actual_source === "no_request" || r.actual_source === "refused";
+    const summary = settleOperations(runs.map((r) => r.receipt));
+    const spend = summary.operations[0];
+    const credits = summary.total_credits;
+    if (!spend && credits === null) continue;
+    const charge = runs.find((r) => r.receipt.role === "charge" && !sentNothing(r.receipt));
     const owner =
-      runs.find((r) => r.receipt.role === "charge" && !sentNothing(r.receipt)) ??
+      charge ??
       runs
-        .filter((r) => r.receipt.provider_reported.credits !== null)
+        .filter((r) => reported(r.receipt))
         .reduce((earliest, r) => (r.receipt.at < earliest.receipt.at ? r : earliest));
-    out.set(owner.entry, credits);
+    out.set(owner.entry, {
+      ...(spend ? { spend } : {}),
+      ...(credits !== null ? { credits } : {}),
+    });
   }
   return out;
 }
@@ -250,45 +269,60 @@ export function aggregateUsage(entries: HistoryEntry[], by: UsageGroup): UsageRo
   // Decided once over every row: the runs of one operation can fall under different keys.
   const outcomes = operationOutcomes(sent);
   const groups = new Map<string, HistoryEntry[]>();
-  const creditsOf = creditsByEntry(sent);
+  const owned = spendByEntry(sent);
+  const spends = [...owned.values()].flatMap((o) => (o.spend ? [o.spend] : []));
+  const isKnown = (op: OperationSpend) =>
+    op.actual_usd !== null && (op.status === "settled" || op.status === "computed");
+  const knownIds = new Set(spends.filter(isKnown).map((op) => op.operation_id));
+  // Completed runs with no receipt at all (ledger entries before receipts): cost unknown,
+  // counted once on the operation's first such run. An operation a receipt accounts for is not unknown.
+  const accounted = new Set(spends.map((op) => op.operation_id));
+  const unreceipted = new Map<string, HistoryEntry>();
+  for (const e of sent) {
+    const id = operationOf(e);
+    if (e.ok && !receiptOf(e) && !accounted.has(id) && !unreceipted.has(id)) unreceipted.set(id, e);
+  }
+  const unreceiptedRuns = new Set(unreceipted.values());
   for (const e of sent) {
     const key = keyOf(e, by);
-    groups.set(key, [...(groups.get(key) ?? []), e]);
+    const list = groups.get(key);
+    if (list) list.push(e);
+    else groups.set(key, [e]);
   }
   const rows: UsageRow[] = [];
   for (const [key, list] of groups) {
-    const receipts = list.map(receiptOf).filter((r): r is CostReceipt => r !== undefined);
-    const spend = settleOperations(receipts);
-    const known = spend.operations.filter(
-      (op) => op.actual_usd !== null && (op.status === "settled" || op.status === "computed"),
-    );
+    // Each operation's spend lands in the row of the run that owns it.
+    const rowSpends = list.flatMap((e) => {
+      const s = owned.get(e)?.spend;
+      return s ? [s] : [];
+    });
+    const known = rowSpends.filter(isKnown);
     const sum = (ops: typeof known) => round(ops.reduce((s, op) => s + (op.actual_usd ?? 0), 0));
-    const knownIds = new Set(known.map((op) => op.operation_id));
+    const rowKnownIds = new Set(known.map((op) => op.operation_id));
+    const unknownOps =
+      rowSpends.filter((op) => op.status === "unknown").length +
+      list.filter((e) => unreceiptedRuns.has(e)).length;
+    const uncertainOps = rowSpends.filter((op) => op.status === "uncertain").length;
     // Estimates of operations still without a known cost: what they were expected to cost.
     const estimates = new Map<string, number>();
-    for (const r of receipts) {
-      const v = r.estimate?.expected_usd;
-      if (!knownIds.has(r.operation_id) && typeof v === "number") estimates.set(r.operation_id, v);
+    for (const e of list) {
+      const r = receiptOf(e);
+      const v = r?.estimate?.expected_usd;
+      if (r && !knownIds.has(r.operation_id) && typeof v === "number") {
+        estimates.set(r.operation_id, v);
+      }
     }
     const opIds = [...new Set(list.map(operationOf))];
     const ops = opIds.length;
     const count = (o: Outcome) => opIds.filter((id) => outcomes.get(id) === o).length;
-    // Completed runs with no receipt at all (ledger entries before receipts): cost unknown.
-    // An operation another run's receipt already accounts for is not unknown.
-    const accounted = new Set(spend.operations.map((op) => op.operation_id));
-    const unreceipted = new Set(
-      list
-        .filter((e) => e.ok && !receiptOf(e))
-        .map(operationOf)
-        .filter((id) => !accounted.has(id)),
-    );
     const completedOps = new Set(opIds.filter((id) => outcomes.get(id) === "completed"));
+    // Per success only when this row holds the known cost of every operation it completed.
     const allPriced =
       completedOps.size > 0 &&
-      spend.unknown + spend.uncertain + unreceipted.size === 0 &&
-      [...completedOps].every((id) => knownIds.has(id));
+      unknownOps + uncertainOps === 0 &&
+      [...completedOps].every((id) => rowKnownIds.has(id));
     const credits = list.reduce<number | undefined>((s, e) => {
-      const c = creditsOf.get(e);
+      const c = owned.get(e)?.credits;
       return c === undefined ? s : (s ?? 0) + c;
     }, undefined);
     const durations = list.map((e) => e.duration_ms);
@@ -312,8 +346,8 @@ export function aggregateUsage(entries: HistoryEntry[], by: UsageGroup): UsageRo
         estimated_usd: estimates.size
           ? round([...estimates.values()].reduce((a, b) => a + b, 0))
           : null,
-        unknown_operations: spend.unknown + unreceipted.size,
-        uncertain_operations: spend.uncertain,
+        unknown_operations: unknownOps,
+        uncertain_operations: uncertainOps,
         per_success_usd: allPriced ? round(sum(known) / completedOps.size) : null,
       },
       ...(credits !== undefined ? { credits: round(credits) } : {}),
