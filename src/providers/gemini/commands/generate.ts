@@ -88,41 +88,36 @@ export function registerGenerateCommand(parent: Command): void {
         const savedFiles: string[] = [];
 
         for (let i = 0; i < numImages; i++) {
-          try {
-            const resp = await withGeminiKey(
-              (apiKey) =>
-                generateContent(
-                  {
-                    model,
-                    contents: [{ parts: [{ text: opts.prompt }] }],
-                    generationConfig,
-                  },
-                  { apiKey, logger },
-                ),
-              { logger },
+          // A failed call throws: the run is classified from the error itself, not a log line.
+          const resp = await withGeminiKey(
+            (apiKey) =>
+              generateContent(
+                {
+                  model,
+                  contents: [{ parts: [{ text: opts.prompt }] }],
+                  generationConfig,
+                },
+                { apiKey, logger },
+              ),
+            { logger },
+          );
+
+          const images = extractImages(resp);
+          if (images.length === 0) {
+            logger.warn(
+              `Request ${i + 1}: no images in response — model may not support image generation`,
             );
+            continue;
+          }
 
-            const images = extractImages(resp);
-            if (images.length === 0) {
-              logger.warn(
-                `Request ${i + 1}: no images in response — model may not support image generation`,
-              );
-              continue;
-            }
-
-            for (const img of images) {
-              const outDir = getOutputDir();
-              const ext = img.mimeType.includes("png") ? "png" : "jpg";
-              const fname = `gemini_generated_${outputStamp()}_${i}.${ext}`;
-              const dest = path.join(outDir, fname);
-              fs.writeFileSync(dest, Buffer.from(img.data, "base64"));
-              savedFiles.push(dest);
-              logger.success(`Saved: ${dest}`);
-            }
-          } catch (e) {
-            const msg = e instanceof Error ? e.message : String(e);
-            logger.error(`Generation failed: ${msg}`);
-            process.exit(1);
+          for (const img of images) {
+            const outDir = getOutputDir();
+            const ext = img.mimeType.includes("png") ? "png" : "jpg";
+            const fname = `gemini_generated_${outputStamp()}_${i}.${ext}`;
+            const dest = path.join(outDir, fname);
+            fs.writeFileSync(dest, Buffer.from(img.data, "base64"));
+            savedFiles.push(dest);
+            logger.success(`Saved: ${dest}`);
           }
         }
 

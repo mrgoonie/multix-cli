@@ -161,7 +161,7 @@ const TEXT_RULES: Array<[RegExp, ErrorCode]> = [
     "CONTENT_BLOCKED",
   ],
   [
-    /(quota|insufficient (credit|balance|funds)|out of credits|billing|payment required|exceeded your)/i,
+    /(quota|insufficient (credit|balance|funds)|out of credits|billing|payment[ _]required|exceeded your)/i,
     "QUOTA_EXCEEDED",
   ],
   [/(rate.?limit|too many requests)/i, "RATE_LIMITED"],
