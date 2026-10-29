@@ -26,9 +26,12 @@ function track(target: unknown): void {
   if (file) run.written.add(file);
 }
 
-function untrack(target: unknown): void {
-  const file = targetPath(target);
-  if (file) run.written.delete(file);
+/** Resolves both paths before changing the set, so a bad target leaves it as it was. */
+function trackRename(from: unknown, to: unknown): void {
+  const src = targetPath(from);
+  const dest = targetPath(to);
+  if (src) run.written.delete(src);
+  if (dest) run.written.add(dest);
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: wraps arbitrary fs signatures
@@ -52,17 +55,11 @@ export function installOutputFileTracker(): void {
   }
   for (const name of ["copyFileSync", "copyFile"]) wrap(fs, name, (args) => track(args[1]));
   for (const name of ["renameSync", "rename"]) {
-    wrap(fs, name, (args) => {
-      untrack(args[0]);
-      track(args[1]);
-    });
+    wrap(fs, name, (args) => trackRename(args[0], args[1]));
   }
   wrap(fs.promises, "writeFile", (args) => track(args[0]));
   wrap(fs.promises, "copyFile", (args) => track(args[1]));
-  wrap(fs.promises, "rename", (args) => {
-    untrack(args[0]);
-    track(args[1]);
-  });
+  wrap(fs.promises, "rename", (args) => trackRename(args[0], args[1]));
   syncBuiltinESMExports();
 }
 

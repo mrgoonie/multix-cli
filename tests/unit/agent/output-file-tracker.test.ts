@@ -113,6 +113,8 @@ describe("producedFiles", () => {
     expect(producedFiles()).toEqual([]);
   });
 
+  // installOutputFileTracker() patches node:fs for the rest of this file; vitest
+  // isolates each test file, so other files see the unpatched module.
   it("records a file: URL target as its decoded path, and untracks a renamed URL", () => {
     installOutputFileTracker();
     vi.stubEnv("MULTIX_OUTPUT_DIR", path.join(base, "out"));
@@ -125,4 +127,15 @@ describe("producedFiles", () => {
     expect([...run.written]).toEqual([renamed]);
     expect(producedFiles()).toEqual([renamed]);
   });
+
+  it.skipIf(process.platform === "win32")(
+    "keeps the source tracked when a rename names an invalid destination URL",
+    () => {
+      installOutputFileTracker();
+      vi.stubEnv("MULTIX_OUTPUT_DIR", path.join(base, "out"));
+      const file = write("out", "a.png");
+      expect(() => fs.renameSync(file, new URL("file://host/share/a.png"))).toThrow();
+      expect(producedFiles()).toEqual([file]);
+    },
+  );
 });
