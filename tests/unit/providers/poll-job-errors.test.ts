@@ -162,7 +162,8 @@ describe("byteplus tasks that succeed without an output URL", () => {
     status: "succeeded",
     content: { prompt: PROMPT, last_frame_url: SIGNED },
   };
-  const NO_VIDEO = "BytePlus task task-1 succeeded but returned no video URL";
+  const NO_VIDEO =
+    "BytePlus task task-1 succeeded but returned no video URL; inspect it with: multix byteplus status task-1";
 
   it.each([
     ["video", ["byteplus", "video", "--prompt", PROMPT], NO_VIDEO],
@@ -182,12 +183,12 @@ describe("byteplus tasks that succeed without an output URL", () => {
     [
       "generate-3d",
       ["byteplus", "generate-3d", "--prompt", PROMPT],
-      "BytePlus task task-1 succeeded but returned no 3D file URL",
+      "BytePlus task task-1 succeeded but returned no 3D file URL; inspect it with: multix byteplus status task-1",
     ],
     [
       "status --download",
       ["byteplus", "status", "task-1", "--download"],
-      "BytePlus task task-1 succeeded but returned no video or 3D file URL",
+      "BytePlus task task-1 succeeded but returned no video or 3D file URL; inspect it with: multix byteplus status task-1",
     ],
   ])("%s throws unusable output without the payload", async (_name, argv, message) => {
     stubFetch(SUCCEEDED, SUBMITTED);

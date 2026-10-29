@@ -170,7 +170,7 @@ export function toTaskWaitError(error: unknown, taskId: string, resumeCommand: s
  */
 export function missingTaskOutputError(taskId: string, output: string): ProviderJobFailedError {
   return new ProviderJobFailedError(
-    `BytePlus task ${taskId} succeeded but returned no ${output}`,
+    `BytePlus task ${taskId} succeeded but returned no ${output}; inspect it with: multix byteplus status ${taskId}`,
     "byteplus",
     { terminal: false },
   );
