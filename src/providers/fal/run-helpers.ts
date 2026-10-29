@@ -5,7 +5,11 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { isRetryableServerStatus } from "../../core/async-poll.js";
+import {
+  PollTimeoutError,
+  isRetryableServerStatus,
+  isTransientHttpError,
+} from "../../core/async-poll.js";
 import { audioExtFromMime } from "../../core/audio-kind.js";
 import { MultixError, ProviderError } from "../../core/errors.js";
 import { downloadFile } from "../../core/http-client.js";
@@ -32,12 +36,6 @@ export interface SubmitAndWaitOptions {
 export interface SubmitAndWaitResult {
   requestId: string;
   result: FalResultResponse;
-}
-
-/** True for errors worth retrying while polling: network failures and 5xx responses except 501/505. */
-function isTransientError(e: unknown): boolean {
-  if (e instanceof HttpError) return isRetryableServerStatus(e.status);
-  return false;
 }
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
@@ -145,10 +143,13 @@ export async function waitForFalResult(opts: WaitForResultOptions): Promise<FalR
   const resumeHint = `Resume with: multix fal status ${model} ${requestId}  or  multix fal result ${model} ${requestId}`;
 
   let attempt = 0;
+  let lastError: unknown;
   for (;;) {
-    if (Date.now() >= deadline) {
-      throw new Error(
-        `Timed out waiting for fal request ${requestId} after ${waitTimeoutMs}ms. ${resumeHint}`,
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) {
+      const last = lastError instanceof Error ? ` Last error: ${lastError.message}.` : "";
+      throw new PollTimeoutError(
+        `Timed out waiting for fal request ${requestId} after ${waitTimeoutMs}ms.${last} ${resumeHint}`,
       );
     }
 
@@ -156,11 +157,17 @@ export async function waitForFalResult(opts: WaitForResultOptions): Promise<FalR
     let statusRes: FalStatusResponse;
     try {
       statusRes = await client.getAbsolute<FalStatusResponse>(submit.status_url, logger);
+      lastError = undefined;
     } catch (e) {
-      if (isTransientError(e)) {
+      // The job is already submitted: a network error, 408, 429 or retryable 5xx is waited out
+      // (honouring Retry-After, never past the deadline) rather than ending the run.
+      if (isTransientHttpError(e)) {
+        lastError = e;
         const msg = e instanceof Error ? e.message : String(e);
         logger.debug(`attempt ${attempt} — transient error, retrying: ${msg}`);
-        await sleep(intervalMs);
+        const retryAfterMs = e instanceof HttpError ? e.retryAfterMs : undefined;
+        const delay = Math.max(retryAfterMs ?? 0, intervalMs);
+        await sleep(Math.min(delay, Math.max(1, deadline - Date.now())));
         continue;
       }
       const msg = e instanceof Error ? e.message : String(e);

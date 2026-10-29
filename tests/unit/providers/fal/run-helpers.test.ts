@@ -331,20 +331,48 @@ describe("submitAndWait", () => {
     });
   });
 
-  it("keeps Retry-After and the HTTP class of a 429 on the status poll", async () => {
+  it("waits out a 429 on the status poll for Retry-After, then polls again", async () => {
+    let polls = 0;
     mockQueue(
-      () => new Response("Too Many Requests", { status: 429, headers: { "retry-after": "12" } }),
+      () =>
+        ++polls === 1
+          ? new Response("Too Many Requests", { status: 429, headers: { "retry-after": "1" } })
+          : new Response(JSON.stringify({ status: "COMPLETED" }), { status: 200 }),
+      () => new Response(JSON.stringify({ images: [] }), { status: 200 }),
+    );
+    const started = Date.now();
+    const { requestId } = await submitAndWait({
+      model: "fal-ai/flux/schnell",
+      input: { prompt: "x" },
+      logger: noopLogger,
+      pollIntervalMs: 5,
+    });
+    expect(requestId).toBe("req-1");
+    expect(polls).toBe(2);
+    expect(Date.now() - started).toBeGreaterThanOrEqual(950);
+  });
+
+  it("never waits a 429's Retry-After past the deadline, and names it in the timeout", async () => {
+    mockQueue(
+      () => new Response("Too Many Requests", { status: 429, headers: { "retry-after": "30" } }),
       () => new Response("{}", { status: 200 }),
     );
-    const err = await waitError();
-    expect((err as Error).message).toMatch(
-      /^Failed to poll status for fal request req-1: HTTP 429/,
+    const started = Date.now();
+    const err = await submitAndWait({
+      model: "fal-ai/flux/schnell",
+      input: { prompt: "x" },
+      logger: noopLogger,
+      pollIntervalMs: 5,
+      waitTimeoutMs: 50,
+    }).then(
+      () => expect.unreachable("submitAndWait should reject"),
+      (e: unknown) => e,
     );
-    expect(classifyError(err)).toMatchObject({
-      code: "RATE_LIMITED",
-      http_status: 429,
-      retry_after_s: 12,
-    });
+    expect(Date.now() - started).toBeLessThan(5000);
+    expect((err as Error).message).toMatch(
+      /^Timed out waiting for fal request req-1 after 50ms\. Last error: HTTP 429 .*multix fal result fal-ai\/flux\/schnell req-1/s,
+    );
+    expect(classifyError(err).code).toBe("TIMEOUT");
   });
 
   it("classifies a 401 on the status poll as INVALID_KEY from the HttpError status", async () => {
