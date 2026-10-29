@@ -140,7 +140,7 @@ export function historyStats(entries: HistoryEntry[], by: "provider" | "model" |
         p50_s: Math.round(percentile(b.duration_ms, 50) / 100) / 10,
         p90_s: Math.round(percentile(b.duration_ms, 90) / 100) / 10,
         outputs: b.outputs,
-        ...(priced ? { cost_usd: Math.round(usd * 1e4) / 1e4 } : {}),
+        ...(priced ? { cost_usd: Math.round(Math.round(usd * 1e6) / 1e2) / 1e4 } : {}),
         ...(uncertain ? { cost_uncertain_ops: uncertain } : {}),
         ...(unknown ? { cost_unknown_ops: unknown } : {}),
         ...(b.credits !== undefined ? { credits: Math.round(b.credits * 1e6) / 1e6 } : {}),

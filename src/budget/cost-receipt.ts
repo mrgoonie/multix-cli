@@ -292,7 +292,7 @@ export interface SpendSummary {
 const RANK: Record<CostStatus, number> = { settled: 3, computed: 2, uncertain: 1, unknown: 0 };
 
 /** Receipts that say nothing about money spent: nothing was sent, or every request was refused. */
-const isNoSpend = (r: CostReceipt) =>
+export const isNoSpend = (r: CostReceipt) =>
   r.actual_source === "no_request" || r.actual_source === "refused";
 
 /**

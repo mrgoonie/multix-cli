@@ -104,12 +104,15 @@ của tài khoản provider. Nhóm theo `--by provider|model|offering|task|comma
   chi phí không rõ hoặc không chắc chắn được đếm riêng, không bao giờ cộng như
   $0.
 - Chi tiêu của một operation (USD, số operation có chi phí không rõ hoặc không
-  chắc chắn, và credits) chỉ hiện ở một dòng: dòng của lần submit, hoặc của lần
-  chạy sớm nhất báo con số khi bộ lọc bỏ lần submit ra ngoài. Lần chạy `status`
-  lặp lại chi phí của một task vẫn giữ nó trong `usage` của mình, nhưng không
-  dòng nào cộng lại lần nữa, kể cả khi lần `status` rơi vào dòng khác (ví dụ
-  `(unknown model)`). Dòng đó không hiện chi phí mỗi lần thành công cho các
-  operation có chi phí nằm ở dòng khác.
+  chắc chắn, credits và giá ước tính) chỉ hiện ở một dòng: dòng của lần submit
+  thành công (lần nêu tên model, nên một lần thử lỗi trước khi submit lại không
+  giữ nó), hoặc của lần chạy sớm nhất báo con số khi bộ lọc bỏ lần submit ra
+  ngoài. Operation được ghi mà không có cost receipt thì tính ở lần chạy thành
+  công đầu tiên của nó. Lần chạy `status` lặp lại chi phí của một task vẫn giữ
+  nó trong `usage` của mình, nhưng không dòng nào cộng lại lần nữa, kể cả khi
+  lần `status` rơi vào dòng khác (ví dụ `(unknown model)`). Dòng đã hoàn tất một
+  operation có chi phí được tính ở dòng khác sẽ không hiện chi phí mỗi lần
+  thành công.
 - Model là model provider báo đã chạy; lần chạy không có thông tin này được gom
   vào `(unknown model)`.
 - Mỗi dòng hiển thị cỡ mẫu (số operation) và mức tin cậy (none, low, medium,

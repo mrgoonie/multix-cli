@@ -33,7 +33,7 @@
 
 import type { HistoryEntry } from "../agent/history-store.js";
 import type { CostReceipt, OperationSpend } from "../budget/cost-receipt.js";
-import { operationIdFor, settleOperations } from "../budget/cost-receipt.js";
+import { isNoSpend, operationIdFor, settleOperations } from "../budget/cost-receipt.js";
 import { commandCapability } from "../capabilities/command-capabilities.js";
 
 export const USAGE_GROUPS = ["provider", "model", "offering", "task", "command"] as const;
@@ -87,12 +87,19 @@ export interface OwnedSpend {
   spend?: OperationSpend;
   /** Settled credits of the operation; absent when no run reported any. */
   credits?: number;
+  /** Latest pre-flight expected estimate, only while the operation's cost is not known. */
+  estimate_usd?: number;
 }
+
+const isKnown = (op: OperationSpend) =>
+  op.actual_usd !== null && (op.status === "settled" || op.status === "computed");
 
 /**
  * Each operation's spend (USD and credits) settled once over all of its runs
- * (settleOperations) and placed on one run: its first charge run (the submit,
- * which names the model), else its earliest run that reported a figure. A
+ * (settleOperations) and placed on one run: its successful charge run (the
+ * submit, which names the model; a failed attempt before a resubmit under the
+ * same id does not own it), else its first charge run, else its earliest run
+ * that reported a figure. A
  * status run of the same task then adds nothing to any row, even when it is
  * grouped apart from its submit (no model, another command). Spend is
  * settled per provider within an operation: one MULTIX_OPERATION_ID shared
@@ -111,25 +118,39 @@ export function spendByEntry(entries: HistoryEntry[]): Map<HistoryEntry, OwnedSp
     if (runs) runs.push({ entry, receipt });
     else byOp.set(key, [{ entry, receipt }]);
   }
-  const sentNothing = (r: CostReceipt) =>
-    r.actual_source === "no_request" || r.actual_source === "refused";
+  const earliest = <T extends { receipt: CostReceipt }>(list: T[]) =>
+    list.reduce<T | undefined>(
+      (first, r) => (!first || r.receipt.at < first.receipt.at ? r : first),
+      undefined,
+    );
   const reported = (r: CostReceipt) =>
-    !sentNothing(r) &&
+    !isNoSpend(r) &&
     (r.provider_reported.credits !== null || (r.status === "settled" && r.actual_usd !== null));
   for (const runs of byOp.values()) {
     const summary = settleOperations(runs.map((r) => r.receipt));
     const spend = summary.operations[0];
     const credits = summary.total_credits;
     if (!spend && credits === null) continue;
-    const charge = runs.find((r) => r.receipt.role === "charge" && !sentNothing(r.receipt));
+    const charges = runs.filter((r) => r.receipt.role === "charge" && !isNoSpend(r.receipt));
     const owner =
-      charge ??
-      runs
-        .filter((r) => reported(r.receipt))
-        .reduce((earliest, r) => (r.receipt.at < earliest.receipt.at ? r : earliest));
+      charges.find((r) => r.entry.ok && r.entry.model_resolved) ??
+      charges.find((r) => r.entry.ok) ??
+      charges[0] ??
+      earliest(runs.filter((r) => reported(r.receipt))) ??
+      earliest(runs);
+    const estimate = runs
+      .filter((r) => typeof r.receipt.estimate?.expected_usd === "number")
+      .reduce<CostReceipt | undefined>(
+        (latest, r) => (!latest || r.receipt.at >= latest.at ? r.receipt : latest),
+        undefined,
+      )?.estimate?.expected_usd;
+    if (!owner) continue;
     out.set(owner.entry, {
       ...(spend ? { spend } : {}),
       ...(credits !== null ? { credits } : {}),
+      ...(typeof estimate === "number" && !(spend && isKnown(spend))
+        ? { estimate_usd: estimate }
+        : {}),
     });
   }
   return out;
@@ -254,7 +275,11 @@ export interface UsageRow {
     /** Operations whose cost stays unknown or uncertain (not counted as $0). */
     unknown_operations: number;
     uncertain_operations: number;
-    /** known_usd / successful operations, only when no operation's cost is unknown or uncertain. */
+    /**
+     * known_usd / successful operations, only when the row holds the known cost
+     * of every operation it completed (none unknown or uncertain, none counted
+     * in another row).
+     */
     per_success_usd: number | null;
   };
   credits?: number;
@@ -270,16 +295,14 @@ export function aggregateUsage(entries: HistoryEntry[], by: UsageGroup): UsageRo
   const outcomes = operationOutcomes(sent);
   const groups = new Map<string, HistoryEntry[]>();
   const owned = spendByEntry(sent);
-  const spends = [...owned.values()].flatMap((o) => (o.spend ? [o.spend] : []));
-  const isKnown = (op: OperationSpend) =>
-    op.actual_usd !== null && (op.status === "settled" || op.status === "computed");
-  const knownIds = new Set(spends.filter(isKnown).map((op) => op.operation_id));
   // Completed runs with no receipt at all (ledger entries before receipts): cost unknown,
   // counted once on the operation's first such run. An operation a receipt accounts for is not unknown.
-  const accounted = new Set(spends.map((op) => op.operation_id));
+  const accounted = new Set(
+    [...owned].flatMap(([e, o]) => (o.spend ? [`${e.provider}|${o.spend.operation_id}`] : [])),
+  );
   const unreceipted = new Map<string, HistoryEntry>();
   for (const e of sent) {
-    const id = operationOf(e);
+    const id = `${e.provider}|${operationOf(e)}`;
     if (e.ok && !receiptOf(e) && !accounted.has(id) && !unreceipted.has(id)) unreceipted.set(id, e);
   }
   const unreceiptedRuns = new Set(unreceipted.values());
@@ -304,14 +327,10 @@ export function aggregateUsage(entries: HistoryEntry[], by: UsageGroup): UsageRo
       list.filter((e) => unreceiptedRuns.has(e)).length;
     const uncertainOps = rowSpends.filter((op) => op.status === "uncertain").length;
     // Estimates of operations still without a known cost: what they were expected to cost.
-    const estimates = new Map<string, number>();
-    for (const e of list) {
-      const r = receiptOf(e);
-      const v = r?.estimate?.expected_usd;
-      if (r && !knownIds.has(r.operation_id) && typeof v === "number") {
-        estimates.set(r.operation_id, v);
-      }
-    }
+    const estimates = list.flatMap((e) => {
+      const v = owned.get(e)?.estimate_usd;
+      return v === undefined ? [] : [v];
+    });
     const opIds = [...new Set(list.map(operationOf))];
     const ops = opIds.length;
     const count = (o: Outcome) => opIds.filter((id) => outcomes.get(id) === o).length;
@@ -343,9 +362,7 @@ export function aggregateUsage(entries: HistoryEntry[], by: UsageGroup): UsageRo
         known_usd: sum(known),
         provider_reported_usd: sum(known.filter((op) => op.status === "settled")),
         computed_usd: sum(known.filter((op) => op.status === "computed")),
-        estimated_usd: estimates.size
-          ? round([...estimates.values()].reduce((a, b) => a + b, 0))
-          : null,
+        estimated_usd: estimates.length ? round(estimates.reduce((a, b) => a + b, 0)) : null,
         unknown_operations: unknownOps,
         uncertain_operations: uncertainOps,
         per_success_usd: allPriced ? round(sum(known) / completedOps.size) : null,
