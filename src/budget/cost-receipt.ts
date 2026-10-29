@@ -276,7 +276,11 @@ export interface SpendSummary {
   /** Operations whose cost is uncertain or unknown: the total excludes them. */
   uncertain: number;
   unknown: number;
-  /** Reported credits, each operation once; null when no receipt reported any. */
+  /**
+   * Reported credits, each operation once; null when no receipt reported any.
+   * Includes operations known only from a status read, which have no entry in
+   * `operations` (they carry no spend of their own).
+   */
   total_credits: number | null;
 }
 

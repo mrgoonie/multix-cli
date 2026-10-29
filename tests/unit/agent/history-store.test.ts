@@ -160,4 +160,34 @@ describe("historyStats", () => {
     );
     expect(rows[0]).toMatchObject({ provider: "fal", runs: 3, credits: 42 });
   });
+
+  it("puts a task's credits on its submit's bucket, not again on its status run's", () => {
+    const receipt = (role: "charge" | "observation", at: string): CostReceipt => ({
+      schema: "multix.cost/v1",
+      operation_id: "runway:t1",
+      role,
+      status: "unknown",
+      currency: "USD",
+      provider_reported: { cost_usd: null, credits: 40 },
+      actual_usd: null,
+      actual_source: null,
+      variance_usd: null,
+      at,
+    });
+    const rows = historyStats(
+      [
+        entry({ usage: { credits: 40 }, cost: receipt("charge", "2026-10-28T10:00:00.000Z") }),
+        entry({
+          command: "fal status",
+          usage: { credits: 40 },
+          cost: receipt("observation", "2026-10-28T10:05:00.000Z"),
+        }),
+      ],
+      "command",
+    );
+    expect(rows.map((r) => [r.command, r.credits])).toEqual([
+      ["fal image", 40],
+      ["fal status", undefined],
+    ]);
+  });
 });

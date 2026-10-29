@@ -319,6 +319,40 @@ describe("credits", () => {
     ]);
     expect(row).toMatchObject({ requests: 2, operations: 1, credits: 40 });
   });
+
+  it("puts the credits on the submit's row when the status run lands in another row", () => {
+    const charge = (role: "charge" | "observation", at: string, credits: number | null) =>
+      receipt({
+        operation_id: "fal:t1",
+        role,
+        status: "unknown",
+        provider_reported: { cost_usd: null, credits },
+        at,
+      });
+    const entries = [
+      // The submit reports no credits; the status read, with no model, reports the charge.
+      entry({ cost: charge("charge", T0, null) }),
+      entry({
+        command: "fal status",
+        ts: "2026-10-27T10:05:00.000Z",
+        model_resolved: null,
+        usage: { credits: 40 } as HistoryEntry["usage"],
+        cost: charge("observation", "2026-10-27T10:05:00.000Z", 40),
+      }),
+    ];
+    const credits = (by: "offering" | "command") =>
+      aggregateUsage(entries, by).map((r) => [r.key, r.credits]);
+    expect(credits("offering")).toEqual([
+      ["fal:(unknown model)", undefined],
+      [OFFERING, 40],
+    ]);
+    expect(credits("command")).toEqual([
+      ["fal status", undefined],
+      ["fal video", 40],
+    ]);
+    // A task known only from a status read still counts its credits once.
+    expect(aggregateUsage([entries[1] as HistoryEntry], "offering")[0]?.credits).toBe(40);
+  });
 });
 
 describe("grouping by model", () => {
