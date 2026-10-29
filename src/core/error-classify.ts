@@ -301,5 +301,19 @@ export function classifyError(error: unknown): ErrorInfo {
     if (error.code === "UNKNOWN_REMOTE_STATE") return build("UNKNOWN_REMOTE_STATE", message);
     if (error instanceof BudgetError) return build(error.code as ErrorCode, message);
   }
+  // A plain Error that only adds context (request id, resume hint) to a typed
+  // error: classify the cause, so its class, HTTP status and Retry-After count,
+  // and keep the outer message.
+  if (
+    error instanceof Error &&
+    Object.getPrototypeOf(error) === Error.prototype &&
+    error.cause instanceof MultixError
+  ) {
+    const { code, http_status, retry_after_s } = classifyError(error.cause);
+    return build(code, message, {
+      ...(http_status !== undefined ? { http_status } : {}),
+      ...(retry_after_s !== undefined ? { retry_after_s } : {}),
+    });
+  }
   return classifyMessage(message);
 }

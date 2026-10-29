@@ -1,4 +1,5 @@
 import type { Command } from "commander";
+import { nameJob } from "../../../agent/run-state.js";
 import { createLogger } from "../../../core/logger.js";
 import { getVideoPrediction } from "../client.js";
 import { positiveInteger, saveCompletedVideo, waitForVideo } from "./video-helpers.js";
@@ -25,6 +26,8 @@ export function registerCloudflareVideoStatusCommand(parent: Command): void {
       ) => {
         const logger = createLogger({ verbose: opts.verbose ?? false });
         const shouldWait = Boolean(opts.wait || opts.download);
+        // Name the job read here, so a failed read still joins its operation.
+        nameJob(id);
         const prediction = await getVideoPrediction(id);
         const completed =
           shouldWait && prediction.status !== "succeeded"

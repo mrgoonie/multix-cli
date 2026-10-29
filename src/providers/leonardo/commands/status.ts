@@ -9,6 +9,7 @@
 
 import path from "node:path";
 import type { Command } from "commander";
+import { nameJob } from "../../../agent/run-state.js";
 import { downloadFile } from "../../../core/http-client.js";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
@@ -61,6 +62,8 @@ export function registerLeonardoStatusCommand(parent: Command): void {
       ) => {
         const logger = createLogger({ verbose: opts.verbose ?? false });
         const client = createLeonardoClient();
+        // Name the job read here, so a failed read still joins its operation.
+        nameJob(generationId);
         const shouldWait = !!(opts.wait || opts.download);
 
         const fetchOnce = () =>

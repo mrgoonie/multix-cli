@@ -10,8 +10,10 @@ import {
   ConfigError,
   HttpError,
   MissingBinaryError,
+  MultixError,
   ProviderError,
   ProviderJobFailedError,
+  ResponseTooLargeError,
   ValidationError,
 } from "../../../src/core/errors.js";
 import { AtlasPredictionFailedError } from "../../../src/providers/atlascloud/client.js";
@@ -86,6 +88,38 @@ describe("classifyError", () => {
       new HttpError(429, "slow down", "https://api.example.com/v1/x", 2500),
     );
     expect(info).toMatchObject({ code: "RATE_LIMITED", http_status: 429, retry_after_s: 3 });
+  });
+
+  it("classifies a plain Error that wraps a typed cause from the cause, keeping its message", () => {
+    const cause = new HttpError(
+      429,
+      "slow down",
+      "https://queue.fal.run/fal-ai/flux/requests/r1",
+      30_000,
+    );
+    const info = classifyError(
+      new Error(`Failed to fetch result for fal request r1: ${cause.message}. Resume with: …`, {
+        cause,
+      }),
+    );
+    expect(info).toMatchObject({ code: "RATE_LIMITED", http_status: 429, retry_after_s: 30 });
+    expect(info.message).toMatch(/^Failed to fetch result for fal request r1: HTTP 429/);
+
+    const unknownState = new Error("Failed to poll status for fal request r1: lost", {
+      cause: new MultixError("lost", "UNKNOWN_REMOTE_STATE"),
+    });
+    expect(classifyError(unknownState).code).toBe("UNKNOWN_REMOTE_STATE");
+
+    const tooLarge = new Error("Failed to fetch result for fal request r1: too large", {
+      cause: new ResponseTooLargeError(1024, "https://queue.fal.run/x"),
+    });
+    expect(classifyError(tooLarge).code).toBe("RESPONSE_TOO_LARGE");
+  });
+
+  it("still classifies a plain Error from its text when the cause is not a MultixError", () => {
+    const info = classifyError(new Error("rate limit hit", { cause: new TypeError("x") }));
+    expect(info.code).toBe("RATE_LIMITED");
+    expect(info.http_status).toBeUndefined();
   });
 
   it("redacts URL query strings in the message it hands to the envelope and ledger", () => {
