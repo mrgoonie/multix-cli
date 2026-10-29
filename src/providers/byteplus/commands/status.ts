@@ -85,7 +85,11 @@ export function registerBytePlusStatusCommand(parent: Command): void {
             }
           }
         } catch (e) {
-          throw toTaskWaitError(e, taskId, `multix byteplus status ${taskId} --wait`);
+          throw toTaskWaitError(
+            e,
+            taskId,
+            `multix byteplus status ${taskId} --wait${opts.download ? " --download" : ""}`,
+          );
         }
       },
     );

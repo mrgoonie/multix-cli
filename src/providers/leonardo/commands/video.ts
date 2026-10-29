@@ -16,7 +16,7 @@ import { getOutputDir } from "../../../core/output-dir.js";
 import { maybeDownloadThumb } from "../../../core/video-thumb.js";
 import { createLeonardoClient } from "../client.js";
 import { LEONARDO_DEFAULTS, LEONARDO_V2_VIDEO_MODELS } from "../models.js";
-import { poll, toPollJobError } from "../poll.js";
+import { poll, toGenerationError } from "../poll.js";
 import type {
   CreateV2GenerationResponse,
   CreateVideoResponse,
@@ -154,12 +154,11 @@ async function pollAndDownload(
       onTick: (n, v) => logger.debug(`attempt ${n} — status: ${v.generations_by_pk?.status}`),
     });
   } catch (e) {
-    throw toPollJobError(e, {
-      provider: "leonardo",
-      noun: "Generation",
-      id: jobId,
-      resumeCommand: `multix leonardo status ${jobId} --wait`,
-    });
+    throw toGenerationError(
+      e,
+      jobId,
+      `multix leonardo status ${jobId} --wait${opts.download ? " --download" : ""}`,
+    );
   }
 
   const gen = res.generations_by_pk;

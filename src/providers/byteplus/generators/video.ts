@@ -12,7 +12,7 @@
 import { downloadFile } from "../../../core/http-client.js";
 import { type ResolvedImage, refUrl } from "../../../core/image-input.js";
 import type { Logger } from "../../../core/logger.js";
-import { poll, toPollJobError } from "../../leonardo/poll.js";
+import { failureReason, poll, toPollJobError } from "../../leonardo/poll.js";
 import type { BytePlusClient } from "../client.js";
 import { BYTEPLUS_DEFAULTS, type VideoParamsMode, bytePlusVideoParamsMode } from "../models.js";
 import type {
@@ -151,7 +151,14 @@ export function toTaskWaitError(error: unknown, taskId: string, resumeCommand: s
     noun: "Task",
     id: taskId,
     resumeCommand,
-    terminal: (value) => (value as { status?: unknown } | null)?.status === "failed",
+    describe: (value) => {
+      const task = (value ?? {}) as { status?: unknown; error?: unknown };
+      return {
+        status: task.status,
+        reason: failureReason(task.error),
+        terminal: task.status === "failed",
+      };
+    },
   });
 }
 

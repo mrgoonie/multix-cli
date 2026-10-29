@@ -145,7 +145,7 @@ export function registerBytePlusReferenceToVideoCommand(parent: Command): void {
           console.log(`\nTask: ${taskId}`);
           console.log(`Saved: ${outPath}`);
         } catch (e) {
-          throw toTaskWaitError(e, taskId, `multix byteplus status ${taskId}`);
+          throw toTaskWaitError(e, taskId, `multix byteplus status ${taskId} --wait --download`);
         }
       },
     );
