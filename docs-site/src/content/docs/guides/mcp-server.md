@@ -140,10 +140,10 @@ omits it), and `@file` values are rejected. Commands that
 change your own provider account (for example deleting an ElevenLabs voice)
 run like any other, with your key.
 
-`leonardo video` has no `--duration`: v2 models are always sent 8 seconds and
-v1 models such as Veo 3 run up to 8 seconds. `multix_catalog` shows this as
-`video_seconds_up_to: 8`, and a server whose `MULTIX_MCP_MAX_VIDEO_SECONDS` is
-below 8 refuses the command.
+`leonardo video` has no `--duration`: v2 models are always sent 8 seconds, and
+v1 models pick their own length (Kling 2.1 and 2.5 can run 10 seconds).
+`multix_catalog` shows this as `video_seconds_up_to: 10`, and a server whose
+`MULTIX_MCP_MAX_VIDEO_SECONDS` is below 10 refuses the command.
 
 **Runs the caps cannot bound.** Some runs spend more than the caps above can
 see. `multix_catalog` marks them with `uncapped_spend` (on the command, or on

@@ -656,17 +656,17 @@ describe("prepareRun: fixed video length", () => {
     options: { model },
   });
 
-  it("runs leonardo video when the length cap is at least 8 seconds", () => {
+  it("runs leonardo video when the length cap is at least 10 seconds", () => {
     expect(
-      prepareRun(leonardo("kling-2.6"), limitsFrom({ MULTIX_MCP_MAX_VIDEO_SECONDS: "8" })).argv,
+      prepareRun(leonardo("kling-2.6"), limitsFrom({ MULTIX_MCP_MAX_VIDEO_SECONDS: "10" })).argv,
     ).toEqual(["leonardo", "video", "--model=kling-2.6", "--", "a cat"]);
   });
 
-  it("refuses leonardo video for any model when the length cap is below 8 seconds", () => {
-    const short = limitsFrom({ MULTIX_MCP_MAX_VIDEO_SECONDS: "5" });
-    for (const model of ["kling-2.6", "VEO3"]) {
+  it("refuses leonardo video for any model when the length cap is below 10 seconds", () => {
+    const short = limitsFrom({ MULTIX_MCP_MAX_VIDEO_SECONDS: "8" });
+    for (const model of ["kling-2.6", "KLING2_1", "VEO3"]) {
       expect(() => prepareRun(leonardo(model), short)).toThrow(
-        /renders up to 8 seconds, above this server's limit of 5/,
+        /renders up to 10 seconds, above this server's limit of 8/,
       );
     }
     expect(() => prepareRun({ command: "leonardo video", args: ["a cat"] }, short)).toThrow(

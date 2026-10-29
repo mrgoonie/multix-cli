@@ -24,7 +24,8 @@ export interface CapRules {
   /** Video length in seconds: at most `maxVideoSeconds`. */
   duration?: string[];
   /**
-   * The CLI sends no length and the run can last up to this many seconds:
+   * The caller cannot set the length (the CLI sends a fixed one, or the
+   * provider picks it) and the run can last up to this many seconds:
    * refused when `maxVideoSeconds` is lower.
    */
   fixedSeconds?: number;
@@ -212,8 +213,9 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   "fish clone": { fileOptions: { sample: "file", "transcript-file": "file" } },
   "leonardo generate": { caps: { count: ["num"] } },
   "leonardo image-to-image": { caps: { count: ["num"] } },
-  // No --duration: v2 models are sent a fixed 8 s, and v1 models (Veo 3) run up to 8 s.
-  "leonardo video": { caps: { resolution: ["resolution"], fixedSeconds: 8 } },
+  // No --duration: v2 models are sent a fixed 8 s, and v1 models pick their own
+  // length (Veo 3 runs 8 s; Kling 2.1 / 2.5 support 5 or 10 s with no documented default).
+  "leonardo video": { caps: { resolution: ["resolution"], fixedSeconds: 10 } },
   "leonardo image-to-video": { caps: VIDEO_CAPS },
   "byteplus generate": { fileOptions: { "input-image": "file" }, caps: IMAGE_COUNT },
   "byteplus image-to-image": { fileOptions: { ref: "file" }, caps: IMAGE_COUNT },

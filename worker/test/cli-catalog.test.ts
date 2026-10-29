@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildCliCatalog } from "../scripts/cli-catalog-builder.js";
+import { catalogPayload } from "../src/jobs/catalog-view.js";
 import { CLI_CATALOG, CatalogIndex, isRepeatable, optionName } from "../src/jobs/cli-catalog.js";
 import {
   COMMAND_POLICIES,
@@ -51,6 +52,13 @@ describe("CLI catalog", () => {
     const entry = new CatalogIndex().find("runway models");
     expect(entry?.group).toBe("runway");
     expect(entry?.command.options.map(optionName)).toContain("json");
+  });
+
+  it("shows the length a command runs when the caller cannot set it", () => {
+    const commands = catalogPayload({}, "leonardo").commands as Record<string, unknown>[];
+    const byName = new Map(commands.map((c) => [c.command, c]));
+    expect(byName.get("leonardo video")?.video_seconds_up_to).toBe(10);
+    expect(byName.get("leonardo image-to-video")).not.toHaveProperty("video_seconds_up_to");
   });
 
   it("maps provider groups to stored key names only", () => {
