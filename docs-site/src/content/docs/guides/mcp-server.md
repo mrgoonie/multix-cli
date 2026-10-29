@@ -25,11 +25,13 @@ does not change how `multix` behaves on your machine.
 | `multix_job_cancel` | Stop a running job and its container. |
 | `multix_skills` | Read-only access to the [skills catalogue](#skills): `search` for a skill, `get` its entry, `read` one of its text files. |
 | `multix_skills_manage` | [Author your own skills](#author-your-own-skills): drafts, publishing, revisions, settings and team sharing. It never runs a skill. |
+| `multix_workflow` | [Skill workflows](#skill-workflows): `describe`, `run`, `status`, `cancel` and `list` runs of a skill's `multix.workflow.json`. It cannot authorize a workflow. |
 
 `multix_catalog`, `multix_model_catalog` and `multix_skills` are always listed. `multix_run`,
 `multix_job_status` and `multix_job_cancel` appear only when the Worker has its job bindings
-(`MULTIX_JOBS` and `MULTIX_JOB_QUOTA`, see [Deploy](#deploy)). `multix_skills_manage` appears only
-when the Worker has the `MULTIX_SKILLS` binding.
+(`MULTIX_JOBS` and `MULTIX_JOB_QUOTA`, see [Deploy](#deploy)). `multix_skills_manage` and
+`multix_workflow` appear only when the Worker has the `MULTIX_SKILLS` binding; a workflow run also
+needs the job bindings.
 
 ## Running CLI commands
 
@@ -329,8 +331,8 @@ image to Cloudflare.
    `/api/v1/events` routes answer `503` and `server/discover` does not offer
    events. The `MULTIX_SKILLS` binding (class `AccountSkills`) holds each
    account's private and team [skills](#skills); without it only the built-in
-   skills are served, `multix_skills_manage` is not listed and the
-   `/api/v1/skills` routes answer `503`.
+   skills are served, `multix_skills_manage` and `multix_workflow` are not
+   listed and the `/api/v1/skills` and workflow routes answer `503`.
 4. **Set the secrets** and deploy:
 
    ```bash
@@ -619,6 +621,74 @@ Tool errors start with `INVALID_INPUT`, `NOT_FOUND` or `CONFLICT` (REST `400`,
 MCP requests are capped at 64 KiB, so spread files over several `save_draft`
 calls, and upload a file that does not fit in one request with
 `PUT /api/v1/skills/{skill}/draft` (a body of up to about 11 MiB).
+
+### Skill workflows
+
+A private or team skill may include `multix.workflow.json` at its root: a
+fixed list of multix CLI steps with typed inputs. `multix_workflow` and the
+REST routes under [`/api/v1/workflow-*`](/guides/rest-api/#workflows) run it
+for your account. Built-in skills have no workflow.
+
+```json
+{
+  "version": 1,
+  "description": "Draw a product shot, then restyle it",
+  "inputs": { "subject": { "type": "string", "required": true, "max_length": 500 } },
+  "steps": [
+    { "id": "draw", "command": "gemini generate", "options": { "prompt": "{{inputs.subject}}" } },
+    { "id": "restyle", "command": "gemini image-to-image",
+      "options": { "prompt": "watercolor" }, "inputs": { "ref": "{{steps.draw.outputs[0]}}" } }
+  ]
+}
+```
+
+- `version` is `1`; `description` is optional.
+- `inputs` (at most 20) have a `type` (`string`, `integer`, `number`,
+  `boolean` or `url`) and optional `description`, `required`, `default`,
+  `enum` (string, integer and number), `min` and `max` (integer and number),
+  and `max_length` (string and url). A `url` input must be a public
+  `https://` URL.
+- `steps` (1 to 10) are `{ id, command, args?, options?, inputs? }`, in the
+  form `multix_run` takes. `command` must be one the server runs.
+- Values may hold `{{inputs.<name>}}` and `{{steps.<id>.outputs[<n>]}}` (an
+  earlier step's output URL, so it needs [R2 storage](#r2-storage)). Command
+  paths and option names cannot. Each value stays one argument, so a template
+  cannot add a flag or an argument. An absent optional input leaves its value
+  out.
+
+Publishing refuses an invalid manifest (at most 64 KiB), and it is checked
+again before a run.
+
+Reading or describing a skill never runs it. A run needs your authorization,
+which you give only over REST with an API key from `/dashboard`
+(`POST /api/v1/workflow-authorizations`); MCP cannot authorize, so a model
+never grants itself a run. The authorization is bound to the skill id, the
+served revision and the manifest digest that `describe` returns: a new
+revision, another digest or a recreated skill voids it. It may carry
+`max_cost_usd`, which caps the whole run: every step must have a known price
+whose high end fits the remaining budget, so an unpriced command cannot run
+under it. `cost_policy` (`strict` by default, or `estimate`) works as for
+[`multix_run`](#running-cli-commands). For a team skill shared with you, the
+authorization is your own, not the owner's.
+
+`multix_workflow` actions:
+
+- `describe` (`uri`): the steps, inputs, revision and digest, and whether you
+  authorized them; when you have not, the REST request that would.
+- `run` (`uri`, `inputs`): start a run and its first step.
+- `status` (`run_id`): a run advances when it is read: the reader collects the
+  finished step's outputs and starts the next step. Poll until `succeeded`,
+  `failed` or `canceled`. A step waiting for a free job slot stays `pending`.
+- `cancel` (`run_id`): stop the run and its current job.
+- `list`: your runs and authorizations.
+
+Each step is a normal `multix_run` job with your saved keys and the same
+command policy, caps, URL guard and spend guard. A step the policy refuses,
+a failed job, a revoked authorization or a skill that no longer serves the
+authorized revision fails the run before its next job starts. An account has
+at most 5 active runs (`busy` otherwise) and 50 stored runs; the oldest
+finished ones are dropped first. Tool errors start with `INVALID_INPUT`,
+`NOT_FOUND`, `NOT_AUTHORIZED`, `CONFLICT`, `busy` or `UNAVAILABLE`.
 
 ## Configuration
 

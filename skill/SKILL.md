@@ -252,6 +252,13 @@ container. `multix_skills` (search/get/read) serves the server's own skills
 A team skill reaches another account only after `grant` (owner) and
 `add_shared` (grantee). It never runs a skill. MCP requests are capped at
 64 KiB; upload larger files with REST `PUT /api/v1/skills/{skill}/draft`.
+`multix_workflow` runs a skill's `multix.workflow.json` (fixed CLI steps):
+`describe` (uri) → `run` (uri, inputs) → poll `status` (run_id) until
+`succeeded`, `failed` or `canceled` (a run advances only when read); `cancel`,
+`list`. A run needs the user's authorization for that exact revision and
+digest, given only over REST (`POST /api/v1/workflow-authorizations`); on
+`NOT_AUTHORIZED`, show the user the steps from `describe` and ask them to
+authorize. Never try to authorize it yourself.
 1. `multix_catalog` lists groups and whether the user saved keys
    (`has_keys`); `multix_catalog {"group": "gemini"}` shows each command's
    options and which ones take files.

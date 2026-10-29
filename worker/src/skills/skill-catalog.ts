@@ -126,7 +126,7 @@ export function parseSkillUri(uri: string): string[] {
   return segments;
 }
 
-function locate(uri: string): Located {
+export function locate(uri: string): Located {
   const [head, ...rest] = parseSkillUri(uri);
   if (head === "multix") return { kind: "builtin", rel: rest.join("/") };
   if (head === "private" && rest[0]) {

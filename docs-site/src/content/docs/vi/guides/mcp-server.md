@@ -26,11 +26,13 @@ thay đổi cách `multix` chạy trên máy bạn.
 | `multix_job_cancel` | Dừng job đang chạy cùng container của nó. |
 | `multix_skills` | Đọc (chỉ đọc) [danh mục skill](#skill): `search` để tìm skill, `get` để lấy mục của một skill, `read` để đọc một file văn bản của skill. |
 | `multix_skills_manage` | [Tự tạo skill của bạn](#tự-tạo-skill-của-bạn): bản nháp, xuất bản, revision, cài đặt và chia sẻ trong nhóm. Tool này không bao giờ chạy skill. |
+| `multix_workflow` | [Workflow của skill](#workflow-của-skill): `describe`, `run`, `status`, `cancel` và `list` các lần chạy `multix.workflow.json` của một skill. Tool này không thể cấp quyền cho workflow. |
 
 `multix_catalog`, `multix_model_catalog` và `multix_skills` luôn được liệt kê. `multix_run`,
 `multix_job_status` và `multix_job_cancel` chỉ xuất hiện khi Worker có các binding chạy job
-(`MULTIX_JOBS` và `MULTIX_JOB_QUOTA`, xem [Triển khai](#triển-khai)). `multix_skills_manage` chỉ
-xuất hiện khi Worker có binding `MULTIX_SKILLS`.
+(`MULTIX_JOBS` và `MULTIX_JOB_QUOTA`, xem [Triển khai](#triển-khai)). `multix_skills_manage` và
+`multix_workflow` chỉ xuất hiện khi Worker có binding `MULTIX_SKILLS`; chạy workflow còn cần các
+binding chạy job.
 
 ## Chạy lệnh CLI
 
@@ -324,8 +326,9 @@ Cloudflare.
    `/api/v1/events` trả về `503` và `server/discover` không cung cấp events.
    Binding `MULTIX_SKILLS` (class `AccountSkills`) giữ các
    [skill](#skill) riêng tư và skill nhóm của từng tài khoản; thiếu binding
-   này, server chỉ cung cấp skill dựng sẵn, `multix_skills_manage` không được
-   liệt kê và các route `/api/v1/skills` trả về `503`.
+   này, server chỉ cung cấp skill dựng sẵn, `multix_skills_manage` và
+   `multix_workflow` không được liệt kê, và các route `/api/v1/skills` cùng các
+   route workflow trả về `503`.
 4. **Đặt secret** và triển khai:
 
    ```bash
@@ -620,6 +623,75 @@ Lỗi của tool bắt đầu bằng `INVALID_INPUT`, `NOT_FOUND` hoặc `CONFLI
 Request MCP bị giới hạn 64 KiB, nên hãy chia file ra nhiều lần gọi
 `save_draft`, và tải một file không vừa trong một request lên bằng
 `PUT /api/v1/skills/{skill}/draft` (body tối đa khoảng 11 MiB).
+
+### Workflow của skill
+
+Một skill riêng tư hoặc skill nhóm có thể kèm file `multix.workflow.json` ở
+thư mục gốc: một danh sách cố định các bước multix CLI với input có kiểu.
+`multix_workflow` và các route REST dưới
+[`/api/v1/workflow-*`](/vi/guides/rest-api/#workflow) chạy nó cho tài khoản của
+bạn. Skill dựng sẵn không có workflow.
+
+```json
+{
+  "version": 1,
+  "description": "Draw a product shot, then restyle it",
+  "inputs": { "subject": { "type": "string", "required": true, "max_length": 500 } },
+  "steps": [
+    { "id": "draw", "command": "gemini generate", "options": { "prompt": "{{inputs.subject}}" } },
+    { "id": "restyle", "command": "gemini image-to-image",
+      "options": { "prompt": "watercolor" }, "inputs": { "ref": "{{steps.draw.outputs[0]}}" } }
+  ]
+}
+```
+
+- `version` là `1`; `description` không bắt buộc.
+- `inputs` (tối đa 20) có `type` (`string`, `integer`, `number`, `boolean`
+  hoặc `url`) và các trường tùy chọn `description`, `required`, `default`,
+  `enum` (string, integer và number), `min` và `max` (integer và number), và
+  `max_length` (string và url). Input `url` phải là URL `https://` công khai.
+- `steps` (1 đến 10 bước) có dạng `{ id, command, args?, options?, inputs? }`,
+  giống dạng `multix_run` nhận. `command` phải là lệnh server chạy được.
+- Giá trị có thể chứa `{{inputs.<name>}}` và `{{steps.<id>.outputs[<n>]}}`
+  (URL output của một bước trước đó, nên cần [lưu trữ R2](#lưu-trữ-r2)). Đường
+  dẫn lệnh và tên option thì không. Mỗi giá trị luôn là một đối số, nên
+  template không thể thêm flag hay đối số. Input tùy chọn không được truyền thì
+  giá trị chứa nó bị bỏ đi.
+
+Việc xuất bản từ chối manifest không hợp lệ (tối đa 64 KiB), và manifest được
+kiểm tra lại trước mỗi lần chạy.
+
+Đọc hay mô tả một skill không bao giờ chạy nó. Muốn chạy cần quyền do bạn cấp,
+và chỉ cấp được qua REST bằng API key từ `/dashboard`
+(`POST /api/v1/workflow-authorizations`); MCP không cấp quyền được, nên model
+không bao giờ tự cho phép mình chạy. Quyền gắn với id của skill, revision đang
+phục vụ và digest của manifest mà `describe` trả về: revision mới, digest khác
+hoặc skill được tạo lại đều làm quyền mất hiệu lực. Quyền có thể kèm
+`max_cost_usd` để giới hạn chi phí của cả lần chạy: mọi bước phải có giá đã
+biết với mức cao của ước tính nằm trong ngân sách còn lại, nên lệnh chưa có giá
+không chạy được dưới giới hạn này. `cost_policy` (mặc định `strict`, hoặc
+`estimate`) hoạt động như với [`multix_run`](#chạy-lệnh-cli). Với skill nhóm
+được chia sẻ cho bạn, quyền là của chính bạn, không phải của chủ skill.
+
+Các action của `multix_workflow`:
+
+- `describe` (`uri`): các bước, input, revision và digest, và bạn đã cấp quyền
+  cho chúng chưa; nếu chưa, kèm request REST để cấp quyền.
+- `run` (`uri`, `inputs`): bắt đầu một lần chạy cùng bước đầu tiên.
+- `status` (`run_id`): lần chạy tiến lên khi được đọc: người đọc thu output của
+  bước đã xong và khởi động bước tiếp theo. Poll đến khi là `succeeded`,
+  `failed` hoặc `canceled`. Bước đang chờ một slot job trống vẫn ở `pending`.
+- `cancel` (`run_id`): dừng lần chạy và job hiện tại của nó.
+- `list`: các lần chạy và các quyền đã cấp của bạn.
+
+Mỗi bước là một job `multix_run` bình thường với key đã lưu của bạn, cùng
+chính sách lệnh, giới hạn, URL guard và spend guard. Một bước bị chính sách từ
+chối, một job thất bại, một quyền bị thu hồi hoặc một skill không còn phục vụ
+revision đã được cấp quyền đều làm lần chạy thất bại trước khi job tiếp theo
+khởi động. Mỗi tài khoản có tối đa 5 lần chạy đang hoạt động (nếu vượt thì
+`busy`) và 50 lần chạy được lưu; các lần chạy đã kết thúc cũ nhất bị xóa trước.
+Lỗi của tool bắt đầu bằng `INVALID_INPUT`, `NOT_FOUND`, `NOT_AUTHORIZED`,
+`CONFLICT`, `busy` hoặc `UNAVAILABLE`.
 
 ## Cấu hình
 
