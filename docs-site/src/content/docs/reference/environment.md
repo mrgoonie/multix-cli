@@ -86,6 +86,9 @@ not filtered. On Windows the check ignores case, as the OS does.
 | `REPLICATE_API_TOKEN` or `REPLICATE_API_KEY` | Replicate (direct API) |
 | `RUNWAYML_API_SECRET` | Runway |
 | `HEYGEN_API_KEY` | HeyGen (API credits are billed separately from web plans) |
+| `SUME_API_KEY` | Sume (USD balance, from the [Sume app](https://app.sume.com)) |
+| `TOPVIEW_API_KEY` and `TOPVIEW_UID` | TopView Legacy API (plan credits, from [API Settings](https://www.topview.ai/api-settings)) |
+| `TOPVIEW_PLATFORM_API_KEY` | TopView API Platform (separate USD balance, from [platform.topview.ai](https://platform.topview.ai)) |
 
 ```bash
 export GEMINI_API_KEY="your-key"
@@ -210,6 +213,16 @@ default model (default `drama-3`). It must be one of the models listed on
 `HEYGEN_BASE_URL` overrides the HeyGen API base (default
 `https://api.heygen.com`) for proxies and tests. It must be `https://`; plain
 `http://` is accepted only for `localhost`, `127.0.0.1`, or `[::1]`.
+
+Sume accepts `SUME_BASE_URL` (default `https://api.sume.com`),
+`SUME_IMAGE_MODEL`, and `SUME_VIDEO_MODEL`. Sume has no built-in default
+model: without `-m` or the matching variable, `sume image` and `sume video`
+refuse to run; `multix sume models` lists the IDs. TopView accepts
+`TOPVIEW_BASE_URL` for the Legacy API (default `https://api.topview.ai`) and
+`TOPVIEW_PLATFORM_BASE_URL` for the API Platform (default
+`https://platform-backend.topview.ai`). Sume and TopView downloads also stop at
+`MULTIX_MAX_DOWNLOAD_MB`; see [Sume](/commands/sume/#outputs) and
+[TopView](/commands/topview/#outputs).
 
 ### Base URL overrides and trust
 

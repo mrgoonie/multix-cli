@@ -24,10 +24,12 @@ does not change how `multix` behaves on your machine.
 | `multix_job_status` | Read a `multix_run` job: status, output URLs, stdout and the tail of stderr. |
 | `multix_job_cancel` | Stop a running job and its container. |
 | `multix_skills` | Read-only access to the [skills catalogue](#skills): `search` for a skill, `get` its entry, `read` one of its text files. |
+| `multix_skills_manage` | [Author your own skills](#author-your-own-skills): drafts, publishing, revisions, settings and team sharing. It never runs a skill. |
 
 `multix_catalog`, `multix_model_catalog` and `multix_skills` are always listed. `multix_run`,
 `multix_job_status` and `multix_job_cancel` appear only when the Worker has its job bindings
-(`MULTIX_JOBS` and `MULTIX_JOB_QUOTA`, see [Deploy](#deploy)).
+(`MULTIX_JOBS` and `MULTIX_JOB_QUOTA`, see [Deploy](#deploy)). `multix_skills_manage` appears only
+when the Worker has the `MULTIX_SKILLS` binding.
 
 ## Running CLI commands
 
@@ -51,7 +53,8 @@ JSON:
   `{ estimate_only, command, estimate, budget? }` without starting a job.
 - `max_cost_usd`: a number ≥ 0. The job does not start unless the cost fits,
   under the same rules as the CLI's `--max-cost`; a refusal comes back as a
-  tool error.
+  tool error. A run the caps cannot bound needs it when the server runs such
+  runs in `budget` mode (see below).
 - `cost_policy`: `"strict"` (default, proven ceiling only) or `"estimate"`
   (accept the estimated high end). See
   [Cost](/reference/for-ai-agents/#cost-estimate-spend-guard-and-receipt) for
@@ -137,6 +140,48 @@ omits it), and `@file` values are rejected. Commands that
 change your own provider account (for example deleting an ElevenLabs voice)
 run like any other, with your key.
 
+**Runs the caps cannot bound.** Some runs spend more than the caps above can
+see. `multix_catalog` marks them with `uncapped_spend` (on the command, or on
+the option that makes a run uncapped):
+
+- pass-through request bodies: `fal run`, `replicate run`, `atlas run`,
+  `heygen run`, `topview run`, `--input` of `replicate image` and
+  `replicate video`, `--input` / `--text-field` of `fal tts`, `--param` of
+  `sume image`, `--provider-options` of `openrouter tts`, and the raw model
+  `--flags` of `byteplus generate-3d`;
+- runs billed by the length of their source or script: `heygen video`,
+  `heygen translate`, `heygen lipsync`, `elevenlabs dub`, `topview
+  video-avatar`, `topview product-avatar`, and `heygen video-agent` /
+  `heygen template`, where the agent or template sets the length;
+- runs longer than the duration cap can bound: `topview url-to-video` and
+  `topview materials-to-video` (15-60 s videos), and `elevenlabs music`,
+  whose length (up to 10 minutes) the model picks unless `--music-length-ms`
+  or a `--plan` sets it;
+- `sume video`, where the model's catalog row sets the price and lip-sync and
+  captions models bill by the length of the source media;
+- `atlas image`, `atlas image-to-image`, `sume image` and `replicate image`
+  without `--num-images` / `--num-outputs`, where the model picks the number of
+  outputs. Passing the count (at most `MULTIX_MCP_MAX_OUTPUTS`) makes the run
+  capped again;
+- `fal video`, which has no `--resolution`: the model picks it;
+- `atlas video`, `atlas image-to-video`, `replicate video`,
+  `openrouter image-to-video` and `heygen model-video` without `--resolution`,
+  where the model's default resolution applies. Passing one of
+  `MULTIX_MCP_ALLOWED_RESOLUTIONS` makes the run capped again, for models that
+  take a resolution (some Atlas models do not, and are then always uncapped).
+  For `openrouter image-to-video` the value is a request the model may round.
+
+The operator decides what such a run needs with `MULTIX_MCP_UNCAPPED_SPEND`.
+In `budget` mode (the default) the call must give `max_cost_usd`, and the job
+starts only when the price estimate proves the run fits (`cost_policy` is
+treated as `strict` for these runs, since the estimate cannot see the uncapped
+part). Of these, only `openrouter tts` has a price estimate, and only for a
+model whose price is known, so in practice `budget` refuses the rest, closed
+rather than open. `deny` always refuses them; `allow` runs them as before, on
+the caller's own keys. An `estimate: true` call is answered in every mode, since it
+starts nothing. The REST API (`POST /api/v1/jobs`) takes the same
+`max_cost_usd` and `cost_policy` fields and applies the same rule.
+
 **Gemini edit and extend.** `gemini extend-video --duration` is the length of
 the new continuation and is capped like any other duration, but the returned
 video also contains the source. The cap therefore bounds each call, not the
@@ -153,6 +198,22 @@ start with `@`, so put text before an `@tag` (`"a portrait of @hero"`).
 `runway video` does not wait by default, so the job ends with only a task ID:
 set `"wait": true` in `options` to get the video, or run
 `runway status <id> --wait --download` later.
+
+**Sume and TopView.** Both groups run remotely. Give file flags (Sume
+`--image`, `--end-image`, `--reference-image`, `--video` and `--audio`; the
+TopView Legacy file flags and the `topview upload` file) as `https://` URLs in
+`inputs`. `sume estimate` uploads nothing, so it takes its media as plain
+`https://` URLs. `sume image --num-images` and `topview product-anyshoot
+--count` are capped by `MULTIX_MCP_MAX_OUTPUTS`, and `sume video --duration` and `--resolution` by the
+video limits; pass a `--duration` the model's catalog row lists, because
+without one the server sends its own default length. `topview run --input`
+must be inline JSON, since `@file` values are rejected. `sume image`,
+`sume video`, `topview run` and the TopView Legacy commands other than
+`product-avatar` do not wait by default: set `"wait": true` in `options`, or
+resume later with `sume status <id> --wait --download`,
+`topview status <kind> <taskId> --wait --download` or
+`topview prediction <id> --wait --download`. See
+[Sume](/commands/sume/) and [TopView](/commands/topview/).
 
 **Speech.** `speech generate` must name `--provider`. The job gets only the
 keys of the providers named by `--provider` and `--fallback`, not every speech
@@ -197,8 +258,13 @@ Worker, and keys set there are ignored.
   (Gemini, OpenRouter, OpenAI, MiniMax, Leonardo.Ai, BytePlus with
   `ARK_API_KEY` as fallback, ElevenLabs, fal.ai, Atlas Cloud, Replicate with
   `REPLICATE_API_KEY` as fallback, Runway's `RUNWAYML_API_SECRET` as
-  "API secret", HeyGen), plus the Cloudflare Workers AI
+  "API secret", HeyGen, Sume, TopView with `TOPVIEW_API_KEY` and
+  `TOPVIEW_UID`, and TopView Platform), plus the Cloudflare Workers AI
   account ID, API token and optional AI Gateway ID.
+  `TOPVIEW_UID` is an account ID, not a secret, so it has a plain text input
+  instead of a password field. A `topview` job gets all three TopView values;
+  the Legacy commands need `TOPVIEW_API_KEY` and `TOPVIEW_UID`, the API
+  Platform commands `TOPVIEW_PLATFORM_API_KEY`.
 
 ### API keys for the REST API
 
@@ -275,7 +341,8 @@ image to Cloudflare.
    `/api/v1/events` routes answer `503` and `server/discover` does not offer
    events. The `MULTIX_SKILLS` binding (class `AccountSkills`) holds each
    account's private and team [skills](#skills); without it only the built-in
-   skills are served.
+   skills are served, `multix_skills_manage` is not listed and the
+   `/api/v1/skills` routes answer `503`.
 4. **Set the secrets** and deploy:
 
    ```bash
@@ -445,8 +512,9 @@ Two more URI spaces are reserved for account skills, kept per account in the
 `AccountSkills` Durable Object as immutable revisions with content-addressed
 (SHA-256) files: `skill://private/<name>/<file>` for your own skills and
 `skill://team/<ownerId>/<name>/<file>` for team skills you own or were granted.
-There is no API to publish or share skills yet, so in practice every account
-sees the built-in skills. Another account's skills are never visible: an
+You publish and share them yourself (see
+[Author your own skills](#author-your-own-skills)). Another account's skills
+are never visible unless it granted you a team skill and you added it: an
 unknown skill and a forbidden one get the same answer.
 
 ### Protocol 2026-07-28 clients
@@ -500,6 +568,70 @@ frontmatter and in `_meta`) is that Worker's CLI version. When they differ, an
 agent using this server should follow the remote catalogue, and an agent
 running the CLI locally should follow the local skill.
 
+### Author your own skills
+
+`multix_skills_manage` and the REST routes under
+[`/api/v1/skills`](/guides/rest-api/#skills) create, publish and share your
+own skills. Both use the same code, so checks, conflicts and limits are the
+same. Every write goes to your own registry: no account can change another
+account's skills. Nothing here runs a skill; readers use the methods above.
+
+The workflow, as MCP `action` (REST route in parentheses):
+
+1. `save_draft` (`PUT /skills/{skill}/draft`): add or replace `files` (a
+   `path` with `text`, or `base64` for any file type) and remove `delete`
+   paths. A new draft starts from the served revision, from `from_revision`,
+   or from no files with `replace`. A draft is never served.
+2. `get_draft` and `read_file` (`GET …/draft`, `GET …/files?path=`) show it;
+   `read_file` with `revision` reads a stored revision instead.
+3. `publish` (`POST …/publish`): the draft becomes the next immutable
+   revision, served at `skill://private/<name>/SKILL.md`, or at
+   `skill://team/<your account id>/<name>/SKILL.md` when `visibility` is
+   `team`. The `name` in its `SKILL.md` frontmatter must be the skill name.
+   `visibility`, `tags` and `capabilities` (task ids or `any`) can be set with
+   it; a new skill is `private`.
+
+Revision numbers count up per skill and are never reused, even after a
+revision is deleted. `revisions` and `revision` list and inspect them;
+`set_current` (`POST …/current`) serves another stored revision (roll back or
+forward); `unpublish` stops serving the skill and keeps its revisions;
+`delete_revision` removes any revision except the served one; `delete` removes
+the skill with every revision, its draft and its grants. `update`
+(`PATCH /skills/{skill}`) changes `visibility`, `tags` and `capabilities`; a
+visibility change moves the skill to the other URI and revokes every grant.
+
+To avoid overwriting a concurrent change, send the value you last read
+(`get` returns `draft.digest` and `skill.current_revision`); a mismatch fails
+with `CONFLICT` (REST `409`):
+
+- `expected_digest`: the draft digest, on `save_draft`, `discard_draft` and
+  `publish`. Over REST, `null` on a draft update means you expect no draft.
+- `expected_revision`: the served revision, on `publish`, `set_current`,
+  `unpublish` and `update`. "None served" is `0` over MCP and `null` over
+  REST.
+
+Team sharing is opt-in for the grantee. The owner of a team skill calls
+`grant` with an account id (`gh-<digits>`, the `id` of `GET /api/v1/me`);
+`grants` lists them and `revoke` withdraws one. A grant adds nothing to the
+grantee's catalogue: the grantee calls `add_shared` with the skill's `uri`
+(`skill://team/<owner>/<name>/SKILL.md`) to list it in `skills/list` and
+`multix_skills`, and `remove_shared` to drop it. In `list`, a shared skill
+shows `available: false` once the owner revoked the grant, unpublished or
+deleted the skill. A revoke ends that listing even if the owner grants access
+again; the grantee then has to add it again.
+
+Tool errors start with `INVALID_INPUT`, `NOT_FOUND` or `CONFLICT` (REST `400`,
+`404`, `409`). Limits:
+
+- per account: 200 skills, 200 drafts and 200 listed shared skills;
+- per skill: 100 stored revisions (delete old ones to publish more), 100
+  grants, 512 files and 16 MiB, 1 MiB per file;
+- one draft update carries at most 8 MiB of decoded files.
+
+MCP requests are capped at 64 KiB, so spread files over several `save_draft`
+calls, and upload a file that does not fit in one request with
+`PUT /api/v1/skills/{skill}/draft` (a body of up to about 11 MiB).
+
 ## Configuration
 
 Secrets (set with `npx wrangler secret put <NAME>`):
@@ -523,6 +655,7 @@ Set these as `vars` in `worker/wrangler.jsonc`:
 | `MULTIX_MCP_MAX_OUTPUTS` | `4` (ceiling 10) | Maximum output count (for example `--num-images`) per `multix_run` call. |
 | `MULTIX_MCP_MAX_VIDEO_SECONDS` | `10` (ceiling 15) | Maximum video duration per call (for `gemini extend-video`, the new continuation). When a caller omits it and the command's default is unknown or longer, the server sends `min(5, cap)` seconds. |
 | `MULTIX_MCP_ALLOWED_RESOLUTIONS` | `480p,720p,768p,1080p` | Video resolutions a caller may request (`768p` is a HeyGen Video size). Anything else (for example `4k`), given or the command's default, is rejected before the job starts. |
+| `MULTIX_MCP_UNCAPPED_SPEND` | `budget` | Runs the caps above cannot bound (marked `uncapped_spend` in `multix_catalog`): `budget` runs one only with a `max_cost_usd` its price estimate proves (an unknown price is refused), `deny` refuses it, `allow` runs it. Any other value means `budget`. |
 | `MULTIX_MCP_ALLOWED_ORIGINS` | none | Exact browser origins (for example `https://app.example.com`) allowed to call `/mcp`. `*` and other wildcards are not supported: `*` only matches a literal `*` origin, which browsers never send. After the access token is checked, requests with any other `Origin` header get `403`; requests without an `Origin` (server-side clients) are allowed. Listed origins get CORS headers. `OPTIONS` preflights are answered for any origin by the OAuth layer. |
 | `MULTIX_MAX_JOBS_PER_ACCOUNT` | `2` (ceiling 50) | `multix_run` jobs one account may run at the same time. |
 | `MULTIX_MAX_JOBS_TOTAL` | `10` (ceiling 1000) | `multix_run` jobs the server may run at the same time across all accounts. Keep it at or below the container `max_instances` in `wrangler.jsonc`, which is the platform ceiling. |
@@ -575,10 +708,11 @@ within your Cloudflare account. If another Worker already uses `1001` or
   are rejected before the job starts.
 - **Spend guard:** `multix_run` caps output count, video duration and video
   resolution on the options the server knows for each command (see
-  [Running CLI commands](#running-cli-commands)). Other inputs that may change
-  the price, such as the raw JSON `--input` of `replicate run` or
-  `atlas run`, are not capped. A caller can also set `max_cost_usd` to refuse
-  a run that may cost more.
+  [Running CLI commands](#running-cli-commands)). A run those caps cannot
+  bound (a pass-through JSON body, a price set by the source length, a count
+  or resolution the model picks) is refused unless `max_cost_usd` proves its price, or as
+  `MULTIX_MCP_UNCAPPED_SPEND` sets. A caller can also set `max_cost_usd` to
+  refuse any run that may cost more.
 - **Logging and redaction:** successful calls are logged at `info` with tool
   name, command (or catalog group), outcome, and latency only. Prompts are never logged as
   a field. Failed calls are logged at `warn` (expected errors) or `error`, with

@@ -95,6 +95,12 @@ export const PROVIDER_INFO: Readonly<
     homepage: "https://runwayml.com",
   },
   heygen: { name: "HeyGen", homepage: "https://www.heygen.com" },
+  sume: { name: "Sume", homepage: "https://app.sume.com" },
+  topview: {
+    name: "TopView",
+    homepage: "https://www.topview.ai",
+    docs_url: "https://docs.topview.ai",
+  },
 };
 
 /** Task of an audio price, from what it meters. */

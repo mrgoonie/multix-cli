@@ -99,6 +99,7 @@ describe("catalogQuery views", () => {
       resolution: "720P",
       duration_s: 10,
       audio: true,
+      aspect_ratio: "16:9",
       at: AT,
     });
     expect(comparison.request).toMatchObject({

@@ -23,12 +23,13 @@ const KLING_STANDARD = "fal:fal-ai/kling-video/v3/standard/text-to-video";
 const ALL_READY = () => true;
 const FAL_ONLY = (p: string) => p === "fal";
 
-/** Seedance 720p with audio on for 10 s: only the fal card confirms that configuration. */
+/** Seedance 720p 16:9 with audio on for 10 s: only the fal card confirms that configuration. */
 const SEEDANCE_REQUEST = {
   task: "video",
   resolution: "720p",
   duration_s: 10,
   audio: true,
+  aspect_ratio: "16:9",
   at: AT,
 } as const;
 
@@ -245,6 +246,47 @@ describe("factors, coverage and score", () => {
     const rec = find(recommend(input()), SEEDANCE_FAL);
     expect(rec.factors.price?.value).toBe(1);
     expect(rec.quote_usd).toBe(4.6224);
+  });
+
+  it("gives no price factor to an estimate or a quote with an assumption, and says why", () => {
+    // Seedance 720p for 5 s without audio or aspect ratio: Atlas is a lower estimate, fal assumes 16:9.
+    const result = recommend(
+      input({ request: { task: "video", resolution: "720p", duration_s: 5, at: AT } }),
+    );
+    const atlas = find(result, SEEDANCE_ATLAS);
+    expect(atlas.factors.price).toBeUndefined();
+    expect(atlas.quote_usd).toBeNull();
+    expect(atlas.reasons).toContain(
+      "price: quote not ranked: the provider shows this price as an estimate and bills the final amount from the usage it measures",
+    );
+    expect(atlas.unranked_quote).toEqual({ usd: 1.50228, reasons: expect.any(Array) });
+    const fal = find(result, SEEDANCE_FAL);
+    expect(fal.factors.price).toBeUndefined();
+    expect(fal.quote_usd).toBeNull();
+    expect(fal.reasons.join(" ")).toContain("the quote assumes aspect ratio 16:9");
+  });
+
+  it("gives the price factor to the confirmed list price and not to the cheaper estimate", () => {
+    const result = recommend(
+      input({
+        request: { task: "video", resolution: "720p", duration_s: 5, aspect_ratio: "16:9", at: AT },
+      }),
+    );
+    expect(find(result, SEEDANCE_FAL).factors.price?.value).toBe(1);
+    expect(find(result, SEEDANCE_FAL).unranked_quote).toBeUndefined();
+    expect(find(result, SEEDANCE_ATLAS).factors.price).toBeUndefined();
+  });
+
+  it("names both the setting to pin and the other reasons of an unranked quote", () => {
+    // An estimate whose card fixes 720p, compared without a pinned resolution.
+    const result = recommend(
+      input({ request: { task: "video", duration_s: 5, aspect_ratio: "16:9", at: AT } }),
+    );
+    const atlas = find(result, SEEDANCE_ATLAS);
+    expect(atlas.unranked_quote?.reasons).toEqual([
+      "pin resolution 480p",
+      "the provider shows this price as an estimate and bills the final amount from the usage it measures",
+    ]);
   });
 
   it("scores the mean of the evidenced factors times their coverage", () => {

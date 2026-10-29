@@ -1,6 +1,6 @@
 ---
 title: REST API and account API keys
-description: Use the multix MCP server's REST API from scripts and CI with an account API key to manage provider keys and R2 storage, read the CLI catalog, run, poll and cancel CLI jobs, and receive signed webhooks when jobs end.
+description: Use the multix MCP server's REST API from scripts and CI with an account API key to manage provider keys and R2 storage, read the CLI catalog, run, poll and cancel CLI jobs, receive signed webhooks when jobs end, and author and share skills.
 ---
 
 The [remote MCP server](/guides/mcp-server/) also serves a JSON REST API at
@@ -50,7 +50,8 @@ curl -s https://multix.zuey.me/api/v1/me \
 Every request checks the key, then the per-account rate limit, then the
 sign-in allowlist (`MULTIX_ALLOWED_USERS`, so removing an account from it also
 blocks its API keys). Request bodies are JSON
-(`Content-Type: application/json`, at most 64 KiB).
+(`Content-Type: application/json`, at most 64 KiB; about 11 MiB for
+`PUT /skills/{skill}/draft`).
 
 ## Endpoints
 
@@ -81,6 +82,19 @@ All paths are relative to `/api/v1`.
 | `DELETE` | `/events/subscriptions/{id}` | Revoke a subscription. |
 | `GET` | `/events/dead-letters` | Deliveries that were given up (ids, reason, attempts; no payload). |
 | `GET` | `/events/audit` | Subscription audit log: created, revoked, disabled, expired. |
+| `GET` | `/skills` | Your skills (served or not), your drafts, and the shared team skills you added. |
+| `GET` `PATCH` `DELETE` | `/skills/{skill}` | One skill with its served revision, draft and grants; change visibility, tags or capabilities; delete it. |
+| `GET` `PUT` `DELETE` | `/skills/{skill}/draft` | The draft: read, create or update, discard (`?expected_digest=`). |
+| `GET` | `/skills/{skill}/files?path=[&revision=]` | One file of the draft, or of a stored revision. |
+| `POST` | `/skills/{skill}/publish` | Publish the draft as the next revision (`201`). |
+| `GET` | `/skills/{skill}/revisions` | Stored revisions and the served one. |
+| `GET` `DELETE` | `/skills/{skill}/revisions/{revision}` | One revision with its files; delete it (not the served one). |
+| `POST` | `/skills/{skill}/current` | Serve another revision: `{ "revision": n }` (roll back or forward). |
+| `POST` | `/skills/{skill}/unpublish` | Stop serving the skill; its revisions stay. |
+| `GET` | `/skills/{skill}/grants` | Accounts a team skill is shared with. |
+| `PUT` `DELETE` | `/skills/{skill}/grants/{account}` | Share a team skill with an account, or revoke it. |
+| `GET` `POST` | `/skill-shares` | Team skills shared with you that you added; add one: `{ "uri": "skill://team/<owner>/<skill>/SKILL.md" }` (`201`). |
+| `DELETE` | `/skill-shares/{owner}/{skill}` | Stop listing a shared skill. |
 
 Provider key names are the env names the CLI reads (for example
 `GEMINI_API_KEY`), plus the Cloudflare Workers AI names; `GET /provider-keys`
@@ -189,7 +203,8 @@ whole setting, so leaving `prefix` out resets it to `multix`. The response, like
 ## Run a job and poll it
 
 `POST /jobs` takes the `multix_run` input (`command`, `options`, `args`,
-`inputs`, `wait_seconds`; see
+`inputs`, `wait_seconds`, `max_cost_usd`, `cost_policy`; `estimate` is MCP
+only; see
 [Running CLI commands](/guides/mcp-server/#running-cli-commands)). Use
 `GET /catalog?group=gemini` to see a command's options and which take files,
 `GET /catalog?task=speech` to find the commands and verified models for a
@@ -385,6 +400,27 @@ export function verifyMultixWebhook(secret, headers, rawBody) {
 or expired. To catch up after an outage, read the jobs named there with
 `GET /jobs/{id}`.
 
+## Skills
+
+The `/skills` and `/skill-shares` routes are the REST form of
+`multix_skills_manage`, with the same checks, conflicts and limits; the
+[MCP guide](/guides/mcp-server/#author-your-own-skills) explains drafts,
+revisions, `expected_digest` / `expected_revision` and team sharing. Every
+write goes to the calling account's own skills, and no route runs a skill.
+Over REST, "no draft" and "no served revision" are `null`.
+
+`PUT /skills/{skill}/draft` takes up to 8 MiB of decoded files per request, so
+use it instead of MCP (64 KiB per request) for large files:
+
+```bash
+curl -s -X PUT https://multix.zuey.me/api/v1/skills/brand-voice/draft \
+  -H "Authorization: Bearer $MULTIX_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"files":[{"path":"SKILL.md","text":"---\nname: brand-voice\ndescription: Write in our brand voice\n---\n\nUse short sentences."}]}'
+curl -s -X POST https://multix.zuey.me/api/v1/skills/brand-voice/publish \
+  -H "Authorization: Bearer $MULTIX_API_KEY"
+```
+
 ## Errors
 
 Errors are JSON with a stable `code` and a message that never contains
@@ -399,15 +435,16 @@ submitted values:
 | `400` | `bad_request` | Invalid JSON, field or value, unknown provider key name, or a command, option or input `multix_run` would reject. |
 | `401` | `unauthorized` | Missing, malformed, unknown or revoked API key. |
 | `403` | `forbidden` | The account is no longer in the sign-in allowlist. |
-| `404` | `not_found` | Unknown path, job, API key or event subscription, or one of another account. |
+| `404` | `not_found` | Unknown path, job, API key, event subscription, skill, draft, revision or file, or one of another account. |
 | `405` | `method_not_allowed` | Wrong method; the `Allow` header lists the accepted ones. |
-| `413` | `payload_too_large` | Body over 64 KiB. |
+| `413` | `payload_too_large` | Body over 64 KiB (about 11 MiB for `PUT /skills/{skill}/draft`). |
 | `415` | `unsupported_media_type` | Body not sent as `application/json`. |
 | `409` | `limit_reached` | The account already has 10 active event subscriptions. |
+| `409` | `conflict` | A skill's draft digest or served revision is not the `expected_digest` or `expected_revision` sent. |
 | `422` | `storage_check_failed` | The R2 access check failed; nothing was saved. |
 | `429` | `rate_limited` | Too many requests; retry after the `Retry-After` seconds. |
 | `429` | `busy` | Job caps reached: the account's running-job limit or the server's total. Wait for a job to end (or cancel one) instead of retrying at once. |
-| `503` | `unavailable` | The server has no job container, so jobs cannot run, or no events binding, so event routes are off; or a new subscription's `callback_url` host could not be resolved (retry after `Retry-After`). |
+| `503` | `unavailable` | The server has no job container, so jobs cannot run, or no events binding, so event routes are off, or no skills store, so skill routes are off; or a new subscription's `callback_url` host could not be resolved (retry after `Retry-After`). |
 | `500` | `internal` | Unexpected server error. |
 
 The set of codes is defined in `worker/src/api/api-http.ts`.
@@ -425,4 +462,6 @@ The set of codes is defined in `worker/src/api/api-http.ts`.
 - **API keys:** at most 10 per account; created only in the dashboard.
 - **Event subscriptions:** at most 10 active per account; lifetime 1 hour to
   90 days (default 30 days).
-- **Bodies:** JSON objects up to 64 KiB.
+- **Skills:** see the [MCP guide](/guides/mcp-server/#author-your-own-skills).
+- **Bodies:** JSON objects up to 64 KiB (about 11 MiB, with at most 8 MiB of
+  decoded files, for `PUT /skills/{skill}/draft`).

@@ -23,6 +23,17 @@
  *   DELETE /api/v1/events/subscriptions/{id}   revoke a subscription
  *   GET    /api/v1/events/dead-letters         deliveries that were given up
  *   GET    /api/v1/events/audit                subscription audit log
+ *   GET    /api/v1/skills                      own skills, drafts and listed shared skills
+ *   GET|PATCH|DELETE /api/v1/skills/{name}      one skill: view, settings, delete
+ *   GET|PUT|DELETE   /api/v1/skills/{name}/draft  the draft: view, patch files, discard
+ *   GET    /api/v1/skills/{name}/files?path=[&revision=] one draft or revision file
+ *   POST   /api/v1/skills/{name}/publish        publish the draft as the next revision
+ *   GET    /api/v1/skills/{name}/revisions[/{n}] stored revisions; DELETE one
+ *   POST   /api/v1/skills/{name}/current        serve another revision (rollback)
+ *   POST   /api/v1/skills/{name}/unpublish      stop serving the skill
+ *   GET    /api/v1/skills/{name}/grants         team grants; PUT|DELETE /grants/{account}
+ *   GET|POST /api/v1/skill-shares              list or add a team skill shared with you
+ *   DELETE /api/v1/skill-shares/{owner}/{name} stop listing it
  *   GET    /api/v1/api-keys                    the account's API keys (no values)
  *   DELETE /api/v1/api-keys/{id}               revoke an API key
  *
@@ -65,6 +76,7 @@ import {
 } from "./event-api-handlers.js";
 import { cancelJob, getCatalog, getJob, getModelCatalog, postJob } from "./job-api-handlers.js";
 import { openApiDocument } from "./openapi-document.js";
+import { routeSkillShares, routeSkills, skillManager } from "./skill-api-handlers.js";
 
 export const API_PREFIX = "/api/v1";
 
@@ -192,6 +204,14 @@ async function route(
 
   if (resource === "events") {
     return routeEvents(app, deps, caller, request, parts.slice(1));
+  }
+
+  if (resource === "skills") {
+    return routeSkills(skillManager(app, deps, userId), request, parts.slice(1), url);
+  }
+
+  if (resource === "skill-shares") {
+    return routeSkillShares(skillManager(app, deps, userId), request, parts.slice(1));
   }
 
   throw new ApiError(404, "not_found", "Not found");

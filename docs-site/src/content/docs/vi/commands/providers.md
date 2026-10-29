@@ -21,6 +21,8 @@ description: Chọn tài liệu lệnh có đối chiếu source cho từng AI p
 | Replicate | [Lệnh](/vi/commands/replicate/) | Bất kỳ model nào qua API trực tiếp, cộng lệnh tiện lợi image/video | Model cộng đồng cần version; tiếp tục hoặc hủy job theo prediction ID. |
 | Runway | [Lệnh](/vi/commands/runway/) | Video Gen-4.5 / Gen-4 Turbo và ảnh Gen-4 | `video` chỉ in task ID trừ khi có `--wait`; tiếp tục bằng `status <id> --wait --download`. |
 | HeyGen | [Lệnh](/vi/commands/heygen/) | Video Agent (tạo video từ prompt), video avatar theo kịch bản, dịch video, lipsync, TTS, template | Credit API tính riêng với gói web của HeyGen; dùng `status --type` khớp với job (`agent` nhận session ID). |
+| Sume | [Lệnh](/vi/commands/sume/) | Mọi model ảnh hoặc video trong catalog của Sume, gồm lip-sync và phụ đề | Không có model mặc định: truyền `-m` hoặc đặt `SUME_*_MODEL`; job chạy bất đồng bộ trừ khi có `--wait`, và `cancel` chỉ dùng được khi job còn trong hàng đợi. |
+| TopView | [Lệnh](/vi/commands/topview/) | Video marketing sản phẩm, avatar nói và avatar cầm sản phẩm, ảnh sản phẩm; các model của API Platform | Hai API với key và số dư riêng (Legacy tính credit, Platform tính USD); không có endpoint hủy, nên task đã gửi sẽ bị tính phí. |
 
 Chạy `multix <provider> --help` và `--help` của từng subcommand trước khi tự
 động hóa. Đó là nguồn chuẩn cho option và default hiện tại.
