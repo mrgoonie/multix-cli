@@ -71,7 +71,9 @@ describe("CLI catalog", () => {
     const fileish = /\b(?:file|files|path|paths|dir|directory|folder|filename|prefix|local)\b/i;
     const notPaths = new Set([
       "<json>", // inline JSON; a leading @ (read a file) is rejected for every value
+      "<json|@file>", // same as <json>
       "<id>", // provider-side IDs (e.g. a HeyGen destination folder)
+      "<fileId>", // a file already uploaded to the provider (TopView)
       "<str>", // plain text (e.g. align --text "... or pass --text-file")
       "<MB>", // a size
     ]);

@@ -14,6 +14,7 @@ import {
   DEFAULT_OPENROUTER_STT_MODEL,
   DEFAULT_OPENROUTER_TTS_MODEL,
 } from "../providers/openrouter/speech-defaults.js";
+import { type SumeCatalogSnapshot, estimateSumeCost } from "../providers/sume/cost.js";
 import { SPEECH_PROVIDERS, type SpeechProvider } from "../speech/speech-catalog.js";
 import { parseRouteSpec, resolveTarget } from "../speech/speech-request.js";
 import { type CostEstimate, type EstimateRequest, estimateCost } from "./cost-estimate.js";
@@ -40,6 +41,11 @@ export interface CommandDefaults {
   text?: string;
   /** Per-provider default models with env overrides applied (`speech generate`). */
   speechModels?: Partial<Record<SpeechProvider, string>>;
+  /**
+   * `sume image|video`: the cached Sume catalog (its date, source and the
+   * model's row), read by a caller that has the cache. Without it the price is unknown.
+   */
+  sumeCatalog?: SumeCatalogSnapshot;
   at?: Date;
 }
 
@@ -115,9 +121,23 @@ const NEEDS: Record<string, string> = {
   "fish tts": "--text, --prompt or (from the CLI) a readable --text-file or --turns-file",
 };
 
+/** Priced from the model's row in Sume's catalog (per image or per second). */
+const SUME_COMMANDS = ["sume image", "sume video"] as const;
+
+/**
+ * Requests that cost nothing even though they POST: a provider's own price
+ * quote. They are priced at a proven $0, so --max-cost lets them through, and
+ * their receipts are observations rather than charges.
+ */
+const FREE_COMMANDS: ReadonlySet<string> = new Set(["sume estimate"]);
+
+export function isFreeCommand(command: string): boolean {
+  return FREE_COMMANDS.has(command);
+}
+
 /** Commands with a pre-flight estimator. */
 export function pricedCommands(): string[] {
-  return [...Object.keys(BUILDERS), "speech generate"];
+  return [...Object.keys(BUILDERS), "speech generate", ...SUME_COMMANDS];
 }
 
 function unknownEstimate(
@@ -284,6 +304,28 @@ export function estimateCommand(
     Object.entries(options).map(([k, v]) => [k.replace(/^-+/, ""), v]),
   );
   if (command === "speech generate") return estimateSpeech(named, defaults);
+  if (isFreeCommand(command)) {
+    return {
+      ...unknownEstimate(command, "", "", opt(named, "model") ?? "", defaults.at),
+      status: "estimated",
+      reason: undefined,
+      detail: undefined,
+      low_usd: 0,
+      expected_usd: 0,
+      high_usd: 0,
+      upper_bound: "proven",
+      assumptions: [`${command} is a free price quote; it starts no paid work.`],
+    };
+  }
+  if (command === "sume image" || command === "sume video") {
+    return estimateSumeCost({
+      command: command === "sume image" ? "image" : "video",
+      model: (opt(named, "model") ?? defaults.model ?? "").trim(),
+      options: named,
+      catalog: defaults.sumeCatalog,
+      at: defaults.at,
+    });
+  }
   const builder = BUILDERS[command];
   const req = builder?.(named, defaults);
   if (req) return estimateCost({ ...req, at: defaults.at });
