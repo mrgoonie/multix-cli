@@ -429,10 +429,33 @@ describe("retries, failures and cancels", () => {
       entry({
         ts: "2026-10-27T10:05:00.000Z",
         provider_ids: ["J2"],
+        job: { provider: "fal", id: "J2", attempt: 1 },
         cost: receipt({ operation_id: op }),
       }),
     ]);
     expect(row).toMatchObject({ operations: 1, completed: 1, failed: 0 });
+  });
+
+  it("does not let an upload under the same operation id complete a failed job", () => {
+    const op = "agent-op-2";
+    const row = rowFor([
+      entry({ provider_ids: ["file_9"], cost: receipt({ operation_id: op }) }),
+      entry({
+        ts: "2026-10-27T10:01:00.000Z",
+        provider_ids: ["J1"],
+        job: { provider: "fal", id: "J1", attempt: 1 },
+        cost: receipt({ operation_id: op }),
+      }),
+      entry({
+        ts: "2026-10-27T10:02:00.000Z",
+        provider_ids: ["J1"],
+        ok: false,
+        exit_code: 5,
+        error: { code: "JOB_FAILED", message: "the provider failed the job" },
+        cost: receipt({ operation_id: op, role: "observation", status: "unknown" }),
+      }),
+    ]);
+    expect(row).toMatchObject({ operations: 1, completed: 0, failed: 1 });
   });
 
   it("does not fail a job when a poll got a gateway page that says blocked", () => {
@@ -448,21 +471,6 @@ describe("retries, failures and cancels", () => {
       }),
     ]);
     expect(row).toMatchObject({ operations: 1, completed: 1, failed: 0 });
-  });
-
-  it("fails a job whose status run reports the provider blocked its content", () => {
-    const job = { provider: "runway", id: "j-b", attempt: 1 };
-    const row = rowFor([
-      entry({ job }),
-      entry({
-        job,
-        ts: "2026-10-27T10:01:00.000Z",
-        ok: false,
-        exit_code: 5,
-        error: { code: "CONTENT_BLOCKED", message: "Runway task j-b failed: moderation" },
-      }),
-    ]);
-    expect(row).toMatchObject({ operations: 1, completed: 0, failed: 1 });
   });
 
   it("counts an operation with a successful run as completed even when another run was canceled", () => {

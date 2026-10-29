@@ -91,8 +91,8 @@ của tài khoản provider. Nhóm theo `--by provider|model|offering|task|comma
 - Một **operation** là một phần việc: một lần submit cùng các lần poll trạng
   thái, tiếp tục và tải file chỉ tính một lần.
 - Kết quả được tính theo operation trên mọi dòng. Một lần chạy báo chính
-  provider kết luận job thất bại (`JOB_FAILED`, hoặc `CONTENT_BLOCKED` khi bộ
-  kiểm duyệt của provider chặn job) khiến operation bị tính là **lỗi**, kể cả
+  provider kết luận job thất bại (`JOB_FAILED`, bao gồm cả khi bộ kiểm
+  duyệt của provider chặn job) khiến operation bị tính là **lỗi**, kể cả
   khi lần submit đã được chấp nhận hay một lần đọc trạng thái sau đó thoát ok,
   trừ khi một lần submit lại dưới cùng operation id trả về job khác và job đó
   thành công. Job bị hủy, tạm dừng chờ nhập liệu hoặc chờ thanh toán không bị

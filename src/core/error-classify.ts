@@ -178,7 +178,8 @@ const TEXT_RULES: Array<[RegExp, ErrorCode]> = [
   ],
   [
     // An id between noun and verb must hold a digit, so "task polling failed" is not a job failure.
-    /(task|job|prediction|generation|interaction) (?:[\w.:-]*\d[\w.:-]* )?(failed|was canceled|errored)|status:? ?"?failed/i,
+    // A logged failure whose payload says the job was canceled is not a failed job.
+    /^(?!.*"status"\s*:\s*"(?:cancell?ed|aborted)")(?:.*\b(task|job|prediction|generation|interaction) (?:[\w.:-]*\d[\w.:-]* )?(failed|was canceled|errored)|.*status:? ?"?failed)/is,
     "JOB_FAILED",
   ],
   [/(ENOENT|no such file|file not found|does not exist)/i, "NOT_FOUND"],
@@ -277,13 +278,11 @@ export function classifyError(error: unknown): ErrorInfo {
     return build("USAGE", message.replace(/^error: /, ""));
   }
   if (error instanceof ProviderJobFailedError) {
-    const fromText = codeFromText(message);
-    // The provider's own reason may name a more specific cause; it is still a job failure.
-    if (error.terminal) {
-      return build(fromText === "CONTENT_BLOCKED" ? "CONTENT_BLOCKED" : "JOB_FAILED", message);
-    }
+    // The provider's own reason (moderation, quota) is in the message; the run is a failed job.
+    if (error.terminal) return build("JOB_FAILED", message);
     // Canceled, paused or unusable output: never reported as a failed job, whatever the text says.
-    return build(fromText === "JOB_FAILED" || !fromText ? "UNKNOWN" : fromText, message);
+    const info = classifyMessage(message);
+    return info.code === "JOB_FAILED" ? build("UNKNOWN", message) : info;
   }
   if (error instanceof MultixError) {
     if (error.code === "CONFIG_ERROR") {

@@ -88,11 +88,10 @@ account's usage. Group with `--by provider|model|offering|task|command`.
 - An **operation** is one piece of work: a submit with its status polls,
   resumes and download counts once.
 - Outcomes are counted per operation across all rows. A run that reports the
-  provider's own verdict that the job failed (`JOB_FAILED`, or
-  `CONTENT_BLOCKED` for a job the provider's moderation stopped) makes it
-  **failed**, even when its submit was accepted or a later status read exited
-  ok, unless a resubmit under the same operation id returned another job that
-  succeeded. A job that was canceled, paused for input or waits for payment is
+  provider's own verdict that the job failed (`JOB_FAILED`, including a job
+  the provider's moderation stopped) makes it **failed**, even when its submit
+  was accepted or a later status read exited ok, unless a resubmit under the
+  same operation id returned another job that succeeded. A job that was canceled, paused for input or waits for payment is
   not a failed job. Otherwise the operation is **completed** when any of its
   runs succeeded, so a status poll that failed for another reason (network
   error, timeout) is not a failure of the job. With no successful run, its

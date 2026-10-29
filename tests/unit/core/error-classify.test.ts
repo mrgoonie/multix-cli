@@ -147,13 +147,27 @@ describe("classifyError", () => {
     for (const e of notFailures) expect(classifyError(e).code, e.message).not.toBe("JOB_FAILED");
   });
 
-  it("keeps a moderation verdict on a failed job as CONTENT_BLOCKED", () => {
+  it("reports a moderation verdict on a failed job as the failed job it is", () => {
     const e = new RunwayTaskError({
       id: "t-2",
       status: "FAILED",
       failure: "Content moderation flagged the prompt",
     } as never);
-    expect(classifyError(e).code).toBe("CONTENT_BLOCKED");
+    expect(classifyError(e).code).toBe("JOB_FAILED");
+  });
+
+  it("keeps the HTTP status of a download failure mixed into a HeyGen batch", () => {
+    const e = new HeygenJobFailedError("video v2: HTTP 503 from https://x/y.mp4", undefined, false);
+    expect(classifyError(e)).toMatchObject({ code: "PROVIDER_UNAVAILABLE", http_status: 503 });
+  });
+
+  it("does not report a logged canceled job as a failed one", () => {
+    expect(classifyMessage('Task failed: {"id":"cgt-1","status":"cancelled"}').code).not.toBe(
+      "JOB_FAILED",
+    );
+    expect(classifyMessage('Task failed: {"id":"cgt-1","status":"failed"}').code).toBe(
+      "JOB_FAILED",
+    );
   });
 
   it("does not report a mix of job, poll and download failures as the provider's verdict", () => {

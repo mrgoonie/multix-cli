@@ -13,7 +13,7 @@
  *   count once, so polls and resumes never double the operation count;
  * - outcomes are per operation, decided over the whole ledger before
  *   grouping: a run that reports the provider's own verdict that the job
- *   failed (JOB_FAILED, CONTENT_BLOCKED) makes it failed, even when its
+ *   failed (JOB_FAILED) makes it failed, even when its
  *   submit was accepted and a later read-only poll exited ok, unless a run
  *   under the same operation id succeeded for another provider job (a
  *   resubmit under an explicit operation id); otherwise it is
@@ -98,15 +98,8 @@ export function sentRequest(e: HistoryEntry): boolean {
 }
 
 const isCancel = (e: HistoryEntry) => e.error?.code === "CANCELLED";
-/**
- * The provider's own verdict that the job failed, not a transient failure to
- * read it. CONTENT_BLOCKED counts only as the job's verdict, not as an HTTP
- * response (a gateway page saying "blocked" on a poll).
- */
-const isJobFailure = (e: HistoryEntry) =>
-  !e.ok &&
-  (e.error?.code === "JOB_FAILED" ||
-    (e.error?.code === "CONTENT_BLOCKED" && !/\bHTTP \d{3}\b/.test(e.error.message)));
+/** The provider's own verdict that the job failed, not a transient failure to read it. */
+const isJobFailure = (e: HistoryEntry) => !e.ok && e.error?.code === "JOB_FAILED";
 
 /** Provider job ids a run names. */
 const jobIdsOf = (e: HistoryEntry) => [...(e.provider_ids ?? []), ...(e.job ? [e.job.id] : [])];
@@ -134,10 +127,9 @@ function operationOutcomes(list: HistoryEntry[]): Map<string, Outcome> {
       // The failure sticks to the jobs it names: a resubmit under the same explicit
       // operation id that returned another job can still complete the operation.
       const failed = new Set(failures.flatMap(jobIdsOf));
-      const otherJobOk = ops.some((e) => {
-        const ids = jobIdsOf(e);
-        return e.ok && failed.size > 0 && ids.length > 0 && ids.every((j) => !failed.has(j));
-      });
+      const otherJobOk = ops.some(
+        (e) => e.ok && failed.size > 0 && e.job !== undefined && !failed.has(e.job.id),
+      );
       outcomes.set(id, otherJobOk ? "completed" : "failed");
     } else if (ops.some((e) => e.ok)) outcomes.set(id, "completed");
     else outcomes.set(id, isCancel(latestOf(ops)) ? "canceled" : "failed");
