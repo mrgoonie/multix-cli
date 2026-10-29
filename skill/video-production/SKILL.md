@@ -1,6 +1,6 @@
 ---
 name: video-production
-description: Generate, edit and extend video with multix — text-to-video and image-to-video (i2v) on Gemini Omni Flash (plus legacy Veo), MiniMax Hailuo, OpenRouter (Veo, Seedance, Kling), Leonardo (Motion, Veo, Kling, Hailuo, Seedance, LTX), BytePlus Seedance reference-to-video, Cloudflare AI Gateway via Replicate, fal.ai and Runway Gen-4.5 / Gen-4 Turbo, plus HeyGen Video Agent, scripted avatar videos, video translation, dubbing and lipsync. Includes a provider decision tree and resume/cancel rules for async jobs.
+description: Generate, edit and extend video with multix — text-to-video and image-to-video (i2v) on Gemini Omni Flash (plus legacy Veo), MiniMax Hailuo, OpenRouter (Veo, Seedance, Kling), Leonardo (Motion, Veo, Kling, Hailuo, Seedance, LTX), BytePlus Seedance reference-to-video, Cloudflare AI Gateway via Replicate, fal.ai and Runway Gen-4.5 / Gen-4 Turbo, plus HeyGen Video Agent, scripted avatar videos, video translation, dubbing and lipsync, and TopView product marketing videos, talking/product avatars, product photos and API Platform models (Seedance, Wan). Sume catalog video is in the root multix skill. Includes a provider decision tree and resume/cancel rules for async jobs.
 version: 1.22.0-beta.3 # x-release-please-version
 license: MIT
 metadata:
@@ -20,6 +20,7 @@ Check verified model capabilities before picking a model: `multix models --task 
 - **Generate video via Leonardo** (Motion, Veo, Kling, Hailuo, Seedance, LTX models)
 - Generate Runway Gen-4.5 / Gen-4 Turbo video or Gen-4 images (with tagged reference images), or check/resume/cancel a Runway task by id
 - Make HeyGen avatar videos from a prompt (Video Agent) or an exact script, translate/lipsync videos, HeyGen TTS
+- Make TopView product marketing videos, talking or product avatar videos and product photos (Legacy API), or run TopView API Platform models such as Seedance, Wan and GPT Image 2 (`multix topview`)
 
 ## Image-to-video (i2v) and video generation
 
@@ -153,6 +154,31 @@ multix heygen status <id> --type agent|video|translation|lipsync|model-video --w
 - `<ref>` = `https://` URL, `asset:<asset_id>`, or a local file (uploaded, max 32 MB).
 - Commands wait and download by default. `--async` prints IDs and a resume command; `--type agent` resumes with the Video Agent `session_id`.
 - Failed jobs exit 1 with HeyGen's failure code. 402 means add API credits; 403 means a scope or entitlement is missing.
+
+## TopView
+
+Two APIs with separate keys and balances; neither key works on the other.
+- **Legacy API** (`TOPVIEW_API_KEY` + `TOPVIEW_UID`, plan credits): `url-to-video`, `materials-to-video`, `m2v-export`, `video-avatar`, `product-avatar`, `product-anyshoot`, `status`, `upload`, `credit`.
+- **API Platform** (`TOPVIEW_PLATFORM_API_KEY`, USD): `models`, `run`, `prediction`.
+
+```bash
+multix topview url-to-video <product-url> [--aspect-ratio 9:16] [--video-length-type 1-4] [--preview]
+multix topview materials-to-video --file <path|url>... --product-name "<name>" --product-description "<text>"
+multix topview video-avatar (--avatar-id <id> | --image <file> | --video <file>) (--tts-text "<text>" [--voice-id <id>] | --audio <file>)
+multix topview product-avatar --product-image <file> --avatar-id <id> --image-edit-prompt "<text>" --mode avatar2|avatar4|avatar4Fast --tts-text "<text>" --voice-id <id>
+multix topview product-anyshoot --mode try-on|background --product-image <file> ...
+multix topview status <kind> <taskId> [--wait] [--download]
+multix topview credit                        # remaining plan credits (a balance, not spend) and recent tasks
+multix topview models [--refresh]            # verified API Platform routes with live prices (no key)
+multix topview run <route> --input '<json>'|@body.json [--wait]
+multix topview prediction <id> [--wait] [--download]
+```
+
+- No cancel endpoint on either API: a submitted task runs to completion and is billed.
+- Legacy commands except `product-avatar` print the task ID unless `--wait`. `product-avatar` runs three paid tasks and always waits; after a failure, resume from the last good stage (`--bg-removed-file-id` or `--replace-image-id`) instead of starting over.
+- Legacy submits have no idempotency key: after a network error, timeout or 5xx, check `multix topview credit` before retrying. `topview run` sends an `Idempotency-Key`; retry with `--idempotency-key <key>`.
+- `payment_required` on a prediction means the workspace needs a top-up; do not resubmit, resume with `prediction <id> --wait`.
+- Full reference: https://multix.zuey.me/commands/topview/
 
 ## Environment variables
 

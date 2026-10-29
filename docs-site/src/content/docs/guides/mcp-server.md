@@ -143,14 +143,17 @@ see. `multix_catalog` marks them with `uncapped_spend` (on the command, or on
 the option that makes a run uncapped):
 
 - pass-through request bodies: `fal run`, `replicate run`, `atlas run`,
-  `heygen run`, `--input` of `replicate image` and `replicate video`, and
-  `--input` / `--text-field` of `fal tts`;
+  `heygen run`, `topview run`, `--input` of `replicate image` and
+  `replicate video`, `--input` / `--text-field` of `fal tts`, and `--param`
+  of `sume image`;
 - runs billed by the length of their source or script: `heygen video`,
-  `heygen translate`, `heygen lipsync`, `elevenlabs dub`, and `heygen
-  video-agent` / `heygen template`, where the agent or template sets the
-  length;
-- `atlas image`, `atlas image-to-image` and `replicate image` without
-  `--num-images` / `--num-outputs`, where the model picks the number of
+  `heygen translate`, `heygen lipsync`, `elevenlabs dub`, `topview
+  video-avatar`, `topview product-avatar`, and `heygen video-agent` /
+  `heygen template`, where the agent or template sets the length;
+- `sume video`, where the model's catalog row sets the price and lip-sync and
+  captions models bill by the length of the source media;
+- `atlas image`, `atlas image-to-image`, `sume image` and `replicate image`
+  without `--num-images` / `--num-outputs`, where the model picks the number of
   outputs. Passing the count (at most `MULTIX_MCP_MAX_OUTPUTS`) makes the run
   capped again.
 
@@ -181,6 +184,22 @@ start with `@`, so put text before an `@tag` (`"a portrait of @hero"`).
 `runway video` does not wait by default, so the job ends with only a task ID:
 set `"wait": true` in `options` to get the video, or run
 `runway status <id> --wait --download` later.
+
+**Sume and TopView.** Both groups run remotely. Give file flags (Sume
+`--image`, `--end-image`, `--reference-image`, `--video` and `--audio`; the
+TopView Legacy file flags and the `topview upload` file) as `https://` URLs in
+`inputs`. `sume estimate` uploads nothing, so it takes its media as plain
+`https://` URLs. `sume image --num-images` and `topview product-anyshoot
+--count` are capped by `MULTIX_MCP_MAX_OUTPUTS`, and `sume video --duration` and `--resolution` by the
+video limits; pass a `--duration` the model's catalog row lists, because
+without one the server sends its own default length. `topview run --input`
+must be inline JSON, since `@file` values are rejected. `sume image`,
+`sume video`, `topview run` and the TopView Legacy commands other than
+`product-avatar` do not wait by default: set `"wait": true` in `options`, or
+resume later with `sume status <id> --wait --download`,
+`topview status <kind> <taskId> --wait --download` or
+`topview prediction <id> --wait --download`. See
+[Sume](/commands/sume/) and [TopView](/commands/topview/).
 
 **Speech.** `speech generate` must name `--provider`. The job gets only the
 keys of the providers named by `--provider` and `--fallback`, not every speech
@@ -225,8 +244,13 @@ Worker, and keys set there are ignored.
   (Gemini, OpenRouter, OpenAI, MiniMax, Leonardo.Ai, BytePlus with
   `ARK_API_KEY` as fallback, ElevenLabs, fal.ai, Atlas Cloud, Replicate with
   `REPLICATE_API_KEY` as fallback, Runway's `RUNWAYML_API_SECRET` as
-  "API secret", HeyGen), plus the Cloudflare Workers AI
+  "API secret", HeyGen, Sume, TopView with `TOPVIEW_API_KEY` and
+  `TOPVIEW_UID`, and TopView Platform), plus the Cloudflare Workers AI
   account ID, API token and optional AI Gateway ID.
+  `TOPVIEW_UID` is an account ID, not a secret, so it has a plain text input
+  instead of a password field. A `topview` job gets all three TopView values;
+  the Legacy commands need `TOPVIEW_API_KEY` and `TOPVIEW_UID`, the API
+  Platform commands `TOPVIEW_PLATFORM_API_KEY`.
 
 ### API keys for the REST API
 

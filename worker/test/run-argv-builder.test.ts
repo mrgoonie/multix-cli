@@ -734,6 +734,40 @@ describe("prepareRun: runs the caps cannot bound", () => {
     );
   });
 
+  it("marks Sume and TopView runs the caps cannot bound", () => {
+    expect(
+      run({ command: "sume image", args: ["a cat"], options: { model: "m" } }).uncappedSpend,
+    ).toContain("--num-images is omitted");
+    expect(
+      run({ command: "sume image", args: ["a cat"], options: { model: "m", "num-images": 2 } }),
+    ).not.toHaveProperty("uncappedSpend");
+    expect(
+      run({
+        command: "sume image",
+        args: ["a cat"],
+        options: { model: "m", "num-images": 1, param: ["seed=1"] },
+      }).uncappedSpend,
+    ).toBe("with --param, the request reaches the provider as given");
+    const video = run({ command: "sume video", args: ["a wave"], options: { model: "m" } });
+    expect(video.uncappedSpend).toContain("catalog row sets the price");
+    expect(video.argv).not.toContain("--duration");
+    expect(
+      run({ command: "topview run", args: ["route"], options: { input: "{}" } }).uncappedSpend,
+    ).toBe("the request body is passed to the provider as given");
+    expect(
+      run({
+        command: "topview video-avatar",
+        options: { "avatar-id": "a", "tts-text": "hi", "voice-id": "v" },
+      }).uncappedSpend,
+    ).toBe("billed by the length of the script or audio");
+    expect(
+      run({
+        command: "topview product-anyshoot",
+        options: { mode: "background", count: 2 },
+      }),
+    ).not.toHaveProperty("uncappedSpend");
+  });
+
   it("leaves capped commands unmarked and caps the voice-design count", () => {
     expect(run({ command: "gemini generate", options: { prompt: "a cat" } })).not.toHaveProperty(
       "uncappedSpend",

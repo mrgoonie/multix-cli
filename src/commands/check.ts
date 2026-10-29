@@ -18,6 +18,7 @@ import {
   legacyClaudeEnvFiles,
   redact,
   resolveFirstKey,
+  resolveKey,
 } from "../core/env-loader.js";
 import { createLogger } from "../core/logger.js";
 import { ATLAS_ROUTING } from "../providers/atlascloud/models.js";
@@ -35,6 +36,8 @@ import { LEONARDO_ROUTING } from "../providers/leonardo/models.js";
 import { checkCodexAuthenticated } from "../providers/openai/codex-image-driver.js";
 import { REPLICATE_ROUTING } from "../providers/replicate/models.js";
 import { RUNWAY_ROUTING } from "../providers/runway/models.js";
+import { SUME_ROUTING } from "../providers/sume/models.js";
+import { TOPVIEW_PLATFORM_ROUTING, TOPVIEW_ROUTING } from "../providers/topview/models.js";
 import { checkBinary } from "./check-helpers/binary-check.js";
 import { pingGemini } from "./check-helpers/gemini-ping.js";
 import { FFMPEG_HINT, MAGICK_HINT, SETUP_HINTS } from "./check-helpers/setup-hints.js";
@@ -82,6 +85,9 @@ const BASE_URL_ROUTING: readonly BaseUrlRouting[] = [
   LEONARDO_ROUTING,
   REPLICATE_ROUTING,
   RUNWAY_ROUTING,
+  SUME_ROUTING,
+  TOPVIEW_ROUTING,
+  TOPVIEW_PLATFORM_ROUTING,
 ];
 
 export type ReportLine = { level: "info" | "warn"; message: string };
@@ -216,6 +222,11 @@ export function registerCheckCommand(program: Command): void {
         const envLabel = r.envUsed ?? p.envPrimary;
         if (r.key) {
           logger.success(`${envLabel} found — ${redact(r.key)}`);
+          for (const name of p.companions ?? []) {
+            if (!resolveKey(name)?.trim()) {
+              logger.warn(`${name} not set (${p.name} needs it with ${envLabel})`);
+            }
+          }
           if (p.name === "Gemini") {
             const pool = listGeminiKeys();
             if (pool.length > 1) {

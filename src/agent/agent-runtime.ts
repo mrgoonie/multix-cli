@@ -51,8 +51,12 @@ import { jobIdentity, run, summarizeUsage } from "./run-state.js";
 const TOOLING_GROUPS = ["history", "models", "guide", "rerun", "check", "update", "catalog"];
 /** Commands that are themselves agent tooling or setup: not recorded in history. */
 const UNRECORDED = new RegExp(`^(${TOOLING_GROUPS.join("|")})\\b`);
-/** Read-only lookups that report another run's spend: counting it here would bill it twice in history. */
-const SPEND_LOOKUPS = /^openrouter generation\b/;
+/**
+ * Read-only lookups whose response carries prices or balances that are not
+ * this run's spend (another run's generation, a quote, an account balance):
+ * counting them here would bill them in history.
+ */
+const SPEND_LOOKUPS = /^(openrouter generation|sume estimate|topview credit)\b/;
 /** Groups that run locally (ffmpeg/ImageMagick): dry run stops before the action. */
 const LOCAL_GROUPS = new Set(["media"]);
 /** Exit statuses of a run stopped by SIGHUP, SIGINT or SIGTERM (128 + the signal number). */
