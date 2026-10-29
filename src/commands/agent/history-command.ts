@@ -16,7 +16,10 @@ import {
 } from "../../agent/history-store.js";
 import { run } from "../../agent/run-state.js";
 import { type CostReceipt, settleOperations } from "../../budget/cost-receipt.js";
+import { receiptOf } from "../../catalog/usage-aggregate.js";
 import { ValidationError } from "../../core/errors.js";
+
+export { receiptOf };
 
 interface ListOpts {
   last?: string;
@@ -87,27 +90,6 @@ interface Bucket {
   credits?: number;
   tokens?: number;
   outputs: number;
-}
-
-/**
- * The entry's cost receipt; entries written before receipts existed get one
- * from their provider-reported cost (one operation per run).
- */
-export function receiptOf(e: HistoryEntry): CostReceipt | undefined {
-  if (e.cost) return e.cost;
-  if (e.usage?.cost_usd === undefined) return undefined;
-  return {
-    schema: "multix.cost/v1",
-    operation_id: `run:${e.id}`,
-    role: "charge",
-    status: "settled",
-    currency: "USD",
-    provider_reported: { cost_usd: e.usage.cost_usd, credits: e.usage.credits ?? null },
-    actual_usd: e.usage.cost_usd,
-    actual_source: "provider_reported",
-    variance_usd: null,
-    at: e.ts,
-  };
 }
 
 function percentile(values: number[], p: number): number {

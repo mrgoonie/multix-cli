@@ -263,6 +263,10 @@ khi có một trong hai thì `cost_usd` chỉ là cận dưới.
 `MULTIX_HISTORY=0` tắt ledger. `MULTIX_HISTORY_FILE` đổi vị trí file (chỉ trong
 shell hoặc `~/.multix/.env`, không nhận từ `.env` của project).
 
+`multix catalog usage` nhóm cùng ledger này theo offering, provider, model, task
+hoặc lệnh, còn `multix catalog compare` báo giá đúng một request trên nhiều
+offering trước khi chạy; xem [Danh mục](/vi/commands/catalog/).
+
 ## Quy trình lệnh an toàn
 
 - Không in hoặc yêu cầu giá trị secret; `multix check` cho biết key nào đã đặt.
@@ -272,6 +276,7 @@ shell hoặc `~/.multix/.env`, không nhận từ `.env` của project).
 
 | Nhu cầu | Bắt đầu từ |
 | --- | --- |
+| So sánh provider, model và giá cho đúng một request; usage, rating và ghi chú của bạn | [Danh mục](/vi/commands/catalog/) |
 | Phân tích hoặc transcribe file | [Gemini](/vi/commands/gemini/) |
 | Speech từ mọi provider TTS: so sánh model theo ngôn ngữ, một kiểu request | [Speech](/vi/commands/speech/) |
 | Sinh/sửa ảnh, speech hoặc transcription | [OpenAI](/vi/commands/openai/) |

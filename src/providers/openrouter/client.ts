@@ -20,7 +20,7 @@ import {
 } from "./payload.js";
 
 export const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
-export const DEFAULT_OPENROUTER_MODEL = "google/gemini-3.1-flash-image-preview";
+export const DEFAULT_OPENROUTER_MODEL = "google/gemini-3.1-flash-image";
 
 /** Heuristic: model id contains "/" and is not a URL. */
 export function isOpenRouterModel(model: string): boolean {

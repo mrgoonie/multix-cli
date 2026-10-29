@@ -264,6 +264,10 @@ operation's cost once, from known figures only; `cost_uncertain_ops` and
 `MULTIX_HISTORY=0` turns the ledger off. `MULTIX_HISTORY_FILE` moves it (shell
 or `~/.multix/.env` only, not a project `.env`).
 
+`multix catalog usage` groups the same ledger by offering, provider, model, task
+or command, and `multix catalog compare` prices one exact request across
+offerings before you run it; see [Catalogue](/commands/catalog/).
+
 ## Safe command workflow
 
 - Do not print or request secret values; `multix check` reports which keys are
@@ -275,6 +279,7 @@ or `~/.multix/.env` only, not a project `.env`).
 
 | Need | Start with |
 | --- | --- |
+| Compare providers, models and prices for one exact request; your usage, ratings and notes | [Catalogue](/commands/catalog/) |
 | Analyze or transcribe files | [Gemini](/commands/gemini/) |
 | Speech from any TTS provider: compare models by language, one request shape | [Speech](/commands/speech/) |
 | Generate or edit images, speech, or transcription | [OpenAI](/commands/openai/) |

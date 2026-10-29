@@ -44,7 +44,7 @@ import {
 import { jobIdentity, run, summarizeUsage } from "./run-state.js";
 
 /** Commands that are themselves agent tooling or setup: not recorded in history. */
-const UNRECORDED = /^(history|models|guide|rerun|check|update)\b/;
+const UNRECORDED = /^(history|models|guide|rerun|check|update|catalog)\b/;
 /**
  * Read-only lookups whose response carries prices or balances that are not
  * this run's spend (another run's generation, a quote, an account balance):
@@ -86,6 +86,7 @@ const NON_PROVIDER_GROUPS = new Set([
   "history",
   "rerun",
   "help",
+  "catalog",
 ]);
 
 /**
@@ -111,7 +112,7 @@ function setCommand(names: string[]): void {
 }
 
 /** Groups where a dry run means nothing (no provider request, or their own flag). */
-const NO_DRY_RUN_GROUPS = new Set(["check", "models", "guide", "history", "rerun"]);
+const NO_DRY_RUN_GROUPS = new Set(["check", "models", "guide", "history", "rerun", "catalog"]);
 
 /**
  * Add --json to every command, and --dry-run plus the cost flags to every

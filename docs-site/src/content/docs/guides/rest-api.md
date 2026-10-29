@@ -68,6 +68,7 @@ All paths are relative to `/api/v1`.
 | `PUT` | `/storage` | Check access to the bucket, then save the R2 settings. |
 | `DELETE` | `/storage` | Remove the R2 settings. |
 | `GET` | `/catalog[?group=&task=&model=]` | CLI commands the server can run; same payload and filters as `multix_catalog`. |
+| `GET` | `/model-catalog[?view=&task=&provider=&family=&q=&offering=&priced=&ready=&resolution=&duration_s=&audio=&aspect_ratio=&images=&sort=]` | Offerings, prices per configuration and comparisons; same payload as `multix_model_catalog`. `view` defaults to `models`. See [Catalogue](/commands/catalog/). |
 | `POST` | `/jobs` | Run one CLI command; same input as `multix_run`. |
 | `GET` | `/jobs/{id}` | Job status, outputs, stdout and the tail of stderr. |
 | `POST` | `/jobs/{id}/cancel` | Stop a running job. |

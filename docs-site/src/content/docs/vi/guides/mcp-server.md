@@ -20,12 +20,14 @@ thay đổi cách `multix` chạy trên máy bạn.
 | Tool | Mục đích |
 |---|---|
 | `multix_catalog` | Các lệnh CLI mà `multix_run` chạy được. Không có `group`: mọi nhóm lệnh, các lệnh trong nhóm và bạn đã lưu key cho nhóm đó chưa (`has_keys`). Có `group`: positional và option của từng lệnh, option nào nhận file, và giá trị server bắt buộc. Có `task` (như `speech`): chỉ các lệnh và model đã xác minh cho task đó; thêm `group` để giới hạn trong một nhóm. Có `model`: input, voice và định dạng đầu ra của một model đã xác minh cùng cách truyền nó cho `multix_run`, hoặc `verified: null` khi chưa biết input của model. |
+| `multix_model_catalog` | [Danh mục model và provider](/vi/commands/catalog/), chỉ đọc: `view` là `providers`, `models`, `show` (kèm `offering`) hoặc `compare` (đúng một request: `task`, `resolution`, `duration_s`, `audio`, `aspect_ratio`, `images`). Với `providers`, `models` và `compare`, cùng payload với phần `data` của `multix catalog <view> --json` (`show` chỉ trả về offering, không kèm usage, rating và ghi chú cục bộ của CLI); trạng thái sẵn sàng dựa trên key bạn đã lưu. Usage, rating, review và ghi chú vẫn nằm trên máy và không được phục vụ. |
 | `multix_run` | Chạy một lệnh CLI trong container riêng bằng key đã lưu của bạn. Chờ tối đa `wait_seconds` (mặc định 25, tối đa 40, tính cả thời gian khởi động container), sau đó trả về kết quả hoặc job ID để poll. Mặc định mỗi tài khoản chạy tối đa 2 job cùng lúc (`MULTIX_MAX_JOBS_PER_ACCOUNT`). |
 | `multix_job_status` | Đọc job `multix_run`: trạng thái, URL output, stdout và phần cuối của stderr. |
 | `multix_job_cancel` | Dừng job đang chạy cùng container của nó. |
+| `multix_skills` | Đọc (chỉ đọc) [danh mục skill](#skill): `search` để tìm skill, `get` để lấy mục của một skill, `read` để đọc một file văn bản của skill. |
 
-`multix_catalog` luôn được liệt kê. `multix_run`, `multix_job_status` và
-`multix_job_cancel` chỉ xuất hiện khi Worker có các binding chạy job
+`multix_catalog`, `multix_model_catalog` và `multix_skills` luôn được liệt kê. `multix_run`,
+`multix_job_status` và `multix_job_cancel` chỉ xuất hiện khi Worker có các binding chạy job
 (`MULTIX_JOBS` và `MULTIX_JOB_QUOTA`, xem [Triển khai](#triển-khai)).
 
 ## Chạy lệnh CLI
@@ -179,8 +181,10 @@ thay vào đó `multix_catalog` báo `has_keys` theo key bạn đã lưu. Xem
 - Tính năng tương tác hoặc chỉ chạy cục bộ: `multix update`, `multix check`,
   Codex image driver, `--stdin-ext`, và đọc giá trị từ `@file`.
 - Chọn nơi lưu file: server tự đặt thư mục đầu ra. Hãy tải output từ URL R2.
-- Khi không có container chạy job, chỉ `multix_catalog` được liệt kê, nên
-  không lệnh nào chạy được.
+- Khi không có container chạy job, chỉ `multix_catalog`, `multix_model_catalog`
+  và `multix_skills` được liệt kê, nên không lệnh nào chạy được.
+- Các lệnh `multix catalog`: chúng đọc usage và review cục bộ của bạn. Hãy dùng
+  `multix_model_catalog` để xem offering, giá và so sánh.
 
 ## Tài khoản và credential
 
@@ -277,7 +281,8 @@ Cloudflare.
    instance type `basic`, tối đa 10 instance) và binding Durable Object
    `MULTIX_JOBS` bật `multix_run`. Để triển khai không kèm trình chạy CLI
    (không cần Docker, dùng được Workers Free), xóa `containers`,
-   `durable_objects` và `exports`; khi đó chỉ `multix_catalog` được liệt kê.
+   `durable_objects` và `exports`; khi đó chỉ `multix_catalog`,
+   `multix_model_catalog` và `multix_skills` được liệt kê (chỉ có skill dựng sẵn).
    Binding `MULTIX_JOB_QUOTA` (class `AccountJobQuota`) giữ số job đang chạy
    theo từng tài khoản và trên toàn server, và phải đi cùng `MULTIX_JOBS`.
    Binding `MULTIX_EVENTS` (class `AccountEvents`) giữ
@@ -285,6 +290,9 @@ Cloudflare.
    gửi của từng tài khoản, tạo qua REST API lẫn
    [MCP Events](#mcp-events-giao-thức-2026-07-28); thiếu binding này, các route
    `/api/v1/events` trả về `503` và `server/discover` không cung cấp events.
+   Binding `MULTIX_SKILLS` (class `AccountSkills`) giữ các
+   [skill](#skill) riêng tư và skill nhóm của từng tài khoản; thiếu binding
+   này, server chỉ cung cấp skill dựng sẵn.
 4. **Đặt secret** và triển khai:
 
    ```bash
@@ -433,6 +441,85 @@ Subscription chỉ dùng kiểu gửi **webhook**:
 
 `subscriptions/listen` không được hỗ trợ (danh sách tool cố định theo mỗi lần
 triển khai).
+
+## Skill
+
+Server cung cấp một danh mục agent skill: các file hướng dẫn `SKILL.md` chỉ cho
+agent cách dùng multix. Đọc một skill không bao giờ chạy hay kích hoạt nó, và
+server không bao giờ thực thi file của skill.
+
+Skill dựng sẵn chính là thư mục `skill/` của repository, được đóng gói vào
+Worker lúc build (`npm run skills` trong `worker/`, tự chạy trước `dev`,
+`build`, `typecheck`, `test` và `deploy`):
+
+- `skill://multix/SKILL.md`: skill đầu vào, cùng nội dung mà package npm cài
+  trên máy.
+- `skill://multix/<name>/SKILL.md` cho các task skill `image-generation`,
+  `video-production`, `speech-production`, `media-qa`,
+  `document-conversion` và `3d-generation`. Mỗi skill hướng dẫn agent chọn
+  model theo thời gian thực bằng `multix models --task <task> --ready` hoặc
+  `multix models --model <id>`.
+
+Hai không gian URI nữa được dành cho skill của tài khoản, lưu theo từng tài
+khoản trong Durable Object `AccountSkills` dưới dạng các revision bất biến với
+file định địa chỉ theo nội dung (SHA-256): `skill://private/<name>/<file>` cho
+skill của riêng bạn và `skill://team/<ownerId>/<name>/<file>` cho skill nhóm
+bạn sở hữu hoặc được cấp quyền. Hiện chưa có API để xuất bản hay chia sẻ skill,
+nên trên thực tế mọi tài khoản đều chỉ thấy skill dựng sẵn. Skill của tài khoản
+khác không bao giờ hiện ra: skill không tồn tại và skill bị cấm nhận cùng một
+câu trả lời.
+
+### Client giao thức 2026-07-28
+
+`server/discover` khai báo `resources` và extension
+`io.modelcontextprotocol/skills` với `directoryRead: true`. Khi đó client gọi
+được:
+
+| Method | Trả về |
+|---|---|
+| `skills/list` | Các mục skill, 50 mục mỗi trang; gửi lại `nextCursor` (opaque) làm `cursor`. |
+| `skills/get` `{ uri }` | Một mục skill, theo URI của file `SKILL.md`. |
+| `resources/read` `{ uri }` | Một file của skill. |
+| `resources/directory/read` `{ uri, cursor? }` | Các phần tử con trực tiếp của một thư mục skill; thư mục có mimeType `inode/directory`. |
+
+Mỗi mục skill có `uri` (file `SKILL.md` của nó), `frontmatter` (nguyên văn
+YAML, dưới dạng JSON), `resources` (`uri`, `digest` dạng `sha256:<hex>`,
+`size`), và `_meta["me.zuey.multix/skill"]` gồm `id`, `version`, `revision`,
+`manifestDigest`, `status`, `visibility`, `tags` và `capabilities`. Gợi ý cache
+là 5 phút, `public`, khi chỉ có skill dựng sẵn, và 1 phút, `private`, khi có
+cả skill của tài khoản.
+
+Lỗi là JSON-RPC `-32602` với thông điệp cố định (như
+`No skill is served at <uri>` hoặc `Invalid cursor`) và mã ổn định trong
+`data.code`: `INVALID_URI`, `UNKNOWN_SKILL`, `NOT_FOUND`, `NOT_DIRECTORY` hoặc
+`INVALID_CURSOR`.
+
+### Client đời 2025
+
+Các method của extension trả về `-32601`, nhưng `resources/list` liệt kê mọi
+`SKILL.md` và `resources/read` đọc được mọi file. Tool `multix_skills`, có ở
+cả hai phiên bản giao thức, đảm nhận phần còn lại:
+
+- `{"action": "search", "query": "trim", "task": "video"}`: tìm skill theo
+  từ khóa, theo task (một giá trị của `multix models --task`), hoặc cả hai.
+- `{"action": "get", "uri": "skill://multix/media-qa/SKILL.md"}`: cùng mục
+  như `skills/get`.
+- `{"action": "read", "uri": "…", "revision": 3}`: một file văn bản. Truyền
+  `revision` hoặc `digest` từ lần `get` trước để nhận `STALE_REVISION: …` nếu
+  file đã thay đổi từ đó. File nhị phân trả về `BINARY_FILE: …`, file văn bản
+  lớn hơn 256 KiB trả về `PAYLOAD_TOO_LARGE: …`; hãy đọc chúng bằng
+  `resources/read`.
+
+Lỗi của tool bắt đầu bằng cùng các mã ổn định, cộng thêm `STALE_REVISION`,
+`BINARY_FILE` và `PAYLOAD_TOO_LARGE`.
+
+### Skill nào mô tả CLI nào
+
+Skill cài kèm package npm khớp với CLI bạn đã cài. Danh mục từ xa cung cấp
+`skill/` của Worker đang được triển khai, và `version` của nó (trong
+frontmatter và trong `_meta`) là phiên bản CLI của Worker đó. Khi hai bên khác
+nhau, agent dùng server này nên theo danh mục từ xa, còn agent chạy CLI trên
+máy nên theo skill cục bộ.
 
 ## Cấu hình
 

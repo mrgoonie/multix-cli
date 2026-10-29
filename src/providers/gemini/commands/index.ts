@@ -18,7 +18,7 @@ export function registerGeminiCommands(program: Command): void {
   const gemini = program
     .command("gemini")
     .description(
-      "Gemini: analyze, transcribe, extract data, generate images (Imagen/Nano Banana), video (Omni Flash, Veo), and speech (Flash TTS)",
+      "Gemini: analyze, transcribe, extract data, generate images (Nano Banana), video (Omni Flash, Veo), and speech (Flash TTS)",
     );
 
   registerAnalyzeCommand(gemini);

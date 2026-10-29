@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.22.0-beta.3](https://github.com/mrgoonie/multix-cli/compare/v1.22.0-beta.2...v1.22.0-beta.3) (2026-10-28)
+
+
+### Added
+
+* **catalog:** model and provider catalogue with configuration-aware prices, usage, reviews and recommendations ([#422](https://github.com/mrgoonie/multix-cli/issues/422)) ([8c6b8e3](https://github.com/mrgoonie/multix-cli/commit/8c6b8e3a3aee68225ef7e16817a5fdb85fe0e947)), closes [#414](https://github.com/mrgoonie/multix-cli/issues/414)
+* **skills:** MCP Skills Extension, versioned skills registry and task skills ([#420](https://github.com/mrgoonie/multix-cli/issues/420)) ([cd1cc5a](https://github.com/mrgoonie/multix-cli/commit/cd1cc5a1661972d8cc04a7ed64073142bcdeb73e)), closes [#415](https://github.com/mrgoonie/multix-cli/issues/415)
+
+
+### Fixed
+
+* **gemini:** default image generation to the GA gemini-3.1-flash-image ([#423](https://github.com/mrgoonie/multix-cli/issues/423)) ([54d75de](https://github.com/mrgoonie/multix-cli/commit/54d75def77fc32e201fad0176d68f0d9914b3c20)), closes [#419](https://github.com/mrgoonie/multix-cli/issues/419)
+* **media:** refuse a URL in media verify before checking for ffmpeg ([#409](https://github.com/mrgoonie/multix-cli/issues/409)) ([7e9289f](https://github.com/mrgoonie/multix-cli/commit/7e9289f3bc3ae545373e4fd24372eb22e8013a37)), closes [#408](https://github.com/mrgoonie/multix-cli/issues/408)
+
 ## [1.22.0-beta.2](https://github.com/mrgoonie/multix-cli/compare/v1.22.0-beta.1...v1.22.0-beta.2) (2026-10-28)
 
 

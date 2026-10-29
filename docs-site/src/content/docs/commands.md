@@ -26,6 +26,7 @@ description: Choose the multix command group that matches your media workflow.
 | [TopView](/commands/topview/) | Product marketing videos, talking and product avatars, and product shots (Legacy API), plus API Platform models such as Seedance, Wan, and GPT Image 2. |
 | [Speech](/commands/speech/) | Text-to-speech on Gemini, OpenAI, ElevenLabs, MiniMax, Atlas Cloud, or Fish Audio with one set of flags, capability checks, and opt-in fallback. |
 | [Scenes](/commands/scene/) | Multi-character dialogue audio: voice profiles, per-line cached takes, approval, and stem export. |
+| [Catalogue](/commands/catalog/) | Compare providers and models before a run: prices per configuration with source and check date, your usage through multix, ratings, reviews and use-case notes. |
 | `multix media` | Optimize, split, and batch-process files with ffmpeg/ImageMagick. |
 | `multix doc` | Convert supported documents to Markdown through Gemini. |
 | `multix update` | Self-update multix to the latest, or a specific, published version. |

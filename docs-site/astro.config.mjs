@@ -106,6 +106,11 @@ export default defineConfig({
               slug: "commands/scene",
             },
             {
+              label: "Model and provider catalogue",
+              translations: { vi: "Danh mục model và provider" },
+              slug: "commands/catalog",
+            },
+            {
               label: "Provider directory",
               translations: { vi: "Danh mục provider" },
               slug: "commands/providers",

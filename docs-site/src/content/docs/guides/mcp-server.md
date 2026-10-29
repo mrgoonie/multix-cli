@@ -19,12 +19,14 @@ does not change how `multix` behaves on your machine.
 | Tool | Purpose |
 |---|---|
 | `multix_catalog` | The CLI commands `multix_run` can run. Without `group`: every group, its commands and whether you saved keys for it (`has_keys`). With `group`: each command's positionals and options, which ones take files, and the values the server forces. With `task` (such as `speech`): only the commands and verified models for that task; add `group` to stay in one group. With `model`: a verified model's inputs, voices and output formats and how to pass it to `multix_run`, or `verified: null` when its inputs are unknown. |
+| `multix_model_catalog` | The [model and provider catalogue](/commands/catalog/), read-only: `view` is `providers`, `models`, `show` (with `offering`) or `compare` (one exact request: `task`, `resolution`, `duration_s`, `audio`, `aspect_ratio`, `images`). For `providers`, `models` and `compare`, the same payload as the `data` of `multix catalog <view> --json` (`show` returns the offering without the CLI's local usage, ratings and notes); readiness comes from your saved keys. Usage, ratings, reviews and notes stay local and are not served. |
 | `multix_run` | Run one CLI command in its own container with your saved keys. Waits up to `wait_seconds` (default 25, max 40, container start included), then returns the result or a job ID to poll. At most 2 running jobs per account by default (`MULTIX_MAX_JOBS_PER_ACCOUNT`). |
 | `multix_job_status` | Read a `multix_run` job: status, output URLs, stdout and the tail of stderr. |
 | `multix_job_cancel` | Stop a running job and its container. |
+| `multix_skills` | Read-only access to the [skills catalogue](#skills): `search` for a skill, `get` its entry, `read` one of its text files. |
 
-`multix_catalog` is always listed. `multix_run`, `multix_job_status` and
-`multix_job_cancel` appear only when the Worker has its job bindings
+`multix_catalog`, `multix_model_catalog` and `multix_skills` are always listed. `multix_run`,
+`multix_job_status` and `multix_job_cancel` appear only when the Worker has its job bindings
 (`MULTIX_JOBS` and `MULTIX_JOB_QUOTA`, see [Deploy](#deploy)).
 
 ## Running CLI commands
@@ -182,8 +184,10 @@ See [Speech commands](/commands/speech/).
   Codex image driver, `--stdin-ext`, and reading values from `@file`.
 - Choosing where files go: the server sets the output directory. Download
   outputs from their R2 URLs.
-- Without the job container, only `multix_catalog` is listed, so no command
-  can run.
+- Without the job container, only `multix_catalog`, `multix_model_catalog` and
+  `multix_skills` are listed, so no command can run.
+- `multix catalog` commands: they read your local usage and reviews. Use
+  `multix_model_catalog` for offerings, prices and comparisons.
 
 ## Accounts and credentials
 
@@ -281,7 +285,8 @@ image to Cloudflare.
    `MultixJobContainer`, instance type `basic`, at most 10 instances) and the
    `MULTIX_JOBS` Durable Object binding enable `multix_run`. To deploy without
    the CLI runner (no Docker, Workers Free), remove `containers`,
-   `durable_objects` and `exports`; only `multix_catalog` is then listed. The
+   `durable_objects` and `exports`; only `multix_catalog`, `multix_model_catalog`
+   and `multix_skills` are then listed (built-in skills only). The
    `MULTIX_JOB_QUOTA` binding (class `AccountJobQuota`) holds the running-job
    counts per account and server-wide, and is required together with
    `MULTIX_JOBS`. The `MULTIX_EVENTS` binding (class `AccountEvents`) holds
@@ -289,7 +294,9 @@ image to Cloudflare.
    and deliveries, from the REST API and from
    [MCP Events](#mcp-events-protocol-2026-07-28); without it the
    `/api/v1/events` routes answer `503` and `server/discover` does not offer
-   events.
+   events. The `MULTIX_SKILLS` binding (class `AccountSkills`) holds each
+   account's private and team [skills](#skills); without it only the built-in
+   skills are served.
 4. **Set the secrets** and deploy:
 
    ```bash
@@ -437,6 +444,82 @@ Subscriptions use **webhook** delivery only:
   `cursor` from an earlier subscription answers `truncated: true`.
 
 `subscriptions/listen` is not served (the tool list is fixed per deployment).
+
+## Skills
+
+The server serves a catalogue of agent skills: the `SKILL.md` instructions that tell an agent how to use multix. Reading a skill
+never runs or activates it, and the server never executes skill files.
+
+The built-in skills are the repository's `skill/` directory, bundled into the
+Worker when it is built (`npm run skills` in `worker/`, run automatically
+before `dev`, `build`, `typecheck`, `test` and `deploy`):
+
+- `skill://multix/SKILL.md`: the entry skill, the same text the npm package
+  installs locally.
+- `skill://multix/<name>/SKILL.md` for the task skills `image-generation`,
+  `video-production`, `speech-production`, `media-qa`,
+  `document-conversion` and `3d-generation`. Each one tells the agent to pick a
+  model live with `multix models --task <task> --ready` or
+  `multix models --model <id>`.
+
+Two more URI spaces are reserved for account skills, kept per account in the
+`AccountSkills` Durable Object as immutable revisions with content-addressed
+(SHA-256) files: `skill://private/<name>/<file>` for your own skills and
+`skill://team/<ownerId>/<name>/<file>` for team skills you own or were granted.
+There is no API to publish or share skills yet, so in practice every account
+sees the built-in skills. Another account's skills are never visible: an
+unknown skill and a forbidden one get the same answer.
+
+### Protocol 2026-07-28 clients
+
+`server/discover` declares `resources` and the
+`io.modelcontextprotocol/skills` extension with `directoryRead: true`. The
+client can then call:
+
+| Method | Returns |
+|---|---|
+| `skills/list` | Skill entries, 50 per page; pass the opaque `nextCursor` back as `cursor`. |
+| `skills/get` `{ uri }` | One skill entry, by the URI of its `SKILL.md`. |
+| `resources/read` `{ uri }` | One file of a skill. |
+| `resources/directory/read` `{ uri, cursor? }` | The direct children of a skill directory; directories have mimeType `inode/directory`. |
+
+A skill entry has its `uri` (its `SKILL.md`), its `frontmatter` (the YAML
+verbatim, as JSON), its `resources` (`uri`, `digest` as `sha256:<hex>`,
+`size`), and `_meta["me.zuey.multix/skill"]` with `id`, `version`, `revision`,
+`manifestDigest`, `status`, `visibility`, `tags` and `capabilities`. The cache
+hints are 5 minutes, `public`, for built-in skills only, and 1 minute,
+`private`, once account skills are included.
+
+Errors are JSON-RPC `-32602` with a fixed message (such as
+`No skill is served at <uri>` or `Invalid cursor`) and the stable code in
+`data.code`: `INVALID_URI`, `UNKNOWN_SKILL`, `NOT_FOUND`, `NOT_DIRECTORY` or
+`INVALID_CURSOR`.
+
+### 2025 clients
+
+The extension methods answer `-32601`, but `resources/list` lists every
+`SKILL.md` and `resources/read` reads any file. The `multix_skills` tool,
+offered on both protocol revisions, covers the rest:
+
+- `{"action": "search", "query": "trim", "task": "video"}`: find skills by
+  words, a task (a `multix models --task` value), or both.
+- `{"action": "get", "uri": "skill://multix/media-qa/SKILL.md"}`: the same
+  entry as `skills/get`.
+- `{"action": "read", "uri": "…", "revision": 3}`: one text file. Pass the
+  `revision` or `digest` from an earlier `get` to get `STALE_REVISION: …` if it
+  changed since. Binary files answer `BINARY_FILE: …` and text files over
+  256 KiB `PAYLOAD_TOO_LARGE: …`; read those with `resources/read`.
+
+Tool errors start with the same stable codes, plus `STALE_REVISION`,
+`BINARY_FILE` and `PAYLOAD_TOO_LARGE`.
+
+### Which skill describes which CLI
+
+The skill installed with the npm package matches your installed CLI. The remote
+catalogue serves the `skill/` of the deployed Worker, and its `version` (in the
+frontmatter and in `_meta`) is that Worker's CLI version. When they differ, an
+agent using this server should follow the remote catalogue, and an agent
+running the CLI locally should follow the local skill.
 
 ## Configuration
 
