@@ -524,7 +524,7 @@ describe("REST API model catalogue", () => {
     const compare = await api(
       browser,
       key,
-      "/model-catalog?view=compare&task=video&resolution=720p&duration_s=10&audio=true",
+      "/model-catalog?view=compare&task=video&resolution=720p&duration_s=10&audio=true&aspect_ratio=16:9",
     );
     expect(compare.status).toBe(200);
     const rows = (await body(compare)).comparison.rows as Json[];

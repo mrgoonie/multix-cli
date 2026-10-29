@@ -20,9 +20,9 @@ của envelope `multix.result/v1` mang `schema: "multix.catalog/v1"`.
 multix catalog providers --ready                 # provider đã đặt key, link bảng giá
 multix catalog models -t video --priced          # offering có giá hiện hành
 multix catalog show fal:bytedance/seedance-2.5/text-to-video
-multix catalog compare -t video --resolution 720p --duration 10 --audio on
+multix catalog compare -t video --resolution 720p --duration 10 --audio on --aspect-ratio 16:9
 multix catalog usage --by provider --since 7d    # những gì đã chạy qua multix trên máy này
-multix catalog recommend -t video -u product-ugc --resolution 720p --duration 10 --audio on
+multix catalog recommend -t video -u product-ugc --resolution 720p --duration 10 --audio on --aspect-ratio 16:9
 ```
 
 Id của offering có dạng `<provider>:<model>`. `show` cũng nhận id model không
@@ -38,27 +38,40 @@ ngày kiểm tra gần nhất.
 Giá bị thiếu, chưa xác minh, kiểm tra lần cuối quá 120 ngày, hoặc nằm ngoài
 khoảng thời gian hiệu lực sẽ hiển thị là không rõ (unknown) kèm lý do, không bao
 giờ là $0. Atlas Cloud hiển thị giá dưới dạng ước tính và tính tiền cuối cùng
-theo usage đo được, nên multix đánh dấu các giá này là `estimate`.
+theo usage đo được, nên multix đánh dấu các giá này là `estimate`
+(`basis: "estimated"` trong JSON).
 
 ## So sánh
 
 `compare` báo giá mọi offering phù hợp cho đúng một request (`--task`,
 `--resolution`, `--audio`, `--duration`, `--aspect-ratio`, `--images`):
 
-- Một dòng chỉ được xếp hạng khi bảng giá của nó xác nhận mọi thiết lập bạn đã
-  cố định.
+- Một dòng chỉ được xếp hạng khi đó là giá niêm yết và bảng giá của nó xác nhận
+  mọi thiết lập bạn đã cố định, không giả định gì thêm.
 - Dòng có bảng giá cho cấu hình khác, hoặc không nêu một thiết lập bạn đã cố
   định, là `not_comparable` kèm lý do.
 - Dòng không có giá dùng được, hoặc thiếu một input mà giá cần (như thời
   lượng), là `unknown` kèm lý do.
 - Dòng có giá cho một thiết lập bạn chưa cố định vẫn được hiển thị nhưng không
   xếp hạng; output cho biết cần cố định thiết lập nào (`not ranked: pin audio on`).
+- Giá ước tính (Atlas Cloud) vẫn được báo giá nhưng không xếp hạng, vì provider
+  tính tiền cuối cùng theo usage mà họ đo được.
 - Video tính phí theo token (fal Seedance 2.5) cần kích thước khung hình: nếu
-  không có `--aspect-ratio`, báo giá giả định 16:9 và ghi rõ điều đó.
+  không có `--aspect-ratio`, báo giá giả định 16:9, ghi rõ điều đó và không được
+  xếp hạng. Hãy cố định `--aspect-ratio` để xếp hạng dòng này.
+- Khi bạn không cố định audio và giá của một bảng giá video đã được xếp hạng
+  đúng cả khi có lẫn không có audio (fal Seedance: audio không làm thay đổi số
+  token), bảng giá video không nêu audio (Atlas không nói giá có gồm audio hay
+  không) vẫn được báo giá nhưng không xếp hạng. Các bảng giá đều không nêu audio
+  vẫn được xếp hạng với nhau. Hãy cố định `--audio` để chỉ so sánh các bảng giá
+  xác nhận nó.
+- Dòng có giá nhưng không được xếp hạng ghi lý do trong `reasons` ở JSON, và
+  sau `not ranked:` ở output dạng text.
+- Hãy cố định cả `--aspect-ratio` khi phép so sánh có video tính phí theo token.
 
 ```text
-$ multix catalog compare -t video --resolution 720p --duration 10 --audio on
- #1     $4.62  fal:bytedance/seedance-2.5/text-to-video (fal/seedance-2.5-t2v-720p@api)  priced: assumes aspect ratio 16:9 (frame size of the token formula)
+$ multix catalog compare -t video --resolution 720p --duration 10 --audio on --aspect-ratio 16:9
+ #1   $4.6224  fal:bytedance/seedance-2.5/text-to-video (fal/seedance-2.5-t2v-720p@api)  priced
   -   unknown  atlas:bytedance/seedance-2.5/text-to-video  not_comparable: source does not state the price for audio on
 ```
 
@@ -90,6 +103,11 @@ của tài khoản provider. Nhóm theo `--by provider|model|offering|task|comma
 - Chi tiêu tính mỗi operation một lần, chỉ từ các con số đã biết. Operation có
   chi phí không rõ hoặc không chắc chắn được đếm riêng, không bao giờ cộng như
   $0.
+- Credits cũng tính mỗi operation một lần, ở dòng của lần submit (hoặc của lần
+  chạy sớm nhất báo credits khi bộ lọc bỏ lần submit ra ngoài): lần chạy
+  `status` lặp lại credits của một task vẫn giữ chúng trong `usage` của nó,
+  nhưng không dòng nào cộng lại lần nữa, kể cả khi lần `status` rơi vào dòng
+  khác (ví dụ `(unknown model)`).
 - Model là model provider báo đã chạy; lần chạy không có thông tin này được gom
   vào `(unknown model)`.
 - Mỗi dòng hiển thị cỡ mẫu (số operation) và mức tin cậy (none, low, medium,
@@ -136,6 +154,8 @@ multix catalog note list -u product-ugc
 Yếu tố không đủ bằng chứng sẽ bị bỏ ra thay vì đoán; `coverage` cho biết bao
 nhiêu phần trọng số có bằng chứng, và mỗi yếu tố hiển thị bằng chứng của nó. Với
 `--use-case`, offering bị ghi chú `avoid` cho use case đó sẽ bị loại kèm lý do.
+Offering chỉ có báo giá có giá nhưng không được xếp hạng thì không có yếu tố giá;
+nó hiển thị `quote not ranked` kèm giá và lý do (`unranked_quote` trong JSON).
 
 ## Truy cập từ xa
 

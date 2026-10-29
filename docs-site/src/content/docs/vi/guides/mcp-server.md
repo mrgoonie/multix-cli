@@ -129,8 +129,12 @@ cả hai trường hợp. Key không bao giờ xuất hiện trong `stdout` hay
 
 Giới hạn của server cũng áp dụng cho `multix_run`: số output
 (`MULTIX_MCP_MAX_OUTPUTS`), độ dài video (`MULTIX_MCP_MAX_VIDEO_SECONDS`, cũng
-được gửi khi mặc định của lệnh video không rõ hoặc dài hơn) và độ phân giải
-(`MULTIX_MCP_ALLOWED_RESOLUTIONS`). Server tự chọn thư mục đầu ra, `--output`
+được gửi khi mặc định của lệnh video không rõ hoặc dài hơn), độ phân giải
+(`MULTIX_MCP_ALLOWED_RESOLUTIONS`) và độ dài audio sinh ra
+(`MULTIX_MCP_MAX_AUDIO_SECONDS`: `elevenlabs sfx --duration-seconds` và
+`elevenlabs music --music-length-ms`; độ dài nhạc bị bỏ qua sẽ được gửi bằng
+giới hạn, vì nếu không model tự chọn tới 10 phút).
+Server tự chọn thư mục đầu ra, `--output`
 phải là tên file thuần, option mà CLI ghép vào tên file (như
 `elevenlabs voices design --output-prefix` hoặc mã ngôn ngữ khi lồng tiếng) chỉ
 nhận chữ cái, chữ số, `_` và `-`, các lệnh ảnh OpenAI luôn dùng API driver,
@@ -146,27 +150,57 @@ hạn):
 
 - body request chuyển thẳng tới provider: `fal run`, `replicate run`,
   `atlas run`, `heygen run`, `topview run`, `--input` của `replicate image`
-  và `replicate video`, `--input` / `--text-field` của `fal tts`, và
-  `--param` của `sume image`;
+  và `replicate video`, `--input` / `--text-field` của `fal tts`,
+  `--param` của `sume image`, `--provider-options` của `openrouter tts`, và
+  `--flags` (cờ model thô) của `byteplus generate-3d`;
 - lần chạy tính tiền theo độ dài nguồn hoặc kịch bản: `heygen video`,
   `heygen translate`, `heygen lipsync`, `elevenlabs dub`, `topview
   video-avatar`, `topview product-avatar`, và `heygen video-agent` /
-  `heygen template`, nơi agent hoặc template quyết định độ dài;
+  `heygen template`, nơi agent hoặc template quyết định độ dài, và
+  `elevenlabs music` khi có `--plan`, nơi thời lượng các đoạn quyết định độ dài;
+- lần chạy dài hơn mức giới hạn thời lượng chặn được: `topview url-to-video`
+  và `topview materials-to-video` (video 15-60 giây);
 - `sume video`, nơi dòng catalog của model quyết định giá, còn model lip-sync
   và phụ đề tính tiền theo độ dài media nguồn;
-- `atlas image`, `atlas image-to-image`, `sume image` và `replicate image` khi không có
-  `--num-images` / `--num-outputs`, lúc đó model tự chọn số output. Truyền số
-  lượng (tối đa `MULTIX_MCP_MAX_OUTPUTS`) giúp lần chạy được giới hạn trở lại.
+- `atlas image`, `atlas image-to-image`, `sume image` và `replicate image`
+  khi không có `--num-images` / `--num-outputs`, lúc đó model tự chọn số
+  output. Truyền số
+  lượng (tối đa `MULTIX_MCP_MAX_OUTPUTS`) giúp lần chạy được giới hạn trở lại;
+- `fal video`, lệnh không có `--resolution`: model tự chọn độ phân giải;
+- `atlas video`, `atlas image-to-video`, `replicate video`,
+  `openrouter image-to-video` và `heygen model-video` khi không có
+  `--resolution`, lúc đó độ phân giải mặc định của model được dùng. Truyền một
+  giá trị trong `MULTIX_MCP_ALLOWED_RESOLUTIONS` giúp lần chạy được giới hạn
+  trở lại, với model nhận độ phân giải (một số model Atlas không nhận, nên
+  luôn không bị giới hạn). Với `openrouter image-to-video`, giá trị này là yêu
+  cầu mà model có thể làm tròn.
 
 Operator quyết định điều kiện cho các lần chạy này bằng
 `MULTIX_MCP_UNCAPPED_SPEND`. Ở chế độ `budget` (mặc định), lệnh gọi phải có
 `max_cost_usd` và job chỉ khởi động khi ước tính giá chứng minh lần chạy nằm
 trong mức đó (`cost_policy` được coi là `strict` với các lần chạy này, vì ước
-tính không nhìn thấy phần không bị giới hạn). Hiện chưa lệnh nào trong số này có bảng giá, nên trên thực tế
-`budget` từ chối chúng (đóng thay vì mở). `deny` luôn từ chối; `allow` chạy như
-trước, bằng key của chính người gọi. Lệnh gọi `estimate: true` luôn được trả
+tính không nhìn thấy phần không bị giới hạn). Trong số này chỉ
+`openrouter tts` có ước tính giá, và chỉ với model đã biết giá, nên trên thực
+tế `budget` từ chối các lệnh còn lại (đóng thay vì mở). `deny` luôn từ chối;
+`allow` chạy như trước, bằng key của chính người gọi. Lệnh gọi `estimate: true` luôn được trả
 lời ở mọi chế độ vì nó không khởi động gì. REST API (`POST /api/v1/jobs`) nhận
 cùng các trường `max_cost_usd` và `cost_policy` và áp dụng cùng quy tắc.
+
+**Model ảnh.** Model quyết định giá mỗi ảnh, thường chênh tới cả chục lần giữa
+các model, nên `--model` không bị đánh dấu là không giới hạn: làm vậy sẽ đẩy
+gần như mọi lần tạo ảnh qua `MULTIX_MCP_UNCAPPED_SPEND`. Thay vào đó operator
+giới hạn nó bằng `MULTIX_MCP_ALLOWED_IMAGE_MODELS`, danh sách các mục
+`<group>:<model>` phân tách bằng dấu phẩy, ví dụ
+`fal:fal-ai/flux/schnell,openai:gpt-image-2`. Mục có kèm group vì cùng một
+model id có thể đắt hơn ở provider khác. Khi biến này được đặt, lệnh tạo ảnh có
+`--model` chỉ chạy với model được liệt kê cho group của nó: `--model` của
+caller, hoặc `default` mà `multix_catalog` liệt kê. Khi CLI tự chọn model lúc
+chạy (không có default trong catalog), caller phải truyền một `--model` có
+trong danh sách, và group không có mục nào bị từ chối. Không đặt thì mọi model
+đều chạy. Các lệnh chuyển thẳng `run` (`fal run`, `replicate run`, ...) nhận
+model qua positional và vẫn do `MULTIX_MCP_UNCAPPED_SPEND` quản lý, không phải
+danh sách này. `cloudflare generate --steps` cũng đổi giá, với biên độ nhỏ hơn,
+và không bị giới hạn.
 
 **Gemini edit và extend.** `gemini extend-video --duration` là độ dài của đoạn
 nối tiếp mới và bị giới hạn như mọi thời lượng khác, nhưng video trả về còn chứa
@@ -176,6 +210,12 @@ thêm, và `gemini edit-video` giữ nguyên độ dài của nguồn. Server kh
 dài của interaction đã lưu nên không giới hạn một chuỗi extend ngoài giới hạn
 40 giây tổng cộng của Google; mọi lần gọi đều được tính phí trên key Gemini của
 chính bạn.
+
+**Leonardo.** `leonardo video` không có `--duration`: CLI yêu cầu các model
+viết thường (`kling-2.6`, `hailuo-2_3`, `seedance-2.0` và các model khác trong
+`leonardo video-models`) tạo 8 giây, còn các model viết hoa (`MOTION2`, `VEO3`,
+`KLING2_1`, ...) tự chọn độ dài, tối đa 10 giây với Kling 2.1 và 2.5. Vì vậy
+server từ chối lệnh này khi `MULTIX_MCP_MAX_VIDEO_SECONDS` nhỏ hơn 10.
 
 **Runway.** `runway video` và `runway image` chạy được từ xa; truyền `--image`
 và từng `--reference` dưới dạng URL `https://` trong `inputs`, còn `--duration`
@@ -190,10 +230,12 @@ mặc định không chờ, nên job kết thúc chỉ với task ID: đặt `"w
 `topview upload`) dưới dạng URL `https://` trong `inputs`. `sume estimate`
 không upload gì, nên nhận media dưới dạng URL `https://` thông thường.
 `sume image --num-images` và `topview product-anyshoot --count` bị giới hạn
-bởi `MULTIX_MCP_MAX_OUTPUTS`, còn
-`sume video --duration` và `--resolution` bị giới hạn bởi các giới hạn video;
-hãy truyền một `--duration` có trong dòng catalog của model, vì nếu thiếu,
-server sẽ gửi độ dài mặc định của riêng nó. `topview run --input` phải là JSON
+bởi `MULTIX_MCP_MAX_OUTPUTS`, còn `sume video --resolution` bị giới hạn bởi
+các độ phân giải được phép. `sume video --duration` không bị giới hạn và không được điền sẵn (model
+không có thời lượng sẽ từ chối giá trị được điền, còn model lip-sync hiểu nó là
+độ dài audio), nên mọi lần chạy `sume video` đều đi qua
+`MULTIX_MCP_UNCAPPED_SPEND`; hãy truyền một `--duration` có trong dòng catalog
+của model. `topview run --input` phải là JSON
 viết trực tiếp, vì giá trị `@file` bị từ chối. `sume image`, `sume video`,
 `topview run` và các lệnh Legacy của TopView trừ `product-avatar` mặc định
 không chờ: đặt `"wait": true` trong `options`, hoặc tiếp tục sau bằng
@@ -715,7 +757,9 @@ closed). `http://localhost` được chấp nhận khi phát triển cục bộ.
 | `MULTIX_PUBLIC_URL` | — (bắt buộc) | Origin công khai, ví dụ `https://mcp.example.com`. Dùng cho metadata OAuth, redirect và callback GitHub. |
 | `MULTIX_MCP_MAX_OUTPUTS` | `4` (tối đa 10) | Số output tối đa (ví dụ `--num-images`) mỗi lần gọi `multix_run`. |
 | `MULTIX_MCP_MAX_VIDEO_SECONDS` | `10` (tối đa 15) | Thời lượng video tối đa cho mỗi lần gọi (với `gemini extend-video` là đoạn nối tiếp mới). Khi caller bỏ qua thời lượng và mặc định của lệnh không rõ hoặc dài hơn, server gửi `min(5, giới hạn)` giây. |
+| `MULTIX_MCP_MAX_AUDIO_SECONDS` | `30` (tối đa 300) | Độ dài audio sinh ra tối đa cho mỗi lần gọi: `elevenlabs sfx --duration-seconds` và `elevenlabs music --music-length-ms`. Độ dài nhạc bị bỏ qua được gửi bằng giới hạn (nếu không model tự chọn tới 10 phút), trừ khi có `--plan`; độ dài hiệu ứng âm thanh bị bỏ qua chỉ được gửi bằng giới hạn khi giới hạn thấp hơn mức tối đa 30 giây của nhà cung cấp. |
 | `MULTIX_MCP_ALLOWED_RESOLUTIONS` | `480p,720p,768p,1080p` | Độ phân giải video caller được yêu cầu (`768p` là kích thước của HeyGen Video). Giá trị khác (ví dụ `4k`), do caller truyền hay là mặc định của lệnh, bị từ chối trước khi job bắt đầu. |
+| `MULTIX_MCP_ALLOWED_IMAGE_MODELS` | mọi model | Danh sách mục `<group>:<model>` (ví dụ `fal:fal-ai/flux/schnell`, khớp chính xác, phân tách bằng dấu phẩy) mà các lệnh tạo ảnh của `multix_run` được dùng, qua `--model` hoặc mặc định của lệnh trong catalog. Khi CLI tự chọn model lúc chạy, caller phải truyền một `--model` có trong danh sách; group không có mục nào bị từ chối. Các lệnh `run` chuyển thẳng do `MULTIX_MCP_UNCAPPED_SPEND` quản lý. |
 | `MULTIX_MCP_UNCAPPED_SPEND` | `budget` | Lần chạy mà các giới hạn trên không chặn được (đánh dấu `uncapped_spend` trong `multix_catalog`): `budget` chỉ chạy khi có `max_cost_usd` mà ước tính giá chứng minh được (giá không rõ thì bị từ chối), `deny` từ chối, `allow` cho chạy. Giá trị khác được hiểu là `budget`. |
 | `MULTIX_MCP_ALLOWED_ORIGINS` | không có | Origin trình duyệt chính xác (ví dụ `https://app.example.com`) được phép gọi `/mcp`. Không hỗ trợ `*` hay wildcard khác: `*` chỉ khớp origin `*` theo nghĩa đen, thứ trình duyệt không bao giờ gửi. Sau khi access token được kiểm tra, request có header `Origin` khác nhận `403`; request không có `Origin` (client phía server) được chấp nhận. Origin trong danh sách nhận header CORS. Preflight `OPTIONS` được lớp OAuth trả lời cho mọi origin. |
 | `MULTIX_MAX_JOBS_PER_ACCOUNT` | `2` (tối đa 50) | Số job `multix_run` một tài khoản được chạy cùng lúc. |
@@ -770,7 +814,8 @@ chung bộ đếm.
 - **Giới hạn chi phí:** `multix_run` giới hạn số output, thời lượng video và
   độ phân giải video trên các option mà server biết cho từng lệnh (xem
   [Chạy lệnh CLI](#chạy-lệnh-cli)). Lần chạy mà các giới hạn đó không chặn
-  được (body JSON chuyển thẳng, giá theo độ dài nguồn, số output do model chọn)
+  được (body JSON chuyển thẳng, giá theo độ dài nguồn, số output hoặc độ phân
+  giải do model chọn)
   bị từ chối trừ khi `max_cost_usd` chứng minh được giá, hoặc theo
   `MULTIX_MCP_UNCAPPED_SPEND`. Người gọi cũng có thể đặt `max_cost_usd` để từ
   chối mọi lần chạy có thể tốn hơn mức đó.

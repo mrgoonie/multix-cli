@@ -1,13 +1,17 @@
 /**
  * Configuration-aware quotes and comparisons. A quote prices one rate card
  * for one request (resolution, duration, audio, aspect ratio, images); a
- * comparison ranks only quotes whose rate card confirms every setting the
- * request pins. A card that does not state a setting the request pins is
- * "not_comparable"; a card without a current price is "unknown" (null, never
- * $0). Ranking is by price only and says nothing about quality.
+ * comparison ranks only list prices whose rate card confirms every setting the
+ * request pins, with nothing assumed. A card that does not state a setting the
+ * request pins is "not_comparable"; a card without a current price is
+ * "unknown" (null, never $0). An estimate, a quote that assumes a setting, and
+ * a video card silent on audio next to a ranked card whose price holds with or
+ * without audio stay priced but unranked, with the reason. Ranking is by price only and says
+ * nothing about quality.
  */
 
 import { type PriceMeter, priceOf } from "../budget/pricing-catalog.js";
+import type { Task } from "../capabilities/capability-types.js";
 import type {
   ConfigKey,
   Offering,
@@ -20,6 +24,12 @@ import { frameSize } from "./rate-cards.js";
 
 const DEFAULT_ASPECT = "16:9";
 const OTHER_CONFIG = "rate card is for another configuration";
+const ESTIMATE =
+  "the provider shows this price as an estimate and bills the final amount from the usage it measures";
+const AUDIO_UNSTATED =
+  "source does not state whether this price includes audio, while other prices here do";
+/** Tasks whose output can carry generated audio. */
+const AUDIO_TASKS: readonly Task[] = ["video", "image-to-video"];
 
 const describe = (key: ConfigKey, value: unknown) =>
   key === "audio" ? `audio ${value ? "on" : "off"}` : `${key} ${String(value)}`;
@@ -132,6 +142,11 @@ export function quoteRate(offering: Offering, rate: RateView, req: QuoteRequest)
     total += priceOf([c], c.meter, n) ?? 0;
   }
   const open = match.open.map((k) => describe(k, rate.config[k]));
+  // Only a list price with nothing assumed is a price the source confirms.
+  const unranked = [
+    ...(rate.basis === "estimated" ? [ESTIMATE] : []),
+    ...assumptions.map((a) => `the quote assumes ${a}; pin that setting to rank it`),
+  ];
   return {
     ...head,
     status: "priced",
@@ -139,7 +154,48 @@ export function quoteRate(offering: Offering, rate: RateView, req: QuoteRequest)
     units,
     ...(assumptions.length ? { assumptions } : {}),
     ...(open.length ? { open_settings: open } : {}),
+    ...(unranked.length ? { reasons: unranked } : {}),
   };
+}
+
+interface PricedQuote {
+  row: QuoteRow;
+  rate: RateView;
+  tasks: readonly Task[];
+}
+
+const rankable = (r: QuoteRow) => r.status === "priced" && !r.open_settings && !r.reasons?.length;
+
+/**
+ * Audio left open by the request is open for every priced video card that does
+ * not state it once another video card, itself ranked, confirms its price with
+ * or without audio (fal: "audio does not change the token count"; Atlas does
+ * not say whether audio is included): the silent rows are not ranked against
+ * it. Cards that are all silent still rank against each other. Pinned audio is
+ * settled per card by quoteRate.
+ */
+function markAudioUnstated(priced: PricedQuote[], req: QuoteRequest) {
+  if (req.audio !== undefined) return;
+  const video = priced.filter((p) => p.tasks.some((t) => AUDIO_TASKS.includes(t)));
+  const covered = video.some(
+    (p) => (p.rate.config_independent ?? []).includes("audio") && rankable(p.row),
+  );
+  if (!covered) return;
+  for (const { row, rate } of video) {
+    if (rate.config.audio !== undefined || (rate.config_independent ?? []).includes("audio")) {
+      continue;
+    }
+    row.reasons = [...(row.reasons ?? []), AUDIO_UNSTATED];
+  }
+}
+
+/** Why a priced row is not ranked (empty when it is ranked or not priced). */
+export function notRankedReasons(r: QuoteRow): string[] {
+  if (r.status !== "priced") return [];
+  return [
+    ...(r.open_settings?.length ? [`pin ${r.open_settings.join(", ")}`] : []),
+    ...(r.reasons ?? []),
+  ];
 }
 
 export interface Comparison {
@@ -152,13 +208,18 @@ export interface Comparison {
 /**
  * Quote every rate card of the offerings for the request. Rows whose card
  * fixes a setting the request left open are priced but not ranked: pin the
- * setting to rank them. Ties share a rank.
+ * setting to rank them. Estimates, quotes with assumptions and video cards
+ * silent on audio that another ranked card covers are priced but not ranked
+ * either; their reasons say why. Ties share a rank.
  */
 export function compareOfferings(offerings: Offering[], req: QuoteRequest): Comparison {
   const rows: QuoteRow[] = [];
+  const priced: PricedQuote[] = [];
   for (const o of offerings) {
     if (req.task && !o.tasks.includes(req.task)) continue;
-    const quotes = o.rates.map((r) => quoteRate(o, r, req));
+    const quoted = o.rates.map((rate) => ({ rate, tasks: o.tasks, row: quoteRate(o, rate, req) }));
+    priced.push(...quoted.filter((q) => q.row.status === "priced"));
+    const quotes = quoted.map((q) => q.row);
     const useful = quotes.filter((q) => q.status !== "not_comparable");
     if (useful.length) rows.push(...useful);
     else if (quotes.length) {
@@ -186,9 +247,10 @@ export function compareOfferings(offerings: Offering[], req: QuoteRequest): Comp
       });
     }
   }
-  const rankable = rows.filter((r) => r.status === "priced" && !r.open_settings);
-  const sorted = [...new Set(rankable.map((r) => r.total_usd as number))].sort((a, b) => a - b);
-  for (const r of rankable) r.price_rank = sorted.indexOf(r.total_usd as number) + 1;
+  markAudioUnstated(priced, req);
+  const ranked = rows.filter(rankable);
+  const sorted = [...new Set(ranked.map((r) => r.total_usd as number))].sort((a, b) => a - b);
+  for (const r of ranked) r.price_rank = sorted.indexOf(r.total_usd as number) + 1;
   rows.sort(
     (a, b) =>
       (a.price_rank ?? Number.POSITIVE_INFINITY) - (b.price_rank ?? Number.POSITIVE_INFINITY) ||
@@ -199,7 +261,7 @@ export function compareOfferings(offerings: Offering[], req: QuoteRequest): Comp
   return {
     request: { ...rest, at: (at ?? new Date()).toISOString() },
     rows,
-    note: "Ranked by quoted price for this exact configuration only; price says nothing about output quality. Unranked rows are unknown, not comparable, or priced for a setting you did not pin.",
+    note: "Ranked by quoted price for this exact configuration only, and only list prices the source confirms with nothing assumed; price says nothing about output quality. Unranked rows are unknown, not comparable, priced for a setting you did not pin, an estimate, based on an assumption, or or silent on audio that other prices state.",
   };
 }
 
