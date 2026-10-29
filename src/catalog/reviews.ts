@@ -61,10 +61,13 @@ const NOT_KEY_NAME = /(?:^|[_-])image[_-]key$/i;
 /** Any other name ending in "key" ("Key", "hotkey") holds a secret only with a token-like value. */
 const TOKEN_LIKE = /^(?=.{16})(?=.*\d)(?=.*[A-Za-z])/s;
 
+/** A pair name that holds a secret whatever its value. */
+function secretName(name: string): boolean {
+  return SECRET_NAME.test(name) || (KEY_NAME.test(name) && !NOT_KEY_NAME.test(name));
+}
+
 function secretPair(name: string, value: string): boolean {
-  if (SECRET_NAME.test(name)) return true;
-  if (!/key$/i.test(name)) return false;
-  return (KEY_NAME.test(name) && !NOT_KEY_NAME.test(name)) || TOKEN_LIKE.test(value);
+  return secretName(name) || (/key$/i.test(name) && TOKEN_LIKE.test(value));
 }
 
 /**
@@ -82,49 +85,113 @@ function looksLikeModelId(token: string): boolean {
 
 const HEX_SHA = /^[0-9a-f]{40}$/;
 
-function looksLikeBase64Secret(token: string): boolean {
+/** Three or more slashes with a lower-case word between two of them. */
+function looksLikePath(run: string): boolean {
+  const parts = run.split("/");
+  return parts.length >= 4 && parts.slice(1, -1).some((p) => /^[a-z]{3,}$/.test(p));
+}
+
+/**
+ * A standard-base64 run (its body and its "=" padding) that reads as a secret:
+ * 40 characters with "/" or "+" (an AWS secret access key), or a 32- or 64-byte
+ * key (43-44 or 86-88 characters: HMAC-SHA256, Azure storage) that is padded or
+ * has "/" or "+". It mixes upper and lower case. It is a path instead when it
+ * is unpadded, has no "+", has three or more slashes and a lower-case word
+ * between two of them. Those are path signs a random key rarely shows: about
+ * one in a hundred has a lower-case word somewhere, but padding never ends a
+ * path and "+" never appears in one.
+ */
+function looksLikeBase64Secret(body: string, padding: string): boolean {
+  const length = body.length + padding.length;
+  const shaped =
+    padding.length === 0 && length === 40
+      ? /[+/]/.test(body)
+      : padding.length <= 2 &&
+        ((length >= 43 && length <= 44) || (length >= 86 && length <= 88)) &&
+        (padding.length > 0 || /[+/]/.test(body));
   return (
-    /[+/]/.test(token) &&
-    /\d/.test(token) &&
-    /[A-Z]/.test(token) &&
-    /[a-z]/.test(token) &&
-    !token.split(/[+/]/).some((p) => /^[a-z]{3,}$/.test(p))
+    shaped &&
+    /[A-Z]/.test(body) &&
+    /[a-z]/.test(body) &&
+    !(padding.length === 0 && !body.includes("+") && looksLikePath(body))
   );
 }
 
-const PAIR_NAME = new RegExp(`${TOKEN_START}([\\w-]+)\\s*[:=]\\s*`, "g");
+/**
+ * A pair name, an optional quote closing it ("password": …), the separator
+ * (":", "=", "=>" or "==") and an optional quote opening the value.
+ */
+const PAIR_NAME = new RegExp(`${TOKEN_START}([\\w-]+)(["']?)\\s*(=>|==|[:=])\\s*(["']?)`, "g");
 const PAIR_VALUE = /\S+/y;
 /**
  * Enough of a value to judge it, so a run of non-secret names is not rescanned.
  * A value that fills the whole peek is long enough to count as a token.
  */
 const PAIR_PEEK = /\S{1,64}/y;
+/** After a quoted name, an unquoted value (null, 12345) ends at the JSON punctuation after it. */
+const FIELD_VALUE = /[^\s,}\]]+/y;
+const FIELD_PEEK = /[^\s,}\]]{1,64}/y;
+/** A quoted value runs to its closing quote (or the end of the line); a backslash escapes. */
+const QUOTED_VALUE = { '"': /(?:[^"\\\n]|\\.)*/y, "'": /(?:[^'\\\n]|\\.)*/y } as const;
+const QUOTED_PEEK = { '"': /(?:[^"\\\n]|\\.){1,64}/y, "'": /(?:[^'\\\n]|\\.){1,64}/y } as const;
+/**
+ * Code rather than a value after "=>" or "==": the rest of "===", a call on a
+ * lower-case identifier or member chain without digits, or a bare keyword.
+ * Anything else (Hunter2(x), =s3cr3t, $ecret)99) is a value.
+ */
+const CODE_VALUE =
+  /^(?:=$|[a-z_$][A-Za-z_$]*(?:\.[A-Za-z_$]+)*\(|(?:null|undefined|true|false|this|new|typeof|function|async|await|void)(?=$|[)\];,]))/;
 
 /**
- * key=value / key: value pairs whose name holds a secret. A pair with another
- * name is stepped over without its value, so a secret pair glued to it
- * ("user=bob&password=…", "Note:password=…") is still found.
+ * key=value, key: value, key => value and key == value pairs whose name holds
+ * a secret, also with a quoted name or value ("password": "…", 'token': '…').
+ * The pair becomes [redacted]; a quoted name stays, with its value replaced
+ * by a quoted [redacted], so JSON stays valid. A quoted value is replaced up
+ * to its closing quote; one with spaces is prose, so only a secret name makes
+ * it a secret. A pair with another name is stepped over without its value,
+ * so a secret pair glued to it ("user=bob&password=…", "Note:password=…") is
+ * still found.
  */
 function redactSecretPairs(text: string): string {
   let out = "";
   let last = 0;
   PAIR_NAME.lastIndex = 0;
   for (let m = PAIR_NAME.exec(text); m; m = PAIR_NAME.exec(text)) {
-    if (!/(?:key|secret|token|password|credentials?)$/i.test(m[1] as string)) continue;
-    PAIR_PEEK.lastIndex = PAIR_NAME.lastIndex;
-    const peek = PAIR_PEEK.exec(text);
-    if (!peek || !(peek[0].length === 64 || secretPair(m[1] as string, peek[0]))) continue;
-    PAIR_VALUE.lastIndex = PAIR_NAME.lastIndex;
-    PAIR_VALUE.exec(text);
-    out += `${text.slice(last, m.index)}[redacted]`;
-    last = PAIR_NAME.lastIndex = PAIR_VALUE.lastIndex;
+    const name = m[1] as string;
+    if (!/(?:key|secret|token|password|credentials?)$/i.test(name)) continue;
+    const nameQuote = m[2] as string;
+    const separator = m[3] as string;
+    const quote = m[4] as "" | '"' | "'";
+    const [peekRe, valueRe] = quote
+      ? [QUOTED_PEEK[quote], QUOTED_VALUE[quote]]
+      : nameQuote
+        ? [FIELD_PEEK, FIELD_VALUE]
+        : [PAIR_PEEK, PAIR_VALUE];
+    const start = PAIR_NAME.lastIndex;
+    peekRe.lastIndex = start;
+    const peek = peekRe.exec(text)?.[0];
+    if (!peek) continue;
+    if (!quote && separator !== ":" && separator !== "=" && CODE_VALUE.test(peek)) continue;
+    const secret =
+      quote && /\s/.test(peek) ? secretName(name) : peek.length >= 64 || secretPair(name, peek);
+    if (!secret) continue;
+    valueRe.lastIndex = start;
+    valueRe.exec(text);
+    let end = valueRe.lastIndex;
+    if (quote && text[end] === quote) end += 1;
+    const q = quote || nameQuote;
+    const replaced = nameQuote
+      ? `${text.slice(m.index, start - quote.length)}${q}[redacted]${q}`
+      : "[redacted]";
+    out += text.slice(last, m.index) + replaced;
+    last = PAIR_NAME.lastIndex = end;
   }
   return out + text.slice(last);
 }
 
 /** A pattern replaced everywhere in the text. */
 const swap =
-  (re: RegExp, to: string | ((match: string) => string)) =>
+  (re: RegExp, to: string | ((match: string, ...groups: string[]) => string)) =>
   (text: string): string =>
     typeof to === "string" ? text.replace(re, to) : text.replace(re, to);
 
@@ -163,10 +230,10 @@ const SECRET_STEPS: Array<(text: string) => string> = [
   redactSecretPairs,
   // UUID-shaped keys.
   swap(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, "[redacted]"),
-  // A bare 40-character base64 secret (an AWS secret access key). A hex SHA has
-  // no "/" or "+", and a path has a lower-case word between its slashes.
-  swap(/(?<![A-Za-z0-9+\/])[A-Za-z0-9+\/]{40}(?![A-Za-z0-9+\/=])/g, (m) =>
-    looksLikeBase64Secret(m) ? "[redacted]" : m,
+  // Bare base64 secrets: an AWS secret access key, a 32- or 64-byte key. Each
+  // run of base64 characters and its padding is matched once, from its start.
+  swap(/(?<![A-Za-z0-9+\/])([A-Za-z0-9+\/]+)(=*)/g, (m, body: string, padding: string) =>
+    looksLikeBase64Secret(body, padding) ? "[redacted]" : m,
   ),
   // Long opaque strings (32+ chars) that mix letters and digits, unless they
   // read as a model id or a 40-character hex commit or file hash.

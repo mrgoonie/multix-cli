@@ -156,8 +156,13 @@ multix catalog note list -u product-ugc
   marks, variation selectors, Unicode tag characters) are removed, tabs become
   spaces, look-alike forms such as fullwidth letters are folded (NFKC) and
   Unicode dashes read as `-`, then URL query strings, key-like tokens (API
-  keys, JWTs, AWS key ids and secret keys, private keys, signed-URL parameters,
-  `Authorization` values, `name=value` pairs whose name ends in `secret`,
+  keys, JWTs, AWS key ids and secret keys, bare base64 keys of 32 or 64 bytes
+  such as HMAC-SHA256 or Azure storage keys, private keys, signed-URL
+  parameters, `Authorization` values, pairs written `name=value`,
+  `name: value`, `name => value`, `name == value` or quoted as in JSON
+  (`"password": "…"`, `'token': '…'`; the whole quoted value is removed, and
+  a quoted name stays with `"[redacted]"` as its value so JSON stays valid)
+  whose name ends in `secret`,
   `token`, `password` or `credential`, or in a joined key word such as
   `FAL_KEY`, `api_key`, `x-api-key` or `accesskey`; any other name ending in
   `key` counts only when its value looks like a token, 16 or more characters
