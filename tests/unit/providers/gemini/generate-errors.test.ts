@@ -1,6 +1,11 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { run } from "../../../../src/agent/run-state.js";
 import { classifyError } from "../../../../src/core/error-classify.js";
+import { _resetOutputDir } from "../../../../src/core/output-dir.js";
 import { registerGenerateCommand } from "../../../../src/providers/gemini/commands/generate.js";
 import { _resetGeminiKeyCooldowns } from "../../../../src/providers/gemini/key-pool.js";
 
@@ -14,9 +19,9 @@ function program(): Command {
   return root;
 }
 
-async function runAndCatch(): Promise<unknown> {
+async function runAndCatch(extra: string[] = []): Promise<unknown> {
   try {
-    await program().parseAsync(["generate", "--prompt", "a cat", "--model", "gemini-x"], {
+    await program().parseAsync(["generate", "--prompt", "a cat", "--model", "gemini-x", ...extra], {
       from: "user",
     });
   } catch (error) {
@@ -27,6 +32,7 @@ async function runAndCatch(): Promise<unknown> {
 
 beforeEach(() => {
   logged = [];
+  _resetOutputDir();
   _resetGeminiKeyCooldowns();
   for (const k of Object.keys(process.env)) {
     if (k.startsWith("GEMINI_API_KEY")) {
@@ -45,7 +51,10 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  run.partial = undefined;
+  _resetOutputDir();
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   vi.restoreAllMocks();
   for (const k of Object.keys(process.env)) {
     if (k.startsWith("GEMINI_API_KEY")) Reflect.deleteProperty(process.env, k);
@@ -73,5 +82,71 @@ describe("gemini generate failures", () => {
     );
     const info = classifyError(await runAndCatch());
     expect(info).toMatchObject({ code: "PROVIDER_REJECTED", http_status: 400 });
+  });
+
+  it("finishes the saved images and records the remainder when a later request fails", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "multix-gen-partial-"));
+    vi.stubEnv("MULTIX_OUTPUT_DIR", dir);
+    const image = {
+      candidates: [
+        { content: { parts: [{ inlineData: { mimeType: "image/png", data: "iVBORw0KGgo=" } }] } },
+      ],
+    };
+    let calls = 0;
+    vi.stubGlobal("fetch", async () => {
+      calls++;
+      return calls === 1
+        ? new Response(JSON.stringify(image), { status: 200 })
+        : new Response(JSON.stringify({ error: { message: "overloaded" } }), { status: 503 });
+    });
+    const output = path.join(dir, "out", "first.png");
+    try {
+      const error = await runAndCatch([
+        "--num-images",
+        "3",
+        "--output",
+        output,
+        "--image-format",
+        "original",
+      ]);
+      expect(calls).toBe(2);
+      expect(classifyError(error)).toMatchObject({
+        code: "PROVIDER_UNAVAILABLE",
+        http_status: 503,
+      });
+      expect(fs.readdirSync(dir).filter((f) => f.startsWith("gemini_generated_"))).toHaveLength(1);
+      expect(fs.existsSync(output)).toBe(true);
+      expect(run.partial).toEqual({ options: { "--num-images": "2", "--output": null } });
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("counts requests that returned no image as still owed", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "multix-gen-partial-"));
+    vi.stubEnv("MULTIX_OUTPUT_DIR", dir);
+    const image = {
+      candidates: [
+        { content: { parts: [{ inlineData: { mimeType: "image/png", data: "iVBORw0KGgo=" } }] } },
+      ],
+    };
+    const responses = [
+      new Response(JSON.stringify(image), { status: 200 }),
+      new Response(JSON.stringify({ candidates: [] }), { status: 200 }),
+      new Response("{}", { status: 503 }),
+    ];
+    vi.stubGlobal("fetch", async () => responses.shift());
+    try {
+      await runAndCatch(["--num-images", "4", "--image-format", "original"]);
+      expect(run.partial?.options["--num-images"]).toBe("3");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("records no remainder when the first request fails", async () => {
+    vi.stubGlobal("fetch", async () => new Response("{}", { status: 503 }));
+    await runAndCatch(["--num-images", "3"]);
+    expect(run.partial).toBeUndefined();
   });
 });

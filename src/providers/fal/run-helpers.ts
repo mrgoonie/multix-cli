@@ -131,6 +131,8 @@ export interface WaitForResultOptions {
  * Uses the URLs fal itself returned from submit rather than reconstructing
  * them, since the queue's status/result URLs are keyed by app id (first two
  * path segments of the model id), not the full endpoint id. Never submits.
+ * A failed poll or fetch is rethrown with the request id and resume hint, and
+ * the original error as `cause` so classifyError keeps its class and Retry-After.
  */
 export async function waitForFalResult(opts: WaitForResultOptions): Promise<FalResultResponse> {
   const { client, model, submit, logger } = opts;
@@ -162,7 +164,9 @@ export async function waitForFalResult(opts: WaitForResultOptions): Promise<FalR
         continue;
       }
       const msg = e instanceof Error ? e.message : String(e);
-      throw new Error(`Failed to poll status for fal request ${requestId}: ${msg}. ${resumeHint}`);
+      throw new Error(`Failed to poll status for fal request ${requestId}: ${msg}. ${resumeHint}`, {
+        cause: e,
+      });
     }
 
     logger.debug(`attempt ${attempt} — status: ${statusRes.status}`);
@@ -174,7 +178,9 @@ export async function waitForFalResult(opts: WaitForResultOptions): Promise<FalR
     return await client.getAbsolute<FalResultResponse>(submit.response_url, logger);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    throw new Error(`Failed to fetch result for fal request ${requestId}: ${msg}. ${resumeHint}`);
+    throw new Error(`Failed to fetch result for fal request ${requestId}: ${msg}. ${resumeHint}`, {
+      cause: e,
+    });
   }
 }
 

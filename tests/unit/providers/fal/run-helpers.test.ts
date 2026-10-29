@@ -2,7 +2,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ProviderError, ValidationError } from "../../../../src/core/errors.js";
+import { classifyError } from "../../../../src/core/error-classify.js";
+import { HttpError, ProviderError, ValidationError } from "../../../../src/core/errors.js";
 import {
   downloadResultMedia,
   extractMediaUrls,
@@ -278,6 +279,83 @@ describe("submitAndWait", () => {
         pollIntervalMs: 5,
       }),
     ).rejects.toThrow(/req-1/);
+  });
+
+  /** Fetch mock: submit, then the given status and result responses. */
+  function mockQueue(status: () => Response, result: () => Response) {
+    globalThis.fetch = vi.fn(async (url: string | URL) => {
+      const u = String(url);
+      if (u.endsWith("/fal-ai/flux/schnell")) {
+        return new Response(
+          JSON.stringify({
+            request_id: "req-1",
+            status_url: STATUS_URL,
+            response_url: RESPONSE_URL,
+          }),
+          { status: 200 },
+        );
+      }
+      if (u === STATUS_URL) return status();
+      if (u === RESPONSE_URL) return result();
+      throw new Error(`unexpected fetch: ${u}`);
+    }) as unknown as typeof fetch;
+  }
+
+  async function waitError(): Promise<unknown> {
+    return submitAndWait({
+      model: "fal-ai/flux/schnell",
+      input: { prompt: "x" },
+      logger: noopLogger,
+      pollIntervalMs: 5,
+    }).then(
+      () => expect.unreachable("submitAndWait should reject"),
+      (e: unknown) => e,
+    );
+  }
+
+  it("keeps Retry-After and the HTTP class of a 429 on the result fetch", async () => {
+    mockQueue(
+      () => new Response(JSON.stringify({ status: "COMPLETED" }), { status: 200 }),
+      () => new Response("Too Many Requests", { status: 429, headers: { "retry-after": "30" } }),
+    );
+    const err = await waitError();
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).message).toMatch(
+      /^Failed to fetch result for fal request req-1: HTTP 429 .*multix fal result fal-ai\/flux\/schnell req-1/s,
+    );
+    expect((err as Error).cause).toBeInstanceOf(HttpError);
+    expect(classifyError(err)).toMatchObject({
+      code: "RATE_LIMITED",
+      http_status: 429,
+      retry_after_s: 30,
+    });
+  });
+
+  it("keeps Retry-After and the HTTP class of a 429 on the status poll", async () => {
+    mockQueue(
+      () => new Response("Too Many Requests", { status: 429, headers: { "retry-after": "12" } }),
+      () => new Response("{}", { status: 200 }),
+    );
+    const err = await waitError();
+    expect((err as Error).message).toMatch(
+      /^Failed to poll status for fal request req-1: HTTP 429/,
+    );
+    expect(classifyError(err)).toMatchObject({
+      code: "RATE_LIMITED",
+      http_status: 429,
+      retry_after_s: 12,
+    });
+  });
+
+  it("classifies a 401 on the status poll as INVALID_KEY from the HttpError status", async () => {
+    mockQueue(
+      () => new Response("nope", { status: 401 }),
+      () => new Response("{}", { status: 200 }),
+    );
+    expect(classifyError(await waitError())).toMatchObject({
+      code: "INVALID_KEY",
+      http_status: 401,
+    });
   });
 
   /** Fetch mock whose submit returns the given follow-up URLs; records every keyed request. */
