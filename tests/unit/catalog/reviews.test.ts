@@ -188,6 +188,97 @@ describe("scrubText: key shapes", () => {
     expect(scrubText(`set ${line} here`)).toBe("set [redacted] here");
   });
 
+  // 32- and 64-byte keys in standard base64: HMAC-SHA256 keys, Azure storage keys.
+  const b64 = (n: number) => fake("Zm9vYmFy", "K3dK", "/Qx7", "Lm2N").repeat(8).slice(0, n);
+  it.each([
+    ["a 44-character key ending in =", `${b64(43)}=`],
+    ["a 43-character unpadded key with a slash", b64(43)],
+    ["a 44-character key without padding", b64(44)],
+    ["an 88-character key ending in ==", `${b64(86)}==`],
+    ["an 87-character key ending in =", `${b64(86)}=`],
+    ["an 86-character key with a slash", b64(86)],
+    [
+      "a 44-character key of letters and digits ending in =",
+      `${fake("aB3x", "Q9zK").repeat(5)}abc=`,
+    ],
+  ])("removes a bare base64 secret: %s", (_label, secret) => {
+    expect(scrubText(`use ${secret} now`)).toBe("use [redacted] now");
+    expect(scrubText(`key:${secret}.`)).not.toContain(secret);
+  });
+
+  it.each([
+    ["a fat-arrow pair", fake("password => ", "hunter2x"), "[redacted]"],
+    ["a double-equals pair", fake("password == ", "hunter2x"), "[redacted]"],
+    ["a JSON-quoted pair", fake('{"password": "', 'hunter 2x"}'), '{"password": "[redacted]"}'],
+    ["a single-quoted pair", fake("{'token': '", "abc def'}"), "{'token': '[redacted]'}"],
+    ["a JSON api_key", fake('{"api_key":"', 'abc123"}'), '{"api_key":"[redacted]"}'],
+    ["a JSON credentials entry", fake('"credentials" : "', 'u:p"'), '"credentials" : "[redacted]"'],
+    [
+      "a quoted value with an escaped quote",
+      fake('{"password": "abc', '\\"def123rest"}'),
+      '{"password": "[redacted]"}',
+    ],
+    [
+      "a quoted value with an escaped backslash",
+      fake("'token': 'ab\\\\", "' tail"),
+      "'token': '[redacted]' tail",
+    ],
+    [
+      "a quoted name with a null value",
+      fake('{"token": null, "x": 1}'),
+      '{"token": "[redacted]", "x": 1}',
+    ],
+    ["a quoted name with a number value", fake('{"token": ', "12345}"), '{"token": "[redacted]"}'],
+    ["mixed quotes", fake("{'token': \"ab", 'c"}'), "{'token': \"[redacted]\"}"],
+    [
+      "a quoted name ending in key with prose under a secret name",
+      fake('"api_key": "two ', 'words 2x"'),
+      '"api_key": "[redacted]"',
+    ],
+    [
+      "an always-secret name with a quoted prose value",
+      fake('password: "correct horse ', 'battery"'),
+      "[redacted]",
+    ],
+    ["a quoted value after a bare name", fake('password="', 'two words" ok'), "[redacted] ok"],
+    ["a Ruby hash entry", fake(':token => "', 'abc def", x'), ":[redacted], x"],
+    [
+      "a token-like value under a quoted name ending in key",
+      fake('"Key": "', 'abcd1234efgh5678"'),
+      '"Key": "[redacted]"',
+    ],
+  ])("removes %s", (_label, input, expected) => {
+    expect(scrubText(input)).toBe(expected);
+  });
+
+  it.each([
+    fake('{"password": "hunter 2x", "user": "bob"}'),
+    fake('{"token": null, "x": 1}'),
+    fake('{"token": ', '12345, "list": [1, 2]}'),
+    fake('{"api_key": "abc', '\\"def123", "n": {"secret": "s3c', 'ret"}}'),
+    fake('[{"credentials": "u:p"}, {"Key": "abcd1234', 'efgh5678"}]'),
+  ])("keeps JSON valid when it removes a secret from %s", (json) => {
+    const out = scrubText(json);
+    expect(out).toContain("[redacted]");
+    expect(() => JSON.parse(out)).not.toThrow();
+  });
+
+  it("removes every random 32-byte, 64-byte and 40-character base64 key", () => {
+    // A fixed-seed generator (mulberry32) keeps the keys the same on every run.
+    let seed = 0x474;
+    const next = () => {
+      seed = (seed + 0x6d2b79f5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    const key = (bytes: number) =>
+      Buffer.from(Array.from({ length: bytes }, () => Math.floor(next() * 256))).toString("base64");
+    const keys = Array.from({ length: 700 }, () => [key(32), key(64), key(30)]).flat();
+    const leaked = keys.filter((k) => scrubText(`use ${k} now`) !== "use [redacted] now");
+    expect(leaked.length).toBe(0);
+  });
+
   it("removes a PEM private key with a lower-case header", () => {
     expect(scrubText(`k ${fake("-----begin ", "private key-----")}\nMIIEvQIBADAN`)).toBe(
       "k [redacted]",
@@ -216,6 +307,21 @@ describe("scrubText: time", () => {
     ["60k question marks", "?".repeat(60_000)],
     ["60k chained key names", "key:".repeat(15_000)],
     ["60k chained key pairs", "Key=a".repeat(12_000)],
+    ["60k equals signs", "=".repeat(60_000)],
+    ["60k padding after one run", `Ab1${"=".repeat(60_000)}`],
+    ["60k runs of two equals signs", "a==".repeat(20_000)],
+    ["60k fat arrows", "a=>".repeat(20_000)],
+    ["60k chained double-equals pairs", "token==".repeat(9_000)],
+    ["60k quoted names", '"a": "'.repeat(10_000)],
+    ["60k quoted secret names", "'token': '".repeat(6_000)],
+    ["an unclosed quoted secret value", `"token": "${"a b ".repeat(15_000)}`],
+    ["a 60k base64 run", "Ab1+".repeat(15_000)],
+    ["60k of 44-character base64 runs", `${"Ab1/".repeat(11)} `.repeat(1_330)],
+    ["60k of slash-joined words", "ab/".repeat(20_000)],
+    ["60k backslashes in a quoted secret value", `"token": "${"\\".repeat(60_000)}`],
+    ["60k escaped quotes in a quoted secret value", `"token": "${'\\"'.repeat(30_000)}`],
+    ["60k quoted secret names with bare values", '{"token": a,'.repeat(5_000)],
+    ["60k arrow calls", "token => f(".repeat(5_500)],
   ])("scrubs %s in linear time", (_label, text) => {
     const started = performance.now();
     scrubText(text);
@@ -242,8 +348,33 @@ describe("scrubText: ordinary text survives", () => {
     "hotkey: Ctrl+K",
     "Monkey: no",
     "image-key=abc123",
+    "a => b",
+    "x == y",
+    "if quality == 5 => ship it",
+    '{"model": "kling-v2-1-master", "max_tokens": 4096, "note": "fast"}',
+    "{'resolution': '1080p', 'hotkey': 'Ctrl+K'}",
+    '"Key": "fast and cheap"',
+    "Saved under /Users/Ann/Projects/Campaign2026/src/renders/v2final today.",
+    "Runs on fal-ai/flux-pro/v1.1-ultra/Redux and fal-ai/AuraFlow/v0.3/Edit2 now.",
+    "Rendered to /srv/media/renders/Final/Take2026ABCDEFGHIJK today.",
+    'hotkey: "Ctrl+Shift+4 to capture"',
+    '{"key": "Use 2 passes for best results at 1080p"}',
+    '"monkey": "We saw 3 of them at the zoo"',
+    `"key": "${"a long description of what this field holds, ".repeat(2)}"`,
+    "items.map(token => token.trim())",
+    "if (token == null) return;",
+    "const ok = token === undefined;",
   ])("keeps %s", (text) => {
     expect(scrubText(text)).toBe(text);
+  });
+
+  it("redacts values after => and == that only look like code", () => {
+    const pw = "Hunter" + "2";
+    expect(scrubText(`password => ${pw}(x) ok`)).toBe("[redacted] ok");
+    expect(scrubText(`token == Abc.def(1)xyz${"9"} ok`)).toBe("[redacted] ok");
+    expect(scrubText(`token => $ecret)${"99"} ok`)).toBe("[redacted] ok");
+    expect(scrubText(`secret == =s3cr${"3tVal"} ok`)).toBe("[redacted] ok");
+    expect(scrubText(`if (token == f( password=${pw}`)).toBe("if (token == f( [redacted]");
   });
 
   it("keeps decomposed Vietnamese as its composed form under NFKC", () => {
