@@ -87,11 +87,16 @@ account's usage. Group with `--by provider|model|offering|task|command`.
   bad flag, a resume that only read local state) are left out.
 - An **operation** is one piece of work: a submit with its status polls,
   resumes and download counts once.
-- Outcomes are counted per operation across all rows: it is **completed** when
-  any of its runs succeeded, so a failed status poll recorded under the job's
-  operation is not a failure. Otherwise its latest run decides whether it
-  **failed** or was **canceled**. The success rate is completed operations
-  divided by operations.
+- Outcomes are counted per operation across all rows. A run that reports the
+  provider's own verdict that the job failed (`JOB_FAILED`, including a job
+  the provider's moderation stopped) makes it **failed**, even when its submit
+  was accepted or a later status read exited ok, unless a resubmit under the
+  same operation id returned another job that succeeded. A job that was
+  canceled, paused for input or waits for payment is not a failed job.
+  Otherwise the operation is **completed** when any of its runs succeeded, so a status poll that failed for another reason (network
+  error, timeout) is not a failure of the job. With no successful run, its
+  latest run decides whether it **failed** or was **canceled**. The success
+  rate is completed operations divided by operations.
 - A failed poll whose run never received the job's provider id (its first
   request failed) is still recorded as an operation of its own, so it can count
   as a failure. Operation identity across runs is tracked in
@@ -99,6 +104,15 @@ account's usage. Group with `--by provider|model|offering|task|command`.
 - **Retries** are failed sends of a submit before the one that returned the job.
 - Spend counts each operation once from known figures. Operations whose cost is
   unknown or uncertain are counted separately, never added as $0.
+- An operation's spend (USD, its unknown or uncertain count, credits and
+  estimate) shows in one row: the row of its successful submit (the one that
+  names the model, so a failed attempt before a resubmit does not take it), or
+  of its earliest run that reported a figure when a filter leaves the submit
+  out. An operation recorded without a cost receipt counts on its first
+  successful run. A status run that repeats a task's cost keeps it in its own
+  `usage`, but no row adds it again, even when the status run lands in another
+  row (for example `(unknown model)`). A row that completed an operation whose
+  cost is counted in another row shows no per-success cost.
 - The model is the one the provider reported running; runs without one are
   grouped under `(unknown model)`.
 - Each row shows its sample size (operations) and a confidence level (none,

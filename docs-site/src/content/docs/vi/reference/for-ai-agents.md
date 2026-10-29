@@ -235,7 +235,9 @@ nhận `cost` (`multix.cost/v1`):
 lại chỉ tính một lần, con số provider báo sẽ chốt chi phí của thao tác, và chỉ
 mỗi lần submit tính phí riêng biệt (submit lại thì bị tính phí lại) mới cộng
 thêm chi phí. Lần chạy không gửi gì không bao giờ làm giảm chi phí của thao tác. Mặc định là
-`<provider>:<job id>`, hoặc `run:<history id>` khi provider không trả id. Hãy
+`<provider>:<id>`, trong đó id là `job` của lần chạy (không bao giờ trỏ tới file
+đầu vào đã tải lên hay một lệnh gọi bị từ chối), nếu không có thì là id đầu tiên
+mà bất kỳ phản hồi nào trả về, hoặc `run:<history id>` khi provider không trả id. Hãy
 đặt biến này trong shell cho lần chạy đó; `.env` của project không đặt được.
 
 ## Lịch sử chạy
@@ -256,7 +258,9 @@ multix rerun h_mfz3k2ab1c9d         # chạy lại (tham số thêm được n�
 ```
 
 `history stats` bỏ qua các lần chạy `--dry-run` và `--estimate`, và tính chi phí
-mỗi thao tác một lần, chỉ từ các con số đã biết; `cost_uncertain_ops` và
+và credits của mỗi thao tác một lần (chi phí và credits của một task chỉ hiện
+một lần, thường ở dòng của lần submit, dù bao nhiêu lần `status` lặp lại chúng),
+chỉ từ các con số đã biết; `cost_uncertain_ops` và
 `cost_unknown_ops` đếm số thao tác có chi phí không chắc chắn hoặc không rõ, nên
 khi có một trong hai thì `cost_usd` chỉ là cận dưới.
 

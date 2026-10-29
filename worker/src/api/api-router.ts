@@ -34,6 +34,12 @@
  *   GET    /api/v1/skills/{name}/grants         team grants; PUT|DELETE /grants/{account}
  *   GET|POST /api/v1/skill-shares              list or add a team skill shared with you
  *   DELETE /api/v1/skill-shares/{owner}/{name} stop listing it
+ *   GET    /api/v1/workflows?uri=              a skill's workflow and whether you authorized it
+ *   GET|POST /api/v1/workflow-authorizations    list or authorize a workflow revision
+ *   DELETE /api/v1/workflow-authorizations/{owner}/{name} withdraw an authorization
+ *   GET|POST /api/v1/workflow-runs              list runs or start one
+ *   GET    /api/v1/workflow-runs/{id}          read a run (advances it)
+ *   POST   /api/v1/workflow-runs/{id}/cancel   stop a run
  *   GET    /api/v1/api-keys                    the account's API keys (no values)
  *   DELETE /api/v1/api-keys/{id}               revoke an API key
  *
@@ -77,6 +83,12 @@ import {
 import { cancelJob, getCatalog, getJob, getModelCatalog, postJob } from "./job-api-handlers.js";
 import { openApiDocument } from "./openapi-document.js";
 import { routeSkillShares, routeSkills, skillManager } from "./skill-api-handlers.js";
+import {
+  routeWorkflowAuthorizations,
+  routeWorkflowRuns,
+  routeWorkflows,
+  workflowManager,
+} from "./workflow-api-handlers.js";
 
 export const API_PREFIX = "/api/v1";
 
@@ -214,6 +226,22 @@ async function route(
     return routeSkillShares(skillManager(app, deps, userId), request, parts.slice(1));
   }
 
+  if (resource === "workflows") {
+    return routeWorkflows(workflowManager(app, deps, userId, keys), request, parts.slice(1), url);
+  }
+
+  if (resource === "workflow-authorizations") {
+    return routeWorkflowAuthorizations(
+      workflowManager(app, deps, userId, keys),
+      request,
+      parts.slice(1),
+    );
+  }
+
+  if (resource === "workflow-runs") {
+    return routeWorkflowRuns(workflowManager(app, deps, userId, keys), request, parts.slice(1));
+  }
+
   throw new ApiError(404, "not_found", "Not found");
 }
 
@@ -267,10 +295,13 @@ export async function handleApi(
     routeName = parts[0] ?? "root";
     const caller = await authenticate(app, request);
     if (caller instanceof Response) return caller;
-    // Only the catalogs and jobs use the decrypted keys; the other routes must keep
-    // working (e.g. to revoke an API key) even if a stored key cannot be decrypted.
+    // Only the catalogs, jobs and workflow runs use the decrypted keys; the other routes
+    // must keep working (e.g. to revoke an API key) even if a stored key cannot be decrypted.
     const needsKeys =
-      routeName === "catalog" || routeName === "model-catalog" || routeName === "jobs";
+      routeName === "catalog" ||
+      routeName === "model-catalog" ||
+      routeName === "jobs" ||
+      routeName === "workflow-runs";
     const keys: ProviderKeys = needsKeys ? await app.accounts.providerKeys(caller.account.id) : {};
     // Scrub the caller's own key values from any error message that echoes CLI output.
     secrets = secretValues(keys);

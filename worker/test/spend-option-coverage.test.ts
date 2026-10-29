@@ -30,7 +30,6 @@ const LOCAL_GROUPS: ReadonlySet<string> = new Set(["media"]);
 const NOT_SPEND: Readonly<Record<string, string>> = {
   "elevenlabs transcribe --num-speakers": "a diarization hint; billing is by audio length",
   "elevenlabs dub --num-speakers": "a diarization hint; the command is uncapped anyway",
-  "elevenlabs sfx --duration-seconds": "ElevenLabs bounds a sound effect at 30 s",
   "fish tts --chunk-length": "a text chunking size; billing is by the bytes of the text",
   "atlas image --resolution": "an image tier (1k, 2k); --num-images bounds the number of images",
   "atlas image-to-image --resolution":
@@ -61,6 +60,9 @@ function isCovered(name: string, kind: SpendKind, policy: CommandPolicy): boolea
   if (policy.uncappedOptions?.includes(name)) return true;
   if (policy.unsupported?.includes(name) || policy.forced?.[name] !== undefined) return true;
   if (kind === "raw") return false;
+  if (kind === "duration" && policy.caps?.audioLength?.some((rule) => rule.option === name)) {
+    return true;
+  }
   return policy.caps?.[kind]?.includes(name) ?? false;
 }
 

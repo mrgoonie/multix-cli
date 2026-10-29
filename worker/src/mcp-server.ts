@@ -8,7 +8,8 @@
  * (skills/skills-methods.ts) as resources and the read-only multix_skills
  * tool; modern servers also declare the MCP Skills Extension and answer
  * skills/list, skills/get and resources/directory/read. With an account
- * registry, multix_skills_manage authors the caller's own skills.
+ * registry, multix_skills_manage authors the caller's own skills and
+ * multix_workflow runs skill workflows the caller authorized over REST.
  */
 
 import { type CallToolResult, McpServer } from "@modelcontextprotocol/server";
@@ -29,6 +30,7 @@ import {
   skillsCapabilities,
 } from "./skills/skills-methods.js";
 import { registerSkillsTool } from "./skills/skills-tool.js";
+import { registerWorkflowTool } from "./skills/workflow-tool.js";
 
 export const SERVER_NAME = "multix";
 
@@ -45,7 +47,7 @@ export interface ServerDeps {
   events?: EventsContext;
   /** The caller's skills context; built-in skills only when absent. */
   skills?: SkillsContext;
-  /** The caller's own skills registry; multix_skills_manage is registered only when present. */
+  /** The caller's own skills registry; multix_skills_manage and multix_workflow are registered only when present. */
   authoring?: AuthoringContext;
 }
 
@@ -147,6 +149,11 @@ export function createMcpServer(env: Env, deps: ServerDeps): McpServer {
   if (deps.authoring) {
     registerSkillsManageTool(server, deps.authoring, (tool, fields, body) =>
       runTool(env, tool, fields, body),
+    );
+    registerWorkflowTool(
+      server,
+      { ...deps.authoring, jobs: deps.jobs, limits },
+      (tool, fields, body) => runTool(env, tool, fields, body),
     );
   }
 

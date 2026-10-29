@@ -90,11 +90,17 @@ của tài khoản provider. Nhóm theo `--by provider|model|offering|task|comma
   key, sai flag, lần tiếp tục chỉ đọc trạng thái cục bộ) bị bỏ qua.
 - Một **operation** là một phần việc: một lần submit cùng các lần poll trạng
   thái, tiếp tục và tải file chỉ tính một lần.
-- Kết quả được tính theo operation trên mọi dòng: operation **hoàn tất** khi có
-  ít nhất một lần chạy thành công, nên một lần poll trạng thái lỗi được ghi dưới
-  operation của job không bị tính là lỗi. Nếu không, lần chạy gần nhất quyết
-  định operation **lỗi** hay **bị hủy**. Tỉ lệ thành công là số operation hoàn
-  tất chia cho số operation.
+- Kết quả được tính theo operation trên mọi dòng. Một lần chạy báo chính
+  provider kết luận job thất bại (`JOB_FAILED`, bao gồm cả khi bộ kiểm
+  duyệt của provider chặn job) khiến operation bị tính là **lỗi**, kể cả
+  khi lần submit đã được chấp nhận hay một lần đọc trạng thái sau đó thoát ok,
+  trừ khi một lần submit lại dưới cùng operation id trả về job khác và job đó
+  thành công. Job bị hủy, tạm dừng chờ nhập liệu hoặc chờ thanh toán không bị
+  tính là job lỗi. Nếu không, operation **hoàn tất** khi có ít nhất một lần chạy
+  thành công, nên lần poll trạng thái lỗi vì lý do khác (lỗi mạng, hết thời gian
+  chờ) không phải lỗi của job. Nếu không có lần chạy thành công, lần chạy gần
+  nhất quyết định operation **lỗi** hay **bị hủy**. Tỉ lệ thành công là số
+  operation hoàn tất chia cho số operation.
 - Lần poll lỗi chưa từng nhận được provider id của job (request đầu tiên đã
   lỗi) vẫn được ghi thành một operation riêng, nên có thể bị tính là lỗi. Việc
   nhận diện operation qua nhiều lần chạy được theo dõi ở
@@ -103,6 +109,16 @@ của tài khoản provider. Nhóm theo `--by provider|model|offering|task|comma
 - Chi tiêu tính mỗi operation một lần, chỉ từ các con số đã biết. Operation có
   chi phí không rõ hoặc không chắc chắn được đếm riêng, không bao giờ cộng như
   $0.
+- Chi tiêu của một operation (USD, số operation có chi phí không rõ hoặc không
+  chắc chắn, credits và giá ước tính) chỉ hiện ở một dòng: dòng của lần submit
+  thành công (lần nêu tên model, nên một lần thử lỗi trước khi submit lại không
+  giữ nó), hoặc của lần chạy sớm nhất báo con số khi bộ lọc bỏ lần submit ra
+  ngoài. Operation được ghi mà không có cost receipt thì tính ở lần chạy thành
+  công đầu tiên của nó. Lần chạy `status` lặp lại chi phí của một task vẫn giữ
+  nó trong `usage` của mình, nhưng không dòng nào cộng lại lần nữa, kể cả khi
+  lần `status` rơi vào dòng khác (ví dụ `(unknown model)`). Dòng đã hoàn tất một
+  operation có chi phí được tính ở dòng khác sẽ không hiện chi phí mỗi lần
+  thành công.
 - Model là model provider báo đã chạy; lần chạy không có thông tin này được gom
   vào `(unknown model)`.
 - Mỗi dòng hiển thị cỡ mẫu (số operation) và mức tin cậy (none, low, medium,

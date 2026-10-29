@@ -1,10 +1,13 @@
 /**
  * Operator caps for `multix_run`, the same limits the Worker's own image and
  * video tools enforce (MULTIX_MCP_MAX_OUTPUTS, MULTIX_MCP_MAX_VIDEO_SECONDS,
- * MULTIX_MCP_ALLOWED_RESOLUTIONS). Applied to the value the CLI would really
- * use: the caller's value, or else the CLI default.
+ * MULTIX_MCP_ALLOWED_RESOLUTIONS), plus MULTIX_MCP_MAX_AUDIO_SECONDS for
+ * generated audio and MULTIX_MCP_ALLOWED_IMAGE_MODELS for image models.
+ * Applied to the value the CLI would really use: the caller's value, or else
+ * the CLI default.
  */
 
+import { commandCapability } from "../../../src/capabilities/command-capabilities.js";
 import { ValidationError } from "../../../src/core/errors.js";
 import type { Limits } from "../config.js";
 import type { CliOption } from "./cli-catalog-types.js";
@@ -38,10 +41,10 @@ export function normaliseResolution(raw: string): string {
  */
 const PLAIN_NUMBER_RE = /^\d+(\.\d+)?$/;
 
-function positiveNumber(raw: string, name: string): number {
+function positiveNumber(raw: string, name: string, min = 1): number {
   const n = Number(raw);
-  if (!PLAIN_NUMBER_RE.test(raw.trim()) || n < 1)
-    throw new ValidationError(`--${name} must be a plain decimal number of at least 1`);
+  if (!PLAIN_NUMBER_RE.test(raw.trim()) || n < min)
+    throw new ValidationError(`--${name} must be a plain decimal number of at least ${min}`);
   return n;
 }
 
@@ -78,6 +81,29 @@ export function applyCaps(
       values.set(name, [String(limits.defaultVideoSeconds)]);
     }
   }
+  if (rules?.fixedSeconds !== undefined && rules.fixedSeconds > limits.maxVideoSeconds) {
+    throw new ValidationError(
+      `this command renders up to ${rules.fixedSeconds} seconds of video and has no length option; this server allows at most ${limits.maxVideoSeconds} seconds`,
+    );
+  }
+  for (const rule of rules?.audioLength ?? []) {
+    const { option: name, unitsPerSecond, omittedSeconds, notWith, min } = rule;
+    const given = single(values, name);
+    const maxUnits = limits.maxAudioSeconds * unitsPerSecond;
+    if (given !== undefined) {
+      if (positiveNumber(given, name, min) > maxUnits) {
+        throw new ValidationError(
+          `--${name} must be at most ${maxUnits} (${limits.maxAudioSeconds} seconds) on this server`,
+        );
+      }
+    } else if (
+      omittedSeconds > limits.maxAudioSeconds &&
+      !notWith?.some((other) => values.has(other))
+    ) {
+      // The provider's own length could exceed the cap: send the cap instead.
+      values.set(name, [String(maxUnits)]);
+    }
+  }
   for (const name of rules?.resolution ?? []) {
     if (
       rules?.fillResolution &&
@@ -97,6 +123,50 @@ export function applyCaps(
       );
     }
   }
+}
+
+const MODEL_OPTION = "model";
+
+/** True when `command` outputs images and takes --model, so the image model allowlist applies to it. */
+export function isImageModelCommand(
+  command: string,
+  options: ReadonlyMap<string, CliOption>,
+): boolean {
+  return (
+    options.has(MODEL_OPTION) && (commandCapability(command)?.outputs.includes("image") ?? false)
+  );
+}
+
+/**
+ * The model sets the price of each image, so with MULTIX_MCP_ALLOWED_IMAGE_MODELS
+ * set an image command runs only with a model listed for its group
+ * (`<group>:<model>`, since one id can cost more on another provider): the
+ * caller's --model, or else the catalog default. When the CLI picks the model
+ * at run time (no catalog default), the caller must name one.
+ */
+export function assertAllowedImageModel(
+  command: string,
+  group: string,
+  options: ReadonlyMap<string, CliOption>,
+  values: OptionValues,
+  limits: Limits,
+): void {
+  if (limits.allowedImageModels.length === 0 || !isImageModelCommand(command, options)) return;
+  const prefix = `${group}:`;
+  const allowed = limits.allowedImageModels
+    .filter((entry) => entry.startsWith(prefix))
+    .map((entry) => entry.slice(prefix.length));
+  const model = single(values, MODEL_OPTION) ?? defaultString(options.get(MODEL_OPTION));
+  if (model !== undefined && allowed.includes(model)) return;
+  if (allowed.length === 0) {
+    throw new ValidationError(
+      `"${command}" is not available on this server: no ${group} image model is allowed (the model sets the price of each image)`,
+    );
+  }
+  const which = model === undefined ? "pass --model" : "--model must be";
+  throw new ValidationError(
+    `${which} one of ${allowed.join(", ")} for "${command}" on this server (the model sets the price of each image)`,
+  );
 }
 
 /**

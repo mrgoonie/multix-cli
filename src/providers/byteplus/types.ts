@@ -48,6 +48,8 @@ export interface VideoTaskParameters {
 export interface VideoTaskRequest {
   model: string;
   content: VideoContentItem[];
+  /** Generate audio synchronized with the video (models that support it). */
+  generate_audio?: boolean;
   parameters?: VideoTaskParameters;
 }
 

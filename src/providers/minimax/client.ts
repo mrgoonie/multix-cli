@@ -6,7 +6,7 @@
  */
 
 import { resolveKey } from "../../core/env-loader.js";
-import { ConfigError, ProviderError } from "../../core/errors.js";
+import { ConfigError, ProviderError, ProviderJobFailedError } from "../../core/errors.js";
 import { downloadFile as coreDownload, httpJson } from "../../core/http-client.js";
 import type { Logger } from "../../core/logger.js";
 
@@ -82,7 +82,7 @@ export interface PollResult {
 }
 
 /**
- * Poll an async MiniMax task until Success/Failed/Error or timeout.
+ * Poll an async MiniMax task until Success/Fail or timeout.
  * Mirrors poll_async_task in Python source.
  */
 export async function pollAsyncTask(
@@ -104,8 +104,12 @@ export async function pollAsyncTask(
     }
 
     if (status === "Success") return result;
-    if (status === "Failed" || status === "Error") {
-      throw new ProviderError(`Task ${taskId} failed: ${JSON.stringify(result)}`, "minimax");
+    // MiniMax reports a failed task as "Fail"; older responses used "Failed"/"Error".
+    if (status === "Fail" || status === "Failed" || status === "Error") {
+      throw new ProviderJobFailedError(
+        `Task ${taskId} failed: ${JSON.stringify(result)}`,
+        "minimax",
+      );
     }
 
     await sleep(intervalMs);

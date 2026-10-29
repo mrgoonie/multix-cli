@@ -178,7 +178,66 @@ describe("operations, polls and resumes", () => {
       entry({ job: { ...job, id: "job-3" } }),
     ];
     expect(rowFor(rows).operations).toBe(2);
-    expect(operationOf(rows[0] as HistoryEntry)).toBe("job:fal:job-2");
+    expect(operationOf(rows[0] as HistoryEntry)).toBe("fal:job-2");
+  });
+
+  // Entries written before receipts carry provider_ids but no job (job came later).
+  it("counts a job's cost once across ledger entries written before receipts", () => {
+    const row = rowFor([
+      entry({ provider_ids: ["req_1"], usage: { cost_usd: 3 } as HistoryEntry["usage"] }),
+      entry({
+        command: "fal status",
+        ts: "2026-10-27T10:05:00.000Z",
+        provider_ids: ["req_1"],
+        usage: { cost_usd: 3 } as HistoryEntry["usage"],
+      }),
+    ]);
+    expect(row).toMatchObject({ operations: 1, cost: { known_usd: 3, per_success_usd: 3 } });
+  });
+
+  it("joins an old entry without a receipt to a newer receipt of the same job", () => {
+    const row = rowFor([
+      entry({ provider_ids: ["req_2"] }),
+      entry({
+        command: "fal status",
+        ts: "2026-10-27T10:05:00.000Z",
+        cost: receipt({
+          operation_id: "fal:req_2",
+          role: "observation",
+          actual_usd: 0.5,
+          actual_source: "provider_reported",
+        }),
+      }),
+    ]);
+    expect(row).toMatchObject({
+      operations: 1,
+      cost: { known_usd: 0.5, unknown_operations: 0, per_success_usd: 0.5 },
+    });
+  });
+
+  it("puts an old job's credits once, on its first run's row", () => {
+    const rows = aggregateUsage(
+      [
+        entry({
+          provider: "leonardo",
+          model_resolved: "flux",
+          provider_ids: ["gen_1"],
+          usage: { credits: 12 } as HistoryEntry["usage"],
+        }),
+        entry({
+          provider: "leonardo",
+          model_resolved: null,
+          provider_ids: ["gen_1"],
+          ts: "2026-10-27T10:05:00.000Z",
+          usage: { credits: 12 } as HistoryEntry["usage"],
+        }),
+      ],
+      "model",
+    );
+    expect(rows.map((r) => [r.key, r.credits])).toEqual([
+      ["(unknown model)", undefined],
+      ["flux", 12],
+    ]);
   });
 
   it("gives a run with no job and no receipt its own operation", () => {
@@ -357,6 +416,141 @@ describe("retries, failures and cancels", () => {
     });
   });
 
+  it("fails a job whose status run reports JOB_FAILED even though its submit was accepted", () => {
+    const op = "fal:req_1";
+    const entries = [
+      entry({ provider_ids: ["req_1"], cost: receipt({ operation_id: op }) }),
+      entry({
+        ts: "2026-10-27T10:01:00.000Z",
+        command: "fal status",
+        model_resolved: undefined,
+        provider_ids: ["req_1"],
+        ok: false,
+        exit_code: 5,
+        error: { code: "JOB_FAILED", message: "the provider failed the job" },
+        cost: receipt({ operation_id: op, role: "observation", status: "unknown" }),
+      }),
+    ];
+    for (const by of USAGE_GROUPS) {
+      for (const r of aggregateUsage(entries, by)) {
+        expect(r, `${by} ${r.key}`).toMatchObject({ completed: 0, canceled: 0, success_rate: 0 });
+        expect(r.failed, `${by} ${r.key}`).toBe(r.operations);
+      }
+    }
+    expect(aggregateUsage(entries, "provider")).toMatchObject([
+      { key: "fal", requests: 2, operations: 1, completed: 0, failed: 1, success_rate: 0 },
+    ]);
+  });
+
+  it("fails a job from the ledger before receipts when its status run reports JOB_FAILED", () => {
+    // The repro of #471: no receipts, one fal job named by its provider id.
+    const entries = [
+      entry({ provider_ids: ["req_1"] }),
+      entry({
+        ts: "2026-10-27T10:01:00.000Z",
+        command: "fal status",
+        model_resolved: undefined,
+        provider_ids: ["req_1"],
+        ok: false,
+        exit_code: 5,
+        error: { code: "JOB_FAILED", message: "fal request req_1 failed" },
+      }),
+    ];
+    expect(aggregateUsage(entries, "provider")).toMatchObject([
+      { key: "fal", operations: 1, completed: 0, failed: 1, success_rate: 0 },
+    ]);
+  });
+
+  it("fails a job identified by its job record when a later run reports JOB_FAILED", () => {
+    const job = { provider: "fal", id: "j-f", attempt: 1 };
+    const row = rowFor([
+      entry({ job }),
+      entry({
+        job,
+        ts: "2026-10-27T10:05:00.000Z",
+        ok: false,
+        exit_code: 5,
+        error: { code: "JOB_FAILED", message: "the provider failed the job" },
+      }),
+    ]);
+    expect(row).toMatchObject({ operations: 1, completed: 0, failed: 1, success_rate: 0 });
+  });
+
+  it("keeps a job failed when a later read-only status poll exits ok", () => {
+    const job = { provider: "byteplus", id: "j-r", attempt: 1 };
+    const row = rowFor([
+      entry({ job }),
+      entry({
+        job,
+        ts: "2026-10-27T10:01:00.000Z",
+        ok: false,
+        exit_code: 5,
+        error: { code: "JOB_FAILED", message: "the provider failed the job" },
+      }),
+      entry({ job, ts: "2026-10-27T10:05:00.000Z" }),
+    ]);
+    expect(row).toMatchObject({ operations: 1, completed: 0, failed: 1, success_rate: 0 });
+  });
+
+  it("completes an operation when a resubmit under the same operation id returned another job that succeeded", () => {
+    const op = "agent-op-1";
+    const row = rowFor([
+      entry({ provider_ids: ["J1"], cost: receipt({ operation_id: op }) }),
+      entry({
+        ts: "2026-10-27T10:01:00.000Z",
+        provider_ids: ["J1"],
+        ok: false,
+        exit_code: 5,
+        error: { code: "JOB_FAILED", message: "the provider failed the job" },
+        cost: receipt({ operation_id: op, role: "observation", status: "unknown" }),
+      }),
+      entry({
+        ts: "2026-10-27T10:05:00.000Z",
+        provider_ids: ["J2"],
+        job: { provider: "fal", id: "J2", attempt: 1 },
+        cost: receipt({ operation_id: op }),
+      }),
+    ]);
+    expect(row).toMatchObject({ operations: 1, completed: 1, failed: 0 });
+  });
+
+  it("does not let an upload under the same operation id complete a failed job", () => {
+    const op = "agent-op-2";
+    const row = rowFor([
+      entry({ provider_ids: ["file_9"], cost: receipt({ operation_id: op }) }),
+      entry({
+        ts: "2026-10-27T10:01:00.000Z",
+        provider_ids: ["J1"],
+        job: { provider: "fal", id: "J1", attempt: 1 },
+        cost: receipt({ operation_id: op }),
+      }),
+      entry({
+        ts: "2026-10-27T10:02:00.000Z",
+        provider_ids: ["J1"],
+        ok: false,
+        exit_code: 5,
+        error: { code: "JOB_FAILED", message: "the provider failed the job" },
+        cost: receipt({ operation_id: op, role: "observation", status: "unknown" }),
+      }),
+    ]);
+    expect(row).toMatchObject({ operations: 1, completed: 0, failed: 1 });
+  });
+
+  it("does not fail a job when a poll got a gateway page that says blocked", () => {
+    const job = { provider: "fal", id: "j-w", attempt: 1 };
+    const row = rowFor([
+      entry({ job }),
+      entry({
+        job,
+        ts: "2026-10-27T10:01:00.000Z",
+        ok: false,
+        exit_code: 5,
+        error: { code: "CONTENT_BLOCKED", message: "HTTP 403: you have been blocked" },
+      }),
+    ]);
+    expect(row).toMatchObject({ operations: 1, completed: 1, failed: 0 });
+  });
+
   it("counts an operation with a successful run as completed even when another run was canceled", () => {
     const job = { provider: "fal", id: "j-c", attempt: 1 };
     const row = rowFor([
@@ -489,6 +683,211 @@ describe("spend is known, unknown or uncertain, never $0", () => {
     const row = rowFor([entry({ id: "h_no_cost" })]);
     expect(row.cost.per_success_usd).toBeNull();
     expect(row.cost.unknown_operations).toBe(1);
+  });
+});
+
+describe("spend across rows", () => {
+  const STATUS_AT = "2026-10-27T10:05:00.000Z";
+  const submit = (over: Partial<CostReceipt> = {}) =>
+    entry({
+      cost: receipt({
+        operation_id: "fal:t1",
+        actual_usd: 0.5,
+        actual_source: "provider_reported",
+        ...over,
+      }),
+    });
+  const status = () =>
+    entry({
+      command: "fal status",
+      ts: STATUS_AT,
+      model_resolved: null,
+      cost: receipt({
+        operation_id: "fal:t1",
+        role: "observation",
+        actual_usd: 0.5,
+        actual_source: "provider_reported",
+        at: STATUS_AT,
+      }),
+    });
+  const costs = (entries: HistoryEntry[], by: "offering" | "command") =>
+    aggregateUsage(entries, by).map((r) => [r.key, r.cost.known_usd, r.cost.per_success_usd]);
+
+  it("counts a task's USD once, on the submit's row, when its status run lands in another row", () => {
+    const entries = [submit(), status()];
+    expect(costs(entries, "offering")).toEqual([
+      ["fal:(unknown model)", 0, null],
+      [OFFERING, 0.5, 0.5],
+    ]);
+    expect(costs(entries, "command")).toEqual([
+      ["fal status", 0, null],
+      ["fal video", 0.5, 0.5],
+    ]);
+  });
+
+  it("settles an uncertain submit with its status read in the submit's row only", () => {
+    const entries = [submit({ status: "uncertain", actual_usd: null }), status()];
+    const rows = aggregateUsage(entries, "offering");
+    expect(rows.map((r) => [r.key, r.cost.known_usd, r.cost.uncertain_operations])).toEqual([
+      ["fal:(unknown model)", 0, 0],
+      [OFFERING, 0.5, 0],
+    ]);
+  });
+
+  it("keeps a task known only from a status read in that read's row", () => {
+    expect(costs([status()], "offering")).toEqual([["fal:(unknown model)", 0.5, 0.5]]);
+  });
+
+  it("counts an old job with no cost as unknown once, on its first run's row", () => {
+    const old = (over: Partial<HistoryEntry>) => entry({ provider_ids: ["req_9"], ...over });
+    const entries = [old({}), old({ command: "fal status", ts: STATUS_AT, model_resolved: null })];
+    const rows = aggregateUsage(entries, "offering");
+    expect(rows.map((r) => [r.key, r.cost.unknown_operations])).toEqual([
+      ["fal:(unknown model)", 0],
+      [OFFERING, 1],
+    ]);
+  });
+
+  it("puts a resubmitted task's USD on the attempt that ran the model", () => {
+    const failed = entry({
+      ok: false,
+      exit_code: 1,
+      model_resolved: null,
+      cost: receipt({ operation_id: "fal:t1", status: "unknown" }),
+    });
+    const entries = [failed, submit({ at: STATUS_AT })];
+    const rows = aggregateUsage(entries, "offering");
+    // The failed attempt's cost is unknown, so the task's is too: never $0.
+    expect(rows.map((r) => [r.key, r.cost.known_usd, r.cost.unknown_operations])).toEqual([
+      ["fal:(unknown model)", 0, 0],
+      [OFFERING, 0, 1],
+    ]);
+  });
+
+  it("keeps another provider's estimate when two providers share an operation id", () => {
+    const estimate = { status: "estimated", expected_usd: 2, high_usd: 3 } as const;
+    const runway = entry({
+      provider: "runway",
+      command: "runway video",
+      model_resolved: "gen4",
+      cost: receipt({ operation_id: "shared", status: "unknown", estimate }),
+    });
+    const fal = entry({
+      cost: receipt({
+        operation_id: "shared",
+        actual_usd: 0.5,
+        actual_source: "provider_reported",
+        estimate: { ...estimate, expected_usd: 1 },
+      }),
+    });
+    const rows = aggregateUsage([runway, fal], "offering");
+    expect(rows.map((r) => [r.key, r.cost.known_usd, r.cost.estimated_usd])).toEqual([
+      [OFFERING, 0.5, null],
+      ["runway:gen4", 0, 2],
+    ]);
+  });
+
+  it("counts no spend for an operation whose only send was refused", () => {
+    const refused = entry({
+      ok: false,
+      exit_code: 1,
+      cost: receipt({ operation_id: "fal:t1", actual_usd: 0, actual_source: "refused" }),
+    });
+    const row = rowFor([refused]);
+    expect([row.cost.known_usd, row.cost.unknown_operations, row.cost.estimated_usd]).toEqual([
+      0,
+      0,
+      null,
+    ]);
+  });
+});
+
+describe("credits", () => {
+  it("counts a task's credits once across its submit run and a later status run", () => {
+    const row = rowFor([
+      entry({
+        usage: { credits: 40 } as HistoryEntry["usage"],
+        cost: receipt({
+          operation_id: "fal:t1",
+          status: "unknown",
+          provider_reported: { cost_usd: null, credits: 40 },
+        }),
+      }),
+      entry({
+        command: "fal status",
+        ts: "2026-10-27T10:05:00.000Z",
+        usage: { credits: 40 } as HistoryEntry["usage"],
+        cost: receipt({
+          operation_id: "fal:t1",
+          role: "observation",
+          status: "unknown",
+          provider_reported: { cost_usd: null, credits: 40 },
+          at: "2026-10-27T10:05:00.000Z",
+        }),
+      }),
+    ]);
+    expect(row).toMatchObject({ requests: 2, operations: 1, credits: 40 });
+  });
+
+  it("puts the credits on the submit's row when the status run lands in another row", () => {
+    const charge = (role: "charge" | "observation", at: string, credits: number | null) =>
+      receipt({
+        operation_id: "fal:t1",
+        role,
+        status: "unknown",
+        provider_reported: { cost_usd: null, credits },
+        at,
+      });
+    const entries = [
+      // The submit reports no credits; the status read, with no model, reports the charge.
+      entry({ cost: charge("charge", T0, null) }),
+      entry({
+        command: "fal status",
+        ts: "2026-10-27T10:05:00.000Z",
+        model_resolved: null,
+        usage: { credits: 40 } as HistoryEntry["usage"],
+        cost: charge("observation", "2026-10-27T10:05:00.000Z", 40),
+      }),
+    ];
+    const credits = (by: "offering" | "command") =>
+      aggregateUsage(entries, by).map((r) => [r.key, r.credits]);
+    expect(credits("offering")).toEqual([
+      ["fal:(unknown model)", undefined],
+      [OFFERING, 40],
+    ]);
+    expect(credits("command")).toEqual([
+      ["fal status", undefined],
+      ["fal video", 40],
+    ]);
+    // A task known only from a status read still counts its credits once.
+    expect(aggregateUsage([entries[1] as HistoryEntry], "offering")[0]?.credits).toBe(40);
+  });
+
+  it("keeps each provider's credits apart under one shared operation id", () => {
+    const shared = (role: "charge" | "observation", credits: number, at = T0) =>
+      receipt({
+        operation_id: "job-42",
+        role,
+        status: "unknown",
+        provider_reported: { cost_usd: null, credits },
+        at,
+      });
+    const rows = aggregateUsage(
+      [
+        entry({ provider: "leonardo", command: "leonardo generate", cost: shared("charge", 10) }),
+        entry({ provider: "runway", command: "runway video", cost: shared("charge", 0) }),
+        entry({
+          provider: "runway",
+          command: "runway status",
+          cost: shared("observation", 40, "2026-10-27T10:05:00.000Z"),
+        }),
+      ],
+      "provider",
+    );
+    expect(rows.map((r) => [r.key, r.credits])).toEqual([
+      ["runway", 40],
+      ["leonardo", 10],
+    ]);
   });
 });
 

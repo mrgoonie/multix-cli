@@ -5,7 +5,13 @@
  * exit code class.
  */
 
-import { BudgetError, HttpError, MultixError, ResponseTooLargeError } from "./errors.js";
+import {
+  BudgetError,
+  HttpError,
+  MultixError,
+  ProviderJobFailedError,
+  ResponseTooLargeError,
+} from "./errors.js";
 import { redactUrlsInText } from "./redact.js";
 
 export type ErrorCode =
@@ -157,6 +163,13 @@ const TEXT_RULES: Array<[RegExp, ErrorCode]> = [
     "INVALID_KEY",
   ],
   [
+    // A logged job failure is the provider's verdict, whatever reason its payload names
+    // (moderation, quota, an internal timeout). An id between noun and verb must hold a
+    // digit, so "task polling failed" is not one; a payload whose status is canceled is not.
+    /^(?!.*"status"\s*:\s*"(?:cancell?ed|aborted)")(?:.*\b(task|job|prediction|generation|interaction) (?:(?=[\w.:-]*\d)[\w.:-]+ )?(failed|was canceled|errored)|.*status:? ?"?failed)/is,
+    "JOB_FAILED",
+  ],
+  [
     /(safety|content policy|moderation|blocked|nsfw|prohibited|sensitive content|responsible ai|flagged)/i,
     "CONTENT_BLOCKED",
   ],
@@ -169,10 +182,6 @@ const TEXT_RULES: Array<[RegExp, ErrorCode]> = [
   [
     /(model).{0,40}(not found|does not exist|unknown|not supported|invalid)|(unknown|invalid) model/i,
     "MODEL_NOT_FOUND",
-  ],
-  [
-    /(task|job|prediction|generation|request) (failed|was canceled|errored)|status: ?failed/i,
-    "JOB_FAILED",
   ],
   [/(ENOENT|no such file|file not found|does not exist)/i, "NOT_FOUND"],
   [
@@ -268,6 +277,13 @@ export function classifyError(error: unknown): ErrorInfo {
   const commanderCode = (error as { code?: unknown } | null)?.code;
   if (typeof commanderCode === "string" && commanderCode.startsWith("commander.")) {
     return build("USAGE", message.replace(/^error: /, ""));
+  }
+  if (error instanceof ProviderJobFailedError) {
+    // The provider's own reason (moderation, quota) is in the message; the run is a failed job.
+    if (error.terminal) return build("JOB_FAILED", message);
+    // Canceled, paused or unusable output: never reported as a failed job, whatever the text says.
+    const info = classifyMessage(message);
+    return info.code === "JOB_FAILED" ? build("UNKNOWN", message) : info;
   }
   if (error instanceof MultixError) {
     if (error.code === "CONFIG_ERROR") {

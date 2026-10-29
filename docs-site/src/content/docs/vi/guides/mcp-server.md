@@ -26,11 +26,13 @@ thay đổi cách `multix` chạy trên máy bạn.
 | `multix_job_cancel` | Dừng job đang chạy cùng container của nó. |
 | `multix_skills` | Đọc (chỉ đọc) [danh mục skill](#skill): `search` để tìm skill, `get` để lấy mục của một skill, `read` để đọc một file văn bản của skill. |
 | `multix_skills_manage` | [Tự tạo skill của bạn](#tự-tạo-skill-của-bạn): bản nháp, xuất bản, revision, cài đặt và chia sẻ trong nhóm. Tool này không bao giờ chạy skill. |
+| `multix_workflow` | [Workflow của skill](#workflow-của-skill): `describe`, `run`, `status`, `cancel` và `list` các lần chạy `multix.workflow.json` của một skill. Tool này không thể cấp quyền cho workflow. |
 
 `multix_catalog`, `multix_model_catalog` và `multix_skills` luôn được liệt kê. `multix_run`,
 `multix_job_status` và `multix_job_cancel` chỉ xuất hiện khi Worker có các binding chạy job
-(`MULTIX_JOBS` và `MULTIX_JOB_QUOTA`, xem [Triển khai](#triển-khai)). `multix_skills_manage` chỉ
-xuất hiện khi Worker có binding `MULTIX_SKILLS`.
+(`MULTIX_JOBS` và `MULTIX_JOB_QUOTA`, xem [Triển khai](#triển-khai)). `multix_skills_manage` và
+`multix_workflow` chỉ xuất hiện khi Worker có binding `MULTIX_SKILLS`; chạy workflow còn cần các
+binding chạy job.
 
 ## Chạy lệnh CLI
 
@@ -127,8 +129,12 @@ cả hai trường hợp. Key không bao giờ xuất hiện trong `stdout` hay
 
 Giới hạn của server cũng áp dụng cho `multix_run`: số output
 (`MULTIX_MCP_MAX_OUTPUTS`), độ dài video (`MULTIX_MCP_MAX_VIDEO_SECONDS`, cũng
-được gửi khi mặc định của lệnh video không rõ hoặc dài hơn) và độ phân giải
-(`MULTIX_MCP_ALLOWED_RESOLUTIONS`). Server tự chọn thư mục đầu ra, `--output`
+được gửi khi mặc định của lệnh video không rõ hoặc dài hơn), độ phân giải
+(`MULTIX_MCP_ALLOWED_RESOLUTIONS`) và độ dài audio sinh ra
+(`MULTIX_MCP_MAX_AUDIO_SECONDS`: `elevenlabs sfx --duration-seconds` và
+`elevenlabs music --music-length-ms`; độ dài nhạc bị bỏ qua sẽ được gửi bằng
+giới hạn, vì nếu không model tự chọn tới 10 phút).
+Server tự chọn thư mục đầu ra, `--output`
 phải là tên file thuần, option mà CLI ghép vào tên file (như
 `elevenlabs voices design --output-prefix` hoặc mã ngôn ngữ khi lồng tiếng) chỉ
 nhận chữ cái, chữ số, `_` và `-`, các lệnh ảnh OpenAI luôn dùng API driver,
@@ -150,11 +156,10 @@ hạn):
 - lần chạy tính tiền theo độ dài nguồn hoặc kịch bản: `heygen video`,
   `heygen translate`, `heygen lipsync`, `elevenlabs dub`, `topview
   video-avatar`, `topview product-avatar`, và `heygen video-agent` /
-  `heygen template`, nơi agent hoặc template quyết định độ dài;
+  `heygen template`, nơi agent hoặc template quyết định độ dài, và
+  `elevenlabs music` khi có `--plan`, nơi thời lượng các đoạn quyết định độ dài;
 - lần chạy dài hơn mức giới hạn thời lượng chặn được: `topview url-to-video`
-  và `topview materials-to-video` (video 15-60 giây), và `elevenlabs music`,
-  nơi model tự chọn độ dài (tới 10 phút) trừ khi `--music-length-ms` hoặc
-  `--plan` quy định;
+  và `topview materials-to-video` (video 15-60 giây);
 - `sume video`, nơi dòng catalog của model quyết định giá, còn model lip-sync
   và phụ đề tính tiền theo độ dài media nguồn;
 - `atlas image`, `atlas image-to-image`, `sume image` và `replicate image`
@@ -181,6 +186,22 @@ tế `budget` từ chối các lệnh còn lại (đóng thay vì mở). `deny` 
 lời ở mọi chế độ vì nó không khởi động gì. REST API (`POST /api/v1/jobs`) nhận
 cùng các trường `max_cost_usd` và `cost_policy` và áp dụng cùng quy tắc.
 
+**Model ảnh.** Model quyết định giá mỗi ảnh, thường chênh tới cả chục lần giữa
+các model, nên `--model` không bị đánh dấu là không giới hạn: làm vậy sẽ đẩy
+gần như mọi lần tạo ảnh qua `MULTIX_MCP_UNCAPPED_SPEND`. Thay vào đó operator
+giới hạn nó bằng `MULTIX_MCP_ALLOWED_IMAGE_MODELS`, danh sách các mục
+`<group>:<model>` phân tách bằng dấu phẩy, ví dụ
+`fal:fal-ai/flux/schnell,openai:gpt-image-2`. Mục có kèm group vì cùng một
+model id có thể đắt hơn ở provider khác. Khi biến này được đặt, lệnh tạo ảnh có
+`--model` chỉ chạy với model được liệt kê cho group của nó: `--model` của
+caller, hoặc `default` mà `multix_catalog` liệt kê. Khi CLI tự chọn model lúc
+chạy (không có default trong catalog), caller phải truyền một `--model` có
+trong danh sách, và group không có mục nào bị từ chối. Không đặt thì mọi model
+đều chạy. Các lệnh chuyển thẳng `run` (`fal run`, `replicate run`, ...) nhận
+model qua positional và vẫn do `MULTIX_MCP_UNCAPPED_SPEND` quản lý, không phải
+danh sách này. `cloudflare generate --steps` cũng đổi giá, với biên độ nhỏ hơn,
+và không bị giới hạn.
+
 **Gemini edit và extend.** `gemini extend-video --duration` là độ dài của đoạn
 nối tiếp mới và bị giới hạn như mọi thời lượng khác, nhưng video trả về còn chứa
 cả clip nguồn. Vì vậy giới hạn áp dụng cho từng lần gọi, không phải cho cả clip:
@@ -189,6 +210,12 @@ thêm, và `gemini edit-video` giữ nguyên độ dài của nguồn. Server kh
 dài của interaction đã lưu nên không giới hạn một chuỗi extend ngoài giới hạn
 40 giây tổng cộng của Google; mọi lần gọi đều được tính phí trên key Gemini của
 chính bạn.
+
+**Leonardo.** `leonardo video` không có `--duration`: CLI yêu cầu các model
+viết thường (`kling-2.6`, `hailuo-2_3`, `seedance-2.0` và các model khác trong
+`leonardo video-models`) tạo 8 giây, còn các model viết hoa (`MOTION2`, `VEO3`,
+`KLING2_1`, ...) tự chọn độ dài, tối đa 10 giây với Kling 2.1 và 2.5. Vì vậy
+server từ chối lệnh này khi `MULTIX_MCP_MAX_VIDEO_SECONDS` nhỏ hơn 10.
 
 **Runway.** `runway video` và `runway image` chạy được từ xa; truyền `--image`
 và từng `--reference` dưới dạng URL `https://` trong `inputs`, còn `--duration`
@@ -203,10 +230,12 @@ mặc định không chờ, nên job kết thúc chỉ với task ID: đặt `"w
 `topview upload`) dưới dạng URL `https://` trong `inputs`. `sume estimate`
 không upload gì, nên nhận media dưới dạng URL `https://` thông thường.
 `sume image --num-images` và `topview product-anyshoot --count` bị giới hạn
-bởi `MULTIX_MCP_MAX_OUTPUTS`, còn
-`sume video --duration` và `--resolution` bị giới hạn bởi các giới hạn video;
-hãy truyền một `--duration` có trong dòng catalog của model, vì nếu thiếu,
-server sẽ gửi độ dài mặc định của riêng nó. `topview run --input` phải là JSON
+bởi `MULTIX_MCP_MAX_OUTPUTS`, còn `sume video --resolution` bị giới hạn bởi
+các độ phân giải được phép. `sume video --duration` không bị giới hạn và không được điền sẵn (model
+không có thời lượng sẽ từ chối giá trị được điền, còn model lip-sync hiểu nó là
+độ dài audio), nên mọi lần chạy `sume video` đều đi qua
+`MULTIX_MCP_UNCAPPED_SPEND`; hãy truyền một `--duration` có trong dòng catalog
+của model. `topview run --input` phải là JSON
 viết trực tiếp, vì giá trị `@file` bị từ chối. `sume image`, `sume video`,
 `topview run` và các lệnh Legacy của TopView trừ `product-avatar` mặc định
 không chờ: đặt `"wait": true` trong `options`, hoặc tiếp tục sau bằng
@@ -339,8 +368,9 @@ Cloudflare.
    `/api/v1/events` trả về `503` và `server/discover` không cung cấp events.
    Binding `MULTIX_SKILLS` (class `AccountSkills`) giữ các
    [skill](#skill) riêng tư và skill nhóm của từng tài khoản; thiếu binding
-   này, server chỉ cung cấp skill dựng sẵn, `multix_skills_manage` không được
-   liệt kê và các route `/api/v1/skills` trả về `503`.
+   này, server chỉ cung cấp skill dựng sẵn, `multix_skills_manage` và
+   `multix_workflow` không được liệt kê, và các route `/api/v1/skills` cùng các
+   route workflow trả về `503`.
 4. **Đặt secret** và triển khai:
 
    ```bash
@@ -636,6 +666,75 @@ Request MCP bị giới hạn 64 KiB, nên hãy chia file ra nhiều lần gọi
 `save_draft`, và tải một file không vừa trong một request lên bằng
 `PUT /api/v1/skills/{skill}/draft` (body tối đa khoảng 11 MiB).
 
+### Workflow của skill
+
+Một skill riêng tư hoặc skill nhóm có thể kèm file `multix.workflow.json` ở
+thư mục gốc: một danh sách cố định các bước multix CLI với input có kiểu.
+`multix_workflow` và các route REST dưới
+[`/api/v1/workflow-*`](/vi/guides/rest-api/#workflow) chạy nó cho tài khoản của
+bạn. Skill dựng sẵn không có workflow.
+
+```json
+{
+  "version": 1,
+  "description": "Draw a product shot, then restyle it",
+  "inputs": { "subject": { "type": "string", "required": true, "max_length": 500 } },
+  "steps": [
+    { "id": "draw", "command": "gemini generate", "options": { "prompt": "{{inputs.subject}}" } },
+    { "id": "restyle", "command": "gemini image-to-image",
+      "options": { "prompt": "watercolor" }, "inputs": { "ref": "{{steps.draw.outputs[0]}}" } }
+  ]
+}
+```
+
+- `version` là `1`; `description` không bắt buộc.
+- `inputs` (tối đa 20) có `type` (`string`, `integer`, `number`, `boolean`
+  hoặc `url`) và các trường tùy chọn `description`, `required`, `default`,
+  `enum` (string, integer và number), `min` và `max` (integer và number), và
+  `max_length` (string và url). Input `url` phải là URL `https://` công khai.
+- `steps` (1 đến 10 bước) có dạng `{ id, command, args?, options?, inputs? }`,
+  giống dạng `multix_run` nhận. `command` phải là lệnh server chạy được.
+- Giá trị có thể chứa `{{inputs.<name>}}` và `{{steps.<id>.outputs[<n>]}}`
+  (URL output của một bước trước đó, nên cần [lưu trữ R2](#lưu-trữ-r2)). Đường
+  dẫn lệnh và tên option thì không. Mỗi giá trị luôn là một đối số, nên
+  template không thể thêm flag hay đối số. Input tùy chọn không được truyền thì
+  giá trị chứa nó bị bỏ đi.
+
+Việc xuất bản từ chối manifest không hợp lệ (tối đa 64 KiB), và manifest được
+kiểm tra lại trước mỗi lần chạy.
+
+Đọc hay mô tả một skill không bao giờ chạy nó. Muốn chạy cần quyền do bạn cấp,
+và chỉ cấp được qua REST bằng API key từ `/dashboard`
+(`POST /api/v1/workflow-authorizations`); MCP không cấp quyền được, nên model
+không bao giờ tự cho phép mình chạy. Quyền gắn với id của skill, revision đang
+phục vụ và digest của manifest mà `describe` trả về: revision mới, digest khác
+hoặc skill được tạo lại đều làm quyền mất hiệu lực. Quyền có thể kèm
+`max_cost_usd` để giới hạn chi phí của cả lần chạy: mọi bước phải có giá đã
+biết với mức cao của ước tính nằm trong ngân sách còn lại, nên lệnh chưa có giá
+không chạy được dưới giới hạn này. `cost_policy` (mặc định `strict`, hoặc
+`estimate`) hoạt động như với [`multix_run`](#chạy-lệnh-cli). Với skill nhóm
+được chia sẻ cho bạn, quyền là của chính bạn, không phải của chủ skill.
+
+Các action của `multix_workflow`:
+
+- `describe` (`uri`): các bước, input, revision và digest, và bạn đã cấp quyền
+  cho chúng chưa; nếu chưa, kèm request REST để cấp quyền.
+- `run` (`uri`, `inputs`): bắt đầu một lần chạy cùng bước đầu tiên.
+- `status` (`run_id`): lần chạy tiến lên khi được đọc: người đọc thu output của
+  bước đã xong và khởi động bước tiếp theo. Poll đến khi là `succeeded`,
+  `failed` hoặc `canceled`. Bước đang chờ một slot job trống vẫn ở `pending`.
+- `cancel` (`run_id`): dừng lần chạy và job hiện tại của nó.
+- `list`: các lần chạy và các quyền đã cấp của bạn.
+
+Mỗi bước là một job `multix_run` bình thường với key đã lưu của bạn, cùng
+chính sách lệnh, giới hạn, URL guard và spend guard. Một bước bị chính sách từ
+chối, một job thất bại, một quyền bị thu hồi hoặc một skill không còn phục vụ
+revision đã được cấp quyền đều làm lần chạy thất bại trước khi job tiếp theo
+khởi động. Mỗi tài khoản có tối đa 5 lần chạy đang hoạt động (nếu vượt thì
+`busy`) và 50 lần chạy được lưu; các lần chạy đã kết thúc cũ nhất bị xóa trước.
+Lỗi của tool bắt đầu bằng `INVALID_INPUT`, `NOT_FOUND`, `NOT_AUTHORIZED`,
+`CONFLICT`, `busy` hoặc `UNAVAILABLE`.
+
 ## Cấu hình
 
 Secret (đặt bằng `npx wrangler secret put <NAME>`):
@@ -658,7 +757,9 @@ closed). `http://localhost` được chấp nhận khi phát triển cục bộ.
 | `MULTIX_PUBLIC_URL` | — (bắt buộc) | Origin công khai, ví dụ `https://mcp.example.com`. Dùng cho metadata OAuth, redirect và callback GitHub. |
 | `MULTIX_MCP_MAX_OUTPUTS` | `4` (tối đa 10) | Số output tối đa (ví dụ `--num-images`) mỗi lần gọi `multix_run`. |
 | `MULTIX_MCP_MAX_VIDEO_SECONDS` | `10` (tối đa 15) | Thời lượng video tối đa cho mỗi lần gọi (với `gemini extend-video` là đoạn nối tiếp mới). Khi caller bỏ qua thời lượng và mặc định của lệnh không rõ hoặc dài hơn, server gửi `min(5, giới hạn)` giây. |
+| `MULTIX_MCP_MAX_AUDIO_SECONDS` | `30` (tối đa 300) | Độ dài audio sinh ra tối đa cho mỗi lần gọi: `elevenlabs sfx --duration-seconds` và `elevenlabs music --music-length-ms`. Độ dài nhạc bị bỏ qua được gửi bằng giới hạn (nếu không model tự chọn tới 10 phút), trừ khi có `--plan`; độ dài hiệu ứng âm thanh bị bỏ qua chỉ được gửi bằng giới hạn khi giới hạn thấp hơn mức tối đa 30 giây của nhà cung cấp. |
 | `MULTIX_MCP_ALLOWED_RESOLUTIONS` | `480p,720p,768p,1080p` | Độ phân giải video caller được yêu cầu (`768p` là kích thước của HeyGen Video). Giá trị khác (ví dụ `4k`), do caller truyền hay là mặc định của lệnh, bị từ chối trước khi job bắt đầu. |
+| `MULTIX_MCP_ALLOWED_IMAGE_MODELS` | mọi model | Danh sách mục `<group>:<model>` (ví dụ `fal:fal-ai/flux/schnell`, khớp chính xác, phân tách bằng dấu phẩy) mà các lệnh tạo ảnh của `multix_run` được dùng, qua `--model` hoặc mặc định của lệnh trong catalog. Khi CLI tự chọn model lúc chạy, caller phải truyền một `--model` có trong danh sách; group không có mục nào bị từ chối. Các lệnh `run` chuyển thẳng do `MULTIX_MCP_UNCAPPED_SPEND` quản lý. |
 | `MULTIX_MCP_UNCAPPED_SPEND` | `budget` | Lần chạy mà các giới hạn trên không chặn được (đánh dấu `uncapped_spend` trong `multix_catalog`): `budget` chỉ chạy khi có `max_cost_usd` mà ước tính giá chứng minh được (giá không rõ thì bị từ chối), `deny` từ chối, `allow` cho chạy. Giá trị khác được hiểu là `budget`. |
 | `MULTIX_MCP_ALLOWED_ORIGINS` | không có | Origin trình duyệt chính xác (ví dụ `https://app.example.com`) được phép gọi `/mcp`. Không hỗ trợ `*` hay wildcard khác: `*` chỉ khớp origin `*` theo nghĩa đen, thứ trình duyệt không bao giờ gửi. Sau khi access token được kiểm tra, request có header `Origin` khác nhận `403`; request không có `Origin` (client phía server) được chấp nhận. Origin trong danh sách nhận header CORS. Preflight `OPTIONS` được lớp OAuth trả lời cho mọi origin. |
 | `MULTIX_MAX_JOBS_PER_ACCOUNT` | `2` (tối đa 50) | Số job `multix_run` một tài khoản được chạy cùng lúc. |

@@ -320,6 +320,8 @@ export function assertJobSucceeded(state: HeygenJobState): void {
   throw new HeygenJobFailedError(
     `HeyGen ${label} ended with status "${state.status}"${code}${msg}`,
     state.failureCode,
+    // Canceled, or a Video Agent paused for input: not a failed job.
+    state.status === "failed",
   );
 }
 

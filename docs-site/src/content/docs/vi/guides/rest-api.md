@@ -95,6 +95,12 @@ Mọi path đều tương đối với `/api/v1`.
 | `PUT` `DELETE` | `/skills/{skill}/grants/{account}` | Chia sẻ một skill nhóm với một tài khoản, hoặc thu hồi. |
 | `GET` `POST` | `/skill-shares` | Các skill nhóm được chia sẻ mà bạn đã thêm; thêm một skill: `{ "uri": "skill://team/<owner>/<skill>/SKILL.md" }` (`201`). |
 | `DELETE` | `/skill-shares/{owner}/{skill}` | Ngừng liệt kê một skill được chia sẻ. |
+| `GET` | `/workflows?uri=` | [Workflow](#workflow) của một skill: các bước, input, revision và digest, và bạn đã cấp quyền cho nó chưa. |
+| `GET` `POST` | `/workflow-authorizations` | Các quyền chạy workflow của bạn; cấp quyền: `{ "uri", "revision", "digest", "max_cost_usd"?, "cost_policy"? }` (`201`). |
+| `DELETE` | `/workflow-authorizations/{owner}/{skill}` | Thu hồi một quyền (`{owner}` là id tài khoản của chính bạn với skill riêng tư). |
+| `GET` `POST` | `/workflow-runs` | Các lần chạy và các quyền của bạn; bắt đầu một lần chạy: `{ "uri", "inputs"? }` (`201`). |
+| `GET` | `/workflow-runs/{id}` | Đọc một lần chạy; việc đọc làm nó tiến lên. |
+| `POST` | `/workflow-runs/{id}/cancel` | Dừng một lần chạy và job hiện tại của nó. |
 
 Tên provider key là tên biến môi trường mà CLI đọc (ví dụ `GEMINI_API_KEY`),
 cùng các tên của Cloudflare Workers AI; `GET /provider-keys` liệt kê tất cả.
@@ -421,6 +427,34 @@ curl -s -X POST https://multix.zuey.me/api/v1/skills/brand-voice/publish \
   -H "Authorization: Bearer $MULTIX_API_KEY"
 ```
 
+### Workflow
+
+Các route `/workflows`, `/workflow-authorizations` và `/workflow-runs` chạy
+`multix.workflow.json` của một skill bằng cùng đoạn code với `multix_workflow`;
+[hướng dẫn MCP](/vi/guides/mcp-server/#workflow-của-skill) giải thích manifest
+và các quy tắc. Chỉ cấp quyền được qua REST: xem lại workflow, rồi cấp quyền
+cho đúng `revision` và `digest` mà `GET /workflows` trả về (giá trị khác trả về
+`409`). Revision mới cần được cấp quyền lại.
+
+```bash
+URI="skill://private/studio/SKILL.md"
+curl -s -G https://multix.zuey.me/api/v1/workflows --data-urlencode "uri=$URI" \
+  -H "Authorization: Bearer $MULTIX_API_KEY"
+curl -s -X POST https://multix.zuey.me/api/v1/workflow-authorizations \
+  -H "Authorization: Bearer $MULTIX_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"uri":"'"$URI"'","revision":1,"digest":"sha256:…","max_cost_usd":2}'
+curl -s -X POST https://multix.zuey.me/api/v1/workflow-runs \
+  -H "Authorization: Bearer $MULTIX_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"uri":"'"$URI"'","inputs":{"subject":"a red bicycle"}}'
+```
+
+Poll `GET /workflow-runs/{id}` đến khi `status` là `succeeded`, `failed` hoặc
+`canceled`: mỗi lần đọc thu output của bước đã xong và khởi động bước tiếp
+theo, bước này chạy như một job bình thường với cùng giới hạn và cách kiểm tra
+như `POST /jobs`.
+
 ## Lỗi
 
 Lỗi là JSON có `code` cố định và thông báo không bao giờ chứa giá trị đã gửi:
@@ -433,17 +467,17 @@ Lỗi là JSON có `code` cố định và thông báo không bao giờ chứa g
 |---|---|---|
 | `400` | `bad_request` | JSON, trường hoặc giá trị không hợp lệ, tên provider key không hợp lệ, hoặc lệnh, option hay input mà `multix_run` sẽ từ chối. |
 | `401` | `unauthorized` | Thiếu API key, sai định dạng, không tồn tại hoặc đã bị thu hồi. |
-| `403` | `forbidden` | Tài khoản không còn trong danh sách được phép đăng nhập. |
-| `404` | `not_found` | Path, job, API key, subscription sự kiện, skill, bản nháp, revision hoặc file không tồn tại, hoặc thuộc tài khoản khác. |
+| `403` | `forbidden` | Tài khoản không còn trong danh sách được phép đăng nhập, hoặc lần chạy workflow không có quyền khớp. |
+| `404` | `not_found` | Path, job, API key, subscription sự kiện, skill, bản nháp, revision, file, workflow hoặc lần chạy workflow không tồn tại, hoặc thuộc tài khoản khác. |
 | `405` | `method_not_allowed` | Sai method; header `Allow` liệt kê các method được chấp nhận. |
 | `413` | `payload_too_large` | Body lớn hơn 64 KiB (khoảng 11 MiB với `PUT /skills/{skill}/draft`). |
 | `415` | `unsupported_media_type` | Body không gửi dưới dạng `application/json`. |
 | `409` | `limit_reached` | Tài khoản đã có 10 subscription sự kiện đang hoạt động. |
-| `409` | `conflict` | Digest bản nháp hoặc revision đang phục vụ của skill khác với `expected_digest` hoặc `expected_revision` đã gửi. |
+| `409` | `conflict` | Digest bản nháp hoặc revision đang phục vụ của skill khác với `expected_digest` hoặc `expected_revision` đã gửi, hoặc quyền workflow nêu revision hay digest mà skill không phục vụ. |
 | `422` | `storage_check_failed` | Kiểm tra quyền truy cập R2 thất bại; không có gì được lưu. |
 | `429` | `rate_limited` | Quá nhiều request; thử lại sau số giây trong `Retry-After`. |
-| `429` | `busy` | Đã chạm giới hạn job: số job đang chạy của tài khoản hoặc tổng số job của server. Chờ một job kết thúc (hoặc hủy một job) thay vì thử lại ngay. |
-| `503` | `unavailable` | Server không có job container, nên không chạy được job, hoặc không có binding sự kiện, nên các route sự kiện bị tắt, hoặc không có kho skill, nên các route skill bị tắt; hoặc không phân giải được host `callback_url` của subscription mới (thử lại sau `Retry-After`). |
+| `429` | `busy` | Đã chạm giới hạn job: số job đang chạy của tài khoản hoặc tổng số job của server, hoặc đã có 5 lần chạy workflow đang hoạt động. Chờ một job hay lần chạy kết thúc (hoặc hủy một cái) thay vì thử lại ngay. |
+| `503` | `unavailable` | Server không có job container, nên không chạy được job, hoặc không có binding sự kiện, nên các route sự kiện bị tắt, hoặc không có kho skill, nên các route skill và workflow bị tắt; hoặc không phân giải được host `callback_url` của subscription mới (thử lại sau `Retry-After`). |
 | `500` | `internal` | Lỗi server không lường trước. |
 
 Tập mã lỗi được định nghĩa trong `worker/src/api/api-http.ts`.
@@ -463,5 +497,7 @@ Tập mã lỗi được định nghĩa trong `worker/src/api/api-http.ts`.
 - **Subscription sự kiện:** tối đa 10 subscription đang hoạt động mỗi tài
   khoản; thời gian sống từ 1 giờ đến 90 ngày (mặc định 30 ngày).
 - **Skill:** xem [hướng dẫn MCP](/vi/guides/mcp-server/#tự-tạo-skill-của-bạn).
+- **Lần chạy workflow:** tối đa 5 đang hoạt động và 50 được lưu mỗi tài khoản;
+  xem [Workflow của skill](/vi/guides/mcp-server/#workflow-của-skill).
 - **Body:** object JSON tối đa 64 KiB (khoảng 11 MiB, với tối đa 8 MiB file
   sau khi giải mã, cho `PUT /skills/{skill}/draft`).
