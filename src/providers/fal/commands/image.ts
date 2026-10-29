@@ -65,6 +65,7 @@ export function registerFalImageCommand(parent: Command): void {
           input,
           logger,
           waitTimeoutMs: Number.parseInt(opts.waitTimeout, 10) || 480_000,
+          download: opts.download,
         });
 
         const urls = extractMediaUrls(result);

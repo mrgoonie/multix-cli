@@ -62,6 +62,7 @@ export function registerFalVideoCommand(parent: Command): void {
           input,
           logger,
           waitTimeoutMs: Number.parseInt(opts.waitTimeout, 10) || 900_000,
+          download: opts.download,
         });
 
         const urls = extractMediaUrls(result);

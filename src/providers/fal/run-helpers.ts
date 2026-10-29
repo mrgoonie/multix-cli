@@ -5,18 +5,20 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { trackInFlight } from "../../agent/run-state.js";
 import {
   PollTimeoutError,
   isRetryableServerStatus,
   isTransientHttpError,
 } from "../../core/async-poll.js";
 import { audioExtFromMime } from "../../core/audio-kind.js";
-import { MultixError, ProviderError } from "../../core/errors.js";
+import { MultixError, ProviderError, ProviderJobFailedError } from "../../core/errors.js";
 import { downloadFile } from "../../core/http-client.js";
 import { parseJsonInput } from "../../core/json-input.js";
 import type { Logger } from "../../core/logger.js";
 import { redactUrl } from "../../core/redact.js";
 import { type FalClient, HttpError, createFalClient, submitPath } from "./client.js";
+import { resultCommand, resumeCommand } from "./request-receipt.js";
 import type { FalResultResponse, FalStatusResponse, FalSubmitResponse } from "./types.js";
 
 /** Parse `--input` as inline JSON or `@path/to/file.json`. */
@@ -31,6 +33,8 @@ export interface SubmitAndWaitOptions {
   waitTimeoutMs?: number;
   /** Poll interval override — mainly for tests. Defaults to 3000ms. */
   pollIntervalMs?: number;
+  /** False for `--no-download`: resuming then prints the result rather than downloading it. */
+  download?: boolean;
 }
 
 export interface SubmitAndWaitResult {
@@ -121,6 +125,11 @@ export interface WaitForResultOptions {
   waitTimeoutMs?: number;
   /** Poll interval override — mainly for tests. Defaults to 3000ms. */
   pollIntervalMs?: number;
+  /**
+   * Command that fetches the accepted job's output without submitting it again
+   * (default `multix fal result <model> <id> --download`).
+   */
+  resume?: string;
 }
 
 /** Longest a single status or result request may take; fal's client default. */
@@ -150,10 +159,13 @@ function retryDelayMs(error: unknown, intervalMs: number, deadline: number): num
  * path segments of the model id), not the full endpoint id. Never submits.
  * A failed poll or fetch is rethrown with the request id and resume hint, and
  * the original error as `cause` so classifyError keeps its class and Retry-After.
+ * The job is tracked as in flight first: it is billed, so a run that fails or
+ * stops from here reports the resume command instead of a rerun.
  */
 export async function waitForFalResult(opts: WaitForResultOptions): Promise<FalResultResponse> {
   const { client, model, submit, logger } = opts;
   const requestId = submit.request_id;
+  trackInFlight(requestId, opts.resume ?? resultCommand(model, requestId));
   logger.info("Polling for completion...");
 
   const waitTimeoutMs = opts.waitTimeoutMs ?? 480_000;
@@ -197,7 +209,17 @@ export async function waitForFalResult(opts: WaitForResultOptions): Promise<FalR
     }
 
     logger.debug(`attempt ${attempt} — status: ${statusRes.status}`);
-    if (statusRes.status === "COMPLETED") break;
+    if (statusRes.status === "COMPLETED") {
+      // fal ends a failed request as COMPLETED with an error: its result fetch cannot succeed.
+      if (statusRes.error) {
+        const kind = statusRes.error_type ? ` (${statusRes.error_type})` : "";
+        throw new ProviderJobFailedError(
+          `fal request ${requestId} failed${kind}: ${statusRes.error}`,
+          "fal",
+        );
+      }
+      break;
+    }
     await sleep(intervalMs);
   }
 
@@ -240,7 +262,8 @@ function isRetryableResultError(error: unknown): boolean {
 export async function submitAndWait(opts: SubmitAndWaitOptions): Promise<SubmitAndWaitResult> {
   const client = createFalClient();
   const submit = await submitFalRequest(client, opts.model, opts.input, opts.logger);
-  const result = await waitForFalResult({ ...opts, client, submit });
+  const resume = resumeCommand(opts.model, submit.request_id, { download: opts.download });
+  const result = await waitForFalResult({ ...opts, client, submit, resume });
   return { requestId: submit.request_id, result };
 }
 
