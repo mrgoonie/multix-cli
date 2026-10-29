@@ -21,7 +21,7 @@ import {
 } from "./media-analyze.js";
 import { type InspectReport, inspectSource } from "./media-inspect.js";
 import { RULE_INPUT_SCHEMA, type RuleRun, resolveRuleFile, runRule } from "./media-rule.js";
-import { hashFile, resolveMediaSource } from "./media-source.js";
+import { assertLocalPath, hashFile, resolveMediaSource } from "./media-source.js";
 import type { Severity, VerifyProfile } from "./verify-profiles.js";
 
 export const VERIFY_SCHEMA = "multix.media-verify/v1";
@@ -600,6 +600,8 @@ export async function verifyMedia(input: string, opts: VerifyOptions): Promise<V
     parseRange(r);
   if (expect.aspect_ratio !== undefined) parseAspect(expect.aspect_ratio);
   const rules = (opts.rules ?? []).map(resolveRuleFile);
+  // A URL is refused as bad input whether or not ffmpeg is installed.
+  assertLocalPath(input);
   // Without ffmpeg nothing can be measured: stop with an install hint, never a verdict.
   await assertFfprobe();
   await assertFfmpeg();
