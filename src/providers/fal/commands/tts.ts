@@ -18,7 +18,6 @@ import {
   type FalReceipt,
   buildReceipt,
   persistReceipt,
-  resultCommand,
   resumeCommand,
 } from "../request-receipt.js";
 import { parseInputArg, submitFalRequest, waitForFalResult } from "../run-helpers.js";
@@ -130,7 +129,8 @@ export async function runFalTts(flags: SpeechFlags, opts: FalTtsRun): Promise<Fa
     submit,
     logger,
     waitTimeoutMs: opts.waitTimeoutMs,
-    resume: resumeCommand(receipt?.result_command ?? resultCommand(model, submit.request_id), {
+    resume: resumeCommand(model, submit.request_id, {
+      ...(request.format ? { extraArgs: ["--format", request.format] } : {}),
       outputDir: opts.outDir,
       download: opts.download,
     }),

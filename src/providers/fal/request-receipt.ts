@@ -66,15 +66,19 @@ export function resultCommand(model: string, requestId: string, extraArgs: strin
 }
 
 /**
- * The resume command of a waiting run: `base`, saving into `outputDir` when one
- * was given. Without download (`--no-download`), the result JSON only, as the run would print.
+ * The resume command of a waiting run: `fal result` saving where the run would
+ * (`extraArgs`, `outputDir`). Without download (`--no-download`), the result JSON only,
+ * as the run would print.
  */
 export function resumeCommand(
-  base: string,
-  opts: { outputDir?: string; download?: boolean } = {},
+  model: string,
+  requestId: string,
+  opts: { extraArgs?: string[]; outputDir?: string; download?: boolean } = {},
 ): string {
-  if (opts.download === false) return base.replace(/ --download(?= |$).*$/, "");
-  return opts.outputDir ? `${base} --output-dir ${shellQuote(opts.outputDir)}` : base;
+  if (opts.download === false)
+    return `multix fal result ${shellQuote(model)} ${shellQuote(requestId)}`;
+  const outputDir = opts.outputDir ? ["--output-dir", opts.outputDir] : [];
+  return resultCommand(model, requestId, [...(opts.extraArgs ?? []), ...outputDir]);
 }
 
 export function buildReceipt(opts: {

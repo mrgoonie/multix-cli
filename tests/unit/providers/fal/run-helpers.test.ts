@@ -4,7 +4,12 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { run as runState } from "../../../../src/agent/run-state.js";
 import { classifyError } from "../../../../src/core/error-classify.js";
-import { HttpError, ProviderError, ValidationError } from "../../../../src/core/errors.js";
+import {
+  HttpError,
+  ProviderError,
+  ProviderJobFailedError,
+  ValidationError,
+} from "../../../../src/core/errors.js";
 import type { FalClient } from "../../../../src/providers/fal/client.js";
 import {
   downloadResultMedia,
@@ -331,6 +336,32 @@ describe("submitAndWait", () => {
       resume: "multix fal result fal-ai/flux/schnell req-1 --download",
     });
     expect(runState.ids).toContain("req-1");
+  });
+
+  it("reports a request fal failed (COMPLETED with an error) as a failed job, unfetched", async () => {
+    let resultFetches = 0;
+    mockQueue(
+      () =>
+        new Response(
+          JSON.stringify({
+            status: "COMPLETED",
+            error: "prompt is required",
+            error_type: "validation_error",
+          }),
+          { status: 200 },
+        ),
+      () => {
+        resultFetches++;
+        return new Response("{}", { status: 422 });
+      },
+    );
+    const err = await waitError();
+    expect(err).toBeInstanceOf(ProviderJobFailedError);
+    expect((err as Error).message).toBe(
+      "fal request req-1 failed (validation_error): prompt is required",
+    );
+    expect(classifyError(err).code).toBe("JOB_FAILED");
+    expect(resultFetches).toBe(0);
   });
 
   it("keeps Retry-After and the HTTP class of a 429 on the result fetch", async () => {

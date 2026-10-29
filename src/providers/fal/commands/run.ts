@@ -19,7 +19,6 @@ import {
   type FalReceipt,
   buildReceipt,
   persistReceipt,
-  resultCommand,
   resumeCommand,
 } from "../request-receipt.js";
 import {
@@ -130,7 +129,7 @@ export function registerFalRunCommand(parent: Command): void {
         submit,
         logger,
         waitTimeoutMs: Number.parseInt(opts.waitTimeout, 10) || 480_000,
-        resume: resumeCommand(receipt?.result_command ?? resultCommand(model, submit.request_id), {
+        resume: resumeCommand(model, submit.request_id, {
           outputDir: opts.outputDir ? path.resolve(opts.outputDir) : undefined,
           download: opts.download !== false,
         }),

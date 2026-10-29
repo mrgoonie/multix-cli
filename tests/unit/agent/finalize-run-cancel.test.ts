@@ -158,6 +158,39 @@ describe("finalizeRun after a failure with a job in flight", () => {
     }
   });
 
+  it("leaves a rejection of the accepted job (a 422 result fetch) to its own advice", async () => {
+    const { envelope } = await finalizeCancelled(
+      2,
+      falRun({ id: "req-1", resume }),
+      ({ HttpError }) => ({
+        exitCode: 1,
+        error: new Error("Failed to fetch result for fal request req-1: HTTP 422", {
+          cause: new HttpError(422, "prompt is required", "https://queue.fal.run/x"),
+        }),
+      }),
+    );
+    expect(envelope.error.code).not.toBe("RATE_LIMITED");
+    expect(envelope.error.hint).not.toContain("Do not rerun");
+    expect(envelope.next).not.toContain(resume);
+  });
+
+  it("keeps the key advice when a poll fails on the key", async () => {
+    const { envelope } = await finalizeCancelled(
+      2,
+      falRun({ id: "req-1", resume }),
+      ({ HttpError }) => ({
+        exitCode: 1,
+        error: new Error("Failed to poll status for fal request req-1: HTTP 401", {
+          cause: new HttpError(401, "unauthorized", "https://queue.fal.run/x"),
+        }),
+      }),
+    );
+    expect(envelope.error).toMatchObject({ code: "INVALID_KEY", retryable: false });
+    expect(envelope.error.hint).toContain("Do not rerun; fix the key, then resume");
+    expect(envelope.error.hint).toContain("The provider rejected the key");
+    expect(envelope.next[0]).toBe(resume);
+  });
+
   it("keeps the signal-exit wording", async () => {
     const { envelope } = await finalizeCancelled(2, falRun({ id: "req-1", resume }));
     expect(envelope.error).toMatchObject({ code: "CANCELLED", retryable: false });

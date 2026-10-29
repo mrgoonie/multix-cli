@@ -543,6 +543,26 @@ describe("a run that fails after fal accepted the job", () => {
     });
   });
 
+  it("fal image --no-download resumes with the result JSON, not a download", async () => {
+    const model = "fal-ai/flux/schnell";
+    const app = "fal-ai/flux";
+    stub({
+      [`POST https://queue.fal.run/${model}`]: [
+        { json: { request_id: REQUEST_ID, status: "IN_QUEUE", ...queueUrls(app) } },
+      ],
+      [`GET https://queue.fal.run/${app}/requests/${REQUEST_ID}/status`]: [
+        { status: 401, json: { detail: "unauthorized" } },
+      ],
+    });
+    await expect(cli("image", "a cat", "-m", model, "--no-download")).rejects.toThrow(
+      /Failed to poll status/,
+    );
+    expect(run.inFlight).toEqual({
+      id: REQUEST_ID,
+      resume: `multix fal result ${model} ${REQUEST_ID}`,
+    });
+  });
+
   it("--detach tracks nothing: it returns once fal queued the job", async () => {
     stub(submitRoute);
     await cli("run", MODEL, "--input", '{"prompt":"x"}', "--detach");

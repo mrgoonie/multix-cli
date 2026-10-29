@@ -16,6 +16,7 @@
 import fs from "node:fs";
 import type { Command } from "commander";
 import {
+  type ErrorCode,
   type ErrorInfo,
   classifyError,
   classifyMessage,
@@ -231,9 +232,27 @@ interface FinalizeInput {
   estimateOnly?: boolean;
 }
 
+/**
+ * Failures that leave an accepted job to be fetched by its resume command: the run,
+ * the network or the key failed, not the job. A rejection (bad input, blocked
+ * content, a failed job) ends the job too, so its own advice stands.
+ */
+const RESUMABLE_FAILURES = new Set<ErrorCode>([
+  "RATE_LIMITED",
+  "PROVIDER_UNAVAILABLE",
+  "NETWORK_ERROR",
+  "TIMEOUT",
+  "UNKNOWN_REMOTE_STATE",
+  "MISSING_KEY",
+  "INVALID_KEY",
+  "UNKNOWN",
+]);
+
+const KEY_FAILURES = new Set<ErrorCode>(["MISSING_KEY", "INVALID_KEY"]);
+
 /** True when the provider itself ended the job (failed, canceled or paused it), not the run. */
 function jobEndedByProvider(info: ErrorInfo, error: unknown): boolean {
-  if (info.code === "JOB_FAILED") return true;
+  if (!RESUMABLE_FAILURES.has(info.code)) return true;
   for (let e = error, depth = 0; e instanceof Error && depth < 5; e = e.cause, depth++) {
     if (e instanceof ProviderJobFailedError) return true;
   }
@@ -269,14 +288,18 @@ export function finalizeRun(input: FinalizeInput): number {
       ? run.inFlight
       : undefined;
   if (info && inFlight) {
-    const wait =
-      !signalExit && info.retry_after_s !== undefined ? `wait ${info.retry_after_s}s, then ` : "";
+    const wait = KEY_FAILURES.has(info.code)
+      ? "fix the key, then "
+      : !signalExit && info.retry_after_s !== undefined
+        ? `wait ${info.retry_after_s}s, then `
+        : "";
+    const keyHint = KEY_FAILURES.has(info.code) ? ` ${info.hint}` : "";
     info = {
       ...info,
       retryable: false,
       hint: signalExit
         ? `Job ${inFlight.id} was submitted before the run stopped; it runs on (or has finished) and is billed. Do not rerun; resume it with the next command.`
-        : `Job ${inFlight.id} was accepted before the run failed; it runs on (or has finished) and is billed. Do not rerun; ${wait}resume it with the next command.`,
+        : `Job ${inFlight.id} was accepted before the run failed; it runs on (or has finished) and is billed. Do not rerun; ${wait}resume it with the next command.${keyHint}`,
     };
   } else if (info && run.interrupted && signalExit) {
     info = { ...info, ...run.interrupted };

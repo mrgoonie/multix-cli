@@ -5,7 +5,13 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { run } from "../../../../src/agent/run-state.js";
 import { _resetEnvLoader } from "../../../../src/core/env-loader.js";
-import { ConfigError, ProviderError, ValidationError } from "../../../../src/core/errors.js";
+import { classifyError } from "../../../../src/core/error-classify.js";
+import {
+  ConfigError,
+  ProviderError,
+  ProviderJobFailedError,
+  ValidationError,
+} from "../../../../src/core/errors.js";
 import { _resetOutputDir } from "../../../../src/core/output-dir.js";
 import { AtlasPredictionFailedError } from "../../../../src/providers/atlascloud/client.js";
 import {
@@ -333,17 +339,23 @@ describe("executePrediction (mocked submit -> poll -> saved output)", () => {
         body: prediction("nsfw1", "completed", { outputs: [], has_nsfw_contents: [true] }),
       },
     });
-    await expect(
-      executePrediction({
-        client,
-        logger,
-        kind: "image",
-        model: "m/x",
-        body: { prompt: "x" },
-        opts: {},
-        defaultWaitTimeoutMs: 60_000,
-      }),
-    ).rejects.toThrow(/content safety/);
+    const error = await executePrediction({
+      client,
+      logger,
+      kind: "image",
+      model: "m/x",
+      body: { prompt: "x" },
+      opts: {},
+      defaultWaitTimeoutMs: 60_000,
+    }).then(
+      () => expect.unreachable("an empty result should fail"),
+      (e: unknown) => e,
+    );
+    expect(String(error)).toMatch(/content safety/);
+    // Ended by the provider, so a failed run is not told to resume it; the code stays specific.
+    expect(error).toBeInstanceOf(ProviderJobFailedError);
+    expect((error as ProviderJobFailedError).terminal).toBe(false);
+    expect(classifyError(error).code).toBe("CONTENT_BLOCKED");
   });
 
   it("fails when no output downloads, without leaking the signed URL query", async () => {

@@ -12,13 +12,13 @@ import {
   isTransientHttpError,
 } from "../../core/async-poll.js";
 import { audioExtFromMime } from "../../core/audio-kind.js";
-import { MultixError, ProviderError } from "../../core/errors.js";
+import { MultixError, ProviderError, ProviderJobFailedError } from "../../core/errors.js";
 import { downloadFile } from "../../core/http-client.js";
 import { parseJsonInput } from "../../core/json-input.js";
 import type { Logger } from "../../core/logger.js";
 import { redactUrl } from "../../core/redact.js";
 import { type FalClient, HttpError, createFalClient, submitPath } from "./client.js";
-import { resultCommand } from "./request-receipt.js";
+import { resultCommand, resumeCommand } from "./request-receipt.js";
 import type { FalResultResponse, FalStatusResponse, FalSubmitResponse } from "./types.js";
 
 /** Parse `--input` as inline JSON or `@path/to/file.json`. */
@@ -33,6 +33,8 @@ export interface SubmitAndWaitOptions {
   waitTimeoutMs?: number;
   /** Poll interval override — mainly for tests. Defaults to 3000ms. */
   pollIntervalMs?: number;
+  /** False for `--no-download`: resuming then prints the result rather than downloading it. */
+  download?: boolean;
 }
 
 export interface SubmitAndWaitResult {
@@ -207,7 +209,17 @@ export async function waitForFalResult(opts: WaitForResultOptions): Promise<FalR
     }
 
     logger.debug(`attempt ${attempt} — status: ${statusRes.status}`);
-    if (statusRes.status === "COMPLETED") break;
+    if (statusRes.status === "COMPLETED") {
+      // fal ends a failed request as COMPLETED with an error: its result fetch cannot succeed.
+      if (statusRes.error) {
+        const kind = statusRes.error_type ? ` (${statusRes.error_type})` : "";
+        throw new ProviderJobFailedError(
+          `fal request ${requestId} failed${kind}: ${statusRes.error}`,
+          "fal",
+        );
+      }
+      break;
+    }
     await sleep(intervalMs);
   }
 
@@ -250,7 +262,8 @@ function isRetryableResultError(error: unknown): boolean {
 export async function submitAndWait(opts: SubmitAndWaitOptions): Promise<SubmitAndWaitResult> {
   const client = createFalClient();
   const submit = await submitFalRequest(client, opts.model, opts.input, opts.logger);
-  const result = await waitForFalResult({ ...opts, client, submit });
+  const resume = resumeCommand(opts.model, submit.request_id, { download: opts.download });
+  const result = await waitForFalResult({ ...opts, client, submit, resume });
   return { requestId: submit.request_id, result };
 }
 
