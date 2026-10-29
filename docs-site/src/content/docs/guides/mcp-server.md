@@ -179,10 +179,12 @@ see a stored interaction's length, so it does not bound a chain beyond
 Google's own limit of 40 seconds in total; every call is billed to your own
 Gemini key.
 
-**Leonardo.** `leonardo video` has no `--duration`: a Kling, Hailuo, LTX or
-Seedance model always renders 8 seconds, and the other models pick their own
-length (Veo 3 renders 8 seconds). The server therefore refuses it when
-`MULTIX_MCP_MAX_VIDEO_SECONDS` is below 8.
+**Leonardo.** `leonardo video` has no `--duration`: the CLI asks the
+lower-case models (`kling-2.6`, `hailuo-2_3`, `seedance-2.0` and the others
+listed by `leonardo video-models`) for 8 seconds, and the upper-case models
+(`MOTION2`, `VEO3`, `KLING2_1`, ...) pick their own length, up to 10 seconds
+for Kling 2.1 and 2.5. The server therefore refuses it when
+`MULTIX_MCP_MAX_VIDEO_SECONDS` is below 10.
 
 **Runway.** `runway video` and `runway image` can run remotely; give
 `--image` and each `--reference` as `https://` URLs in `inputs`, and

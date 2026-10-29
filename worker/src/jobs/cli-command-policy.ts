@@ -212,9 +212,9 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   "fish clone": { fileOptions: { sample: "file", "transcript-file": "file" } },
   "leonardo generate": { caps: { count: ["num"] } },
   "leonardo image-to-image": { caps: { count: ["num"] } },
-  // No --duration: a v2 model always renders 8 s (the CLI sends duration: 8) and a
-  // v1 model picks its own length (Veo 3 renders 8 s), so 8 s is what a run can reach.
-  "leonardo video": { caps: { resolution: ["resolution"], fixedSeconds: 8 } },
+  // No --duration: a v2 model gets duration: 8 and a v1 model picks its own length
+  // (Leonardo documents Kling 2.1 and 2.5 at 5 or 10 s), so a run can reach 10 s.
+  "leonardo video": { caps: { resolution: ["resolution"], fixedSeconds: 10 } },
   "leonardo image-to-video": { caps: VIDEO_CAPS },
   "byteplus generate": { fileOptions: { "input-image": "file" }, caps: IMAGE_COUNT },
   "byteplus image-to-image": { fileOptions: { ref: "file" }, caps: IMAGE_COUNT },
