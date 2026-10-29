@@ -129,8 +129,8 @@ Giới hạn của server cũng áp dụng cho `multix_run`: số output
 (`MULTIX_MCP_MAX_OUTPUTS`), độ dài video (`MULTIX_MCP_MAX_VIDEO_SECONDS`, cũng
 được gửi khi mặc định của lệnh video không rõ hoặc dài hơn; `leonardo video`
 không có `--duration` và tạo video tới 8 giây, nên bị từ chối khi giới hạn
-dưới 8) và độ phân giải (`MULTIX_MCP_ALLOWED_RESOLUTIONS`). Server tự chọn thư mục đầu ra, `--output`
-phải là tên file thuần, option mà CLI ghép vào tên file (như
+dưới 8) và độ phân giải (`MULTIX_MCP_ALLOWED_RESOLUTIONS`). Server tự chọn thư mục đầu ra,
+`--output` phải là tên file thuần, option mà CLI ghép vào tên file (như
 `elevenlabs voices design --output-prefix` hoặc mã ngôn ngữ khi lồng tiếng) chỉ
 nhận chữ cái, chữ số, `_` và `-`, các lệnh ảnh OpenAI luôn dùng API driver,
 các lệnh video Gemini luôn dùng Gemini Omni Flash (khi người gọi bỏ trống độ

@@ -131,8 +131,8 @@ Server limits apply to `multix_run` too: the output count
 (`MULTIX_MCP_MAX_OUTPUTS`), video length (`MULTIX_MCP_MAX_VIDEO_SECONDS`, also
 sent when a video command's default is unknown or longer; `leonardo video`,
 which takes no `--duration` and renders up to 8 s, is refused when the cap is
-below 8) and resolution (`MULTIX_MCP_ALLOWED_RESOLUTIONS`). The server chooses the output directory,
-`--output` must be a plain file name, options the CLI turns into part of a
+below 8) and resolution (`MULTIX_MCP_ALLOWED_RESOLUTIONS`). The server chooses the output
+directory, `--output` must be a plain file name, options the CLI turns into part of a
 file name (such as `elevenlabs voices design --output-prefix` or a dub
 language) accept only letters, digits, `_` and `-`, the OpenAI image commands
 always use the API driver, the Gemini video commands always use Gemini Omni

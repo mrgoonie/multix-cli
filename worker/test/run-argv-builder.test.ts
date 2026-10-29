@@ -141,7 +141,7 @@ describe("prepareRun: argv", () => {
 
   it("refuses leonardo video, which always renders up to 8 s, when the cap is below 8", () => {
     const request = { command: "leonardo video", args: ["waves"] };
-    expect(run(request).argv).not.toContain("--duration");
+    expect(run(request).argv.some((a) => a.startsWith("--duration"))).toBe(false);
     expect(prepareRun(request, limitsFrom({ MULTIX_MCP_MAX_VIDEO_SECONDS: "8" })).argv).toEqual([
       "leonardo",
       "video",

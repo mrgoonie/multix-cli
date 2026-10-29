@@ -74,6 +74,15 @@ export const LEONARDO_V2_VIDEO_MODELS = new Set<string>([
   "seedance-2.0-fast",
 ]);
 
+/**
+ * v1 text-to-video models that take a duration (5 or 10 s). The CLI sends 5 s,
+ * since `leonardo video` has no --duration and the v2 models get a fixed 8 s.
+ */
+export const LEONARDO_V1_VIDEO_SECONDS: Readonly<Record<string, number>> = {
+  KLING2_1: 5,
+  Kling2_5: 5,
+};
+
 /** GPT Image family routes through the v2 endpoint with a different request shape. */
 export function isGptImageModel(modelId: string | undefined): boolean {
   return typeof modelId === "string" && modelId.startsWith("gpt-image-");

@@ -15,7 +15,11 @@ import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import { maybeDownloadThumb } from "../../../core/video-thumb.js";
 import { createLeonardoClient } from "../client.js";
-import { LEONARDO_DEFAULTS, LEONARDO_V2_VIDEO_MODELS } from "../models.js";
+import {
+  LEONARDO_DEFAULTS,
+  LEONARDO_V1_VIDEO_SECONDS,
+  LEONARDO_V2_VIDEO_MODELS,
+} from "../models.js";
 import { PollFailedError, PollTimeoutError, poll } from "../poll.js";
 import type {
   CreateV2GenerationResponse,
@@ -27,6 +31,23 @@ function v2DimsFor(resolution: string): { width: number; height: number } {
   if (resolution === "RESOLUTION_1080") return { width: 1920, height: 1080 };
   if (resolution === "RESOLUTION_480") return { width: 854, height: 480 };
   return { width: 1280, height: 720 };
+}
+
+/** Request body of the v1 endpoint; Kling models get an explicit 5 s duration. */
+export function v1TextToVideoBody(
+  prompt: string,
+  model: string,
+  opts: { resolution: string; enhance?: boolean; frameInterpolation?: boolean },
+): Record<string, unknown> {
+  const duration = LEONARDO_V1_VIDEO_SECONDS[model];
+  return {
+    prompt,
+    model,
+    resolution: opts.resolution,
+    promptEnhance: !!opts.enhance,
+    frameInterpolation: !!opts.frameInterpolation,
+    ...(duration === undefined ? {} : { duration }),
+  };
 }
 
 export function registerLeonardoVideoCommand(parent: Command): void {
@@ -92,13 +113,7 @@ export function registerLeonardoVideoCommand(parent: Command): void {
         } else {
           const res = await client.post<CreateVideoResponse>(
             "/generations-text-to-video",
-            {
-              prompt,
-              model,
-              resolution: opts.resolution,
-              promptEnhance: !!opts.enhance,
-              frameInterpolation: !!opts.frameInterpolation,
-            },
+            v1TextToVideoBody(prompt, model, opts),
             logger,
           );
           jobId = res.motionVideoGenerationJob?.generationId;
