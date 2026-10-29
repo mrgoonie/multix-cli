@@ -767,4 +767,58 @@ describe("prepareRun: runs the caps cannot bound", () => {
     expect(() => assertSpendGuard("fal run", why, mode("allow"), undefined)).not.toThrow();
     expect(() => assertSpendGuard("gemini generate", undefined, mode(), undefined)).not.toThrow();
   });
+
+  it("limits image commands to MULTIX_MCP_ALLOWED_IMAGE_MODELS when it is set", () => {
+    const allowed = limitsFrom({
+      MULTIX_MCP_ALLOWED_IMAGE_MODELS: " fal-ai/flux/schnell , gpt-image-2,,",
+    });
+    expect(limitsFrom({}).allowedImageModels).toEqual([]);
+    expect(allowed.allowedImageModels).toEqual(["fal-ai/flux/schnell", "gpt-image-2"]);
+    const runWith = (request: RunRequest) => prepareRun(request, allowed);
+    const refused = (request: RunRequest, message: RegExp) =>
+      expect(() => runWith(request)).toThrow(message);
+
+    // A listed model, given or as the catalog default, runs.
+    expect(
+      runWith({ command: "fal image", args: ["cat"], options: { model: "fal-ai/flux/schnell" } })
+        .argv,
+    ).toContain("--model=fal-ai/flux/schnell");
+    expect(() => runWith({ command: "fal image", args: ["cat"] })).not.toThrow();
+    expect(() => runWith({ command: "openai generate", options: { prompt: "cat" } })).not.toThrow();
+    // Any other model is refused, including a near miss.
+    refused(
+      { command: "fal image", args: ["cat"], options: { model: "fal-ai/flux-pro/v1.1-ultra" } },
+      /--model must be one of fal-ai\/flux\/schnell, gpt-image-2 for "fal image"/,
+    );
+    refused(
+      { command: "fal image", args: ["cat"], options: { model: " fal-ai/flux/schnell" } },
+      /--model must be one of/,
+    );
+    refused(
+      { command: "openai image-to-image", options: { prompt: "x", model: "gpt-image-1" } },
+      /--model must be one of/,
+    );
+    // When the CLI picks the model at run time, the caller must name a listed one.
+    refused(
+      { command: "replicate image", args: ["cat"] },
+      /pass --model one of fal-ai\/flux\/schnell, gpt-image-2 for "replicate image"/,
+    );
+    refused(
+      { command: "atlas image", args: ["cat"], options: { "num-images": 1 } },
+      /pass --model/,
+    );
+    // Commands without image outputs or without --model are not affected.
+    expect(() =>
+      runWith({ command: "openai generate-speech", options: { text: "hi", model: "tts-1-hd" } }),
+    ).not.toThrow();
+    expect(() => runWith({ command: "leonardo upscale", args: ["image-id"] })).not.toThrow();
+    // Unset, any model runs.
+    expect(() =>
+      run({
+        command: "fal image",
+        args: ["cat"],
+        options: { model: "fal-ai/flux-pro/v1.1-ultra" },
+      }),
+    ).not.toThrow();
+  });
 });

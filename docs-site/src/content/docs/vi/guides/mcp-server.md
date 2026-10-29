@@ -159,6 +159,16 @@ hạn):
   image`. Bỏ trống option, hoặc truyền đúng `default` mà `multix_catalog` liệt
   kê cho option đó, thì lần chạy vẫn được giới hạn.
 
+Việc chọn model còn làm giá mỗi ảnh chênh lệch hơn nữa (tới cả chục lần giữa
+các model), nên `--model` không bị đánh dấu là không giới hạn: làm vậy sẽ đẩy
+gần như mọi lần tạo ảnh qua `MULTIX_MCP_UNCAPPED_SPEND`. Thay vào đó operator
+giới hạn nó bằng `MULTIX_MCP_ALLOWED_IMAGE_MODELS`. Khi biến này được đặt, lệnh
+tạo ảnh có `--model` chỉ chạy với model trong danh sách: `--model` của caller,
+hoặc `default` mà `multix_catalog` liệt kê. Khi CLI tự chọn model lúc chạy
+(không có default trong catalog), caller phải truyền một `--model` có trong
+danh sách. Không đặt thì mọi model đều chạy. `cloudflare generate --steps`
+cũng đổi giá, với biên độ nhỏ hơn, và không bị giới hạn.
+
 Operator quyết định điều kiện cho các lần chạy này bằng
 `MULTIX_MCP_UNCAPPED_SPEND`. Ở chế độ `budget` (mặc định), lệnh gọi phải có
 `max_cost_usd` và job chỉ khởi động khi ước tính giá chứng minh lần chạy nằm
@@ -557,6 +567,7 @@ closed). `http://localhost` được chấp nhận khi phát triển cục bộ.
 | `MULTIX_MCP_MAX_OUTPUTS` | `4` (tối đa 10) | Số output tối đa (ví dụ `--num-images`) mỗi lần gọi `multix_run`. |
 | `MULTIX_MCP_MAX_VIDEO_SECONDS` | `10` (tối đa 15) | Thời lượng video tối đa cho mỗi lần gọi (với `gemini extend-video` là đoạn nối tiếp mới). Khi caller bỏ qua thời lượng và mặc định của lệnh không rõ hoặc dài hơn, server gửi `min(5, giới hạn)` giây. |
 | `MULTIX_MCP_ALLOWED_RESOLUTIONS` | `480p,720p,768p,1080p` | Độ phân giải video caller được yêu cầu (`768p` là kích thước của HeyGen Video). Giá trị khác (ví dụ `4k`), do caller truyền hay là mặc định của lệnh, bị từ chối trước khi job bắt đầu. |
+| `MULTIX_MCP_ALLOWED_IMAGE_MODELS` | mọi model | Danh sách model id (khớp chính xác, phân tách bằng dấu phẩy) mà các lệnh tạo ảnh của `multix_run` được dùng, qua `--model` hoặc mặc định của lệnh trong catalog. Khi CLI tự chọn model lúc chạy, caller phải truyền một `--model` có trong danh sách. |
 | `MULTIX_MCP_UNCAPPED_SPEND` | `budget` | Lần chạy mà các giới hạn trên không chặn được (đánh dấu `uncapped_spend` trong `multix_catalog`): `budget` chỉ chạy khi có `max_cost_usd` mà ước tính giá chứng minh được (giá không rõ thì bị từ chối), `deny` từ chối, `allow` cho chạy. Giá trị khác được hiểu là `budget`. |
 | `MULTIX_MCP_ALLOWED_ORIGINS` | không có | Origin trình duyệt chính xác (ví dụ `https://app.example.com`) được phép gọi `/mcp`. Không hỗ trợ `*` hay wildcard khác: `*` chỉ khớp origin `*` theo nghĩa đen, thứ trình duyệt không bao giờ gửi. Sau khi access token được kiểm tra, request có header `Origin` khác nhận `403`; request không có `Origin` (client phía server) được chấp nhận. Origin trong danh sách nhận header CORS. Preflight `OPTIONS` được lớp OAuth trả lời cho mọi origin. |
 | `MULTIX_MAX_JOBS_PER_ACCOUNT` | `2` (tối đa 50) | Số job `multix_run` một tài khoản được chạy cùng lúc. |

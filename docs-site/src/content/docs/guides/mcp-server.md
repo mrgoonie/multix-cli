@@ -163,6 +163,16 @@ the option that makes a run uncapped):
   image`. Omitting the option, or repeating the `default` that
   `multix_catalog` lists for it, keeps the run capped.
 
+The model choice moves the price of an image even more (by an order of
+magnitude between models), so `--model` is not marked uncapped: that would
+send almost every image run through `MULTIX_MCP_UNCAPPED_SPEND`. The operator
+bounds it with `MULTIX_MCP_ALLOWED_IMAGE_MODELS` instead. When it is set, a
+command that outputs images and takes `--model` runs only with a listed
+model: the caller's `--model`, or else the `default` `multix_catalog` lists.
+When the CLI picks the model at run time (no listed default), the caller must
+pass a listed `--model`. Unset, any model runs. `cloudflare generate --steps`
+also changes the price, by a smaller margin, and is not bounded.
+
 The operator decides what such a run needs with `MULTIX_MCP_UNCAPPED_SPEND`.
 In `budget` mode (the default) the call must give `max_cost_usd`, and the job
 starts only when the price estimate proves the run fits (`cost_policy` is
@@ -560,6 +570,7 @@ Set these as `vars` in `worker/wrangler.jsonc`:
 | `MULTIX_MCP_MAX_OUTPUTS` | `4` (ceiling 10) | Maximum output count (for example `--num-images`) per `multix_run` call. |
 | `MULTIX_MCP_MAX_VIDEO_SECONDS` | `10` (ceiling 15) | Maximum video duration per call (for `gemini extend-video`, the new continuation). When a caller omits it and the command's default is unknown or longer, the server sends `min(5, cap)` seconds. |
 | `MULTIX_MCP_ALLOWED_RESOLUTIONS` | `480p,720p,768p,1080p` | Video resolutions a caller may request (`768p` is a HeyGen Video size). Anything else (for example `4k`), given or the command's default, is rejected before the job starts. |
+| `MULTIX_MCP_ALLOWED_IMAGE_MODELS` | any | Comma-separated model ids (exact match) that image commands of `multix_run` may use, given as `--model` or as the command's catalog default. When the CLI picks the model at run time, the caller must pass a listed `--model`. |
 | `MULTIX_MCP_UNCAPPED_SPEND` | `budget` | Runs the caps above cannot bound (marked `uncapped_spend` in `multix_catalog`): `budget` runs one only with a `max_cost_usd` its price estimate proves (an unknown price is refused), `deny` refuses it, `allow` runs it. Any other value means `budget`. |
 | `MULTIX_MCP_ALLOWED_ORIGINS` | none | Exact browser origins (for example `https://app.example.com`) allowed to call `/mcp`. `*` and other wildcards are not supported: `*` only matches a literal `*` origin, which browsers never send. After the access token is checked, requests with any other `Origin` header get `403`; requests without an `Origin` (server-side clients) are allowed. Listed origins get CORS headers. `OPTIONS` preflights are answered for any origin by the OAuth layer. |
 | `MULTIX_MAX_JOBS_PER_ACCOUNT` | `2` (ceiling 50) | `multix_run` jobs one account may run at the same time. |

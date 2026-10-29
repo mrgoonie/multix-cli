@@ -1,10 +1,12 @@
 /**
  * Operator caps for `multix_run`, the same limits the Worker's own image and
  * video tools enforce (MULTIX_MCP_MAX_OUTPUTS, MULTIX_MCP_MAX_VIDEO_SECONDS,
- * MULTIX_MCP_ALLOWED_RESOLUTIONS). Applied to the value the CLI would really
- * use: the caller's value, or else the CLI default.
+ * MULTIX_MCP_ALLOWED_RESOLUTIONS, MULTIX_MCP_ALLOWED_IMAGE_MODELS). Applied to
+ * the value the CLI would really use: the caller's value, or else the CLI
+ * default.
  */
 
+import { commandCapability } from "../../../src/capabilities/command-capabilities.js";
 import { ValidationError } from "../../../src/core/errors.js";
 import type { Limits } from "../config.js";
 import type { CliOption } from "./cli-catalog-types.js";
@@ -89,6 +91,40 @@ export function applyCaps(
       );
     }
   }
+}
+
+const MODEL_OPTION = "model";
+
+/** True when `command` outputs images and takes --model, so the image model allowlist applies to it. */
+export function isImageModelCommand(
+  command: string,
+  options: ReadonlyMap<string, CliOption>,
+): boolean {
+  return (
+    options.has(MODEL_OPTION) && (commandCapability(command)?.outputs.includes("image") ?? false)
+  );
+}
+
+/**
+ * The model sets the price of each image, so with MULTIX_MCP_ALLOWED_IMAGE_MODELS
+ * set an image command runs only with a listed model: the caller's --model, or
+ * else the catalog default. When the CLI picks the model at run time (no
+ * catalog default), the caller must name one.
+ */
+export function assertAllowedImageModel(
+  command: string,
+  options: ReadonlyMap<string, CliOption>,
+  values: OptionValues,
+  limits: Limits,
+): void {
+  const allowed = limits.allowedImageModels;
+  if (allowed.length === 0 || !isImageModelCommand(command, options)) return;
+  const model = single(values, MODEL_OPTION) ?? defaultString(options.get(MODEL_OPTION));
+  if (model !== undefined && allowed.includes(model)) return;
+  const which = model === undefined ? "pass --model" : "--model must be";
+  throw new ValidationError(
+    `${which} one of ${allowed.join(", ")} for "${command}" on this server (the model sets the price of each image)`,
+  );
 }
 
 /**
