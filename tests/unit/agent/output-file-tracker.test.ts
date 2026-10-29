@@ -17,6 +17,16 @@ describe("producedFiles", () => {
     return file;
   }
 
+  /** os.tmpdir() reads TMPDIR on POSIX and TEMP/TMP on Windows. */
+  function stubTmpDir(dir: string): void {
+    for (const name of ["TMPDIR", "TEMP", "TMP"]) vi.stubEnv(name, dir);
+  }
+
+  /** os.homedir() reads HOME on POSIX and USERPROFILE on Windows. */
+  function stubHomeDir(dir: string): void {
+    for (const name of ["HOME", "USERPROFILE"]) vi.stubEnv(name, dir);
+  }
+
   beforeEach(() => {
     base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "multix-tracker-")));
     run.written.clear();
@@ -69,7 +79,7 @@ describe("producedFiles", () => {
   });
 
   it("counts only direct children when the output dir is the temp root", () => {
-    vi.stubEnv("TMPDIR", base);
+    stubTmpDir(base);
     vi.stubEnv("MULTIX_OUTPUT_DIR", base);
     const direct = write("result.png");
     write("scratch", "upload.bin");
@@ -77,7 +87,7 @@ describe("producedFiles", () => {
   });
 
   it("drops temp files when the output dir contains the temp dir", () => {
-    vi.stubEnv("TMPDIR", path.join(base, "user"));
+    stubTmpDir(path.join(base, "user"));
     vi.stubEnv("MULTIX_OUTPUT_DIR", base);
     fs.mkdirSync(path.join(base, "user"));
     const result = write("result.png");
@@ -87,7 +97,7 @@ describe("producedFiles", () => {
   });
 
   it("drops ~/.multix state but keeps sibling dirs that share the prefix", () => {
-    vi.stubEnv("HOME", base);
+    stubHomeDir(base);
     // The output dir holds ~/.multix too, so only the state rule can drop it.
     vi.stubEnv("MULTIX_OUTPUT_DIR", base);
     write(".multix", "history.jsonl");
@@ -96,7 +106,7 @@ describe("producedFiles", () => {
   });
 
   it("drops a file named exactly ~/.multix", () => {
-    vi.stubEnv("HOME", base);
+    stubHomeDir(base);
     vi.stubEnv("MULTIX_OUTPUT_DIR", base);
     write(".multix");
     expect(producedFiles()).toEqual([]);
