@@ -476,7 +476,41 @@ describe("prepareRun: rejections", () => {
       { command: "gemini edit-video", options: { prompt: "p", video: "/etc/passwd" } },
       /video/,
     ],
+    [
+      "count in exponent form the CLI reads as 100",
+      { command: "fal image", args: ["p"], options: { "num-images": "100e-2" } },
+      /--num-images must be a plain decimal number of at least 1/,
+    ],
+    [
+      "duration in exponent form the CLI reads as 60",
+      { command: "byteplus video", options: { prompt: "p", duration: "60e-1" } },
+      /--duration must be a plain decimal number of at least 1/,
+    ],
+    [
+      "fractional duration the CLI reads as 0",
+      { command: "byteplus video", options: { prompt: "p", duration: "0.5" } },
+      /--duration must be a plain decimal number of at least 1/,
+    ],
+    [
+      "hex count",
+      { command: "fal image", args: ["p"], options: { "num-images": "0x2" } },
+      /--num-images must be a plain decimal number/,
+    ],
+    [
+      "signed count",
+      { command: "fal image", args: ["p"], options: { "num-images": "+2" } },
+      /--num-images must be a plain decimal number/,
+    ],
   ])("rejects %s", (_label, request, message) => rejects(request, message));
+
+  it("accepts padded and fractional values within the caps", () => {
+    expect(() =>
+      run({ command: "fal image", args: ["p"], options: { "num-images": " 2 " } }),
+    ).not.toThrow();
+    expect(() =>
+      run({ command: "byteplus video", options: { prompt: "p", duration: "4.9" } }),
+    ).not.toThrow();
+  });
 });
 
 describe("prepareRun: speech", () => {
