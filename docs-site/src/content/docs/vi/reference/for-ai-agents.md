@@ -101,7 +101,7 @@ https://multix.zuey.me/llms.txt
 | `estimate` | Giá ước tính trước khi chạy (với `--estimate`, `--max-cost`, hoặc với lệnh có bảng giá). `estimate_only: true` đánh dấu lần chạy `--estimate`. |
 | `budget` | Với `--max-cost`: `ok`, `max_cost_usd`, `policy`, cùng `code` và `message` khi bị từ chối. |
 | `cost` | Biên nhận chi phí của lần chạy (`multix.cost/v1`); xem [Biên nhận chi phí](#biên-nhận-chi-phí). |
-| `next[]` | Lệnh nên chạy tiếp: lệnh status của job async, `multix check` khi lỗi key, `multix rerun <id>` khi lỗi tạm thời. |
+| `next[]` | Lệnh nên chạy tiếp: lệnh status của job async, `multix check` khi lỗi key, `multix rerun <id>` khi lỗi tạm thời. Khi một lần chạy đã lưu một phần output trước khi request sau bị lỗi (`gemini generate --num-images N`), các file đã lưu vẫn nằm trong `outputs`, hint nói rõ điều đó, và `next[]` có lệnh chỉ yêu cầu phần còn thiếu thay vì rerun và trả tiền lại cho các file đó: đứng đầu khi lỗi tạm thời, đứng cuối với lỗi khác (sửa key, quota hoặc input trước). |
 
 ## Exit code và mã lỗi
 
@@ -110,7 +110,7 @@ https://multix.zuey.me/llms.txt
 | 0 | thành công | | |
 | 2 | sai cú pháp hoặc input | `USAGE`, `INVALID_INPUT`, `BUDGET_EXCEEDED`, `BUDGET_UNPROVEN` | Sửa flag; chưa bị tính phí. Với lỗi ngân sách, chạy lệnh `--estimate` trong `next[]`. |
 | 3 | key hoặc cài đặt | `MISSING_KEY`, `INVALID_KEY`, `CONFIG_ERROR`, `BINARY_MISSING` | `multix check`, đặt key có tên trong `error.env`. |
-| 4 | tạm thời | `RATE_LIMITED`, `PROVIDER_UNAVAILABLE`, `NETWORK_ERROR` | Chờ `retry_after_s`, rồi `multix rerun <id>`. |
+| 4 | tạm thời | `RATE_LIMITED`, `PROVIDER_UNAVAILABLE`, `NETWORK_ERROR` | Chờ `retry_after_s`, rồi `multix rerun <id>`, hoặc `next[0]` khi đã có file được lưu (`outputs`). |
 | 5 | bị từ chối | `QUOTA_EXCEEDED`, `CONTENT_BLOCKED`, `MODEL_NOT_FOUND`, `NOT_FOUND`, `PROVIDER_REJECTED`, `JOB_FAILED`, `RESPONSE_TOO_LARGE` | Đổi input, model hoặc provider. |
 | 6 | hết thời gian hoặc không rõ | `TIMEOUT`, `UNKNOWN_REMOTE_STATE` | Job có thể vẫn đang chạy: dùng lệnh status trong `next[]`. `UNKNOWN_REMOTE_STATE`: lần submit thất bại mà không chứng minh được provider đã từ chối (bị cắt kết nối, lỗi gateway 5xx) nên job có thể đã vào hàng đợi; kiểm tra danh sách request của provider trước khi submit lại. |
 | 129, 130, 143 | đã hủy | `CANCELLED` | Lần chạy bị dừng bởi SIGHUP, Ctrl-C (SIGINT) hoặc SIGTERM sau khi đã dọn dẹp; không để lại gì. Chạy lại lệnh. Nếu request đã được gửi tới provider, hint sẽ nói rõ: lấy kết quả theo `provider_ids` trước khi chạy lại, nếu không có thể bị tính phí hai lần. Khi lệnh biết rõ hơn, hint sẽ cụ thể: job đã submit và đang chờ thì tiếp tục bằng `next[0]` (không chạy lại); submit bị dừng giữa chừng có thể đã được nhận với id chưa biết (kiểm tra console của provider trước); dừng trước khi submit thì không có gì bị tính phí. Tín hiệu thứ hai dừng lệnh trước khi dọn dẹp: lệnh vẫn kết thúc với exit code đó nhưng không có envelope, và có thể còn file tạm. |

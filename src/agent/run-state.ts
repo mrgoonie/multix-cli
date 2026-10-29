@@ -91,6 +91,13 @@ export interface RunState {
    * still in flight may have been accepted under an id the run never saw.
    */
   interrupted?: { hint: string; retryable: boolean };
+  /**
+   * Set by a command that saved part of its outputs before a later paid request
+   * failed: the option changes that request only what is still missing (null
+   * drops an option, such as an --output already written). The failure suggests
+   * that run instead of a rerun that pays again for the saved files.
+   */
+  partial?: { options: Record<string, string | null> };
   /** True once a command action started (help and parse errors never get there). */
   actionStarted: boolean;
   finalized: boolean;

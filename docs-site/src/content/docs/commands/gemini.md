@@ -44,7 +44,10 @@ curl -s https://example.com/talk.mp3 | multix gemini transcribe --files - --stdi
 `gemini-3.1-flash-lite-image`, `gemini-3-pro-image` and `gemini-nano-banana-2.1`
 are other choices. Imagen 4 is no longer served on the Gemini API, and the
 `-preview` image ids are past their earliest announced shutdown date and may
-stop at any time. `image-to-image` (alias `i2i`) accepts repeated `--ref` inputs.
+stop at any time. With `--num-images` above 1 the images are requested one by
+one; if a later request fails, the images already saved are kept (and copied to
+`--output`), and the error suggests a run with `--num-images` set to what is
+left. `image-to-image` (alias `i2i`) accepts repeated `--ref` inputs.
 
 ```bash
 multix gemini generate --prompt "A mountain lake" --aspect-ratio 16:9 --size 2K

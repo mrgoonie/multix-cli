@@ -101,7 +101,7 @@ https://multix.zuey.me/llms.txt
 | `estimate` | Pre-flight price of the run (with `--estimate`, `--max-cost`, or on a priced command). `estimate_only: true` marks an `--estimate` run. |
 | `budget` | With `--max-cost`: `ok`, `max_cost_usd`, `policy`, and the refusal `code` and `message`. |
 | `cost` | The run's cost receipt (`multix.cost/v1`); see [Cost receipt](#cost-receipt). |
-| `next[]` | Commands to run next: a status command for an async job, `multix check` for a key problem, `multix rerun <id>` for a temporary failure. |
+| `next[]` | Commands to run next: a status command for an async job, `multix check` for a key problem, `multix rerun <id>` for a temporary failure. When a run saved some outputs before a later request failed (`gemini generate --num-images N`), the saved files stay in `outputs`, the hint says so, and `next[]` has a run that requests only the rest instead of a rerun that would pay for them again: first after a temporary failure, last after any other (fix the key, quota or input first). |
 
 ## Exit codes and error codes
 
@@ -110,7 +110,7 @@ https://multix.zuey.me/llms.txt
 | 0 | success | | |
 | 2 | usage or invalid input | `USAGE`, `INVALID_INPUT`, `BUDGET_EXCEEDED`, `BUDGET_UNPROVEN` | Fix the flags; nothing was billed. For a budget error, run the `--estimate` command in `next[]`. |
 | 3 | key or setup | `MISSING_KEY`, `INVALID_KEY`, `CONFIG_ERROR`, `BINARY_MISSING` | `multix check`, set the key named in `error.env`. |
-| 4 | temporary | `RATE_LIMITED`, `PROVIDER_UNAVAILABLE`, `NETWORK_ERROR` | Wait `retry_after_s`, then `multix rerun <id>`. |
+| 4 | temporary | `RATE_LIMITED`, `PROVIDER_UNAVAILABLE`, `NETWORK_ERROR` | Wait `retry_after_s`, then `multix rerun <id>`, or `next[0]` when files were already saved (`outputs`). |
 | 5 | rejected | `QUOTA_EXCEEDED`, `CONTENT_BLOCKED`, `MODEL_NOT_FOUND`, `NOT_FOUND`, `PROVIDER_REJECTED`, `JOB_FAILED`, `RESPONSE_TOO_LARGE` | Change the input, model or provider. |
 | 6 | timed out or unknown | `TIMEOUT`, `UNKNOWN_REMOTE_STATE` | The job may still run: use the status command in `next[]`. `UNKNOWN_REMOTE_STATE`: the submit failed without proof that the provider rejected it (cut off, 5xx gateway error), so it may have been queued; check the provider's request list before resubmitting. |
 | 129, 130, 143 | cancelled | `CANCELLED` | The run was stopped by SIGHUP, Ctrl-C (SIGINT) or SIGTERM after cleaning up; nothing was left behind. Rerun the command. If a provider request was already sent, the hint says so instead: fetch the result by `provider_ids` before rerunning, or you may pay twice. When the command knows more, the hint is specific: a job it submitted and was waiting on is resumed with `next[0]` (never rerun); a submit stopped in flight may have been accepted under an unknown id (check the provider's console first); a stop before the submit left nothing billed. A second signal stops the run before its cleanup: it then ends with the same status but no envelope, and temporary files may remain. |

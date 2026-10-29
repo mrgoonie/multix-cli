@@ -6,6 +6,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Command } from "commander";
+import { run } from "../../../agent/run-state.js";
 import { ValidationError } from "../../../core/errors.js";
 import {
   finalizeGeneratedImages,
@@ -86,21 +87,32 @@ export function registerGenerateCommand(parent: Command): void {
         };
 
         const savedFiles: string[] = [];
+        let failure: { error: unknown; request: number } | undefined;
+        // Requests that returned images: what a failed run still owes is the rest.
+        let delivered = 0;
 
         for (let i = 0; i < numImages; i++) {
           // A failed call throws: the run is classified from the error itself, not a log line.
-          const resp = await withGeminiKey(
-            (apiKey) =>
-              generateContent(
-                {
-                  model,
-                  contents: [{ parts: [{ text: opts.prompt }] }],
-                  generationConfig,
-                },
-                { apiKey, logger },
-              ),
-            { logger },
-          );
+          let resp: Awaited<ReturnType<typeof generateContent>>;
+          try {
+            resp = await withGeminiKey(
+              (apiKey) =>
+                generateContent(
+                  {
+                    model,
+                    contents: [{ parts: [{ text: opts.prompt }] }],
+                    generationConfig,
+                  },
+                  { apiKey, logger },
+                ),
+              { logger },
+            );
+          } catch (error) {
+            if (savedFiles.length === 0) throw error;
+            // Images already paid for stay reported; the error is rethrown once they are finished.
+            failure = { error, request: i + 1 };
+            break;
+          }
 
           const images = extractImages(resp);
           if (images.length === 0) {
@@ -110,6 +122,7 @@ export function registerGenerateCommand(parent: Command): void {
             continue;
           }
 
+          delivered++;
           for (const img of images) {
             const outDir = getOutputDir();
             const ext = img.mimeType.includes("png") ? "png" : "jpg";
@@ -126,16 +139,34 @@ export function registerGenerateCommand(parent: Command): void {
           process.exit(1);
         }
 
-        // Copy first to --output if specified
-        if (opts.output && savedFiles[0]) {
-          fs.mkdirSync(path.dirname(path.resolve(opts.output)), { recursive: true });
-          fs.copyFileSync(savedFiles[0], opts.output);
-          logger.success(`Copied to: ${opts.output}`);
+        if (failure) {
+          const remaining = numImages - delivered;
+          logger.warn(
+            `Request ${failure.request} of ${numImages} failed after ${savedFiles.length} image(s) were saved; ${remaining} still missing`,
+          );
+          run.partial = { options: { "--num-images": String(remaining), "--output": null } };
         }
 
-        const finalImages = finalizeGeneratedImages(savedFiles, { ...opts, logger });
-        console.log(`\nGenerated ${finalImages.length} image(s):`);
-        for (const f of finalImages) console.log(`  ${f}`);
+        try {
+          // Copy first to --output if specified
+          if (opts.output && savedFiles[0]) {
+            fs.mkdirSync(path.dirname(path.resolve(opts.output)), { recursive: true });
+            fs.copyFileSync(savedFiles[0], opts.output);
+            logger.success(`Copied to: ${opts.output}`);
+          }
+
+          const finalImages = finalizeGeneratedImages(savedFiles, { ...opts, logger });
+          console.log(`\nGenerated ${finalImages.length} image(s):`);
+          for (const f of finalImages) console.log(`  ${f}`);
+        } catch (error) {
+          if (!failure) throw error;
+          // The request's own error decides the run; the saved images stay as written.
+          logger.warn(
+            `Could not finish the saved images: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+
+        if (failure) throw failure.error;
       },
     );
 }
