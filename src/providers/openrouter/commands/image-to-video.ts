@@ -12,7 +12,7 @@ import { envDefault } from "../../../core/env-default.js";
 import { createLogger } from "../../../core/logger.js";
 import { poll } from "../../leonardo/poll.js";
 import { type OpenRouterVideoPollResponse, pollVideoJob, submitVideoJob } from "../video-client.js";
-import { downloadOpenRouterVideo, toVideoJobError } from "./video-status.js";
+import { downloadOpenRouterVideo, isStoppedVideoJob, toVideoJobError } from "./video-status.js";
 
 export function registerOpenRouterImageToVideoCommand(parent: Command): void {
   parent
@@ -96,7 +96,7 @@ export function registerOpenRouterImageToVideoCommand(parent: Command): void {
           final = await poll<OpenRouterVideoPollResponse>({
             fetch: () => pollVideoJob(res.id),
             done: (v) => v.status === "completed",
-            failed: (v) => v.status === "failed",
+            failed: isStoppedVideoJob,
             intervalMs: 5000,
             maxAttempts: Math.max(
               1,
