@@ -12,6 +12,7 @@ import os from "node:os";
 import path from "node:path";
 import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { shellQuote } from "../../../../src/agent/agent-runtime.js";
 import { run } from "../../../../src/agent/run-state.js";
 import { modelRows } from "../../../../src/commands/agent/models-command.js";
 import { MultixError, ProviderError, ValidationError } from "../../../../src/core/errors.js";
@@ -338,7 +339,7 @@ describe("fal tts — queue receipts and resume", () => {
       ).rejects.toThrow(/Failed to fetch result/);
       expect(run.inFlight).toEqual({
         id: REQUEST_ID,
-        resume: `multix fal result ${ELEVEN} ${REQUEST_ID} --download --format ulaw_8000 --output-dir ${out}`,
+        resume: `multix fal result ${ELEVEN} ${REQUEST_ID} --download --format ulaw_8000 --output-dir ${shellQuote(out)}`,
       });
     } finally {
       run.inFlight = undefined;
