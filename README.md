@@ -68,7 +68,7 @@ multix fal image "a red fox" --json           # one-line multix.result/v1 envelo
 multix elevenlabs tts --text "Hi" --estimate  # price range, units, rate and source; nothing is sent
 multix elevenlabs tts --text "Hi" --max-cost 0.01  # refuse before sending unless the cost fits
 multix history stats --by model               # runs, success rate, p50/p90 time, cost, credits, tokens
-multix catalog compare -t video --resolution 720p --duration 10 --audio on  # rank prices for one exact request
+multix catalog compare -t video --resolution 720p --duration 10 --audio on --aspect-ratio 16:9  # rank prices for one exact request
 multix rerun last                             # repeat a recorded run
 ```
 

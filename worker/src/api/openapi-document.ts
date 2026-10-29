@@ -216,7 +216,7 @@ export function openApiDocument(origin: string): Json {
         get: {
           summary: "Model & provider catalogue",
           description:
-            "The same views as `multix catalog --json`. view=providers: provider links and whether your saved keys cover each. view=models (default): offerings (provider + model) with tasks, the multix command and prices per configuration, each with its source URL and check date; a price that is unknown, unverified or stale says so and is never $0. view=show&offering=<provider>:<model>: one offering. view=compare: quote every offering for one exact request (task, resolution, duration_s, audio, aspect_ratio, images); only prices the source confirms for that configuration are ranked.",
+            "The same views as `multix catalog --json`. view=providers: provider links and whether your saved keys cover each. view=models (default): offerings (provider + model) with tasks, the multix command and prices per configuration, each with its source URL and check date; a price that is unknown, unverified or stale says so and is never $0. view=show&offering=<provider>:<model>: one offering. view=compare: quote every offering for one exact request (task, resolution, duration_s, audio, aspect_ratio, images); only list prices the source confirms for that configuration, with nothing assumed, are ranked; estimates, assumed settings and audio left unstated while a ranked price covers it stay priced but unranked, with reasons.",
           operationId: "getModelCatalog",
           parameters: [
             {

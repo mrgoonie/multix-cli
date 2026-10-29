@@ -19,9 +19,9 @@ Run `multix catalog <command> --help` for every flag. With `--json`, the
 multix catalog providers --ready                 # providers with your key set, pricing links
 multix catalog models -t video --priced          # offerings with a current price
 multix catalog show fal:bytedance/seedance-2.5/text-to-video
-multix catalog compare -t video --resolution 720p --duration 10 --audio on
+multix catalog compare -t video --resolution 720p --duration 10 --audio on --aspect-ratio 16:9
 multix catalog usage --by provider --since 7d    # what went through multix on this machine
-multix catalog recommend -t video -u product-ugc --resolution 720p --duration 10 --audio on
+multix catalog recommend -t video -u product-ugc --resolution 720p --duration 10 --audio on --aspect-ratio 16:9
 ```
 
 An offering id is `<provider>:<model>`. `show` also accepts a bare model id when
@@ -37,26 +37,38 @@ URL and the date it was last checked.
 A price that is missing, not verified, last checked more than 120 days ago, or
 outside its dated window is shown as unknown with that reason, never as $0.
 Atlas Cloud shows its prices as estimates and bills the final amount from usage,
-so multix marks them `estimate`.
+so multix marks them `estimate` (`basis: "estimated"` in JSON).
 
 ## Compare
 
 `compare` quotes every matching offering for one exact request (`--task`,
 `--resolution`, `--audio`, `--duration`, `--aspect-ratio`, `--images`):
 
-- A row is ranked only when its rate card confirms every setting you pinned.
+- A row is ranked only when it is a list price whose rate card confirms every
+  setting you pinned, with nothing assumed.
 - A row whose card is for another configuration, or does not state a pinned
   setting, is `not_comparable` with the reason.
 - A row with no usable price, or missing an input the price needs (such as a
   duration), is `unknown` with the reason.
 - A row priced for a setting you did not pin is shown but not ranked; the
   output says which setting to pin (`not ranked: pin audio on`).
+- An estimate (Atlas Cloud) is priced but not ranked, since the provider bills
+  the final amount from the usage it measures.
 - Token-billed video (fal Seedance 2.5) needs the frame size: without
-  `--aspect-ratio`, the quote assumes 16:9 and says so.
+  `--aspect-ratio`, the quote assumes 16:9, says so and is not ranked. Pin
+  `--aspect-ratio` to rank it.
+- When you do not pin audio and a ranked video card's price holds with or
+  without audio (fal Seedance: audio does not change the token count), a video
+  card that does not state audio (Atlas does not say whether audio is included)
+  is priced but not ranked. Cards that are all silent on audio still rank
+  against each other. Pin `--audio` to compare only the cards that confirm it.
+- An unranked priced row lists why under `reasons` in JSON, and after
+  `not ranked:` in the text output.
+- Pin `--aspect-ratio` as well when the comparison includes token-billed video.
 
 ```text
-$ multix catalog compare -t video --resolution 720p --duration 10 --audio on
- #1     $4.62  fal:bytedance/seedance-2.5/text-to-video (fal/seedance-2.5-t2v-720p@api)  priced: assumes aspect ratio 16:9 (frame size of the token formula)
+$ multix catalog compare -t video --resolution 720p --duration 10 --audio on --aspect-ratio 16:9
+ #1   $4.6224  fal:bytedance/seedance-2.5/text-to-video (fal/seedance-2.5-t2v-720p@api)  priced
   -   unknown  atlas:bytedance/seedance-2.5/text-to-video  not_comparable: source does not state the price for audio on
 ```
 
@@ -123,6 +135,9 @@ multix catalog note list -u product-ugc
 A factor without enough evidence is left out instead of guessed; `coverage`
 shows how much of the weight had evidence, and each factor shows its evidence.
 With `--use-case`, offerings noted `avoid` for it are excluded with the reason.
+An offering whose only quotes are priced but not ranked gets no price factor; it
+shows `quote not ranked` with the price and the reasons (`unranked_quote` in
+JSON).
 
 ## Remote access
 

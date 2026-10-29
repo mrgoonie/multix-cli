@@ -13553,7 +13553,7 @@
             {
               "long": "--aspect-ratio",
               "flags": "--aspect-ratio <ratio>",
-              "description": "Aspect ratio (16:9) for token-billed video",
+              "description": "Aspect ratio (16:9); pin it to rank token-billed video",
               "required": false,
               "takesValue": true,
               "valueOptional": false,
@@ -13703,7 +13703,7 @@
             {
               "long": "--aspect-ratio",
               "flags": "--aspect-ratio <ratio>",
-              "description": "Aspect ratio (16:9)",
+              "description": "Aspect ratio (16:9); pin it to rank token-billed video",
               "required": false,
               "takesValue": true,
               "valueOptional": false,

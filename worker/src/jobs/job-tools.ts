@@ -121,7 +121,7 @@ export function registerJobTools(
     {
       title: "multix model & provider catalogue",
       description:
-        "Compare models and providers before running one. view providers: provider links and whether you saved keys. view models: offerings (provider + model) with tasks, the multix command and prices per configuration (resolution, audio), each with its source URL and check date. view show: one offering. view compare: quote every offering for one exact request (task, resolution, duration_s, audio, aspect_ratio, images); only prices the source confirms for that configuration are ranked, the rest are not_comparable or unknown with the reason, never $0. Price says nothing about quality. Never returns key values.",
+        "Compare models and providers before running one. view providers: provider links and whether you saved keys. view models: offerings (provider + model) with tasks, the multix command and prices per configuration (resolution, audio), each with its source URL and check date. view show: one offering. view compare: quote every offering for one exact request (task, resolution, duration_s, audio, aspect_ratio, images); only list prices the source confirms for that configuration, with nothing assumed, are ranked; an estimate, an assumed setting (pass aspect_ratio) or audio left unstated while a ranked price covers it stays priced but unranked with reasons; the rest are not_comparable or unknown with the reason, never $0. Price says nothing about quality. Never returns key values.",
       inputSchema: toolInput({
         view: z.enum(CATALOG_VIEWS).describe("providers, models, show or compare"),
         task: z.enum(TASKS).optional().describe("Task filter, e.g. video, image-to-video, speech"),
