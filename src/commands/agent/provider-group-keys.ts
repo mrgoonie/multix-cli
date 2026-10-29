@@ -22,6 +22,10 @@ export const GROUP_KEY_ROWS: Readonly<Record<string, readonly (readonly string[]
   replicate: [["REPLICATE_API_TOKEN", "REPLICATE_API_KEY"]],
   runway: [["RUNWAYML_API_SECRET"]],
   heygen: [["HEYGEN_API_KEY"]],
+  sume: [["SUME_API_KEY"]],
+  // Legacy commands need the key and the account id; the platform commands
+  // (`models`, `run`, `prediction`) read TOPVIEW_PLATFORM_API_KEY instead.
+  topview: [["TOPVIEW_API_KEY", "TOPVIEW_PLATFORM_API_KEY"]],
   // `multix speech` routes to one provider; any one of their keys makes it usable.
   speech: [
     [

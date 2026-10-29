@@ -71,7 +71,7 @@ export interface CommandPolicy {
    * subject to MULTIX_MCP_UNCAPPED_SPEND.
    */
   uncappedSpend?: string;
-  /** Options that make a run uncapped when given (a raw body or flags, a length the caps do not cover). */
+  /** Options that make a run uncapped when given (a raw request body or raw model flags). */
   uncappedOptions?: string[];
   /**
    * The job gets the keys of the provider groups these options name (the part
@@ -137,6 +137,9 @@ const IMAGE_COUNT: CapRules = { count: ["num-images"] };
 const MODEL_IMAGE_COUNT: CapRules = { ...IMAGE_COUNT, countFromModel: true };
 const PASS_THROUGH = "the request body is passed to the provider as given";
 const SOURCE_LENGTH = "billed by the length of the source media";
+const SCRIPT_LENGTH = "billed by the length of the script or audio";
+/** m2v's --video-length-type picks a 15-60 s range, past what the duration cap can bound. */
+const M2V_LENGTH = "the video runs 15-60 s (--video-length-type), longer than the duration cap";
 const EXTRA_INPUT = ["input"];
 const SPEECH_KEY_GROUPS = [
   "gemini",
@@ -237,10 +240,10 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   "elevenlabs clone": { fileOptions: { files: "file", audio: "file" } },
   "elevenlabs voice-changer": { fileOptions: { input: "file" } },
   "elevenlabs transcribe": { fileOptions: { input: "file" } },
-  // Billed by length: --music-length-ms and a --plan's section durations set it (30 s otherwise).
+  // Billed by length: --music-length-ms or a --plan sets it, else the model picks it.
   "elevenlabs music": {
+    uncappedSpend: "billed by length, which the model picks (up to 10 minutes) unless given",
     fileOptions: { plan: "file" },
-    uncappedOptions: ["music-length-ms", "plan"],
   },
   "elevenlabs dub": {
     uncappedSpend: SOURCE_LENGTH,
@@ -306,7 +309,7 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
     urlOptions: ["callback-url"],
   },
   "heygen video": {
-    uncappedSpend: "billed by the length of the script or audio",
+    uncappedSpend: SCRIPT_LENGTH,
     fileOptions: { audio: "file", "background-image": "file" },
     assetRefOptions: ["audio", "background-image"],
     urlOptions: ["callback-url"],
@@ -339,6 +342,64 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   },
   "heygen template": { uncappedSpend: "the template decides the video length" },
   "heygen run": { uncappedSpend: PASS_THROUGH },
+  // An omitted --num-images leaves the count to the model's catalog default;
+  // --param sets any other request field the model's catalog row lists.
+  "sume image": {
+    fileOptions: { image: "file" },
+    repeatable: ["image", "param"],
+    caps: { count: ["num-images"], countFromModel: true },
+    uncappedOptions: ["param"],
+  },
+  "sume video": {
+    fileOptions: {
+      image: "file",
+      "end-image": "file",
+      "reference-image": "file",
+      video: "file",
+      audio: "file",
+    },
+    repeatable: ["image", "reference-image", "param"],
+    // No duration cap: a filled --duration is refused by models without one and
+    // means the audio length on lip-sync models.
+    uncappedSpend:
+      "the model's catalog row sets the price; lip-sync and captions bill by the length of the source media",
+    caps: { resolution: ["resolution"] },
+  },
+  // A quote takes only public URLs: nothing is uploaded or billed.
+  "sume estimate": {
+    urlOptions: ["image", "end-image", "reference-image", "video", "audio"],
+    repeatable: ["image", "reference-image", "param"],
+  },
+  // The product page URL is sent as given; the CLI accepts only http(s).
+  "topview url-to-video": {
+    uncappedSpend: M2V_LENGTH,
+    fileOptions: { logo: "file", music: "file" },
+  },
+  "topview materials-to-video": {
+    uncappedSpend: M2V_LENGTH,
+    fileOptions: { file: "file", logo: "file", music: "file" },
+    repeatable: ["file"],
+  },
+  "topview video-avatar": {
+    uncappedSpend: SCRIPT_LENGTH,
+    fileOptions: { video: "file", image: "file", audio: "file" },
+  },
+  "topview product-avatar": {
+    uncappedSpend: SCRIPT_LENGTH,
+    fileOptions: { "product-image": "file", "template-image": "file", audio: "file" },
+  },
+  "topview product-anyshoot": {
+    fileOptions: {
+      "product-image": "file",
+      "product-mask": "file",
+      "template-image": "file",
+      "template-mask": "file",
+    },
+    // try-on bills each generated image (--count 1-4).
+    caps: { count: ["count"] },
+  },
+  "topview upload": { filePositionals: ["file"] },
+  "topview run": { uncappedSpend: PASS_THROUGH },
   "media optimize": { fileOptions: { input: "file" } },
   "media split": { fileOptions: { input: "file" } },
   "media batch": { fileOptions: { "input-dir": "dir" } },
@@ -383,6 +444,8 @@ export const GROUP_KEYS: Readonly<Record<string, readonly ProviderSecretName[]>>
   replicate: ["REPLICATE_API_TOKEN", "REPLICATE_API_KEY"],
   runway: ["RUNWAYML_API_SECRET"],
   heygen: ["HEYGEN_API_KEY"],
+  sume: ["SUME_API_KEY"],
+  topview: ["TOPVIEW_API_KEY", "TOPVIEW_UID", "TOPVIEW_PLATFORM_API_KEY"],
   // Readiness only: a speech job gets the keys of the providers it routes to (keyOptions).
   speech: [
     "GEMINI_API_KEY",
@@ -404,6 +467,8 @@ export const GROUP_REQUIRED_KEYS: Readonly<
   byteplus: [["BYTEPLUS_API_KEY", "ARK_API_KEY"]],
   replicate: [["REPLICATE_API_TOKEN", "REPLICATE_API_KEY"]],
   cloudflare: [["CLOUDFLARE_ACCOUNT_ID"], ["CLOUDFLARE_API_TOKEN"]],
+  // Legacy commands need TOPVIEW_API_KEY and TOPVIEW_UID; platform commands need the platform key.
+  topview: [["TOPVIEW_API_KEY", "TOPVIEW_PLATFORM_API_KEY"]],
   speech: [
     [
       "GEMINI_API_KEY",

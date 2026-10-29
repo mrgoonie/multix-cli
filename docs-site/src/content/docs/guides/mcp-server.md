@@ -143,31 +143,40 @@ see. `multix_catalog` marks them with `uncapped_spend` (on the command, or on
 the option that makes a run uncapped):
 
 - pass-through request bodies: `fal run`, `replicate run`, `atlas run`,
-  `heygen run`, `--input` of `replicate image` and `replicate video`,
-  `--input` / `--text-field` of `fal tts`, `--provider-options` of
-  `openrouter tts`, and the raw model `--flags` of `byteplus generate-3d`;
+  `heygen run`, `topview run`, `--input` of `replicate image` and
+  `replicate video`, `--input` / `--text-field` of `fal tts`, `--param` of
+  `sume image`, `--provider-options` of `openrouter tts`, and the raw model
+  `--flags` of `byteplus generate-3d`;
 - runs billed by the length of their source or script: `heygen video`,
-  `heygen translate`, `heygen lipsync`, `elevenlabs dub`, and `heygen
-  video-agent` / `heygen template`, where the agent or template sets the
-  length, and `elevenlabs music` with `--music-length-ms` or a `--plan` (30 s
-  otherwise);
-- `fal video`, which has no `--resolution`: the model picks it;
-- `atlas image`, `atlas image-to-image` and `replicate image` without
-  `--num-images` / `--num-outputs`, where the model picks the number of
+  `heygen translate`, `heygen lipsync`, `elevenlabs dub`, `topview
+  video-avatar`, `topview product-avatar`, and `heygen video-agent` /
+  `heygen template`, where the agent or template sets the length;
+- runs longer than the duration cap can bound: `topview url-to-video` and
+  `topview materials-to-video` (15-60 s videos), and `elevenlabs music`,
+  whose length (up to 10 minutes) the model picks unless `--music-length-ms`
+  or a `--plan` sets it;
+- `sume video`, where the model's catalog row sets the price and lip-sync and
+  captions models bill by the length of the source media;
+- `atlas image`, `atlas image-to-image`, `sume image` and `replicate image`
+  without `--num-images` / `--num-outputs`, where the model picks the number of
   outputs. Passing the count (at most `MULTIX_MCP_MAX_OUTPUTS`) makes the run
   capped again;
+- `fal video`, which has no `--resolution`: the model picks it;
 - `atlas video`, `atlas image-to-video`, `replicate video`,
   `openrouter image-to-video` and `heygen model-video` without `--resolution`,
   where the model's default resolution applies. Passing one of
-  `MULTIX_MCP_ALLOWED_RESOLUTIONS` makes the run capped again.
+  `MULTIX_MCP_ALLOWED_RESOLUTIONS` makes the run capped again, for models that
+  take a resolution (some Atlas models do not, and are then always uncapped).
+  For `openrouter image-to-video` the value is a request the model may round.
 
 The operator decides what such a run needs with `MULTIX_MCP_UNCAPPED_SPEND`.
 In `budget` mode (the default) the call must give `max_cost_usd`, and the job
 starts only when the price estimate proves the run fits (`cost_policy` is
 treated as `strict` for these runs, since the estimate cannot see the uncapped
-part). Of these, only `openrouter tts` has a price estimate, so in practice
-`budget` refuses the others, closed rather than open. `deny` always refuses them; `allow` runs them as before, on the
-caller's own keys. An `estimate: true` call is answered in every mode, since it
+part). Of these, only `openrouter tts` has a price estimate, and only for a
+model whose price is known, so in practice `budget` refuses the rest, closed
+rather than open. `deny` always refuses them; `allow` runs them as before, on
+the caller's own keys. An `estimate: true` call is answered in every mode, since it
 starts nothing. The REST API (`POST /api/v1/jobs`) takes the same
 `max_cost_usd` and `cost_policy` fields and applies the same rule.
 
@@ -187,6 +196,22 @@ start with `@`, so put text before an `@tag` (`"a portrait of @hero"`).
 `runway video` does not wait by default, so the job ends with only a task ID:
 set `"wait": true` in `options` to get the video, or run
 `runway status <id> --wait --download` later.
+
+**Sume and TopView.** Both groups run remotely. Give file flags (Sume
+`--image`, `--end-image`, `--reference-image`, `--video` and `--audio`; the
+TopView Legacy file flags and the `topview upload` file) as `https://` URLs in
+`inputs`. `sume estimate` uploads nothing, so it takes its media as plain
+`https://` URLs. `sume image --num-images` and `topview product-anyshoot
+--count` are capped by `MULTIX_MCP_MAX_OUTPUTS`, and `sume video --duration` and `--resolution` by the
+video limits; pass a `--duration` the model's catalog row lists, because
+without one the server sends its own default length. `topview run --input`
+must be inline JSON, since `@file` values are rejected. `sume image`,
+`sume video`, `topview run` and the TopView Legacy commands other than
+`product-avatar` do not wait by default: set `"wait": true` in `options`, or
+resume later with `sume status <id> --wait --download`,
+`topview status <kind> <taskId> --wait --download` or
+`topview prediction <id> --wait --download`. See
+[Sume](/commands/sume/) and [TopView](/commands/topview/).
 
 **Speech.** `speech generate` must name `--provider`. The job gets only the
 keys of the providers named by `--provider` and `--fallback`, not every speech
@@ -231,8 +256,13 @@ Worker, and keys set there are ignored.
   (Gemini, OpenRouter, OpenAI, MiniMax, Leonardo.Ai, BytePlus with
   `ARK_API_KEY` as fallback, ElevenLabs, fal.ai, Atlas Cloud, Replicate with
   `REPLICATE_API_KEY` as fallback, Runway's `RUNWAYML_API_SECRET` as
-  "API secret", HeyGen), plus the Cloudflare Workers AI
+  "API secret", HeyGen, Sume, TopView with `TOPVIEW_API_KEY` and
+  `TOPVIEW_UID`, and TopView Platform), plus the Cloudflare Workers AI
   account ID, API token and optional AI Gateway ID.
+  `TOPVIEW_UID` is an account ID, not a secret, so it has a plain text input
+  instead of a password field. A `topview` job gets all three TopView values;
+  the Legacy commands need `TOPVIEW_API_KEY` and `TOPVIEW_UID`, the API
+  Platform commands `TOPVIEW_PLATFORM_API_KEY`.
 
 ### API keys for the REST API
 

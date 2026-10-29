@@ -9,7 +9,18 @@ import {
   policyFor,
 } from "../src/jobs/cli-command-policy.js";
 
+/**
+ * Walks every catalog command that spends on a provider and checks each option
+ * able to raise spend past the operator caps: counts, durations, resolutions
+ * and raw request bodies, found by name. Per-output settings (image size,
+ * quality, steps, fps) are not walked: each stays within the provider's own
+ * per-model limits, and the count cap bounds how many outputs pay for them.
+ */
+
 type SpendKind = "count" | "duration" | "resolution" | "raw";
+
+/** Groups that get no provider keys because they only work on local files. */
+const LOCAL_GROUPS: ReadonlySet<string> = new Set(["media"]);
 
 /**
  * Options that look able to raise spend but do not, or whose spend is bounded
@@ -24,8 +35,12 @@ const NOT_SPEND: Readonly<Record<string, string>> = {
   "atlas image --resolution": "an image tier (1k, 2k); --num-images bounds the number of images",
   "atlas image-to-image --resolution":
     "an image tier (1k, 2k); --num-images bounds the number of images",
+  "sume image --resolution": "an image tier (1K, 2K); --num-images bounds the number of images",
+  "sume estimate --duration": "a price quote; nothing is generated or billed",
+  "sume estimate --resolution": "a price quote; nothing is generated or billed",
+  "sume estimate --num-images": "a price quote; nothing is generated or billed",
   "speech generate --extra":
-    "keys come from a fixed list per provider (speed, stability, seed, …), none of which changes the billed unit",
+    "keys come from a fixed list per provider; the billed ones (previous_text, next_text) add text, which no TTS cap bounds",
 };
 
 /** What an option can raise, judged from its name; undefined when nothing. */
@@ -74,6 +89,31 @@ describe("spend caps cover every catalog command", () => {
     }
     expect(uncovered, "cap these in cli-command-policy.ts or mark them uncapped").toEqual([]);
     expect(Object.keys(NOT_SPEND).filter((key) => !exempted.has(key))).toEqual([]);
+  });
+
+  it("leaves no provider group out of the walk", () => {
+    const unwalked = CLI_CATALOG.groups
+      .filter((group) => (GROUP_KEYS[group.group]?.length ?? 0) === 0)
+      .filter((group) => !LOCAL_GROUPS.has(group.group))
+      .filter((group) => group.commands.some((c) => !EXCLUDED_COMMANDS.has(c.command)))
+      .map((group) => group.group);
+    expect(unwalked, "add the group's keys to GROUP_KEYS, or to LOCAL_GROUPS here").toEqual([]);
+  });
+
+  it("does not mark uncapped only when given an option the model fills when omitted", () => {
+    const leftToModel: string[] = [];
+    for (const command of spendingCommands()) {
+      const policy = policyFor(command.command);
+      if (policy.uncappedSpend) continue;
+      for (const name of policy.uncappedOptions ?? []) {
+        const option = command.options.find((o) => optionName(o) === name);
+        const kind = option && spendKind(option, policy);
+        if (kind && kind !== "raw" && option.default === undefined) {
+          leftToModel.push(`${command.command} --${name}`);
+        }
+      }
+    }
+    expect(leftToModel, "an omitted value is uncapped too: mark the command").toEqual([]);
   });
 
   it("does not leave an omitted capped resolution to the model", () => {
