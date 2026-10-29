@@ -19,7 +19,7 @@
  */
 
 import { PollTimeoutError, isTransientHttpError } from "../../core/async-poll.js";
-import { HttpError, ProviderError } from "../../core/errors.js";
+import { HttpError, ProviderError, ProviderJobFailedError } from "../../core/errors.js";
 import { toFetchError } from "../../core/fetch-error.js";
 import { type FetchLike, fetchJson, httpErrorFromResponse } from "../../core/fetch-json.js";
 import { checkUrlSafety } from "../../core/url-safety.js";
@@ -88,7 +88,7 @@ export class SumeApiError extends ProviderError {
 }
 
 /** A job ended failed or canceled — never a success. */
-export class SumeJobError extends ProviderError {
+export class SumeJobError extends ProviderJobFailedError {
   constructor(
     public readonly jobId: string,
     public readonly status: string,

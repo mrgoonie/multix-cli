@@ -5,7 +5,13 @@
  * exit code class.
  */
 
-import { BudgetError, HttpError, MultixError, ResponseTooLargeError } from "./errors.js";
+import {
+  BudgetError,
+  HttpError,
+  MultixError,
+  ProviderJobFailedError,
+  ResponseTooLargeError,
+} from "./errors.js";
 import { redactUrlsInText } from "./redact.js";
 
 export type ErrorCode =
@@ -170,10 +176,7 @@ const TEXT_RULES: Array<[RegExp, ErrorCode]> = [
     /(model).{0,40}(not found|does not exist|unknown|not supported|invalid)|(unknown|invalid) model/i,
     "MODEL_NOT_FOUND",
   ],
-  [
-    /(task|job|prediction|generation|request) (failed|was canceled|errored)|status: ?failed/i,
-    "JOB_FAILED",
-  ],
+  [/(task|job|prediction|generation) (failed|was canceled|errored)|status: ?failed/i, "JOB_FAILED"],
   [/(ENOENT|no such file|file not found|does not exist)/i, "NOT_FOUND"],
   [
     /(ECONNRESET|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|fetch failed|network|socket hang up)/i,
@@ -268,6 +271,13 @@ export function classifyError(error: unknown): ErrorInfo {
   const commanderCode = (error as { code?: unknown } | null)?.code;
   if (typeof commanderCode === "string" && commanderCode.startsWith("commander.")) {
     return build("USAGE", message.replace(/^error: /, ""));
+  }
+  if (error instanceof ProviderJobFailedError && error.terminal) {
+    // The provider's own reason may name a more specific cause; it is still a job failure.
+    return build(
+      codeFromText(message) === "CONTENT_BLOCKED" ? "CONTENT_BLOCKED" : "JOB_FAILED",
+      message,
+    );
   }
   if (error instanceof MultixError) {
     if (error.code === "CONFIG_ERROR") {

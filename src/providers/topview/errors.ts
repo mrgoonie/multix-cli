@@ -9,7 +9,7 @@
  * requestId, code, message }` (e.g. 401 UNAUTHENTICATED, 403 IDENTITY_FORBIDDEN).
  */
 
-import { HttpError, ProviderError } from "../../core/errors.js";
+import { HttpError, ProviderError, ProviderJobFailedError } from "../../core/errors.js";
 import {
   TOPVIEW_API_SETTINGS_LINK,
   TOPVIEW_DASHBOARD_LINK,
@@ -41,7 +41,7 @@ export class TopviewApiError extends ProviderError {
 }
 
 /** A legacy task reached `fail`, or finished without the output the next step needs. */
-export class TopviewTaskError extends ProviderError {
+export class TopviewTaskError extends ProviderJobFailedError {
   constructor(
     public readonly task: LegacyTask,
     detail?: string,

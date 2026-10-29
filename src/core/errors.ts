@@ -50,6 +50,27 @@ export class ProviderError extends MultixError {
   }
 }
 
+/**
+ * The provider itself ended a job (failed, canceled, aborted): a terminal
+ * verdict on the job, never a transient failure to read its state.
+ */
+export class ProviderJobFailedError extends ProviderError {
+  constructor(
+    message: string,
+    provider: string,
+    options?: ErrorOptions & {
+      /** False when the error also reports failures that are not the provider's verdict (a poll or a download). */
+      terminal?: boolean;
+    },
+  ) {
+    super(message, provider, options);
+    this.name = "ProviderJobFailedError";
+    this.terminal = options?.terminal ?? true;
+  }
+
+  readonly terminal: boolean;
+}
+
 /** Input validation failed (zod parse, file not found, etc.). */
 export class ValidationError extends MultixError {
   constructor(message: string) {

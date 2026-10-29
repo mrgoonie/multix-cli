@@ -14,7 +14,7 @@
  */
 
 import { PollTimeoutError, isTransientHttpError, pollUntil } from "../../core/async-poll.js";
-import { HttpError, ProviderError } from "../../core/errors.js";
+import { HttpError, ProviderError, ProviderJobFailedError } from "../../core/errors.js";
 import { toFetchError } from "../../core/fetch-error.js";
 import { type FetchLike, fetchJson, httpErrorFromResponse } from "../../core/fetch-json.js";
 import { checkUrlSafety } from "../../core/url-safety.js";
@@ -62,7 +62,7 @@ export class RunwayApiError extends ProviderError {
 }
 
 /** A task reached FAILED or CANCELLED — never a success. */
-export class RunwayTaskError extends ProviderError {
+export class RunwayTaskError extends ProviderJobFailedError {
   constructor(public readonly task: RunwayTask) {
     const code = task.failureCode ? ` [${task.failureCode}]` : "";
     const detail = task.failure ? `: ${task.failure.slice(0, DETAIL_MAX)}` : "";

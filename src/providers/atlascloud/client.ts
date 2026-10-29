@@ -16,7 +16,13 @@
  */
 
 import { PollTimeoutError, isTransientHttpError, pollUntil } from "../../core/async-poll.js";
-import { ConfigError, HttpError, ProviderError, ValidationError } from "../../core/errors.js";
+import {
+  ConfigError,
+  HttpError,
+  ProviderError,
+  ProviderJobFailedError,
+  ValidationError,
+} from "../../core/errors.js";
 import { toFetchError } from "../../core/fetch-error.js";
 import {
   DEFAULT_TIMEOUT_MS,
@@ -50,7 +56,7 @@ const CATALOG_TIMEOUT_MS = 15_000;
 const PREDICTION_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
 
 /** A prediction reached a terminal failure state; carries the provider payload. */
-export class AtlasPredictionFailedError extends ProviderError {
+export class AtlasPredictionFailedError extends ProviderJobFailedError {
   constructor(public readonly prediction: AtlasPrediction) {
     const reason = predictionErrorMessage(prediction.error) || `status "${prediction.status}"`;
     super(`Atlas Cloud prediction ${prediction.id} failed: ${reason}`, ATLAS_PROVIDER);

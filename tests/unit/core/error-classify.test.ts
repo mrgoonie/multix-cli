@@ -11,8 +11,15 @@ import {
   HttpError,
   MissingBinaryError,
   ProviderError,
+  ProviderJobFailedError,
   ValidationError,
 } from "../../../src/core/errors.js";
+import { AtlasPredictionFailedError } from "../../../src/providers/atlascloud/client.js";
+import { HeygenJobFailedError } from "../../../src/providers/heygen/heygen-errors.js";
+import { ReplicatePredictionError } from "../../../src/providers/replicate/client.js";
+import { RunwayTaskError } from "../../../src/providers/runway/client.js";
+import { SumeJobError } from "../../../src/providers/sume/client.js";
+import { TopviewTaskError } from "../../../src/providers/topview/errors.js";
 
 describe("codeFromHttp", () => {
   it("maps statuses to codes, refined by the body", () => {
@@ -94,6 +101,53 @@ describe("classifyError", () => {
     expect(classifyError(new ConfigError("GEMINI_API_KEY is not set")).exit_code).toBe(
       EXIT_CODES.config,
     );
+  });
+
+  it("reports a job the provider ended as JOB_FAILED, whatever its message says", () => {
+    const failures = [
+      new ReplicatePredictionError({
+        id: "p1x9",
+        status: "failed",
+        error: "out of memory",
+      } as never),
+      new AtlasPredictionFailedError({ id: "a1", status: "failed", error: "bad input" } as never),
+      new RunwayTaskError({ id: "t-1", status: "FAILED", failureCode: "INTERNAL" } as never),
+      new SumeJobError("j1", "canceled"),
+      new TopviewTaskError({ kind: "avatar", taskId: "t9", status: "fail" } as never),
+      new HeygenJobFailedError('HeyGen video v1 ended with status "failed"', "render_error"),
+      new ProviderJobFailedError("Task 77 failed: {}", "minimax"),
+      new ProviderJobFailedError("Gemini Omni interaction i1 failed", "gemini"),
+    ];
+    for (const e of failures) {
+      expect(classifyError(e), e.message).toMatchObject({
+        code: "JOB_FAILED",
+        exit_code: EXIT_CODES.rejected,
+      });
+    }
+  });
+
+  it("keeps a moderation verdict on a failed job as CONTENT_BLOCKED", () => {
+    const e = new RunwayTaskError({
+      id: "t-2",
+      status: "FAILED",
+      failure: "Content moderation flagged the prompt",
+    } as never);
+    expect(classifyError(e).code).toBe("CONTENT_BLOCKED");
+  });
+
+  it("does not report a mix of job, poll and download failures as the provider's verdict", () => {
+    const e = new HeygenJobFailedError(
+      "1 of 2 translation jobs delivered; 1 failed:\nDownload of t1 failed: network",
+      undefined,
+      false,
+    );
+    expect(classifyError(e).code).not.toBe("JOB_FAILED");
+  });
+
+  it("does not take a failed request for a failed job", () => {
+    expect(classifyMessage("Request failed: fetch failed").code).toBe("NETWORK_ERROR");
+    expect(classifyMessage("request failed: ECONNRESET").code).toBe("NETWORK_ERROR");
+    expect(classifyMessage("Generation failed: {}").code).toBe("JOB_FAILED");
   });
 
   it("reports a missing ffmpeg or ffprobe as a binary to install, not bad input", () => {

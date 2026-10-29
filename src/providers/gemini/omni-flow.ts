@@ -30,6 +30,7 @@ import {
   ConfigError,
   HttpError,
   ProviderError,
+  ProviderJobFailedError,
   ResponseTooLargeError,
   ValidationError,
 } from "../../core/errors.js";
@@ -439,7 +440,9 @@ export async function runOmniVideo(
   if (interaction.status !== "completed") {
     record.error = interactionFailureMessage(interaction);
     writeRecord(recordPath, record);
-    throw new ProviderError(record.error, "gemini");
+    throw isTerminalInteraction(interaction.status)
+      ? new ProviderJobFailedError(record.error, "gemini")
+      : new ProviderError(record.error, "gemini");
   }
 
   const dest = path.join(outDir, `${base}.mp4`);

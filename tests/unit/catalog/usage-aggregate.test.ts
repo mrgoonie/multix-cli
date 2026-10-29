@@ -367,7 +367,7 @@ describe("retries, failures and cancels", () => {
         model_resolved: undefined,
         provider_ids: ["req_1"],
         ok: false,
-        exit_code: 2,
+        exit_code: 5,
         error: { code: "JOB_FAILED", message: "the provider failed the job" },
         cost: receipt({ operation_id: op, role: "observation", status: "unknown" }),
       }),
@@ -391,25 +391,42 @@ describe("retries, failures and cancels", () => {
         job,
         ts: "2026-10-27T10:05:00.000Z",
         ok: false,
-        exit_code: 2,
+        exit_code: 5,
         error: { code: "JOB_FAILED", message: "the provider failed the job" },
       }),
     ]);
     expect(row).toMatchObject({ operations: 1, completed: 0, failed: 1, success_rate: 0 });
   });
 
-  it("lets a later successful run of the same operation complete it after JOB_FAILED", () => {
-    const job = { provider: "fal", id: "j-r", attempt: 1 };
+  it("keeps a job failed when a later read-only status poll exits ok", () => {
+    const job = { provider: "byteplus", id: "j-r", attempt: 1 };
     const row = rowFor([
+      entry({ job }),
       entry({
         job,
+        ts: "2026-10-27T10:01:00.000Z",
         ok: false,
-        exit_code: 2,
+        exit_code: 5,
         error: { code: "JOB_FAILED", message: "the provider failed the job" },
       }),
       entry({ job, ts: "2026-10-27T10:05:00.000Z" }),
     ]);
-    expect(row).toMatchObject({ operations: 1, completed: 1, failed: 0, success_rate: 1 });
+    expect(row).toMatchObject({ operations: 1, completed: 0, failed: 1, success_rate: 0 });
+  });
+
+  it("fails a job whose status run reports the provider blocked its content", () => {
+    const job = { provider: "runway", id: "j-b", attempt: 1 };
+    const row = rowFor([
+      entry({ job }),
+      entry({
+        job,
+        ts: "2026-10-27T10:01:00.000Z",
+        ok: false,
+        exit_code: 5,
+        error: { code: "CONTENT_BLOCKED", message: "Runway task j-b failed: moderation" },
+      }),
+    ]);
+    expect(row).toMatchObject({ operations: 1, completed: 0, failed: 1 });
   });
 
   it("counts an operation with a successful run as completed even when another run was canceled", () => {

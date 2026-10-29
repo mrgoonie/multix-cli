@@ -6,7 +6,7 @@
  */
 
 import { resolveKey } from "../../core/env-loader.js";
-import { ConfigError, ProviderError } from "../../core/errors.js";
+import { ConfigError, ProviderError, ProviderJobFailedError } from "../../core/errors.js";
 import { downloadFile as coreDownload, httpJson } from "../../core/http-client.js";
 import type { Logger } from "../../core/logger.js";
 
@@ -105,7 +105,10 @@ export async function pollAsyncTask(
 
     if (status === "Success") return result;
     if (status === "Failed" || status === "Error") {
-      throw new ProviderError(`Task ${taskId} failed: ${JSON.stringify(result)}`, "minimax");
+      throw new ProviderJobFailedError(
+        `Task ${taskId} failed: ${JSON.stringify(result)}`,
+        "minimax",
+      );
     }
 
     await sleep(intervalMs);
