@@ -33,11 +33,11 @@ afterAll(() => {
 });
 
 /** Run the built CLI inside the temp directory with its own notes file and run ledger. */
-function run(args: string[], extra: Record<string, string> = {}) {
+function run(args: string[], extra: Record<string, string> = {}, cwd = dir) {
   return execa("node", [CLI, ...args], {
     reject: false,
     timeout: SPAWN_TIMEOUT - 1_000,
-    cwd: dir,
+    cwd,
     extendEnv: false,
     env: {
       ...isolatedEnv(dir),
@@ -250,6 +250,47 @@ describe("multix catalog (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
         }),
       }),
     ]);
+  });
+
+  it("shows project reviews tied to a run missing from this machine's ledger as unverified", async () => {
+    const project = fs.mkdtempSync(path.join(dir, "repo-"));
+    fs.mkdirSync(path.join(project, ".multix"));
+    const stamp = {
+      created_at: "2026-10-27T10:00:00.000Z",
+      updated_at: "2026-10-27T10:00:00.000Z",
+    };
+    const reviews = ["ads", "ugc", "promo"].map((useCase, i) => ({
+      id: `r_forged${i}`,
+      offering: SEEDANCE,
+      use_case: useCase,
+      score: 5,
+      verified_usage: { history_id: "h_doesnotexist", ts: "2026-10-27T09:00:00.000Z" },
+      ...stamp,
+    }));
+    fs.writeFileSync(
+      path.join(project, ".multix", "catalog-notes.json"),
+      JSON.stringify({ reviews, notes: [] }),
+    );
+
+    // An empty private store, so only the project reviews are counted.
+    const env = { MULTIX_CATALOG_FILE: path.join(project, "private.json") };
+    const listed = JSON.parse(
+      (await run(["catalog", "reviews", "list", "--json"], env, project)).stdout,
+    );
+    const forged = listed.data.reviews.filter((r: { id: string }) => r.id.startsWith("r_forged"));
+    expect(forged).toHaveLength(3);
+    for (const r of forged) expect(r.verified_usage).toBeUndefined();
+
+    const text = await run(["catalog", "reviews", "list"], env, project);
+    expect(text.stdout).toContain("r_forged0");
+    expect(text.stdout).not.toContain("verified run");
+
+    const recommended = await run(
+      ["catalog", "recommend", "--task", "video", "--json"],
+      env,
+      project,
+    );
+    expect(recommended.stdout).toContain("from 3 ratings (0 tied to a run)");
   });
 
   it("keeps a rate that was given the wrong grouping of settings out of the ledger when it fails", async () => {
