@@ -350,6 +350,24 @@ describe("fal result failures", () => {
     });
     expect(stdout).toEqual([]);
   });
+
+  it("throws a network error as itself, still naming the request", async () => {
+    stub({
+      [`GET https://queue.fal.run/${MODEL}/requests/${REQUEST_ID}`]: [
+        { error: new TypeError("fetch failed") },
+      ],
+    });
+    const exit = vi.spyOn(process, "exit").mockImplementation((code?: unknown) => {
+      throw new Error(`process.exit(${String(code)})`);
+    });
+    const error = await cli("result", MODEL, REQUEST_ID).then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+    expect(exit).not.toHaveBeenCalled();
+    expect(String(error)).toContain(REQUEST_ID);
+    expect(classifyError(error).code).toBe("NETWORK_ERROR");
+  });
 });
 
 describe("submit cut off before fal answered", () => {

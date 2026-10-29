@@ -41,14 +41,13 @@ afterEach(() => {
 
 describe("minimax image-to-image failures", () => {
   it("keeps the HTTP status and Retry-After of a rate-limited request", async () => {
-    vi.stubGlobal(
-      "fetch",
-      async () =>
-        new Response(JSON.stringify({ error: "slow down" }), {
-          status: 429,
-          headers: { "content-type": "application/json", "retry-after": "30" },
-        }),
-    );
+    vi.stubGlobal("fetch", async (input: string | URL | Request) => {
+      expect(String(input)).toBe("https://api.minimax.io/v1/image_generation");
+      return new Response(JSON.stringify({ error: "slow down" }), {
+        status: 429,
+        headers: { "content-type": "application/json", "retry-after": "30" },
+      });
+    });
     const error = await runAndCatch();
     expect(String(error)).not.toMatch(/process\.exit/);
     expect(classifyError(error)).toMatchObject({
