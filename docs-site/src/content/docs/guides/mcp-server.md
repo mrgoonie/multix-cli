@@ -215,7 +215,7 @@ TopView Legacy file flags and the `topview upload` file) as `https://` URLs in
 `inputs`. `sume estimate` uploads nothing, so it takes its media as plain
 `https://` URLs. `sume image --num-images` and `topview product-anyshoot
 --count` are capped by `MULTIX_MCP_MAX_OUTPUTS`, and `sume video --resolution`
-by the allowed resolutions. `sume video --duration` is not capped (models
+by the allowed resolutions. `sume video --duration` is neither capped nor filled (models
 without one refuse a filled value, and lip-sync models read it as the audio
 length), so every `sume video` run goes through `MULTIX_MCP_UNCAPPED_SPEND`;
 pass a `--duration` the model's catalog row lists. `topview run --input`
