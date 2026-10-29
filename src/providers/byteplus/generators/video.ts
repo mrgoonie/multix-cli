@@ -5,6 +5,7 @@
  *
  * Param encoding:
  *   - flags (default): append `--rs 1080p --dur 8 --rt 16:9 ...` inside content[0].text
+ *   Audio is always the top-level `generate_audio` field.
  *   - structured: emit top-level `parameters` object
  */
 
@@ -44,7 +45,6 @@ function buildFlagSuffix(opts: BuildVideoBodyOptions): string {
   if (opts.aspectRatio) parts.push(`--rt ${opts.aspectRatio}`);
   if (opts.cameraFixed !== undefined) parts.push(`--cf ${opts.cameraFixed}`);
   if (opts.seed !== undefined) parts.push(`--seed ${opts.seed}`);
-  if (opts.audio !== undefined) parts.push(`--wm ${opts.audio}`);
   return parts.length > 0 ? ` ${parts.join(" ")}` : "";
 }
 
@@ -80,6 +80,8 @@ export function buildVideoTaskBody(opts: BuildVideoBodyOptions): VideoTaskReques
   }
 
   const body: VideoTaskRequest = { model: opts.model, content };
+  // Audio is a request field, not a text command (`--wm` in the text is the watermark).
+  if (opts.audio !== undefined) body.generate_audio = opts.audio;
 
   if (mode === "structured") {
     body.parameters = {
