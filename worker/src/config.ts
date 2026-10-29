@@ -38,8 +38,9 @@ export interface ServerSettings {
   /** Comma-separated video resolutions callers may request (default 480p,720p,768p,1080p). */
   MULTIX_MCP_ALLOWED_RESOLUTIONS?: string;
   /**
-   * Comma-separated model ids the image commands of multix_run may use
-   * (default: any model). The model sets the price of each image.
+   * Comma-separated `<group>:<model>` entries the image commands of
+   * multix_run may use (default: any model), e.g. `fal:fal-ai/flux/schnell`.
+   * The model sets the price of each image.
    */
   MULTIX_MCP_ALLOWED_IMAGE_MODELS?: string;
   /** Comma-separated browser origins allowed to call /mcp. Requests with other Origins get 403. */
@@ -147,7 +148,7 @@ export interface Limits {
   defaultVideoSeconds: number;
   /** Lower-case resolutions callers may request. */
   allowedResolutions: string[];
-  /** Model ids image commands may use; empty means any model. */
+  /** `<group>:<model>` entries image commands may use; empty means any model. */
   allowedImageModels: string[];
   /** What a run the caps cannot bound needs (see MULTIX_MCP_UNCAPPED_SPEND). */
   uncappedSpend: UncappedSpendMode;

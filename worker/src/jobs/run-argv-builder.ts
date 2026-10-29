@@ -204,7 +204,7 @@ export function prepareRun(
   for (const [name, forced] of Object.entries(policy.forced ?? {})) values.set(name, [forced]);
   if (options.has(OUTPUT_DIR_OPTION)) values.set(OUTPUT_DIR_OPTION, [OUTPUT_DIR]);
   applyCaps(policy.caps, options, values, limits);
-  assertAllowedImageModel(path, options, values, limits);
+  assertAllowedImageModel(path, group, options, values, limits);
 
   for (const [name, option] of options) {
     if (option.required && !values.has(name)) {

@@ -1031,8 +1031,11 @@ instance runs at `https://multix.zuey.me/mcp` (invited GitHub accounts only).
   chained extends grew, nor a `gemini edit-video` of it),
   `MULTIX_MCP_ALLOWED_RESOLUTIONS` (default `480p,720p,768p,1080p`),
   `MULTIX_MCP_ALLOWED_IMAGE_MODELS` (default any: the model sets the price of
-  each image, so when set, image commands run only with a listed `--model`,
-  given or as the catalog default),
+  each image, so when set to `<group>:<model>` entries such as
+  `fal:fal-ai/flux/schnell`, image commands run only with a model listed for
+  their group, given as `--model` or as the catalog default; a command without
+  a catalog default needs an explicit listed `--model`, and a group with no
+  entry is refused),
   `MULTIX_MCP_UNCAPPED_SPEND` (default `budget`: runs those caps cannot bound,
   such as `fal run`, `heygen translate` or an image size/quality tier other
   than the default, start only with a `max_cost_usd`
