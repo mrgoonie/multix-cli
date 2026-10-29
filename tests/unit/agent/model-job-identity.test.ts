@@ -154,6 +154,7 @@ describe("job identity", () => {
     );
     expect(out.job).toEqual({ provider: "fal", id: "req-ok", attempt: 2 });
     expect(out.provider_ids).toEqual(["rl-1", "req-ok"]);
+    expect(out.cost.operation_id).toBe("fal:req-ok");
   });
 
   it("prefers a tracked in-flight job over other ids", async () => {
@@ -180,6 +181,15 @@ describe("job identity", () => {
       },
     );
     expect(out.job).toEqual({ provider: "replicate", id: "pred-xyz", attempt: 1 });
+    expect(out.cost.operation_id).toBe("replicate:pred-xyz");
+  });
+
+  it("keeps an explicit MULTIX_OPERATION_ID over the job", async () => {
+    vi.stubEnv("MULTIX_OPERATION_ID", "batch-7");
+    const out = await runWith("replicate", [json({ id: "pred-1", model: "o/m" }, 201)], () =>
+      post("https://api.replicate.com/v1/predictions", { version: "o/m" }),
+    );
+    expect(out.cost.operation_id).toBe("batch-7");
   });
 
   it("does not count a failed status poll as a resubmit", async () => {
@@ -203,6 +213,7 @@ describe("job identity", () => {
     );
     expect(out.provider_ids).toEqual(["rej-1"]);
     expect(out.job).toBeUndefined();
+    expect(out.cost.operation_id).toBe("fal:rej-1");
   });
 
   it("reads the model and response id after inline audio in an oversized body", async () => {

@@ -235,7 +235,9 @@ nhận `cost` (`multix.cost/v1`):
 lại chỉ tính một lần, con số provider báo sẽ chốt chi phí của thao tác, và chỉ
 mỗi lần submit tính phí riêng biệt (submit lại thì bị tính phí lại) mới cộng
 thêm chi phí. Lần chạy không gửi gì không bao giờ làm giảm chi phí của thao tác. Mặc định là
-`<provider>:<job id>`, hoặc `run:<history id>` khi provider không trả id. Hãy
+`<provider>:<job id>`, trong đó job là `job` của lần chạy (không bao giờ là id
+của file đầu vào đã tải lên), nếu không có thì là id đầu tiên mà phản hồi trả về,
+hoặc `run:<history id>` khi provider không trả id. Hãy
 đặt biến này trong shell cho lần chạy đó; `.env` của project không đặt được.
 
 ## Lịch sử chạy

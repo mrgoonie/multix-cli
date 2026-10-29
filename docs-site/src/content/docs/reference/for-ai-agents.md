@@ -236,7 +236,9 @@ once: status polls and downloads add nothing, a replayed receipt counts once,
 a provider-reported figure settles the operation, and only each distinct paid
 submit (a resubmit is billed again) adds its cost. A run that sent nothing never
 lowers the operation's cost. The default is
-`<provider>:<job id>`, or `run:<history id>` when the provider returned no id.
+`<provider>:<job id>`, where the job is the run's `job` (never an uploaded
+input file's id), else the first id a response returned, or `run:<history id>`
+when the provider returned no id.
 Set it in the shell for the run; a project `.env` cannot set it.
 
 ## Run history
