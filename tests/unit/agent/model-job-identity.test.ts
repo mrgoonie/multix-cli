@@ -253,6 +253,17 @@ describe("job identity", () => {
     expect(out.provider_ids).toEqual(["req-9"]);
   });
 
+  it("names a padded id by the trimmed form the client sends", async () => {
+    const out = await runWith("replicate", [json({ id: "abc", status: "succeeded" })], async () => {
+      const { nameJob } = await import("../../../src/agent/run-state.js");
+      nameJob(" abc ");
+      await fetch("https://api.replicate.com/v1/predictions/abc");
+    });
+    expect(out.job?.id).toBe("abc");
+    expect(out.cost.operation_id).toBe("replicate:abc");
+    expect(out.provider_ids).toEqual(["abc"]);
+  });
+
   it("keeps an explicit MULTIX_OPERATION_ID over the job", async () => {
     vi.stubEnv("MULTIX_OPERATION_ID", "batch-7");
     const out = await runWith("replicate", [json({ id: "pred-1", model: "o/m" }, 201)], () =>
