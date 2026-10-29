@@ -37,6 +37,11 @@ export interface ServerSettings {
   MULTIX_MCP_MAX_VIDEO_SECONDS?: string;
   /** Comma-separated video resolutions callers may request (default 480p,720p,768p,1080p). */
   MULTIX_MCP_ALLOWED_RESOLUTIONS?: string;
+  /**
+   * Comma-separated model ids the image commands of multix_run may use
+   * (`--model`, given or the command's default). Empty = any model.
+   */
+  MULTIX_MCP_ALLOWED_IMAGE_MODELS?: string;
   /** Comma-separated browser origins allowed to call /mcp. Requests with other Origins get 403. */
   MULTIX_MCP_ALLOWED_ORIGINS?: string;
   /**
@@ -101,6 +106,7 @@ export function serverSettings(env: ServerSettings): ServerSettings {
     MULTIX_MCP_MAX_OUTPUTS: env.MULTIX_MCP_MAX_OUTPUTS,
     MULTIX_MCP_MAX_VIDEO_SECONDS: env.MULTIX_MCP_MAX_VIDEO_SECONDS,
     MULTIX_MCP_ALLOWED_RESOLUTIONS: env.MULTIX_MCP_ALLOWED_RESOLUTIONS,
+    MULTIX_MCP_ALLOWED_IMAGE_MODELS: env.MULTIX_MCP_ALLOWED_IMAGE_MODELS,
     MULTIX_MCP_ALLOWED_ORIGINS: env.MULTIX_MCP_ALLOWED_ORIGINS,
     MULTIX_MCP_UNCAPPED_SPEND: env.MULTIX_MCP_UNCAPPED_SPEND,
   };
@@ -141,6 +147,8 @@ export interface Limits {
   defaultVideoSeconds: number;
   /** Lower-case resolutions callers may request. */
   allowedResolutions: string[];
+  /** Model ids the image commands may use; empty means any model. */
+  allowedImageModels: string[];
   /** What a run the caps cannot bound needs (see MULTIX_MCP_UNCAPPED_SPEND). */
   uncappedSpend: UncappedSpendMode;
 }
@@ -166,6 +174,7 @@ export function limitsFrom(env: Env): Limits {
     maxVideoSeconds,
     defaultVideoSeconds: Math.min(VIDEO_SECONDS_WHEN_OMITTED, maxVideoSeconds),
     allowedResolutions: resolutions.length > 0 ? resolutions : RESOLUTIONS_DEFAULT,
+    allowedImageModels: csv(env.MULTIX_MCP_ALLOWED_IMAGE_MODELS),
     uncappedSpend: uncappedSpendMode(env.MULTIX_MCP_UNCAPPED_SPEND),
   };
 }

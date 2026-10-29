@@ -793,3 +793,86 @@ describe("prepareRun: runs the caps cannot bound", () => {
     expect(() => assertSpendGuard("gemini generate", undefined, mode(), undefined)).not.toThrow();
   });
 });
+
+describe("prepareRun: MULTIX_MCP_ALLOWED_IMAGE_MODELS", () => {
+  const allowed = limitsFrom({
+    MULTIX_MCP_ALLOWED_IMAGE_MODELS: " fal-ai/flux/schnell, google/gemini-2.5-flash-image ,",
+  });
+  const runAllowed = (request: RunRequest) => prepareRun(request, allowed);
+  const refused = (request: RunRequest, message: RegExp) => {
+    expect(() => runAllowed(request)).toThrow(ValidationError);
+    expect(() => runAllowed(request)).toThrow(message);
+  };
+
+  it("parses the list and leaves every model allowed when it is empty", () => {
+    expect(allowed.allowedImageModels).toEqual([
+      "fal-ai/flux/schnell",
+      "google/gemini-2.5-flash-image",
+    ]);
+    expect(limits.allowedImageModels).toEqual([]);
+    expect(
+      run({
+        command: "fal image",
+        args: ["a cat"],
+        options: { model: "fal-ai/flux-pro/v1.1-ultra" },
+      }).argv,
+    ).toContain("--model=fal-ai/flux-pro/v1.1-ultra");
+    expect(
+      run({ command: "atlas image", args: ["a cat"], options: { "num-images": 1 } }).argv,
+    ).not.toContain("--model");
+  });
+
+  it("accepts a listed model, given or the command's default", () => {
+    const given = runAllowed({
+      command: "openrouter generate",
+      options: { prompt: "a cat", model: "google/gemini-2.5-flash-image" },
+    });
+    expect(given.argv).toContain("--model=google/gemini-2.5-flash-image");
+    // fal image defaults to fal-ai/flux/schnell, which is listed.
+    expect(runAllowed({ command: "fal image", args: ["a cat"] }).argv).toEqual([
+      "fal",
+      "image",
+      "--",
+      "a cat",
+    ]);
+  });
+
+  it("refuses an unlisted model, given or the command's default", () => {
+    refused(
+      { command: "fal image", args: ["a cat"], options: { model: "fal-ai/flux-pro/v1.1-ultra" } },
+      /--model must be one of fal-ai\/flux\/schnell, google\/gemini-2.5-flash-image on this server/,
+    );
+    // Matching is exact: a suffixed or re-cased id is another model.
+    refused(
+      {
+        command: "openrouter image-to-image",
+        options: { prompt: "edit", model: "google/gemini-2.5-flash-image:nitro" },
+        inputs: { ref: "https://cdn.example.com/a.png" },
+      },
+      /--model must be one of/,
+    );
+    // openai generate defaults to gpt-image-2, which is not listed.
+    refused({ command: "openai generate", options: { prompt: "a cat" } }, /--model must be one of/);
+  });
+
+  it("needs --model when the catalog does not know the command's default", () => {
+    refused(
+      { command: "atlas image", args: ["a cat"], options: { "num-images": 1 } },
+      /--model is required for "atlas image" on this server: pass one of fal-ai\/flux\/schnell/,
+    );
+    refused({ command: "replicate image", args: ["a cat"], options: { model: " " } }, /--model/);
+  });
+
+  it("leaves commands without image outputs alone", () => {
+    expect(
+      runAllowed({ command: "elevenlabs tts", options: { text: "hi", model: "eleven_v3" } }).argv,
+    ).toContain("--model=eleven_v3");
+    expect(
+      runAllowed({
+        command: "gemini analyze",
+        options: { model: "gemini-3.6-flash" },
+        inputs: { files: "https://cdn.example.com/a.png" },
+      }).argv,
+    ).toContain("--model=gemini-3.6-flash");
+  });
+});

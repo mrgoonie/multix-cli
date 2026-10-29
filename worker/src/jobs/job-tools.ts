@@ -89,6 +89,12 @@ export const UNCAPPED_SPEND_NOTE: Record<Limits["uncappedSpend"], string> = {
   allow: "Runs the caps cannot bound (uncapped_spend in multix_catalog) are allowed.",
 };
 
+/** The image model allowlist, when the operator set one. */
+function imageModelsNote(limits: Limits): string {
+  const models = limits.allowedImageModels;
+  return models.length > 0 ? ` Image commands accept only --model ${models.join(", ")}.` : "";
+}
+
 export function registerJobTools(
   server: McpServer,
   limits: Limits,
@@ -179,7 +185,7 @@ export function registerJobTools(
     "multix_run",
     {
       title: "Run a multix CLI command",
-      description: `Run one multix CLI command in an isolated container with your saved keys. command: e.g. "gemini generate". options: by long name without dashes ({"prompt": "...", "num-images": 2, "no-webp": true}). args: positionals in order. inputs: https URLs for file options or positionals (downloaded for the CLI). Output files go to your R2 bucket (configure it in /dashboard) and come back as URLs. Waits up to wait_seconds (max ${MAX_WAIT_SECONDS}, container start included); if still running, poll multix_job_status. At most ${jobs.caps.perAccount} running jobs per account. Caps: ${limits.maxOutputs} outputs, ${limits.maxVideoSeconds} s video, resolutions ${limits.allowedResolutions.join("/")}. ${UNCAPPED_SPEND_NOTE[limits.uncappedSpend]}`,
+      description: `Run one multix CLI command in an isolated container with your saved keys. command: e.g. "gemini generate". options: by long name without dashes ({"prompt": "...", "num-images": 2, "no-webp": true}). args: positionals in order. inputs: https URLs for file options or positionals (downloaded for the CLI). Output files go to your R2 bucket (configure it in /dashboard) and come back as URLs. Waits up to wait_seconds (max ${MAX_WAIT_SECONDS}, container start included); if still running, poll multix_job_status. At most ${jobs.caps.perAccount} running jobs per account. Caps: ${limits.maxOutputs} outputs, ${limits.maxVideoSeconds} s video, resolutions ${limits.allowedResolutions.join("/")}.${imageModelsNote(limits)} ${UNCAPPED_SPEND_NOTE[limits.uncappedSpend]}`,
       inputSchema: toolInput({
         command: z.string().min(1).max(100).describe("Command path from multix_catalog"),
         args: z.array(z.string()).max(20).optional(),

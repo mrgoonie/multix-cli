@@ -1,10 +1,12 @@
 /**
  * Operator caps for `multix_run`, the same limits the Worker's own image and
  * video tools enforce (MULTIX_MCP_MAX_OUTPUTS, MULTIX_MCP_MAX_VIDEO_SECONDS,
- * MULTIX_MCP_ALLOWED_RESOLUTIONS). Applied to the value the CLI would really
+ * MULTIX_MCP_ALLOWED_RESOLUTIONS), plus the image model allowlist
+ * (MULTIX_MCP_ALLOWED_IMAGE_MODELS). Applied to the value the CLI would really
  * use: the caller's value, or else the CLI default.
  */
 
+import { commandCapability } from "../../../src/capabilities/command-capabilities.js";
 import { ValidationError } from "../../../src/core/errors.js";
 import type { Limits } from "../config.js";
 import type { CliOption } from "./cli-catalog-types.js";
@@ -96,6 +98,36 @@ export function applyCaps(
         `--${name} must be one of ${limits.allowedResolutions.join(", ")} on this server`,
       );
     }
+  }
+}
+
+const MODEL_OPTION = "model";
+
+/**
+ * Check `--model` of a command whose outputs include images against
+ * MULTIX_MCP_ALLOWED_IMAGE_MODELS: the model sets the price of each image,
+ * which no other cap bounds. Ids match exactly. With an allowlist set, a
+ * command whose default model the catalog does not know needs `--model`.
+ */
+export function assertImageModelAllowed(
+  command: string,
+  options: ReadonlyMap<string, CliOption>,
+  values: OptionValues,
+  limits: Limits,
+): void {
+  const allowed = limits.allowedImageModels;
+  if (allowed.length === 0 || !options.has(MODEL_OPTION)) return;
+  if (!commandCapability(command)?.outputs.includes("image")) return;
+  const model = (single(values, MODEL_OPTION) ?? defaultString(options.get(MODEL_OPTION)))?.trim();
+  if (model === undefined || model === "") {
+    throw new ValidationError(
+      `--${MODEL_OPTION} is required for "${command}" on this server: pass one of ${allowed.join(", ")}`,
+    );
+  }
+  if (!allowed.includes(model)) {
+    throw new ValidationError(
+      `--${MODEL_OPTION} must be one of ${allowed.join(", ")} on this server`,
+    );
   }
 }
 

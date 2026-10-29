@@ -128,7 +128,9 @@ cả hai trường hợp. Key không bao giờ xuất hiện trong `stdout` hay
 Giới hạn của server cũng áp dụng cho `multix_run`: số output
 (`MULTIX_MCP_MAX_OUTPUTS`), độ dài video (`MULTIX_MCP_MAX_VIDEO_SECONDS`, cũng
 được gửi khi mặc định của lệnh video không rõ hoặc dài hơn) và độ phân giải
-(`MULTIX_MCP_ALLOWED_RESOLUTIONS`). Server tự chọn thư mục đầu ra, `--output`
+(`MULTIX_MCP_ALLOWED_RESOLUTIONS`), và khi operator đặt
+`MULTIX_MCP_ALLOWED_IMAGE_MODELS`, cả `--model` của mọi lệnh tạo ra ảnh. Server
+tự chọn thư mục đầu ra, `--output`
 phải là tên file thuần, option mà CLI ghép vào tên file (như
 `elevenlabs voices design --output-prefix` hoặc mã ngôn ngữ khi lồng tiếng) chỉ
 nhận chữ cái, chữ số, `_` và `-`, các lệnh ảnh OpenAI luôn dùng API driver,
@@ -165,6 +167,20 @@ tính không nhìn thấy phần không bị giới hạn). Hiện chưa lệnh 
 trước, bằng key của chính người gọi. Lệnh gọi `estimate: true` luôn được trả
 lời ở mọi chế độ vì nó không khởi động gì. REST API (`POST /api/v1/jobs`) nhận
 cùng các trường `max_cost_usd` và `cost_policy` và áp dụng cùng quy tắc.
+
+**Model ảnh.** Model quyết định giá của mỗi ảnh, thường chênh nhau cả chục lần,
+và không giới hạn số lượng hay kích thước nào chặn được nó. Đặt
+`MULTIX_MCP_ALLOWED_IMAGE_MODELS` thành danh sách model id bạn chấp nhận: khi
+đó mọi lệnh có output là ảnh (`gemini generate`, `openai generate`, `fal
+image`, `atlas image`, `replicate image`, `openrouter generate`, `leonardo
+generate`, `byteplus generate`, `cloudflare generate`, `runway image`, `sume
+image`, các dạng `image-to-image` của chúng và các lệnh khác) chỉ chạy với
+`--model` có trong danh sách, dù do người gọi truyền hay là mặc định của lệnh.
+Id phải khớp chính xác (bản ghim version của Replicate hay hậu tố `:nitro` của
+OpenRouter là một mục khác). Lệnh mà `multix_catalog` không cho biết model mặc
+định thì phải truyền `--model`. Danh sách không áp dụng cho body truyền thẳng
+như `fal run`, vốn vẫn theo `MULTIX_MCP_UNCAPPED_SPEND`. Để trống (mặc định)
+thì cho phép mọi model.
 
 **Gemini edit và extend.** `gemini extend-video --duration` là độ dài của đoạn
 nối tiếp mới và bị giới hạn như mọi thời lượng khác, nhưng video trả về còn chứa
@@ -644,6 +660,7 @@ closed). `http://localhost` được chấp nhận khi phát triển cục bộ.
 | `MULTIX_MCP_MAX_OUTPUTS` | `4` (tối đa 10) | Số output tối đa (ví dụ `--num-images`) mỗi lần gọi `multix_run`. |
 | `MULTIX_MCP_MAX_VIDEO_SECONDS` | `10` (tối đa 15) | Thời lượng video tối đa cho mỗi lần gọi (với `gemini extend-video` là đoạn nối tiếp mới). Khi caller bỏ qua thời lượng và mặc định của lệnh không rõ hoặc dài hơn, server gửi `min(5, giới hạn)` giây. |
 | `MULTIX_MCP_ALLOWED_RESOLUTIONS` | `480p,720p,768p,1080p` | Độ phân giải video caller được yêu cầu (`768p` là kích thước của HeyGen Video). Giá trị khác (ví dụ `4k`), do caller truyền hay là mặc định của lệnh, bị từ chối trước khi job bắt đầu. |
+| `MULTIX_MCP_ALLOWED_IMAGE_MODELS` | trống (mọi model) | Danh sách model id, phân tách bằng dấu phẩy, mà các lệnh `multix_run` có output là ảnh được dùng làm `--model`, dù do người gọi truyền hay là mặc định của lệnh. Id phải khớp chính xác; khi đó lệnh không có mặc định đã biết phải truyền `--model`. Không áp dụng cho lần chạy truyền thẳng (`fal run`, `replicate run`, ...). |
 | `MULTIX_MCP_UNCAPPED_SPEND` | `budget` | Lần chạy mà các giới hạn trên không chặn được (đánh dấu `uncapped_spend` trong `multix_catalog`): `budget` chỉ chạy khi có `max_cost_usd` mà ước tính giá chứng minh được (giá không rõ thì bị từ chối), `deny` từ chối, `allow` cho chạy. Giá trị khác được hiểu là `budget`. |
 | `MULTIX_MCP_ALLOWED_ORIGINS` | không có | Origin trình duyệt chính xác (ví dụ `https://app.example.com`) được phép gọi `/mcp`. Không hỗ trợ `*` hay wildcard khác: `*` chỉ khớp origin `*` theo nghĩa đen, thứ trình duyệt không bao giờ gửi. Sau khi access token được kiểm tra, request có header `Origin` khác nhận `403`; request không có `Origin` (client phía server) được chấp nhận. Origin trong danh sách nhận header CORS. Preflight `OPTIONS` được lớp OAuth trả lời cho mọi origin. |
 | `MULTIX_MAX_JOBS_PER_ACCOUNT` | `2` (tối đa 50) | Số job `multix_run` một tài khoản được chạy cùng lúc. |

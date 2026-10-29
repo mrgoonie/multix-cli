@@ -130,7 +130,9 @@ the CLI prints) is returned either way. Keys never appear in `stdout` or
 Server limits apply to `multix_run` too: the output count
 (`MULTIX_MCP_MAX_OUTPUTS`), video length (`MULTIX_MCP_MAX_VIDEO_SECONDS`, also
 sent when a video command's default is unknown or longer) and resolution
-(`MULTIX_MCP_ALLOWED_RESOLUTIONS`). The server chooses the output directory,
+(`MULTIX_MCP_ALLOWED_RESOLUTIONS`), and, when the operator sets
+`MULTIX_MCP_ALLOWED_IMAGE_MODELS`, the `--model` of every command that outputs
+images. The server chooses the output directory,
 `--output` must be a plain file name, options the CLI turns into part of a
 file name (such as `elevenlabs voices design --output-prefix` or a dub
 language) accept only letters, digits, `_` and `-`, the OpenAI image commands
@@ -169,6 +171,19 @@ than open. `deny` always refuses them; `allow` runs them as before, on the
 caller's own keys. An `estimate: true` call is answered in every mode, since it
 starts nothing. The REST API (`POST /api/v1/jobs`) takes the same
 `max_cost_usd` and `cost_policy` fields and applies the same rule.
+
+**Image models.** The model sets the price of each image, often by an order of
+magnitude, and no count or size cap bounds it. Set
+`MULTIX_MCP_ALLOWED_IMAGE_MODELS` to the model ids you accept: every command
+whose outputs include images (`gemini generate`, `openai generate`, `fal
+image`, `atlas image`, `replicate image`, `openrouter generate`, `leonardo
+generate`, `byteplus generate`, `cloudflare generate`, `runway image`, `sume
+image`, their `image-to-image` forms, and others) then runs only with a listed
+`--model`, given or the command's default. Ids match exactly (a Replicate
+version pin or an OpenRouter `:nitro` suffix is another entry). A command whose
+default model `multix_catalog` does not show needs `--model`. The list does not
+cover pass-through bodies such as `fal run`, which stay under
+`MULTIX_MCP_UNCAPPED_SPEND`. Empty (the default) allows any model.
 
 **Gemini edit and extend.** `gemini extend-video --duration` is the length of
 the new continuation and is capped like any other duration, but the returned
@@ -643,6 +658,7 @@ Set these as `vars` in `worker/wrangler.jsonc`:
 | `MULTIX_MCP_MAX_OUTPUTS` | `4` (ceiling 10) | Maximum output count (for example `--num-images`) per `multix_run` call. |
 | `MULTIX_MCP_MAX_VIDEO_SECONDS` | `10` (ceiling 15) | Maximum video duration per call (for `gemini extend-video`, the new continuation). When a caller omits it and the command's default is unknown or longer, the server sends `min(5, cap)` seconds. |
 | `MULTIX_MCP_ALLOWED_RESOLUTIONS` | `480p,720p,768p,1080p` | Video resolutions a caller may request (`768p` is a HeyGen Video size). Anything else (for example `4k`), given or the command's default, is rejected before the job starts. |
+| `MULTIX_MCP_ALLOWED_IMAGE_MODELS` | empty (any model) | Comma-separated model ids that the `multix_run` commands with image outputs may use as `--model`, given or the command's default. Ids match exactly; a command without a known default then needs `--model`. Pass-through runs (`fal run`, `replicate run`, ...) are not covered. |
 | `MULTIX_MCP_UNCAPPED_SPEND` | `budget` | Runs the caps above cannot bound (marked `uncapped_spend` in `multix_catalog`): `budget` runs one only with a `max_cost_usd` its price estimate proves (an unknown price is refused), `deny` refuses it, `allow` runs it. Any other value means `budget`. |
 | `MULTIX_MCP_ALLOWED_ORIGINS` | none | Exact browser origins (for example `https://app.example.com`) allowed to call `/mcp`. `*` and other wildcards are not supported: `*` only matches a literal `*` origin, which browsers never send. After the access token is checked, requests with any other `Origin` header get `403`; requests without an `Origin` (server-side clients) are allowed. Listed origins get CORS headers. `OPTIONS` preflights are answered for any origin by the OAuth layer. |
 | `MULTIX_MAX_JOBS_PER_ACCOUNT` | `2` (ceiling 50) | `multix_run` jobs one account may run at the same time. |

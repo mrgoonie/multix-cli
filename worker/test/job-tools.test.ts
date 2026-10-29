@@ -630,5 +630,17 @@ describe("multix_run: runs the operator caps cannot bound", () => {
     expect(tool.description).toContain(
       "need max_cost_usd and start only when their price is known",
     );
+    expect(tool.description).not.toContain("Image commands accept only");
+  });
+
+  it("names the image model allowlist in the tool description", async () => {
+    const list = await rpc(
+      { ...env, MULTIX_MCP_ALLOWED_IMAGE_MODELS: "fal-ai/flux/schnell" },
+      "tools/list",
+      {},
+      { jobs: jobsContext(new FakeBackend(succeeded)) },
+    );
+    const tool = list.result.tools.find((t: { name: string }) => t.name === "multix_run");
+    expect(tool.description).toContain("Image commands accept only --model fal-ai/flux/schnell.");
   });
 });
