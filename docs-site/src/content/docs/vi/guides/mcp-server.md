@@ -184,6 +184,22 @@ tế `budget` từ chối các lệnh còn lại (đóng thay vì mở). `deny` 
 lời ở mọi chế độ vì nó không khởi động gì. REST API (`POST /api/v1/jobs`) nhận
 cùng các trường `max_cost_usd` và `cost_policy` và áp dụng cùng quy tắc.
 
+**Model ảnh.** Model quyết định giá mỗi ảnh, thường chênh tới cả chục lần giữa
+các model, nên `--model` không bị đánh dấu là không giới hạn: làm vậy sẽ đẩy
+gần như mọi lần tạo ảnh qua `MULTIX_MCP_UNCAPPED_SPEND`. Thay vào đó operator
+giới hạn nó bằng `MULTIX_MCP_ALLOWED_IMAGE_MODELS`, danh sách các mục
+`<group>:<model>` phân tách bằng dấu phẩy, ví dụ
+`fal:fal-ai/flux/schnell,openai:gpt-image-2`. Mục có kèm group vì cùng một
+model id có thể đắt hơn ở provider khác. Khi biến này được đặt, lệnh tạo ảnh có
+`--model` chỉ chạy với model được liệt kê cho group của nó: `--model` của
+caller, hoặc `default` mà `multix_catalog` liệt kê. Khi CLI tự chọn model lúc
+chạy (không có default trong catalog), caller phải truyền một `--model` có
+trong danh sách, và group không có mục nào bị từ chối. Không đặt thì mọi model
+đều chạy. Các lệnh chuyển thẳng `run` (`fal run`, `replicate run`, ...) nhận
+model qua positional và vẫn do `MULTIX_MCP_UNCAPPED_SPEND` quản lý, không phải
+danh sách này. `cloudflare generate --steps` cũng đổi giá, với biên độ nhỏ hơn,
+và không bị giới hạn.
+
 **Gemini edit và extend.** `gemini extend-video --duration` là độ dài của đoạn
 nối tiếp mới và bị giới hạn như mọi thời lượng khác, nhưng video trả về còn chứa
 cả clip nguồn. Vì vậy giới hạn áp dụng cho từng lần gọi, không phải cho cả clip:
@@ -663,6 +679,7 @@ closed). `http://localhost` được chấp nhận khi phát triển cục bộ.
 | `MULTIX_MCP_MAX_VIDEO_SECONDS` | `10` (tối đa 15) | Thời lượng video tối đa cho mỗi lần gọi (với `gemini extend-video` là đoạn nối tiếp mới). Khi caller bỏ qua thời lượng và mặc định của lệnh không rõ hoặc dài hơn, server gửi `min(5, giới hạn)` giây. |
 | `MULTIX_MCP_MAX_AUDIO_SECONDS` | `30` (tối đa 300) | Độ dài audio sinh ra tối đa cho mỗi lần gọi: `elevenlabs sfx --duration-seconds` và `elevenlabs music --music-length-ms`. Độ dài nhạc bị bỏ qua được gửi bằng giới hạn (nếu không model tự chọn tới 10 phút), trừ khi có `--plan`; độ dài hiệu ứng âm thanh bị bỏ qua chỉ được gửi bằng giới hạn khi giới hạn thấp hơn mức tối đa 30 giây của nhà cung cấp. |
 | `MULTIX_MCP_ALLOWED_RESOLUTIONS` | `480p,720p,768p,1080p` | Độ phân giải video caller được yêu cầu (`768p` là kích thước của HeyGen Video). Giá trị khác (ví dụ `4k`), do caller truyền hay là mặc định của lệnh, bị từ chối trước khi job bắt đầu. |
+| `MULTIX_MCP_ALLOWED_IMAGE_MODELS` | mọi model | Danh sách mục `<group>:<model>` (ví dụ `fal:fal-ai/flux/schnell`, khớp chính xác, phân tách bằng dấu phẩy) mà các lệnh tạo ảnh của `multix_run` được dùng, qua `--model` hoặc mặc định của lệnh trong catalog. Khi CLI tự chọn model lúc chạy, caller phải truyền một `--model` có trong danh sách; group không có mục nào bị từ chối. Các lệnh `run` chuyển thẳng do `MULTIX_MCP_UNCAPPED_SPEND` quản lý. |
 | `MULTIX_MCP_UNCAPPED_SPEND` | `budget` | Lần chạy mà các giới hạn trên không chặn được (đánh dấu `uncapped_spend` trong `multix_catalog`): `budget` chỉ chạy khi có `max_cost_usd` mà ước tính giá chứng minh được (giá không rõ thì bị từ chối), `deny` từ chối, `allow` cho chạy. Giá trị khác được hiểu là `budget`. |
 | `MULTIX_MCP_ALLOWED_ORIGINS` | không có | Origin trình duyệt chính xác (ví dụ `https://app.example.com`) được phép gọi `/mcp`. Không hỗ trợ `*` hay wildcard khác: `*` chỉ khớp origin `*` theo nghĩa đen, thứ trình duyệt không bao giờ gửi. Sau khi access token được kiểm tra, request có header `Origin` khác nhận `403`; request không có `Origin` (client phía server) được chấp nhận. Origin trong danh sách nhận header CORS. Preflight `OPTIONS` được lớp OAuth trả lời cho mọi origin. |
 | `MULTIX_MAX_JOBS_PER_ACCOUNT` | `2` (tối đa 50) | Số job `multix_run` một tài khoản được chạy cùng lúc. |

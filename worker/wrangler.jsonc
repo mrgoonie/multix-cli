@@ -83,6 +83,8 @@
     "MULTIX_MCP_MAX_VIDEO_SECONDS": "10",
     "MULTIX_MCP_MAX_AUDIO_SECONDS": "30",
     "MULTIX_MCP_ALLOWED_RESOLUTIONS": "480p,720p,768p,1080p",
+    // <group>:<model> entries image commands may use (empty: any model), e.g. "fal:fal-ai/flux/schnell,openai:gpt-image-2".
+    "MULTIX_MCP_ALLOWED_IMAGE_MODELS": "",
     // Runs the caps above cannot bound (fal run, heygen translate, ...): budget | deny | allow.
     "MULTIX_MCP_UNCAPPED_SPEND": "budget",
     // multix_run jobs running at once: per account, and across the server.

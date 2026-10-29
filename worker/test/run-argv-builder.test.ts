@@ -912,4 +912,73 @@ describe("prepareRun: runs the caps cannot bound", () => {
     expect(() => assertSpendGuard("fal run", why, mode("allow"), undefined)).not.toThrow();
     expect(() => assertSpendGuard("gemini generate", undefined, mode(), undefined)).not.toThrow();
   });
+
+  it("limits image commands to the MULTIX_MCP_ALLOWED_IMAGE_MODELS of their group", () => {
+    const allowed = limitsFrom({
+      MULTIX_MCP_ALLOWED_IMAGE_MODELS: " fal:fal-ai/flux/schnell , openai:gpt-image-2,,",
+    });
+    expect(limitsFrom({}).allowedImageModels).toEqual([]);
+    expect(allowed.allowedImageModels).toEqual(["fal:fal-ai/flux/schnell", "openai:gpt-image-2"]);
+    const runWith = (request: RunRequest) => prepareRun(request, allowed);
+    const refused = (request: RunRequest, message: RegExp) =>
+      expect(() => runWith(request)).toThrow(message);
+
+    // A model listed for the group, given or as the catalog default, runs.
+    expect(
+      runWith({ command: "fal image", args: ["cat"], options: { model: "fal-ai/flux/schnell" } })
+        .argv,
+    ).toContain("--model=fal-ai/flux/schnell");
+    expect(() => runWith({ command: "fal image", args: ["cat"] })).not.toThrow();
+    expect(() => runWith({ command: "openai generate", options: { prompt: "cat" } })).not.toThrow();
+    // Any other model is refused, including a near miss.
+    refused(
+      { command: "fal image", args: ["cat"], options: { model: "fal-ai/flux-pro/v1.1-ultra" } },
+      /--model must be one of fal-ai\/flux\/schnell for "fal image"/,
+    );
+    refused(
+      { command: "fal image", args: ["cat"], options: { model: " fal-ai/flux/schnell" } },
+      /--model must be one of/,
+    );
+    refused(
+      { command: "openai image-to-image", options: { prompt: "x", model: "gpt-image-1" } },
+      /--model must be one of gpt-image-2 for/,
+    );
+    // An id listed for one provider does not unlock it on another.
+    refused(
+      { command: "leonardo generate", args: ["cat"], options: { model: "gpt-image-2" } },
+      /"leonardo generate" is not available on this server: no leonardo image model is allowed/,
+    );
+    refused({ command: "replicate image", args: ["cat"] }, /no replicate image model is allowed/);
+    refused({ command: "sume image", args: ["cat"] }, /no sume image model is allowed/);
+    // When the CLI picks the model at run time, the caller must name a listed one.
+    const replicate = limitsFrom({
+      MULTIX_MCP_ALLOWED_IMAGE_MODELS: "replicate:black-forest-labs/flux-schnell",
+    });
+    expect(() => prepareRun({ command: "replicate image", args: ["cat"] }, replicate)).toThrow(
+      /pass --model one of black-forest-labs\/flux-schnell for "replicate image"/,
+    );
+    expect(() =>
+      prepareRun(
+        {
+          command: "replicate image",
+          args: ["cat"],
+          options: { model: "black-forest-labs/flux-schnell", "num-outputs": 1 },
+        },
+        replicate,
+      ),
+    ).not.toThrow();
+    // Commands without image outputs or without --model are not affected.
+    expect(() =>
+      runWith({ command: "openai generate-speech", options: { text: "hi", model: "tts-1-hd" } }),
+    ).not.toThrow();
+    expect(() => runWith({ command: "leonardo upscale", args: ["image-id"] })).not.toThrow();
+    // Unset, any model runs.
+    expect(() =>
+      run({
+        command: "fal image",
+        args: ["cat"],
+        options: { model: "fal-ai/flux-pro/v1.1-ultra" },
+      }),
+    ).not.toThrow();
+  });
 });

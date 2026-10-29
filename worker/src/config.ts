@@ -39,6 +39,12 @@ export interface ServerSettings {
   MULTIX_MCP_MAX_AUDIO_SECONDS?: string;
   /** Comma-separated video resolutions callers may request (default 480p,720p,768p,1080p). */
   MULTIX_MCP_ALLOWED_RESOLUTIONS?: string;
+  /**
+   * Comma-separated `<group>:<model>` entries the image commands of
+   * multix_run may use (default: any model), e.g. `fal:fal-ai/flux/schnell`.
+   * The model sets the price of each image.
+   */
+  MULTIX_MCP_ALLOWED_IMAGE_MODELS?: string;
   /** Comma-separated browser origins allowed to call /mcp. Requests with other Origins get 403. */
   MULTIX_MCP_ALLOWED_ORIGINS?: string;
   /**
@@ -104,6 +110,7 @@ export function serverSettings(env: ServerSettings): ServerSettings {
     MULTIX_MCP_MAX_VIDEO_SECONDS: env.MULTIX_MCP_MAX_VIDEO_SECONDS,
     MULTIX_MCP_MAX_AUDIO_SECONDS: env.MULTIX_MCP_MAX_AUDIO_SECONDS,
     MULTIX_MCP_ALLOWED_RESOLUTIONS: env.MULTIX_MCP_ALLOWED_RESOLUTIONS,
+    MULTIX_MCP_ALLOWED_IMAGE_MODELS: env.MULTIX_MCP_ALLOWED_IMAGE_MODELS,
     MULTIX_MCP_ALLOWED_ORIGINS: env.MULTIX_MCP_ALLOWED_ORIGINS,
     MULTIX_MCP_UNCAPPED_SPEND: env.MULTIX_MCP_UNCAPPED_SPEND,
   };
@@ -150,6 +157,8 @@ export interface Limits {
   maxAudioSeconds: number;
   /** Lower-case resolutions callers may request. */
   allowedResolutions: string[];
+  /** `<group>:<model>` entries image commands may use; empty means any model. */
+  allowedImageModels: string[];
   /** What a run the caps cannot bound needs (see MULTIX_MCP_UNCAPPED_SPEND). */
   uncappedSpend: UncappedSpendMode;
 }
@@ -180,6 +189,7 @@ export function limitsFrom(env: Env): Limits {
       AUDIO_SECONDS_CEILING,
     ),
     allowedResolutions: resolutions.length > 0 ? resolutions : RESOLUTIONS_DEFAULT,
+    allowedImageModels: csv(env.MULTIX_MCP_ALLOWED_IMAGE_MODELS),
     uncappedSpend: uncappedSpendMode(env.MULTIX_MCP_UNCAPPED_SPEND),
   };
 }
