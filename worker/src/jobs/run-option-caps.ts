@@ -1,7 +1,8 @@
 /**
  * Operator caps for `multix_run`, the same limits the Worker's own image and
  * video tools enforce (MULTIX_MCP_MAX_OUTPUTS, MULTIX_MCP_MAX_VIDEO_SECONDS,
- * MULTIX_MCP_ALLOWED_RESOLUTIONS). Applied to the value the CLI would really
+ * MULTIX_MCP_ALLOWED_RESOLUTIONS), plus MULTIX_MCP_MAX_AUDIO_SECONDS for
+ * generated audio. Applied to the value the CLI would really
  * use: the caller's value, or else the CLI default.
  */
 
@@ -38,10 +39,10 @@ export function normaliseResolution(raw: string): string {
  */
 const PLAIN_NUMBER_RE = /^\d+(\.\d+)?$/;
 
-function positiveNumber(raw: string, name: string): number {
+function positiveNumber(raw: string, name: string, min = 1): number {
   const n = Number(raw);
-  if (!PLAIN_NUMBER_RE.test(raw.trim()) || n < 1)
-    throw new ValidationError(`--${name} must be a plain decimal number of at least 1`);
+  if (!PLAIN_NUMBER_RE.test(raw.trim()) || n < min)
+    throw new ValidationError(`--${name} must be a plain decimal number of at least ${min}`);
   return n;
 }
 
@@ -83,6 +84,24 @@ export function applyCaps(
       `this command renders up to ${rules.fixedSeconds} seconds of video, above the ${limits.maxVideoSeconds} second cap on this server`,
     );
   }
+  for (const rule of rules?.audioLength ?? []) {
+    const { option: name, unitsPerSecond, omittedSeconds, notWith, min } = rule;
+    const given = single(values, name);
+    const maxUnits = limits.maxAudioSeconds * unitsPerSecond;
+    if (given !== undefined) {
+      if (positiveNumber(given, name, min) > maxUnits) {
+        throw new ValidationError(
+          `--${name} must be at most ${maxUnits} (${limits.maxAudioSeconds} seconds) on this server`,
+        );
+      }
+    } else if (
+      omittedSeconds > limits.maxAudioSeconds &&
+      !notWith?.some((other) => values.has(other))
+    ) {
+      // The provider's own length could exceed the cap: send the cap instead.
+      values.set(name, [String(maxUnits)]);
+    }
+  }
   for (const name of rules?.resolution ?? []) {
     if (
       rules?.fillResolution &&
@@ -107,7 +126,7 @@ export function applyCaps(
 /**
  * Why the caps cannot bound this run, or undefined when they do: the command
  * is marked uncapped, the caller used an option that merges a raw request
- * body, or the model picks the number of outputs.
+ * body, or the model picks the number of outputs or the resolution.
  */
 export function uncappedReason(
   policy: CommandPolicy,
@@ -116,11 +135,17 @@ export function uncappedReason(
 ): string | undefined {
   if (policy.uncappedSpend) return policy.uncappedSpend;
   const merged = policy.uncappedOptions?.find((name) => values.has(name));
-  if (merged) return `with --${merged}, the request reaches the provider as given`;
+  if (merged) return `with --${merged}, the server caps do not bound the request`;
   if (policy.caps?.countFromModel) {
     const omitted = policy.caps.count?.find((name) => !values.has(name));
     if (omitted) {
       return `--${omitted} is omitted, so the model picks the number of outputs (pass --${omitted}, at most ${limits.maxOutputs})`;
+    }
+  }
+  if (policy.caps?.resolutionFromModel) {
+    const omitted = policy.caps.resolution?.find((name) => !values.has(name));
+    if (omitted) {
+      return `--${omitted} is omitted, so the model picks the resolution (pass --${omitted}: ${limits.allowedResolutions.join(", ")})`;
     }
   }
   return undefined;

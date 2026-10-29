@@ -129,8 +129,11 @@ Giới hạn của server cũng áp dụng cho `multix_run`: số output
 (`MULTIX_MCP_MAX_OUTPUTS`), độ dài video (`MULTIX_MCP_MAX_VIDEO_SECONDS`, cũng
 được gửi khi mặc định của lệnh video không rõ hoặc dài hơn; `leonardo video`
 không có `--duration` và tạo video tới 8 giây, nên bị từ chối khi giới hạn
-dưới 8) và độ phân giải (`MULTIX_MCP_ALLOWED_RESOLUTIONS`). Server tự chọn thư mục đầu ra,
-`--output` phải là tên file thuần, option mà CLI ghép vào tên file (như
+dưới 8), độ phân giải (`MULTIX_MCP_ALLOWED_RESOLUTIONS`) và độ dài audio sinh
+ra (`MULTIX_MCP_MAX_AUDIO_SECONDS`: `elevenlabs sfx --duration-seconds` và
+`elevenlabs music --music-length-ms`; độ dài nhạc bị bỏ qua sẽ được gửi bằng
+giới hạn, vì nếu không model tự chọn tới 10 phút). Server tự chọn thư mục đầu
+ra, `--output` phải là tên file thuần, option mà CLI ghép vào tên file (như
 `elevenlabs voices design --output-prefix` hoặc mã ngôn ngữ khi lồng tiếng) chỉ
 nhận chữ cái, chữ số, `_` và `-`, các lệnh ảnh OpenAI luôn dùng API driver,
 các lệnh video Gemini luôn dùng Gemini Omni Flash (khi người gọi bỏ trống độ
@@ -145,25 +148,39 @@ hạn):
 
 - body request chuyển thẳng tới provider: `fal run`, `replicate run`,
   `atlas run`, `heygen run`, `topview run`, `--input` của `replicate image`
-  và `replicate video`, `--input` / `--text-field` của `fal tts`, và
-  `--param` của `sume image`;
+  và `replicate video`, `--input` / `--text-field` của `fal tts`,
+  `--param` của `sume image`, `--provider-options` của `openrouter tts`, và
+  `--flags` (cờ model thô) của `byteplus generate-3d`;
 - lần chạy tính tiền theo độ dài nguồn hoặc kịch bản: `heygen video`,
   `heygen translate`, `heygen lipsync`, `elevenlabs dub`, `topview
   video-avatar`, `topview product-avatar`, và `heygen video-agent` /
-  `heygen template`, nơi agent hoặc template quyết định độ dài;
+  `heygen template`, nơi agent hoặc template quyết định độ dài, và
+  `elevenlabs music` khi có `--plan`, nơi thời lượng các đoạn quyết định độ dài;
+- lần chạy dài hơn mức giới hạn thời lượng chặn được: `topview url-to-video`
+  và `topview materials-to-video` (video 15-60 giây);
 - `sume video`, nơi dòng catalog của model quyết định giá, còn model lip-sync
   và phụ đề tính tiền theo độ dài media nguồn;
-- `atlas image`, `atlas image-to-image`, `sume image` và `replicate image` khi không có
-  `--num-images` / `--num-outputs`, lúc đó model tự chọn số output. Truyền số
-  lượng (tối đa `MULTIX_MCP_MAX_OUTPUTS`) giúp lần chạy được giới hạn trở lại.
+- `atlas image`, `atlas image-to-image`, `sume image` và `replicate image`
+  khi không có `--num-images` / `--num-outputs`, lúc đó model tự chọn số
+  output. Truyền số
+  lượng (tối đa `MULTIX_MCP_MAX_OUTPUTS`) giúp lần chạy được giới hạn trở lại;
+- `fal video`, lệnh không có `--resolution`: model tự chọn độ phân giải;
+- `atlas video`, `atlas image-to-video`, `replicate video`,
+  `openrouter image-to-video` và `heygen model-video` khi không có
+  `--resolution`, lúc đó độ phân giải mặc định của model được dùng. Truyền một
+  giá trị trong `MULTIX_MCP_ALLOWED_RESOLUTIONS` giúp lần chạy được giới hạn
+  trở lại, với model nhận độ phân giải (một số model Atlas không nhận, nên
+  luôn không bị giới hạn). Với `openrouter image-to-video`, giá trị này là yêu
+  cầu mà model có thể làm tròn.
 
 Operator quyết định điều kiện cho các lần chạy này bằng
 `MULTIX_MCP_UNCAPPED_SPEND`. Ở chế độ `budget` (mặc định), lệnh gọi phải có
 `max_cost_usd` và job chỉ khởi động khi ước tính giá chứng minh lần chạy nằm
 trong mức đó (`cost_policy` được coi là `strict` với các lần chạy này, vì ước
-tính không nhìn thấy phần không bị giới hạn). Hiện chưa lệnh nào trong số này có bảng giá, nên trên thực tế
-`budget` từ chối chúng (đóng thay vì mở). `deny` luôn từ chối; `allow` chạy như
-trước, bằng key của chính người gọi. Lệnh gọi `estimate: true` luôn được trả
+tính không nhìn thấy phần không bị giới hạn). Trong số này chỉ
+`openrouter tts` có ước tính giá, và chỉ với model đã biết giá, nên trên thực
+tế `budget` từ chối các lệnh còn lại (đóng thay vì mở). `deny` luôn từ chối;
+`allow` chạy như trước, bằng key của chính người gọi. Lệnh gọi `estimate: true` luôn được trả
 lời ở mọi chế độ vì nó không khởi động gì. REST API (`POST /api/v1/jobs`) nhận
 cùng các trường `max_cost_usd` và `cost_policy` và áp dụng cùng quy tắc.
 
@@ -644,6 +661,7 @@ closed). `http://localhost` được chấp nhận khi phát triển cục bộ.
 | `MULTIX_PUBLIC_URL` | — (bắt buộc) | Origin công khai, ví dụ `https://mcp.example.com`. Dùng cho metadata OAuth, redirect và callback GitHub. |
 | `MULTIX_MCP_MAX_OUTPUTS` | `4` (tối đa 10) | Số output tối đa (ví dụ `--num-images`) mỗi lần gọi `multix_run`. |
 | `MULTIX_MCP_MAX_VIDEO_SECONDS` | `10` (tối đa 15) | Thời lượng video tối đa cho mỗi lần gọi (với `gemini extend-video` là đoạn nối tiếp mới). Khi caller bỏ qua thời lượng và mặc định của lệnh không rõ hoặc dài hơn, server gửi `min(5, giới hạn)` giây. |
+| `MULTIX_MCP_MAX_AUDIO_SECONDS` | `30` (tối đa 300) | Độ dài audio sinh ra tối đa cho mỗi lần gọi: `elevenlabs sfx --duration-seconds` và `elevenlabs music --music-length-ms`. Độ dài nhạc bị bỏ qua được gửi bằng giới hạn (nếu không model tự chọn tới 10 phút), trừ khi có `--plan`; độ dài hiệu ứng âm thanh bị bỏ qua chỉ được gửi bằng giới hạn khi giới hạn thấp hơn mức tối đa 30 giây của nhà cung cấp. |
 | `MULTIX_MCP_ALLOWED_RESOLUTIONS` | `480p,720p,768p,1080p` | Độ phân giải video caller được yêu cầu (`768p` là kích thước của HeyGen Video). Giá trị khác (ví dụ `4k`), do caller truyền hay là mặc định của lệnh, bị từ chối trước khi job bắt đầu. |
 | `MULTIX_MCP_UNCAPPED_SPEND` | `budget` | Lần chạy mà các giới hạn trên không chặn được (đánh dấu `uncapped_spend` trong `multix_catalog`): `budget` chỉ chạy khi có `max_cost_usd` mà ước tính giá chứng minh được (giá không rõ thì bị từ chối), `deny` từ chối, `allow` cho chạy. Giá trị khác được hiểu là `budget`. |
 | `MULTIX_MCP_ALLOWED_ORIGINS` | không có | Origin trình duyệt chính xác (ví dụ `https://app.example.com`) được phép gọi `/mcp`. Không hỗ trợ `*` hay wildcard khác: `*` chỉ khớp origin `*` theo nghĩa đen, thứ trình duyệt không bao giờ gửi. Sau khi access token được kiểm tra, request có header `Origin` khác nhận `403`; request không có `Origin` (client phía server) được chấp nhận. Origin trong danh sách nhận header CORS. Preflight `OPTIONS` được lớp OAuth trả lời cho mọi origin. |
@@ -699,7 +717,8 @@ chung bộ đếm.
 - **Giới hạn chi phí:** `multix_run` giới hạn số output, thời lượng video và
   độ phân giải video trên các option mà server biết cho từng lệnh (xem
   [Chạy lệnh CLI](#chạy-lệnh-cli)). Lần chạy mà các giới hạn đó không chặn
-  được (body JSON chuyển thẳng, giá theo độ dài nguồn, số output do model chọn)
+  được (body JSON chuyển thẳng, giá theo độ dài nguồn, số output hoặc độ phân
+  giải do model chọn)
   bị từ chối trừ khi `max_cost_usd` chứng minh được giá, hoặc theo
   `MULTIX_MCP_UNCAPPED_SPEND`. Người gọi cũng có thể đặt `max_cost_usd` để từ
   chối mọi lần chạy có thể tốn hơn mức đó.

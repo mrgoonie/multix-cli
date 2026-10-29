@@ -6003,7 +6003,7 @@
             {
               "long": "--music-length-ms",
               "flags": "--music-length-ms <n>",
-              "description": "Total length in milliseconds (3000-600000; omitted: the model picks it)",
+              "description": "Total length in milliseconds (the model picks one when omitted; not with --plan)",
               "required": false,
               "takesValue": true,
               "valueOptional": false,
@@ -15601,7 +15601,7 @@
             {
               "long": "--aspect-ratio",
               "flags": "--aspect-ratio <ratio>",
-              "description": "Aspect ratio (16:9) for token-billed video",
+              "description": "Aspect ratio (16:9); pin it to rank token-billed video",
               "required": false,
               "takesValue": true,
               "valueOptional": false,
@@ -15751,7 +15751,7 @@
             {
               "long": "--aspect-ratio",
               "flags": "--aspect-ratio <ratio>",
-              "description": "Aspect ratio (16:9)",
+              "description": "Aspect ratio (16:9); pin it to rank token-billed video",
               "required": false,
               "takesValue": true,
               "valueOptional": false,

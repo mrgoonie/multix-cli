@@ -35,6 +35,8 @@ export interface ServerSettings {
   MULTIX_MCP_MAX_OUTPUTS?: string;
   /** Max video duration in seconds (default 10, hard cap 15). */
   MULTIX_MCP_MAX_VIDEO_SECONDS?: string;
+  /** Max generated audio length in seconds (default 30, hard cap 300). */
+  MULTIX_MCP_MAX_AUDIO_SECONDS?: string;
   /** Comma-separated video resolutions callers may request (default 480p,720p,768p,1080p). */
   MULTIX_MCP_ALLOWED_RESOLUTIONS?: string;
   /** Comma-separated browser origins allowed to call /mcp. Requests with other Origins get 403. */
@@ -100,6 +102,7 @@ export function serverSettings(env: ServerSettings): ServerSettings {
   return {
     MULTIX_MCP_MAX_OUTPUTS: env.MULTIX_MCP_MAX_OUTPUTS,
     MULTIX_MCP_MAX_VIDEO_SECONDS: env.MULTIX_MCP_MAX_VIDEO_SECONDS,
+    MULTIX_MCP_MAX_AUDIO_SECONDS: env.MULTIX_MCP_MAX_AUDIO_SECONDS,
     MULTIX_MCP_ALLOWED_RESOLUTIONS: env.MULTIX_MCP_ALLOWED_RESOLUTIONS,
     MULTIX_MCP_ALLOWED_ORIGINS: env.MULTIX_MCP_ALLOWED_ORIGINS,
     MULTIX_MCP_UNCAPPED_SPEND: env.MULTIX_MCP_UNCAPPED_SPEND,
@@ -118,6 +121,10 @@ const VIDEO_SECONDS_DEFAULT = 10;
 const VIDEO_SECONDS_CEILING = 15;
 /** Duration sent when the caller omits one, so a provider default can never exceed the cap. */
 const VIDEO_SECONDS_WHEN_OMITTED = 5;
+/** ElevenLabs' longest sound effect. */
+const AUDIO_SECONDS_DEFAULT = 30;
+/** Half of ElevenLabs Music's 10-minute maximum. */
+const AUDIO_SECONDS_CEILING = 300;
 /** 768p is a HeyGen Video resolution between 720p and 1080p. */
 const RESOLUTIONS_DEFAULT = ["480p", "720p", "768p", "1080p"];
 
@@ -139,6 +146,8 @@ export interface Limits {
   maxVideoSeconds: number;
   /** Duration used when the caller omits one: min(5, maxVideoSeconds). */
   defaultVideoSeconds: number;
+  /** Generated audio length in seconds (sound effects, music). */
+  maxAudioSeconds: number;
   /** Lower-case resolutions callers may request. */
   allowedResolutions: string[];
   /** What a run the caps cannot bound needs (see MULTIX_MCP_UNCAPPED_SPEND). */
@@ -165,6 +174,11 @@ export function limitsFrom(env: Env): Limits {
     maxOutputs: boundedInt(env.MULTIX_MCP_MAX_OUTPUTS, OUTPUTS_DEFAULT, OUTPUTS_CEILING),
     maxVideoSeconds,
     defaultVideoSeconds: Math.min(VIDEO_SECONDS_WHEN_OMITTED, maxVideoSeconds),
+    maxAudioSeconds: boundedInt(
+      env.MULTIX_MCP_MAX_AUDIO_SECONDS,
+      AUDIO_SECONDS_DEFAULT,
+      AUDIO_SECONDS_CEILING,
+    ),
     allowedResolutions: resolutions.length > 0 ? resolutions : RESOLUTIONS_DEFAULT,
     uncappedSpend: uncappedSpendMode(env.MULTIX_MCP_UNCAPPED_SPEND),
   };
