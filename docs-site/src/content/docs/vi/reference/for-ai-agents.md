@@ -101,7 +101,7 @@ https://multix.zuey.me/llms.txt
 | `estimate` | Giá ước tính trước khi chạy (với `--estimate`, `--max-cost`, hoặc với lệnh có bảng giá). `estimate_only: true` đánh dấu lần chạy `--estimate`. |
 | `budget` | Với `--max-cost`: `ok`, `max_cost_usd`, `policy`, cùng `code` và `message` khi bị từ chối. |
 | `cost` | Biên nhận chi phí của lần chạy (`multix.cost/v1`); xem [Biên nhận chi phí](#biên-nhận-chi-phí). |
-| `next[]` | Lệnh nên chạy tiếp: lệnh status của job async, `multix check` khi lỗi key, `multix rerun <id>` khi lỗi tạm thời. Khi một lần chạy đã lưu một phần output trước khi request sau bị lỗi (`gemini generate --num-images N`), các file đã lưu vẫn nằm trong `outputs`, hint nói rõ điều đó, và `next[0]` chỉ yêu cầu phần còn thiếu thay vì rerun và trả tiền lại cho các file đó. |
+| `next[]` | Lệnh nên chạy tiếp: lệnh status của job async, `multix check` khi lỗi key, `multix rerun <id>` khi lỗi tạm thời. Khi một lần chạy đã lưu một phần output trước khi request sau bị lỗi (`gemini generate --num-images N`), các file đã lưu vẫn nằm trong `outputs`, hint nói rõ điều đó, và `next[]` có lệnh chỉ yêu cầu phần còn thiếu thay vì rerun và trả tiền lại cho các file đó: đứng đầu khi lỗi tạm thời, đứng cuối với lỗi khác (sửa key, quota hoặc input trước). |
 
 ## Exit code và mã lỗi
 

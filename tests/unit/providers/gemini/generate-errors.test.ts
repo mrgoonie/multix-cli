@@ -5,6 +5,7 @@ import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { run } from "../../../../src/agent/run-state.js";
 import { classifyError } from "../../../../src/core/error-classify.js";
+import { _resetOutputDir } from "../../../../src/core/output-dir.js";
 import { registerGenerateCommand } from "../../../../src/providers/gemini/commands/generate.js";
 import { _resetGeminiKeyCooldowns } from "../../../../src/providers/gemini/key-pool.js";
 
@@ -31,6 +32,7 @@ async function runAndCatch(extra: string[] = []): Promise<unknown> {
 
 beforeEach(() => {
   logged = [];
+  _resetOutputDir();
   _resetGeminiKeyCooldowns();
   for (const k of Object.keys(process.env)) {
     if (k.startsWith("GEMINI_API_KEY")) {
@@ -50,6 +52,7 @@ beforeEach(() => {
 
 afterEach(() => {
   run.partial = undefined;
+  _resetOutputDir();
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
   vi.restoreAllMocks();
@@ -114,6 +117,28 @@ describe("gemini generate failures", () => {
       expect(fs.readdirSync(dir).filter((f) => f.startsWith("gemini_generated_"))).toHaveLength(1);
       expect(fs.existsSync(output)).toBe(true);
       expect(run.partial).toEqual({ options: { "--num-images": "2", "--output": null } });
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("counts requests that returned no image as still owed", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "multix-gen-partial-"));
+    vi.stubEnv("MULTIX_OUTPUT_DIR", dir);
+    const image = {
+      candidates: [
+        { content: { parts: [{ inlineData: { mimeType: "image/png", data: "iVBORw0KGgo=" } }] } },
+      ],
+    };
+    const responses = [
+      new Response(JSON.stringify(image), { status: 200 }),
+      new Response(JSON.stringify({ candidates: [] }), { status: 200 }),
+      new Response("{}", { status: 503 }),
+    ];
+    vi.stubGlobal("fetch", async () => responses.shift());
+    try {
+      await runAndCatch(["--num-images", "4", "--image-format", "original"]);
+      expect(run.partial?.options["--num-images"]).toBe("3");
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }

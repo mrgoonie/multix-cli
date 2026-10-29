@@ -87,7 +87,9 @@ export function registerGenerateCommand(parent: Command): void {
         };
 
         const savedFiles: string[] = [];
-        let failure: { error: unknown; remaining: number } | undefined;
+        let failure: { error: unknown; request: number } | undefined;
+        // Requests that returned images: what a failed run still owes is the rest.
+        let delivered = 0;
 
         for (let i = 0; i < numImages; i++) {
           // A failed call throws: the run is classified from the error itself, not a log line.
@@ -108,7 +110,7 @@ export function registerGenerateCommand(parent: Command): void {
           } catch (error) {
             if (savedFiles.length === 0) throw error;
             // Images already paid for stay reported; the error is rethrown once they are finished.
-            failure = { error, remaining: numImages - i };
+            failure = { error, request: i + 1 };
             break;
           }
 
@@ -120,6 +122,7 @@ export function registerGenerateCommand(parent: Command): void {
             continue;
           }
 
+          delivered++;
           for (const img of images) {
             const outDir = getOutputDir();
             const ext = img.mimeType.includes("png") ? "png" : "jpg";
@@ -136,26 +139,34 @@ export function registerGenerateCommand(parent: Command): void {
           process.exit(1);
         }
 
-        // Copy first to --output if specified
-        if (opts.output && savedFiles[0]) {
-          fs.mkdirSync(path.dirname(path.resolve(opts.output)), { recursive: true });
-          fs.copyFileSync(savedFiles[0], opts.output);
-          logger.success(`Copied to: ${opts.output}`);
-        }
-
-        const finalImages = finalizeGeneratedImages(savedFiles, { ...opts, logger });
-        console.log(`\nGenerated ${finalImages.length} image(s):`);
-        for (const f of finalImages) console.log(`  ${f}`);
-
         if (failure) {
+          const remaining = numImages - delivered;
           logger.warn(
-            `Request ${numImages - failure.remaining + 1} of ${numImages} failed after ${finalImages.length} image(s) were saved; ${failure.remaining} request(s) remain`,
+            `Request ${failure.request} of ${numImages} failed after ${savedFiles.length} image(s) were saved; ${remaining} still missing`,
           );
-          run.partial = {
-            options: { "--num-images": String(failure.remaining), "--output": null },
-          };
-          throw failure.error;
+          run.partial = { options: { "--num-images": String(remaining), "--output": null } };
         }
+
+        try {
+          // Copy first to --output if specified
+          if (opts.output && savedFiles[0]) {
+            fs.mkdirSync(path.dirname(path.resolve(opts.output)), { recursive: true });
+            fs.copyFileSync(savedFiles[0], opts.output);
+            logger.success(`Copied to: ${opts.output}`);
+          }
+
+          const finalImages = finalizeGeneratedImages(savedFiles, { ...opts, logger });
+          console.log(`\nGenerated ${finalImages.length} image(s):`);
+          for (const f of finalImages) console.log(`  ${f}`);
+        } catch (error) {
+          if (!failure) throw error;
+          // The request's own error decides the run; the saved images stay as written.
+          logger.warn(
+            `Could not finish the saved images: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+
+        if (failure) throw failure.error;
       },
     );
 }

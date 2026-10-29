@@ -101,7 +101,7 @@ https://multix.zuey.me/llms.txt
 | `estimate` | Pre-flight price of the run (with `--estimate`, `--max-cost`, or on a priced command). `estimate_only: true` marks an `--estimate` run. |
 | `budget` | With `--max-cost`: `ok`, `max_cost_usd`, `policy`, and the refusal `code` and `message`. |
 | `cost` | The run's cost receipt (`multix.cost/v1`); see [Cost receipt](#cost-receipt). |
-| `next[]` | Commands to run next: a status command for an async job, `multix check` for a key problem, `multix rerun <id>` for a temporary failure. When a run saved some outputs before a later request failed (`gemini generate --num-images N`), the saved files stay in `outputs`, the hint says so, and `next[0]` requests only the rest instead of a rerun that would pay for them again. |
+| `next[]` | Commands to run next: a status command for an async job, `multix check` for a key problem, `multix rerun <id>` for a temporary failure. When a run saved some outputs before a later request failed (`gemini generate --num-images N`), the saved files stay in `outputs`, the hint says so, and `next[]` has a run that requests only the rest instead of a rerun that would pay for them again: first after a temporary failure, last after any other (fix the key, quota or input first). |
 
 ## Exit codes and error codes
 

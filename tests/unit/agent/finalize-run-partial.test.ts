@@ -8,7 +8,7 @@ type RunState = typeof import("../../../src/agent/run-state.js").run;
 let dir: string;
 
 /** Fresh run state per case; the saved file is passed as --output so it counts as an output. */
-async function finalizeFailed(setup: (run: RunState) => void) {
+async function finalizeFailed(setup: (run: RunState) => void, status = 503, body = "overloaded") {
   vi.resetModules();
   const written: string[] = [];
   const spy = vi.spyOn(fs, "writeSync").mockImplementation(((fd: number, buf: Buffer) => {
@@ -26,7 +26,7 @@ async function finalizeFailed(setup: (run: RunState) => void) {
     run.requestsStarted = 2;
     setup(run);
     const { HttpError } = await import("../../../src/core/errors.js");
-    const error = new HttpError(503, "overloaded", "https://example.test/v1/generate");
+    const error = new HttpError(status, body, "https://example.test/v1/generate");
     finalizeRun({ exitCode: 1, error });
     return JSON.parse(written.join(""));
   } finally {
@@ -54,9 +54,30 @@ describe("finalizeRun after a partial success", () => {
     expect(envelope.ok).toBe(false);
     expect(envelope.outputs).toHaveLength(1);
     expect(envelope.error.code).toBe("PROVIDER_UNAVAILABLE");
-    expect(envelope.error.hint).toMatch(/^1 file\(s\) were saved before the failure; keep them/);
+    expect(envelope.error.hint).toMatch(
+      /^Files saved before the failure are listed in outputs; keep them and request/,
+    );
     expect(envelope.next[0]).toBe("multix gemini generate --prompt 'a cat' --json --num-images 2");
     expect(envelope.next.some((c: string) => c.startsWith("multix rerun"))).toBe(false);
+  });
+
+  it("puts the fix for a non-temporary failure before the remainder", async () => {
+    const saved = path.join(dir, "first.png");
+    fs.writeFileSync(saved, "png");
+    const envelope = await finalizeFailed(
+      (run) => {
+        run.options.output = saved;
+        run.partial = { options: { "--num-images": "2", "--output": null } };
+      },
+      429,
+      "RESOURCE_EXHAUSTED: quota exceeded for this billing account",
+    );
+    expect(envelope.error.code).toBe("QUOTA_EXCEEDED");
+    expect(envelope.error.hint).toMatch(/keep them\. .*Then request only the rest/);
+    expect(envelope.next[0]).toMatch(/^multix models --task image/);
+    expect(envelope.next.at(-1)).toBe(
+      "multix gemini generate --prompt 'a cat' --json --num-images 2",
+    );
   });
 
   it("leaves the failure as is when nothing was saved", async () => {
@@ -78,5 +99,14 @@ describe("withOptions", () => {
         "--output": null,
       }),
     ).toEqual(["gen", "--prompt", "x", "--num-images", "1"]);
+  });
+
+  it("keeps values that are names of object built-ins", async () => {
+    const { withOptions } = await import("../../../src/agent/agent-runtime.js");
+    expect(
+      withOptions(["gen", "--prompt", "constructor", "--num-images", "3"], {
+        "--num-images": "2",
+      }),
+    ).toEqual(["gen", "--prompt", "constructor", "--num-images", "2"]);
   });
 });

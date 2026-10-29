@@ -162,7 +162,7 @@ export function withOptions(argv: string[], options: Record<string, string | nul
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i] ?? "";
     const name = arg.split("=")[0] ?? "";
-    if (!(name in options)) out.push(arg);
+    if (!Object.hasOwn(options, name)) out.push(arg);
     else if (!arg.includes("=")) i++;
   }
   for (const [name, value] of Object.entries(options)) if (value !== null) out.push(name, value);
@@ -307,25 +307,30 @@ export function finalizeRun(input: FinalizeInput): number {
   const duration = Date.now() - run.startedAt;
   const cost = costReceiptFor({ failed, notSent, historyId, model, usage });
 
-  // Files saved before a later request failed are kept: ask only for the rest, never a full rerun.
+  // Files saved before a later request failed are kept: ask only for the rest, never a full
+  // rerun. A temporary failure gets that run first; any other is fixed first (key, quota, input).
   const partial = info && !inFlight && outputs.length ? run.partial : undefined;
+  const rest = partial
+    ? `multix ${redactArgv(withOptions(run.argv, partial.options)).map(shellQuote).join(" ")}`
+    : undefined;
   if (info && partial) {
     info = {
       ...info,
-      hint: `${outputs.length} file(s) were saved before the failure; keep them and request only the rest with the next command. ${info.hint}`,
+      hint: info.retryable
+        ? `Files saved before the failure are listed in outputs; keep them and request only the rest with the next command. ${info.hint}`
+        : `Files saved before the failure are listed in outputs; keep them. ${info.hint} Then request only the rest with the last command in next.`,
     };
   }
   const next = [
     ...(inFlight ? [inFlight.resume] : []),
-    ...(partial
-      ? [`multix ${redactArgv(withOptions(run.argv, partial.options)).map(shellQuote).join(" ")}`]
-      : []),
+    ...(rest && info?.retryable ? [rest] : []),
     ...(info
       ? nextForError(info, run.command, run.group, historyId).filter(
           (cmd) => !partial || !cmd.startsWith("multix rerun "),
         )
       : []),
     ...suggestedCommands([...run.stdout, ...run.stderr], run.command, knownGroups),
+    ...(rest && !info?.retryable ? [rest] : []),
   ];
   if (info?.code === "BUDGET_EXCEEDED" || info?.code === "BUDGET_UNPROVEN") {
     next.unshift(
