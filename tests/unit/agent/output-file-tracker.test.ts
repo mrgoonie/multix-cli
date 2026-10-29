@@ -62,9 +62,27 @@ describe("producedFiles", () => {
     expect(producedFiles()).toEqual([]);
   });
 
-  it("keeps scratch subdirectories out when the output dir is the temp root", () => {
-    vi.stubEnv("MULTIX_OUTPUT_DIR", os.tmpdir());
+  it("reports a child whose name starts with two dots", () => {
+    vi.stubEnv("MULTIX_OUTPUT_DIR", path.join(base, "out"));
+    const file = write("out", "..cache", "a.png");
+    expect(producedFiles()).toEqual([file]);
+  });
+
+  it("counts only direct children when the output dir is the temp root", () => {
+    vi.stubEnv("TMPDIR", base);
+    vi.stubEnv("MULTIX_OUTPUT_DIR", base);
+    const direct = write("result.png");
     write("scratch", "upload.bin");
-    expect(producedFiles()).toEqual([]);
+    expect(producedFiles()).toEqual([direct]);
+  });
+
+  it("drops temp files when the output dir contains the temp dir", () => {
+    vi.stubEnv("TMPDIR", path.join(base, "user"));
+    vi.stubEnv("MULTIX_OUTPUT_DIR", base);
+    fs.mkdirSync(path.join(base, "user"));
+    const result = write("result.png");
+    write("user", "multix-stdin-1", "stdin.png");
+    write("user", "loose.png");
+    expect(producedFiles()).toEqual([result]);
   });
 });

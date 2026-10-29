@@ -67,16 +67,17 @@ function realDir(dir: string): string {
 
 function isWithin(dir: string, root: string): boolean {
   const rel = path.relative(root, dir);
-  return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
+  return rel === "" || (rel !== ".." && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel));
 }
 
 /**
  * Files this run produced that still exist, excluding ~/.multix state and the
  * CLI's own temp files. A file under the temp dir counts only when it was
  * asked for: the explicit output path, or inside an output directory
- * (MULTIX_OUTPUT_DIR or `outputDirs`) that itself lives in the temp dir. When
- * that output directory is the temp root, only files directly in it count, so
- * scratch subdirectories stay excluded.
+ * (MULTIX_OUTPUT_DIR or `outputDirs`) that itself lives in the temp dir. An
+ * output directory that is the temp root counts only files directly in it, and
+ * one that contains the temp dir counts none of it, so scratch subdirectories
+ * stay excluded.
  */
 export function producedFiles(extra: string[] = [], outputDirs: string[] = []): string[] {
   const tmp = fs.realpathSync(os.tmpdir());
@@ -84,7 +85,7 @@ export function producedFiles(extra: string[] = [], outputDirs: string[] = []): 
   const extras = new Set(extra.map((p) => path.resolve(p)));
   const roots = [resolveOutputDir(), ...outputDirs].map(realDir);
   const requested = (dir: string) =>
-    roots.some((root) => (root === tmp ? dir === tmp : isWithin(dir, root)));
+    roots.some((root) => (isWithin(tmp, root) ? root === tmp && dir === tmp : isWithin(dir, root)));
   const all = new Set([...run.written, ...extras]);
   return [...all].filter((file) => {
     if (file.startsWith(state) || /\.tmp-\d+|\.part$|\.tmp$/.test(file)) return false;
