@@ -13,6 +13,7 @@ import {
   MultixError,
   ProviderError,
   ProviderJobFailedError,
+  ResponseTooLargeError,
   ValidationError,
 } from "../../../src/core/errors.js";
 import { AtlasPredictionFailedError } from "../../../src/providers/atlascloud/client.js";
@@ -108,6 +109,11 @@ describe("classifyError", () => {
       cause: new MultixError("lost", "UNKNOWN_REMOTE_STATE"),
     });
     expect(classifyError(unknownState).code).toBe("UNKNOWN_REMOTE_STATE");
+
+    const tooLarge = new Error("Failed to fetch result for fal request r1: too large", {
+      cause: new ResponseTooLargeError(1024, "https://queue.fal.run/x"),
+    });
+    expect(classifyError(tooLarge).code).toBe("RESPONSE_TOO_LARGE");
   });
 
   it("still classifies a plain Error from its text when the cause is not a MultixError", () => {
