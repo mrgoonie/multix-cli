@@ -131,3 +131,19 @@ None found.
 Status: DONE_WITH_CONCERNS
 Summary: The authorization, isolation, template and URL-guard boundaries hold under tracing. A partial infrastructure failure in step start can launch a duplicate paid job outside the cost cap (H1), and missing optional inputs shift positionals (M1).
 Concerns/Blockers: The change was committed (139e36d) while the review was running; the findings apply to HEAD.
+
+## Resolution
+
+| Finding | Outcome |
+|---|---|
+| H1 | Fixed. The job id is chosen before the step starts and kept in the lease together with the estimate. A reader that finds the lease expired adopts the job (`runner.status`), and starts the step again only on `JobNotFoundError`. An error after the job may have started keeps the lease. Tests: "adopts a job whose start was not recorded…" (checked by mutation: it fails when adoption is removed) and "starts the step again when an expired lease's job never started". |
+| M1 | Fixed. A positional that is exactly an optional input without a default is refused when the manifest is parsed. |
+| M2 | Fixed. A `wfruns` index of summaries is kept in the same put as each run. Listing and the active and stored limits read only the index. |
+| L1 | Fixed. The run is saved (with a version check) just before `runner.run`, so a cancel wins and no job starts. Cancel also stops the job id held by the lease. |
+| L2 | Fixed. `Object.hasOwn` for input references, run input names and rendering. |
+| L3 | Fixed. `startStep` requires the runner before it takes the lease. |
+| L4 | Not changed: product decision. Opened as #479. |
+| L5 | Fixed. `load()` returns the URI form that matches the skill's visibility. |
+| L6 | Fixed. The spend-guard message tells the caller to authorize the workflow again with `max_cost_usd`. |
+| L7 | Fixed. A step job's error goes through `sanitizeText`, which removes keys and URL query strings, before it is stored. |
+| Open question: an unread pending run holds an active slot | Opened as #480. Cancel frees the slot today. |

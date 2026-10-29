@@ -1,6 +1,6 @@
 # Skill workflows: run a skill's manifest after explicit authorization (#432)
 
-Status: in progress. Phase 3 of #415 (phase 1 #420, phase 2 #431).
+Status: implemented; follow-ups #479 and #480. Phase 3 of #415 (phase 1 #420, phase 2 #431).
 
 ## Outcome
 
