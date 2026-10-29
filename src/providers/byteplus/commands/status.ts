@@ -10,10 +10,14 @@ import { nameJob } from "../../../agent/run-state.js";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import { maybeDownloadThumb } from "../../../core/video-thumb.js";
-import { PollFailedError, PollTimeoutError } from "../../leonardo/poll.js";
 import { createBytePlusClient } from "../client.js";
 import { downloadModelFile, inferModelFileExt } from "../generators/three-d.js";
-import { downloadVideo, getVideoTaskStatus, waitForVideoTask } from "../generators/video.js";
+import {
+  downloadVideo,
+  getVideoTaskStatus,
+  toTaskWaitError,
+  waitForVideoTask,
+} from "../generators/video.js";
 
 export function registerBytePlusStatusCommand(parent: Command): void {
   parent
@@ -81,15 +85,7 @@ export function registerBytePlusStatusCommand(parent: Command): void {
             }
           }
         } catch (e) {
-          if (e instanceof PollTimeoutError) {
-            logger.error(`Timed out waiting for task ${taskId}`);
-            process.exit(1);
-          }
-          if (e instanceof PollFailedError) {
-            logger.error(`Task failed: ${JSON.stringify(e.value)}`);
-            process.exit(1);
-          }
-          throw e;
+          throw toTaskWaitError(e, taskId, `multix byteplus status ${taskId} --wait`);
         }
       },
     );

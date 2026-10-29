@@ -14,7 +14,7 @@ import { fetchWithValidatedRedirects } from "../../../core/http-client.js";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import { maybeDownloadThumb } from "../../../core/video-thumb.js";
-import { PollFailedError, PollTimeoutError, poll } from "../../leonardo/poll.js";
+import { poll, toPollJobError } from "../../leonardo/poll.js";
 import { requireOpenRouterKey } from "../client.js";
 import {
   type OpenRouterVideoPollResponse,
@@ -106,15 +106,12 @@ export function registerOpenRouterVideoStatusCommand(parent: Command): void {
               })
             : await pollVideoJob(jobId);
         } catch (e) {
-          if (e instanceof PollTimeoutError) {
-            logger.error(`Timed out waiting for job ${jobId}`);
-            process.exit(1);
-          }
-          if (e instanceof PollFailedError) {
-            logger.error(`Job failed: ${JSON.stringify(e.value)}`);
-            process.exit(1);
-          }
-          throw e;
+          throw toPollJobError(e, {
+            provider: "openrouter",
+            noun: "Job",
+            id: jobId,
+            resumeCommand: `multix openrouter video-status ${jobId} --wait`,
+          });
         }
 
         console.error(`status: ${res.status}`);
