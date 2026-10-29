@@ -22,7 +22,7 @@ import type { SkillRegistryStub } from "./account-skills.js";
 import { BUILTIN_CATALOG, type BuiltinCatalog } from "./builtin-skills.js";
 import { isTextMediaType, manifestDigest, sha256Digest } from "./skill-files.js";
 import type { Frontmatter } from "./skill-frontmatter.js";
-import { type ServedSkill, SkillRegistryError } from "./skill-registry.js";
+import { type ServedSkill, registryRefusal } from "./skill-registry.js";
 import { ACCOUNT_ID_RE, type SkillFile, type SkillVisibility } from "./skill-types.js";
 
 export const SKILL_SCHEME = "skill://";
@@ -351,7 +351,7 @@ export class SkillCatalog {
         where.rel,
       );
     } catch (error) {
-      if (error instanceof SkillRegistryError && error.reason === "corrupt") {
+      if (registryRefusal(error) === "corrupt") {
         throw new SkillCatalogError("CORRUPT", "Stored skill content does not match its digest");
       }
       throw error;

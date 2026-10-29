@@ -9,6 +9,7 @@
  * registry before the caller lists a shared skill.
  */
 
+import { TASKS } from "../../../src/capabilities/capability-types.js";
 import { base64ToBytes, bytesToBase64 } from "../accounts/base64.js";
 import type { SkillAuthoringStub } from "./account-skills.js";
 import { SKILL_SCHEME, parseSkillUri } from "./skill-catalog.js";
@@ -28,6 +29,8 @@ import {
   type SkillFile,
   type SkillRevision,
 } from "./skill-types.js";
+
+const CAPABILITIES: ReadonlySet<string> = new Set([...TASKS, "any"]);
 
 /** Decoded bytes one draft update may carry (larger skills are uploaded in several updates). */
 export const MAX_PATCH_BYTES = 8 * 1024 * 1024;
@@ -195,20 +198,25 @@ export class SkillManager {
   /** The account's skills (served or not), drafts, and the shared skills it lists. */
   async list() {
     const { skills, drafts } = await this.own.ownSkills(this.me);
-    const shared = [];
-    for (const share of await this.own.shares()) {
-      const served = await this.ctx.registries
-        .getByName(share.ownerId)
-        .served(share.ownerId, this.me, share.name, share.grantId);
-      shared.push({
+    const shares = await this.own.shares();
+    const served = await Promise.all(
+      shares.map((share) =>
+        this.ctx.registries
+          .getByName(share.ownerId)
+          .served(share.ownerId, this.me, share.name, share.grantId),
+      ),
+    );
+    const shared = shares.map((share, i) => {
+      const found = served[i] ?? null;
+      return {
         uri: `${SKILL_SCHEME}team/${share.ownerId}/${share.name}/SKILL.md`,
         owner: share.ownerId,
         name: share.name,
         // false once the owner revoked the grant, unpublished or deleted the skill
-        available: served !== null && served.skill.visibility === "team",
+        available: found !== null && found.skill.visibility === "team",
         added_at: iso(share.addedAt),
-      });
-    }
+      };
+    });
     return {
       skills: skills.map(skillView).sort((a, b) => (a.name < b.name ? -1 : 1)),
       drafts: drafts.sort(),
@@ -288,6 +296,10 @@ export class SkillManager {
   }
 
   private settings(options: SkillSettings): SkillSettings {
+    const unknown = options.capabilities?.find((c) => !CAPABILITIES.has(c));
+    if (unknown !== undefined) {
+      invalid(`unknown capability "${unknown.slice(0, 40)}"; use a task id or "any"`);
+    }
     const out: SkillSettings = {};
     if (options.visibility !== undefined) out.visibility = options.visibility;
     if (options.tags !== undefined) out.tags = options.tags;

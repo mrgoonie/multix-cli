@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { SkillCatalog, SkillCatalogError } from "../src/skills/skill-catalog.js";
 import { MAX_PATCH_BYTES, SkillManager, decodeFiles } from "../src/skills/skill-manager.js";
-import { SkillRegistryError } from "../src/skills/skill-registry.js";
+import { registryRefusal } from "../src/skills/skill-registry.js";
 import { MAX_REVISIONS_PER_SKILL } from "../src/skills/skill-types.js";
 import { callTool, fullEnv } from "./helpers.js";
 import { OTHER, OWNER, fakeRegistries } from "./skills-helpers.js";
@@ -20,7 +20,8 @@ async function reason(promise: Promise<unknown>): Promise<string> {
   try {
     await promise;
   } catch (error) {
-    if (error instanceof SkillRegistryError) return error.reason;
+    const reason = registryRefusal(error);
+    if (reason) return reason;
     throw error;
   }
   throw new Error("expected a SkillRegistryError");
@@ -191,6 +192,46 @@ describe("skill revisions", () => {
     expect(await reason(published(owner, "too many"))).toBe("invalid");
   });
 
+  it("refuses to publish a draft over a revision served after the draft started", async () => {
+    const { owner } = setup();
+    await published(owner, "one", "two");
+    await owner.saveDraft("notes", { files: [{ path: "body.md", text: "three" }] });
+    await owner.setCurrent("notes", 1);
+    expect(await reason(owner.publishDraft("notes", {}))).toBe("conflict");
+    const forced = await owner.publishDraft("notes", { expected_revision: 1 });
+    expect(forced.revision.revision).toBe(3);
+  });
+
+  it("refuses capabilities that are not task ids", async () => {
+    const { owner } = setup();
+    await published(owner, "one");
+    expect(await reason(owner.update("notes", { capabilities: ["mind-reading"] }))).toBe("invalid");
+    expect((await owner.update("notes", { capabilities: ["image", "any"] })).skill).toMatchObject({
+      capabilities: ["image", "any"],
+    });
+  });
+
+  it("finishes a delete that was cut short when it is retried", async () => {
+    const { owner, registries } = setup();
+    const data = registries.data(OWNER);
+    await published(owner, "one", "two");
+    const realDelete = data.delete.bind(data);
+    let cut = false;
+    data.delete = (key: string) => {
+      if (!cut && key.startsWith("rev:")) {
+        cut = true;
+        throw new Error("storage went away");
+      }
+      return realDelete(key);
+    };
+    await expect(owner.delete("notes")).rejects.toThrow("storage went away");
+    // The record survives, no longer served, so the retry can finish the job.
+    expect((await owner.get("notes")).skill).toMatchObject({ current_revision: null });
+    expect(await owner.delete("notes")).toMatchObject({ deleted: true });
+    expect([...data.keys()].filter((k) => k.includes("notes"))).toEqual([]);
+    expect(blobKeys(data)).toEqual([]);
+  });
+
   it("deletes a skill with its revisions, draft and grants, keeping shared blobs", async () => {
     const { owner, registries } = setup();
     const data = registries.data(OWNER);
@@ -291,6 +332,20 @@ describe("skill sharing", () => {
     expect((await owner.grants("style")).grants).toEqual([]);
   });
 
+  it("ignores a grant left over from an earlier skill of the same name", async () => {
+    const { owner, other, registries } = setup();
+    await teamSkill(owner);
+    await owner.grant("style", OTHER);
+    const key = `access:style:${OTHER}`;
+    const data = registries.data(OWNER);
+    data.set(key, { ...(data.get(key) as object), skillId: "sk_earlier" });
+    expect(await reason(other.addShared(URI))).toBe("not_found");
+    expect((await owner.grants("style")).grants).toEqual([]);
+    // Granting again replaces the stale record.
+    await owner.grant("style", OTHER);
+    expect(await other.addShared(URI)).toEqual({ uri: URI, added: true });
+  });
+
   it("refuses team URIs whose owner segment is not an account id", async () => {
     const { registries } = setup();
     const catalog = new SkillCatalog({ userId: OTHER, registries });
@@ -330,6 +385,14 @@ describe("multix_skills_manage", () => {
     });
     expect(saved.isError).toBeFalsy();
     const digest = saved.structuredContent.draft.digest;
+    // null: "I expect no draft yet"; one exists, so this is a conflict.
+    const again = await call({
+      action: "save_draft",
+      name: "brief",
+      files: [{ path: "SKILL.md", text: skillMd("brief") }],
+      expected_digest: null,
+    });
+    expect(again.content[0].text).toMatch(/^CONFLICT: /);
     const published = await call({
       action: "publish",
       name: "brief",

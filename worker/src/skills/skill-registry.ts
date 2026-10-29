@@ -74,6 +74,26 @@ export class SkillRegistryError extends Error {
   }
 }
 
+const REASONS: ReadonlySet<string> = new Set<RegistryErrorReason>([
+  "invalid",
+  "not_found",
+  "conflict",
+  "corrupt",
+]);
+
+/**
+ * The reason of a registry refusal. A Durable Object call rethrows the error
+ * as a plain Error that keeps its name and own properties but not its class,
+ * so `instanceof SkillRegistryError` is false on the calling side.
+ */
+export function registryRefusal(error: unknown): RegistryErrorReason | undefined {
+  if (!(error instanceof Error) || error.name !== "SkillRegistryError") return undefined;
+  const reason = (error as { reason?: unknown }).reason;
+  return typeof reason === "string" && REASONS.has(reason)
+    ? (reason as RegistryErrorReason)
+    : undefined;
+}
+
 /** A skill as a reader sees it: identity plus the revision currently served. */
 export interface ServedSkill {
   skill: Skill;
@@ -437,8 +457,10 @@ export class SkillRegistry {
       }
       base = existing.files;
       baseRevision = existing.baseRevision;
-    } else if (!input.replace || input.fromRevision !== undefined) {
-      const skill = await this.storage.get<Skill>(skillKey(input.name));
+    }
+    const keepsDraft = existing !== undefined && !input.replace;
+    const skill = keepsDraft ? undefined : await this.storage.get<Skill>(skillKey(input.name));
+    if (!keepsDraft && (!input.replace || input.fromRevision !== undefined)) {
       const from = input.fromRevision ?? skill?.currentRevision ?? null;
       if (from !== null) {
         base = (await this.revisionOrThrow(input.name, from)).files;
@@ -491,6 +513,7 @@ export class SkillRegistry {
     const draft: SkillDraft = {
       name: input.name,
       baseRevision,
+      servedRevision: keepsDraft ? existing.servedRevision : (skill?.currentRevision ?? null),
       digest: await manifestDigest(files),
       files,
       createdAt: existing && !input.replace ? existing.createdAt : at,
@@ -552,7 +575,7 @@ export class SkillRegistry {
       input,
       async () => {},
       input.name,
-      input.expectedRevision,
+      input.expectedRevision !== undefined ? input.expectedRevision : existing.servedRevision,
     );
     await this.storage.delete([key]);
     await this.release(
@@ -685,9 +708,15 @@ export class SkillRegistry {
   }
 
   /** Delete a skill with its revisions, draft and grants; unreferenced blobs go too. */
+  /**
+   * Stop serving, revoke, remove revisions and the draft, and drop the skill
+   * record last: a delete cut short leaves the record, so a retry resumes it.
+   */
   async deleteSkill(name: string): Promise<{ revoked: string[] }> {
-    await this.skillOrThrow(name);
-    await this.storage.delete([skillKey(name)]);
+    const skill = await this.skillOrThrow(name);
+    if (skill.currentRevision !== null) {
+      await this.storage.put({ [skillKey(name)]: { ...skill, currentRevision: null } });
+    }
     const revoked = await this.revokeAll(name);
     const revisions = await this.storage.list<SkillRevision>({ prefix: `rev:${name}:` });
     for (const [key, record] of revisions) {
@@ -698,6 +727,7 @@ export class SkillRegistry {
       );
     }
     await this.discardDraft(name);
+    await this.storage.delete([skillKey(name)]);
     return { revoked };
   }
 
@@ -719,7 +749,7 @@ export class SkillRegistry {
     }
     const key = `access:${name}:${principal}`;
     const existing = await this.storage.get<SkillAccess>(key);
-    if (existing) return existing;
+    if (existing?.skillId === skill.id) return existing;
     const grants = await this.storage.list({
       prefix: `access:${name}:`,
       limit: MAX_GRANTS_PER_SKILL,
@@ -749,15 +779,17 @@ export class SkillRegistry {
   }
 
   async grants(name: string): Promise<SkillAccess[]> {
-    await this.skillOrThrow(name);
-    return [...(await this.storage.list<SkillAccess>({ prefix: `access:${name}:` })).values()];
+    const skill = await this.skillOrThrow(name);
+    const rows = await this.storage.list<SkillAccess>({ prefix: `access:${name}:` });
+    return [...rows.values()].filter((a) => a.skillId === skill.id);
   }
 
   /** `principal`'s grant on team skill `name`, or null (also for a skill that is not team). */
   async access(name: string, principal: string): Promise<SkillAccess | null> {
     const skill = await this.storage.get<Skill>(skillKey(name));
     if (!skill || skill.visibility !== "team") return null;
-    return (await this.storage.get<SkillAccess>(`access:${name}:${principal}`)) ?? null;
+    const access = await this.storage.get<SkillAccess>(`access:${name}:${principal}`);
+    return access?.skillId === skill.id ? access : null;
   }
 
   /** List (in this, the grantee's registry) a team skill `ownerId` granted under `grantId`. */
@@ -804,7 +836,12 @@ export class SkillRegistry {
     if (principal === ownerId) return true;
     if (skill.visibility !== "team") return false;
     const access = await this.storage.get<SkillAccess>(`access:${skill.name}:${principal}`);
-    return access !== undefined && (grantId === undefined || access.grantId === grantId);
+    // A grant left over from an earlier skill of the same name does not count.
+    return (
+      access !== undefined &&
+      access.skillId === skill.id &&
+      (grantId === undefined || access.grantId === grantId)
+    );
   }
 
   /**

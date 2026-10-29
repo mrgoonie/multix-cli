@@ -10,6 +10,28 @@ import { fakeDoStorage } from "./fake-do-storage.js";
 export const OWNER = "gh-1001";
 export const OTHER = "gh-2002";
 
+/**
+ * Call the object the way a Durable Object stub does: a thrown error comes
+ * back as a plain Error carrying its name, message and own properties, but
+ * not its class.
+ */
+function overRpc<T extends object>(target: T): T {
+  return new Proxy(target, {
+    get(obj, prop, receiver) {
+      const value = Reflect.get(obj, prop, receiver);
+      if (typeof value !== "function") return value;
+      return async (...args: unknown[]) => {
+        try {
+          return await value.apply(obj, args);
+        } catch (error) {
+          if (!(error instanceof Error)) throw error;
+          throw Object.assign(new Error(error.message), { ...error, name: error.name });
+        }
+      };
+    },
+  });
+}
+
 export function fakeRegistries(now: () => number = () => 1_000) {
   const registries = new Map<string, AccountSkills>();
   const data = new Map<string, Map<string, unknown>>();
@@ -23,7 +45,7 @@ export function fakeRegistries(now: () => number = () => 1_000) {
           storage: fake.storage,
           blockConcurrencyWhile: <T>(fn: () => Promise<T>) => fn(),
         };
-        registry = new AccountSkills(ctx as never, {} as never, now);
+        registry = overRpc(new AccountSkills(ctx as never, {} as never, now));
         registries.set(accountId, registry);
         data.set(accountId, fake.data);
       }

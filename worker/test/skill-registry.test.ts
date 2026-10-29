@@ -6,7 +6,7 @@ import {
   paginate,
   parseSkillUri,
 } from "../src/skills/skill-catalog.js";
-import { MAX_SKILLS_PER_ACCOUNT, SkillRegistryError } from "../src/skills/skill-registry.js";
+import { MAX_SKILLS_PER_ACCOUNT } from "../src/skills/skill-registry.js";
 import { MAX_BYTES_PER_FILE } from "../src/skills/skill-types.js";
 import { OTHER, OWNER, fakeRegistries, skillFiles } from "./skills-helpers.js";
 
@@ -80,7 +80,7 @@ describe("skills registry", () => {
     const registry = fakeRegistries().getByName(OWNER);
     await expect(
       registry.publish({ ownerId: OWNER, visibility: "private", files }),
-    ).rejects.toThrow(SkillRegistryError);
+    ).rejects.toMatchObject({ name: "SkillRegistryError", reason: "invalid" });
   });
 
   it("caps the number of skills per account", async () => {

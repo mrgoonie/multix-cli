@@ -13,7 +13,7 @@ import type { RunToolFn } from "../jobs/job-tools.js";
 import { toolInput } from "../jobs/tool-input-schema.js";
 import { MAX_SKILL_NAME_CHARS } from "./skill-frontmatter.js";
 import { type AuthoringContext, SkillManager } from "./skill-manager.js";
-import { SkillRegistryError } from "./skill-registry.js";
+import { registryRefusal } from "./skill-registry.js";
 import { MAX_FILES_PER_SKILL, MAX_TAGS } from "./skill-types.js";
 
 const ACTIONS = [
@@ -51,9 +51,10 @@ const REASON_CODES = {
 
 /** Registry refusals as expected tool errors, their code leading the message. */
 function refusal(error: unknown): never {
-  if (error instanceof SkillRegistryError && error.reason !== "corrupt") {
-    const code = REASON_CODES[error.reason];
-    throw new MultixError(`${code}: ${error.message}`, code);
+  const reason = registryRefusal(error);
+  if (reason && reason !== "corrupt") {
+    const code = REASON_CODES[reason];
+    throw new MultixError(`${code}: ${(error as Error).message}`, code);
   }
   throw error;
 }
@@ -82,7 +83,7 @@ export function registerSkillsManageTool(
     {
       title: "multix skills authoring",
       description:
-        "Create and maintain your own agent skills (SKILL.md plus files); nothing here runs a skill. Workflow: save_draft (files as text or base64, delete paths; a new draft starts from the served revision) → get_draft → publish (the draft becomes the next immutable revision, served at its skill:// URI). Pass expected_digest (draft) or expected_revision (served revision) to fail with CONFLICT instead of overwriting someone else's change. revisions/revision list and inspect stored revisions; set_current rolls back or forward; unpublish stops serving; delete_revision removes an old revision; update changes visibility (private or team; a change revokes every grant), tags and capabilities; delete removes the skill with all revisions, its draft and grants. Team sharing: grant/revoke an account id (gh-<digits>), grants lists them; the grantee calls add_shared with the skill:// team URI to list it, remove_shared to drop it. read_file returns a draft file, or a stored revision's with revision.",
+        "Create and maintain your own agent skills (SKILL.md plus files); nothing here runs a skill. Workflow: save_draft (files as text or base64, delete paths; a new draft starts from the served revision) → get_draft → publish (the draft becomes the next immutable revision, served at its skill:// URI). Pass expected_digest (draft) or expected_revision (served revision) to fail with CONFLICT instead of overwriting someone else's change. revisions/revision list and inspect stored revisions; set_current rolls back or forward; unpublish stops serving; delete_revision removes an old revision; update changes visibility (private or team; a change revokes every grant), tags and capabilities; delete removes the skill with all revisions, its draft and grants. Team sharing: grant/revoke an account id (gh-<digits>), grants lists them; the grantee calls add_shared with the skill:// team URI to list it, remove_shared to drop it. read_file returns a draft file, or a stored revision's with revision. An MCP request is limited to 64 KiB, so send large or binary files in several save_draft calls or with PUT /api/v1/skills/{name}/draft.",
       inputSchema: toolInput({
         action: z.enum(ACTIONS),
         name: z
@@ -123,8 +124,11 @@ export function registerSkillsManageTool(
         expected_digest: z
           .string()
           .regex(/^sha256:[0-9a-f]{64}$/)
+          .nullable()
           .optional()
-          .describe("Draft digest you last saw (save_draft, discard_draft, publish)"),
+          .describe(
+            "Draft digest you last saw (save_draft, discard_draft, publish); null on save_draft: expect no draft yet",
+          ),
         expected_revision: z
           .number()
           .int()
@@ -187,10 +191,10 @@ export function registerSkillsManageTool(
                 required(args.path, "path", a),
               );
             case "discard_draft":
-              return await manager.discardDraft(name, args.expected_digest);
+              return await manager.discardDraft(name, args.expected_digest ?? undefined);
             case "publish":
               return await manager.publishDraft(name, {
-                expected_digest: args.expected_digest,
+                expected_digest: args.expected_digest ?? undefined,
                 expected_revision: expectedRevision,
                 ...settings,
               });

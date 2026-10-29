@@ -80,6 +80,11 @@ export interface SkillDraft {
   name: string;
   /** Revision the draft started from, or null for a new skill or an empty start. */
   baseRevision: number | null;
+  /**
+   * Revision served when the draft started. Publishing without an explicit
+   * expected revision fails if another revision is served by then.
+   */
+  servedRevision?: number | null;
   /** manifestDigest of the draft's files; callers pass it back to detect concurrent edits. */
   digest: string;
   files: SkillFile[];

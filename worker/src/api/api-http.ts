@@ -11,7 +11,7 @@ import { BodyTooLargeError, readBodyLimited } from "../http-guards.js";
 import { json } from "../http-responses.js";
 import { JobCapacityError, JobNotFoundError } from "../jobs/job-runner.js";
 import { logEvent, sanitizeText } from "../redaction.js";
-import { SkillRegistryError } from "../skills/skill-registry.js";
+import { registryRefusal } from "../skills/skill-registry.js";
 
 export type ApiErrorCode =
   | "bad_request"
@@ -93,10 +93,12 @@ export function errorResponse(
   if (error instanceof JobCapacityError) {
     return apiError(429, "busy", error.message, { "retry-after": "60" });
   }
-  if (error instanceof SkillRegistryError && error.reason !== "corrupt") {
-    if (error.reason === "not_found") return apiError(404, "not_found", error.message);
-    if (error.reason === "conflict") return apiError(409, "conflict", error.message);
-    return apiError(400, "bad_request", error.message);
+  const refusal = registryRefusal(error);
+  if (refusal && refusal !== "corrupt") {
+    const message = (error as Error).message;
+    if (refusal === "not_found") return apiError(404, "not_found", message);
+    if (refusal === "conflict") return apiError(409, "conflict", message);
+    return apiError(400, "bad_request", message);
   }
   if (error instanceof MultixError) {
     return apiError(400, "bad_request", sanitizeText(error.message, secrets));
