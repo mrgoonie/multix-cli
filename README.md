@@ -4,7 +4,7 @@ AI multimodal CLI — generate images/video/speech/music, analyze and transcribe
 
 ![Isometric technical illustration of multix media workflows](docs-site/public/images/multix-isometric-banner.png)
 
-Supports **OpenAI** (image, image edits, TTS, STT, optional Codex image driver), **Gemini** (analyze, transcribe, generate, Omni Flash video generation and editing, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation, image-to-video, TTS, STT), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), **Cloudflare** (Workers AI image and speech; AI Gateway-routed Replicate video), **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment), **Fish Audio** (native Drama 3 TTS, multi-speaker turns, pronunciation dictionaries, voice design, voice cloning, voice models), **fal.ai** (generic model runner, image, video, text-to-speech via the fal queue API), and **Atlas Cloud** (any model: image, image edit, video, audio, 3D, with resumable async predictions), **Replicate** (generic model runner, image, video, async prediction status/cancel via the direct Replicate API), **Runway** (Gen-4.5 and Gen-4 Turbo video, Gen-4 images, resumable task status/cancel), **HeyGen** (v3 Video Agent prompt-to-video, scripted avatar videos, video translation, lipsync, TTS).
+Supports **OpenAI** (image, image edits, TTS, STT, optional Codex image driver), **Gemini** (analyze, transcribe, generate, Omni Flash video generation and editing, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation, image-to-video, TTS, STT), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), **Cloudflare** (Workers AI image and speech; AI Gateway-routed Replicate video), **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment), **Fish Audio** (native Drama 3 TTS, multi-speaker turns, pronunciation dictionaries, voice design, voice cloning, voice models), **fal.ai** (generic model runner, image, video, text-to-speech via the fal queue API), and **Atlas Cloud** (any model: image, image edit, video, audio, 3D, with resumable async predictions), **Replicate** (generic model runner, image, video, async prediction status/cancel via the direct Replicate API), **Runway** (Gen-4.5 and Gen-4 Turbo video, Gen-4 images, resumable task status/cancel), **HeyGen** (v3 Video Agent prompt-to-video, scripted avatar videos, video translation, lipsync, TTS), **Sume** (any image or video model in Sume's catalog, including lip-sync and captions, on one key, with resumable or cancellable jobs), **TopView** (Legacy API product marketing videos, talking and product avatars, product shots; API Platform models such as Seedance, Wan and GPT Image 2).
 
 ## Documentation
 
@@ -169,10 +169,16 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `RUNWAY_BASE_URL` | No | Override Runway API root (default `https://api.dev.runwayml.com`) |
 | `RUNWAY_VIDEO_MODEL` | No | Default `multix runway video` model (default `gen4.5`) |
 | `RUNWAY_IMAGE_MODEL` | No | Default `multix runway image` model (default `gen4_image`) |
+| `SUME_API_KEY` | For Sume | [Sume app](https://app.sume.com) (API keys, USD balance) |
+| `SUME_BASE_URL` | No | Override Sume API root (default `https://api.sume.com`) |
+| `SUME_IMAGE_MODEL` / `SUME_VIDEO_MODEL` | No | Default `multix sume image` / `video` model. No built-in default: pass `-m` or set these (`multix sume models` lists IDs) |
+| `TOPVIEW_API_KEY` / `TOPVIEW_UID` | For TopView Legacy API | Both from [TopView API Settings](https://www.topview.ai/api-settings); billed in plan credits |
+| `TOPVIEW_PLATFORM_API_KEY` | For TopView API Platform | [TopView API Platform](https://platform.topview.ai); separate USD balance, not interchangeable with the Legacy key |
+| `TOPVIEW_BASE_URL` / `TOPVIEW_PLATFORM_BASE_URL` | No | Override the Legacy API root (default `https://api.topview.ai`) / API Platform root (default `https://platform-backend.topview.ai`) |
 | `CLOUDFLARE_AI_IMAGE_MODEL` | No | Image model setting; only `@cf/black-forest-labs/flux-1-schnell` is accepted |
 | `CLOUDFLARE_AI_TTS_MODEL` | No | Speech model setting; only `@cf/myshell-ai/melotts` is accepted |
 | `MULTIX_OUTPUT_DIR` | No | Override default output dir (`./multix-output`) |
-| `MULTIX_MAX_DOWNLOAD_MB` | No | Size limit per downloaded Replicate, Runway or Atlas Cloud output file (default `2048`) |
+| `MULTIX_MAX_DOWNLOAD_MB` | No | Size limit per downloaded Replicate, Runway, Atlas Cloud, Sume or TopView output file (default `2048`) |
 | `MULTIX_UPLOAD_MIN_KBPS` | No | Slowest upload speed to allow for (Gemini Files API, Runway requests with inline images), in KB/s (default `1000`); lower it on slow links |
 | `MULTIX_IMAGE_FORMAT` | No | `webp` (default) or `original` to keep provider image format/quality |
 | `MULTIX_OUTPUT` | No | `json` prints one `multix.result/v1` envelope per run, as `--json` does |
@@ -824,6 +830,51 @@ multix heygen me
 - Failed, cancelled, or input-blocked jobs exit non-zero with HeyGen's `failure_code`/message. When several jobs run, every success is still downloaded before the command exits non-zero. 429 `Retry-After` is honoured, and `Idempotency-Key` is sent only on endpoints that document it.
 - `--callback-url` webhooks are signed with HMAC-SHA256 of the raw body (hex, `signature` header). The npm package does not export a verifier; copy `src/providers/heygen/webhook.ts` or the Node snippet in the [HeyGen docs](https://multix.zuey.me/commands/heygen/#webhooks).
 - Digital-twin creation and voice cloning are out of scope. Full reference: [HeyGen commands](https://multix.zuey.me/commands/heygen/).
+
+### `multix sume`
+
+[Sume](https://www.sume.com) API (`https://api.sume.com`, `SUME_API_KEY`): one key for every image and video model in Sume's catalog. The catalog decides which models exist and which flags each takes; multix checks every flag against the model's catalog row before anything is uploaded or billed, with no model fallback and no built-in default model.
+
+```bash
+multix sume models [--kind image|video|lipsync|captions] [--refresh] [--json]   # public catalog, no key, cached
+multix sume image "a red fox in snow" -m <model> [--image <path|url>]... [--aspect-ratio 16:9] [--num-images 2] [--wait]
+multix sume video "waves at dusk" -m <model> [--image <path|url>] [--end-image <path|url>] [--duration 8] [--wait]
+multix sume video -m <lipsync-model> --image ./face.png --audio ./speech.mp3 --duration 12
+multix sume status <job_id> [--wait] [--download]
+multix sume cancel <job_id>                       # only while the job is still queued
+multix sume estimate "waves" -m <model> --duration 8   # Sume's own quote, not billed
+```
+
+- Jobs are async by default: `image` and `video` print the job ID with check, resume and cancel commands. `--wait` polls and downloads.
+- `--estimate` / `--max-cost` price the request from the cached catalog; Sume reserves the price on submit and refunds failed and canceled jobs.
+- Every submit carries an `Idempotency-Key`; an interrupted submit prints the key to re-run with `--idempotency-key`.
+- Full reference: [Sume commands](https://multix.zuey.me/commands/sume/).
+
+### `multix topview`
+
+[TopView](https://www.topview.ai) has two APIs with separate keys and balances; neither key works on the other.
+
+```bash
+# Legacy API (TOPVIEW_API_KEY + TOPVIEW_UID, plan credits)
+multix topview url-to-video https://shop.example.com/p/mug [--aspect-ratio 9:16] [--preview]
+multix topview materials-to-video --file ./front.jpg --file ./demo.mp4 --product-name "Mug" --product-description "350 ml"
+multix topview video-avatar --avatar-id <id> --tts-text "Welcome to our store"
+multix topview product-avatar --product-image ./bottle.png --avatar-id <id> --image-edit-prompt "..." --mode avatar4 --tts-text "..." --voice-id <id>
+multix topview product-anyshoot --mode try-on|background --product-image <path|url> ...
+multix topview status <kind> <taskId> [--wait] [--download]
+multix topview upload <file>
+multix topview credit
+
+# API Platform (TOPVIEW_PLATFORM_API_KEY, USD)
+multix topview models [--refresh]
+multix topview run bytedance/seedance-2.0/text-to-video --input '{"content":[{"type":"text","text":"a paper boat"}]}' [--wait]
+multix topview prediction <id> [--wait] [--download]
+```
+
+- Neither API has a cancel endpoint: a submitted task runs to completion and is billed.
+- `product-avatar` runs three paid tasks and always waits; each stage prints how to resume from its output.
+- `topview run` accepts only the verified routes `topview models` lists, and rejects a body whose shape does not match the route.
+- Full reference: [TopView commands](https://multix.zuey.me/commands/topview/).
 
 ### `multix speech`
 

@@ -760,6 +760,43 @@ describe("prepareRun: runs the caps cannot bound", () => {
     ).toBe("with --plan, the server caps do not bound the request");
   });
 
+  it("marks Sume and TopView runs the caps cannot bound", () => {
+    expect(
+      run({ command: "sume image", args: ["a cat"], options: { model: "m" } }).uncappedSpend,
+    ).toContain("--num-images is omitted");
+    expect(
+      run({ command: "sume image", args: ["a cat"], options: { model: "m", "num-images": 2 } }),
+    ).not.toHaveProperty("uncappedSpend");
+    expect(
+      run({
+        command: "sume image",
+        args: ["a cat"],
+        options: { model: "m", "num-images": 1, param: ["seed=1"] },
+      }).uncappedSpend,
+    ).toBe("with --param, the server caps do not bound the request");
+    const video = run({ command: "sume video", args: ["a wave"], options: { model: "m" } });
+    expect(video.uncappedSpend).toContain("catalog row sets the price");
+    expect(video.argv).not.toContain("--duration");
+    expect(
+      run({ command: "topview run", args: ["route"], options: { input: "{}" } }).uncappedSpend,
+    ).toBe("the request body is passed to the provider as given");
+    expect(
+      run({
+        command: "topview video-avatar",
+        options: { "avatar-id": "a", "tts-text": "hi", "voice-id": "v" },
+      }).uncappedSpend,
+    ).toBe("billed by the length of the script or audio");
+    expect(
+      run({ command: "topview url-to-video", args: ["https://example.com/p"] }).uncappedSpend,
+    ).toContain("15-60 s");
+    expect(
+      run({
+        command: "topview product-anyshoot",
+        options: { mode: "background", count: 2 },
+      }),
+    ).not.toHaveProperty("uncappedSpend");
+  });
+
   it("caps the generated audio length with MULTIX_MCP_MAX_AUDIO_SECONDS", async () => {
     expect(limits.maxAudioSeconds).toBe(30);
     expect(limitsFrom({ MULTIX_MCP_MAX_AUDIO_SECONDS: "9999" }).maxAudioSeconds).toBe(300);

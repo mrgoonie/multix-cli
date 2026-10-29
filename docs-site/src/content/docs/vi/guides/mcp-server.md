@@ -144,32 +144,40 @@ các giới hạn trên nhìn thấy. `multix_catalog` đánh dấu chúng bằn
 hạn):
 
 - body request chuyển thẳng tới provider: `fal run`, `replicate run`,
-  `atlas run`, `heygen run`, `--input` của `replicate image` và
-  `replicate video`, `--input` / `--text-field` của `fal tts`,
-  `--provider-options` của `openrouter tts`, và `--flags` (cờ model thô) của
-  `byteplus generate-3d`;
+  `atlas run`, `heygen run`, `topview run`, `--input` của `replicate image`
+  và `replicate video`, `--input` / `--text-field` của `fal tts`,
+  `--param` của `sume image`, `--provider-options` của `openrouter tts`, và
+  `--flags` (cờ model thô) của `byteplus generate-3d`;
 - lần chạy tính tiền theo độ dài nguồn hoặc kịch bản: `heygen video`,
-  `heygen translate`, `heygen lipsync`, `elevenlabs dub`, và `heygen
-  video-agent` / `heygen template`, nơi agent hoặc template quyết định độ dài,
-  và `elevenlabs music` khi có `--plan`, nơi thời lượng các đoạn quyết định
-  độ dài;
-- `fal video`, lệnh không có `--resolution`: model tự chọn độ phân giải;
-- `atlas image`, `atlas image-to-image` và `replicate image` khi không có
-  `--num-images` / `--num-outputs`, lúc đó model tự chọn số output. Truyền số
+  `heygen translate`, `heygen lipsync`, `elevenlabs dub`, `topview
+  video-avatar`, `topview product-avatar`, và `heygen video-agent` /
+  `heygen template`, nơi agent hoặc template quyết định độ dài, và
+  `elevenlabs music` khi có `--plan`, nơi thời lượng các đoạn quyết định độ dài;
+- lần chạy dài hơn mức giới hạn thời lượng chặn được: `topview url-to-video`
+  và `topview materials-to-video` (video 15-60 giây);
+- `sume video`, nơi dòng catalog của model quyết định giá, còn model lip-sync
+  và phụ đề tính tiền theo độ dài media nguồn;
+- `atlas image`, `atlas image-to-image`, `sume image` và `replicate image`
+  khi không có `--num-images` / `--num-outputs`, lúc đó model tự chọn số
+  output. Truyền số
   lượng (tối đa `MULTIX_MCP_MAX_OUTPUTS`) giúp lần chạy được giới hạn trở lại;
+- `fal video`, lệnh không có `--resolution`: model tự chọn độ phân giải;
 - `atlas video`, `atlas image-to-video`, `replicate video`,
   `openrouter image-to-video` và `heygen model-video` khi không có
   `--resolution`, lúc đó độ phân giải mặc định của model được dùng. Truyền một
   giá trị trong `MULTIX_MCP_ALLOWED_RESOLUTIONS` giúp lần chạy được giới hạn
-  trở lại.
+  trở lại, với model nhận độ phân giải (một số model Atlas không nhận, nên
+  luôn không bị giới hạn). Với `openrouter image-to-video`, giá trị này là yêu
+  cầu mà model có thể làm tròn.
 
 Operator quyết định điều kiện cho các lần chạy này bằng
 `MULTIX_MCP_UNCAPPED_SPEND`. Ở chế độ `budget` (mặc định), lệnh gọi phải có
 `max_cost_usd` và job chỉ khởi động khi ước tính giá chứng minh lần chạy nằm
 trong mức đó (`cost_policy` được coi là `strict` với các lần chạy này, vì ước
-tính không nhìn thấy phần không bị giới hạn). Trong số này chỉ `openrouter tts` có ước tính giá, nên trên thực tế
-`budget` từ chối các lệnh còn lại (đóng thay vì mở). `deny` luôn từ chối; `allow` chạy như
-trước, bằng key của chính người gọi. Lệnh gọi `estimate: true` luôn được trả
+tính không nhìn thấy phần không bị giới hạn). Trong số này chỉ
+`openrouter tts` có ước tính giá, và chỉ với model đã biết giá, nên trên thực
+tế `budget` từ chối các lệnh còn lại (đóng thay vì mở). `deny` luôn từ chối;
+`allow` chạy như trước, bằng key của chính người gọi. Lệnh gọi `estimate: true` luôn được trả
 lời ở mọi chế độ vì nó không khởi động gì. REST API (`POST /api/v1/jobs`) nhận
 cùng các trường `max_cost_usd` và `cost_policy` và áp dụng cùng quy tắc.
 
@@ -188,6 +196,24 @@ bị giới hạn bởi `MULTIX_MCP_MAX_VIDEO_SECONDS`. Prompt không được b
 `@`, nên hãy đặt chữ trước `@tag` (`"a portrait of @hero"`). `runway video`
 mặc định không chờ, nên job kết thúc chỉ với task ID: đặt `"wait": true` trong
 `options` để nhận video, hoặc chạy `runway status <id> --wait --download` sau.
+
+**Sume và TopView.** Cả hai nhóm lệnh chạy được từ xa. Truyền các flag file
+(của Sume là `--image`, `--end-image`, `--reference-image`, `--video` và
+`--audio`; của TopView là các flag file của Legacy API và file của
+`topview upload`) dưới dạng URL `https://` trong `inputs`. `sume estimate`
+không upload gì, nên nhận media dưới dạng URL `https://` thông thường.
+`sume image --num-images` và `topview product-anyshoot --count` bị giới hạn
+bởi `MULTIX_MCP_MAX_OUTPUTS`, còn
+`sume video --duration` và `--resolution` bị giới hạn bởi các giới hạn video;
+hãy truyền một `--duration` có trong dòng catalog của model, vì nếu thiếu,
+server sẽ gửi độ dài mặc định của riêng nó. `topview run --input` phải là JSON
+viết trực tiếp, vì giá trị `@file` bị từ chối. `sume image`, `sume video`,
+`topview run` và các lệnh Legacy của TopView trừ `product-avatar` mặc định
+không chờ: đặt `"wait": true` trong `options`, hoặc tiếp tục sau bằng
+`sume status <id> --wait --download`,
+`topview status <kind> <taskId> --wait --download` hoặc
+`topview prediction <id> --wait --download`. Xem
+[Sume](/vi/commands/sume/) và [TopView](/vi/commands/topview/).
 
 **Speech.** `speech generate` phải nêu `--provider`. Job chỉ nhận key của các
 provider được nêu trong `--provider` và `--fallback`, không phải mọi key speech
@@ -231,8 +257,12 @@ bị bỏ qua.
   OpenRouter, OpenAI, MiniMax, Leonardo.Ai, BytePlus với `ARK_API_KEY` làm tên
   dự phòng, ElevenLabs, fal.ai, Atlas Cloud, Replicate với `REPLICATE_API_KEY`
   làm tên dự phòng, Runway với `RUNWAYML_API_SECRET` mang nhãn "API secret",
-  HeyGen), cùng account ID, API token và AI Gateway ID (tùy
-  chọn) của Cloudflare Workers AI.
+  HeyGen, Sume, TopView với `TOPVIEW_API_KEY` và `TOPVIEW_UID`, và TopView
+  Platform), cùng account ID, API token và AI Gateway ID (tùy chọn) của
+  Cloudflare Workers AI. `TOPVIEW_UID` là account ID chứ không phải secret,
+  nên được nhập bằng ô văn bản thường thay vì ô mật khẩu. Một job `topview`
+  nhận cả ba giá trị TopView; các lệnh Legacy cần `TOPVIEW_API_KEY` và
+  `TOPVIEW_UID`, các lệnh API Platform cần `TOPVIEW_PLATFORM_API_KEY`.
 
 ### API key cho REST API
 

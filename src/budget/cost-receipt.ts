@@ -81,6 +81,8 @@ export interface ReceiptInput {
   model?: string;
   calls: ReceiptCall[];
   usage?: ReceiptUsage;
+  /** A known-free operation (a price quote): its requests start no paid work. */
+  free?: boolean;
   estimate?: CostEstimate;
   max_cost_usd?: number;
   policy?: string;
@@ -152,7 +154,7 @@ function compactEstimate(e: CostEstimate): NonNullable<CostReceipt["estimate"]> 
 export function buildCostReceipt(input: ReceiptInput): CostReceipt {
   const at = input.at ?? new Date();
   const sent = input.calls.filter((c) => c.status !== -1);
-  const billable = sent.filter((c) => isBillableMethod(c.method));
+  const billable = input.free ? [] : sent.filter((c) => isBillableMethod(c.method));
   const role: CostRole = billable.length > 0 ? "charge" : sent.length > 0 ? "observation" : "none";
   const reportedUsd = input.usage?.cost_usd;
   const reportedCredits = input.usage?.credits;
@@ -202,7 +204,9 @@ export function buildCostReceipt(input: ReceiptInput): CostReceipt {
       status = "unknown";
       reason =
         role === "observation"
-          ? "Status or download only; spend belongs to the operation's submit run."
+          ? input.free
+            ? "A free price quote; it starts no paid work."
+            : "Status or download only; spend belongs to the operation's submit run."
           : "The provider reported no cost and there is no trusted price for the measured usage.";
     }
   }
