@@ -170,20 +170,23 @@ When it does, update every affected living surface in the same PR:
 - Public docs: `README.md` and `docs-site/src/content/docs/**`, published at
   <https://multix.zuey.me>. Change the English page and its `vi/` counterpart
   together. The build derives each page's agent-readable `.md` route and
-  `llms.txt` from these sources, so edit the source, not the output.
-- Agent-facing: `skill/SKILL.md`, and command `--help`/usage strings in
-  `src/commands/**` when a command's surface changes.
+  `llms-full.txt` from these sources; `llms.txt` is a hand-written index in
+  `docs-site/src/pages/llms.txt.ts`, so update it when a page is added,
+  renamed, removed or changes scope.
+- Agent-facing: `skill/SKILL.md` and the task skills in `skill/<name>/SKILL.md`,
+  and command `--help`/usage strings (`src/commands/**` and
+  `src/providers/<name>/commands/**`) when a command's surface changes.
 - Contributor/internal: this file, `.env.example`, and any active plan in
-  `plans/` that the change makes wrong. Plans and
-  `plans/reports/` from finished work are historical records: do not rewrite
-  them to match new behavior.
+  `plans/` that the change makes wrong. Plans and `plans/reports/` from
+  finished work are historical records: do not rewrite them to match new
+  behavior.
 
 Rules:
 
 - Accuracy over volume. Check commands, options, model names, defaults, env
-  vars, URLs and snippets against the source, tests and the provider's
-  official reference. Never document a model, price or behavior that the code
-  does not implement or that you did not verify.
+  vars, URLs, snippets and screenshots against the source, tests and the
+  provider's official reference. Never document a model, price or behavior
+  that the code does not implement or that you did not verify.
 - No noise. A refactor, test-only or internal change with no observable
   effect needs no doc edit; say so instead of making an empty one.
 - When `docs-site/` changes, run `npm run verify:docs` (see
