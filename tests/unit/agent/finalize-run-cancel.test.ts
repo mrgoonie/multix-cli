@@ -1,14 +1,19 @@
 import fs from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+type FinalizeArgs = { exitCode: number; error?: unknown };
+
 /**
  * finalizeRun keeps the module-level run state, so each case loads a fresh copy
- * and captures the envelope it writes to fd 1.
+ * and captures the envelope it writes to fd 1. An `input` function builds the
+ * error after that load, so its class is the one finalizeRun checks against.
  */
 async function finalizeCancelled(
   requestsStarted: number,
   setup: (run: typeof import("../../../src/agent/run-state.js").run) => void = () => {},
-  input: { exitCode: number; error?: unknown } = { exitCode: 143 },
+  input: FinalizeArgs | ((errors: typeof import("../../../src/core/errors.js")) => FinalizeArgs) = {
+    exitCode: 143,
+  },
 ) {
   vi.resetModules();
   const written: string[] = [];
@@ -22,8 +27,9 @@ async function finalizeCancelled(
     const { finalizeRun } = await import("../../../src/agent/agent-runtime.js");
     run.json = true;
     run.requestsStarted = requestsStarted;
+    const errors = await import("../../../src/core/errors.js");
     setup(run);
-    const exitCode = finalizeRun(input);
+    const exitCode = finalizeRun(typeof input === "function" ? input(errors) : input);
     return { exitCode, envelope: JSON.parse(written.join("")) };
   } finally {
     spy.mockRestore();
@@ -76,5 +82,88 @@ describe("finalizeRun on a signal exit", () => {
     expect(thrown.envelope.error.hint).not.toBe("Maybe accepted.");
     const plain = await finalizeCancelled(1, setup, { exitCode: 1 });
     expect(plain.envelope.error.hint).not.toBe("Maybe accepted.");
+  });
+});
+
+describe("finalizeRun after a failure with a job in flight", () => {
+  beforeEach(() => vi.stubEnv("MULTIX_HISTORY", "0"));
+  afterEach(() => vi.unstubAllEnvs());
+
+  const resume = "multix fal result fal-ai/flux/schnell req-1 --download";
+  /** A fal run whose result fetch got a 429 after fal accepted the job. */
+  const rateLimited = ({ HttpError }: typeof import("../../../src/core/errors.js")) => ({
+    exitCode: 1,
+    error: new Error("Failed to fetch result for fal request req-1: HTTP 429", {
+      cause: new HttpError(429, "slow down", "https://queue.fal.run/x", 30_000),
+    }),
+  });
+  const falRun =
+    (inFlight?: { id: string; resume: string }) =>
+    (run: typeof import("../../../src/agent/run-state.js").run) => {
+      run.command = "fal run";
+      run.group = "fal";
+      run.argv = ["fal", "run", "fal-ai/flux/schnell"];
+      run.actionStarted = true;
+      if (inFlight) run.inFlight = inFlight;
+    };
+
+  it("offers a rerun when nothing was accepted (baseline)", async () => {
+    const { envelope } = await finalizeCancelled(1, falRun(), rateLimited);
+    expect(envelope.error).toMatchObject({ code: "RATE_LIMITED", retryable: true });
+    expect(envelope.next[0]).toMatch(/^multix rerun h_/);
+  });
+
+  it("resumes an accepted job instead of rerunning it, keeping the classification", async () => {
+    const { exitCode, envelope } = await finalizeCancelled(
+      2,
+      falRun({ id: "req-1", resume }),
+      rateLimited,
+    );
+    expect(envelope.error).toMatchObject({
+      code: "RATE_LIMITED",
+      http_status: 429,
+      retry_after_s: 30,
+      retryable: false,
+      message: "Failed to fetch result for fal request req-1: HTTP 429",
+    });
+    expect(envelope.error.hint).toContain("Job req-1 was accepted");
+    expect(envelope.error.hint).toContain("Do not rerun; wait 30s, then resume");
+    expect(envelope.next[0]).toBe(resume);
+    expect(envelope.next.some((c: string) => c.startsWith("multix rerun"))).toBe(false);
+    expect(exitCode).toBe(envelope.exit_code);
+  });
+
+  it("resumes after a non-zero exit with no thrown error", async () => {
+    const { envelope } = await finalizeCancelled(2, falRun({ id: "req-1", resume }), {
+      exitCode: 1,
+    });
+    expect(envelope.error.retryable).toBe(false);
+    expect(envelope.error.hint).toContain("Do not rerun; resume it with the next command.");
+    expect(envelope.next[0]).toBe(resume);
+  });
+
+  it("leaves a job the provider failed or canceled to the usual advice", async () => {
+    for (const terminal of [true, false]) {
+      const { envelope } = await finalizeCancelled(
+        2,
+        falRun({ id: "req-1", resume }),
+        ({ ProviderJobFailedError }) => ({
+          exitCode: 1,
+          error: new ProviderJobFailedError("job req-1 ended", "fal", { terminal }),
+        }),
+      );
+      if (terminal) expect(envelope.error.code).toBe("JOB_FAILED");
+      expect(envelope.error.hint).not.toContain("Do not rerun");
+      expect(envelope.next).not.toContain(resume);
+    }
+  });
+
+  it("keeps the signal-exit wording", async () => {
+    const { envelope } = await finalizeCancelled(2, falRun({ id: "req-1", resume }));
+    expect(envelope.error).toMatchObject({ code: "CANCELLED", retryable: false });
+    expect(envelope.error.hint).toBe(
+      "Job req-1 was submitted before the run stopped; it runs on (or has finished) and is billed. Do not rerun; resume it with the next command.",
+    );
+    expect(envelope.next[0]).toBe(resume);
   });
 });
