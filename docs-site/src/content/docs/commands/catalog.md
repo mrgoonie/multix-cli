@@ -87,9 +87,11 @@ account's usage. Group with `--by provider|model|offering|task|command`.
   bad flag, a resume that only read local state) are left out.
 - An **operation** is one piece of work: a submit with its status polls,
   resumes and download counts once.
-- Outcomes are counted per operation across all rows: it is **completed** when
-  any of its runs succeeded, so a failed status poll recorded under the job's
-  operation is not a failure. Otherwise its latest run decides whether it
+- Outcomes are counted per operation across all rows: it **failed** when any
+  of its runs reports that the provider failed the job (`JOB_FAILED`), even
+  though the submit was accepted. Otherwise it is **completed** when any of its
+  runs succeeded, so a status poll that failed on its own (network error,
+  timeout) is not a failure. Otherwise its latest run decides whether it
   **failed** or was **canceled**. The success rate is completed operations
   divided by operations.
 - A failed poll whose run never received the job's provider id (its first

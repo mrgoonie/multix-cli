@@ -274,6 +274,42 @@ describe("retries, failures and cancels", () => {
     expect(row.sample).toEqual({ n: 1, confidence: "low" });
   });
 
+  it("counts a job the provider failed as failed even though its submit was ok", () => {
+    const failedStatus = (over: Partial<HistoryEntry>) =>
+      entry({
+        command: "fal status",
+        ts: "2026-10-27T10:05:00.000Z",
+        ok: false,
+        exit_code: 5,
+        error: { code: "JOB_FAILED", message: "The job failed at the provider" },
+        // Status reads carry no resolved model, so they land in another model row.
+        model_resolved: undefined,
+        ...over,
+      });
+    // Entries written before receipts: the operation id comes from the job.
+    const legacy = [
+      entry({ provider_ids: ["req_1"], job: { provider: "fal", id: "req_1", attempt: 1 } }),
+      failedStatus({ provider_ids: ["req_1"], job: { provider: "fal", id: "req_1", attempt: 1 } }),
+    ];
+    // Receipted entries: the submit and the status run share an operation id.
+    const receipted = [
+      entry({ provider_ids: ["J9"], cost: receipt({ operation_id: "fal:J9" }) }),
+      failedStatus({
+        provider_ids: ["J9"],
+        cost: receipt({ operation_id: "fal:J9", role: "observation", status: "unknown" }),
+      }),
+    ];
+    for (const rows of [legacy, receipted]) {
+      const [row] = aggregateUsage(rows, "provider");
+      expect(row).toMatchObject({ requests: 2, operations: 1, completed: 0, failed: 1 });
+      expect(row.success_rate).toBe(0);
+    }
+    // Every grouping agrees, including rows that only hold the status run.
+    for (const by of USAGE_GROUPS) {
+      for (const r of aggregateUsage(receipted, by)) expect(r.completed, `${by} ${r.key}`).toBe(0);
+    }
+  });
+
   it("decides an operation with no successful run by its latest run", () => {
     const fail = { ok: false, exit_code: 1 } as const;
     const down = { code: "PROVIDER_UNAVAILABLE", message: "down" };
