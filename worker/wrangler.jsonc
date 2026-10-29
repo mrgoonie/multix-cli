@@ -81,6 +81,7 @@
     "MULTIX_PUBLIC_URL": "https://multix.zuey.me",
     "MULTIX_MCP_MAX_OUTPUTS": "4",
     "MULTIX_MCP_MAX_VIDEO_SECONDS": "10",
+    "MULTIX_MCP_MAX_AUDIO_SECONDS": "30",
     "MULTIX_MCP_ALLOWED_RESOLUTIONS": "480p,720p,768p,1080p",
     // Model ids the image commands of multix_run may use (--model); empty allows any model.
     "MULTIX_MCP_ALLOWED_IMAGE_MODELS": "",

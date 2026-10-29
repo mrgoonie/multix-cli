@@ -16,6 +16,7 @@ describe("multix_model_catalog", () => {
       resolution: "720p",
       duration_s: 10,
       audio: true,
+      aspect_ratio: "16:9",
     });
     expect(result.isError).toBeFalsy();
     const rows = result.structuredContent.comparison.rows as Json[];
