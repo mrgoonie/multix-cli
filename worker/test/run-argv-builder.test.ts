@@ -511,6 +511,23 @@ describe("prepareRun: rejections", () => {
       run({ command: "byteplus video", options: { prompt: "p", duration: "4.9" } }),
     ).not.toThrow();
   });
+
+  it("refuses leonardo video, which renders up to 8 s, when the length cap is below 8", () => {
+    const request: RunRequest = {
+      command: "leonardo video",
+      args: ["waves"],
+      options: { model: "kling-2.6" },
+    };
+    expect(() =>
+      prepareRun(request, limitsFrom({ MULTIX_MCP_MAX_VIDEO_SECONDS: "8" })),
+    ).not.toThrow();
+    for (const model of ["kling-2.6", "MOTION2", undefined]) {
+      const capped: RunRequest = { ...request, options: model ? { model } : {} };
+      expect(() => prepareRun(capped, limitsFrom({ MULTIX_MCP_MAX_VIDEO_SECONDS: "7" }))).toThrow(
+        /renders up to 8 seconds of video and has no length option; this server allows at most 7 seconds/,
+      );
+    }
+  });
 });
 
 describe("prepareRun: speech", () => {

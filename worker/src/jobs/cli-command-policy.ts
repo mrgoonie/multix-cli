@@ -23,6 +23,11 @@ export type FileInputKind = "file" | "dir";
 export interface CapRules {
   /** Video length in seconds: at most `maxVideoSeconds`. */
   duration?: string[];
+  /**
+   * The command has no length option and always renders up to this many
+   * seconds: refused when it is above `maxVideoSeconds`.
+   */
+  fixedSeconds?: number;
   /** Number of outputs: at most `maxOutputs`. */
   count?: string[];
   /**
@@ -207,7 +212,9 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   "fish clone": { fileOptions: { sample: "file", "transcript-file": "file" } },
   "leonardo generate": { caps: { count: ["num"] } },
   "leonardo image-to-image": { caps: { count: ["num"] } },
-  "leonardo video": { caps: { resolution: ["resolution"] } },
+  // No --duration: a v2 model always renders 8 s (the CLI sends duration: 8) and a
+  // v1 model picks its own length (Veo 3 renders 8 s), so 8 s is what a run can reach.
+  "leonardo video": { caps: { resolution: ["resolution"], fixedSeconds: 8 } },
   "leonardo image-to-video": { caps: VIDEO_CAPS },
   "byteplus generate": { fileOptions: { "input-image": "file" }, caps: IMAGE_COUNT },
   "byteplus image-to-image": { fileOptions: { ref: "file" }, caps: IMAGE_COUNT },

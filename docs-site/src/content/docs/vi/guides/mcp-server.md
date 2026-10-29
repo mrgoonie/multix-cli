@@ -175,6 +175,11 @@ dài của interaction đã lưu nên không giới hạn một chuỗi extend n
 40 giây tổng cộng của Google; mọi lần gọi đều được tính phí trên key Gemini của
 chính bạn.
 
+**Leonardo.** `leonardo video` không có `--duration`: model Kling, Hailuo, LTX
+hoặc Seedance luôn tạo video 8 giây, còn các model khác tự chọn độ dài (Veo 3
+tạo 8 giây). Vì vậy server từ chối lệnh này khi `MULTIX_MCP_MAX_VIDEO_SECONDS`
+nhỏ hơn 8.
+
 **Runway.** `runway video` và `runway image` chạy được từ xa; truyền `--image`
 và từng `--reference` dưới dạng URL `https://` trong `inputs`, còn `--duration`
 bị giới hạn bởi `MULTIX_MCP_MAX_VIDEO_SECONDS`. Prompt không được bắt đầu bằng

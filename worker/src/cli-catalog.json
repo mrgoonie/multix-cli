@@ -6003,7 +6003,7 @@
             {
               "long": "--music-length-ms",
               "flags": "--music-length-ms <n>",
-              "description": "Total length in milliseconds (default 30000)",
+              "description": "Total length in milliseconds (omit to let the model pick the length)",
               "required": false,
               "takesValue": true,
               "valueOptional": false,

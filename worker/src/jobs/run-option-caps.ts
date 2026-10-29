@@ -78,6 +78,11 @@ export function applyCaps(
       values.set(name, [String(limits.defaultVideoSeconds)]);
     }
   }
+  if (rules?.fixedSeconds !== undefined && rules.fixedSeconds > limits.maxVideoSeconds) {
+    throw new ValidationError(
+      `this command renders up to ${rules.fixedSeconds} seconds of video and has no length option; this server allows at most ${limits.maxVideoSeconds} seconds`,
+    );
+  }
   for (const name of rules?.resolution ?? []) {
     if (
       rules?.fillResolution &&

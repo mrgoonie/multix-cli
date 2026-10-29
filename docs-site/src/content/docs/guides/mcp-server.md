@@ -179,6 +179,11 @@ see a stored interaction's length, so it does not bound a chain beyond
 Google's own limit of 40 seconds in total; every call is billed to your own
 Gemini key.
 
+**Leonardo.** `leonardo video` has no `--duration`: a Kling, Hailuo, LTX or
+Seedance model always renders 8 seconds, and the other models pick their own
+length (Veo 3 renders 8 seconds). The server therefore refuses it when
+`MULTIX_MCP_MAX_VIDEO_SECONDS` is below 8.
+
 **Runway.** `runway video` and `runway image` can run remotely; give
 `--image` and each `--reference` as `https://` URLs in `inputs`, and
 `--duration` is capped by `MULTIX_MCP_MAX_VIDEO_SECONDS`. A prompt must not
