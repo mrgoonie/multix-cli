@@ -32,6 +32,7 @@ describe("CLI catalog", () => {
         ...(policy.unsupported ?? []),
         ...(policy.nameOptions ?? []),
         ...(policy.promptFlagOptions ?? []),
+        ...Object.keys(policy.allowedValues ?? {}),
         ...(policy.repeatable ?? []),
         ...(policy.caps?.count ?? []),
         ...(policy.caps?.duration ?? []),

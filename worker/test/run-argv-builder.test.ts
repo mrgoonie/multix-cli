@@ -497,6 +497,11 @@ describe("prepareRun: rejections", () => {
       /--prompt may not contain "--" followed by a letter/,
     ],
     [
+      "a Seedance prompt given under a dashed key that starts with a model flag",
+      { command: "byteplus video", options: { "--prompt": "--rs 1080p a cat" } },
+      /--prompt may not contain/,
+    ],
+    [
       "a Seedance negative prompt carrying a model flag",
       {
         command: "byteplus image-to-video",
@@ -512,6 +517,14 @@ describe("prepareRun: rejections", () => {
         options: { prompt: "p", "aspect-ratio": "16:9 --dur 12" },
       },
       /--aspect-ratio may not contain/,
+    ],
+    [
+      "a Seedance model on the 3D command, whose --flags reach the prompt raw",
+      {
+        command: "byteplus generate-3d",
+        options: { prompt: "p", model: "seedance-2.0", flags: "--dur 15 --rs 1080p" },
+      },
+      /--model must be one of hyper3d-gen2-260112, hitem3d-2-0-251223/,
     ],
     [
       "hex count",
@@ -531,6 +544,12 @@ describe("prepareRun: rejections", () => {
     ).not.toThrow();
     expect(() =>
       run({ command: "byteplus video", options: { prompt: "p", duration: "4.9" } }),
+    ).not.toThrow();
+    expect(() =>
+      run({
+        command: "byteplus generate-3d",
+        options: { prompt: "p", model: "hitem3d-2-0-251223", flags: "--ff 2" },
+      }),
     ).not.toThrow();
     // Dashes that are not a model-parameter token stay allowed in Seedance text.
     expect(() =>

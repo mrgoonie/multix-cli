@@ -15,6 +15,7 @@
  * Option names are long flags without the leading `--`.
  */
 
+import { BYTEPLUS_3D_MODELS } from "../../../src/providers/byteplus/models.js";
 import type { ProviderSecretName } from "../provider-secret-names.js";
 
 /** `file`: one or more downloaded files (repeatable when the CLI option is). `dir`: a directory of them. */
@@ -64,6 +65,8 @@ export interface CommandPolicy {
    * capped duration or resolution.
    */
   promptFlagOptions?: string[];
+  /** Options whose value must be one of the listed ones (e.g. models the caps were written for). */
+  allowedValues?: Record<string, readonly string[]>;
   /** Options the CLI collects when repeated but the catalog cannot tell (custom parser, no array default). */
   repeatable?: string[];
   caps?: CapRules;
@@ -232,7 +235,12 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
     caps: VIDEO_CAPS,
     promptFlagOptions: SEEDANCE_PROMPT_FLAGS,
   },
-  "byteplus generate-3d": { fileOptions: { "input-image": "file" } },
+  "byteplus generate-3d": {
+    fileOptions: { "input-image": "file" },
+    // The 3D models only: the same tasks endpoint runs Seedance, and --flags
+    // goes into the prompt raw, so any other model could make an uncapped video.
+    allowedValues: { model: BYTEPLUS_3D_MODELS.map((m) => m.id) },
+  },
   "cloudflare generate-video": { caps: VIDEO_CAPS },
   "elevenlabs clone": { fileOptions: { files: "file", audio: "file" } },
   "elevenlabs voice-changer": { fileOptions: { input: "file" } },

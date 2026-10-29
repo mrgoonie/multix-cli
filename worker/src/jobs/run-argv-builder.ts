@@ -176,6 +176,10 @@ export function prepareRun(
     if (nameOptions.has(name) && value !== true && !value.every((v) => NAME_PART_RE.test(v))) {
       throw new ValidationError(`--${name} may contain only letters, digits, _ and - (at most 64)`);
     }
+    const allowed = policy.allowedValues?.[name];
+    if (allowed && value !== true && !value.every((v) => allowed.includes(v))) {
+      throw new ValidationError(`--${name} must be one of ${allowed.join(", ")} on this server`);
+    }
     if (
       promptFlagOptions.has(name) &&
       value !== true &&

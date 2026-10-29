@@ -68,6 +68,7 @@ function commandDetail(command: CliCommand): Record<string, unknown> {
       if (policy.urlOptions?.includes(name)) view.https_url = true;
       if (policy.forced?.[name] !== undefined) view.forced = policy.forced[name];
       if (policy.nameOptions?.includes(name)) view.format = "letters, digits, _ and - only";
+      if (policy.allowedValues?.[name]) view.allowed_values = policy.allowedValues[name];
       if (policy.promptFlagOptions?.includes(name)) view.format = 'no "--" followed by a letter';
       if (name === OUTPUT_FILE_OPTION) view.output = "plain file name inside the job output";
       if (policy.uncappedOptions?.includes(name))

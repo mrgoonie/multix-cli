@@ -182,7 +182,9 @@ nằm trong nội dung prompt, nơi BytePlus đọc chúng như tham số của 
 prompt không thể ghi đè các giá trị đã bị giới hạn, server từ chối giá trị
 `--prompt`, `--negative` hoặc `--aspect-ratio` có chứa `--` theo sau là một chữ
 cái (chẳng hạn `--dur 12`); hãy đặt độ dài và độ phân giải bằng chính các
-option của lệnh.
+option của lệnh. `byteplus generate-3d` gửi tới cùng endpoint task và nối
+`--flags` nguyên văn vào prompt, nên chỉ nhận các model 3D cho `--model`
+(`hyper3d-gen2-260112`, `hitem3d-2-0-251223`).
 
 **Runway.** `runway video` và `runway image` chạy được từ xa; truyền `--image`
 và từng `--reference` dưới dạng URL `https://` trong `inputs`, còn `--duration`
