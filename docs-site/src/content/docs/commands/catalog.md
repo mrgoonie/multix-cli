@@ -89,7 +89,8 @@ account's usage. Group with `--by provider|model|offering|task|command`.
   resumes and download counts once.
 - Outcomes are counted per operation across all rows: it **failed** when any
   of its runs reports that the provider failed the job (`JOB_FAILED`), even
-  though the submit was accepted. Otherwise it is **completed** when any of its
+  though the submit was accepted, unless a successful resubmit under the same
+  operation id came later. Otherwise it is **completed** when any of its
   runs succeeded, so a status poll that failed on its own (network error,
   timeout) is not a failure. Otherwise its latest run decides whether it
   **failed** or was **canceled**. The success rate is completed operations

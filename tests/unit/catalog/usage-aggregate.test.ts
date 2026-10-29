@@ -310,6 +310,47 @@ describe("retries, failures and cancels", () => {
     }
   });
 
+  it("lets only a later successful resubmit reopen a job the provider failed", () => {
+    const op = "my-op";
+    const at = (m: number) => `2026-10-27T10:0${m}:00.000Z`;
+    const charge = receipt({ operation_id: op });
+    const observe = receipt({ operation_id: op, role: "observation", status: "unknown" });
+    const jobFailed = {
+      ok: false,
+      exit_code: 5,
+      error: { code: "JOB_FAILED", message: "The job failed at the provider" },
+    } as const;
+    const failed = [
+      entry({ ts: at(0), cost: charge }),
+      entry({ ts: at(1), ...jobFailed, cost: observe }),
+    ];
+    // A status read that exits ok after the failure does not reopen the job.
+    expect(rowFor([...failed, entry({ ts: at(2), cost: observe })])).toMatchObject({
+      completed: 0,
+      failed: 1,
+    });
+    // A resubmit under the same explicit operation id that succeeds does.
+    expect(rowFor([...failed, entry({ ts: at(2), cost: charge })])).toMatchObject({
+      completed: 1,
+      failed: 0,
+    });
+  });
+
+  it("does not fail a completed job over a status poll that timed out", () => {
+    const op = "fal:J2";
+    const rows = [
+      entry({ cost: receipt({ operation_id: op }) }),
+      entry({
+        ts: "2026-10-27T10:05:00.000Z",
+        ok: false,
+        exit_code: 6,
+        error: { code: "TIMEOUT", message: "timed out waiting for the job" },
+        cost: receipt({ operation_id: op, role: "observation", status: "unknown" }),
+      }),
+    ];
+    expect(rowFor(rows)).toMatchObject({ operations: 1, completed: 1, failed: 0 });
+  });
+
   it("decides an operation with no successful run by its latest run", () => {
     const fail = { ok: false, exit_code: 1 } as const;
     const down = { code: "PROVIDER_UNAVAILABLE", message: "down" };

@@ -12,11 +12,12 @@
  *   receipt operation id (submit, status polls, result download, resume)
  *   count once, so polls and resumes never double the operation count;
  * - outcomes are per operation, decided over the whole ledger before
- *   grouping: failed when any of its runs reports that the provider failed
- *   the job (JOB_FAILED), even after an accepted submit; otherwise completed
+ *   grouping: failed when a run reports that the provider failed the job
+ *   (JOB_FAILED), even after an accepted submit, unless a successful
+ *   resubmit under the same operation id came later; otherwise completed
  *   when any of its runs succeeded, otherwise failed or canceled by its
- *   latest run. A poll that failed on its own (network, timeout) is not a
- *   failure of the job, even when it lands in another row (no resolved
+ *   latest run. Any other failed run (a poll cut off by the network or a
+ *   timeout) is not a failure of the job once a run succeeded, even when it lands in another row (no resolved
  *   model, a status command); success rate and sample size count operations;
  * - retries are failed sends of the same submit before the one that returned
  *   the job (`job.attempt - 1`);
@@ -99,6 +100,18 @@ const isJobFailure = (e: HistoryEntry) => e.error?.code === "JOB_FAILED";
 
 type Outcome = "completed" | "failed" | "canceled";
 
+/** Ledger index breaks timestamp ties, as in the latest-run rule below. */
+const after = (a: HistoryEntry, ai: number, b: HistoryEntry, bi: number) =>
+  a.ts > b.ts || (a.ts === b.ts && ai > bi);
+
+/** A run reported JOB_FAILED and no successful charged send came after it. */
+function failedForGood(ops: HistoryEntry[]): boolean {
+  const failures = ops.map((e, i) => [e, i] as const).filter(([e]) => isJobFailure(e));
+  if (failures.length === 0) return false;
+  const [last, li] = failures.reduce((a, b) => (after(b[0], b[1], a[0], a[1]) ? b : a));
+  return !ops.some((e, i) => e.ok && receiptOf(e)?.role === "charge" && after(e, i, last, li));
+}
+
 /**
  * Outcome of each operation: failed if the provider failed the job, else
  * completed if any run succeeded, else its latest run decides.
@@ -112,7 +125,9 @@ function operationOutcomes(list: HistoryEntry[]): Map<string, Outcome> {
   const outcomes = new Map<string, Outcome>();
   for (const [id, ops] of runs) {
     // A submit is ok once the provider accepts the job; a later JOB_FAILED overrides it.
-    if (ops.some(isJobFailure)) outcomes.set(id, "failed");
+    // Only a later charged send (a resubmit under the same explicit operation id)
+    // reopens it: a status read can exit ok while reporting the failed job.
+    if (failedForGood(ops)) outcomes.set(id, "failed");
     else if (ops.some((e) => e.ok)) outcomes.set(id, "completed");
     else {
       // Latest by timestamp; ledger order breaks ties (it is append order).

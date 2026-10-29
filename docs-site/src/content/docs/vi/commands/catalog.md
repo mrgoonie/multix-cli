@@ -92,7 +92,8 @@ của tài khoản provider. Nhóm theo `--by provider|model|offering|task|comma
   thái, tiếp tục và tải file chỉ tính một lần.
 - Kết quả được tính theo operation trên mọi dòng: operation **lỗi** khi có một
   lần chạy báo provider đã làm job thất bại (`JOB_FAILED`), dù lần submit đã
-  được chấp nhận. Nếu không, operation **hoàn tất** khi có ít nhất một lần chạy
+  được chấp nhận, trừ khi sau đó có một lần submit lại thành công dưới cùng
+  operation id. Nếu không, operation **hoàn tất** khi có ít nhất một lần chạy
   thành công, nên một lần poll trạng thái tự lỗi (lỗi mạng, hết thời gian) không
   bị tính là lỗi. Nếu không nữa, lần chạy gần nhất quyết định operation **lỗi**
   hay **bị hủy**. Tỉ lệ thành công là số operation hoàn
