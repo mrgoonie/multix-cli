@@ -21,6 +21,15 @@ import { RunwayTaskError } from "../../../src/providers/runway/client.js";
 import { SumeJobError } from "../../../src/providers/sume/client.js";
 import { TopviewPredictionError, TopviewTaskError } from "../../../src/providers/topview/errors.js";
 
+describe("TopView payment_required", () => {
+  it("reads a prediction that needs payment as out of credits, not bad input", () => {
+    const message =
+      "TopView prediction p_1 needs payment (payment_required). Amount due: $1.2. Top up the same API Platform workspace at https://platform.topview.ai; settlement retries automatically without resubmitting. Then resume with: multix topview prediction p_1 --wait --download";
+    expect(classifyMessage(message).code).toBe("QUOTA_EXCEEDED");
+    expect(classifyError(new ProviderError(message, "topview")).code).toBe("QUOTA_EXCEEDED");
+  });
+});
+
 describe("codeFromHttp", () => {
   it("maps statuses to codes, refined by the body", () => {
     expect(codeFromHttp(401, "")).toBe("INVALID_KEY");
