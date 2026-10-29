@@ -435,6 +435,27 @@ describe("fal run without --detach (unchanged default)", () => {
     await cli("run", MODEL, "--input", '{"prompt":"x"}', "--no-download");
     expect(JSON.parse(stdout.join("\n"))).toEqual({ text: "ok" });
   });
+
+  it("keeps Retry-After and the resume hint when the result fetch is rate limited", async () => {
+    const app = "fal-ai/mmaudio-v2";
+    stub({
+      ...submitRoute,
+      [`GET https://queue.fal.run/${app}/requests/${REQUEST_ID}/status`]: [
+        { json: { status: "COMPLETED" } },
+      ],
+      [`GET https://queue.fal.run/${app}/requests/${REQUEST_ID}`]: [
+        { status: 429, json: { detail: "slow down" }, headers: { "retry-after": "30" } },
+      ],
+    });
+    const error = await cli("run", MODEL, "--input", '{"prompt":"x"}').then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+    const info = classifyError(error);
+    expect(info).toMatchObject({ code: "RATE_LIMITED", http_status: 429, retry_after_s: 30 });
+    expect(info.message).toContain(`Failed to fetch result for fal request ${REQUEST_ID}`);
+    expect(info.message).toContain(`multix fal result ${MODEL} ${REQUEST_ID}`);
+  });
 });
 
 describe("fal result failures", () => {

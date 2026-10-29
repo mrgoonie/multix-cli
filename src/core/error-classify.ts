@@ -265,6 +265,14 @@ export function classifyMessage(message: string): ErrorInfo {
 
 /** Classify any thrown value. */
 export function classifyError(error: unknown): ErrorInfo {
+  // A plain Error that only adds context (an id, a resume hint) is classified as the error it wraps.
+  if (
+    !(error instanceof MultixError) &&
+    error instanceof Error &&
+    error.cause instanceof MultixError
+  ) {
+    return { ...classifyError(error.cause), message: redactUrlsInText(error.message) };
+  }
   if (error instanceof HttpError) {
     const code = codeFromHttp(error.status, error.snippet);
     const extra: Partial<ErrorInfo> = { http_status: error.status || undefined };

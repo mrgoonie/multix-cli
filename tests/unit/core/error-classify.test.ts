@@ -88,6 +88,18 @@ describe("classifyError", () => {
     expect(info).toMatchObject({ code: "RATE_LIMITED", http_status: 429, retry_after_s: 3 });
   });
 
+  it("classifies a plain Error that wraps a multix error as the wrapped error, with its message", () => {
+    const cause = new HttpError(429, "slow down", "https://queue.fal.run/x/requests/r1", 2500);
+    const info = classifyError(
+      new Error(`Failed to fetch result for fal request r1: ${cause.message}`, { cause }),
+    );
+    expect(info).toMatchObject({ code: "RATE_LIMITED", http_status: 429, retry_after_s: 3 });
+    expect(info.message).toMatch(/^Failed to fetch result for fal request r1: HTTP 429/);
+    // Only multix errors are followed: a fetch TypeError's low-level cause is not.
+    const network = new TypeError("fetch failed", { cause: new Error("bad request body") });
+    expect(classifyError(network).code).toBe(classifyMessage("fetch failed").code);
+  });
+
   it("redacts URL query strings in the message it hands to the envelope and ledger", () => {
     const info = classifyError(
       new ProviderError(
