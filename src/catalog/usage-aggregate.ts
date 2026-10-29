@@ -128,7 +128,11 @@ function operationOutcomes(list: HistoryEntry[]): Map<string, Outcome> {
       // operation id that returned another job can still complete the operation.
       const failed = new Set(failures.flatMap(jobIdsOf));
       const otherJobOk = ops.some(
-        (e) => e.ok && failed.size > 0 && e.job !== undefined && !failed.has(e.job.id),
+        (e) =>
+          e.ok &&
+          failed.size > 0 &&
+          e.job !== undefined &&
+          jobIdsOf(e).every((j) => !failed.has(j)),
       );
       outcomes.set(id, otherJobOk ? "completed" : "failed");
     } else if (ops.some((e) => e.ok)) outcomes.set(id, "completed");

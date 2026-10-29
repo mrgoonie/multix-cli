@@ -161,6 +161,24 @@ describe("classifyError", () => {
     expect(classifyError(e)).toMatchObject({ code: "PROVIDER_UNAVAILABLE", http_status: 503 });
   });
 
+  it("reports a logged job failure as JOB_FAILED whatever reason its payload names", () => {
+    // BytePlus, OpenRouter and Leonardo log the failed payload instead of throwing.
+    for (const line of [
+      'Task failed: {"status":"failed","error":{"message":"content moderation flagged"}}',
+      'Job failed: {"status":"failed","error":"insufficient credits"}',
+      'Generation failed: {"status":"FAILED","reason":"Internal timeout"}',
+    ]) {
+      expect(classifyMessage(line).code, line).toBe("JOB_FAILED");
+    }
+  });
+
+  it("classifies a long id-like run in linear time", () => {
+    const started = Date.now();
+    classifyMessage(`task ${"1".repeat(100_000)}`);
+    classifyMessage(`Task failed: job ${"a1".repeat(50_000)}`);
+    expect(Date.now() - started).toBeLessThan(500);
+  });
+
   it("does not report a logged canceled job as a failed one", () => {
     expect(classifyMessage('Task failed: {"id":"cgt-1","status":"cancelled"}').code).not.toBe(
       "JOB_FAILED",

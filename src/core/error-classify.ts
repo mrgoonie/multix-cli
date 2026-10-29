@@ -163,6 +163,13 @@ const TEXT_RULES: Array<[RegExp, ErrorCode]> = [
     "INVALID_KEY",
   ],
   [
+    // A logged job failure is the provider's verdict, whatever reason its payload names
+    // (moderation, quota, an internal timeout). An id between noun and verb must hold a
+    // digit, so "task polling failed" is not one; a payload whose status is canceled is not.
+    /^(?!.*"status"\s*:\s*"(?:cancell?ed|aborted)")(?:.*\b(task|job|prediction|generation|interaction) (?:(?=[\w.:-]*\d)[\w.:-]+ )?(failed|was canceled|errored)|.*status:? ?"?failed)/is,
+    "JOB_FAILED",
+  ],
+  [
     /(safety|content policy|moderation|blocked|nsfw|prohibited|sensitive content|responsible ai|flagged)/i,
     "CONTENT_BLOCKED",
   ],
@@ -175,12 +182,6 @@ const TEXT_RULES: Array<[RegExp, ErrorCode]> = [
   [
     /(model).{0,40}(not found|does not exist|unknown|not supported|invalid)|(unknown|invalid) model/i,
     "MODEL_NOT_FOUND",
-  ],
-  [
-    // An id between noun and verb must hold a digit, so "task polling failed" is not a job failure.
-    // A logged failure whose payload says the job was canceled is not a failed job.
-    /^(?!.*"status"\s*:\s*"(?:cancell?ed|aborted)")(?:.*\b(task|job|prediction|generation|interaction) (?:[\w.:-]*\d[\w.:-]* )?(failed|was canceled|errored)|.*status:? ?"?failed)/is,
-    "JOB_FAILED",
   ],
   [/(ENOENT|no such file|file not found|does not exist)/i, "NOT_FOUND"],
   [
