@@ -6,6 +6,7 @@
 
 import path from "node:path";
 import type { Command } from "commander";
+import { nameJob } from "../../../agent/run-state.js";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import { maybeDownloadThumb } from "../../../core/video-thumb.js";
@@ -38,6 +39,8 @@ export function registerBytePlusStatusCommand(parent: Command): void {
       ) => {
         const logger = createLogger({ verbose: opts.verbose ?? false });
         const client = createBytePlusClient();
+        // Name the job read here, so a failed read still joins its operation.
+        nameJob(taskId);
         const shouldWait = !!(opts.wait || opts.download);
 
         try {

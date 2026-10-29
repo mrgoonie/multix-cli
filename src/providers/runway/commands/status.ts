@@ -11,6 +11,7 @@
  */
 
 import type { Command } from "commander";
+import { nameJob } from "../../../agent/run-state.js";
 import { createLogger } from "../../../core/logger.js";
 import { RunwayTaskError } from "../client.js";
 import { assertTaskId, isTerminalStatus } from "../models.js";
@@ -43,6 +44,8 @@ export function registerRunwayStatusCommand(parent: Command): void {
     .action(async (taskId: string, opts: StatusOpts) => {
       const logger = createLogger({ verbose: opts.verbose ?? false, stderr: true });
       const id = assertTaskId(taskId);
+      // Name the job read here, so a failed read still joins its operation.
+      nameJob(id);
       const waitTimeoutMs = parsePositiveInt(opts.waitTimeout, "--wait-timeout");
       const client = createRunwayClient();
 

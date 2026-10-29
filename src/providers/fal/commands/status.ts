@@ -3,6 +3,7 @@
  */
 
 import type { Command } from "commander";
+import { nameJob } from "../../../agent/run-state.js";
 import { createLogger } from "../../../core/logger.js";
 import { createFalClient, statusPath } from "../client.js";
 import type { FalStatusResponse } from "../types.js";
@@ -15,6 +16,8 @@ export function registerFalStatusCommand(parent: Command): void {
     .action(async (model: string, requestId: string, opts: { verbose?: boolean }) => {
       const logger = createLogger({ verbose: opts.verbose ?? false, stderr: true });
       const client = createFalClient();
+      // Name the job read here, so a failed read still joins its operation.
+      nameJob(requestId);
       const res = await client.get<FalStatusResponse>(statusPath(model, requestId), logger);
       console.log(JSON.stringify(res, null, 2));
     });
