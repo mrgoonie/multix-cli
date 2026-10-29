@@ -5,15 +5,23 @@
  * project. Files are written atomically with mode 0600 under a lock file, so
  * concurrent commands do not lose each other's records. Every record is
  * validated and scrubbed (src/catalog/reviews.ts) when stored and again when
- * read back, since a project store arrives with the repository.
+ * read back, since a project store arrives with the repository. For the same
+ * reason a project review counts as tied to a run only when this machine's run
+ * ledger holds that run and no other review references it, and a store file
+ * over MAX_STORE_BYTES or LIMITS.records is read only in part. Saves never
+ * take a store over those caps; removals still work on a store that is over
+ * them, so it can be trimmed back under.
  */
 
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { type HistoryEntry, readHistory } from "../../agent/history-store.js";
 import type { Review, ReviewScope, UseCaseNote } from "../../catalog/catalog-types.js";
-import { LIMITS, loadNote, loadReview } from "../../catalog/reviews.js";
+import { LIMITS, type RunCheck, checkRuns, loadNote, loadReview } from "../../catalog/reviews.js";
+import { resolvedModel } from "../../catalog/usage-aggregate.js";
 import { ValidationError } from "../../core/errors.js";
+import { defaultLogger } from "../../core/logger.js";
 
 export const STORE_SCHEMA = "multix.catalog-notes/v1";
 
@@ -52,13 +60,77 @@ function refuseProjectLink(scope: ReviewScope, file: string): void {
   }
 }
 
-export function readStore(scope: ReviewScope): CatalogStore {
+/**
+ * Run check against this machine's run ledger: the run must exist with the
+ * recorded time and have completed a real request of the offering, as
+ * `--job` requires when a review is saved. The ledger is read and indexed
+ * once, on first use.
+ */
+export function ledgerRunCheck(): RunCheck {
+  let byId: Map<string, HistoryEntry> | undefined;
+  return (usage, offering) => {
+    byId ??= new Map(readHistory().map((e) => [e.id, e]));
+    const e = byId.get(usage.history_id);
+    if (!e || e.ts !== usage.ts || !e.ok || e.dry_run || e.estimate_only) return false;
+    const model = resolvedModel(e);
+    return model !== undefined && `${e.provider}:${model}` === offering;
+  };
+}
+
+/** Largest store file read; a project store arrives with the repository and is read on every catalog command. */
+export const MAX_STORE_BYTES = 8 * 1024 * 1024;
+
+/** Largest store file read to remove records from it; past this, moving the file is the only fix. */
+const MAX_TRIM_BYTES = 8 * MAX_STORE_BYTES;
+
+/** What a warning about a store over a cap tells the user to do. */
+const TRIM_HINT =
+  "remove records with `multix catalog reviews rm <id>` or `multix catalog note rm <id>` (the ids are in the file), or move the file";
+
+/**
+ * How a store is read:
+ * - `checked`: for use; run references are checked (`checkRuns`), and a file
+ *   over the caps is skipped (or cut to the record limit) with a warning.
+ * - `unchecked`: as `checked`, but run references are kept as stored, for a
+ *   caller that checks the reviews of several stores together.
+ * - `write`: for a read-modify-write; run references are kept as stored (they
+ *   may be a teammate's runs) and a file over the caps is refused, since
+ *   writing it back would lose records.
+ * - `trim`: for finding and removing records; run references are kept as
+ *   stored and the caps do not apply (up to MAX_TRIM_BYTES), so a store over
+ *   them can be trimmed back under.
+ */
+export type ReadMode = "checked" | "unchecked" | "write" | "trim";
+
+/** Fail a write, or warn and go on with what fits, when a store is over a cap. */
+function overCap(mode: ReadMode, message: string): void {
+  if (mode === "write") {
+    throw new ValidationError(`${message}; ${TRIM_HINT} before saving to it.`);
+  }
+  defaultLogger.warn(`${message}; ${TRIM_HINT}.`);
+}
+
+export function readStore(scope: ReviewScope, mode: ReadMode = "checked"): CatalogStore {
   const file = storeFile(scope);
   refuseProjectLink(scope, file);
   let text: string;
   try {
+    const bytes = fs.statSync(file).size;
+    if (mode === "trim" && bytes > MAX_TRIM_BYTES) {
+      throw new ValidationError(
+        `${file} is ${bytes} bytes, too large to edit (over ${MAX_TRIM_BYTES}); move it first.`,
+      );
+    }
+    if (mode !== "trim" && bytes > MAX_STORE_BYTES) {
+      overCap(
+        mode,
+        `${file} is ${bytes} bytes, over the ${MAX_STORE_BYTES} a catalog store may hold; its records are skipped`,
+      );
+      return empty();
+    }
     text = fs.readFileSync(file, "utf8");
-  } catch {
+  } catch (error) {
+    if (error instanceof ValidationError) throw error;
     return empty();
   }
   let data: Partial<Record<keyof CatalogStore, unknown>>;
@@ -67,12 +139,21 @@ export function readStore(scope: ReviewScope): CatalogStore {
   } catch {
     throw new ValidationError(`${file} is not valid JSON; fix or move it first.`);
   }
-  const each = <T>(v: unknown, load: (raw: unknown, scope: ReviewScope) => T | undefined) =>
-    (Array.isArray(v) ? v : []).map((raw) => load(raw, scope)).filter((r): r is T => !!r);
+  let rawReviews = Array.isArray(data?.reviews) ? (data.reviews as unknown[]) : [];
+  let rawNotes = Array.isArray(data?.notes) ? (data.notes as unknown[]) : [];
+  if (mode !== "trim" && rawReviews.length + rawNotes.length > LIMITS.records) {
+    overCap(
+      mode,
+      `${file} holds ${rawReviews.length + rawNotes.length} records, over the ${LIMITS.records} a catalog store may hold; the rest are skipped`,
+    );
+    rawReviews = rawReviews.slice(0, LIMITS.records);
+    rawNotes = rawNotes.slice(0, LIMITS.records - rawReviews.length);
+  }
+  const reviews = rawReviews.map((raw) => loadReview(raw, scope)).filter((r) => !!r);
   return {
     schema: STORE_SCHEMA,
-    reviews: each(data?.reviews, loadReview),
-    notes: each(data?.notes, loadNote),
+    reviews: mode === "checked" ? checkRuns(reviews, ledgerRunCheck()) : reviews,
+    notes: rawNotes.map((raw) => loadNote(raw, scope)).filter((n) => !!n),
   };
 }
 
@@ -112,23 +193,46 @@ export function withStoreLock<T>(scope: ReviewScope, fn: () => T): T {
   }
 }
 
-export function writeStore(scope: ReviewScope, store: CatalogStore): void {
-  if (store.reviews.length + store.notes.length > LIMITS.records) {
+/**
+ * Write a store atomically. A save that would take it over a read cap is
+ * refused, so a saved record is never skipped on the next read. `trimming`
+ * (a removal, which only shrinks the store) skips the caps, so a store that
+ * is already over them can still be trimmed.
+ */
+export function writeStore(scope: ReviewScope, store: CatalogStore, trimming = false): void {
+  if (!trimming && store.reviews.length + store.notes.length > LIMITS.records) {
     throw new ValidationError(`The ${scope} store holds at most ${LIMITS.records} records.`);
+  }
+  const json = `${JSON.stringify(store, null, 2)}\n`;
+  const bytes = Buffer.byteLength(json);
+  if (!trimming && bytes > MAX_STORE_BYTES) {
+    throw new ValidationError(
+      `The ${scope} store would be ${bytes} bytes, over the ${MAX_STORE_BYTES} a catalog store may hold; remove records before saving more.`,
+    );
   }
   const file = storeFile(scope);
   refuseProjectLink(scope, file);
   fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   const tmp = `${file}.${process.pid}.tmp`;
-  fs.writeFileSync(tmp, `${JSON.stringify(store, null, 2)}\n`, { mode: 0o600 });
+  fs.writeFileSync(tmp, json, { mode: 0o600 });
   fs.renameSync(tmp, file);
 }
 
-/** Records of both scopes (project first missing is fine). */
+/**
+ * Records of both scopes (project first missing is fine). Run references are
+ * checked across both, so one run backs at most one review in either store.
+ */
 export function readAll(): CatalogStore {
+  const out = unchecked();
+  out.reviews = checkRuns(out.reviews, ledgerRunCheck());
+  return out;
+}
+
+/** Records of both scopes with run references as stored. */
+function unchecked(): CatalogStore {
   const out = empty();
   for (const scope of ["private", "project"] as const) {
-    const s = readStore(scope);
+    const s = readStore(scope, "unchecked");
     out.reviews.push(...s.reviews);
     out.notes.push(...s.notes);
   }
@@ -149,14 +253,15 @@ export function upsertReview(
   now = new Date(),
 ): Review {
   return withStoreLock(fields.scope, () => {
-    const store = readStore(fields.scope);
+    const store = readStore(fields.scope, "write");
     const at = now.toISOString();
     const i = store.reviews.findIndex(
       (r) => r.offering === fields.offering && (r.use_case ?? "") === (fields.use_case ?? ""),
     );
     const prev = i >= 0 ? store.reviews[i] : undefined;
+    if (fields.verified_usage) refuseSharedRun(fields.verified_usage.history_id, prev);
     const review: Review = {
-      ...prev,
+      ...carriedOver(prev),
       ...fields,
       id: prev?.id ?? newRecordId("r", now.getTime()),
       created_at: prev?.created_at ?? at,
@@ -167,6 +272,37 @@ export function upsertReview(
     writeStore(fields.scope, store);
     return review;
   });
+}
+
+/**
+ * A run backs one review: a second review referencing it reads as unverified
+ * for both, so saving one is refused instead of storing a claim that never
+ * counts. The review being updated (`prev`) does not count.
+ */
+function refuseSharedRun(historyId: string, prev: Review | undefined): void {
+  const holder = unchecked().reviews.find(
+    (r) =>
+      r.verified_usage?.history_id === historyId && !(r.id === prev?.id && r.scope === prev.scope),
+  );
+  if (holder) {
+    throw new ValidationError(
+      `Run ${historyId} already backs ${holder.scope} review ${holder.id}; a run can back one review.`,
+    );
+  }
+}
+
+/**
+ * The stored review an update starts from. A project review keeps its run
+ * only when the run is in this machine's ledger, so editing someone else's
+ * review does not pass their run off as backing the new text. Whether other
+ * reviews reference the same run does not matter here: the owner's own edit
+ * keeps the real run even while a copied reference makes it read unverified.
+ */
+function carriedOver(prev: Review | undefined): Partial<Review> | undefined {
+  if (!prev?.verified_usage || prev.scope !== "project") return prev;
+  if (ledgerRunCheck()(prev.verified_usage, prev.offering)) return prev;
+  const { verified_usage: _unchecked, ...rest } = prev;
+  return rest;
 }
 
 /** Throws when an offering and use case already hold the most notes allowed (`except` aside). */
@@ -186,7 +322,7 @@ export function addNote(
   now = new Date(),
 ): UseCaseNote {
   return withStoreLock(fields.scope, () => {
-    const store = readStore(fields.scope);
+    const store = readStore(fields.scope, "write");
     checkNoteLimit(store, fields.offering, fields.use_case);
     const at = now.toISOString();
     const note: UseCaseNote = {
@@ -201,34 +337,38 @@ export function addNote(
   });
 }
 
-/** Find a record by id in either scope. */
+/** Find a record by id in either scope, including a store over the caps. */
 export function locate(
   kind: "reviews" | "notes",
   id: string,
 ): { scope: ReviewScope; store: CatalogStore; index: number } {
   for (const scope of ["private", "project"] as const) {
-    const store = readStore(scope);
+    const store = readStore(scope, "trim");
     const index = (store[kind] as Array<{ id: string }>).findIndex((r) => r.id === id);
     if (index >= 0) return { scope, store, index };
   }
   throw new ValidationError(`No ${kind === "reviews" ? "review" : "note"} with id ${id}.`);
 }
 
-/** Change a located record under its scope's lock, re-reading the file first. */
+/**
+ * Change a located record under its scope's lock, re-reading the file first.
+ * `trimming` is for a removal, which may run on a store over the caps.
+ */
 function updateLocated<T>(
   kind: "reviews" | "notes",
   id: string,
   fn: (store: CatalogStore, index: number, scope: ReviewScope) => T,
+  trimming = false,
 ): T {
   const { scope } = locate(kind, id);
   return withStoreLock(scope, () => {
-    const store = readStore(scope);
+    const store = readStore(scope, trimming ? "trim" : "write");
     const index = (store[kind] as Array<{ id: string }>).findIndex((r) => r.id === id);
     if (index < 0) {
       throw new ValidationError(`No ${kind === "reviews" ? "review" : "note"} with id ${id}.`);
     }
     const out = fn(store, index, scope);
-    writeStore(scope, store);
+    writeStore(scope, store, trimming);
     return out;
   });
 }
@@ -254,8 +394,13 @@ export function replaceNote(
 }
 
 export function removeRecord(kind: "reviews" | "notes", id: string): ReviewScope {
-  return updateLocated(kind, id, (store, index, scope) => {
-    store[kind].splice(index, 1);
-    return scope;
-  });
+  return updateLocated(
+    kind,
+    id,
+    (store, index, scope) => {
+      store[kind].splice(index, 1);
+      return scope;
+    },
+    true,
+  );
 }

@@ -7,10 +7,11 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { UseCaseNote } from "../../../src/catalog/catalog-types.js";
 import { LIMITS, cleanNote, cleanReview } from "../../../src/catalog/reviews.js";
 import {
+  MAX_STORE_BYTES,
   STORE_SCHEMA,
   addNote,
   locate,
@@ -346,4 +347,283 @@ describe("records read back from a store file", () => {
       ),
     ).toThrow(ValidationError);
   });
+});
+
+describe("project reviews tied to a run", () => {
+  const stamp = { created_at: "2026-10-27T10:00:00.000Z", updated_at: "2026-10-27T10:00:00.000Z" };
+  const run = { history_id: "h_real1", ts: "2026-10-27T09:00:00.000Z" };
+  const ledgerEntry = {
+    v: 1,
+    id: run.history_id,
+    ts: run.ts,
+    duration_ms: 4000,
+    cwd: "/x",
+    version: "0.0.0",
+    command: "fal video",
+    provider: "fal",
+    model_resolved: "bytedance/seedance-2.5/text-to-video",
+    argv: ["fal", "video"],
+    ok: true,
+    exit_code: 0,
+  };
+  const forged = {
+    id: "r_forged1",
+    offering: OFFERING,
+    use_case: "ads",
+    score: 5,
+    verified_usage: { history_id: "h_doesnotexist", ts: run.ts },
+    ...stamp,
+  };
+  const genuine = { id: "r_genuine1", offering: OFFERING, score: 4, verified_usage: run, ...stamp };
+
+  let cwd: string;
+  let projectFile: string;
+  let previousHistory: string | undefined;
+
+  beforeEach(() => {
+    cwd = process.cwd();
+    const project = fs.mkdtempSync(path.join(dir, "repo-"));
+    fs.mkdirSync(path.join(project, ".multix"));
+    projectFile = path.join(project, ".multix", "catalog-notes.json");
+    previousHistory = process.env.MULTIX_HISTORY_FILE;
+    process.env.MULTIX_HISTORY_FILE = path.join(dir, "history.jsonl");
+    fs.writeFileSync(process.env.MULTIX_HISTORY_FILE, `${JSON.stringify(ledgerEntry)}\n`);
+    process.chdir(project);
+  });
+
+  afterEach(() => {
+    process.chdir(cwd);
+    if (previousHistory === undefined) Reflect.deleteProperty(process.env, "MULTIX_HISTORY_FILE");
+    else process.env.MULTIX_HISTORY_FILE = previousHistory;
+  });
+
+  const writeProject = (...reviews: unknown[]) =>
+    fs.writeFileSync(projectFile, JSON.stringify({ reviews, notes: [] }));
+
+  it("reads a run that is not in this machine's ledger as unverified", () => {
+    writeProject(forged, genuine);
+    const reviews = readAll().reviews;
+    expect(reviews.find((r) => r.id === "r_forged1")?.verified_usage).toBeUndefined();
+    expect(reviews.find((r) => r.id === "r_genuine1")?.verified_usage).toEqual(run);
+  });
+
+  it("verifies neither review when a copy of the run is placed before the real one", () => {
+    writeProject({ ...genuine, id: "r_copy1", use_case: "ads" }, genuine);
+    const reviews = readAll().reviews;
+    expect(reviews.find((r) => r.id === "r_copy1")?.verified_usage).toBeUndefined();
+    expect(reviews.find((r) => r.id === "r_genuine1")?.verified_usage).toBeUndefined();
+  });
+
+  it("does not let a malformed record that is dropped claim the run", () => {
+    writeProject({ ...genuine, id: "r_bad1", use_case: "ads", score: 99 }, genuine);
+    const reviews = readAll().reviews;
+    expect(reviews.map((r) => r.id)).toEqual(["r_genuine1"]);
+    expect(reviews[0]?.verified_usage).toEqual(run);
+  });
+
+  it("keeps the owner's run in the file when the owner edits the review a copy shadows", () => {
+    writeProject({ ...genuine, id: "r_copy1", use_case: "ads" }, genuine);
+    const edited = upsertReview(
+      cleanReview({ offering: OFFERING, scope: "project", text: "Still good" }),
+      T2,
+    );
+    expect(edited).toMatchObject({ id: "r_genuine1", verified_usage: run });
+    const saved = JSON.parse(fs.readFileSync(projectFile, "utf8")).reviews;
+    expect(saved.find((r: { id: string }) => r.id === "r_genuine1").verified_usage).toEqual(run);
+  });
+
+  it("verifies neither review when a private and a project review share a run", () => {
+    writeProject(genuine);
+    fs.writeFileSync(file, JSON.stringify({ reviews: [{ ...genuine, id: "r_mine1" }], notes: [] }));
+    expect(readAll().reviews.map((r) => r.verified_usage)).toEqual([undefined, undefined]);
+  });
+
+  it("refuses to save a review with a run that already backs another review", () => {
+    writeProject(genuine);
+    const fields = cleanReview({
+      offering: OFFERING,
+      scope: "private",
+      use_case: "ads",
+      score: 4,
+      verified_usage: run,
+    });
+    expect(() => upsertReview(fields, T2)).toThrow(
+      new ValidationError(
+        "Run h_real1 already backs project review r_genuine1; a run can back one review.",
+      ),
+    );
+    expect(fs.existsSync(file)).toBe(false);
+  });
+
+  it("lets the review that holds a run be saved again with it", () => {
+    writeProject(genuine);
+    const fields = cleanReview({
+      offering: OFFERING,
+      scope: "project",
+      score: 5,
+      verified_usage: run,
+    });
+    expect(upsertReview(fields, T2)).toMatchObject({ id: "r_genuine1", verified_usage: run });
+  });
+
+  it("does not verify a ledger run of another offering, a failed run or another time", () => {
+    for (const entry of [
+      { ...ledgerEntry, model_resolved: "other/model" },
+      { ...ledgerEntry, ok: false },
+      { ...ledgerEntry, dry_run: true },
+      { ...ledgerEntry, ts: "2026-10-27T09:30:00.000Z" },
+    ]) {
+      fs.writeFileSync(process.env.MULTIX_HISTORY_FILE as string, `${JSON.stringify(entry)}\n`);
+      writeProject(genuine);
+      expect(readStore("project").reviews[0]?.verified_usage).toBeUndefined();
+    }
+  });
+
+  it("keeps a teammate's run reference in the file when another record is written", () => {
+    writeProject(forged);
+    upsertReview(cleanReview({ offering: OFFERING, scope: "project", score: 3 }), T2);
+    const saved = JSON.parse(fs.readFileSync(projectFile, "utf8")).reviews;
+    expect(saved.find((r: { id: string }) => r.id === "r_forged1").verified_usage).toEqual(
+      forged.verified_usage,
+    );
+  });
+
+  it("drops an unconfirmed run when the review it backs is edited here", () => {
+    writeProject(forged);
+    const edited = upsertReview(
+      cleanReview({ offering: OFFERING, scope: "project", use_case: "ads", text: "Changed" }),
+      T2,
+    );
+    expect(edited).toMatchObject({ id: "r_forged1", score: 5, text: "Changed" });
+    expect(edited.verified_usage).toBeUndefined();
+  });
+
+  it("keeps a confirmed run when the review it backs is edited here", () => {
+    writeProject(genuine);
+    const edited = upsertReview(
+      cleanReview({ offering: OFFERING, scope: "project", text: "Still good" }),
+      T2,
+    );
+    expect(edited.verified_usage).toEqual(run);
+  });
+});
+
+describe("store size caps", () => {
+  const stamp = { created_at: "2026-10-27T10:00:00.000Z", updated_at: "2026-10-27T10:00:00.000Z" };
+  const note = (i: number) => ({
+    id: `n_${i}`,
+    offering: OFFERING,
+    use_case: "ugc",
+    verdict: "mixed",
+    ...stamp,
+  });
+  let warn: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    warn.mockRestore();
+  });
+
+  it("skips a store file over the size cap with a warning, and refuses to write to it", () => {
+    fs.writeFileSync(
+      file,
+      JSON.stringify({ reviews: [], notes: [note(1)], pad: "x".repeat(MAX_STORE_BYTES) }),
+    );
+    expect(readStore("private").notes).toEqual([]);
+    expect(String(warn.mock.calls[0]?.[0])).toMatch(/its records are skipped/);
+    expect(() => addNote(noteFields(), T1)).toThrow(/catalog reviews rm <id>.*before saving/);
+  });
+
+  /** A note of the largest size a save allows, all of the same serialized length. */
+  const bigNote = (i: number) => ({
+    ...cleanNote({
+      offering: OFFERING,
+      use_case: `uc-${String(i).padStart(6, "0")}`,
+      verdict: "recommended",
+      scope: "private",
+      text: "Calm motion, clean faces. ".repeat(76),
+      strengths: Array.from({ length: LIMITS.items }, () => "Steady camera work. ".repeat(10)),
+      weaknesses: Array.from({ length: LIMITS.items }, () => "Slow first frames. ".repeat(10)),
+    }),
+    id: `n_${String(i).padStart(12, "0")}`,
+    ...stamp,
+  });
+  const sized = (notes: unknown[]) =>
+    Buffer.byteLength(`${JSON.stringify({ schema: STORE_SCHEMA, reviews: [], notes }, null, 2)}\n`);
+  /** Big notes in the largest number that still fits under the size cap. */
+  const fullNotes = () => {
+    const one = sized([bigNote(0)]);
+    const n = 1 + Math.floor((MAX_STORE_BYTES - one) / (sized([bigNote(0), bigNote(1)]) - one));
+    return Array.from({ length: n }, (_, i) => bigNote(i));
+  };
+
+  it("refuses a save that would take the store over the size cap, and the store stays readable", () => {
+    const notes = fullNotes();
+    expect(sized(notes)).toBeLessThanOrEqual(MAX_STORE_BYTES);
+    expect(sized([...notes, bigNote(notes.length)])).toBeGreaterThan(MAX_STORE_BYTES);
+    writeStore("private", { schema: STORE_SCHEMA, reviews: [], notes: notes as UseCaseNote[] });
+
+    const next = { ...bigNote(999_999) } as Partial<UseCaseNote>;
+    for (const k of ["id", "created_at", "updated_at"] as const) delete next[k];
+    expect(() => addNote(next as Parameters<typeof addNote>[0], T1)).toThrow(
+      /would be \d+ bytes, over the 8388608 .*remove records before saving more/,
+    );
+    expect(() =>
+      writeStore("private", {
+        schema: STORE_SCHEMA,
+        reviews: [],
+        notes: [...notes, bigNote(notes.length)] as UseCaseNote[],
+      }),
+    ).toThrow(ValidationError);
+    expect(readStore("private").notes).toHaveLength(notes.length);
+    expect(warn).not.toHaveBeenCalled();
+  }, 30_000);
+
+  it("removes records from a store over the size cap until it is read again", () => {
+    const notes = [...fullNotes()];
+    notes.push(bigNote(notes.length));
+    const review = { ...ratingFields(4), id: "r_over", ...stamp };
+    fs.writeFileSync(
+      file,
+      `${JSON.stringify({ schema: STORE_SCHEMA, reviews: [review], notes }, null, 2)}\n`,
+    );
+    expect(fs.statSync(file).size).toBeGreaterThan(MAX_STORE_BYTES);
+    expect(readStore("private").reviews).toEqual([]);
+    expect(String(warn.mock.calls[0]?.[0])).toMatch(
+      /its records are skipped; remove records with `multix catalog reviews rm <id>` or `multix catalog note rm <id>`/,
+    );
+    expect(() =>
+      replaceNote(notes[0]?.id as string, noteFields(notes[0]?.use_case as string), T2),
+    ).toThrow(/before saving/);
+
+    expect(removeRecord("reviews", "r_over")).toBe("private");
+    expect(fs.statSync(file).size).toBeGreaterThan(MAX_STORE_BYTES);
+    expect(removeRecord("notes", notes[0]?.id as string)).toBe("private");
+    expect(fs.statSync(file).size).toBeLessThanOrEqual(MAX_STORE_BYTES);
+    warn.mockClear();
+    const store = readStore("private");
+    expect(store.reviews).toEqual([]);
+    expect(store.notes).toHaveLength(notes.length - 1);
+    expect(warn).not.toHaveBeenCalled();
+  }, 30_000);
+
+  it("reads only the records up to the record cap, with a warning, and refuses to write", () => {
+    const notes = Array.from({ length: LIMITS.records + 3 }, (_, i) => note(i));
+    fs.writeFileSync(file, JSON.stringify({ reviews: [], notes }));
+    expect(readStore("private").notes).toHaveLength(LIMITS.records);
+    expect(String(warn.mock.calls[0]?.[0])).toMatch(/the rest are skipped/);
+    expect(() => addNote(noteFields("ads"), T1)).toThrow(ValidationError);
+  });
+
+  it("removes records from a store over the record cap until it is read in full", () => {
+    const notes = Array.from({ length: LIMITS.records + 1 }, (_, i) => note(i));
+    fs.writeFileSync(file, JSON.stringify({ reviews: [], notes }));
+    expect(removeRecord("notes", `n_${LIMITS.records}`)).toBe("private");
+    warn.mockClear();
+    expect(readStore("private").notes).toHaveLength(LIMITS.records);
+    expect(warn).not.toHaveBeenCalled();
+  }, 30_000);
 });
