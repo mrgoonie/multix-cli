@@ -9,12 +9,12 @@ import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import { outputStamp } from "../../../core/output-name.js";
 import { maybeDownloadThumb } from "../../../core/video-thumb.js";
-import { PollFailedError, PollTimeoutError } from "../../leonardo/poll.js";
 import { createBytePlusClient } from "../client.js";
 import {
   buildVideoTaskBody,
   downloadVideo,
   submitVideoTask,
+  toTaskWaitError,
   waitForVideoTask,
 } from "../generators/video.js";
 import { BYTEPLUS_DEFAULTS } from "../models.js";
@@ -123,15 +123,7 @@ export function registerBytePlusImageToVideoCommand(parent: Command): void {
           console.log(`\nTask: ${taskId}`);
           console.log(`Saved: ${outPath}`);
         } catch (e) {
-          if (e instanceof PollTimeoutError) {
-            logger.error(`Timed out — multix byteplus status ${taskId}`);
-            process.exit(1);
-          }
-          if (e instanceof PollFailedError) {
-            logger.error(`Task failed: ${JSON.stringify(e.value)}`);
-            process.exit(1);
-          }
-          throw e;
+          throw toTaskWaitError(e, taskId, `multix byteplus status ${taskId} --wait --download`);
         }
       },
     );

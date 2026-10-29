@@ -12,7 +12,7 @@
 import { downloadFile } from "../../../core/http-client.js";
 import { type ResolvedImage, refUrl } from "../../../core/image-input.js";
 import type { Logger } from "../../../core/logger.js";
-import { poll } from "../../leonardo/poll.js";
+import { failureReason, poll, toPollJobError } from "../../leonardo/poll.js";
 import type { BytePlusClient } from "../client.js";
 import { BYTEPLUS_DEFAULTS, type VideoParamsMode, bytePlusVideoParamsMode } from "../models.js";
 import type {
@@ -137,6 +137,28 @@ export async function waitForVideoTask(
     intervalMs,
     maxAttempts,
     onTick: (attempt, v) => opts.logger?.debug(`attempt ${attempt} — status: ${v.status}`),
+  });
+}
+
+/**
+ * Map a failed or timed-out BytePlus task wait (video or 3D) onto the CLI
+ * errors. Only a "failed" status is the provider failing the job; a
+ * "cancelled" task is reported as a non-terminal job failure.
+ */
+export function toTaskWaitError(error: unknown, taskId: string, resumeCommand: string): unknown {
+  return toPollJobError(error, {
+    provider: "byteplus",
+    noun: "Task",
+    id: taskId,
+    resumeCommand,
+    describe: (value) => {
+      const task = (value ?? {}) as { status?: unknown; error?: unknown };
+      return {
+        status: task.status,
+        reason: failureReason(task.error),
+        terminal: task.status === "failed",
+      };
+    },
   });
 }
 

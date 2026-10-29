@@ -9,7 +9,7 @@
  */
 
 import { extractUsage, hasUsage } from "../core/usage-extract.js";
-import { run } from "./run-state.js";
+import { namesJob, run } from "./run-state.js";
 
 const MAX_JSON_BYTES = 2_000_000;
 /** Tail of an oversized JSON body searched for its trailing usage block. */
@@ -301,8 +301,16 @@ async function recordUsage(
     }
   }
   const usage = extractUsage(body, response.headers);
+  // A submit's id is kept past the cap once, so uploads before it never hide the job.
+  let jobPastCap =
+    namesJob(run.calls[callIndex], true) &&
+    !run.ids.some((id) => namesJob(run.calls[run.idCalls.get(id) ?? -1], true));
   for (const id of usage.ids) {
-    if (run.ids.includes(id) || run.ids.length >= 10) continue;
+    if (run.ids.includes(id)) continue;
+    if (run.ids.length >= 10) {
+      if (!jobPastCap) continue;
+      jobPastCap = false;
+    }
     run.ids.push(id);
     run.idCalls.set(id, callIndex);
   }

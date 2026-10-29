@@ -6,13 +6,18 @@
 
 import path from "node:path";
 import type { Command } from "commander";
+import { nameJob } from "../../../agent/run-state.js";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import { maybeDownloadThumb } from "../../../core/video-thumb.js";
-import { PollFailedError, PollTimeoutError } from "../../leonardo/poll.js";
 import { createBytePlusClient } from "../client.js";
 import { downloadModelFile, inferModelFileExt } from "../generators/three-d.js";
-import { downloadVideo, getVideoTaskStatus, waitForVideoTask } from "../generators/video.js";
+import {
+  downloadVideo,
+  getVideoTaskStatus,
+  toTaskWaitError,
+  waitForVideoTask,
+} from "../generators/video.js";
 
 export function registerBytePlusStatusCommand(parent: Command): void {
   parent
@@ -38,6 +43,8 @@ export function registerBytePlusStatusCommand(parent: Command): void {
       ) => {
         const logger = createLogger({ verbose: opts.verbose ?? false });
         const client = createBytePlusClient();
+        // Name the job read here, so a failed read still joins its operation.
+        nameJob(taskId);
         const shouldWait = !!(opts.wait || opts.download);
 
         try {
@@ -78,15 +85,11 @@ export function registerBytePlusStatusCommand(parent: Command): void {
             }
           }
         } catch (e) {
-          if (e instanceof PollTimeoutError) {
-            logger.error(`Timed out waiting for task ${taskId}`);
-            process.exit(1);
-          }
-          if (e instanceof PollFailedError) {
-            logger.error(`Task failed: ${JSON.stringify(e.value)}`);
-            process.exit(1);
-          }
-          throw e;
+          throw toTaskWaitError(
+            e,
+            taskId,
+            `multix byteplus status ${taskId} --wait${opts.download ? " --download" : ""}`,
+          );
         }
       },
     );

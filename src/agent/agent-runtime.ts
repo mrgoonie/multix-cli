@@ -156,6 +156,19 @@ function withoutCostLimit(argv: string[]): string[] {
   return out;
 }
 
+/** argv with each option replaced by its new value, or dropped when the value is null. */
+export function withOptions(argv: string[], options: Record<string, string | null>): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i] ?? "";
+    const name = arg.split("=")[0] ?? "";
+    if (!Object.hasOwn(options, name)) out.push(arg);
+    else if (!arg.includes("=")) i++;
+  }
+  for (const [name, value] of Object.entries(options)) if (value !== null) out.push(name, value);
+  return out;
+}
+
 function captureStreams(): void {
   process.stdout.write = ((chunk: unknown, ...rest: unknown[]) => {
     if (run.json) {
@@ -262,9 +275,12 @@ export function finalizeRun(input: FinalizeInput): number {
 
   const warnings: OutputWarning[] = [];
   const extra = typeof run.options.output === "string" ? [run.options.output] : [];
+  const outputDirs = [run.options.outputDir, run.options.outDir].filter(
+    (dir): dir is string => typeof dir === "string",
+  );
   const outputs: OutputFile[] = notSent
     ? []
-    : producedFiles(extra).flatMap((file) => {
+    : producedFiles(extra, outputDirs).flatMap((file) => {
         try {
           return [inspectOutput(file, warnings)];
         } catch {
@@ -294,10 +310,30 @@ export function finalizeRun(input: FinalizeInput): number {
   const duration = Date.now() - run.startedAt;
   const cost = costReceiptFor({ failed, notSent, historyId, model, usage });
 
+  // Files saved before a later request failed are kept: ask only for the rest, never a full
+  // rerun. A temporary failure gets that run first; any other is fixed first (key, quota, input).
+  const partial = info && !inFlight && outputs.length ? run.partial : undefined;
+  const rest = partial
+    ? `multix ${redactArgv(withOptions(run.argv, partial.options)).map(shellQuote).join(" ")}`
+    : undefined;
+  if (info && partial) {
+    info = {
+      ...info,
+      hint: info.retryable
+        ? `Files saved before the failure are listed in outputs; keep them and request only the rest with the next command. ${info.hint}`
+        : `Files saved before the failure are listed in outputs; keep them. ${info.hint} Then request only the rest with the last command in next.`,
+    };
+  }
   const next = [
     ...(inFlight ? [inFlight.resume] : []),
-    ...(info ? nextForError(info, run.command, run.group, historyId) : []),
+    ...(rest && info?.retryable ? [rest] : []),
+    ...(info
+      ? nextForError(info, run.command, run.group, historyId).filter(
+          (cmd) => !partial || !cmd.startsWith("multix rerun "),
+        )
+      : []),
     ...suggestedCommands([...run.stdout, ...run.stderr], run.command, knownGroups),
+    ...(rest && !info?.retryable ? [rest] : []),
   ];
   if (info?.code === "BUDGET_EXCEEDED" || info?.code === "BUDGET_UNPROVEN") {
     next.unshift(

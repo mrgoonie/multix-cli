@@ -436,3 +436,43 @@ describe("fal run without --detach (unchanged default)", () => {
     expect(JSON.parse(stdout.join("\n"))).toEqual({ text: "ok" });
   });
 });
+
+describe("fal result failures", () => {
+  const RESULT_URL = `https://queue.fal.run/${MODEL}/requests/${REQUEST_ID}`;
+
+  async function resultError(): Promise<unknown> {
+    vi.spyOn(process, "exit").mockImplementation((code?: unknown) => {
+      throw new Error(`process.exit(${String(code)})`);
+    });
+    try {
+      await cli("result", MODEL, REQUEST_ID);
+    } catch (error) {
+      return error;
+    }
+    throw new Error("expected fal result to throw");
+  }
+
+  it("throws a rate limit as itself, keeping Retry-After and the request id", async () => {
+    stub({
+      [`GET ${RESULT_URL}`]: [
+        { status: 429, json: { detail: "slow down" }, headers: { "retry-after": "30" } },
+      ],
+    });
+    const error = await resultError();
+    expect(String(error)).not.toMatch(/process\.exit/);
+    expect(classifyError(error)).toMatchObject({
+      code: "RATE_LIMITED",
+      http_status: 429,
+      retry_after_s: 30,
+    });
+    expect(String((error as Error).message)).toContain(REQUEST_ID);
+    expect(stderr.join("\n")).not.toMatch(/Failed to fetch result/);
+  });
+
+  it("throws a network failure as itself, not as a logged exit", async () => {
+    stub({ [`GET ${RESULT_URL}`]: [{ error: new TypeError("fetch failed") }] });
+    const error = await resultError();
+    expect(String(error)).not.toMatch(/process\.exit/);
+    expect(classifyError(error).code).toBe("NETWORK_ERROR");
+  });
+});

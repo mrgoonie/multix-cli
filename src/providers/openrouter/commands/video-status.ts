@@ -14,7 +14,7 @@ import { fetchWithValidatedRedirects } from "../../../core/http-client.js";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import { maybeDownloadThumb } from "../../../core/video-thumb.js";
-import { PollFailedError, PollTimeoutError, poll } from "../../leonardo/poll.js";
+import { failureReason, poll, toPollJobError } from "../../leonardo/poll.js";
 import { requireOpenRouterKey } from "../client.js";
 import {
   type OpenRouterVideoPollResponse,
@@ -65,6 +65,23 @@ export async function downloadOpenRouterVideo(opts: OpenRouterDownloadOpts): Pro
   return dest;
 }
 
+/**
+ * Map a failed or timed-out video job wait onto the CLI errors. The resume
+ * command downloads the video when the interrupted run would have.
+ */
+export function toVideoJobError(error: unknown, jobId: string, download: boolean): unknown {
+  return toPollJobError(error, {
+    provider: "openrouter",
+    noun: "Job",
+    id: jobId,
+    resumeCommand: `multix openrouter video-status ${jobId} --wait${download ? " --download" : ""}`,
+    describe: (value) => {
+      const job = (value ?? {}) as { status?: unknown; error?: unknown };
+      return { status: job.status, reason: failureReason(job.error), terminal: true };
+    },
+  });
+}
+
 export function registerOpenRouterVideoStatusCommand(parent: Command): void {
   parent
     .command("video-status <jobId>")
@@ -106,15 +123,7 @@ export function registerOpenRouterVideoStatusCommand(parent: Command): void {
               })
             : await pollVideoJob(jobId);
         } catch (e) {
-          if (e instanceof PollTimeoutError) {
-            logger.error(`Timed out waiting for job ${jobId}`);
-            process.exit(1);
-          }
-          if (e instanceof PollFailedError) {
-            logger.error(`Job failed: ${JSON.stringify(e.value)}`);
-            process.exit(1);
-          }
-          throw e;
+          throw toVideoJobError(e, jobId, !!opts.download);
         }
 
         console.error(`status: ${res.status}`);

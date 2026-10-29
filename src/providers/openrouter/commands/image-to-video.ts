@@ -10,9 +10,9 @@
 import type { Command } from "commander";
 import { envDefault } from "../../../core/env-default.js";
 import { createLogger } from "../../../core/logger.js";
-import { PollFailedError, PollTimeoutError, poll } from "../../leonardo/poll.js";
+import { poll } from "../../leonardo/poll.js";
 import { type OpenRouterVideoPollResponse, pollVideoJob, submitVideoJob } from "../video-client.js";
-import { downloadOpenRouterVideo } from "./video-status.js";
+import { downloadOpenRouterVideo, toVideoJobError } from "./video-status.js";
 
 export function registerOpenRouterImageToVideoCommand(parent: Command): void {
   parent
@@ -105,15 +105,7 @@ export function registerOpenRouterImageToVideoCommand(parent: Command): void {
             onTick: (n, v) => logger.debug(`attempt ${n} — status: ${v.status}`),
           });
         } catch (e) {
-          if (e instanceof PollTimeoutError) {
-            logger.error(`Timed out — multix openrouter video-status ${res.id}`);
-            process.exit(1);
-          }
-          if (e instanceof PollFailedError) {
-            logger.error(`Job failed: ${JSON.stringify(e.value)}`);
-            process.exit(1);
-          }
-          throw e;
+          throw toVideoJobError(e, res.id, !!opts.download);
         }
 
         console.error(`status: ${final.status}`);

@@ -10,6 +10,7 @@ import fs from "node:fs";
 import { syncBuiltinESMExports } from "node:module";
 import os from "node:os";
 import path from "node:path";
+import { resolveOutputDir } from "../core/output-dir.js";
 import { run } from "./run-state.js";
 
 function track(target: unknown): void {
@@ -56,16 +57,41 @@ export function installOutputFileTracker(): void {
   syncBuiltinESMExports();
 }
 
-/** Files this run produced that still exist, excluding temp and ~/.multix state. */
-export function producedFiles(extra: string[] = []): string[] {
+function realDir(dir: string): string {
+  try {
+    return fs.realpathSync(dir);
+  } catch {
+    return path.resolve(dir);
+  }
+}
+
+function isWithin(dir: string, root: string): boolean {
+  const rel = path.relative(root, dir);
+  return rel === "" || (rel !== ".." && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel));
+}
+
+/**
+ * Files this run produced that still exist, excluding ~/.multix state and the
+ * CLI's own temp files. A file under the temp dir counts only when it was
+ * asked for: the explicit output path, or inside an output directory
+ * (MULTIX_OUTPUT_DIR or `outputDirs`) that itself lives in the temp dir. An
+ * output directory that is the temp root counts only files directly in it, and
+ * one that contains the temp dir counts none of it, so scratch subdirectories
+ * stay excluded.
+ */
+export function producedFiles(extra: string[] = [], outputDirs: string[] = []): string[] {
   const tmp = fs.realpathSync(os.tmpdir());
   const state = path.join(os.homedir(), ".multix");
   const extras = new Set(extra.map((p) => path.resolve(p)));
+  const roots = [resolveOutputDir(), ...outputDirs].map(realDir);
+  const requested = (dir: string) =>
+    roots.some((root) => (isWithin(tmp, root) ? root === tmp && dir === tmp : isWithin(dir, root)));
   const all = new Set([...run.written, ...extras]);
   return [...all].filter((file) => {
-    if (file.startsWith(state) || /\.tmp-\d+|\.part$|\.tmp$/.test(file)) return false;
+    if (isWithin(file, state) || /\.tmp-\d+|\.part$|\.tmp$/.test(file)) return false;
     try {
-      if (fs.realpathSync(path.dirname(file)).startsWith(tmp) && !extras.has(file)) return false;
+      const dir = fs.realpathSync(path.dirname(file));
+      if (isWithin(dir, tmp) && !extras.has(file) && !requested(dir)) return false;
       return fs.statSync(file).isFile();
     } catch {
       return false;
