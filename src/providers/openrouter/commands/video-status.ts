@@ -2,7 +2,7 @@
  * multix openrouter video-status <jobId> — poll an OpenRouter video job.
  *
  * Default: single GET (backward-compatible).
- * --wait: polls until status is `completed` / `failed`.
+ * --wait: polls until the job completes, fails, is cancelled or expires.
  * --download: streams the video to MULTIX_OUTPUT_DIR (or --output <path>).
  *   Auto-detects a thumbnail URL in the response and saves it as `<base>_thumb.<ext>`.
  */
@@ -66,13 +66,9 @@ export async function downloadOpenRouterVideo(opts: OpenRouterDownloadOpts): Pro
 }
 
 /**
- * Map a failed or timed-out video job wait onto the CLI errors. The resume
- * command downloads the video when the interrupted run would have.
- */
-/**
  * Statuses a video job never leaves without completing. Only "failed" is the
  * provider failing the job; "cancelled" and "expired" (past its time to live)
- * are reported by OpenRouter's webhooks and end the wait without a result.
+ * are documented poll statuses that end the wait without a result.
  */
 const STOPPED_STATUSES = new Set(["failed", "cancelled", "expired"]);
 
@@ -81,6 +77,10 @@ export function isStoppedVideoJob(job: OpenRouterVideoPollResponse): boolean {
   return STOPPED_STATUSES.has(job.status);
 }
 
+/**
+ * Map a failed or timed-out video job wait onto the CLI errors. The resume
+ * command downloads the video when the interrupted run would have.
+ */
 export function toVideoJobError(error: unknown, jobId: string, download: boolean): unknown {
   return toPollJobError(error, {
     provider: "openrouter",

@@ -2427,7 +2427,7 @@
             {
               "long": "--wait",
               "flags": "--wait",
-              "description": "Poll until status is 'completed' or 'failed'",
+              "description": "Poll until the job completes, fails, is cancelled or expires",
               "required": false,
               "takesValue": false,
               "valueOptional": false,
@@ -2503,7 +2503,7 @@
             {
               "long": "--wait",
               "flags": "--wait",
-              "description": "Poll until status is 'completed' or 'failed'",
+              "description": "Poll until the job completes, fails, is cancelled or expires",
               "required": false,
               "takesValue": false,
               "valueOptional": false,

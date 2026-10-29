@@ -29,7 +29,7 @@ export function registerOpenRouterImageToVideoCommand(parent: Command): void {
     .option("--aspect-ratio <r>", "Aspect ratio hint (e.g. 16:9, 9:16)")
     .option("--duration <n>", "Duration seconds")
     .option("--seed <n>", "Fixed seed")
-    .option("--wait", "Poll until status is 'completed' or 'failed'")
+    .option("--wait", "Poll until the job completes, fails, is cancelled or expires")
     .option("--wait-timeout <ms>", "Poll timeout in ms (with --wait)", "600000")
     .option("--download", "Download the generated video on success (implies --wait)")
     .option("--output <path>", "Copy downloaded video to this path")
