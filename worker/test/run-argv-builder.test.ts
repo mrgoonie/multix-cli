@@ -665,7 +665,23 @@ describe("prepareRun: runs the caps cannot bound", () => {
         args: ["a cat"],
         options: { "num-outputs": 1, input: '{"num_outputs": 8}' },
       }).uncappedSpend,
-    ).toBe("--input is passed to the provider as given");
+    ).toBe("with --input, the request reaches the provider as given");
+    expect(
+      run({
+        command: "replicate video",
+        args: ["a wave"],
+        options: { input: "{}" },
+      }).uncappedSpend,
+    ).toBe("with --input, the request reaches the provider as given");
+    expect(run({ command: "fal tts", options: { text: "hi" } })).not.toHaveProperty(
+      "uncappedSpend",
+    );
+    expect(
+      run({
+        command: "fal tts",
+        options: { text: "hi", model: "fal-ai/veo3", "text-field": "prompt" },
+      }).uncappedSpend,
+    ).toBe("with --text-field, the request reaches the provider as given");
   });
 
   it("marks an omitted count the model picks, and accepts one within the cap", () => {

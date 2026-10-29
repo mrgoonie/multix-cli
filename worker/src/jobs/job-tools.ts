@@ -212,7 +212,11 @@ export function registerJobTools(
         if (!args.estimate) {
           assertSpendGuard(prepared.command, prepared.uncappedSpend, limits, args.max_cost_usd);
         }
-        const preflight = costPreflight(prepared.command, args);
+        // The estimate cannot see the uncapped part, so only a proven ceiling counts.
+        const preflight = costPreflight(
+          prepared.command,
+          prepared.uncappedSpend ? { ...args, cost_policy: "strict" } : args,
+        );
         if (preflight) return preflight;
         return runner.run(prepared, args.wait_seconds ?? DEFAULT_WAIT_SECONDS);
       });

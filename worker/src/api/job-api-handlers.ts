@@ -4,6 +4,7 @@
  * input checks, ownership and output scrubbing are the same on both surfaces.
  */
 
+import { COST_POLICIES, type CostPolicy } from "../../../src/budget/command-cost.js";
 import type { Limits } from "../config.js";
 import { json } from "../http-responses.js";
 import { MODEL_ID_RE, catalogPayload } from "../jobs/catalog-view.js";
@@ -95,7 +96,7 @@ function requireJobs(jobs: JobToolsContext | undefined): JobToolsContext {
 /** Same shape as multix_run's arguments; prepareRun validates the details. */
 interface RunBudget {
   max_cost_usd?: number;
-  cost_policy?: string;
+  cost_policy?: CostPolicy;
 }
 
 function runRequest(body: Record<string, unknown>): {
@@ -145,8 +146,8 @@ function runRequest(body: Record<string, unknown>): {
   ) {
     throw new ApiError(400, "bad_request", "max_cost_usd must be a number of USD, at least 0");
   }
-  if (costPolicy !== undefined && typeof costPolicy !== "string") {
-    throw new ApiError(400, "bad_request", "cost_policy must be strict or estimate");
+  if (costPolicy !== undefined && !COST_POLICIES.includes(costPolicy as CostPolicy)) {
+    throw new ApiError(400, "bad_request", `cost_policy must be ${COST_POLICIES.join(" or ")}`);
   }
   return {
     request: {
@@ -156,7 +157,7 @@ function runRequest(body: Record<string, unknown>): {
       inputs: inputs as RunRequest["inputs"],
     },
     wait: (wait as number | undefined) ?? DEFAULT_WAIT_SECONDS,
-    budget: { max_cost_usd: maxCost, cost_policy: costPolicy },
+    budget: { max_cost_usd: maxCost, cost_policy: costPolicy as CostPolicy | undefined },
   };
 }
 
@@ -178,7 +179,12 @@ export async function postJob(
   const { request: run, wait, budget } = runRequest(await readJsonObject(request));
   const prepared = prepareRun(run, limits);
   assertSpendGuard(prepared.command, prepared.uncappedSpend, limits, budget.max_cost_usd);
-  costPreflight(prepared.command, { options: run.options, ...budget });
+  // The estimate cannot see the uncapped part, so only a proven ceiling counts.
+  costPreflight(prepared.command, {
+    options: run.options,
+    ...budget,
+    ...(prepared.uncappedSpend ? { cost_policy: "strict" } : {}),
+  });
   return jobResponse(await new JobRunner(ctx).run(prepared, wait));
 }
 

@@ -141,8 +141,8 @@ các giới hạn trên nhìn thấy. `multix_catalog` đánh dấu chúng bằn
 hạn):
 
 - body request chuyển thẳng tới provider: `fal run`, `replicate run`,
-  `atlas run`, `heygen run`, và `--input` của `replicate image` và
-  `replicate video`;
+  `atlas run`, `heygen run`, `--input` của `replicate image` và
+  `replicate video`, và `--input` / `--text-field` của `fal tts`;
 - lần chạy tính tiền theo độ dài nguồn hoặc kịch bản: `heygen video`,
   `heygen translate`, `heygen lipsync`, `elevenlabs dub`, và `heygen
   video-agent` / `heygen template`, nơi agent hoặc template quyết định độ dài;
@@ -153,7 +153,8 @@ hạn):
 Operator quyết định điều kiện cho các lần chạy này bằng
 `MULTIX_MCP_UNCAPPED_SPEND`. Ở chế độ `budget` (mặc định), lệnh gọi phải có
 `max_cost_usd` và job chỉ khởi động khi ước tính giá chứng minh lần chạy nằm
-trong mức đó. Hiện chưa lệnh nào trong số này có bảng giá, nên trên thực tế
+trong mức đó (`cost_policy` được coi là `strict` với các lần chạy này, vì ước
+tính không nhìn thấy phần không bị giới hạn). Hiện chưa lệnh nào trong số này có bảng giá, nên trên thực tế
 `budget` từ chối chúng (đóng thay vì mở). `deny` luôn từ chối; `allow` chạy như
 trước, bằng key của chính người gọi. Lệnh gọi `estimate: true` luôn được trả
 lời ở mọi chế độ vì nó không khởi động gì. REST API (`POST /api/v1/jobs`) nhận

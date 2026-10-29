@@ -589,6 +589,13 @@ describe("multix_run: runs the operator caps cannot bound", () => {
     );
     expect(refused.isError).toBe(true);
     expect(refused.content[0].text).toContain("This server does not run such commands.");
+    const estimate = await callTool(
+      falEnv("deny"),
+      "multix_run",
+      { ...falRun, estimate: true },
+      { jobs: jobsContext(denied) },
+    );
+    expect(estimate.structuredContent).toMatchObject({ estimate_only: true });
     expect(denied.specs.size).toBe(0);
 
     const allowed = new FakeBackend(succeeded, 0);

@@ -317,8 +317,14 @@ describe("REST API jobs", () => {
     const unknown = await post({ max_cost_usd: 1 });
     expect(unknown.status).toBe(400);
     expect((await body(unknown)).error.message).toMatch(/^Refusing to run: cost of .* is unknown/);
-    expect((await post({ max_cost_usd: "1" })).status).toBe(400);
-    expect((await post({ max_cost_usd: 1, cost_policy: "loose" })).status).toBe(400);
+    const text = await post({ max_cost_usd: "1" });
+    expect(text.status).toBe(400);
+    expect((await body(text)).error.message).toBe(
+      "max_cost_usd must be a number of USD, at least 0",
+    );
+    const loose = await post({ cost_policy: "loose" });
+    expect(loose.status).toBe(400);
+    expect((await body(loose)).error.message).toBe("cost_policy must be strict or estimate");
     expect(specs.size).toBe(0);
   });
 

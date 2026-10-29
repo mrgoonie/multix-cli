@@ -103,7 +103,7 @@ export function uncappedReason(
 ): string | undefined {
   if (policy.uncappedSpend) return policy.uncappedSpend;
   const merged = policy.uncappedOptions?.find((name) => values.has(name));
-  if (merged) return `--${merged} is passed to the provider as given`;
+  if (merged) return `with --${merged}, the request reaches the provider as given`;
   if (policy.caps?.countFromModel) {
     const omitted = policy.caps.count?.find((name) => !values.has(name));
     if (omitted) {
@@ -131,7 +131,7 @@ export function assertSpendGuard(
   }
   if (maxCostUsd === undefined) {
     throw new ValidationError(
-      `${why}. Pass max_cost_usd: the run starts only when its price is known and fits.`,
+      `${why}. Pass max_cost_usd: the run starts only when its price is known and fits, so a command without a price estimate is refused.`,
     );
   }
 }

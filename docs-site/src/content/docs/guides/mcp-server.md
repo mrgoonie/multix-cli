@@ -143,7 +143,8 @@ see. `multix_catalog` marks them with `uncapped_spend` (on the command, or on
 the option that makes a run uncapped):
 
 - pass-through request bodies: `fal run`, `replicate run`, `atlas run`,
-  `heygen run`, and `--input` of `replicate image` and `replicate video`;
+  `heygen run`, `--input` of `replicate image` and `replicate video`, and
+  `--input` / `--text-field` of `fal tts`;
 - runs billed by the length of their source or script: `heygen video`,
   `heygen translate`, `heygen lipsync`, `elevenlabs dub`, and `heygen
   video-agent` / `heygen template`, where the agent or template sets the
@@ -155,7 +156,9 @@ the option that makes a run uncapped):
 
 The operator decides what such a run needs with `MULTIX_MCP_UNCAPPED_SPEND`.
 In `budget` mode (the default) the call must give `max_cost_usd`, and the job
-starts only when the price estimate proves the run fits. None of these
+starts only when the price estimate proves the run fits (`cost_policy` is
+treated as `strict` for these runs, since the estimate cannot see the uncapped
+part). None of these
 commands is priced yet, so in practice `budget` refuses them, closed rather
 than open. `deny` always refuses them; `allow` runs them as before, on the
 caller's own keys. An `estimate: true` call is answered in every mode, since it

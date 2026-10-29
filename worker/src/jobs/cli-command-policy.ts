@@ -244,7 +244,13 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   "fal video": { urlOptions: ["image-url"], caps: { duration: ["duration"] } },
   // The text file comes from `inputs`; `--receipt` takes a local path (the
   // detached receipt is still printed, and `fal status` / `fal result` resume it).
-  "fal tts": { fileOptions: { "text-file": "file" }, unsupported: ["receipt"] },
+  // An unlisted model needs --text-field, and then any fal model runs with the
+  // --input body as given.
+  "fal tts": {
+    fileOptions: { "text-file": "file" },
+    unsupported: ["receipt"],
+    uncappedOptions: ["input", "text-field"],
+  },
   // An omitted --num-images leaves the count to the model's schema default.
   "atlas image": { caps: MODEL_IMAGE_COUNT },
   "atlas image-to-image": { fileOptions: { ref: "file" }, caps: MODEL_IMAGE_COUNT },

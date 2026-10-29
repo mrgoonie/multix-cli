@@ -190,7 +190,7 @@ giá trị này và không bao giờ chứa access key.
 ## Chạy job và theo dõi
 
 `POST /jobs` nhận input của `multix_run` (`command`, `options`, `args`,
-`inputs`, `wait_seconds`; xem
+`inputs`, `wait_seconds`, `max_cost_usd`, `cost_policy`; `estimate` chỉ có trên MCP; xem
 [Chạy lệnh CLI](/vi/guides/mcp-server/#chạy-lệnh-cli)). Dùng
 `GET /catalog?group=gemini` để xem các option của một lệnh và option nào nhận
 file, `GET /catalog?task=speech` để tìm các lệnh và model đã xác minh cho một
