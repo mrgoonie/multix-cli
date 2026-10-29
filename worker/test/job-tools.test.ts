@@ -535,3 +535,100 @@ describe("CLI runner tools", () => {
     expect(backend.specs.size).toBe(1);
   });
 });
+
+describe("multix_run: runs the operator caps cannot bound", () => {
+  const falEnv = (mode?: string) =>
+    fullEnv({ FAL_KEY: "fal-key-1234567890", MULTIX_MCP_UNCAPPED_SPEND: mode });
+  const falRun = { command: "fal run", args: ["fal-ai/any-model"], options: { input: "{}" } };
+
+  it("refuses a pass-through run without max_cost_usd and starts nothing", async () => {
+    const backend = new FakeBackend(succeeded);
+    const result = await callTool(falEnv(), "multix_run", falRun, {
+      jobs: jobsContext(backend),
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain(
+      '"fal run" is not bounded by this server\'s caps: the request body is passed to the provider as given. Pass max_cost_usd',
+    );
+    expect(backend.specs.size).toBe(0);
+  });
+
+  it("with max_cost_usd still refuses a run whose price is unknown (fail closed)", async () => {
+    const backend = new FakeBackend(succeeded);
+    const result = await callTool(
+      falEnv("budget"),
+      "multix_run",
+      { ...falRun, max_cost_usd: 1, cost_policy: "estimate" },
+      { jobs: jobsContext(backend) },
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/^Refusing to run: cost of .* is unknown/);
+    expect(backend.specs.size).toBe(0);
+  });
+
+  it("answers an estimate-only call without starting a job", async () => {
+    const backend = new FakeBackend(succeeded);
+    const result = await callTool(
+      falEnv(),
+      "multix_run",
+      { ...falRun, estimate: true },
+      { jobs: jobsContext(backend) },
+    );
+    expect(result.isError).toBeUndefined();
+    expect(result.structuredContent).toMatchObject({ estimate_only: true, command: "fal run" });
+    expect(backend.specs.size).toBe(0);
+  });
+
+  it("deny refuses even with a budget; allow runs it", async () => {
+    const denied = new FakeBackend(succeeded);
+    const refused = await callTool(
+      falEnv("deny"),
+      "multix_run",
+      { ...falRun, max_cost_usd: 1 },
+      { jobs: jobsContext(denied) },
+    );
+    expect(refused.isError).toBe(true);
+    expect(refused.content[0].text).toContain("This server does not run such commands.");
+    const estimate = await callTool(
+      falEnv("deny"),
+      "multix_run",
+      { ...falRun, estimate: true },
+      { jobs: jobsContext(denied) },
+    );
+    expect(estimate.structuredContent).toMatchObject({ estimate_only: true });
+    expect(denied.specs.size).toBe(0);
+
+    const allowed = new FakeBackend(succeeded, 0);
+    const ran = await callTool(
+      falEnv("allow"),
+      "multix_run",
+      { ...falRun, wait_seconds: 10 },
+      { jobs: jobsContext(allowed) },
+    );
+    expect(ran.isError).toBeUndefined();
+    expect(allowed.specs.size).toBe(1);
+  });
+
+  it("leaves capped commands alone and states the mode in the tool description", async () => {
+    const backend = new FakeBackend(succeeded, 0);
+    const ran = await callTool(
+      env,
+      "multix_run",
+      { command: "gemini generate", options: { prompt: "a cat" }, wait_seconds: 10 },
+      { jobs: jobsContext(backend) },
+    );
+    expect(ran.isError).toBeUndefined();
+    expect(backend.specs.size).toBe(1);
+
+    const list = await rpc(
+      env,
+      "tools/list",
+      {},
+      { jobs: jobsContext(new FakeBackend(succeeded)) },
+    );
+    const tool = list.result.tools.find((t: { name: string }) => t.name === "multix_run");
+    expect(tool.description).toContain(
+      "need max_cost_usd and start only when their price is known",
+    );
+  });
+});

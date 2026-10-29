@@ -22,7 +22,7 @@ import {
 } from "./cli-command-policy.js";
 import type { JobInputFile } from "./job-protocol.js";
 import { type FileTarget, resolveInputs } from "./run-input-files.js";
-import { type OptionValues, applyCaps } from "./run-option-caps.js";
+import { type OptionValues, applyCaps, uncappedReason } from "./run-option-caps.js";
 
 export type RunOptionValue = string | number | boolean | string[];
 
@@ -41,6 +41,8 @@ export interface PreparedRun {
   keyGroups: string[];
   argv: string[];
   inputs: JobInputFile[];
+  /** Why the operator caps cannot bound this run (see assertSpendGuard); undefined when they do. */
+  uncappedSpend?: string;
 }
 
 /** Longest single option or positional value. */
@@ -217,7 +219,15 @@ export function prepareRun(
     else for (const v of value) argv.push(`--${name}=${v}`);
   }
   if (positionals.length > 0) argv.push("--", ...positionals);
-  return { command: path, group, keyGroups, argv, inputs: resolved.files };
+  const uncappedSpend = uncappedReason(policy, values, limits);
+  return {
+    command: path,
+    group,
+    keyGroups,
+    argv,
+    inputs: resolved.files,
+    ...(uncappedSpend ? { uncappedSpend } : {}),
+  };
 }
 
 interface PositionalFiles {

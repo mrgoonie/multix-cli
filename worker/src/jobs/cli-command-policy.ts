@@ -9,6 +9,8 @@
  * - Output locations belong to the server: files land in the job's output
  *   directory (MULTIX_OUTPUT_DIR) and are uploaded from there.
  * - Caps reuse the operator limits of the Worker tools (MULTIX_MCP_*).
+ *   A run the caps cannot bound is marked (`uncappedSpend`, `uncappedOptions`,
+ *   `countFromModel`) and goes through MULTIX_MCP_UNCAPPED_SPEND instead.
  *
  * Option names are long flags without the leading `--`.
  */
@@ -23,6 +25,11 @@ export interface CapRules {
   duration?: string[];
   /** Number of outputs: at most `maxOutputs`. */
   count?: string[];
+  /**
+   * The CLI sends no count when the option is omitted, so the model's own
+   * default (which can be above 1) applies: such a run is uncapped.
+   */
+  countFromModel?: boolean;
   /** Video resolution: must normalise to one of `allowedResolutions`. */
   resolution?: string[];
   /**
@@ -53,6 +60,14 @@ export interface CommandPolicy {
   /** Options the CLI collects when repeated but the catalog cannot tell (custom parser, no array default). */
   repeatable?: string[];
   caps?: CapRules;
+  /**
+   * Why the caps cannot bound this command's spend (a pass-through request
+   * body, a price set by the length of the source media). Every run of it is
+   * subject to MULTIX_MCP_UNCAPPED_SPEND.
+   */
+  uncappedSpend?: string;
+  /** Options that make a run uncapped when given (a JSON body merged into the request). */
+  uncappedOptions?: string[];
   /**
    * The job gets the keys of the provider groups these options name (the part
    * of each value before the first `:`) instead of the command group's keys.
@@ -112,6 +127,11 @@ const OMNI_VIDEO_CAPS: CapRules = { ...VIDEO_CAPS, fillResolution: true };
 /** Veo leaves the Gemini API on 2026-10-22 and rejects --duration, which the caps always send. */
 const OMNI_MODEL = { model: "gemini-omni-1.1-flash" };
 const IMAGE_COUNT: CapRules = { count: ["num-images"] };
+const MODEL_IMAGE_COUNT: CapRules = { ...IMAGE_COUNT, countFromModel: true };
+const PASS_THROUGH = "the request body is passed to the provider as given";
+const SOURCE_LENGTH = "billed by the length of the source media";
+const SCRIPT_LENGTH = "billed by the length of the script or audio";
+const EXTRA_INPUT = ["input"];
 const SPEECH_KEY_GROUPS = [
   "gemini",
   "openai",
@@ -183,6 +203,7 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
     fileOptions: { "text-file": "file", "turns-file": "file", "dictionary-file": "file" },
     repeatable: ["voice", "dictionary"],
   },
+  "fish voice-design": { caps: { count: ["count"] } },
   "fish clone": { fileOptions: { sample: "file", "transcript-file": "file" } },
   "leonardo generate": { caps: { count: ["num"] } },
   "leonardo image-to-image": { caps: { count: ["num"] } },
@@ -207,6 +228,7 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   "elevenlabs transcribe": { fileOptions: { input: "file" } },
   "elevenlabs music": { fileOptions: { plan: "file" } },
   "elevenlabs dub": {
+    uncappedSpend: SOURCE_LENGTH,
     fileOptions: { input: "file" },
     urlOptions: ["source-url"],
     nameOptions: ["target-lang"],
@@ -217,24 +239,40 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   "elevenlabs align": { fileOptions: { input: "file", "text-file": "file" } },
   // `--file key=path` maps a model field to a local file and `--receipt` takes
   // a local path; neither is expressible remotely (pass URLs in --input).
-  "fal run": { unsupported: ["file", "receipt"] },
+  "fal run": { unsupported: ["file", "receipt"], uncappedSpend: PASS_THROUGH },
   "fal upload": { filePositionals: ["file"] },
   "fal image": { caps: IMAGE_COUNT },
   "fal video": { urlOptions: ["image-url"], caps: { duration: ["duration"] } },
   // The text file comes from `inputs`; `--receipt` takes a local path (the
   // detached receipt is still printed, and `fal status` / `fal result` resume it).
-  "fal tts": { fileOptions: { "text-file": "file" }, unsupported: ["receipt"] },
-  "atlas image": { caps: IMAGE_COUNT },
-  "atlas image-to-image": { fileOptions: { ref: "file" }, caps: IMAGE_COUNT },
+  // An unlisted model needs --text-field, and then any fal model runs with the
+  // --input body as given.
+  "fal tts": {
+    fileOptions: { "text-file": "file" },
+    unsupported: ["receipt"],
+    uncappedOptions: ["input", "text-field"],
+  },
+  // An omitted --num-images leaves the count to the model's schema default.
+  "atlas image": { caps: MODEL_IMAGE_COUNT },
+  "atlas image-to-image": { fileOptions: { ref: "file" }, caps: MODEL_IMAGE_COUNT },
   "atlas video": { caps: VIDEO_CAPS },
   "atlas image-to-video": { fileOptions: { ref: "file" }, caps: VIDEO_CAPS },
   "atlas audio": { fileOptions: { audio: "file" } },
   "atlas 3d": { fileOptions: { ref: "file" } },
   "atlas upload": { filePositionals: ["file"] },
+  "atlas run": { uncappedSpend: PASS_THROUGH },
   // `--file key=path` maps a model field to a local file; not expressible remotely.
-  "replicate run": { unsupported: ["file"] },
-  "replicate image": { caps: { count: ["num-outputs"] } },
-  "replicate video": { fileOptions: { image: "file" }, caps: VIDEO_CAPS },
+  "replicate run": { unsupported: ["file"], uncappedSpend: PASS_THROUGH },
+  // --input merges any model field (num_outputs, num_frames, …) under the flags.
+  "replicate image": {
+    caps: { count: ["num-outputs"], countFromModel: true },
+    uncappedOptions: EXTRA_INPUT,
+  },
+  "replicate video": {
+    fileOptions: { image: "file" },
+    caps: VIDEO_CAPS,
+    uncappedOptions: EXTRA_INPUT,
+  },
   // --ratio is checked against each model's fixed list by the CLI (at most 1920x1080).
   "runway video": { fileOptions: { image: "file" }, caps: { duration: ["duration"] } },
   "runway image": {
@@ -242,24 +280,28 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
     repeatable: ["reference", "reference-tag"],
   },
   "heygen video-agent": {
+    uncappedSpend: "the agent decides the video length",
     fileOptions: { file: "file" },
     assetRefOptions: ["file"],
     repeatable: ["file"],
     urlOptions: ["callback-url"],
   },
   "heygen video": {
+    uncappedSpend: SCRIPT_LENGTH,
     fileOptions: { audio: "file", "background-image": "file" },
     assetRefOptions: ["audio", "background-image"],
     urlOptions: ["callback-url"],
     caps: { resolution: ["resolution"] },
   },
   "heygen translate": {
+    uncappedSpend: SOURCE_LENGTH,
     filePositionals: ["source"],
     fileOptions: { audio: "file" },
     assetRefOptions: ["source", "audio"],
     urlOptions: ["callback-url"],
   },
   "heygen lipsync": {
+    uncappedSpend: SOURCE_LENGTH,
     fileOptions: { video: "file", audio: "file" },
     assetRefOptions: ["video", "audio"],
     urlOptions: ["callback-url"],
@@ -276,10 +318,15 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
     urlOptions: ["callback-url"],
     caps: VIDEO_CAPS,
   },
+  "heygen template": { uncappedSpend: "the template decides the video length" },
+  "heygen run": { uncappedSpend: PASS_THROUGH },
+  // An omitted --num-images leaves the count to the model's catalog default;
+  // --param sets any other request field the model's catalog row lists.
   "sume image": {
     fileOptions: { image: "file" },
     repeatable: ["image", "param"],
-    caps: { count: ["num-images"] },
+    caps: { count: ["num-images"], countFromModel: true },
+    uncappedOptions: ["param"],
   },
   "sume video": {
     fileOptions: {
@@ -290,7 +337,11 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
       audio: "file",
     },
     repeatable: ["image", "reference-image", "param"],
-    caps: VIDEO_CAPS,
+    // No duration cap: a filled --duration is refused by models without one and
+    // means the audio length on lip-sync models.
+    uncappedSpend:
+      "the model's catalog row sets the price; lip-sync and captions bill by the length of the source media",
+    caps: { resolution: ["resolution"] },
   },
   // A quote takes only public URLs: nothing is uploaded or billed.
   "sume estimate": {
@@ -303,8 +354,12 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
     fileOptions: { file: "file", logo: "file", music: "file" },
     repeatable: ["file"],
   },
-  "topview video-avatar": { fileOptions: { video: "file", image: "file", audio: "file" } },
+  "topview video-avatar": {
+    uncappedSpend: SCRIPT_LENGTH,
+    fileOptions: { video: "file", image: "file", audio: "file" },
+  },
   "topview product-avatar": {
+    uncappedSpend: SCRIPT_LENGTH,
     fileOptions: { "product-image": "file", "template-image": "file", audio: "file" },
   },
   "topview product-anyshoot": {
@@ -319,6 +374,7 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
     caps: { count: ["count"] },
   },
   "topview upload": { filePositionals: ["file"] },
+  "topview run": { uncappedSpend: PASS_THROUGH },
   "media optimize": { fileOptions: { input: "file" } },
   "media split": { fileOptions: { input: "file" } },
   "media batch": { fileOptions: { "input-dir": "dir" } },
