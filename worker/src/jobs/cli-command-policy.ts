@@ -30,11 +30,16 @@ export interface CapRules {
    * default (which can be above 1) applies: such a run is uncapped.
    */
   countFromModel?: boolean;
-  /** Video resolution: must normalise to one of `allowedResolutions`. */
+  /**
+   * Video resolution: must normalise to one of `allowedResolutions`. When it
+   * is omitted and the CLI has no default, the model picks one, so the run is
+   * uncapped unless `fillResolution` is set.
+   */
   resolution?: string[];
   /**
    * When the resolution is omitted and the CLI has no default (the provider
    * picks one, or an edit keeps the source's), send an allowed one instead.
+   * Only for models known to accept the allowed values.
    */
   fillResolution?: boolean;
 }
@@ -66,8 +71,12 @@ export interface CommandPolicy {
    * subject to MULTIX_MCP_UNCAPPED_SPEND.
    */
   uncappedSpend?: string;
-  /** Options that make a run uncapped when given (a JSON body merged into the request). */
-  uncappedOptions?: string[];
+  /**
+   * Options that make a run uncapped when given, with why: a JSON body merged
+   * into the request, a length no server cap bounds, a model that picks the
+   * resolution.
+   */
+  uncappedOptions?: Readonly<Record<string, string>>;
   /**
    * The job gets the keys of the provider groups these options name (the part
    * of each value before the first `:`) instead of the command group's keys.
@@ -130,7 +139,8 @@ const IMAGE_COUNT: CapRules = { count: ["num-images"] };
 const MODEL_IMAGE_COUNT: CapRules = { ...IMAGE_COUNT, countFromModel: true };
 const PASS_THROUGH = "the request body is passed to the provider as given";
 const SOURCE_LENGTH = "billed by the length of the source media";
-const EXTRA_INPUT = ["input"];
+const RAW_BODY = "the request reaches the provider as given";
+const EXTRA_INPUT = { input: RAW_BODY };
 const SPEECH_KEY_GROUPS = [
   "gemini",
   "openai",
@@ -196,7 +206,11 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
     urlOptions: ["image-url", "last-frame-url"],
     caps: VIDEO_CAPS,
   },
-  "openrouter tts": { fileOptions: { "text-file": "file", "turns-file": "file" } },
+  // --provider-options passes per-provider settings through as given.
+  "openrouter tts": {
+    fileOptions: { "text-file": "file", "turns-file": "file" },
+    uncappedOptions: { "provider-options": RAW_BODY },
+  },
   "openrouter transcribe": { fileOptions: { input: "file" } },
   "fish tts": {
     fileOptions: { "text-file": "file", "turns-file": "file", "dictionary-file": "file" },
@@ -220,12 +234,25 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
     fileOptions: { "ref-image": "file", "ref-video": "file", "ref-audio": "file" },
     caps: VIDEO_CAPS,
   },
-  "byteplus generate-3d": { fileOptions: { "input-image": "file" } },
+  // --flags is appended to the prompt as raw model flags (e.g. `--resolution 1536pro`).
+  "byteplus generate-3d": {
+    fileOptions: { "input-image": "file" },
+    uncappedOptions: { flags: "the raw model flags reach the provider as given" },
+  },
   "cloudflare generate-video": { caps: VIDEO_CAPS },
   "elevenlabs clone": { fileOptions: { files: "file", audio: "file" } },
   "elevenlabs voice-changer": { fileOptions: { input: "file" } },
   "elevenlabs transcribe": { fileOptions: { input: "file" } },
-  "elevenlabs music": { fileOptions: { plan: "file" } },
+  // Billed by the track length, which the model picks when neither
+  // --music-length-ms nor a --plan sets it (no server cap bounds audio length).
+  "elevenlabs music": {
+    uncappedSpend: "billed by the track length, which no server cap bounds",
+    fileOptions: { plan: "file" },
+  },
+  // Omitted, the provider picks the length at a flat price; a set length is billed per second.
+  "elevenlabs sfx": {
+    uncappedOptions: { "duration-seconds": "the price follows a length no server cap bounds" },
+  },
   "elevenlabs dub": {
     uncappedSpend: SOURCE_LENGTH,
     fileOptions: { input: "file" },
@@ -241,7 +268,14 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   "fal run": { unsupported: ["file", "receipt"], uncappedSpend: PASS_THROUGH },
   "fal upload": { filePositionals: ["file"] },
   "fal image": { caps: IMAGE_COUNT },
-  "fal video": { urlOptions: ["image-url"], caps: { duration: ["duration"] } },
+  // fal video has no resolution option: the model sets it. The defaults
+  // (Kling 1.6 standard, text- and image-to-video) render 720p; another
+  // --model may render more.
+  "fal video": {
+    urlOptions: ["image-url"],
+    caps: { duration: ["duration"] },
+    uncappedOptions: { model: "the model picks the video resolution" },
+  },
   // The text file comes from `inputs`; `--receipt` takes a local path (the
   // detached receipt is still printed, and `fal status` / `fal result` resume it).
   // An unlisted model needs --text-field, and then any fal model runs with the
@@ -249,7 +283,7 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   "fal tts": {
     fileOptions: { "text-file": "file" },
     unsupported: ["receipt"],
-    uncappedOptions: ["input", "text-field"],
+    uncappedOptions: { input: RAW_BODY, "text-field": RAW_BODY },
   },
   // An omitted --num-images leaves the count to the model's schema default.
   "atlas image": { caps: MODEL_IMAGE_COUNT },

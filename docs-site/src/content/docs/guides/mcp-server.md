@@ -143,8 +143,9 @@ see. `multix_catalog` marks them with `uncapped_spend` (on the command, or on
 the option that makes a run uncapped):
 
 - pass-through request bodies: `fal run`, `replicate run`, `atlas run`,
-  `heygen run`, `--input` of `replicate image` and `replicate video`, and
-  `--input` / `--text-field` of `fal tts`;
+  `heygen run`, `--input` of `replicate image` and `replicate video`,
+  `--input` / `--text-field` of `fal tts`, `--provider-options` of
+  `openrouter tts`, and `--flags` of `byteplus generate-3d`;
 - runs billed by the length of their source or script: `heygen video`,
   `heygen translate`, `heygen lipsync`, `elevenlabs dub`, and `heygen
   video-agent` / `heygen template`, where the agent or template sets the
@@ -152,7 +153,15 @@ the option that makes a run uncapped):
 - `atlas image`, `atlas image-to-image` and `replicate image` without
   `--num-images` / `--num-outputs`, where the model picks the number of
   outputs. Passing the count (at most `MULTIX_MCP_MAX_OUTPUTS`) makes the run
-  capped again.
+  capped again;
+- `atlas video`, `atlas image-to-video`, `replicate video`, `openrouter
+  image-to-video` and `heygen model-video` without `--resolution`, where the
+  model picks the resolution. Passing an allowed resolution makes the run
+  capped again. `fal video` has no resolution option: its default models
+  render 720p, and with `--model` the model picks the resolution, so the run
+  is uncapped;
+- audio lengths no cap bounds: `elevenlabs music` (billed by the track
+  length) and `--duration-seconds` of `elevenlabs sfx`.
 
 The operator decides what such a run needs with `MULTIX_MCP_UNCAPPED_SPEND`.
 In `budget` mode (the default) the call must give `max_cost_usd`, and the job

@@ -142,13 +142,23 @@ hạn):
 
 - body request chuyển thẳng tới provider: `fal run`, `replicate run`,
   `atlas run`, `heygen run`, `--input` của `replicate image` và
-  `replicate video`, và `--input` / `--text-field` của `fal tts`;
+  `replicate video`, `--input` / `--text-field` của `fal tts`,
+  `--provider-options` của `openrouter tts`, và `--flags` của
+  `byteplus generate-3d`;
 - lần chạy tính tiền theo độ dài nguồn hoặc kịch bản: `heygen video`,
   `heygen translate`, `heygen lipsync`, `elevenlabs dub`, và `heygen
   video-agent` / `heygen template`, nơi agent hoặc template quyết định độ dài;
 - `atlas image`, `atlas image-to-image` và `replicate image` khi không có
   `--num-images` / `--num-outputs`, lúc đó model tự chọn số output. Truyền số
-  lượng (tối đa `MULTIX_MCP_MAX_OUTPUTS`) giúp lần chạy được giới hạn trở lại.
+  lượng (tối đa `MULTIX_MCP_MAX_OUTPUTS`) giúp lần chạy được giới hạn trở lại;
+- `atlas video`, `atlas image-to-video`, `replicate video`, `openrouter
+  image-to-video` và `heygen model-video` khi không có `--resolution`, lúc đó
+  model tự chọn độ phân giải. Truyền một độ phân giải được phép giúp lần chạy
+  được giới hạn trở lại. `fal video` không có option độ phân giải: các model
+  mặc định của nó xuất 720p, còn với `--model` thì model tự chọn độ phân giải,
+  nên lần chạy không bị giới hạn;
+- độ dài âm thanh mà không giới hạn nào chặn được: `elevenlabs music` (tính
+  tiền theo độ dài bản nhạc) và `--duration-seconds` của `elevenlabs sfx`.
 
 Operator quyết định điều kiện cho các lần chạy này bằng
 `MULTIX_MCP_UNCAPPED_SPEND`. Ở chế độ `budget` (mặc định), lệnh gọi phải có

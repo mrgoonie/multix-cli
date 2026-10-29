@@ -92,23 +92,45 @@ export function applyCaps(
 }
 
 /**
+ * Resolution options of `rules` that are omitted, have no CLI default and are
+ * not filled by the server: the model picks the resolution of such a run.
+ * Called after applyCaps, so a filled value already counts as given.
+ */
+export function modelResolutionOptions(
+  rules: CapRules | undefined,
+  options: ReadonlyMap<string, CliOption>,
+  given: (name: string) => boolean,
+): string[] {
+  if (rules?.fillResolution) return [];
+  return (rules?.resolution ?? []).filter(
+    (name) => !given(name) && defaultString(options.get(name)) === undefined,
+  );
+}
+
+/**
  * Why the caps cannot bound this run, or undefined when they do: the command
- * is marked uncapped, the caller used an option that merges a raw request
- * body, or the model picks the number of outputs.
+ * is marked uncapped, the caller used an option that makes it uncapped, or the
+ * model picks the number of outputs or the resolution.
  */
 export function uncappedReason(
   policy: CommandPolicy,
+  options: ReadonlyMap<string, CliOption>,
   values: OptionValues,
   limits: Limits,
 ): string | undefined {
   if (policy.uncappedSpend) return policy.uncappedSpend;
-  const merged = policy.uncappedOptions?.find((name) => values.has(name));
-  if (merged) return `with --${merged}, the request reaches the provider as given`;
+  for (const [name, why] of Object.entries(policy.uncappedOptions ?? {})) {
+    if (values.has(name)) return `with --${name}, ${why}`;
+  }
   if (policy.caps?.countFromModel) {
     const omitted = policy.caps.count?.find((name) => !values.has(name));
     if (omitted) {
       return `--${omitted} is omitted, so the model picks the number of outputs (pass --${omitted}, at most ${limits.maxOutputs})`;
     }
+  }
+  const [resolution] = modelResolutionOptions(policy.caps, options, (name) => values.has(name));
+  if (resolution) {
+    return `--${resolution} is omitted, so the model picks the resolution (pass --${resolution}: ${limits.allowedResolutions.join(", ")})`;
   }
   return undefined;
 }

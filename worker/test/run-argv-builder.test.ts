@@ -700,6 +700,74 @@ describe("prepareRun: runs the caps cannot bound", () => {
     );
   });
 
+  it("marks an omitted resolution the model picks, and accepts an allowed one", () => {
+    const why =
+      "--resolution is omitted, so the model picks the resolution (pass --resolution: 480p, 720p, 768p, 1080p)";
+    const omitted: RunRequest[] = [
+      { command: "atlas video", args: ["a wave"] },
+      { command: "atlas image-to-video", inputs: { ref: "https://cdn.example.com/a.png" } },
+      { command: "replicate video", args: ["a wave"] },
+      {
+        command: "openrouter image-to-video",
+        options: { prompt: "a wave", "image-url": "https://cdn.example.com/a.png" },
+      },
+      { command: "heygen model-video", args: ["a wave"] },
+    ];
+    for (const request of omitted) {
+      expect(run(request).uncappedSpend, request.command).toBe(why);
+      const given = { ...request, options: { ...request.options, resolution: "720p" } };
+      expect(run(given), request.command).not.toHaveProperty("uncappedSpend");
+    }
+    rejects(
+      { command: "atlas video", args: ["a wave"], options: { resolution: "4k" } },
+      /--resolution must be one of/,
+    );
+    // Filled by the server, or a CLI default the caps check: still capped.
+    expect(
+      run({ command: "gemini generate-video", options: { prompt: "a wave" } }),
+    ).not.toHaveProperty("uncappedSpend");
+    expect(run({ command: "byteplus video", options: { prompt: "a wave" } })).not.toHaveProperty(
+      "uncappedSpend",
+    );
+  });
+
+  it("marks fal video with a model that picks its own resolution", () => {
+    expect(run({ command: "fal video", args: ["a wave"] })).not.toHaveProperty("uncappedSpend");
+    expect(
+      run({ command: "fal video", args: ["a wave"], options: { model: "fal-ai/veo3" } })
+        .uncappedSpend,
+    ).toBe("with --model, the model picks the video resolution");
+  });
+
+  it("marks raw provider options and lengths no cap bounds", () => {
+    expect(run({ command: "openrouter tts", options: { text: "hi" } })).not.toHaveProperty(
+      "uncappedSpend",
+    );
+    expect(
+      run({
+        command: "openrouter tts",
+        options: { text: "hi", "provider-options": '{"google-ai-studio":{}}' },
+      }).uncappedSpend,
+    ).toBe("with --provider-options, the request reaches the provider as given");
+    expect(
+      run({ command: "byteplus generate-3d", options: { prompt: "a chair" } }),
+    ).not.toHaveProperty("uncappedSpend");
+    expect(
+      run({ command: "byteplus generate-3d", options: { prompt: "a chair", flags: "--ff 2" } })
+        .uncappedSpend,
+    ).toBe("with --flags, the raw model flags reach the provider as given");
+    expect(run({ command: "elevenlabs sfx", options: { text: "rain" } })).not.toHaveProperty(
+      "uncappedSpend",
+    );
+    expect(
+      run({ command: "elevenlabs sfx", options: { text: "rain", "duration-seconds": 30 } })
+        .uncappedSpend,
+    ).toBe("with --duration-seconds, the price follows a length no server cap bounds");
+    expect(run({ command: "elevenlabs music", options: { prompt: "lofi" } }).uncappedSpend).toBe(
+      "billed by the track length, which no server cap bounds",
+    );
+  });
+
   it("leaves capped commands unmarked and caps the voice-design count", () => {
     expect(run({ command: "gemini generate", options: { prompt: "a cat" } })).not.toHaveProperty(
       "uncappedSpend",

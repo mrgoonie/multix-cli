@@ -33,6 +33,7 @@ import {
   OUTPUT_FILE_OPTION,
   policyFor,
 } from "./cli-command-policy.js";
+import { modelResolutionOptions } from "./run-option-caps.js";
 
 /** Whether the caller saved the keys a group needs (groups that need none are always ready). */
 export function hasGroupKeys(group: string, keys: ProviderKeys): boolean {
@@ -49,6 +50,8 @@ function runnable(group: CliGroup): CliCommand[] {
 function commandDetail(command: CliCommand): Record<string, unknown> {
   const policy = policyFor(command.command);
   const unsupported = new Set([...GLOBALLY_UNSUPPORTED_OPTIONS, ...(policy.unsupported ?? [])]);
+  const byName = new Map(command.options.map((o) => [optionName(o), o]));
+  const modelResolutions = modelResolutionOptions(policy.caps, byName, () => false);
   const options = command.options
     .filter((o) => !unsupported.has(optionName(o)) && optionName(o) !== OUTPUT_DIR_OPTION)
     .map((option) => {
@@ -69,10 +72,13 @@ function commandDetail(command: CliCommand): Record<string, unknown> {
       if (policy.forced?.[name] !== undefined) view.forced = policy.forced[name];
       if (policy.nameOptions?.includes(name)) view.format = "letters, digits, _ and - only";
       if (name === OUTPUT_FILE_OPTION) view.output = "plain file name inside the job output";
-      if (policy.uncappedOptions?.includes(name))
-        view.uncapped_spend = "with this option, the request reaches the provider as given";
+      const uncappedWhy = policy.uncappedOptions?.[name];
+      if (uncappedWhy) view.uncapped_spend = `with this option, ${uncappedWhy}`;
       if (policy.caps?.countFromModel && policy.caps.count?.includes(name)) {
         view.uncapped_spend = "when omitted, the model picks the number of outputs";
+      }
+      if (modelResolutions.includes(name)) {
+        view.uncapped_spend = "when omitted, the model picks the resolution";
       }
       return view;
     });
