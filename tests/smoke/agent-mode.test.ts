@@ -495,6 +495,18 @@ describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     expect(envelope(bad.stdout).provider).toBeUndefined();
   });
 
+  it("offers no cost flags on tooling commands and keeps their own --dry-run", async () => {
+    const commands = [["check"], ["update"], ["models"], ["guide"], ["history", "list"], ["rerun"]];
+    for (const cmd of commands) {
+      const help = await run([...cmd, "--help"]);
+      for (const flag of ["--estimate", "--max-cost", "--cost-policy"]) {
+        expect(help.stdout, cmd.join(" ")).not.toContain(flag);
+      }
+    }
+    expect((await run(["update", "--help"])).stdout).toContain("--dry-run");
+    expect((await run(["check", "--help"])).stdout).not.toContain("--dry-run");
+  });
+
   it("keeps exit 1 without --json but prints the code, hint and next steps", async () => {
     const result = await run(["fal", "image", "a cat"], { FAL_KEY: "" });
     expect(result.exitCode).toBe(1);
