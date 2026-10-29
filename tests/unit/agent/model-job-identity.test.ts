@@ -196,13 +196,18 @@ describe("job identity", () => {
     const url = "https://queue.fal.run/fal-ai/flux/requests/req-1/status";
     const out = await runWith(
       "fal",
-      [json({ detail: "busy" }, 503), json({ status: "COMPLETED", request_id: "req-1" })],
+      [
+        json({ detail: "busy" }, 503, { "x-request-id": "poll-1" }),
+        json({ status: "COMPLETED", request_id: "req-1" }),
+      ],
       async () => {
         await fetch(url).then(() => undefined);
         await fetch(url).then(() => undefined);
       },
     );
     expect(out.job).toEqual({ provider: "fal", id: "req-1", attempt: 1 });
+    // The submit run of the same job files under the same operation.
+    expect(out.cost.operation_id).toBe("fal:req-1");
   });
 
   it("names no job when only a failed request returned an id", async () => {
