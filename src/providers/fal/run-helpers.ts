@@ -143,8 +143,8 @@ function retryDelayMs(error: unknown, intervalMs: number, deadline: number): num
 /**
  * Poll a submitted request's status_url until COMPLETED (bounded by a real
  * deadline, retrying transient network/408/429/5xx errors), then fetch
- * response_url, retrying the same errors until the deadline. Each request's
- * timeout is bounded by the time left (see requestTimeoutMs).
+ * response_url, retrying those errors except 500/504 while the deadline allows.
+ * Each status request's timeout is bounded by the time left (see requestTimeoutMs).
  * Uses the URLs fal itself returned from submit rather than reconstructing
  * them, since the queue's status/result URLs are keyed by app id (first two
  * path segments of the model id), not the full endpoint id. Never submits.
@@ -201,19 +201,22 @@ export async function waitForFalResult(opts: WaitForResultOptions): Promise<FalR
     await sleep(intervalMs);
   }
 
-  // The job is finished and billed: a transient failure fetching its result is retried while
-  // the deadline allows; the last one is rethrown with its own class (e.g. RATE_LIMITED).
-  for (;;) {
+  // The job is finished and billed: a network error, 408, 429, 502 or 503 fetching its result is
+  // retried while the deadline allows. fal answers 500 (model or platform failed) and 504 (job
+  // never started) for the job's own failure, so those end the run at once. The first fetch gets
+  // the full request timeout, as an inline (sync_mode) result can be large.
+  for (let first = true; ; first = false) {
     try {
       return await client.requestAbsolute<FalResultResponse>(submit.response_url, {
         logger,
-        timeoutMs: requestTimeoutMs(deadline),
+        timeoutMs: first ? MAX_REQUEST_TIMEOUT_MS : requestTimeoutMs(deadline),
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      if (isTransientHttpError(e) && deadline - Date.now() > 0) {
+      const delay = retryDelayMs(e, intervalMs, deadline);
+      if (isRetryableResultError(e) && Date.now() + delay < deadline) {
         logger.debug(`result fetch — transient error, retrying: ${msg}`);
-        await sleep(retryDelayMs(e, intervalMs, deadline));
+        await sleep(delay);
         continue;
       }
       throw new Error(
@@ -224,6 +227,13 @@ export async function waitForFalResult(opts: WaitForResultOptions): Promise<FalR
       );
     }
   }
+}
+
+/** A result-fetch failure worth retrying: transient, but not fal's 500/504 for a failed job. */
+function isRetryableResultError(error: unknown): boolean {
+  if (!isTransientHttpError(error)) return false;
+  const status = (error as HttpError).status;
+  return status !== 500 && status !== 504;
 }
 
 /** Submit a job and wait for its result (see submitFalRequest and waitForFalResult). */

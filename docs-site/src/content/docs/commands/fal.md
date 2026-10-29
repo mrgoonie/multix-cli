@@ -217,9 +217,11 @@ path segments, e.g. `fal-ai/kling-video`); the full model id used for `run`,
   without these URLs also fails with a provider error.
 - Polling is bounded by `--wait-timeout` (a wall-clock deadline, in
   milliseconds) and retries network errors, 408, 429 (waiting for `Retry-After`, never past the deadline)
-  and 5xx responses other than 501 and 505, on the status poll and on the
-  result fetch after the job completes. Each request's own timeout is the time
-  left before the deadline (at least 10 seconds, at most 120). A timeout or
+  and 5xx responses other than 501 and 505 on the status poll. The result
+  fetch after the job completes retries the same errors except 500 and 504,
+  which fal returns when the job itself failed. Each status request's own
+  timeout is the time left before the deadline (at least 10 seconds, at most
+  120). A timeout or
   unrecoverable error prints the request ID so you can resume with
   `multix fal status` or `multix fal result`.
 - Media extraction prefers known result fields (`images[].url`, `video.url`,

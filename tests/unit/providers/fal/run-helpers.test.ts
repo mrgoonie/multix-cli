@@ -356,6 +356,66 @@ describe("submitAndWait", () => {
     expect(result).toEqual({ images: [{ url: "https://x.test/a.png" }] });
   });
 
+  it.each([500, 504])(
+    "does not retry a %i on the result fetch, which fal returns for a failed job",
+    async (status) => {
+      let fetches = 0;
+      mockQueue(
+        () => new Response(JSON.stringify({ status: "COMPLETED" }), { status: 200 }),
+        () => {
+          fetches++;
+          return new Response(JSON.stringify({ detail: "model failed" }), { status });
+        },
+      );
+      const err = await submitAndWait({
+        model: "fal-ai/flux/schnell",
+        input: { prompt: "x" },
+        logger: noopLogger,
+        pollIntervalMs: 5,
+      }).then(
+        () => expect.unreachable("submitAndWait should reject"),
+        (e: unknown) => e,
+      );
+      expect(fetches).toBe(1);
+      expect((err as Error).cause).toBeInstanceOf(HttpError);
+      expect(classifyError(err).http_status).toBe(status);
+    },
+  );
+
+  it("stops retrying the result fetch at the deadline and keeps the last error's class", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "Date"] });
+    try {
+      let fetches = 0;
+      mockQueue(
+        () => new Response(JSON.stringify({ status: "COMPLETED" }), { status: 200 }),
+        () => {
+          fetches++;
+          return new Response("Service Unavailable", { status: 503 });
+        },
+      );
+      const run = submitAndWait({
+        model: "fal-ai/flux/schnell",
+        input: { prompt: "x" },
+        logger: noopLogger,
+        pollIntervalMs: 1000,
+        waitTimeoutMs: 3500,
+      }).then(
+        () => expect.unreachable("submitAndWait should reject"),
+        (e: unknown) => e,
+      );
+      await vi.advanceTimersByTimeAsync(10_000);
+      const err = await run;
+      // Fetches at 0, 1000, 2000 and 3000 ms; a fifth would start past the 3500 ms deadline.
+      expect(fetches).toBe(4);
+      expect((err as Error).message).toMatch(
+        /^Failed to fetch result for fal request req-1: HTTP 503/,
+      );
+      expect(classifyError(err)).toMatchObject({ http_status: 503 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("does not retry a non-transient result-fetch failure", async () => {
     let fetches = 0;
     mockQueue(
@@ -391,10 +451,12 @@ describe("submitAndWait", () => {
       waitTimeoutMs: 30_000,
     });
     expect(timeouts).toHaveLength(3);
-    for (const t of timeouts) {
+    for (const t of timeouts.slice(0, 2)) {
       expect(t).toBeLessThanOrEqual(30_000);
       expect(t).toBeGreaterThan(29_000);
     }
+    // The first result fetch always gets the full request timeout (an inline result can be large).
+    expect(timeouts[2]).toBe(120_000);
 
     timeouts.length = 0;
     polls = 0;
@@ -411,7 +473,7 @@ describe("submitAndWait", () => {
       pollIntervalMs: 5,
       waitTimeoutMs: 1000,
     });
-    expect(timeouts).toEqual([10_000, 10_000, 10_000]);
+    expect(timeouts).toEqual([10_000, 10_000, 120_000]);
   });
 
   it("waits out a 429 on the status poll for Retry-After, then polls again", async () => {
