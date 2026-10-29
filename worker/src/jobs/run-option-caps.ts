@@ -129,6 +129,8 @@ export function assertImageModelAllowed(
       `--${MODEL_OPTION} must be one of ${allowed.join(", ")} on this server`,
     );
   }
+  // Send the id that was checked, not the caller's untrimmed text.
+  if (values.has(MODEL_OPTION)) values.set(MODEL_OPTION, [model]);
 }
 
 /**

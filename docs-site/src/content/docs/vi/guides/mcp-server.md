@@ -129,7 +129,7 @@ Giới hạn của server cũng áp dụng cho `multix_run`: số output
 (`MULTIX_MCP_MAX_OUTPUTS`), độ dài video (`MULTIX_MCP_MAX_VIDEO_SECONDS`, cũng
 được gửi khi mặc định của lệnh video không rõ hoặc dài hơn) và độ phân giải
 (`MULTIX_MCP_ALLOWED_RESOLUTIONS`), và khi operator đặt
-`MULTIX_MCP_ALLOWED_IMAGE_MODELS`, cả `--model` của mọi lệnh tạo ra ảnh. Server
+`MULTIX_MCP_ALLOWED_IMAGE_MODELS`, cả `--model` của mọi lệnh tạo ra ảnh và có option này. Server
 tự chọn thư mục đầu ra, `--output`
 phải là tên file thuần, option mà CLI ghép vào tên file (như
 `elevenlabs voices design --output-prefix` hoặc mã ngôn ngữ khi lồng tiếng) chỉ
@@ -171,11 +171,12 @@ cùng các trường `max_cost_usd` và `cost_policy` và áp dụng cùng quy t
 **Model ảnh.** Model quyết định giá của mỗi ảnh, thường chênh nhau cả chục lần,
 và không giới hạn số lượng hay kích thước nào chặn được nó. Đặt
 `MULTIX_MCP_ALLOWED_IMAGE_MODELS` thành danh sách model id bạn chấp nhận: khi
-đó mọi lệnh có output là ảnh (`gemini generate`, `openai generate`, `fal
-image`, `atlas image`, `replicate image`, `openrouter generate`, `leonardo
-generate`, `byteplus generate`, `cloudflare generate`, `runway image`, `sume
-image`, các dạng `image-to-image` của chúng và các lệnh khác) chỉ chạy với
-`--model` có trong danh sách, dù do người gọi truyền hay là mặc định của lệnh.
+đó mọi lệnh có output là ảnh và nhận `--model` (`generate` / `image` và
+`image-to-image` của `gemini`, `openai`, `openrouter`, `minimax`, `leonardo`,
+`byteplus` và `atlas`, cùng `fal image`, `replicate image`, `cloudflare
+generate`, `runway image` và `sume image`) chỉ chạy với `--model` có trong danh
+sách, dù do người gọi truyền hay là mặc định của lệnh. `leonardo upscale` và
+`topview product-anyshoot` không nhận model nên không bị ảnh hưởng.
 Id phải khớp chính xác (bản ghim version của Replicate hay hậu tố `:nitro` của
 OpenRouter là một mục khác). Lệnh mà `multix_catalog` không cho biết model mặc
 định thì phải truyền `--model`. Danh sách không áp dụng cho body truyền thẳng

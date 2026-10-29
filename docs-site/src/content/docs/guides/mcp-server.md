@@ -132,7 +132,7 @@ Server limits apply to `multix_run` too: the output count
 sent when a video command's default is unknown or longer) and resolution
 (`MULTIX_MCP_ALLOWED_RESOLUTIONS`), and, when the operator sets
 `MULTIX_MCP_ALLOWED_IMAGE_MODELS`, the `--model` of every command that outputs
-images. The server chooses the output directory,
+images and takes one. The server chooses the output directory,
 `--output` must be a plain file name, options the CLI turns into part of a
 file name (such as `elevenlabs voices design --output-prefix` or a dub
 language) accept only letters, digits, `_` and `-`, the OpenAI image commands
@@ -175,11 +175,12 @@ starts nothing. The REST API (`POST /api/v1/jobs`) takes the same
 **Image models.** The model sets the price of each image, often by an order of
 magnitude, and no count or size cap bounds it. Set
 `MULTIX_MCP_ALLOWED_IMAGE_MODELS` to the model ids you accept: every command
-whose outputs include images (`gemini generate`, `openai generate`, `fal
-image`, `atlas image`, `replicate image`, `openrouter generate`, `leonardo
-generate`, `byteplus generate`, `cloudflare generate`, `runway image`, `sume
-image`, their `image-to-image` forms, and others) then runs only with a listed
-`--model`, given or the command's default. Ids match exactly (a Replicate
+whose outputs include images and that takes `--model` (`gemini`, `openai`,
+`openrouter`, `minimax`, `leonardo`, `byteplus` and `atlas` `generate` /
+`image` and `image-to-image`, `fal image`, `replicate image`, `cloudflare
+generate`, `runway image` and `sume image`) then runs only with a listed
+`--model`, given or the command's default. `leonardo upscale` and `topview
+product-anyshoot` take no model and are not affected. Ids match exactly (a Replicate
 version pin or an OpenRouter `:nitro` suffix is another entry). A command whose
 default model `multix_catalog` does not show needs `--model`. The list does not
 cover pass-through bodies such as `fal run`, which stay under

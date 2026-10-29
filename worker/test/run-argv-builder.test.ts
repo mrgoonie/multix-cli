@@ -863,7 +863,22 @@ describe("prepareRun: MULTIX_MCP_ALLOWED_IMAGE_MODELS", () => {
     refused({ command: "replicate image", args: ["a cat"], options: { model: " " } }, /--model/);
   });
 
-  it("leaves commands without image outputs alone", () => {
+  it("sends the checked id, without the caller's surrounding spaces", () => {
+    const prepared = runAllowed({
+      command: "fal image",
+      args: ["a cat"],
+      options: { model: "  fal-ai/flux/schnell " },
+    });
+    expect(prepared.argv).toContain("--model=fal-ai/flux/schnell");
+  });
+
+  it("leaves commands without image outputs or without --model alone", () => {
+    expect(runAllowed({ command: "leonardo upscale", args: ["img-1"] }).argv).toEqual([
+      "leonardo",
+      "upscale",
+      "--",
+      "img-1",
+    ]);
     expect(
       runAllowed({ command: "elevenlabs tts", options: { text: "hi", model: "eleven_v3" } }).argv,
     ).toContain("--model=eleven_v3");
