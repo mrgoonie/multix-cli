@@ -23,6 +23,8 @@ export type FileInputKind = "file" | "dir";
 export interface CapRules {
   /** Video length in seconds: at most `maxVideoSeconds`. */
   duration?: string[];
+  /** Generated audio length: at most `maxAudioSeconds`. */
+  audioLength?: AudioLengthRule[];
   /** Number of outputs: at most `maxOutputs`. */
   count?: string[];
   /**
@@ -42,6 +44,17 @@ export interface CapRules {
    * can be above `allowedResolutions`: such a run is uncapped.
    */
   resolutionFromModel?: boolean;
+}
+
+export interface AudioLengthRule {
+  option: string;
+  /** Option units in one second: 1 for seconds, 1000 for milliseconds. */
+  unitsPerSecond: number;
+  /**
+   * Longest length the provider produces when the option is omitted; above
+   * the cap, the server sends the cap instead.
+   */
+  omittedSeconds: number;
 }
 
 export interface CommandPolicy {
@@ -237,10 +250,18 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   "elevenlabs clone": { fileOptions: { files: "file", audio: "file" } },
   "elevenlabs voice-changer": { fileOptions: { input: "file" } },
   "elevenlabs transcribe": { fileOptions: { input: "file" } },
-  // Billed by length: --music-length-ms and a --plan's section durations set it (30 s otherwise).
+  // Billed by length: --music-length-ms sets it (30 s when omitted), and a
+  // --plan's section durations, which the caps cannot see.
   "elevenlabs music": {
     fileOptions: { plan: "file" },
-    uncappedOptions: ["music-length-ms", "plan"],
+    uncappedOptions: ["plan"],
+    caps: {
+      audioLength: [{ option: "music-length-ms", unitsPerSecond: 1000, omittedSeconds: 30 }],
+    },
+  },
+  // An omitted --duration-seconds lets the model pick, up to ElevenLabs' 30 s.
+  "elevenlabs sfx": {
+    caps: { audioLength: [{ option: "duration-seconds", unitsPerSecond: 1, omittedSeconds: 30 }] },
   },
   "elevenlabs dub": {
     uncappedSpend: SOURCE_LENGTH,

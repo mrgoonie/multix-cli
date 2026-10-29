@@ -1030,6 +1030,9 @@ instance runs at `https://multix.zuey.me/mcp` (invited GitHub accounts only).
   bounds each `gemini extend-video` continuation, not a stored clip that
   chained extends grew, nor a `gemini edit-video` of it),
   `MULTIX_MCP_ALLOWED_RESOLUTIONS` (default `480p,720p,768p,1080p`),
+  `MULTIX_MCP_MAX_AUDIO_SECONDS` (default `30`, ceiling `300`: caps
+  `elevenlabs sfx --duration-seconds` and `elevenlabs music --music-length-ms`,
+  and is sent when the provider's own 30 s would be longer),
   `MULTIX_MCP_UNCAPPED_SPEND` (default `budget`: runs those caps cannot bound,
   such as `fal run` or `heygen translate`, start only with a `max_cost_usd`
   their price estimate proves; `deny` refuses them, `allow` runs them),
