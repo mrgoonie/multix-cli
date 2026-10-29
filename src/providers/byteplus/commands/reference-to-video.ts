@@ -13,6 +13,7 @@ import { createBytePlusClient } from "../client.js";
 import {
   buildVideoTaskBody,
   downloadVideo,
+  missingTaskOutputError,
   submitVideoTask,
   toTaskWaitError,
   waitForVideoTask,
@@ -129,10 +130,7 @@ export function registerBytePlusReferenceToVideoCommand(parent: Command): void {
             logger,
           });
           const url = final.content?.video_url;
-          if (!url) {
-            logger.error(`Task succeeded but no video_url: ${JSON.stringify(final)}`);
-            process.exit(1);
-          }
+          if (!url) throw missingTaskOutputError(taskId, "video URL");
           const outPath =
             opts.output ??
             path.join(getOutputDir(), `byteplus-r2v-${taskId.slice(0, 8)}-${outputStamp()}.mp4`);

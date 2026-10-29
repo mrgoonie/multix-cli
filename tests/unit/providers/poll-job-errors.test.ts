@@ -5,7 +5,9 @@
  * the provider's reason with URLs redacted, never the whole payload (it holds
  * the prompt). A canceled task is not a failed job and its reason cannot turn
  * it into another error class. A wait that runs out throws a POLL_TIMEOUT
- * error (TIMEOUT) naming the command that finishes the job. None of them call
+ * error (TIMEOUT) naming the command that finishes the job. A BytePlus task
+ * that succeeds with no output URL is unusable output: a non-terminal job
+ * failure naming the task, not a failed job. None of them call
  * process.exit. Fake timers skip the poll intervals. No network.
  */
 
@@ -150,6 +152,52 @@ describe("byteplus task waits", () => {
       code: "UNKNOWN",
       message: "Task task-1 cancelled",
     });
+  });
+});
+
+describe("byteplus tasks that succeed without an output URL", () => {
+  const SUBMITTED = { id: "task-1" };
+  const SUCCEEDED = {
+    id: "task-1",
+    status: "succeeded",
+    content: { prompt: PROMPT, last_frame_url: SIGNED },
+  };
+  const NO_VIDEO = "BytePlus task task-1 succeeded but returned no video URL";
+
+  it.each([
+    ["video", ["byteplus", "video", "--prompt", PROMPT], NO_VIDEO],
+    ["image-to-video", ["byteplus", "image-to-video", IMAGE, "--prompt", PROMPT], NO_VIDEO],
+    [
+      "reference-to-video",
+      [
+        "byteplus",
+        "reference-to-video",
+        "--prompt",
+        PROMPT,
+        "--ref-image",
+        IMAGE.replace(":", "\\:"),
+      ],
+      NO_VIDEO,
+    ],
+    [
+      "generate-3d",
+      ["byteplus", "generate-3d", "--prompt", PROMPT],
+      "BytePlus task task-1 succeeded but returned no 3D file URL",
+    ],
+    [
+      "status --download",
+      ["byteplus", "status", "task-1", "--download"],
+      "BytePlus task task-1 succeeded but returned no video or 3D file URL",
+    ],
+  ])("%s throws unusable output without the payload", async (_name, argv, message) => {
+    stubFetch(SUCCEEDED, SUBMITTED);
+    const error = await runAndCatch(argv);
+    expect(error).toBeInstanceOf(ProviderJobFailedError);
+    expect((error as ProviderJobFailedError).terminal).toBe(false);
+    expect((error as Error).message).toBe(message);
+    expect(classifyError(error)).toMatchObject({ code: "UNKNOWN", message });
+    expect((error as Error).message).not.toContain(PROMPT);
+    expect((error as Error).message).not.toContain("SECRET_TOKEN");
   });
 });
 

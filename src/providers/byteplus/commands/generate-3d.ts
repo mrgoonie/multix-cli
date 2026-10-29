@@ -18,7 +18,7 @@ import {
   submitThreeDTask,
   waitForThreeDTask,
 } from "../generators/three-d.js";
-import { toTaskWaitError } from "../generators/video.js";
+import { missingTaskOutputError, toTaskWaitError } from "../generators/video.js";
 import { BYTEPLUS_3D_MODELS, BYTEPLUS_DEFAULTS } from "../models.js";
 
 export function registerBytePlusGenerate3DCommand(parent: Command): void {
@@ -98,10 +98,7 @@ export function registerBytePlusGenerate3DCommand(parent: Command): void {
             logger,
           });
           const url = final.content?.file_url;
-          if (!url) {
-            logger.error(`Task succeeded but no file_url in response: ${JSON.stringify(final)}`);
-            process.exit(1);
-          }
+          if (!url) throw missingTaskOutputError(taskId, "3D file URL");
           const ext = inferModelFileExt(url);
           const outPath =
             opts.output ??

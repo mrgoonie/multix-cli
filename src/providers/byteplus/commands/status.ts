@@ -15,6 +15,7 @@ import { downloadModelFile, inferModelFileExt } from "../generators/three-d.js";
 import {
   downloadVideo,
   getVideoTaskStatus,
+  missingTaskOutputError,
   toTaskWaitError,
   waitForVideoTask,
 } from "../generators/video.js";
@@ -80,8 +81,7 @@ export function registerBytePlusStatusCommand(parent: Command): void {
               await downloadModelFile(fileUrl, outPath, logger);
               console.log(`Saved: ${outPath}`);
             } else {
-              logger.error("Task succeeded but no video_url or file_url present");
-              process.exit(1);
+              throw missingTaskOutputError(taskId, "video or 3D file URL");
             }
           }
         } catch (e) {

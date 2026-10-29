@@ -9,6 +9,7 @@
  * Audio is always the top-level `generate_audio` field.
  */
 
+import { ProviderJobFailedError } from "../../../core/errors.js";
 import { downloadFile } from "../../../core/http-client.js";
 import { type ResolvedImage, refUrl } from "../../../core/image-input.js";
 import type { Logger } from "../../../core/logger.js";
@@ -160,6 +161,19 @@ export function toTaskWaitError(error: unknown, taskId: string, resumeCommand: s
       };
     },
   });
+}
+
+/**
+ * A task that succeeded but returned no output URL: the provider did not fail
+ * it, but there is nothing to download, so it is a non-terminal job failure.
+ * The task payload stays out of the message (it echoes the prompt and signed URLs).
+ */
+export function missingTaskOutputError(taskId: string, output: string): ProviderJobFailedError {
+  return new ProviderJobFailedError(
+    `BytePlus task ${taskId} succeeded but returned no ${output}`,
+    "byteplus",
+    { terminal: false },
+  );
 }
 
 export async function downloadVideo(
