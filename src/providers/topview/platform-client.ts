@@ -344,8 +344,12 @@ export async function fetchPlatformCatalog(opts: {
  * prediction was created (with funds reserved). The same Idempotency-Key and
  * body make a retry safe; say so instead of letting the user resubmit blind.
  */
+export function platformOrphanHint(route: string, key: string): string {
+  return `The prediction may have been created anyway. Retry the SAME submission safely with the same body and key: multix topview run ${route} --input <same input> --idempotency-key ${key}`;
+}
+
 function withPlatformOrphanHint(error: unknown, route: string, key: string): unknown {
-  const hint = `The prediction may have been created anyway. Retry the SAME submission safely with the same body and key: multix topview run ${route} --input <same input> --idempotency-key ${key}`;
+  const hint = platformOrphanHint(route, key);
   if (error instanceof TopviewApiError) {
     const { status } = error;
     if (!(status === 0 || isRetryableServerStatus(status))) return error;

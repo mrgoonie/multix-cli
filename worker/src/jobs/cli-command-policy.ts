@@ -299,6 +299,9 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
       "template-image": "file",
       "template-mask": "file",
     },
+    // try-on bills each generated image (--count 1-4). TopView commands take no
+    // duration in seconds (m2v's --video-length-type is a range code), so none is capped.
+    caps: { count: ["count"] },
   },
   "topview upload": { filePositionals: ["file"] },
   "media optimize": { fileOptions: { input: "file" } },

@@ -173,8 +173,12 @@ export function withLegacyOrphanHint(error: unknown, extra?: string): unknown {
   const hint = extra ? `${LEGACY_ORPHAN_HINT}. ${extra}` : LEGACY_ORPHAN_HINT;
   if (error instanceof TopviewApiError) {
     const { status } = error;
+    // TopView documents no 429, so one may come from a gateway after the task was created.
     const ambiguous =
-      status === 0 || status >= 500 || (status >= 200 && status < 300 && error.isLegacyServerError);
+      status === 0 ||
+      status === 429 ||
+      status >= 500 ||
+      (status >= 200 && status < 300 && error.isLegacyServerError);
     if (!ambiguous) return error;
     return new TopviewApiError(
       `${error.message}. ${hint}`,

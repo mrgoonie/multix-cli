@@ -344,6 +344,15 @@ export function parseJob(body: unknown, requested: string): SumeJob {
   if (model) out.model = model;
   const created = text(job.created_at, 64);
   if (created) out.createdAt = created;
+  const summary = record(job.usage_summary) ?? record(data.usage_summary);
+  if (summary) {
+    const state = text(summary.status, 40)?.toLowerCase();
+    const cents = nonNegative(summary.captured_usd_cents);
+    out.charge = {
+      ...(state ? { status: state } : {}),
+      ...(cents !== undefined ? { capturedUsd: cents / 100 } : {}),
+    };
+  }
   const error = record(job.error);
   if (error) {
     out.error = {

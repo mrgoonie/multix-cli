@@ -2,18 +2,21 @@
  * `topview run <route> --input <json|@file>` (API Platform): submit a
  * prediction on a verified route (`topview models`). The route and the
  * body's top-level shape are checked before any request. Every submission
- * carries an Idempotency-Key, reused on its own retries; pass
- * `--idempotency-key` to retry an earlier submission whose outcome is
- * unknown. Async by default; --wait polls and downloads. The input body is
+ * carries an Idempotency-Key, generated before the request and reused on
+ * its own retries; Ctrl-C or an ambiguous failure during the submit prints
+ * it, and `--idempotency-key` retries that submission without paying twice. Async by default; --wait polls and downloads. The input body is
  * never logged.
  */
 
+import { randomUUID } from "node:crypto";
 import type { Command } from "commander";
 import { ValidationError } from "../../../core/errors.js";
 import { parseJsonInput } from "../../../core/json-input.js";
 import { createLogger } from "../../../core/logger.js";
+import { exitOnInterrupt } from "../../atlascloud/commands/prediction-runner.js";
 import { assertBodyFamily, assertIdempotencyKey, assertPlatformRoute } from "../models.js";
 import { createTopviewPlatformClient } from "../node-client.js";
+import { platformOrphanHint } from "../platform-client.js";
 import {
   type WaitFlagOptions,
   addWaitOptions,
@@ -49,13 +52,19 @@ export function registerTopviewRunCommand(parent: Command): void {
       throw new ValidationError("--input <json|@file> is required");
     }
     const body = assertBodyFamily(spec, parseJsonInput(opts.input));
+    // Generated here, before the request, so an interrupted submit can still name it.
     const key =
-      opts.idempotencyKey !== undefined ? assertIdempotencyKey(opts.idempotencyKey) : undefined;
+      opts.idempotencyKey !== undefined ? assertIdempotencyKey(opts.idempotencyKey) : randomUUID();
     const client = createTopviewPlatformClient();
     logger.info(`TopView API Platform: ${spec.route}`);
-    const { prediction, idempotencyKey } = await client.submit(spec.route, body, {
-      ...(key ? { idempotencyKey: key } : {}),
-    });
+    const hint = platformOrphanHint(spec.route, key);
+    const { prediction, idempotencyKey } = await exitOnInterrupt(
+      () => client.submit(spec.route, body, { idempotencyKey: key }),
+      {
+        message: `Stopped while submitting to TopView. ${hint}`,
+        outcome: { hint, retryable: false },
+      },
+    );
     logger.success(`Created TopView prediction ${prediction.id} (${prediction.status})`);
     logPlatformCost(logger, prediction);
     if (!opts.wait) {

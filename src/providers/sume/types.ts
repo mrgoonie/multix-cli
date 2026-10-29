@@ -146,6 +146,16 @@ export interface SumeJob {
   model?: string;
   createdAt?: string;
   error?: SumeJobError;
+  /** The job's usage_summary: what Sume holds or charged for it. */
+  charge?: SumeJobCharge;
+}
+
+/** usage_summary of a job: reserved on submit, then captured (completed) or refunded. */
+export interface SumeJobCharge {
+  /** reserved | captured | refunded (newer values pass through). */
+  status?: string;
+  /** captured_usd_cents in USD (0 once refunded). */
+  capturedUsd?: number;
 }
 
 /** POST /v1/jobs/{id}/cancel → data. */

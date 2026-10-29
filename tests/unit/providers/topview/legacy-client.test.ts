@@ -1,6 +1,6 @@
 /**
  * TopView Legacy API client against the in-memory fake: auth headers,
- * envelope and error mapping, submit retry policy (429 only, orphan hint on
+ * envelope and error mapping, submit policy (never resent, orphan hint on
  * ambiguous failures), task parsing quirks, polling, the upload flow with its
  * SSRF guard, and the credit detail. No network.
  */
@@ -103,17 +103,19 @@ describe("auth and envelope", () => {
 });
 
 describe("submit retry policy (no idempotency key)", () => {
-  it("retries a 429 with Retry-After, the same body, then succeeds", async () => {
+  it("never resubmits after a 429, and names the credit log", async () => {
     const { fake, c, sleeps } = client({
       [SUBMIT]: [
         { status: 429, json: { message: "slow down" }, headers: { "retry-after": "3" } },
         ok({ taskId: TASK_ID }),
       ],
     });
-    await expect(c.submitVideoAvatar({ a: 1 })).resolves.toMatchObject({ taskId: TASK_ID });
-    expect(fake.calls).toHaveLength(2);
-    expect(fake.calls[1]?.body).toEqual({ a: 1 });
-    expect(sleeps).toEqual([3000]);
+    const e = await errorOf(c.submitVideoAvatar({ a: 1 }));
+    expect(e).toBeInstanceOf(TopviewApiError);
+    expect(e.message).toMatch(/rate limit.*may have been created \(and billed\) anyway/);
+    expect(e.message).toMatch(/multix topview credit/);
+    expect(fake.calls).toHaveLength(1);
+    expect(sleeps).toEqual([]);
   });
 
   it.each([

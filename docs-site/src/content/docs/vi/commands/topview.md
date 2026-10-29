@@ -237,10 +237,12 @@ multix topview run openai/gpt-image-2/text-to-image --input @body.json --wait
   tới file JSON. multix từ chối route chưa được xác minh, và body có cấu trúc
   cấp cao nhất không khớp với nhóm của route, trước khi gửi bất cứ thứ gì.
   TopView kiểm tra các trường.
-- Mỗi lần gửi đều kèm `Idempotency-Key`. multix dùng lại cùng key khi thử lại
-  sau lỗi mạng, `429` hoặc `5xx` (tối đa hai lần, tôn trọng `Retry-After`).
-  Nếu vẫn không rõ kết quả, hãy thử lại với cùng body và
-  `--idempotency-key <key>` để tránh tạo dự đoán thứ hai.
+- Mỗi lần gửi đều kèm `Idempotency-Key`, được tạo trước khi gửi request.
+  multix dùng lại cùng key khi thử lại sau lỗi mạng, `429` hoặc `5xx` (tối đa
+  hai lần, tôn trọng `Retry-After`). Nếu vẫn không rõ kết quả, hoặc lần chạy bị
+  dừng (Ctrl-C, hết thời gian) khi đang gửi, multix in key đó. Hãy thử lại với
+  cùng body và `--idempotency-key <key>` để nhận lại đúng dự đoán đó thay vì
+  tạo dự đoán thứ hai.
 - Không có `--wait`, lệnh in ID dự đoán, các lệnh để kiểm tra và tiếp tục, cùng
   idempotency key.
 
@@ -279,8 +281,8 @@ multix topview prediction <id> --wait --download    # tiếp tục
   Dự đoán API Platform báo `charged_usd` kèm `billing_state`: `RESERVED` là
   khoản giữ tạm, chưa phải chi tiêu cuối cùng; `CAPTURED` là khoản thu cuối
   cùng; `RELEASED` nghĩa là khoản giữ đã được hoàn lại.
-- Lệnh gửi Legacy không có idempotency key, nên multix chỉ thử lại khi gặp
-  `429`, lúc chưa có gì được tạo. Sau lỗi mạng, hết thời gian chờ, `5xx` hoặc
+- Lệnh gửi Legacy không có idempotency key, nên multix không bao giờ thử lại,
+  kể cả khi gặp `429`. Sau `429`, lỗi mạng, hết thời gian chờ, `5xx` hoặc
   phản hồi thành công không đọc được, task vẫn có thể đã được tạo và tính phí.
   Hãy kiểm tra `multix topview credit` (các task gần đây) hoặc
   [bảng điều khiển TopView](https://www.topview.ai/dashboard/home) trước khi

@@ -156,8 +156,8 @@ set `"wait": true` in `options` to get the video, or run
 `--image`, `--end-image`, `--reference-image`, `--video` and `--audio`; the
 TopView Legacy file flags and the `topview upload` file) as `https://` URLs in
 `inputs`. `sume estimate` uploads nothing, so it takes its media as plain
-`https://` URLs. `sume image --num-images` is capped by
-`MULTIX_MCP_MAX_OUTPUTS`, and `sume video --duration` and `--resolution` by the
+`https://` URLs. `sume image --num-images` and `topview product-anyshoot
+--count` are capped by `MULTIX_MCP_MAX_OUTPUTS`, and `sume video --duration` and `--resolution` by the
 video limits; pass a `--duration` the model's catalog row lists, because
 without one the server sends its own default length. `topview run --input`
 must be inline JSON, since `@file` values are rejected. `sume image`,

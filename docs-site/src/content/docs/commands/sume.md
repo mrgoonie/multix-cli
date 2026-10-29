@@ -156,10 +156,14 @@ bad value fails before anything is sent.
 
 ## Costs, refunds and limits
 
-Sume bills in USD. On submit it reserves the job's price, and the CLI logs that
-amount (`usage.usd`); it is the amount the run's cost receipt reports. Failed
-and canceled jobs are refunded. Reserved, refunded and released amounts and the
-account balance are never counted as spend.
+Sume bills in USD. On submit it reserves the job's price. The CLI logs that
+amount (`usage.usd`) as reserved, but never counts it as spend. Once the run
+sees the job complete (`--wait`, or `sume status` of a completed job), it
+reads the job's captured charge (`usage_summary.captured_usd_cents`) and the
+cost receipt reports that amount. A run that only submits gets a receipt
+whose cost is unknown until a later run sees the job complete. Failed and
+canceled jobs are refunded, so they record no spend. Refunded and released
+amounts and the account balance are never counted as spend.
 
 ```bash
 multix sume image "a fox" -m seedream-4-5-edit --num-images 2 --estimate     # pre-flight estimate, nothing sent
@@ -176,7 +180,8 @@ multix sume estimate "waves" -m veo-3.1 --duration 8                        # Su
   flag is invalid. Run `multix sume models --refresh` to refresh the cache.
 - `sume estimate` asks Sume for its quote (`POST /v1/open/estimate`). The quote
   is shown as Sume returns it and is not used by `--max-cost`. Media must be
-  `https://` URLs.
+  `https://` URLs. The quote itself is free: it is not recorded as a charge,
+  and `--max-cost` does not refuse it.
 - Prices change; [Sume's API pricing](https://www.sume.com/pricing/api) is
   authoritative.
 

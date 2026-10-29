@@ -1,13 +1,15 @@
 /**
- * What a Sume run reports as spent: the submit's usage.usd (a decimal string)
- * counts once; polls, reserved / refunded / released amounts and the balance
- * never count as spend. Runs the real client through the CLI fetch telemetry.
+ * What a Sume run reports as spent: the captured charge of a completed job
+ * (usage_summary.captured_usd_cents), counted once. The submit's usage.usd is a
+ * reservation and never counts; refunded jobs record nothing; reserved /
+ * refunded / released amounts and the balance never count as spend. Runs the real client through the CLI fetch telemetry.
  */
 
 import { afterEach, describe, expect, it } from "vitest";
 import { installFetchTelemetry, settleTelemetry } from "../../../../src/agent/fetch-telemetry.js";
 import { run, summarizeUsage } from "../../../../src/agent/run-state.js";
-import { buildCostReceipt } from "../../../../src/budget/cost-receipt.js";
+import { checkBudget, estimateCommand } from "../../../../src/budget/command-cost.js";
+import { buildCostReceipt, settleOperations } from "../../../../src/budget/cost-receipt.js";
 import { extractUsage } from "../../../../src/core/usage-extract.js";
 import { SumeClient } from "../../../../src/providers/sume/client.js";
 import {
@@ -33,16 +35,49 @@ afterEach(() => {
   run.requestModel = undefined;
   run.resolvedModel = undefined;
   run.dryRun = false;
+  run.postAmountsReserved = undefined;
 });
 
+/** A job's usage_summary while the reservation is held (documented field names, USD in cents). */
 const RESERVED_SUMMARY = {
   usage_summary: {
+    status: "reserved",
     reserved_credits: 35,
-    reserved_usd: "0.35",
+    reserved_usd_cents: 35,
+    captured_credits: 0,
+    captured_usd_cents: 0,
     refunded_credits: 0,
+    refunded_usd_cents: 0,
     released_credits: 0,
+    released_usd_cents: 0,
+    final: false,
   },
 };
+
+function jobBody(state: string, summary: Record<string, unknown>) {
+  return { data: { job: { id: JOB_ID, status: state, usage_summary: summary } } };
+}
+
+const CAPTURED = jobBody("completed", {
+  status: "captured",
+  reserved_usd_cents: 35,
+  captured_credits: 35,
+  captured_usd_cents: 35,
+  refunded_usd_cents: 0,
+  final: true,
+});
+
+function refunded(state: "failed" | "canceled") {
+  return jobBody(state, {
+    status: "refunded",
+    reserved_usd_cents: 35,
+    captured_credits: 0,
+    captured_usd_cents: 0,
+    refunded_credits: 35,
+    refunded_usd_cents: 35,
+    final: true,
+  });
+}
 
 function client(routes: Parameters<typeof createFakeSume>[0]) {
   const fake = createFakeSume(routes);
@@ -92,27 +127,36 @@ describe("usage extraction", () => {
 });
 
 describe("cost receipt of a Sume run", () => {
-  it("settles at the submit's usage.usd, counted once across submit, polls and result", async () => {
+  /** A `sume image` run: the submit's usage is a reservation, never spend. */
+  function generationClient(routes: Parameters<typeof createFakeSume>[0]) {
     const sume = client({
       "POST /v1/image-router/generate": [{ status: 202, json: submitted() }],
+      ...routes,
+    });
+    run.postAmountsReserved = true;
+    return sume;
+  }
+
+  it("settles a completed job at its captured charge, counted once", async () => {
+    const sume = generationClient({
       [`GET /v1/jobs/${JOB_ID}/status`]: [
         { json: status("processing", RESERVED_SUMMARY) },
-        { json: status("completed", RESERVED_SUMMARY) },
+        { json: status("completed") },
       ],
+      [`GET /v1/jobs/${JOB_ID}`]: [{ json: CAPTURED }],
       [`GET /v1/jobs/${JOB_ID}/result`]: [{ json: result() }],
     });
     const job = await sume.generate("image", { model: "nano-banana-2.1", prompt: "x" });
     await sume.waitForJob(job.jobId, { timeoutMs: 60_000 });
+    expect((await sume.getJob(job.jobId)).charge).toEqual({
+      status: "captured",
+      capturedUsd: 0.35,
+    });
     await sume.getResult(job.jobId);
     await settleTelemetry();
 
-    expect(run.calls.map((c) => `${c.method} ${c.status}`)).toEqual([
-      "POST 202",
-      "GET 200",
-      "GET 200",
-      "GET 200",
-    ]);
     expect(summarizeUsage()).toMatchObject({ cost_usd: 0.35, credits: 35 });
+    expect(summarizeUsage()?.metrics?.["data.usage.usd"]).toBe(0.35);
     expect(receipt()).toMatchObject({
       role: "charge",
       status: "settled",
@@ -120,6 +164,46 @@ describe("cost receipt of a Sume run", () => {
       actual_source: "provider_reported",
       provider_reported: { cost_usd: 0.35, credits: 35 },
     });
+  });
+
+  it.each([["failed" as const], ["canceled" as const]])(
+    "records no spend for a %s job whose reservation was refunded",
+    async (state) => {
+      const sume = generationClient({
+        [`GET /v1/jobs/${JOB_ID}/status`]: [{ json: status(state) }],
+        [`GET /v1/jobs/${JOB_ID}`]: [{ json: refunded(state) }],
+      });
+      const job = await sume.generate("image", { model: "nano-banana-2.1", prompt: "x" });
+      await sume.waitForJob(job.jobId, { timeoutMs: 60_000 });
+      await sume.getJob(job.jobId);
+      await settleTelemetry();
+
+      expect(summarizeUsage()?.cost_usd).toBe(0);
+      expect(receipt("failed")).toMatchObject({ status: "settled", actual_usd: 0 });
+    },
+  );
+
+  it("leaves a submit-only run's cost unknown, not settled at the reservation", async () => {
+    const sume = generationClient({});
+    await sume.generate("image", { model: "nano-banana-2.1", prompt: "x" });
+    await settleTelemetry();
+
+    expect(summarizeUsage()?.cost_usd).toBeUndefined();
+    expect(summarizeUsage()?.credits).toBeUndefined();
+    expect(summarizeUsage()?.metrics?.["data.usage.usd"]).toBe(0.35);
+    const r = receipt();
+    expect(r).toMatchObject({ role: "charge", actual_usd: null, actual_source: null });
+    expect(["unknown", "uncertain"]).toContain(r.status);
+  });
+
+  it("does not count a job still holding its reservation", async () => {
+    const sume = generationClient({
+      [`GET /v1/jobs/${JOB_ID}`]: [{ json: jobBody("processing", RESERVED_SUMMARY.usage_summary) }],
+    });
+    await sume.generate("image", { model: "nano-banana-2.1", prompt: "x" });
+    await sume.getJob(JOB_ID);
+    await settleTelemetry();
+    expect(summarizeUsage()?.cost_usd).toBeUndefined();
   });
 
   it("does not report a balance check as spend", async () => {
@@ -168,5 +252,33 @@ describe("decimal-string amounts", () => {
       const usage = extractUsage({ data: { charged_usd: "0.40", billing_state: state } });
       expect(usage.cost_usd).toBeUndefined();
     }
+  });
+});
+
+describe("sume estimate, a free quote", () => {
+  it("is priced at a proven $0, so --max-cost lets it through", () => {
+    const estimate = estimateCommand("sume estimate", { model: "veo-3.1" });
+    expect(estimate).toMatchObject({ status: "estimated", high_usd: 0, upper_bound: "proven" });
+    expect(() => checkBudget(estimate, 0, "strict")).not.toThrow();
+  });
+
+  it("gets an observation receipt that adds no unknown-cost operation", () => {
+    const quote = buildCostReceipt({
+      operation_id: "run:h_1",
+      outcome: "ok",
+      provider: "sume",
+      calls: [{ method: "POST", status: 200 }],
+      free: true,
+    });
+    expect(quote).toMatchObject({ role: "observation", actual_usd: null });
+    expect(settleOperations([quote])).toMatchObject({ operations: [], unknown: 0 });
+
+    const charge = buildCostReceipt({
+      operation_id: "run:h_2",
+      outcome: "ok",
+      provider: "sume",
+      calls: [{ method: "POST", status: 200 }],
+    });
+    expect(charge.role).toBe("charge");
   });
 });

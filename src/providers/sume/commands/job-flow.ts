@@ -3,7 +3,9 @@
  *
  * Paid work is async by default: a submit prints the job id with the
  * status/resume/cancel commands. `--wait` polls to a terminal status and
- * downloads the artifacts. Ctrl-C during the submit names the
+ * downloads the artifacts. The submit's usage is a reservation (refunded if
+ * the job fails or is canceled); the run's spend is the charge Sume captured,
+ * read from the job once it completed. Ctrl-C during the submit names the
  * Idempotency-Key that gets the job back without paying twice; Ctrl-C or a
  * timeout while waiting prints the resume command (the job keeps running).
  * The prompt is never logged.
@@ -149,6 +151,30 @@ export async function failJob(client: SumeClient, status: SumeJobStatus): Promis
 }
 
 /**
+ * Read a completed job's usage_summary so the run records what Sume captured
+ * (the submit's usage is only a reservation). Best effort: a failed read
+ * leaves the cost unknown and never fails a completed job.
+ */
+export async function readCapturedCharge(
+  client: SumeClient,
+  id: string,
+  logger: Logger,
+): Promise<void> {
+  try {
+    const charge = (await client.getJob(id)).charge;
+    if (charge?.status === "captured" && charge.capturedUsd !== undefined) {
+      logger.info(`Sume charged $${charge.capturedUsd.toFixed(2)} for job ${id}`);
+    } else if (charge?.status) {
+      logger.debug(`Sume charge for job ${id}: ${charge.status}`);
+    }
+  } catch (error) {
+    logger.debug(
+      `Could not read the charge of job ${id}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+/**
  * Wait for a terminal status, fail loudly unless it completed, then report
  * the artifacts. While waiting, a stopped run reports how to resume the job.
  */
@@ -177,6 +203,7 @@ export async function completeJob(
   );
   if (final.status !== "completed") await failJob(client, final);
   opts.logger.success(`Job ${id} completed`);
+  await readCapturedCharge(client, id, opts.logger);
   return reportOutputs(client, id, opts);
 }
 
@@ -216,6 +243,9 @@ export async function runGeneration(
       ? assertIdempotencyKey(opts.idempotencyKey)
       : `multix-${randomUUID()}`;
   const client = createSumeClient();
+  // The submit's usage is a reservation Sume refunds if the job fails or is
+  // canceled: the run's spend is the captured charge read once it completes.
+  run.postAmountsReserved = true;
 
   const loaded = await requestCatalog(client, run.dryRun);
   if (loaded.state === "stale") {
@@ -242,7 +272,9 @@ export async function runGeneration(
       outcome: { hint: orphanHint(idempotencyKey), retryable: false },
     },
   );
-  const reserved = submitted.usageUsd ? `; reserved $${submitted.usageUsd}` : "";
+  const reserved = submitted.usageUsd
+    ? `; reserved $${submitted.usageUsd}, charged only if it completes`
+    : "";
   const reused = submitted.idempotencyHit
     ? " (the job already created for this idempotency key)"
     : "";

@@ -153,7 +153,8 @@ mặc định không chờ, nên job kết thúc chỉ với task ID: đặt `"w
 `--audio`; của TopView là các flag file của Legacy API và file của
 `topview upload`) dưới dạng URL `https://` trong `inputs`. `sume estimate`
 không upload gì, nên nhận media dưới dạng URL `https://` thông thường.
-`sume image --num-images` bị giới hạn bởi `MULTIX_MCP_MAX_OUTPUTS`, còn
+`sume image --num-images` và `topview product-anyshoot --count` bị giới hạn
+bởi `MULTIX_MCP_MAX_OUTPUTS`, còn
 `sume video --duration` và `--resolution` bị giới hạn bởi các giới hạn video;
 hãy truyền một `--duration` có trong dòng catalog của model, vì nếu thiếu,
 server sẽ gửi độ dài mặc định của riêng nó. `topview run --input` phải là JSON

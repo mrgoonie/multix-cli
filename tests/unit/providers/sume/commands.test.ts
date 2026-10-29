@@ -183,7 +183,7 @@ describe("sume image", () => {
       `  Resume: multix sume status ${JOB_ID} --wait --download`,
       `  Cancel: multix sume cancel ${JOB_ID}`,
     ]);
-    expect(text()).toContain("reserved $0.35");
+    expect(text()).toContain("reserved $0.35, charged only if it completes");
     expectNoSecrets();
   });
 
@@ -352,6 +352,29 @@ describe("sume status", () => {
     const error = await run("status", JOB_ID).catch((e) => e);
     expect(error).toBeInstanceOf(SumeJobError);
     expect(JSON.parse(stdout.join("\n")).status).toBe("canceled");
+  });
+
+  it("reads a completed job's captured charge", async () => {
+    const fake = stub({
+      [STATUS]: [{ json: status("completed") }],
+      [JOB]: [
+        {
+          json: {
+            data: {
+              job: {
+                id: JOB_ID,
+                status: "completed",
+                usage_summary: { status: "captured", captured_usd_cents: 35 },
+              },
+            },
+          },
+        },
+      ],
+    });
+    await run("status", JOB_ID);
+    expect(fake.calls.map((c) => `${c.method} ${c.url.slice(BASE.length)}`)).toEqual([STATUS, JOB]);
+    expect(text()).toContain(`Sume charged $0.35 for job ${JOB_ID}`);
+    expect(JSON.parse(stdout.join("\n")).status).toBe("completed");
   });
 
   it("refuses a bad job id", async () => {

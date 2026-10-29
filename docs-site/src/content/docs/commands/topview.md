@@ -236,10 +236,13 @@ multix topview run openai/gpt-image-2/text-to-image --input @body.json --wait
   file. multix rejects a route that is not verified, and a body whose
   top-level shape does not match the route's family, before it sends
   anything. TopView checks the fields.
-- Every submission carries an `Idempotency-Key`. multix reuses the same key
-  when it retries a network error, `429` or `5xx` (at most twice, honoring
-  `Retry-After`). If the outcome stays unknown, retry with the same body and
-  `--idempotency-key <key>` to avoid creating a second prediction.
+- Every submission carries an `Idempotency-Key`, generated before the request
+  is sent. multix reuses the same key when it retries a network error, `429`
+  or `5xx` (at most twice, honoring `Retry-After`). If the outcome stays
+  unknown, or the run is stopped (Ctrl-C, a timeout) while the submit is in
+  flight, multix prints the key. Retry with the same body and
+  `--idempotency-key <key>` to get the same prediction back instead of
+  creating a second one.
 - Without `--wait`, the command prints the prediction ID, the commands to
   check and resume it, and the idempotency key.
 
@@ -279,8 +282,8 @@ multix topview prediction <id> --wait --download    # resume
   Platform predictions report `charged_usd` with a `billing_state`:
   `RESERVED` is a temporary hold and not final spend, `CAPTURED` is the final
   charge, and `RELEASED` means the hold was returned.
-- Legacy submits have no idempotency key, so multix retries them only on
-  `429`, when nothing was created. After a network error, timeout, `5xx` or an
+- Legacy submits have no idempotency key, so multix never retries them, not
+  even on `429`. After a `429`, network error, timeout, `5xx` or an
   unreadable success response, the task may still have been created and
   billed. Check `multix topview credit` (recent tasks) or the
   [TopView dashboard](https://www.topview.ai/dashboard/home) before you retry.

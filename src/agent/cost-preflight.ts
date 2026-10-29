@@ -12,6 +12,7 @@ import {
   type CostPolicy,
   checkBudget,
   estimateCommand,
+  isFreeCommand,
   parseCostPolicy,
   parseMaxCost,
   pricedCommands,
@@ -186,6 +187,7 @@ export function costReceiptFor(opts: {
     // billable request whose cost multix cannot see.
     calls: [...run.calls, ...run.externalRuns.map(() => ({ method: "EXEC", status: 200 }))],
     usage: opts.usage,
+    ...(isFreeCommand(run.command) ? { free: true } : {}),
     estimate: run.estimate,
     max_cost_usd: run.maxCost,
     policy: run.maxCost !== undefined ? run.costPolicy : undefined,

@@ -6,7 +6,9 @@
  * shapes this keeps any numeric leaf whose key names a token, cost, credit,
  * usage, duration or timing value. It never keeps strings other than ids and
  * plain decimal amounts under a money key (Sume usage.usd "0.35", TopView
- * charged_usd "0.4160" and costCredit "5.00").
+ * charged_usd "0.4160" and costCredit "5.00"). A Sume job's usage_summary
+ * reports the captured charge in USD cents (captured_usd_cents), counted once
+ * the summary is captured or refunded.
  */
 
 export interface UsageTokens {
@@ -84,7 +86,7 @@ function pathKind(path: string): PathKind {
 /**
  * Key paths that name a forecast or a hold, not a charge: Runway estimatedCost,
  * quotes, and the reserved / refunded / released parts of a charge (Sume
- * usage_summary.reserved_credits), which are never what a run spent.
+ * usage_summary.reserved_usd_cents), which are never what a run spent.
  */
 const ESTIMATE_PATH = /(estimat|quote|expected|reserved|refunded|released)/i;
 const ID_KEYS = new Set([
@@ -144,9 +146,23 @@ function decimalAmount(key: string, value: unknown): number | undefined {
  */
 const CAPTURED_STATE = /^(captured|charged|settled|billed|paid|completed?)$/i;
 
-function isHold(obj: Record<string, unknown>): boolean {
+/**
+ * States of a Sume job `usage_summary` whose captured amounts are final: the
+ * reservation was captured, or refunded (nothing captured). `reserved` is a hold.
+ */
+const FINAL_SUMMARY_STATE = /^(captured|refunded)$/i;
+/** A charge summary (Sume's job usage_summary) speaks for the whole body when present. */
+const SUMMARY_SEGMENT = /(^|\.)usage_summary(\.|$)/i;
+/** Captured amounts a charge summary reports in USD cents (Sume rounds them up). */
+const CAPTURED_CENTS = /^captured_usd_cents$/i;
+
+function isHold(obj: Record<string, unknown>, path: string): boolean {
   const state = obj.billing_state ?? obj.billingState;
-  return typeof state === "string" && !CAPTURED_STATE.test(state.trim());
+  if (typeof state === "string") return !CAPTURED_STATE.test(state.trim());
+  if (SUMMARY_SEGMENT.test(path) && typeof obj.status === "string") {
+    return !FINAL_SUMMARY_STATE.test(obj.status.trim());
+  }
+  return false;
 }
 
 function pick(obj: Record<string, unknown>, ...keys: string[]): number | undefined {
@@ -217,7 +233,7 @@ function walk(
   }
   const obj = asRecord(value);
   if (!obj) return;
-  if (isHold(obj)) held.add(path);
+  if (isHold(obj, path)) held.add(path);
   for (const [key, child] of Object.entries(obj)) {
     const childPath = path ? `${path}.${key}` : key;
     const n = num(child) ?? decimalAmount(key, child);
@@ -252,16 +268,23 @@ export function extractUsage(body: unknown, headers?: Headers | null): ResponseU
     tokensFrom(obj, out.tokens);
     walk(obj, "", 0, out, held);
   }
+  // With a charge summary in the body, only its captured amounts are spend:
+  // a reservation reported elsewhere in the same body never is.
+  const summarized = Object.keys(out.metrics).some((path) => SUMMARY_SEGMENT.test(path));
   for (const kind of ["plain", "spend-in-balance"] as const) {
     for (const [path, value] of Object.entries(out.metrics)) {
       const leaf = path.split(".").pop() ?? path;
+      if (summarized && !SUMMARY_SEGMENT.test(path)) continue;
       // Balances never count; a spend inside a balance counts only when no plain one does.
       if (pathKind(path) !== kind) continue;
       // Estimates and holds stay in metrics but are never reported as cost or credits spent.
       if (ESTIMATE_PATH.test(path)) continue;
       const dot = path.lastIndexOf(".");
       if (held.has(dot === -1 ? "" : path.slice(0, dot))) continue;
-      if (
+      if (out.cost_usd === undefined && CAPTURED_CENTS.test(leaf)) {
+        out.cost_usd = value / 100;
+        out.sources = { ...out.sources, cost_usd: `body.${path}` };
+      } else if (
         out.cost_usd === undefined &&
         (/^charged_usd$/i.test(leaf) ||
           (/^(cost|total_cost|cost_usd|usd)$/i.test(leaf) &&

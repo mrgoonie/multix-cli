@@ -239,6 +239,27 @@ describe("estimateSumeCost", () => {
   });
 
   it.each([
+    ["image", SEEDREAM, "seedream-4-5-edit", "per_1k_chars"],
+    ["image", SEEDREAM, "seedream-4-5-edit", "second"],
+    ["video", VEO, "veo-3.1", "minute"],
+    ["video", VEO, "veo-3.1", "image"],
+  ] as const)(
+    "does not price a %s row whose pricing unit it cannot count (%s, %s per %s)",
+    (command, raw, model, unit) => {
+      const row = { ...raw, pricing: { ...raw.pricing, unit } };
+      const e = estimateSumeCost({
+        command,
+        model,
+        options: command === "image" ? { numImages: "1" } : { duration: "8" },
+        catalog: snap(row),
+        at,
+      });
+      expect(e).toMatchObject({ status: "unknown", reason: "unsupported", high_usd: null });
+      expect(e.detail).toContain(`priced per ${unit}`);
+    },
+  );
+
+  it.each([
     [
       "no cache",
       undefined,

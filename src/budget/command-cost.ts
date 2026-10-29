@@ -124,6 +124,17 @@ const NEEDS: Record<string, string> = {
 /** Priced from the model's row in Sume's catalog (per image or per second). */
 const SUME_COMMANDS = ["sume image", "sume video"] as const;
 
+/**
+ * Requests that cost nothing even though they POST: a provider's own price
+ * quote. They are priced at a proven $0, so --max-cost lets them through, and
+ * their receipts are observations rather than charges.
+ */
+const FREE_COMMANDS: ReadonlySet<string> = new Set(["sume estimate"]);
+
+export function isFreeCommand(command: string): boolean {
+  return FREE_COMMANDS.has(command);
+}
+
 /** Commands with a pre-flight estimator. */
 export function pricedCommands(): string[] {
   return [...Object.keys(BUILDERS), "speech generate", ...SUME_COMMANDS];
@@ -293,6 +304,19 @@ export function estimateCommand(
     Object.entries(options).map(([k, v]) => [k.replace(/^-+/, ""), v]),
   );
   if (command === "speech generate") return estimateSpeech(named, defaults);
+  if (isFreeCommand(command)) {
+    return {
+      ...unknownEstimate(command, "", "", opt(named, "model") ?? "", defaults.at),
+      status: "estimated",
+      reason: undefined,
+      detail: undefined,
+      low_usd: 0,
+      expected_usd: 0,
+      high_usd: 0,
+      upper_bound: "proven",
+      assumptions: [`${command} is a free price quote; it starts no paid work.`],
+    };
+  }
   if (command === "sume image" || command === "sume video") {
     return estimateSumeCost({
       command: command === "sume image" ? "image" : "video",

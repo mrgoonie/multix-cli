@@ -5,7 +5,8 @@
  * "unknown", never $0.
  *
  * Price = the matching pricing option (resolution, quality, audio) × units
- * (images, or seconds of video). Billing rounds the charge up to the cent.
+ * (images, or seconds of video). A row priced in any other unit is "unknown".
+ * Billing rounds the charge up to the cent.
  * - One matching option and known units: a proven ceiling.
  * - Several matching options, or a duration the request leaves open: a
  *   min..max range whose high end is only an estimate.
@@ -138,6 +139,12 @@ function billedUnits(
   return `${model.id} lists no duration range; pass --duration`;
 }
 
+/** The pricing unit each command counts: images, or seconds of video. Any other unit is unpriced. */
+const PRICED_UNIT: Record<SumeCommandKind, RegExp> = {
+  image: /^images?$/i,
+  video: /^seconds?$/i,
+};
+
 /** Charge for `units` at `option`, rounded up to the cent as Sume bills it. */
 function priceOf(option: SumePriceOption, units: number): number {
   return Math.ceil((option.usd_micros * units) / 10_000) / 100;
@@ -203,6 +210,15 @@ export function estimateSumeCost(input: SumeEstimateInput): CostEstimate {
       `The Sume catalog lists no price for ${model.id} with these settings; ${REFRESH_HINT}`,
     );
   }
+  const unit = model.pricing.unit;
+  if (!PRICED_UNIT[input.command].test(unit.trim())) {
+    return unknown(
+      input,
+      at,
+      "unsupported",
+      `${model.id} is priced per ${unit}, which multix cannot count before the run`,
+    );
+  }
   const units = billedUnits(model, input.command, body);
   if (typeof units === "string") {
     return unknown(input, at, "missing_input", `Cannot price ${command}: ${units}`);
@@ -211,7 +227,6 @@ export function estimateSumeCost(input: SumeEstimateInput): CostEstimate {
   const low = Math.min(...prices);
   const high = Math.max(...prices);
   const proven = options.length === 1 && units.low === units.high;
-  const unit = model.pricing.unit;
   return {
     status: "estimated",
     currency: "USD",

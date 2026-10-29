@@ -157,10 +157,14 @@ nên một giá trị sai sẽ báo lỗi trước khi gửi bất cứ thứ g�
 
 ## Chi phí, hoàn tiền và giới hạn
 
-Sume tính phí bằng USD. Khi gửi job, Sume tạm giữ giá của job, và CLI ghi lại
-số tiền đó (`usage.usd`); đây là số tiền mà biên nhận chi phí của lần chạy báo
-cáo. Job thất bại hoặc bị hủy được hoàn tiền. Các khoản tạm giữ, hoàn lại, giải
-phóng và số dư tài khoản không bao giờ được tính là chi tiêu.
+Sume tính phí bằng USD. Khi gửi job, Sume tạm giữ giá của job. CLI ghi lại số
+tiền đó (`usage.usd`) là khoản tạm giữ, nhưng không bao giờ tính nó là chi tiêu.
+Khi lần chạy thấy job hoàn tất (`--wait`, hoặc `sume status` của một job đã hoàn
+tất), CLI đọc khoản phí Sume đã thu của job (`usage_summary.captured_usd_cents`)
+và biên nhận chi phí báo cáo số tiền đó. Lần chạy chỉ gửi job nhận biên nhận có
+chi phí chưa xác định, cho đến khi một lần chạy sau thấy job hoàn tất. Job thất
+bại hoặc bị hủy được hoàn tiền, nên không ghi nhận chi tiêu nào. Các khoản hoàn
+lại, giải phóng và số dư tài khoản không bao giờ được tính là chi tiêu.
 
 ```bash
 multix sume image "a fox" -m seedream-4-5-edit --num-images 2 --estimate     # ước tính trước, không gửi gì
@@ -177,7 +181,8 @@ multix sume estimate "waves" -m veo-3.1 --duration 8                        # b�
   hợp lệ. Chạy `multix sume models --refresh` để làm mới bản đệm.
 - `sume estimate` hỏi Sume báo giá (`POST /v1/open/estimate`). Báo giá được
   hiển thị nguyên như Sume trả về và không được `--max-cost` sử dụng. Media
-  phải là URL `https://`.
+  phải là URL `https://`. Bản thân việc báo giá là miễn phí: nó không được ghi
+  nhận là một khoản phí, và `--max-cost` không từ chối nó.
 - Giá có thể thay đổi; [bảng giá API của Sume](https://www.sume.com/pricing/api)
   là nguồn chính thức.
 

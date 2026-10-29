@@ -6,9 +6,9 @@
  *
  * - Auth: `Authorization: Bearer <key>` and `Topview-Uid: <uid>` on every call.
  * - Envelope: `{ code: "200", message, result }`; any other code is an error.
- * - Submits have no idempotency key and there is no cancel endpoint, so only a
- *   429 (nothing created) is retried; any other ambiguous failure carries a
- *   hint to check the credit log before retrying.
+ * - Submits have no idempotency key and there is no cancel endpoint, so a
+ *   paid submit is never retried (not even on 429); an ambiguous failure
+ *   carries a hint to check the credit log before retrying. Free GETs retry.
  * - Uploads: GET /v1/upload/credential → PUT the bytes to the presigned URL
  *   (no TopView headers) → GET /v1/upload/check → fileId.
  */
@@ -45,8 +45,6 @@ import type {
 } from "./types.js";
 
 const REQUEST_TIMEOUT_MS = 60_000;
-const SUBMIT_MAX_RETRIES = 2;
-const SUBMIT_RETRY_CAP_MS = 30_000;
 /** Slowest uplink an upload allows for before timing out (1 MB/s). */
 const DEFAULT_MIN_UPLOAD_BYTES_PER_SEC = 1_000_000;
 /** The docs suggest polling every 3-5 seconds. */
@@ -308,9 +306,11 @@ export class TopviewLegacyClient {
   }
 
   /**
-   * POST a paid task. Retries only a 429 (rejected before anything was
-   * created); every other failure that may have created the task gets the
-   * orphan hint. `resumeHint` is appended to it (e.g. how to resume a chain).
+   * POST a paid task, exactly once. The Legacy API has no idempotency key, so
+   * a resend could create (and bill) a second task: no status is retried, not
+   * even a 429 (a gateway may send one after the task was created). Every
+   * failure that may have created the task gets the orphan hint; `resumeHint`
+   * is appended to it (e.g. how to resume a chain).
    */
   async submit(
     path: string,
@@ -318,24 +318,17 @@ export class TopviewLegacyClient {
     subject: string,
     resumeHint?: string,
   ): Promise<LegacySubmitted> {
-    for (let attempt = 0; ; attempt++) {
-      try {
-        const result = asRecord(unwrapLegacy(await this.raw("POST", path, { body }), subject));
-        if (!result || !isValidLegacyId(result.taskId)) {
-          throw malformed(`missing or invalid taskId for ${subject}`);
-        }
-        return {
-          taskId: result.taskId,
-          ...(str(result.status) ? { status: result.status as string } : {}),
-        };
-      } catch (error) {
-        if (error instanceof HttpError && error.status === 429 && attempt < SUBMIT_MAX_RETRIES) {
-          const delay = Math.min(error.retryAfterMs ?? 2000 * (attempt + 1), SUBMIT_RETRY_CAP_MS);
-          await this.sleep(delay);
-          continue;
-        }
-        throw withLegacyOrphanHint(mapLegacyError(error, subject), resumeHint);
+    try {
+      const result = asRecord(unwrapLegacy(await this.raw("POST", path, { body }), subject));
+      if (!result || !isValidLegacyId(result.taskId)) {
+        throw malformed(`missing or invalid taskId for ${subject}`);
       }
+      return {
+        taskId: result.taskId,
+        ...(str(result.status) ? { status: result.status as string } : {}),
+      };
+    } catch (error) {
+      throw withLegacyOrphanHint(mapLegacyError(error, subject), resumeHint);
     }
   }
 

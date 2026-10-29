@@ -12,6 +12,7 @@ import os from "node:os";
 import path from "node:path";
 import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { run as agentRun } from "../../../../src/agent/run-state.js";
 import { _resetOutputDir } from "../../../../src/core/output-dir.js";
 import { registerTopviewCommands } from "../../../../src/providers/topview/commands/index.js";
 import {
@@ -668,6 +669,36 @@ describe("API Platform commands", () => {
     const fake = stub({ [SUBMIT]: [data(prediction("created"))] });
     await run("run", ROUTE, "--input", INPUT, "--idempotency-key", "earlier-key-1234");
     expect(fake.calls[0]?.headers["idempotency-key"]).toBe("earlier-key-1234");
+  });
+
+  it("run names its idempotency key when stopped mid-submit, and a rerun reuses it", async () => {
+    const fake = stub({ [SUBMIT]: [data(prediction("created"))] });
+    const exits: number[] = [];
+    vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
+      exits.push(code ?? 0);
+    }) as typeof process.exit);
+    const inner = fake.fetch;
+    vi.stubGlobal("fetch", (input: string | URL | Request, init?: RequestInit) => {
+      // Ctrl-C while the POST is in flight.
+      (process.listeners("SIGINT").at(-1) as (s: string) => void)("SIGINT");
+      return inner(input, init);
+    });
+    try {
+      await run("run", ROUTE, "--input", INPUT);
+      expect(exits).toEqual([130]);
+      const key = fake.calls[0]?.headers["idempotency-key"] as string;
+      expect(key).toMatch(/^[0-9a-f-]{36}$/);
+      expect(text()).toContain("Stopped while submitting to TopView");
+      expect(text()).toContain(`--idempotency-key ${key}`);
+      expect(agentRun.interrupted).toMatchObject({ retryable: false });
+      expect(agentRun.interrupted?.hint).toContain(`--idempotency-key ${key}`);
+
+      vi.stubGlobal("fetch", inner);
+      await run("run", ROUTE, "--input", INPUT, "--idempotency-key", key);
+      expect(fake.calls[1]?.headers["idempotency-key"]).toBe(key);
+    } finally {
+      agentRun.interrupted = undefined;
+    }
   });
 
   it("prediction with payment_required exits non-zero with top-up guidance", async () => {

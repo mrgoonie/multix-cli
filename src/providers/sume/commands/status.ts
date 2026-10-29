@@ -5,6 +5,7 @@
  * stdout carries only the result (the JSON, URLs or saved file list):
  * progress and resume hints go to stderr.
  * Failed and canceled jobs exit non-zero with Sume's reason (both are refunded).
+ * A completed job's captured charge is read so the run records what Sume billed.
  */
 
 import type { Command } from "commander";
@@ -16,6 +17,7 @@ import {
   type OutputFlagOptions,
   completeJob,
   parsePositiveInt,
+  readCapturedCharge,
   reportOutputs,
   resumeCommand,
   summarizeStatus,
@@ -47,6 +49,7 @@ export function registerSumeStatusCommand(parent: Command): void {
         return;
       }
       const status = await client.getStatus(id);
+      if (status.status === "completed") await readCapturedCharge(client, id, logger);
       if (status.status === "completed" && opts.download !== undefined) {
         await reportOutputs(client, id, report);
         return;
