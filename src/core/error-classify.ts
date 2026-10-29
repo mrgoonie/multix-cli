@@ -300,6 +300,11 @@ export function classifyError(error: unknown): ErrorInfo {
     if (error.code === "POLL_TIMEOUT") return build("TIMEOUT", message);
     if (error.code === "UNKNOWN_REMOTE_STATE") return build("UNKNOWN_REMOTE_STATE", message);
     if (error instanceof BudgetError) return build(error.code as ErrorCode, message);
+  } else if (error instanceof Error && error.cause instanceof MultixError) {
+    // A plain Error that adds context (a request id, a resume hint) to a typed error keeps
+    // the typed error's code, HTTP status and Retry-After, and reports its own message.
+    const info = classifyError(error.cause);
+    if (info.code !== "UNKNOWN") return { ...info, message: redactUrlsInText(message) };
   }
   return classifyMessage(message);
 }

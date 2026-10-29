@@ -162,7 +162,9 @@ export async function waitForFalResult(opts: WaitForResultOptions): Promise<FalR
         continue;
       }
       const msg = e instanceof Error ? e.message : String(e);
-      throw new Error(`Failed to poll status for fal request ${requestId}: ${msg}. ${resumeHint}`);
+      throw new Error(`Failed to poll status for fal request ${requestId}: ${msg}. ${resumeHint}`, {
+        cause: e,
+      });
     }
 
     logger.debug(`attempt ${attempt} — status: ${statusRes.status}`);
@@ -174,7 +176,10 @@ export async function waitForFalResult(opts: WaitForResultOptions): Promise<FalR
     return await client.getAbsolute<FalResultResponse>(submit.response_url, logger);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    throw new Error(`Failed to fetch result for fal request ${requestId}: ${msg}. ${resumeHint}`);
+    // The cause keeps the error's class, status and Retry-After for classifyError.
+    throw new Error(`Failed to fetch result for fal request ${requestId}: ${msg}. ${resumeHint}`, {
+      cause: e,
+    });
   }
 }
 

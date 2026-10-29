@@ -88,6 +88,30 @@ describe("classifyError", () => {
     expect(info).toMatchObject({ code: "RATE_LIMITED", http_status: 429, retry_after_s: 3 });
   });
 
+  it("classifies a plain Error that wraps a typed error by its cause, keeping its own message", () => {
+    const cause = new HttpError(
+      429,
+      "slow down",
+      "https://api.example.com/v1/x?sig=SECRET",
+      30_000,
+    );
+    const info = classifyError(
+      new Error(`Failed to fetch result for request r-1: ${cause.message}. Resume with: x`, {
+        cause,
+      }),
+    );
+    expect(info).toMatchObject({ code: "RATE_LIMITED", http_status: 429, retry_after_s: 30 });
+    expect(info.message).toBe(
+      "Failed to fetch result for request r-1: HTTP 429 from https://api.example.com/v1/x?[redacted]: slow down. Resume with: x",
+    );
+  });
+
+  it("falls back to the wrapper's text when its typed cause says nothing", () => {
+    const cause = new ProviderError("something odd", "fal");
+    const info = classifyError(new Error("Failed: rate limit exceeded", { cause }));
+    expect(info.code).toBe("RATE_LIMITED");
+  });
+
   it("redacts URL query strings in the message it hands to the envelope and ledger", () => {
     const info = classifyError(
       new ProviderError(

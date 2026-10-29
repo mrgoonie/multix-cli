@@ -2,7 +2,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ProviderError, ValidationError } from "../../../../src/core/errors.js";
+import { classifyError } from "../../../../src/core/error-classify.js";
+import { HttpError, ProviderError, ValidationError } from "../../../../src/core/errors.js";
 import {
   downloadResultMedia,
   extractMediaUrls,
@@ -278,6 +279,67 @@ describe("submitAndWait", () => {
         pollIntervalMs: 5,
       }),
     ).rejects.toThrow(/req-1/);
+  });
+
+  /** Fetch mock: submit accepted, then the given status and result replies. */
+  function mockQueue(status: () => Response, result: () => Response) {
+    globalThis.fetch = vi.fn(async (url: string | URL) => {
+      const u = String(url);
+      if (u.endsWith("/fal-ai/flux/schnell")) {
+        return new Response(
+          JSON.stringify({
+            request_id: "req-1",
+            status_url: STATUS_URL,
+            response_url: RESPONSE_URL,
+          }),
+          { status: 200 },
+        );
+      }
+      if (u === STATUS_URL) return status();
+      if (u === RESPONSE_URL) return result();
+      throw new Error(`unexpected fetch: ${u}`);
+    }) as unknown as typeof fetch;
+  }
+
+  const waitError = () =>
+    submitAndWait({
+      model: "fal-ai/flux/schnell",
+      input: { prompt: "x" },
+      logger: noopLogger,
+      pollIntervalMs: 5,
+    }).catch((e: unknown) => e);
+
+  it("keeps a rate-limited result fetch classifiable, with Retry-After and the resume hint", async () => {
+    mockQueue(
+      () => new Response(JSON.stringify({ status: "COMPLETED" }), { status: 200 }),
+      () =>
+        new Response(JSON.stringify({ detail: "slow down" }), {
+          status: 429,
+          headers: { "retry-after": "30" },
+        }),
+    );
+    const err = await waitError();
+    expect((err as Error).message).toMatch(
+      /Failed to fetch result for fal request req-1: HTTP 429/,
+    );
+    expect((err as Error).message).toContain("Resume with: multix fal status");
+    expect((err as Error).cause).toBeInstanceOf(HttpError);
+    expect(classifyError(err)).toMatchObject({
+      code: "RATE_LIMITED",
+      http_status: 429,
+      retry_after_s: 30,
+      exit_code: 4,
+    });
+  });
+
+  it("keeps a rejected status poll classified by its HTTP status", async () => {
+    mockQueue(
+      () => new Response("Unauthorized", { status: 401 }),
+      () => new Response("{}", { status: 200 }),
+    );
+    const err = await waitError();
+    expect((err as Error).message).toMatch(/Failed to poll status for fal request req-1/);
+    expect(classifyError(err)).toMatchObject({ code: "INVALID_KEY", http_status: 401 });
   });
 
   /** Fetch mock whose submit returns the given follow-up URLs; records every keyed request. */
