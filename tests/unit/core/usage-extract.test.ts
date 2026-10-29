@@ -200,3 +200,85 @@ describe("extractUsage", () => {
     expect(hasUsage(extractUsage({ status: "ok", url: "https://x" }))).toBe(false);
   });
 });
+
+/**
+ * Decimal-string amounts, the `remain` balance word, `charged_usd`, billing_state
+ * holds and charge summaries apply to every provider: these bodies from other
+ * providers must extract exactly what they did before those rules existed.
+ */
+describe("extractUsage on other providers' bodies", () => {
+  it("counts an OpenRouter chat completion's numeric usage.cost once, with its tokens", () => {
+    const usage = extractUsage({
+      id: "gen-1",
+      model: "openai/gpt-4o-mini",
+      status: "reserved",
+      usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15, cost: 0.0123 },
+    });
+    expect(usage).toEqual({
+      tokens: { input: 10, output: 5, total: 15 },
+      cost_usd: 0.0123,
+      metrics: {
+        "usage.prompt_tokens": 10,
+        "usage.completion_tokens": 5,
+        "usage.total_tokens": 15,
+        "usage.cost": 0.0123,
+      },
+      ids: ["gen-1"],
+      sources: { cost_usd: "body.usage.cost" },
+    });
+  });
+
+  it("keeps a fal queue result's timing metrics without inventing a cost", () => {
+    const usage = extractUsage({
+      request_id: "req-fal-1",
+      status: "COMPLETED",
+      metrics: { inference_time: 1.25 },
+    });
+    expect(usage).toEqual({
+      tokens: {},
+      metrics: { "metrics.inference_time": 1.25 },
+      ids: ["req-fal-1"],
+    });
+  });
+
+  it("keeps a Replicate prediction's predict_time, and no string becomes an amount", () => {
+    const usage = extractUsage({
+      id: "rep-1",
+      status: "succeeded",
+      version: "5.1",
+      metrics: { predict_time: 3.5, total_time: 4 },
+      urls: { get: "https://api.replicate.com/v1/predictions/rep-1" },
+    });
+    expect(usage.cost_usd).toBeUndefined();
+    expect(usage.credits).toBeUndefined();
+    expect(usage.metrics).toEqual({ "metrics.predict_time": 3.5, "metrics.total_time": 4 });
+  });
+
+  it("counts a numeric cost beside a status object that is not a charge summary", () => {
+    const usage = extractUsage({
+      data: { status: "reserved", usage: { status: "pending", cost: 0.2, credits: 4 } },
+    });
+    expect(usage).toMatchObject({ cost_usd: 0.2, credits: 4 });
+  });
+
+  it("still separates spent credits from remaining ones", () => {
+    const usage = extractUsage({
+      usage: { credits_remaining: 90, remaining_credits: 90, credits: 2 },
+    });
+    expect(usage.credits).toBe(2);
+  });
+
+  it("counts a numeric charged_usd unless its billing_state is a hold", () => {
+    expect(extractUsage({ charged_usd: 0.4 }).cost_usd).toBe(0.4);
+    expect(extractUsage({ charged_usd: 0.4, billing_state: "CAPTURED" }).cost_usd).toBe(0.4);
+    expect(extractUsage({ charged_usd: 0.4, billing_state: "RESERVED" }).cost_usd).toBeUndefined();
+  });
+
+  it("reads a charge summary's captured cents only once it is final", () => {
+    const summary = (status: string, cents: number) =>
+      extractUsage({ data: { usage_summary: { status, captured_usd_cents: cents } } }).cost_usd;
+    expect(summary("captured", 35)).toBe(0.35);
+    expect(summary("refunded", 0)).toBe(0);
+    expect(summary("reserved", 0)).toBeUndefined();
+  });
+});

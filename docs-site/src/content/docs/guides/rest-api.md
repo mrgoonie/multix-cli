@@ -203,7 +203,8 @@ whole setting, so leaving `prefix` out resets it to `multix`. The response, like
 ## Run a job and poll it
 
 `POST /jobs` takes the `multix_run` input (`command`, `options`, `args`,
-`inputs`, `wait_seconds`; see
+`inputs`, `wait_seconds`, `max_cost_usd`, `cost_policy`; `estimate` is MCP
+only; see
 [Running CLI commands](/guides/mcp-server/#running-cli-commands)). Use
 `GET /catalog?group=gemini` to see a command's options and which take files,
 `GET /catalog?task=speech` to find the commands and verified models for a

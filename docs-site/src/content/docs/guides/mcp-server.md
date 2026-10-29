@@ -53,7 +53,8 @@ JSON:
   `{ estimate_only, command, estimate, budget? }` without starting a job.
 - `max_cost_usd`: a number ≥ 0. The job does not start unless the cost fits,
   under the same rules as the CLI's `--max-cost`; a refusal comes back as a
-  tool error.
+  tool error. A run the caps cannot bound needs it when the server runs such
+  runs in `budget` mode (see below).
 - `cost_policy`: `"strict"` (default, proven ceiling only) or `"estimate"`
   (accept the estimated high end). See
   [Cost](/reference/for-ai-agents/#cost-estimate-spend-guard-and-receipt) for
@@ -139,6 +140,36 @@ omits it), and `@file` values are rejected. Commands that
 change your own provider account (for example deleting an ElevenLabs voice)
 run like any other, with your key.
 
+**Runs the caps cannot bound.** Some runs spend more than the caps above can
+see. `multix_catalog` marks them with `uncapped_spend` (on the command, or on
+the option that makes a run uncapped):
+
+- pass-through request bodies: `fal run`, `replicate run`, `atlas run`,
+  `heygen run`, `topview run`, `--input` of `replicate image` and
+  `replicate video`, `--input` / `--text-field` of `fal tts`, and `--param`
+  of `sume image`;
+- runs billed by the length of their source or script: `heygen video`,
+  `heygen translate`, `heygen lipsync`, `elevenlabs dub`, `topview
+  video-avatar`, `topview product-avatar`, and `heygen video-agent` /
+  `heygen template`, where the agent or template sets the length;
+- `sume video`, where the model's catalog row sets the price and lip-sync and
+  captions models bill by the length of the source media;
+- `atlas image`, `atlas image-to-image`, `sume image` and `replicate image`
+  without `--num-images` / `--num-outputs`, where the model picks the number of
+  outputs. Passing the count (at most `MULTIX_MCP_MAX_OUTPUTS`) makes the run
+  capped again.
+
+The operator decides what such a run needs with `MULTIX_MCP_UNCAPPED_SPEND`.
+In `budget` mode (the default) the call must give `max_cost_usd`, and the job
+starts only when the price estimate proves the run fits (`cost_policy` is
+treated as `strict` for these runs, since the estimate cannot see the uncapped
+part). None of these
+commands is priced yet, so in practice `budget` refuses them, closed rather
+than open. `deny` always refuses them; `allow` runs them as before, on the
+caller's own keys. An `estimate: true` call is answered in every mode, since it
+starts nothing. The REST API (`POST /api/v1/jobs`) takes the same
+`max_cost_usd` and `cost_policy` fields and applies the same rule.
+
 **Gemini edit and extend.** `gemini extend-video --duration` is the length of
 the new continuation and is capped like any other duration, but the returned
 video also contains the source. The cap therefore bounds each call, not the
@@ -155,6 +186,22 @@ start with `@`, so put text before an `@tag` (`"a portrait of @hero"`).
 `runway video` does not wait by default, so the job ends with only a task ID:
 set `"wait": true` in `options` to get the video, or run
 `runway status <id> --wait --download` later.
+
+**Sume and TopView.** Both groups run remotely. Give file flags (Sume
+`--image`, `--end-image`, `--reference-image`, `--video` and `--audio`; the
+TopView Legacy file flags and the `topview upload` file) as `https://` URLs in
+`inputs`. `sume estimate` uploads nothing, so it takes its media as plain
+`https://` URLs. `sume image --num-images` and `topview product-anyshoot
+--count` are capped by `MULTIX_MCP_MAX_OUTPUTS`, and `sume video --duration` and `--resolution` by the
+video limits; pass a `--duration` the model's catalog row lists, because
+without one the server sends its own default length. `topview run --input`
+must be inline JSON, since `@file` values are rejected. `sume image`,
+`sume video`, `topview run` and the TopView Legacy commands other than
+`product-avatar` do not wait by default: set `"wait": true` in `options`, or
+resume later with `sume status <id> --wait --download`,
+`topview status <kind> <taskId> --wait --download` or
+`topview prediction <id> --wait --download`. See
+[Sume](/commands/sume/) and [TopView](/commands/topview/).
 
 **Speech.** `speech generate` must name `--provider`. The job gets only the
 keys of the providers named by `--provider` and `--fallback`, not every speech
@@ -199,8 +246,13 @@ Worker, and keys set there are ignored.
   (Gemini, OpenRouter, OpenAI, MiniMax, Leonardo.Ai, BytePlus with
   `ARK_API_KEY` as fallback, ElevenLabs, fal.ai, Atlas Cloud, Replicate with
   `REPLICATE_API_KEY` as fallback, Runway's `RUNWAYML_API_SECRET` as
-  "API secret", HeyGen), plus the Cloudflare Workers AI
+  "API secret", HeyGen, Sume, TopView with `TOPVIEW_API_KEY` and
+  `TOPVIEW_UID`, and TopView Platform), plus the Cloudflare Workers AI
   account ID, API token and optional AI Gateway ID.
+  `TOPVIEW_UID` is an account ID, not a secret, so it has a plain text input
+  instead of a password field. A `topview` job gets all three TopView values;
+  the Legacy commands need `TOPVIEW_API_KEY` and `TOPVIEW_UID`, the API
+  Platform commands `TOPVIEW_PLATFORM_API_KEY`.
 
 ### API keys for the REST API
 
@@ -591,6 +643,7 @@ Set these as `vars` in `worker/wrangler.jsonc`:
 | `MULTIX_MCP_MAX_OUTPUTS` | `4` (ceiling 10) | Maximum output count (for example `--num-images`) per `multix_run` call. |
 | `MULTIX_MCP_MAX_VIDEO_SECONDS` | `10` (ceiling 15) | Maximum video duration per call (for `gemini extend-video`, the new continuation). When a caller omits it and the command's default is unknown or longer, the server sends `min(5, cap)` seconds. |
 | `MULTIX_MCP_ALLOWED_RESOLUTIONS` | `480p,720p,768p,1080p` | Video resolutions a caller may request (`768p` is a HeyGen Video size). Anything else (for example `4k`), given or the command's default, is rejected before the job starts. |
+| `MULTIX_MCP_UNCAPPED_SPEND` | `budget` | Runs the caps above cannot bound (marked `uncapped_spend` in `multix_catalog`): `budget` runs one only with a `max_cost_usd` its price estimate proves (an unknown price is refused), `deny` refuses it, `allow` runs it. Any other value means `budget`. |
 | `MULTIX_MCP_ALLOWED_ORIGINS` | none | Exact browser origins (for example `https://app.example.com`) allowed to call `/mcp`. `*` and other wildcards are not supported: `*` only matches a literal `*` origin, which browsers never send. After the access token is checked, requests with any other `Origin` header get `403`; requests without an `Origin` (server-side clients) are allowed. Listed origins get CORS headers. `OPTIONS` preflights are answered for any origin by the OAuth layer. |
 | `MULTIX_MAX_JOBS_PER_ACCOUNT` | `2` (ceiling 50) | `multix_run` jobs one account may run at the same time. |
 | `MULTIX_MAX_JOBS_TOTAL` | `10` (ceiling 1000) | `multix_run` jobs the server may run at the same time across all accounts. Keep it at or below the container `max_instances` in `wrangler.jsonc`, which is the platform ceiling. |
@@ -643,10 +696,11 @@ within your Cloudflare account. If another Worker already uses `1001` or
   are rejected before the job starts.
 - **Spend guard:** `multix_run` caps output count, video duration and video
   resolution on the options the server knows for each command (see
-  [Running CLI commands](#running-cli-commands)). Other inputs that may change
-  the price, such as the raw JSON `--input` of `replicate run` or
-  `atlas run`, are not capped. A caller can also set `max_cost_usd` to refuse
-  a run that may cost more.
+  [Running CLI commands](#running-cli-commands)). A run those caps cannot
+  bound (a pass-through JSON body, a price set by the source length, a count
+  the model picks) is refused unless `max_cost_usd` proves its price, or as
+  `MULTIX_MCP_UNCAPPED_SPEND` sets. A caller can also set `max_cost_usd` to
+  refuse any run that may cost more.
 - **Logging and redaction:** successful calls are logged at `info` with tool
   name, command (or catalog group), outcome, and latency only. Prompts are never logged as
   a field. Failed calls are logged at `warn` (expected errors) or `error`, with
