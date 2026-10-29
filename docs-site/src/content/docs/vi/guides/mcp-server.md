@@ -160,6 +160,7 @@ hạn):
   nào chặn được: `--size` của `gemini generate`, `byteplus generate` và `byteplus image-to-image`;
   `--size` / `--quality` của `openai generate` và `openai image-to-image`;
   `--size` / `--resolution` của `atlas image` và `atlas image-to-image`;
+  `--image-size` / `--quality` / `--resolution` của `sume image`;
   `--image-size` của `openrouter generate` và `fal image`; `--ratio` của
   `runway image`; `--width` / `--height` của `leonardo generate` và
   `leonardo image-to-image`, và `--ultra` / `--alchemy` của `leonardo

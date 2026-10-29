@@ -364,6 +364,7 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
     repeatable: ["image", "param"],
     caps: { count: ["num-images"], countFromModel: true },
     uncappedOptions: ["param"],
+    imageSizeOptions: ["image-size", "quality", "resolution"],
   },
   "sume video": {
     fileOptions: {

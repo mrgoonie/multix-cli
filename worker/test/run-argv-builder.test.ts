@@ -735,6 +735,7 @@ describe("prepareRun: runs the caps cannot bound", () => {
       ["openai image-to-image", [], { prompt: "a cat", quality: "high" }, "quality"],
       ["byteplus image-to-image", [], { prompt: "a cat", size: "4K" }, "size"],
       ["runway image", ["a cat"], { ratio: "1920:1080" }, "ratio"],
+      ["sume image", ["a cat"], { "num-images": 1, resolution: "4K" }, "resolution"],
       ["atlas image", ["a cat"], { "num-images": 1, resolution: "4k" }, "resolution"],
       ["atlas image", ["a cat"], { "num-images": 1, size: "2048*2048" }, "size"],
     ];

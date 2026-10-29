@@ -163,6 +163,7 @@ the option that makes a run uncapped):
   `gemini generate`, `byteplus generate` and `byteplus image-to-image`;
   `--size` / `--quality` of `openai generate` and `openai image-to-image`;
   `--size` / `--resolution` of `atlas image` and `atlas image-to-image`;
+  `--image-size` / `--quality` / `--resolution` of `sume image`;
   `--image-size` of `openrouter generate` and `fal image`; `--ratio` of
   `runway image`; `--width` / `--height` of `leonardo generate` and
   `leonardo image-to-image`, and `--ultra` / `--alchemy` of `leonardo
