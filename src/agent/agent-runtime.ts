@@ -43,8 +43,14 @@ import {
 } from "./result-envelope.js";
 import { jobIdentity, run, summarizeUsage } from "./run-state.js";
 
+/**
+ * Top-level groups that are agent tooling or setup: never recorded in history,
+ * never a provider, and offered no global dry run or cost flags. Add a new local
+ * group here, not to the lists derived from it.
+ */
+const TOOLING_GROUPS = ["history", "models", "guide", "rerun", "check", "update", "catalog"];
 /** Commands that are themselves agent tooling or setup: not recorded in history. */
-const UNRECORDED = /^(history|models|guide|rerun|check|update|catalog)\b/;
+const UNRECORDED = new RegExp(`^(${TOOLING_GROUPS.join("|")})\\b`);
 /** Read-only lookups that report another run's spend: counting it here would bill it twice in history. */
 const SPEND_LOOKUPS = /^openrouter generation\b/;
 /** Groups that run locally (ffmpeg/ImageMagick): dry run stops before the action. */
@@ -73,16 +79,7 @@ function commandPath(cmd: Command): string[] {
 }
 
 /** Top-level groups that call a provider (the rest are local or agent tooling). */
-const NON_PROVIDER_GROUPS = new Set([
-  "check",
-  "update",
-  "media",
-  "models",
-  "guide",
-  "history",
-  "rerun",
-  "help",
-]);
+const NON_PROVIDER_GROUPS = new Set([...TOOLING_GROUPS, "media", "help"]);
 
 /**
  * Best-effort command path from argv, for errors commander raises before any
@@ -106,8 +103,8 @@ function setCommand(names: string[]): void {
   run.group = names[0] && !NON_PROVIDER_GROUPS.has(names[0]) ? names[0] : "";
 }
 
-/** Groups where a dry run means nothing (no provider request, or their own flag). */
-const NO_DRY_RUN_GROUPS = new Set(["check", "models", "guide", "history", "rerun"]);
+/** Groups where a dry run means nothing (no provider request, or their own flag, as `update` has). */
+const NO_DRY_RUN_GROUPS = new Set(TOOLING_GROUPS);
 
 /**
  * Add --json to every command, and --dry-run plus the cost flags to every
