@@ -150,8 +150,22 @@ describe("scrubText: key shapes", () => {
     ["a parameter list", "params:token=", "params:[redacted]"],
     ["an env line naming FAL_KEY", "FAL_KEY=", "[redacted]"],
     ["an env line naming OPENAI_KEY", "OPENAI_KEY=", "[redacted]"],
+    ["an api_key parameter", "api_key=", "[redacted]"],
   ])("removes a secret pair glued into %s", (_label, prefix, expected) => {
     expect(scrubText(`${prefix}${fake("hunt", "er2x")} ok`)).toBe(`${expected} ok`);
+  });
+
+  it("removes a token-like value under a name that merely ends in key", () => {
+    expect(scrubText(`Key: ${fake("abcd1234", "efgh5678")} ok`)).toBe("[redacted] ok");
+    // Judged from its first 64 characters: a value that long counts whatever comes after.
+    expect(scrubText(`Key: ${"a".repeat(70)}1 ok`)).toBe("[redacted] ok");
+  });
+
+  it.each([
+    ["eight digits beside a word", "flux-12345678-23456789-34567890-45678901"],
+    ["date-like digits with month 13", "abcdefgh-20261399-ijklmnop-261301"],
+  ])("removes a dash-joined key of %s that is not a release date", (_label, key) => {
+    expect(scrubText(`use ${key} now`)).toBe("use [redacted] now");
   });
 
   it.each([
@@ -200,6 +214,8 @@ describe("scrubText: time", () => {
     ["60k dash-joined characters", "a1-".repeat(20_000)],
     ["60k dash-joined words", "abcdefghijklmn1-".repeat(3_750)],
     ["60k question marks", "?".repeat(60_000)],
+    ["60k chained key names", "key:".repeat(15_000)],
+    ["60k chained key pairs", "Key=a".repeat(12_000)],
   ])("scrubs %s in linear time", (_label, text) => {
     const started = performance.now();
     scrubText(text);
@@ -219,6 +235,13 @@ describe("scrubText: ordinary text survives", () => {
     "Fixed in commit da39a3ee5e6b4b0d3255bfef95601890afd80709 last week.",
     "Saved under https://cdn.example.com/videos/2026/Summer/Campaign/v2/final.mp4 today.",
     "max_tokens=4096 kept the clip short.",
+    "eleven-v3-conversational-20260930 and voxtral-mini-transcribe-3-0-20261020 sound natural.",
+    "voxtral-small-24b-2507-stt-20260813 beat doubao-seedance-1-0-pro-fast-251015 on price.",
+    "Key: fast and cheap",
+    "Primary key: offering id",
+    "hotkey: Ctrl+K",
+    "Monkey: no",
+    "image-key=abc123",
   ])("keeps %s", (text) => {
     expect(scrubText(text)).toBe(text);
   });

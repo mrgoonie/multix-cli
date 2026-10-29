@@ -140,10 +140,13 @@ multix catalog note list -u product-ugc
   `project` lưu trong `./.multix/catalog-notes.json`, để cả nhóm có thể commit
   cùng project. File được ghi với quyền 0600. `team` và `public` bị từ chối:
   chia sẻ ra ngoài máy này cần một kho lưu trữ từ xa, hiện chưa có. Mỗi file
-  lưu trữ chứa tối đa 5000 bản ghi và 8 MiB; file lớn hơn chỉ được đọc trong
-  giới hạn đó (bản ghi sau 5000 bị bỏ qua, file trên 8 MiB bị bỏ qua toàn bộ)
-  kèm cảnh báo, và các lệnh ghi vào file đó bị từ chối cho đến khi file được
-  rút gọn.
+  lưu trữ chứa tối đa 5000 bản ghi và 8 MiB, và lệnh lưu khiến file vượt một
+  trong hai giới hạn đó bị từ chối. File lớn hơn (do sửa tay, hoặc đi kèm một
+  repository) chỉ được đọc trong giới hạn đó (bản ghi sau 5000 bị bỏ qua, file
+  trên 8 MiB bị bỏ qua toàn bộ) kèm cảnh báo, và các lệnh lưu vào file đó bị từ
+  chối cho đến khi file được rút gọn: `multix catalog reviews rm <id>` và
+  `multix catalog note rm <id>` vẫn chạy được trên file đó (id có trong file),
+  hoặc chuyển file sang chỗ khác.
 - Văn bản tự do được làm sạch trước khi lưu và khi đọc lại: các ký tự vô hình
   (ký tự điều khiển và định dạng, dấu zero-width và bidi, variation selector,
   ký tự tag Unicode) bị loại bỏ, tab được đổi thành dấu cách, các dạng trông
@@ -151,7 +154,10 @@ multix catalog note list -u product-ugc
   Unicode được đọc là `-`, sau đó query string của URL, chuỗi trông như key
   (API key, JWT, mã định danh khóa và secret key của AWS, private key, tham số
   của URL đã ký, giá trị `Authorization`, cặp `name=value` có tên kết thúc bằng
-  `key`, `secret`, `token`, `password` hoặc `credential`) và địa chỉ e-mail bị thay thế. Dấu
+  `secret`, `token`, `password` hoặc `credential`, hoặc bằng một từ key ghép
+  như `FAL_KEY`, `api_key`, `x-api-key` hay `accesskey`; tên khác kết thúc bằng
+  `key` chỉ được tính khi giá trị trông như token, dài từ 16 ký tự trở lên, có
+  cả chữ và số) và địa chỉ e-mail bị thay thế. Dấu
   xuống dòng được giữ nguyên. Văn bản tối đa 2000 ký tự (văn bản gốc dài hơn
   tám lần mức đó bị từ chối trước khi làm sạch, và bản ghi đã lưu như vậy bị bỏ
   qua), các danh sách (pros, cons, tags) tối đa 10 mục.

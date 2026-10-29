@@ -136,17 +136,23 @@ multix catalog note list -u product-ugc
   stored in `./.multix/catalog-notes.json`, so a team can commit it. Files are
   written with mode 0600. `team` and `public` are refused: sharing beyond this
   machine needs a remote store that is not available yet. A store file holds at
-  most 5000 records and 8 MiB; a larger file is read only up to those limits
-  (records past 5000 are skipped, a file over 8 MiB is skipped whole) with a
-  warning, and commands that write to it refuse until it is trimmed.
+  most 5000 records and 8 MiB, and a save that would take it past either limit
+  is refused. A larger file (edited by hand, or arriving with a repository) is
+  read only up to those limits (records past 5000 are skipped, a file over
+  8 MiB is skipped whole) with a warning, and saves to it are refused until it
+  is trimmed: `multix catalog reviews rm <id>` and `multix catalog note rm <id>`
+  still work on it (the ids are in the file), or move the file away.
 - Free text is scrubbed before it is stored and again when it is read back:
   invisible characters (control and format characters, zero-width and bidi
   marks, variation selectors, Unicode tag characters) are removed, tabs become
   spaces, look-alike forms such as fullwidth letters are folded (NFKC) and
   Unicode dashes read as `-`, then URL query strings, key-like tokens (API
   keys, JWTs, AWS key ids and secret keys, private keys, signed-URL parameters,
-  `Authorization` values, `name=value` pairs whose name ends in `key`, `secret`,
-  `token`, `password` or `credential`) and e-mail addresses are replaced. Line breaks are
+  `Authorization` values, `name=value` pairs whose name ends in `secret`,
+  `token`, `password` or `credential`, or in a joined key word such as
+  `FAL_KEY`, `api_key`, `x-api-key` or `accesskey`; any other name ending in
+  `key` counts only when its value looks like a token, 16 or more characters
+  with letters and digits) and e-mail addresses are replaced. Line breaks are
   kept. Text is limited to 2000 characters (raw text over eight times that is
   refused before scrubbing, and such a stored record is skipped), and lists
   (pros, cons, tags) to 10 entries.

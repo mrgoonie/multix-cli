@@ -50,11 +50,29 @@ const SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
  * and dashes starts; starting inside the run would rescan it from every dash.
  */
 const TOKEN_START = "(?<![\\w-])";
-/** Names of key=value pairs that hold a secret: anything ending in key, secret, token, password or credential(s). */
-const SECRET_NAME = /(?:key|secret|token|password|credentials?)$/i;
+/** Names of key=value pairs that always hold a secret. */
+const SECRET_NAME = /(?:secret|token|password|credentials?)$/i;
+/**
+ * Names ending in a joined key word (FAL_KEY, api_key, x-api-key, accesskey).
+ * `image-key` is an image id (Leonardo), not a credential.
+ */
+const KEY_NAME = /(?:[_-]|api|access|secret|private|auth)key$/i;
+const NOT_KEY_NAME = /(?:^|[_-])image[_-]key$/i;
+/** Any other name ending in "key" ("Key", "hotkey") holds a secret only with a token-like value. */
+const TOKEN_LIKE = /^(?=.{16})(?=.*\d)(?=.*[A-Za-z])/s;
 
-/** A word with a letter outside a-f (not a hex group), or a short version part ("v2", "1080p", "a14b"). */
-const MODEL_ID_PART = /^(?=[a-z]*[g-z])[a-z]+$|^[a-z]?\d{1,4}[a-z]?$/;
+function secretPair(name: string, value: string): boolean {
+  if (SECRET_NAME.test(name)) return true;
+  if (!/key$/i.test(name)) return false;
+  return (KEY_NAME.test(name) && !NOT_KEY_NAME.test(name)) || TOKEN_LIKE.test(value);
+}
+
+/**
+ * A word with a letter outside a-f (not a hex group), a short version part
+ * ("v2", "1080p", "a14b") or a release date (YYMMDD or YYYYMMDD).
+ */
+const MODEL_ID_PART =
+  /^(?=[a-z]*[g-z])[a-z]+$|^[a-z]?\d{1,4}[a-z]?$|^(?:\d\d){1,2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])$/;
 
 /** A dash-joined token made of lower-case words and short version parts ("kling-v2-1-master"). */
 function looksLikeModelId(token: string): boolean {
@@ -76,6 +94,11 @@ function looksLikeBase64Secret(token: string): boolean {
 
 const PAIR_NAME = new RegExp(`${TOKEN_START}([\\w-]+)\\s*[:=]\\s*`, "g");
 const PAIR_VALUE = /\S+/y;
+/**
+ * Enough of a value to judge it, so a run of non-secret names is not rescanned.
+ * A value that fills the whole peek is long enough to count as a token.
+ */
+const PAIR_PEEK = /\S{1,64}/y;
 
 /**
  * key=value / key: value pairs whose name holds a secret. A pair with another
@@ -87,9 +110,12 @@ function redactSecretPairs(text: string): string {
   let last = 0;
   PAIR_NAME.lastIndex = 0;
   for (let m = PAIR_NAME.exec(text); m; m = PAIR_NAME.exec(text)) {
-    if (!SECRET_NAME.test(m[1] as string)) continue;
+    if (!/(?:key|secret|token|password|credentials?)$/i.test(m[1] as string)) continue;
+    PAIR_PEEK.lastIndex = PAIR_NAME.lastIndex;
+    const peek = PAIR_PEEK.exec(text);
+    if (!peek || !(peek[0].length === 64 || secretPair(m[1] as string, peek[0]))) continue;
     PAIR_VALUE.lastIndex = PAIR_NAME.lastIndex;
-    if (!PAIR_VALUE.exec(text)) continue;
+    PAIR_VALUE.exec(text);
     out += `${text.slice(last, m.index)}[redacted]`;
     last = PAIR_NAME.lastIndex = PAIR_VALUE.lastIndex;
   }

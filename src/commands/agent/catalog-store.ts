@@ -8,7 +8,9 @@
  * read back, since a project store arrives with the repository. For the same
  * reason a project review counts as tied to a run only when this machine's run
  * ledger holds that run and no other review references it, and a store file
- * over MAX_STORE_BYTES or LIMITS.records is read only in part.
+ * over MAX_STORE_BYTES or LIMITS.records is read only in part. Saves never
+ * take a store over those caps; removals still work on a store that is over
+ * them, so it can be trimmed back under.
  */
 
 import fs from "node:fs";
@@ -78,6 +80,13 @@ export function ledgerRunCheck(): RunCheck {
 /** Largest store file read; a project store arrives with the repository and is read on every catalog command. */
 export const MAX_STORE_BYTES = 8 * 1024 * 1024;
 
+/** Largest store file read to remove records from it; past this, moving the file is the only fix. */
+const MAX_TRIM_BYTES = 8 * MAX_STORE_BYTES;
+
+/** What a warning about a store over a cap tells the user to do. */
+const TRIM_HINT =
+  "remove records with `multix catalog reviews rm <id>` or `multix catalog note rm <id>` (the ids are in the file), or move the file";
+
 /**
  * How a store is read:
  * - `checked`: for use; run references are checked (`checkRuns`), and a file
@@ -87,13 +96,18 @@ export const MAX_STORE_BYTES = 8 * 1024 * 1024;
  * - `write`: for a read-modify-write; run references are kept as stored (they
  *   may be a teammate's runs) and a file over the caps is refused, since
  *   writing it back would lose records.
+ * - `trim`: for finding and removing records; run references are kept as
+ *   stored and the caps do not apply (up to MAX_TRIM_BYTES), so a store over
+ *   them can be trimmed back under.
  */
-export type ReadMode = "checked" | "unchecked" | "write";
+export type ReadMode = "checked" | "unchecked" | "write" | "trim";
 
 /** Fail a write, or warn and go on with what fits, when a store is over a cap. */
 function overCap(mode: ReadMode, message: string): void {
-  if (mode === "write") throw new ValidationError(`${message}; trim it before writing to it.`);
-  defaultLogger.warn(message);
+  if (mode === "write") {
+    throw new ValidationError(`${message}; ${TRIM_HINT} before saving to it.`);
+  }
+  defaultLogger.warn(`${message}; ${TRIM_HINT}.`);
 }
 
 export function readStore(scope: ReviewScope, mode: ReadMode = "checked"): CatalogStore {
@@ -102,7 +116,12 @@ export function readStore(scope: ReviewScope, mode: ReadMode = "checked"): Catal
   let text: string;
   try {
     const bytes = fs.statSync(file).size;
-    if (bytes > MAX_STORE_BYTES) {
+    if (mode === "trim" && bytes > MAX_TRIM_BYTES) {
+      throw new ValidationError(
+        `${file} is ${bytes} bytes, too large to edit (over ${MAX_TRIM_BYTES}); move it first.`,
+      );
+    }
+    if (mode !== "trim" && bytes > MAX_STORE_BYTES) {
       overCap(
         mode,
         `${file} is ${bytes} bytes, over the ${MAX_STORE_BYTES} a catalog store may hold; its records are skipped`,
@@ -122,7 +141,7 @@ export function readStore(scope: ReviewScope, mode: ReadMode = "checked"): Catal
   }
   let rawReviews = Array.isArray(data?.reviews) ? (data.reviews as unknown[]) : [];
   let rawNotes = Array.isArray(data?.notes) ? (data.notes as unknown[]) : [];
-  if (rawReviews.length + rawNotes.length > LIMITS.records) {
+  if (mode !== "trim" && rawReviews.length + rawNotes.length > LIMITS.records) {
     overCap(
       mode,
       `${file} holds ${rawReviews.length + rawNotes.length} records, over the ${LIMITS.records} a catalog store may hold; the rest are skipped`,
@@ -174,15 +193,28 @@ export function withStoreLock<T>(scope: ReviewScope, fn: () => T): T {
   }
 }
 
-export function writeStore(scope: ReviewScope, store: CatalogStore): void {
-  if (store.reviews.length + store.notes.length > LIMITS.records) {
+/**
+ * Write a store atomically. A save that would take it over a read cap is
+ * refused, so a saved record is never skipped on the next read. `trimming`
+ * (a removal, which only shrinks the store) skips the caps, so a store that
+ * is already over them can still be trimmed.
+ */
+export function writeStore(scope: ReviewScope, store: CatalogStore, trimming = false): void {
+  if (!trimming && store.reviews.length + store.notes.length > LIMITS.records) {
     throw new ValidationError(`The ${scope} store holds at most ${LIMITS.records} records.`);
+  }
+  const json = `${JSON.stringify(store, null, 2)}\n`;
+  const bytes = Buffer.byteLength(json);
+  if (!trimming && bytes > MAX_STORE_BYTES) {
+    throw new ValidationError(
+      `The ${scope} store would be ${bytes} bytes, over the ${MAX_STORE_BYTES} a catalog store may hold; remove records before saving more.`,
+    );
   }
   const file = storeFile(scope);
   refuseProjectLink(scope, file);
   fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   const tmp = `${file}.${process.pid}.tmp`;
-  fs.writeFileSync(tmp, `${JSON.stringify(store, null, 2)}\n`, { mode: 0o600 });
+  fs.writeFileSync(tmp, json, { mode: 0o600 });
   fs.renameSync(tmp, file);
 }
 
@@ -305,34 +337,38 @@ export function addNote(
   });
 }
 
-/** Find a record by id in either scope. */
+/** Find a record by id in either scope, including a store over the caps. */
 export function locate(
   kind: "reviews" | "notes",
   id: string,
 ): { scope: ReviewScope; store: CatalogStore; index: number } {
   for (const scope of ["private", "project"] as const) {
-    const store = readStore(scope, "unchecked");
+    const store = readStore(scope, "trim");
     const index = (store[kind] as Array<{ id: string }>).findIndex((r) => r.id === id);
     if (index >= 0) return { scope, store, index };
   }
   throw new ValidationError(`No ${kind === "reviews" ? "review" : "note"} with id ${id}.`);
 }
 
-/** Change a located record under its scope's lock, re-reading the file first. */
+/**
+ * Change a located record under its scope's lock, re-reading the file first.
+ * `trimming` is for a removal, which may run on a store over the caps.
+ */
 function updateLocated<T>(
   kind: "reviews" | "notes",
   id: string,
   fn: (store: CatalogStore, index: number, scope: ReviewScope) => T,
+  trimming = false,
 ): T {
   const { scope } = locate(kind, id);
   return withStoreLock(scope, () => {
-    const store = readStore(scope, "write");
+    const store = readStore(scope, trimming ? "trim" : "write");
     const index = (store[kind] as Array<{ id: string }>).findIndex((r) => r.id === id);
     if (index < 0) {
       throw new ValidationError(`No ${kind === "reviews" ? "review" : "note"} with id ${id}.`);
     }
     const out = fn(store, index, scope);
-    writeStore(scope, store);
+    writeStore(scope, store, trimming);
     return out;
   });
 }
@@ -358,8 +394,13 @@ export function replaceNote(
 }
 
 export function removeRecord(kind: "reviews" | "notes", id: string): ReviewScope {
-  return updateLocated(kind, id, (store, index, scope) => {
-    store[kind].splice(index, 1);
-    return scope;
-  });
+  return updateLocated(
+    kind,
+    id,
+    (store, index, scope) => {
+      store[kind].splice(index, 1);
+      return scope;
+    },
+    true,
+  );
 }
