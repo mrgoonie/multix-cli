@@ -137,6 +137,11 @@ phân giải, server gửi một giá trị được phép, ưu tiên 720p), và
 bị từ chối. Lệnh thay đổi chính tài khoản provider của bạn (ví
 dụ xóa một giọng ElevenLabs) chạy như mọi lệnh khác, bằng key của bạn.
 
+`leonardo video` không có `--duration`: model v2 luôn được gửi 8 giây và model
+v1 như Veo 3 chạy tới 8 giây. `multix_catalog` hiển thị điều này là
+`video_seconds_up_to: 8`, và server có `MULTIX_MCP_MAX_VIDEO_SECONDS` dưới 8 sẽ
+từ chối lệnh này.
+
 **Lần chạy giới hạn không chặn được.** Một số lần chạy tốn nhiều hơn những gì
 các giới hạn trên nhìn thấy. `multix_catalog` đánh dấu chúng bằng
 `uncapped_spend` (trên lệnh, hoặc trên option khiến lần chạy không bị giới

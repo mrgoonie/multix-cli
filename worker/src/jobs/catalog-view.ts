@@ -89,6 +89,7 @@ function commandDetail(command: CliCommand): Record<string, unknown> {
     description: command.description,
     ...(cap ? capabilityFields(command, cap.tasks) : {}),
     ...(policy.uncappedSpend ? { uncapped_spend: policy.uncappedSpend } : {}),
+    ...(policy.caps?.fixedSeconds ? { video_seconds_up_to: policy.caps.fixedSeconds } : {}),
     positionals,
     options,
   };

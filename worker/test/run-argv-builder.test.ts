@@ -649,6 +649,32 @@ describe("prepareRun: speech", () => {
   });
 });
 
+describe("prepareRun: fixed video length", () => {
+  const leonardo = (model: string) => ({
+    command: "leonardo video",
+    args: ["a cat"],
+    options: { model },
+  });
+
+  it("runs leonardo video when the length cap is at least 8 seconds", () => {
+    expect(
+      prepareRun(leonardo("kling-2.6"), limitsFrom({ MULTIX_MCP_MAX_VIDEO_SECONDS: "8" })).argv,
+    ).toEqual(["leonardo", "video", "--model=kling-2.6", "--", "a cat"]);
+  });
+
+  it("refuses leonardo video for any model when the length cap is below 8 seconds", () => {
+    const short = limitsFrom({ MULTIX_MCP_MAX_VIDEO_SECONDS: "5" });
+    for (const model of ["kling-2.6", "VEO3"]) {
+      expect(() => prepareRun(leonardo(model), short)).toThrow(
+        /renders up to 8 seconds, above this server's limit of 5/,
+      );
+    }
+    expect(() => prepareRun({ command: "leonardo video", args: ["a cat"] }, short)).toThrow(
+      ValidationError,
+    );
+  });
+});
+
 describe("helpers", () => {
   it("normalises provider resolution spellings", () => {
     expect(normaliseResolution("1080P")).toBe("1080p");

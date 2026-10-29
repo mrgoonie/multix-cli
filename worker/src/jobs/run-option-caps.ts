@@ -61,6 +61,11 @@ export function applyCaps(
       throw new ValidationError(`--${name} must be at most ${limits.maxOutputs} on this server`);
     }
   }
+  if (rules?.fixedSeconds !== undefined && rules.fixedSeconds > limits.maxVideoSeconds) {
+    throw new ValidationError(
+      `this command renders up to ${rules.fixedSeconds} seconds, above this server's limit of ${limits.maxVideoSeconds}`,
+    );
+  }
   for (const name of rules?.duration ?? []) {
     const given = single(values, name);
     if (given !== undefined) {
