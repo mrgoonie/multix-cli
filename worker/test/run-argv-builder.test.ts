@@ -139,6 +139,22 @@ describe("prepareRun: argv", () => {
     expect(prepared.argv).toContain("--duration=5");
   });
 
+  it("refuses leonardo video, which always renders up to 8 s, when the cap is below 8", () => {
+    const request = { command: "leonardo video", args: ["waves"] };
+    expect(run(request).argv).not.toContain("--duration");
+    expect(prepareRun(request, limitsFrom({ MULTIX_MCP_MAX_VIDEO_SECONDS: "8" })).argv).toEqual([
+      "leonardo",
+      "video",
+      "--",
+      "waves",
+    ]);
+    const short = limitsFrom({ MULTIX_MCP_MAX_VIDEO_SECONDS: "7" });
+    expect(() => prepareRun(request, short)).toThrow(ValidationError);
+    expect(() => prepareRun(request, short)).toThrow(
+      /renders up to 8 seconds of video, above the 7 second cap/,
+    );
+  });
+
   it("passes repeatable options the CLI collects with its own parser once per value", async () => {
     const refs = run({
       command: "heygen video-agent",

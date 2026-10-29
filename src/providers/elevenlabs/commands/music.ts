@@ -17,7 +17,10 @@ export function registerMusicCommand(parent: Command): void {
     .description("Generate music from a text prompt or composition plan")
     .option("--prompt <str>", "Music prompt (mutually exclusive with --plan)")
     .option("--plan <path>", "Path to composition plan JSON file")
-    .option("--music-length-ms <n>", "Total length in milliseconds (default 30000)")
+    .option(
+      "--music-length-ms <n>",
+      "Total length in milliseconds (3000-600000; omitted: the model picks it)",
+    )
     .option("--model <id>", "Music model", "music_v1")
     .option(
       "--format <fmt>",
