@@ -222,4 +222,17 @@ describe("historyStats", () => {
       ["fal status", undefined],
     ]);
   });
+  it("puts a task's USD on its submit's bucket, not again on its status run's", () => {
+    const rows = historyStats(
+      [
+        entry({ provider_ids: ["req_1"], usage: { cost_usd: 3 } }),
+        entry({ provider_ids: ["req_1"], command: "fal status", usage: { cost_usd: 3 } }),
+      ],
+      "command",
+    );
+    expect(rows.map((r) => [r.command, r.cost_usd])).toEqual([
+      ["fal image", 3],
+      ["fal status", undefined],
+    ]);
+  });
 });

@@ -258,8 +258,9 @@ multix rerun h_mfz3k2ab1c9d         # chạy lại (tham số thêm được n�
 ```
 
 `history stats` bỏ qua các lần chạy `--dry-run` và `--estimate`, và tính chi phí
-và credits của mỗi thao tác một lần (credits của một task chỉ hiện một lần,
-thường ở dòng của lần submit, dù bao nhiêu lần `status` lặp lại chúng), chỉ từ các con số đã biết; `cost_uncertain_ops` và
+và credits của mỗi thao tác một lần (chi phí và credits của một task chỉ hiện
+một lần, thường ở dòng của lần submit, dù bao nhiêu lần `status` lặp lại chúng),
+chỉ từ các con số đã biết; `cost_uncertain_ops` và
 `cost_unknown_ops` đếm số thao tác có chi phí không chắc chắn hoặc không rõ, nên
 khi có một trong hai thì `cost_usd` chỉ là cận dưới.
 

@@ -99,11 +99,15 @@ account's usage. Group with `--by provider|model|offering|task|command`.
 - **Retries** are failed sends of a submit before the one that returned the job.
 - Spend counts each operation once from known figures. Operations whose cost is
   unknown or uncertain are counted separately, never added as $0.
-- Credits count each operation once too, in the row of its submit run (or of
-  its earliest run that reported them when a filter leaves the submit out): a
-  status run that repeats a task's credits keeps them in its own `usage`, but no
-  row adds them again, even when the status run lands in another row (for
-  example `(unknown model)`).
+- An operation's spend (USD, its unknown or uncertain count, credits and
+  estimate) shows in one row: the row of its successful submit (the one that
+  names the model, so a failed attempt before a resubmit does not take it), or
+  of its earliest run that reported a figure when a filter leaves the submit
+  out. An operation recorded without a cost receipt counts on its first
+  successful run. A status run that repeats a task's cost keeps it in its own
+  `usage`, but no row adds it again, even when the status run lands in another
+  row (for example `(unknown model)`). A row that completed an operation whose
+  cost is counted in another row shows no per-success cost.
 - The model is the one the provider reported running; runs without one are
   grouped under `(unknown model)`.
 - Each row shows its sample size (operations) and a confidence level (none,

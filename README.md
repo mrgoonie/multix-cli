@@ -1038,7 +1038,8 @@ instance runs at `https://multix.zuey.me/mcp` (invited GitHub accounts only).
   ffmpeg and ImageMagick; waits up to `wait_seconds`, default 25, max 40,
   container start included), `multix_job_status`, `multix_job_cancel`,
   `multix_skills` (read-only skills catalogue; always listed), and
-  `multix_skills_manage` (author your own skills; listed with `MULTIX_SKILLS`).
+  `multix_skills_manage` (author your own skills; listed with `MULTIX_SKILLS`),
+  and `multix_workflow` (run a skill's workflow; listed with `MULTIX_SKILLS`).
   Each account runs at most `MULTIX_MAX_JOBS_PER_ACCOUNT` jobs at once
   (default 2; `busy: …` otherwise) and the server at most
   `MULTIX_MAX_JOBS_TOTAL` (default 10, keep it at or below the container
@@ -1068,6 +1069,15 @@ instance runs at `https://multix.zuey.me/mcp` (invited GitHub accounts only).
   `/api/v1/skill-shares` draft, publish, roll back and share them (owner-only
   writes; a grantee adds a shared team skill before it is listed). See
   [Skills](https://multix.zuey.me/guides/mcp-server/#skills).
+- Skill workflows: a private or team skill may ship `multix.workflow.json`, up
+  to 10 multix CLI steps with typed inputs and `{{inputs.x}}` /
+  `{{steps.<id>.outputs[n]}}` templates (each value stays one argument).
+  `multix_workflow` and `/api/v1/workflow-runs` run it only after the account
+  authorized that exact revision and manifest digest over REST
+  (`/api/v1/workflow-authorizations`, optional `max_cost_usd` for the whole
+  run); MCP cannot authorize. Each step is a normal job under the same caps and
+  checks, and a run advances when it is read. See
+  [Skill workflows](https://multix.zuey.me/guides/mcp-server/#skill-workflows).
 - Auth: OAuth 2.1 (dynamic client registration, PKCE) with GitHub sign-in.
   Only GitHub logins or verified emails in the `MULTIX_ALLOWED_USERS` secret
   can sign in.

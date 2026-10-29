@@ -551,6 +551,122 @@ describe("spend is known, unknown or uncertain, never $0", () => {
   });
 });
 
+describe("spend across rows", () => {
+  const STATUS_AT = "2026-10-27T10:05:00.000Z";
+  const submit = (over: Partial<CostReceipt> = {}) =>
+    entry({
+      cost: receipt({
+        operation_id: "fal:t1",
+        actual_usd: 0.5,
+        actual_source: "provider_reported",
+        ...over,
+      }),
+    });
+  const status = () =>
+    entry({
+      command: "fal status",
+      ts: STATUS_AT,
+      model_resolved: null,
+      cost: receipt({
+        operation_id: "fal:t1",
+        role: "observation",
+        actual_usd: 0.5,
+        actual_source: "provider_reported",
+        at: STATUS_AT,
+      }),
+    });
+  const costs = (entries: HistoryEntry[], by: "offering" | "command") =>
+    aggregateUsage(entries, by).map((r) => [r.key, r.cost.known_usd, r.cost.per_success_usd]);
+
+  it("counts a task's USD once, on the submit's row, when its status run lands in another row", () => {
+    const entries = [submit(), status()];
+    expect(costs(entries, "offering")).toEqual([
+      ["fal:(unknown model)", 0, null],
+      [OFFERING, 0.5, 0.5],
+    ]);
+    expect(costs(entries, "command")).toEqual([
+      ["fal status", 0, null],
+      ["fal video", 0.5, 0.5],
+    ]);
+  });
+
+  it("settles an uncertain submit with its status read in the submit's row only", () => {
+    const entries = [submit({ status: "uncertain", actual_usd: null }), status()];
+    const rows = aggregateUsage(entries, "offering");
+    expect(rows.map((r) => [r.key, r.cost.known_usd, r.cost.uncertain_operations])).toEqual([
+      ["fal:(unknown model)", 0, 0],
+      [OFFERING, 0.5, 0],
+    ]);
+  });
+
+  it("keeps a task known only from a status read in that read's row", () => {
+    expect(costs([status()], "offering")).toEqual([["fal:(unknown model)", 0.5, 0.5]]);
+  });
+
+  it("counts an old job with no cost as unknown once, on its first run's row", () => {
+    const old = (over: Partial<HistoryEntry>) => entry({ provider_ids: ["req_9"], ...over });
+    const entries = [old({}), old({ command: "fal status", ts: STATUS_AT, model_resolved: null })];
+    const rows = aggregateUsage(entries, "offering");
+    expect(rows.map((r) => [r.key, r.cost.unknown_operations])).toEqual([
+      ["fal:(unknown model)", 0],
+      [OFFERING, 1],
+    ]);
+  });
+
+  it("puts a resubmitted task's USD on the attempt that ran the model", () => {
+    const failed = entry({
+      ok: false,
+      exit_code: 1,
+      model_resolved: null,
+      cost: receipt({ operation_id: "fal:t1", status: "unknown" }),
+    });
+    const entries = [failed, submit({ at: STATUS_AT })];
+    const rows = aggregateUsage(entries, "offering");
+    // The failed attempt's cost is unknown, so the task's is too: never $0.
+    expect(rows.map((r) => [r.key, r.cost.known_usd, r.cost.unknown_operations])).toEqual([
+      ["fal:(unknown model)", 0, 0],
+      [OFFERING, 0, 1],
+    ]);
+  });
+
+  it("keeps another provider's estimate when two providers share an operation id", () => {
+    const estimate = { status: "estimated", expected_usd: 2, high_usd: 3 } as const;
+    const runway = entry({
+      provider: "runway",
+      command: "runway video",
+      model_resolved: "gen4",
+      cost: receipt({ operation_id: "shared", status: "unknown", estimate }),
+    });
+    const fal = entry({
+      cost: receipt({
+        operation_id: "shared",
+        actual_usd: 0.5,
+        actual_source: "provider_reported",
+        estimate: { ...estimate, expected_usd: 1 },
+      }),
+    });
+    const rows = aggregateUsage([runway, fal], "offering");
+    expect(rows.map((r) => [r.key, r.cost.known_usd, r.cost.estimated_usd])).toEqual([
+      [OFFERING, 0.5, null],
+      ["runway:gen4", 0, 2],
+    ]);
+  });
+
+  it("counts no spend for an operation whose only send was refused", () => {
+    const refused = entry({
+      ok: false,
+      exit_code: 1,
+      cost: receipt({ operation_id: "fal:t1", actual_usd: 0, actual_source: "refused" }),
+    });
+    const row = rowFor([refused]);
+    expect([row.cost.known_usd, row.cost.unknown_operations, row.cost.estimated_usd]).toEqual([
+      0,
+      0,
+      null,
+    ]);
+  });
+});
+
 describe("credits", () => {
   it("counts a task's credits once across its submit run and a later status run", () => {
     const row = rowFor([

@@ -40,10 +40,16 @@ export function fakeRegistries(now: () => number = () => 1_000) {
       let registry = registries.get(accountId);
       if (!registry) {
         const fake = fakeDoStorage();
+        // Like the runtime: one blockConcurrencyWhile callback at a time per object.
+        let queue: Promise<unknown> = Promise.resolve();
         const ctx = {
           id: { name: accountId },
           storage: fake.storage,
-          blockConcurrencyWhile: <T>(fn: () => Promise<T>) => fn(),
+          blockConcurrencyWhile: <T>(fn: () => Promise<T>) => {
+            const result = queue.then(fn);
+            queue = result.catch(() => undefined);
+            return result;
+          },
         };
         registry = overRpc(new AccountSkills(ctx as never, {} as never, now));
         registries.set(accountId, registry);
