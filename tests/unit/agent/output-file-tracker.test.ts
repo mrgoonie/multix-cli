@@ -85,4 +85,12 @@ describe("producedFiles", () => {
     write("user", "loose.png");
     expect(producedFiles()).toEqual([result]);
   });
+
+  it("drops ~/.multix state but keeps sibling dirs that share the prefix", () => {
+    vi.stubEnv("HOME", base);
+    vi.stubEnv("MULTIX_OUTPUT_DIR", path.join(base, ".multix-out"));
+    write(".multix", "history", "h_1.json");
+    const output = write(".multix-out", "a.png");
+    expect(producedFiles()).toEqual([output]);
+  });
 });

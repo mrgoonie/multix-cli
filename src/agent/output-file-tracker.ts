@@ -88,7 +88,7 @@ export function producedFiles(extra: string[] = [], outputDirs: string[] = []): 
     roots.some((root) => (isWithin(tmp, root) ? root === tmp && dir === tmp : isWithin(dir, root)));
   const all = new Set([...run.written, ...extras]);
   return [...all].filter((file) => {
-    if (file.startsWith(state) || /\.tmp-\d+|\.part$|\.tmp$/.test(file)) return false;
+    if (isWithin(file, state) || /\.tmp-\d+|\.part$|\.tmp$/.test(file)) return false;
     try {
       const dir = fs.realpathSync(path.dirname(file));
       if (isWithin(dir, tmp) && !extras.has(file) && !requested(dir)) return false;
