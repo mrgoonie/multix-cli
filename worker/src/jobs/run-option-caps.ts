@@ -107,10 +107,14 @@ export function uncappedReason(
   const merged = policy.uncappedOptions?.find((name) => values.has(name));
   if (merged) return `with --${merged}, the request reaches the provider as given`;
   const priced = policy.priceOptions?.find((name) => {
-    const given = single(values, name);
-    if (given === undefined) return false;
+    const value = values.get(name);
+    if (value === undefined) return false;
+    if (value === true) return true;
+    const given = value[0]?.trim() ?? "";
     const fallback = defaultString(options.get(name));
-    return fallback === undefined || given.trim().toLowerCase() !== fallback.toLowerCase();
+    if (fallback === undefined) return true;
+    const [n, d] = [Number(given), Number(fallback)];
+    return Number.isFinite(n) && Number.isFinite(d) && given !== "" ? n !== d : given !== fallback;
   });
   if (priced) {
     return `--${priced} sets the price of each output, which this server's caps do not bound (omit it to use the default)`;

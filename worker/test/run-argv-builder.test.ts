@@ -717,6 +717,11 @@ describe("prepareRun: runs the caps cannot bound", () => {
       "--resolution",
     );
     expect(priced("leonardo generate", { width: 1536 }, ["a cat"])).toContain("--width");
+    expect(
+      run({ command: "leonardo generate", args: ["a cat"], options: { ultra: true } })
+        .uncappedSpend,
+    ).toContain("--ultra");
+    expect(priced("runway image", { ratio: "1920:1080" }, ["a cat"])).toContain("--ratio");
     expect(priced("leonardo upscale", { multiplier: 2 }, ["abc"])).toContain("--multiplier");
   });
 
@@ -725,10 +730,16 @@ describe("prepareRun: runs the caps cannot bound", () => {
       "uncappedSpend",
     );
     expect(
-      run({ command: "openai generate", options: { prompt: "a cat", quality: "MEDIUM" } }),
+      run({ command: "openai generate", options: { prompt: "a cat", quality: "medium" } }),
     ).not.toHaveProperty("uncappedSpend");
     expect(
       run({ command: "atlas image", args: ["a cat"], options: { "num-images": 1 } }),
+    ).not.toHaveProperty("uncappedSpend");
+    expect(
+      run({ command: "leonardo upscale", args: ["abc"], options: { multiplier: "1.50" } }),
+    ).not.toHaveProperty("uncappedSpend");
+    expect(
+      run({ command: "leonardo generate", args: ["a cat"], options: { quality: "LOW" } }),
     ).not.toHaveProperty("uncappedSpend");
   });
 

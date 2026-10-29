@@ -71,9 +71,10 @@ export interface CommandPolicy {
   uncappedOptions?: string[];
   /**
    * Options that set the price of each output (image size, quality or
-   * resolution tier, upscale factor), which no operator cap bounds. A value
-   * other than the CLI default makes the run uncapped; omitting the option
-   * leaves the CLI or model default, which stays allowed.
+   * resolution tier, upscale factor, a dearer mode flag), which no operator
+   * cap bounds. A value other than the catalog default makes the run
+   * uncapped; omitting the option leaves the CLI or model default, which
+   * stays allowed.
    */
   priceOptions?: string[];
   /**
@@ -226,7 +227,8 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   "fish clone": { fileOptions: { sample: "file", "transcript-file": "file" } },
   "leonardo generate": {
     caps: { count: ["num"] },
-    priceOptions: [...LEONARDO_IMAGE_SIZE, "quality"],
+    // --quality defaults to HIGH, the dearest tier, so it is not listed.
+    priceOptions: [...LEONARDO_IMAGE_SIZE, "alchemy", "ultra"],
   },
   "leonardo image-to-image": { caps: { count: ["num"] }, priceOptions: LEONARDO_IMAGE_SIZE },
   "leonardo upscale": { priceOptions: ["multiplier"] },
@@ -313,6 +315,8 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   "runway image": {
     fileOptions: { reference: "file" },
     repeatable: ["reference", "reference-tag"],
+    // 1080p-tier ratios cost more than the 1280:720 default.
+    priceOptions: ["ratio"],
   },
   "heygen video-agent": {
     uncappedSpend: "the agent decides the video length",

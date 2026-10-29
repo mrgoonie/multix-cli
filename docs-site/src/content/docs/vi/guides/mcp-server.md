@@ -154,9 +154,10 @@ hạn):
   `--size` / `--quality` của `openai generate` / `image-to-image`; `--size` /
   `--resolution` của `atlas image` / `image-to-image`; `--image-size` của
   `openrouter generate` và `fal image`; `--width` / `--height` của `leonardo
-  generate` / `image-to-image`, `--quality` của `leonardo generate` và
-  `--multiplier` của `leonardo upscale`. Bỏ trống option, hoặc truyền đúng giá
-  trị mặc định của CLI, thì lần chạy vẫn được giới hạn.
+  generate` / `image-to-image`, `--alchemy` / `--ultra` của `leonardo
+  generate`, `--multiplier` của `leonardo upscale` và `--ratio` của `runway
+  image`. Bỏ trống option, hoặc truyền đúng `default` mà `multix_catalog` liệt
+  kê cho option đó, thì lần chạy vẫn được giới hạn.
 
 Operator quyết định điều kiện cho các lần chạy này bằng
 `MULTIX_MCP_UNCAPPED_SPEND`. Ở chế độ `budget` (mặc định), lệnh gọi phải có

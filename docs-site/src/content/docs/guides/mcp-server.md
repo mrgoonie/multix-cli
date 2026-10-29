@@ -158,9 +158,10 @@ the option that makes a run uncapped):
   `--size` / `--quality` of `openai generate` / `image-to-image`; `--size` /
   `--resolution` of `atlas image` / `image-to-image`; `--image-size` of
   `openrouter generate` and `fal image`; `--width` / `--height` of `leonardo
-  generate` / `image-to-image`, `--quality` of `leonardo generate` and
-  `--multiplier` of `leonardo upscale`. Omitting the option, or repeating the
-  CLI default, keeps the run capped.
+  generate` / `image-to-image`, `--alchemy` / `--ultra` of `leonardo
+  generate`, `--multiplier` of `leonardo upscale` and `--ratio` of `runway
+  image`. Omitting the option, or repeating the `default` that
+  `multix_catalog` lists for it, keeps the run capped.
 
 The operator decides what such a run needs with `MULTIX_MCP_UNCAPPED_SPEND`.
 In `budget` mode (the default) the call must give `max_cost_usd`, and the job
