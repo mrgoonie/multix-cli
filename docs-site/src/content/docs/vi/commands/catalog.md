@@ -94,10 +94,10 @@ của tài khoản provider. Nhóm theo `--by provider|model|offering|task|comma
   ít nhất một lần chạy thành công, nên một lần poll trạng thái lỗi giữa đường
   (lỗi mạng, hết thời gian chờ) được ghi dưới operation của job không bị tính là
   lỗi. Một lần chạy báo provider đã làm job thất bại (`JOB_FAILED`) khiến
-  operation thành **lỗi**, dù lần submit được provider chấp nhận đã thành công,
-  trừ khi có một lần chạy thành công sau đó. Nếu không, lần chạy gần nhất quyết
-  định operation **lỗi** hay **bị hủy**. Tỉ lệ thành công là số operation hoàn
-  tất chia cho số operation.
+  operation thành **lỗi**, dù lần submit được provider chấp nhận đã thành công
+  và một lần đọc trạng thái sau đó của job lỗi kết thúc thành công. Nếu không,
+  lần chạy gần nhất quyết định operation **lỗi** hay **bị hủy**. Tỉ lệ thành
+  công là số operation hoàn tất chia cho số operation.
 - Lần poll lỗi chưa từng nhận được provider id của job (request đầu tiên đã
   lỗi) vẫn được ghi thành một operation riêng, nên có thể bị tính là lỗi. Việc
   nhận diện operation qua nhiều lần chạy được theo dõi ở

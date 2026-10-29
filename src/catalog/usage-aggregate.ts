@@ -13,8 +13,7 @@
  *   count once, so polls and resumes never double the operation count;
  * - outcomes are per operation, decided over the whole ledger before
  *   grouping: failed when a run reported the provider failed the job
- *   (JOB_FAILED) and no run succeeded after it, even when the submit was
- *   accepted; otherwise completed when any of its runs succeeded, else failed
+ *   (JOB_FAILED), even when the submit was accepted; otherwise completed when any of its runs succeeded, else failed
  *   or canceled by its latest run. A poll that failed in transit (network,
  *   timeout) under the job's operation is not a failure, even when it lands in
  *   another row (no resolved model, a status command); success rate and
@@ -100,14 +99,11 @@ const isJobFailure = (e: HistoryEntry) => e.error?.code === "JOB_FAILED";
 
 type Outcome = "completed" | "failed" | "canceled";
 
-/** Later run by timestamp; ledger order breaks ties (it is append order). */
-const later = (a: HistoryEntry, b: HistoryEntry) => (b.ts >= a.ts ? b : a);
-
 /**
- * Outcome of each operation: failed when a run reported the provider failed
- * the job and no run succeeded after it (an ok submit only means the job was
- * accepted); otherwise completed if any run succeeded, else its latest run
- * decides.
+ * Outcome of each operation: failed when any run reported the provider failed
+ * the job (terminal; an ok submit only means the job was accepted, and a later
+ * status read of the failed job exits 0); otherwise completed if any run
+ * succeeded, else its latest run decides.
  */
 function operationOutcomes(list: HistoryEntry[]): Map<string, Outcome> {
   const runs = new Map<string, HistoryEntry[]>();
@@ -117,10 +113,13 @@ function operationOutcomes(list: HistoryEntry[]): Map<string, Outcome> {
   }
   const outcomes = new Map<string, Outcome>();
   for (const [id, ops] of runs) {
-    const verdicts = ops.filter((e) => e.ok || isJobFailure(e));
-    const verdict = verdicts.length ? verdicts.reduce(later) : undefined;
-    if (verdict) outcomes.set(id, verdict.ok ? "completed" : "failed");
-    else outcomes.set(id, isCancel(ops.reduce(later)) ? "canceled" : "failed");
+    if (ops.some(isJobFailure)) outcomes.set(id, "failed");
+    else if (ops.some((e) => e.ok)) outcomes.set(id, "completed");
+    else {
+      // Latest by timestamp; ledger order breaks ties (it is append order).
+      const latest = ops.reduce((a, b) => (b.ts >= a.ts ? b : a));
+      outcomes.set(id, isCancel(latest) ? "canceled" : "failed");
+    }
   }
   return outcomes;
 }
@@ -148,7 +147,7 @@ export interface UsageRow {
   requests: number;
   /** Logical operations (a job and its polls/resumes count once). */
   operations: number;
-  /** Operations with a successful run and no later report that the provider failed the job. */
+  /** Operations with a successful run that the provider did not fail. */
   completed: number;
   /** Operations the provider failed (JOB_FAILED), or with no successful run whose latest run failed. */
   failed: number;

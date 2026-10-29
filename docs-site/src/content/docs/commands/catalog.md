@@ -91,8 +91,8 @@ account's usage. Group with `--by provider|model|offering|task|command`.
   any of its runs succeeded, so a status poll that failed in transit (network
   error, timeout) under the job's operation is not a failure. A run that
   reports the provider failed the job (`JOB_FAILED`) makes it **failed**, even
-  though the submit that the provider accepted succeeded, unless a run after it
-  succeeded. Otherwise its latest run decides whether it **failed** or was
+  though the submit that the provider accepted succeeded and a later status
+  read of the failed job exits successfully. Otherwise its latest run decides whether it **failed** or was
   **canceled**. The success rate is completed operations divided by operations.
 - A failed poll whose run never received the job's provider id (its first
   request failed) is still recorded as an operation of its own, so it can count

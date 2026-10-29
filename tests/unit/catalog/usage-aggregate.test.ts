@@ -431,20 +431,43 @@ describe("retries, failures and cancels", () => {
     expect(row).toMatchObject({ operations: 1, completed: 1, failed: 0, success_rate: 1 });
   });
 
-  it("lets a run that succeeded after a reported job failure decide the job completed", () => {
-    const job = { provider: "fal", id: "req_4", attempt: 1 };
+  it("keeps a job the provider failed as failed when a later status read of it exits ok", () => {
+    // A status read without --wait prints the failed task and exits 0.
+    const job = { provider: "byteplus", id: "cgt-1", attempt: 1 };
+    const failedJob = {
+      ok: false,
+      exit_code: 1,
+      error: { code: "JOB_FAILED", message: "Task failed" },
+    };
+    const row = rowFor(
+      [
+        entry({ provider: "byteplus", job }),
+        entry({ provider: "byteplus", job, ts: "2026-10-27T10:01:00.000Z", ...failedJob }),
+        entry({
+          provider: "byteplus",
+          job,
+          ts: "2026-10-27T10:05:00.000Z",
+          command: "byteplus status",
+        }),
+      ],
+      "byteplus:bytedance/seedance-2.5/text-to-video",
+    );
+    expect(row).toMatchObject({ operations: 1, completed: 0, failed: 1, success_rate: 0 });
+  });
+
+  it("counts a job the provider failed as failed, not canceled, when a later resume was canceled", () => {
+    const job = { provider: "fal", id: "req_5", attempt: 1 };
+    const failed = { ok: false, exit_code: 1 } as const;
     const row = rowFor([
-      entry({ job }),
+      entry({ ...failed, job, error: { code: "JOB_FAILED", message: "job failed" } }),
       entry({
+        ...failed,
         job,
-        ts: "2026-10-27T10:01:00.000Z",
-        ok: false,
-        exit_code: 1,
-        error: { code: "JOB_FAILED", message: "job failed" },
+        ts: "2026-10-27T10:05:00.000Z",
+        error: { code: "CANCELLED", message: "stopped" },
       }),
-      entry({ job, ts: "2026-10-27T10:05:00.000Z" }),
     ]);
-    expect(row).toMatchObject({ operations: 1, completed: 1, failed: 0 });
+    expect(row).toMatchObject({ operations: 1, failed: 1, canceled: 0 });
   });
 
   it("lets the later ledger line decide between runs with the same timestamp", () => {
