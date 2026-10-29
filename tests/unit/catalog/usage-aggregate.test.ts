@@ -357,6 +357,61 @@ describe("retries, failures and cancels", () => {
     });
   });
 
+  it("fails a job whose status run reports JOB_FAILED even though its submit was accepted", () => {
+    const op = "fal:req_1";
+    const entries = [
+      entry({ provider_ids: ["req_1"], cost: receipt({ operation_id: op }) }),
+      entry({
+        ts: "2026-10-27T10:01:00.000Z",
+        command: "fal status",
+        model_resolved: undefined,
+        provider_ids: ["req_1"],
+        ok: false,
+        exit_code: 2,
+        error: { code: "JOB_FAILED", message: "the provider failed the job" },
+        cost: receipt({ operation_id: op, role: "observation", status: "unknown" }),
+      }),
+    ];
+    for (const by of USAGE_GROUPS) {
+      for (const r of aggregateUsage(entries, by)) {
+        expect(r, `${by} ${r.key}`).toMatchObject({ completed: 0, canceled: 0, success_rate: 0 });
+        expect(r.failed, `${by} ${r.key}`).toBe(r.operations);
+      }
+    }
+    expect(aggregateUsage(entries, "provider")).toMatchObject([
+      { key: "fal", requests: 2, operations: 1, completed: 0, failed: 1, success_rate: 0 },
+    ]);
+  });
+
+  it("fails a job identified by its job record when a later run reports JOB_FAILED", () => {
+    const job = { provider: "fal", id: "j-f", attempt: 1 };
+    const row = rowFor([
+      entry({ job }),
+      entry({
+        job,
+        ts: "2026-10-27T10:05:00.000Z",
+        ok: false,
+        exit_code: 2,
+        error: { code: "JOB_FAILED", message: "the provider failed the job" },
+      }),
+    ]);
+    expect(row).toMatchObject({ operations: 1, completed: 0, failed: 1, success_rate: 0 });
+  });
+
+  it("lets a later successful run of the same operation complete it after JOB_FAILED", () => {
+    const job = { provider: "fal", id: "j-r", attempt: 1 };
+    const row = rowFor([
+      entry({
+        job,
+        ok: false,
+        exit_code: 2,
+        error: { code: "JOB_FAILED", message: "the provider failed the job" },
+      }),
+      entry({ job, ts: "2026-10-27T10:05:00.000Z" }),
+    ]);
+    expect(row).toMatchObject({ operations: 1, completed: 1, failed: 0, success_rate: 1 });
+  });
+
   it("counts an operation with a successful run as completed even when another run was canceled", () => {
     const job = { provider: "fal", id: "j-c", attempt: 1 };
     const row = rowFor([

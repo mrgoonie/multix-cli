@@ -12,11 +12,13 @@
  *   receipt operation id (submit, status polls, result download, resume)
  *   count once, so polls and resumes never double the operation count;
  * - outcomes are per operation, decided over the whole ledger before
- *   grouping: completed when any of its runs succeeded, otherwise failed or
- *   canceled by its latest run. A failed poll recorded under the job's
- *   operation is not a failure, even when it lands in another row (no
- *   resolved model, a status command); success rate and sample size count
- *   operations;
+ *   grouping: the latest run that succeeded or reported the provider's own
+ *   job failure (JOB_FAILED) decides completed or failed, so a status run
+ *   that reports JOB_FAILED fails a job whose submit was accepted. Without
+ *   such a run, the latest run decides failed or canceled. A poll that failed
+ *   for any other reason (network, timeout) is not a failure of the job, even
+ *   when it lands in another row (no resolved model, a status command);
+ *   success rate and sample size count operations;
  * - retries are failed sends of the same submit before the one that returned
  *   the job (`job.attempt - 1`);
  * - spend is settled per operation (settleOperations): provider-reported
@@ -93,10 +95,18 @@ export function sentRequest(e: HistoryEntry): boolean {
 }
 
 const isCancel = (e: HistoryEntry) => e.error?.code === "CANCELLED";
+/** The provider's own terminal failure of the job, not a transient failure to read it. */
+const isJobFailure = (e: HistoryEntry) => !e.ok && e.error?.code === "JOB_FAILED";
+
+/** Latest run by timestamp; ledger order breaks ties (it is append order). */
+const latestOf = (runs: HistoryEntry[]) => runs.reduce((a, b) => (b.ts >= a.ts ? b : a));
 
 type Outcome = "completed" | "failed" | "canceled";
 
-/** Outcome of each operation: completed if any run succeeded, else its latest run decides. */
+/**
+ * Outcome of each operation: the latest run that succeeded or reported
+ * JOB_FAILED decides; without one, the latest run decides failed or canceled.
+ */
 function operationOutcomes(list: HistoryEntry[]): Map<string, Outcome> {
   const runs = new Map<string, HistoryEntry[]>();
   for (const e of list) {
@@ -105,12 +115,9 @@ function operationOutcomes(list: HistoryEntry[]): Map<string, Outcome> {
   }
   const outcomes = new Map<string, Outcome>();
   for (const [id, ops] of runs) {
-    if (ops.some((e) => e.ok)) outcomes.set(id, "completed");
-    else {
-      // Latest by timestamp; ledger order breaks ties (it is append order).
-      const latest = ops.reduce((a, b) => (b.ts >= a.ts ? b : a));
-      outcomes.set(id, isCancel(latest) ? "canceled" : "failed");
-    }
+    const decisive = ops.filter((e) => e.ok || isJobFailure(e));
+    if (decisive.length > 0) outcomes.set(id, latestOf(decisive).ok ? "completed" : "failed");
+    else outcomes.set(id, isCancel(latestOf(ops)) ? "canceled" : "failed");
   }
   return outcomes;
 }
@@ -138,11 +145,11 @@ export interface UsageRow {
   requests: number;
   /** Logical operations (a job and its polls/resumes count once). */
   operations: number;
-  /** Operations with a successful run. */
+  /** Operations whose latest deciding run (success or JOB_FAILED) succeeded. */
   completed: number;
-  /** Operations with no successful run whose latest run failed. */
+  /** Operations whose latest deciding run reported JOB_FAILED, or with none whose latest run failed. */
   failed: number;
-  /** Operations with no successful run whose latest run was canceled. */
+  /** Operations with no deciding run whose latest run was canceled. */
   canceled: number;
   /** completed / operations, null without operations. */
   success_rate: number | null;
