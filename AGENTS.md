@@ -65,7 +65,9 @@ Open a new issue for it (with evidence) rather than widening the current PR.
 - Branch from `main`: `feat/<scope>-<slug>`, `fix/<scope>-<slug>`, `docs/<slug>`, `chore/<slug>`.
 - Use a separate git worktree per issue when several issues are in flight.
 - Conventional commits (`feat(replicate): …`, `fix(gemini): …`); release-please builds the changelog from them.
-- One issue per PR; put `Closes #<n>` in the PR body.
+- One issue per PR; put `Closes #<n>` in the PR body, plus a
+  `Documentation impact` section (see
+  [Documentation impact](#documentation-impact-required-for-every-change)).
 - Do not merge release-please PRs as part of feature work; they publish to npm.
 - `release-please.yml` merges its own release PR, so every merge into `main`
   with a `feat`, `fix`, `perf`, `refactor` or `docs` commit publishes a new npm
@@ -154,3 +156,40 @@ npm run check:mcp    # when worker/ or a client it imports changed
 - Agent-facing usage: `skill/SKILL.md`.
 - Implementation plans and reports: `plans/`. Isolated code-review reports go
   in `plans/reports/` (`code-reviewer-<yymmdd>-<hhmm>-<slug>.md`).
+
+### Documentation impact (required for every change)
+
+Docs are part of done. Before finishing any change, assess whether it changes
+anything a user, operator, contributor or agent relies on: behavior, commands,
+flags, `--help` text, defaults, provider/model capabilities, MCP tool or API
+schemas and response shapes, auth, config or env vars, installation, error
+codes, security, costs or limits, examples, and operational workflows.
+
+When it does, update every affected living surface in the same PR:
+
+- Public docs: `README.md` and `docs-site/src/content/docs/**`, published at
+  <https://multix.zuey.me>. Change the English page and its `vi/` counterpart
+  together. The build derives each page's agent-readable `.md` route and
+  `llms.txt` from these sources, so edit the source, not the output.
+- Agent-facing: `skill/SKILL.md`, and command `--help`/usage strings in
+  `src/commands/**` when a command's surface changes.
+- Contributor/internal: this file, `.env.example`, and any active plan in
+  `plans/` that the change makes wrong. Plans and
+  `plans/reports/` from finished work are historical records: do not rewrite
+  them to match new behavior.
+
+Rules:
+
+- Accuracy over volume. Check commands, options, model names, defaults, env
+  vars, URLs and snippets against the source, tests and the provider's
+  official reference. Never document a model, price or behavior that the code
+  does not implement or that you did not verify.
+- No noise. A refactor, test-only or internal change with no observable
+  effect needs no doc edit; say so instead of making an empty one.
+- When `docs-site/` changes, run `npm run verify:docs` (see
+  [Verification before review](#verification-before-review)); its output tests
+  fail when an English page lacks its Vietnamese or Markdown counterpart.
+- Every PR body has a short `Documentation impact` section: the docs paths
+  updated, or `N/A` with a one-line reason. If publication or a doc update
+  genuinely has to happen separately (a release or deploy step), link the
+  tracked follow-up issue and state what remains. Never skip docs silently.
