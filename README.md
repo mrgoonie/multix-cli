@@ -68,7 +68,7 @@ multix fal image "a red fox" --json           # one-line multix.result/v1 envelo
 multix elevenlabs tts --text "Hi" --estimate  # price range, units, rate and source; nothing is sent
 multix elevenlabs tts --text "Hi" --max-cost 0.01  # refuse before sending unless the cost fits
 multix history stats --by model               # runs, success rate, p50/p90 time, cost, credits, tokens
-multix catalog compare -t video --resolution 720p --duration 10 --audio on  # rank prices for one exact request
+multix catalog compare -t video --resolution 720p --duration 10 --audio on --aspect-ratio 16:9  # rank prices for one exact request
 multix rerun last                             # repeat a recorded run
 ```
 
@@ -1084,6 +1084,10 @@ instance runs at `https://multix.zuey.me/mcp` (invited GitHub accounts only).
   bounds each `gemini extend-video` continuation, not a stored clip that
   chained extends grew, nor a `gemini edit-video` of it),
   `MULTIX_MCP_ALLOWED_RESOLUTIONS` (default `480p,720p,768p,1080p`),
+  `MULTIX_MCP_MAX_AUDIO_SECONDS` (default `30`, ceiling `300`: caps
+  `elevenlabs sfx --duration-seconds` and `elevenlabs music --music-length-ms`;
+  an omitted music length is sent as the cap, since the model would pick up to
+  10 minutes),
   `MULTIX_MCP_UNCAPPED_SPEND` (default `budget`: runs those caps cannot bound,
   such as `fal run` or `heygen translate`, start only with a `max_cost_usd`
   their price estimate proves; `deny` refuses them, `allow` runs them),

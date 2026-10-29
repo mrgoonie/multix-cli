@@ -81,6 +81,7 @@
     "MULTIX_PUBLIC_URL": "https://multix.zuey.me",
     "MULTIX_MCP_MAX_OUTPUTS": "4",
     "MULTIX_MCP_MAX_VIDEO_SECONDS": "10",
+    "MULTIX_MCP_MAX_AUDIO_SECONDS": "30",
     "MULTIX_MCP_ALLOWED_RESOLUTIONS": "480p,720p,768p,1080p",
     // Runs the caps above cannot bound (fal run, heygen translate, ...): budget | deny | allow.
     "MULTIX_MCP_UNCAPPED_SPEND": "budget",

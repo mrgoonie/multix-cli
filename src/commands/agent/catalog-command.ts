@@ -30,7 +30,7 @@ import {
   type Review,
   type ReviewScope,
 } from "../../catalog/catalog-types.js";
-import type { Comparison } from "../../catalog/price-compare.js";
+import { type Comparison, notRankedReasons } from "../../catalog/price-compare.js";
 import { recommend } from "../../catalog/recommend.js";
 import {
   LIMITS,
@@ -313,7 +313,7 @@ function registerBrowse(catalog: Command): void {
     ),
   )
     .option("-d, --duration <seconds>", "Video length in seconds")
-    .option("--aspect-ratio <ratio>", "Aspect ratio (16:9) for token-billed video")
+    .option("--aspect-ratio <ratio>", "Aspect ratio (16:9); pin it to rank token-billed video")
     .option("--images <n>", "Images to return (image prices)")
     .action((opts: QuoteFlags) => {
       const payload = catalogQuery(queryOf("compare", opts), groupReady, PROVIDER_GROUPS);
@@ -327,13 +327,9 @@ function registerBrowse(catalog: Command): void {
         const rank = r.price_rank ? `#${r.price_rank}` : "  -";
         const detail =
           r.status === "priced"
-            ? [
-                r.basis === "estimated" ? "estimate" : "",
-                ...(r.open_settings?.length
-                  ? [`not ranked: pin ${r.open_settings.join(", ")}`]
-                  : []),
-                ...(r.assumptions ?? []).map((a) => `assumes ${a}`),
-              ]
+            ? notRankedReasons(r).length
+              ? [`not ranked: ${notRankedReasons(r).join("; ")}`]
+              : []
             : (r.reasons ?? []);
         console.log(
           `${rank.padStart(3)} ${usd(r.total_usd).padStart(9)}  ${r.offering}${r.rate_id ? ` (${r.rate_id})` : ""}  ${r.status}${detail.filter(Boolean).length ? `: ${detail.filter(Boolean).join("; ")}` : ""}`,
@@ -395,7 +391,7 @@ function registerBrowse(catalog: Command): void {
   )
     .option("-u, --use-case <name>", "Use case, e.g. product-ugc")
     .option("-d, --duration <seconds>", "Video length in seconds (for the price factor)")
-    .option("--aspect-ratio <ratio>", "Aspect ratio (16:9)")
+    .option("--aspect-ratio <ratio>", "Aspect ratio (16:9); pin it to rank token-billed video")
     .option("--images <n>", "Images to return")
     .action((opts: QuoteFlags & { useCase?: string }) => {
       const req = quoteRequestOf(queryOf("compare", opts));
@@ -415,7 +411,7 @@ function registerBrowse(catalog: Command): void {
       if (run.json) return print({ ...result, user_content: USER_CONTENT_NOTICE });
       for (const r of result.recommendations.slice(0, 15)) {
         console.log(
-          `${r.score.toFixed(3)}  ${r.offering}  [${r.ready ? "ready" : "no key"}]  coverage ${Math.round(r.coverage * 100)}%  quote ${usd(r.quote_usd)}`,
+          `${r.score.toFixed(3)}  ${r.offering}  [${r.ready ? "ready" : "no key"}]  coverage ${Math.round(r.coverage * 100)}%  quote ${r.quote_usd === null && r.unranked_quote ? `not ranked (${usd(r.unranked_quote.usd)})` : usd(r.quote_usd)}`,
         );
         for (const [name, f] of Object.entries(r.factors))
           console.log(`        ${name}: ${f.evidence}`);

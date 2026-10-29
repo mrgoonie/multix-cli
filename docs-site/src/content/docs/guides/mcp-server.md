@@ -129,8 +129,12 @@ the CLI prints) is returned either way. Keys never appear in `stdout` or
 
 Server limits apply to `multix_run` too: the output count
 (`MULTIX_MCP_MAX_OUTPUTS`), video length (`MULTIX_MCP_MAX_VIDEO_SECONDS`, also
-sent when a video command's default is unknown or longer) and resolution
-(`MULTIX_MCP_ALLOWED_RESOLUTIONS`). The server chooses the output directory,
+sent when a video command's default is unknown or longer), resolution
+(`MULTIX_MCP_ALLOWED_RESOLUTIONS`) and generated audio length
+(`MULTIX_MCP_MAX_AUDIO_SECONDS`: `elevenlabs sfx --duration-seconds` and
+`elevenlabs music --music-length-ms`; an omitted music length is sent as the
+cap, since the model would otherwise pick up to 10 minutes).
+The server chooses the output directory,
 `--output` must be a plain file name, options the CLI turns into part of a
 file name (such as `elevenlabs voices design --output-prefix` or a dub
 language) accept only letters, digits, `_` and `-`, the OpenAI image commands
@@ -146,27 +150,38 @@ the option that makes a run uncapped):
 
 - pass-through request bodies: `fal run`, `replicate run`, `atlas run`,
   `heygen run`, `topview run`, `--input` of `replicate image` and
-  `replicate video`, `--input` / `--text-field` of `fal tts`, and `--param`
-  of `sume image`;
+  `replicate video`, `--input` / `--text-field` of `fal tts`, `--param` of
+  `sume image`, `--provider-options` of `openrouter tts`, and the raw model
+  `--flags` of `byteplus generate-3d`;
 - runs billed by the length of their source or script: `heygen video`,
   `heygen translate`, `heygen lipsync`, `elevenlabs dub`, `topview
   video-avatar`, `topview product-avatar`, and `heygen video-agent` /
-  `heygen template`, where the agent or template sets the length;
+  `heygen template`, where the agent or template sets the length, and
+  `elevenlabs music` with a `--plan`, whose section durations set the length;
+- runs longer than the duration cap can bound: `topview url-to-video` and
+  `topview materials-to-video` (15-60 s videos);
 - `sume video`, where the model's catalog row sets the price and lip-sync and
   captions models bill by the length of the source media;
 - `atlas image`, `atlas image-to-image`, `sume image` and `replicate image`
   without `--num-images` / `--num-outputs`, where the model picks the number of
   outputs. Passing the count (at most `MULTIX_MCP_MAX_OUTPUTS`) makes the run
-  capped again.
+  capped again;
+- `fal video`, which has no `--resolution`: the model picks it;
+- `atlas video`, `atlas image-to-video`, `replicate video`,
+  `openrouter image-to-video` and `heygen model-video` without `--resolution`,
+  where the model's default resolution applies. Passing one of
+  `MULTIX_MCP_ALLOWED_RESOLUTIONS` makes the run capped again, for models that
+  take a resolution (some Atlas models do not, and are then always uncapped).
+  For `openrouter image-to-video` the value is a request the model may round.
 
 The operator decides what such a run needs with `MULTIX_MCP_UNCAPPED_SPEND`.
 In `budget` mode (the default) the call must give `max_cost_usd`, and the job
 starts only when the price estimate proves the run fits (`cost_policy` is
 treated as `strict` for these runs, since the estimate cannot see the uncapped
-part). None of these
-commands is priced yet, so in practice `budget` refuses them, closed rather
-than open. `deny` always refuses them; `allow` runs them as before, on the
-caller's own keys. An `estimate: true` call is answered in every mode, since it
+part). Of these, only `openrouter tts` has a price estimate, and only for a
+model whose price is known, so in practice `budget` refuses the rest, closed
+rather than open. `deny` always refuses them; `allow` runs them as before, on
+the caller's own keys. An `estimate: true` call is answered in every mode, since it
 starts nothing. The REST API (`POST /api/v1/jobs`) takes the same
 `max_cost_usd` and `cost_policy` fields and applies the same rule.
 
@@ -649,6 +664,7 @@ Set these as `vars` in `worker/wrangler.jsonc`:
 | `MULTIX_PUBLIC_URL` | — (required) | Public origin, for example `https://mcp.example.com`. Used for OAuth metadata, redirects and the GitHub callback. |
 | `MULTIX_MCP_MAX_OUTPUTS` | `4` (ceiling 10) | Maximum output count (for example `--num-images`) per `multix_run` call. |
 | `MULTIX_MCP_MAX_VIDEO_SECONDS` | `10` (ceiling 15) | Maximum video duration per call (for `gemini extend-video`, the new continuation). When a caller omits it and the command's default is unknown or longer, the server sends `min(5, cap)` seconds. |
+| `MULTIX_MCP_MAX_AUDIO_SECONDS` | `30` (ceiling 300) | Maximum generated audio length per call: `elevenlabs sfx --duration-seconds` and `elevenlabs music --music-length-ms`. An omitted music length is sent as the cap (the model would pick up to 10 minutes), except with a `--plan`; an omitted sound effect length is sent as the cap only when the cap is below the 30 s provider maximum. |
 | `MULTIX_MCP_ALLOWED_RESOLUTIONS` | `480p,720p,768p,1080p` | Video resolutions a caller may request (`768p` is a HeyGen Video size). Anything else (for example `4k`), given or the command's default, is rejected before the job starts. |
 | `MULTIX_MCP_UNCAPPED_SPEND` | `budget` | Runs the caps above cannot bound (marked `uncapped_spend` in `multix_catalog`): `budget` runs one only with a `max_cost_usd` its price estimate proves (an unknown price is refused), `deny` refuses it, `allow` runs it. Any other value means `budget`. |
 | `MULTIX_MCP_ALLOWED_ORIGINS` | none | Exact browser origins (for example `https://app.example.com`) allowed to call `/mcp`. `*` and other wildcards are not supported: `*` only matches a literal `*` origin, which browsers never send. After the access token is checked, requests with any other `Origin` header get `403`; requests without an `Origin` (server-side clients) are allowed. Listed origins get CORS headers. `OPTIONS` preflights are answered for any origin by the OAuth layer. |
@@ -705,7 +721,7 @@ within your Cloudflare account. If another Worker already uses `1001` or
   resolution on the options the server knows for each command (see
   [Running CLI commands](#running-cli-commands)). A run those caps cannot
   bound (a pass-through JSON body, a price set by the source length, a count
-  the model picks) is refused unless `max_cost_usd` proves its price, or as
+  or resolution the model picks) is refused unless `max_cost_usd` proves its price, or as
   `MULTIX_MCP_UNCAPPED_SPEND` sets. A caller can also set `max_cost_usd` to
   refuse any run that may cost more.
 - **Logging and redaction:** successful calls are logged at `info` with tool

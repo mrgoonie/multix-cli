@@ -19,7 +19,7 @@ export function registerMusicCommand(parent: Command): void {
     .option("--plan <path>", "Path to composition plan JSON file")
     .option(
       "--music-length-ms <n>",
-      "Total length in milliseconds (omit to let the model pick the length)",
+      "Total length in milliseconds (the model picks one when omitted; not with --plan)",
     )
     .option("--model <id>", "Music model", "music_v1")
     .option(
