@@ -52,6 +52,11 @@ import {
   type SkillRevision,
   type SkillShare,
 } from "./skill-types.js";
+import {
+  WORKFLOW_FILE,
+  WorkflowManifestError,
+  parseWorkflowManifest,
+} from "./workflow-manifest.js";
 
 /** The subset of Durable Object storage the registry uses (same shape as the event hub's). */
 export interface RegistryStorage {
@@ -213,6 +218,19 @@ function checkFileSet(files: readonly { path: string; size: number }[]): void {
   if (problem) throw new SkillRegistryError(problem, "invalid");
 }
 
+/** A skill's workflow manifest must be valid to publish (it is checked again before a run). */
+function checkWorkflow(text: string | undefined): void {
+  try {
+    parseWorkflowManifest(text ?? "");
+  } catch (error) {
+    if (!(error instanceof WorkflowManifestError)) throw error;
+    const message = error.message.startsWith(WORKFLOW_FILE)
+      ? error.message
+      : `${WORKFLOW_FILE}: ${error.message}`;
+    throw new SkillRegistryError(message, "invalid");
+  }
+}
+
 function byPath(a: { path: string }, b: { path: string }): number {
   return a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
 }
@@ -332,6 +350,7 @@ export class SkillRegistry {
     storeContent: () => Promise<void>,
     expectedName?: string,
     expectedRevision?: number | null,
+    workflowText?: string,
   ): Promise<ServedSkill> {
     checkFileSet(files);
     let frontmatter: Frontmatter;
@@ -341,6 +360,7 @@ export class SkillRegistry {
       if (!(error instanceof FrontmatterError)) throw error;
       throw new SkillRegistryError(error.message, "invalid");
     }
+    if (files.some((f) => f.path === WORKFLOW_FILE)) checkWorkflow(workflowText);
     const name = frontmatter.name;
     if (expectedName !== undefined && name !== expectedName) {
       throw new SkillRegistryError(
@@ -423,6 +443,7 @@ export class SkillRegistry {
     for (const file of input.files) checkFileContent(file);
     const files = await this.describe(input.files);
     const skillMd = input.files.find((f) => f.path === "SKILL.md") as FileInput;
+    const workflow = input.files.find((f) => f.path === WORKFLOW_FILE);
     return this.commit(
       input.ownerId,
       files,
@@ -431,6 +452,7 @@ export class SkillRegistry {
       () => this.storeBlobs(input.files, files),
       undefined,
       input.expectedRevision,
+      workflow && decodeText(workflow.bytes),
     );
   }
 
@@ -564,9 +586,11 @@ export class SkillRegistry {
     }
     // Re-hash every file: a draft is published only with all of its content intact.
     let skillMdText: string | undefined;
+    let workflowText: string | undefined;
     for (const file of existing.files) {
       const bytes = await this.readBlob(file);
       if (file.path === "SKILL.md") skillMdText = decodeText(bytes);
+      if (file.path === WORKFLOW_FILE) workflowText = decodeText(bytes);
     }
     const served = await this.commit(
       input.ownerId,
@@ -576,6 +600,7 @@ export class SkillRegistry {
       async () => {},
       input.name,
       input.expectedRevision !== undefined ? input.expectedRevision : existing.servedRevision,
+      workflowText,
     );
     await this.storage.delete([key]);
     await this.release(

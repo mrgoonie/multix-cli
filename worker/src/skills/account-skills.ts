@@ -6,7 +6,8 @@
  * inside blockConcurrencyWhile (writes read, then write across awaits).
  *
  * Owner calls take the owner's account id first. The two grantee calls
- * (`addShare`, `removeShare`) take the grantee's id, the object's own.
+ * (`addShare`, `removeShare`) take the grantee's id, the object's own, and so
+ * do the workflow calls: authorizations and runs belong to the running account.
  */
 
 import { DurableObject } from "cloudflare:workers";
@@ -27,6 +28,12 @@ import type {
   SkillRevision,
   SkillShare,
 } from "./skill-types.js";
+import {
+  type WorkflowAuthorization,
+  type WorkflowRun,
+  type WorkflowRunSummary,
+  WorkflowStore,
+} from "./workflow-store.js";
 
 type OwnFile = { file: SkillFile; bytes: Uint8Array } | null;
 
@@ -43,8 +50,24 @@ export interface SkillRegistryStub {
   shares(): Promise<SkillShare[]>;
 }
 
+/** The running account's workflow authorizations and runs (see workflow-store.ts). */
+export interface WorkflowStoreStub {
+  workflowAuthorization(
+    accountId: string,
+    ownerId: string,
+    name: string,
+  ): Promise<WorkflowAuthorization | null>;
+  workflowAuthorizations(accountId: string): Promise<WorkflowAuthorization[]>;
+  putWorkflowAuthorization(accountId: string, auth: WorkflowAuthorization): Promise<boolean>;
+  deleteWorkflowAuthorization(accountId: string, ownerId: string, name: string): Promise<boolean>;
+  workflowRun(accountId: string, runId: string): Promise<WorkflowRun | null>;
+  workflowRuns(accountId: string): Promise<WorkflowRunSummary[]>;
+  createWorkflowRun(accountId: string, run: WorkflowRun): Promise<boolean>;
+  saveWorkflowRun(accountId: string, run: WorkflowRun): Promise<WorkflowRun | null>;
+}
+
 /** Every call of an account's registry, reading and authoring. */
-export interface SkillAuthoringStub extends SkillRegistryStub {
+export interface SkillAuthoringStub extends SkillRegistryStub, WorkflowStoreStub {
   publish(input: PublishInput): Promise<ServedSkill>;
   saveDraft(input: DraftInput): Promise<SkillDraft>;
   draft(ownerId: string, name: string): Promise<SkillDraft | null>;
@@ -84,11 +107,13 @@ export interface AccountSkillsNamespace {
 
 export class AccountSkills extends DurableObject implements SkillAuthoringStub {
   private readonly registry: SkillRegistry;
+  private readonly workflows: WorkflowStore;
 
   /** `now` is for tests; the runtime constructs the object with (ctx, env). */
   constructor(ctx: DurableObjectState, env: unknown, now: () => number = Date.now) {
     super(ctx, env as never);
     this.registry = new SkillRegistry(ctx.storage as unknown as RegistryStorage, now);
+    this.workflows = new WorkflowStore(ctx.storage as unknown as RegistryStorage);
   }
 
   /**
@@ -244,5 +269,49 @@ export class AccountSkills extends DurableObject implements SkillAuthoringStub {
   async readFile(ownerId: string, principal: string, name: string, path: string): Promise<OwnFile> {
     this.owner(ownerId);
     return await this.registry.readFile(ownerId, principal, name, path);
+  }
+
+  async workflowAuthorization(
+    accountId: string,
+    ownerId: string,
+    name: string,
+  ): Promise<WorkflowAuthorization | null> {
+    this.owner(accountId);
+    return await this.workflows.authorization(ownerId, name);
+  }
+
+  async workflowAuthorizations(accountId: string): Promise<WorkflowAuthorization[]> {
+    this.owner(accountId);
+    return await this.workflows.authorizations();
+  }
+
+  async putWorkflowAuthorization(accountId: string, auth: WorkflowAuthorization): Promise<boolean> {
+    return this.write(accountId, () => this.workflows.putAuthorization(auth));
+  }
+
+  async deleteWorkflowAuthorization(
+    accountId: string,
+    ownerId: string,
+    name: string,
+  ): Promise<boolean> {
+    return this.write(accountId, () => this.workflows.deleteAuthorization(ownerId, name));
+  }
+
+  async workflowRun(accountId: string, runId: string): Promise<WorkflowRun | null> {
+    this.owner(accountId);
+    return await this.workflows.run(runId);
+  }
+
+  async workflowRuns(accountId: string): Promise<WorkflowRunSummary[]> {
+    this.owner(accountId);
+    return await this.workflows.runs();
+  }
+
+  async createWorkflowRun(accountId: string, run: WorkflowRun): Promise<boolean> {
+    return this.write(accountId, () => this.workflows.createRun(run));
+  }
+
+  async saveWorkflowRun(accountId: string, run: WorkflowRun): Promise<WorkflowRun | null> {
+    return this.write(accountId, () => this.workflows.saveRun(run));
   }
 }
