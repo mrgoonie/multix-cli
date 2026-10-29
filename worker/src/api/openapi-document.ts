@@ -628,6 +628,18 @@ export function openApiDocument(origin: string): Json {
               },
             },
             wait_seconds: { type: "integer", minimum: 0, maximum: MAX_WAIT_SECONDS },
+            max_cost_usd: {
+              type: "number",
+              minimum: 0,
+              description:
+                "Refuse to start unless the cost is at most this many USD. Required for a command the server caps cannot bound (uncapped_spend in the catalog) when the server runs them only within a budget.",
+            },
+            cost_policy: {
+              type: "string",
+              enum: ["strict", "estimate"],
+              description:
+                "With max_cost_usd: strict (proven ceiling only, default) or estimate (accept the estimated high end)",
+            },
           },
         },
         Job: {

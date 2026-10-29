@@ -50,7 +50,8 @@ thay đổi cách `multix` chạy trên máy bạn.
   `{ estimate_only, command, estimate, budget? }` mà không khởi động job.
 - `max_cost_usd`: số ≥ 0. Job không khởi động trừ khi chi phí nằm trong giới
   hạn, theo cùng quy tắc với `--max-cost` của CLI; khi bị từ chối, lệnh gọi trả
-  về lỗi của tool.
+  về lỗi của tool. Lần chạy mà giới hạn không chặn được cần trường này khi
+  server chạy chúng ở chế độ `budget` (xem bên dưới).
 - `cost_policy`: `"strict"` (mặc định, chỉ chấp nhận mức trần đã chứng minh)
   hoặc `"estimate"` (chấp nhận mức cao ước tính). Xem
   [Chi phí](/vi/reference/for-ai-agents/#chi-phí-ước-tính-giới-hạn-chi-tiêu-và-biên-nhận)
@@ -133,6 +134,31 @@ các lệnh video Gemini luôn dùng Gemini Omni Flash (khi người gọi bỏ 
 phân giải, server gửi một giá trị được phép, ưu tiên 720p), và giá trị `@file`
 bị từ chối. Lệnh thay đổi chính tài khoản provider của bạn (ví
 dụ xóa một giọng ElevenLabs) chạy như mọi lệnh khác, bằng key của bạn.
+
+**Lần chạy giới hạn không chặn được.** Một số lần chạy tốn nhiều hơn những gì
+các giới hạn trên nhìn thấy. `multix_catalog` đánh dấu chúng bằng
+`uncapped_spend` (trên lệnh, hoặc trên option khiến lần chạy không bị giới
+hạn):
+
+- body request chuyển thẳng tới provider: `fal run`, `replicate run`,
+  `atlas run`, `heygen run`, `--input` của `replicate image` và
+  `replicate video`, và `--input` / `--text-field` của `fal tts`;
+- lần chạy tính tiền theo độ dài nguồn hoặc kịch bản: `heygen video`,
+  `heygen translate`, `heygen lipsync`, `elevenlabs dub`, và `heygen
+  video-agent` / `heygen template`, nơi agent hoặc template quyết định độ dài;
+- `atlas image`, `atlas image-to-image` và `replicate image` khi không có
+  `--num-images` / `--num-outputs`, lúc đó model tự chọn số output. Truyền số
+  lượng (tối đa `MULTIX_MCP_MAX_OUTPUTS`) giúp lần chạy được giới hạn trở lại.
+
+Operator quyết định điều kiện cho các lần chạy này bằng
+`MULTIX_MCP_UNCAPPED_SPEND`. Ở chế độ `budget` (mặc định), lệnh gọi phải có
+`max_cost_usd` và job chỉ khởi động khi ước tính giá chứng minh lần chạy nằm
+trong mức đó (`cost_policy` được coi là `strict` với các lần chạy này, vì ước
+tính không nhìn thấy phần không bị giới hạn). Hiện chưa lệnh nào trong số này có bảng giá, nên trên thực tế
+`budget` từ chối chúng (đóng thay vì mở). `deny` luôn từ chối; `allow` chạy như
+trước, bằng key của chính người gọi. Lệnh gọi `estimate: true` luôn được trả
+lời ở mọi chế độ vì nó không khởi động gì. REST API (`POST /api/v1/jobs`) nhận
+cùng các trường `max_cost_usd` và `cost_policy` và áp dụng cùng quy tắc.
 
 **Gemini edit và extend.** `gemini extend-video --duration` là độ dài của đoạn
 nối tiếp mới và bị giới hạn như mọi thời lượng khác, nhưng video trả về còn chứa
@@ -522,6 +548,7 @@ closed). `http://localhost` được chấp nhận khi phát triển cục bộ.
 | `MULTIX_MCP_MAX_OUTPUTS` | `4` (tối đa 10) | Số output tối đa (ví dụ `--num-images`) mỗi lần gọi `multix_run`. |
 | `MULTIX_MCP_MAX_VIDEO_SECONDS` | `10` (tối đa 15) | Thời lượng video tối đa cho mỗi lần gọi (với `gemini extend-video` là đoạn nối tiếp mới). Khi caller bỏ qua thời lượng và mặc định của lệnh không rõ hoặc dài hơn, server gửi `min(5, giới hạn)` giây. |
 | `MULTIX_MCP_ALLOWED_RESOLUTIONS` | `480p,720p,768p,1080p` | Độ phân giải video caller được yêu cầu (`768p` là kích thước của HeyGen Video). Giá trị khác (ví dụ `4k`), do caller truyền hay là mặc định của lệnh, bị từ chối trước khi job bắt đầu. |
+| `MULTIX_MCP_UNCAPPED_SPEND` | `budget` | Lần chạy mà các giới hạn trên không chặn được (đánh dấu `uncapped_spend` trong `multix_catalog`): `budget` chỉ chạy khi có `max_cost_usd` mà ước tính giá chứng minh được (giá không rõ thì bị từ chối), `deny` từ chối, `allow` cho chạy. Giá trị khác được hiểu là `budget`. |
 | `MULTIX_MCP_ALLOWED_ORIGINS` | không có | Origin trình duyệt chính xác (ví dụ `https://app.example.com`) được phép gọi `/mcp`. Không hỗ trợ `*` hay wildcard khác: `*` chỉ khớp origin `*` theo nghĩa đen, thứ trình duyệt không bao giờ gửi. Sau khi access token được kiểm tra, request có header `Origin` khác nhận `403`; request không có `Origin` (client phía server) được chấp nhận. Origin trong danh sách nhận header CORS. Preflight `OPTIONS` được lớp OAuth trả lời cho mọi origin. |
 | `MULTIX_MAX_JOBS_PER_ACCOUNT` | `2` (tối đa 50) | Số job `multix_run` một tài khoản được chạy cùng lúc. |
 | `MULTIX_MAX_JOBS_TOTAL` | `10` (tối đa 1000) | Số job `multix_run` server được chạy cùng lúc trên mọi tài khoản. Giữ giá trị này không vượt `max_instances` của container trong `wrangler.jsonc`, là trần của nền tảng. |
@@ -574,10 +601,11 @@ chung bộ đếm.
   từ chối trước khi job bắt đầu.
 - **Giới hạn chi phí:** `multix_run` giới hạn số output, thời lượng video và
   độ phân giải video trên các option mà server biết cho từng lệnh (xem
-  [Chạy lệnh CLI](#chạy-lệnh-cli)). Các input khác có thể làm đổi giá, như
-  JSON `--input` thô của `replicate run` hoặc `atlas run`, không bị giới hạn.
-  Người gọi cũng có thể đặt `max_cost_usd` để từ chối lần chạy có thể tốn hơn
-  mức đó.
+  [Chạy lệnh CLI](#chạy-lệnh-cli)). Lần chạy mà các giới hạn đó không chặn
+  được (body JSON chuyển thẳng, giá theo độ dài nguồn, số output do model chọn)
+  bị từ chối trừ khi `max_cost_usd` chứng minh được giá, hoặc theo
+  `MULTIX_MCP_UNCAPPED_SPEND`. Người gọi cũng có thể đặt `max_cost_usd` để từ
+  chối mọi lần chạy có thể tốn hơn mức đó.
 - **Log và che thông tin nhạy cảm:** lệnh gọi thành công được log ở mức `info`,
   chỉ gồm tên tool, lệnh (hoặc group của catalog), kết quả và độ trễ. Prompt không bao giờ
   được log thành một trường riêng. Lệnh gọi thất bại được log ở mức `warn` (lỗi
