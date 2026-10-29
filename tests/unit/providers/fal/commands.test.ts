@@ -327,6 +327,31 @@ describe("resume after the submitting process is gone", () => {
   });
 });
 
+describe("fal result failures", () => {
+  it("throws the HTTP error so the run keeps its status and Retry-After", async () => {
+    stub({
+      [`GET https://queue.fal.run/${MODEL}/requests/${REQUEST_ID}`]: [
+        { status: 429, json: { detail: "slow down" }, headers: { "retry-after": "30" } },
+      ],
+    });
+    const exit = vi.spyOn(process, "exit").mockImplementation((code?: unknown) => {
+      throw new Error(`process.exit(${String(code)})`);
+    });
+    const error = await cli("result", MODEL, REQUEST_ID).then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+    expect(exit).not.toHaveBeenCalled();
+    expect(String(error)).toContain(REQUEST_ID);
+    expect(classifyError(error)).toMatchObject({
+      code: "RATE_LIMITED",
+      http_status: 429,
+      retry_after_s: 30,
+    });
+    expect(stdout).toEqual([]);
+  });
+});
+
 describe("submit cut off before fal answered", () => {
   it("reports UNKNOWN_REMOTE_STATE, does not retry the POST and saves no receipt", async () => {
     const fake = stub({ [`POST ${SUBMIT}`]: [{ error: new TypeError("fetch failed") }] });
