@@ -39,10 +39,10 @@ export function normaliseResolution(raw: string): string {
  */
 const PLAIN_NUMBER_RE = /^\d+(\.\d+)?$/;
 
-function positiveNumber(raw: string, name: string): number {
+function positiveNumber(raw: string, name: string, min = 1): number {
   const n = Number(raw);
-  if (!PLAIN_NUMBER_RE.test(raw.trim()) || n < 1)
-    throw new ValidationError(`--${name} must be a plain decimal number of at least 1`);
+  if (!PLAIN_NUMBER_RE.test(raw.trim()) || n < min)
+    throw new ValidationError(`--${name} must be a plain decimal number of at least ${min}`);
   return n;
 }
 
@@ -80,11 +80,11 @@ export function applyCaps(
     }
   }
   for (const rule of rules?.audioLength ?? []) {
-    const { option: name, unitsPerSecond, omittedSeconds, notWith } = rule;
+    const { option: name, unitsPerSecond, omittedSeconds, notWith, min } = rule;
     const given = single(values, name);
     const maxUnits = limits.maxAudioSeconds * unitsPerSecond;
     if (given !== undefined) {
-      if (positiveNumber(given, name) > maxUnits) {
+      if (positiveNumber(given, name, min) > maxUnits) {
         throw new ValidationError(
           `--${name} must be at most ${maxUnits} (${limits.maxAudioSeconds} seconds) on this server`,
         );

@@ -131,7 +131,8 @@ Giới hạn của server cũng áp dụng cho `multix_run`: số output
 (`MULTIX_MCP_ALLOWED_RESOLUTIONS`) và độ dài audio sinh ra
 (`MULTIX_MCP_MAX_AUDIO_SECONDS`: `elevenlabs sfx --duration-seconds` và
 `elevenlabs music --music-length-ms`; độ dài nhạc bị bỏ qua sẽ được gửi bằng
-giới hạn, vì nếu không model tự chọn tới 10 phút). Server tự chọn thư mục đầu ra, `--output`
+giới hạn, vì nếu không model tự chọn tới 10 phút).
+Server tự chọn thư mục đầu ra, `--output`
 phải là tên file thuần, option mà CLI ghép vào tên file (như
 `elevenlabs voices design --output-prefix` hoặc mã ngôn ngữ khi lồng tiếng) chỉ
 nhận chữ cái, chữ số, `_` và `-`, các lệnh ảnh OpenAI luôn dùng API driver,

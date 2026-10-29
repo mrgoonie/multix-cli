@@ -57,6 +57,8 @@ export interface AudioLengthRule {
   omittedSeconds: number;
   /** Options with which the provider rejects this one: no value is filled when one is given. */
   notWith?: string[];
+  /** Smallest value below 1 the CLI keeps (it parses the option with parseFloat). */
+  min?: number;
 }
 
 export interface CommandPolicy {
@@ -269,7 +271,11 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   },
   // An omitted --duration-seconds lets the model pick, up to ElevenLabs' 30 s.
   "elevenlabs sfx": {
-    caps: { audioLength: [{ option: "duration-seconds", unitsPerSecond: 1, omittedSeconds: 30 }] },
+    caps: {
+      audioLength: [
+        { option: "duration-seconds", unitsPerSecond: 1, omittedSeconds: 30, min: 0.5 },
+      ],
+    },
   },
   "elevenlabs dub": {
     uncappedSpend: SOURCE_LENGTH,

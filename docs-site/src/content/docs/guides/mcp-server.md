@@ -133,7 +133,8 @@ sent when a video command's default is unknown or longer), resolution
 (`MULTIX_MCP_ALLOWED_RESOLUTIONS`) and generated audio length
 (`MULTIX_MCP_MAX_AUDIO_SECONDS`: `elevenlabs sfx --duration-seconds` and
 `elevenlabs music --music-length-ms`; an omitted music length is sent as the
-cap, since the model would otherwise pick up to 10 minutes). The server chooses the output directory,
+cap, since the model would otherwise pick up to 10 minutes).
+The server chooses the output directory,
 `--output` must be a plain file name, options the CLI turns into part of a
 file name (such as `elevenlabs voices design --output-prefix` or a dub
 language) accept only letters, digits, `_` and `-`, the OpenAI image commands

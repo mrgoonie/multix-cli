@@ -841,7 +841,7 @@ describe("prepareRun: runs the caps cannot bound", () => {
     );
     rejects(
       { command: "elevenlabs music", options: { prompt: "jazz", "music-length-ms": "1e6" } },
-      /--music-length-ms must be at most 30000/,
+      /--music-length-ms must be a plain decimal number of at least 1/,
     );
     rejects(
       { command: "elevenlabs sfx", options: { text: "rain", "duration-seconds": 30.5 } },
@@ -849,9 +849,13 @@ describe("prepareRun: runs the caps cannot bound", () => {
     );
     const sfx = run({
       command: "elevenlabs sfx",
-      options: { text: "rain", "duration-seconds": 2.5 },
+      options: { text: "rain", "duration-seconds": 0.5 },
     });
-    expect(sfx.argv).toContain("--duration-seconds=2.5");
+    expect(sfx.argv).toContain("--duration-seconds=0.5");
+    rejects(
+      { command: "elevenlabs sfx", options: { text: "rain", "duration-seconds": "0.4" } },
+      /--duration-seconds must be a plain decimal number of at least 0.5/,
+    );
     expect(sfx).not.toHaveProperty("uncappedSpend");
     // Within the default cap, an omitted sfx length is left to the provider (auto, at most 30 s).
     expect(run({ command: "elevenlabs sfx", options: { text: "rain" } }).argv).toEqual([
