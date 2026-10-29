@@ -65,9 +65,16 @@ export function resultCommand(model: string, requestId: string, extraArgs: strin
   ].join(" ");
 }
 
-/** The resume command of a waiting run: `base`, saving into `outputDir` when one was given. */
-export function resumeCommand(base: string, outputDir?: string): string {
-  return outputDir ? `${base} --output-dir ${shellQuote(outputDir)}` : base;
+/**
+ * The resume command of a waiting run: `base`, saving into `outputDir` when one
+ * was given. Without download (`--no-download`), the result JSON only, as the run would print.
+ */
+export function resumeCommand(
+  base: string,
+  opts: { outputDir?: string; download?: boolean } = {},
+): string {
+  if (opts.download === false) return base.replace(/ --download(?= |$).*$/, "");
+  return opts.outputDir ? `${base} --output-dir ${shellQuote(opts.outputDir)}` : base;
 }
 
 export function buildReceipt(opts: {

@@ -508,6 +508,23 @@ describe("a run that fails after fal accepted the job", () => {
     expect(fake.calls.filter((c) => c.method === "POST")).toHaveLength(1);
   });
 
+  it("fal run --no-download resumes with the result JSON, not a download", async () => {
+    stub({
+      ...submitRoute,
+      [`GET https://queue.fal.run/${MODEL}/requests/${REQUEST_ID}/status`]: [
+        { json: { status: "COMPLETED" } },
+      ],
+      [`GET https://queue.fal.run/${MODEL}/requests/${REQUEST_ID}`]: [rateLimited],
+    });
+    await expect(
+      cli("run", MODEL, "--input", '{"prompt":"x"}', "--no-download", "--output-dir", tmp),
+    ).rejects.toThrow(/Failed to fetch result/);
+    expect(run.inFlight).toEqual({
+      id: REQUEST_ID,
+      resume: `multix fal result ${MODEL} ${REQUEST_ID}`,
+    });
+  });
+
   it("fal image (submitAndWait) tracks the job with the default resume", async () => {
     const model = "fal-ai/flux/schnell";
     const app = "fal-ai/flux";

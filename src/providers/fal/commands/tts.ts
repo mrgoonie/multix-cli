@@ -130,10 +130,10 @@ export async function runFalTts(flags: SpeechFlags, opts: FalTtsRun): Promise<Fa
     submit,
     logger,
     waitTimeoutMs: opts.waitTimeoutMs,
-    resume: resumeCommand(
-      receipt?.result_command ?? resultCommand(model, submit.request_id),
-      opts.outDir,
-    ),
+    resume: resumeCommand(receipt?.result_command ?? resultCommand(model, submit.request_id), {
+      outputDir: opts.outDir,
+      download: opts.download,
+    }),
   });
   const done = { requestId: submit.request_id, ...(receipt ? { receipt } : {}), result };
   if (!opts.download) return done;
