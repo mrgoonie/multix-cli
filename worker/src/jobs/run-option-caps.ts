@@ -30,9 +30,15 @@ export function normaliseResolution(raw: string): string {
   return digits ? `${digits[1]}p` : lower;
 }
 
+/**
+ * Plain decimals only: the CLI reads counts and durations with parseInt, so a
+ * form like `100e-2` would pass the cap as 1 and reach the provider as 100.
+ */
+const PLAIN_NUMBER_RE = /^\d+(\.\d+)?$/;
+
 function positiveNumber(raw: string, name: string): number {
   const n = Number(raw);
-  if (!Number.isFinite(n) || n <= 0)
+  if (!PLAIN_NUMBER_RE.test(raw.trim()) || n <= 0)
     throw new ValidationError(`--${name} must be a positive number`);
   return n;
 }

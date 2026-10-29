@@ -476,6 +476,16 @@ describe("prepareRun: rejections", () => {
       { command: "gemini edit-video", options: { prompt: "p", video: "/etc/passwd" } },
       /video/,
     ],
+    [
+      "count in exponent form the CLI reads as 100",
+      { command: "fal image", args: ["p"], options: { "num-images": "100e-2" } },
+      /--num-images must be a positive number/,
+    ],
+    [
+      "duration in exponent form the CLI reads as 60",
+      { command: "byteplus video", options: { prompt: "p", duration: "60e-1" } },
+      /--duration must be a positive number/,
+    ],
   ])("rejects %s", (_label, request, message) => rejects(request, message));
 });
 
