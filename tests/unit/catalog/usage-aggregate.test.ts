@@ -135,14 +135,14 @@ describe("operations, polls and resumes", () => {
     expect(operationOf(rows[0] as HistoryEntry)).toBe("fal:job-2");
   });
 
+  // Entries written before receipts carry provider_ids but no job (job came later).
   it("counts a job's cost once across ledger entries written before receipts", () => {
-    const job = { provider: "fal", id: "req_1", attempt: 1 };
     const row = rowFor([
-      entry({ job, usage: { cost_usd: 3 } as HistoryEntry["usage"] }),
+      entry({ provider_ids: ["req_1"], usage: { cost_usd: 3 } as HistoryEntry["usage"] }),
       entry({
-        job,
         command: "fal status",
         ts: "2026-10-27T10:05:00.000Z",
+        provider_ids: ["req_1"],
         usage: { cost_usd: 3 } as HistoryEntry["usage"],
       }),
     ]);
@@ -150,11 +150,9 @@ describe("operations, polls and resumes", () => {
   });
 
   it("joins an old entry without a receipt to a newer receipt of the same job", () => {
-    const job = { provider: "fal", id: "req_2", attempt: 1 };
     const row = rowFor([
-      entry({ job }),
+      entry({ provider_ids: ["req_2"] }),
       entry({
-        job,
         command: "fal status",
         ts: "2026-10-27T10:05:00.000Z",
         cost: receipt({
@@ -171,21 +169,29 @@ describe("operations, polls and resumes", () => {
     });
   });
 
-  it("counts a job's credits once across ledger entries written before receipts", () => {
-    const job = { provider: "leonardo", id: "gen_1", attempt: 1 };
+  it("puts an old job's credits once, on its first run's row", () => {
     const rows = aggregateUsage(
       [
-        entry({ provider: "leonardo", job, usage: { credits: 12 } as HistoryEntry["usage"] }),
         entry({
           provider: "leonardo",
-          job,
+          model_resolved: "flux",
+          provider_ids: ["gen_1"],
+          usage: { credits: 12 } as HistoryEntry["usage"],
+        }),
+        entry({
+          provider: "leonardo",
+          model_resolved: null,
+          provider_ids: ["gen_1"],
           ts: "2026-10-27T10:05:00.000Z",
           usage: { credits: 12 } as HistoryEntry["usage"],
         }),
       ],
-      "provider",
+      "model",
     );
-    expect(rows[0]?.credits).toBe(12);
+    expect(rows.map((r) => [r.key, r.credits])).toEqual([
+      ["(unknown model)", undefined],
+      ["flux", 12],
+    ]);
   });
 
   it("gives a run with no job and no receipt its own operation", () => {

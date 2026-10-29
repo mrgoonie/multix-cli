@@ -162,15 +162,18 @@ describe("historyStats", () => {
   });
 
   it("counts a job's cost once across ledger entries written before receipts", () => {
-    const job = { provider: "fal", id: "req_1", attempt: 1 };
     const rows = historyStats(
       [
-        entry({ job, usage: { cost_usd: 3 } }),
-        entry({ job, command: "fal status", usage: { cost_usd: 3 } }),
+        entry({ provider_ids: ["req_1"], usage: { cost_usd: 3, credits: 12 } }),
+        entry({
+          provider_ids: ["req_1"],
+          command: "fal status",
+          usage: { cost_usd: 3, credits: 12 },
+        }),
       ],
       "provider",
     );
-    expect(rows[0]).toMatchObject({ provider: "fal", runs: 2, cost_usd: 3 });
+    expect(rows[0]).toMatchObject({ provider: "fal", runs: 2, cost_usd: 3, credits: 12 });
   });
 
   it("puts a task's credits on its submit's bucket, not again on its status run's", () => {

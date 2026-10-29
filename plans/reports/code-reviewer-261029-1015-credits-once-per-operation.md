@@ -257,3 +257,74 @@ Say a submit was written before receipts existed (no `cost`, `usage.credits` 40)
 - L2 (USD across rows, predates this change) filed as #444.
 - L3 (a submit written before receipts, with a status run after) kept: the mixed ledger only exists across the upgrade boundary.
 - Info (quadratic grouping) filed as #445.
+
+## Review of d5f3ea2 (261029)
+
+Scope: `src/catalog/usage-aggregate.ts` (+58/-14), tests in `tests/unit/catalog/usage-aggregate.test.ts` and `tests/unit/agent/history-store.test.ts`. I also read `settleOperations` and `operationIdFor` (`src/budget/cost-receipt.ts`), `historyStats` (`src/commands/agent/history-command.ts`), the ledger writer (`src/agent/agent-runtime.ts:271-372`) and `jobIdentity` (`src/agent/run-state.ts:152`).
+
+Verification: `npx vitest run tests/unit` gave 125 files and 2200 tests passed (22 skipped). `npx tsc --noEmit` exited 0. I also ran a probe with esbuild and node against `src/` (scratchpad only, no tracked files touched).
+
+### Verdict
+
+Do not land as a fix for #424. The code is type-safe and green, but the new path only runs for a ledger shape the writer never produces. Real ledgers written before receipts still double-count. The tests pass only because they use synthetic fixtures.
+
+### H1. The legacy job path is dead code: real pre-receipt entries have no `job`
+
+`src/catalog/usage-aggregate.ts:43-45, 59-60, 111`
+
+- `cost` was added to `HistoryEntry` in 1a1e1b3 (#327, 2026-10-26). `job` was added a day later in 1bad7f4 (#394, 2026-10-27). (`git log -S` on `src/agent/history-store.ts`.)
+- The only writer is `appendHistory` at `src/agent/agent-runtime.ts:310`. It gates both fields on `run.group`. `jobIdentity()` returns undefined when `!state.group` (`run-state.ts:153`). `costReceiptFor()` returns undefined when `!run.group` (`cost-preflight.ts:164`). So `job` present implies `cost` present.
+- So an entry with `job` but no `cost` never exists on disk. Entries written before receipts carry `provider_ids` (since bfd7e60, #282) and no `job`. `legacyOperationId` still gives them `run:<id>`.
+- Probe: two pre-receipt `fal` entries (submit and status), both with `provider_ids: ["req_1"]` and `usage: {cost_usd: 3, credits: 12}`:
+  - `operationOf` gives `run:h_a` and `run:h_b`.
+  - `aggregateUsage(…, "provider")` gives `known_usd: 6`, `operations: 2`, `credits: 24`.
+  - `historyStats` gives `cost_usd: 6`, `credits: 24`.
+  - This is the exact $3 + $3 the commit message says it fixes.
+- The "joins an old entry … to a newer receipt" case and the `accounted` filter (`:231-237`) are dead for the same reason. A real unreceipted entry has `run:<own id>`, and no receipt from another run can carry that id unless `MULTIX_OPERATION_ID` is set to that exact string.
+- Fix: derive the legacy operation the way `operationIdFor` does: `e.provider_ids?.[0] && e.provider ? \`${e.provider}:${e.provider_ids[0]}\` : \`run:${e.id}\``. `provider_ids` is written from the same `run.ids` that `operationIdFor` reads (`agent-runtime.ts:343`, `cost-preflight.ts:169`), so it matches newer receipts byte for byte. Keep `e.job` first if you want, but `provider_ids` is the field that exists. Rewrite the fixtures to use `provider_ids` without `job`, so the tests describe the real shape.
+- Caveat for that fix: a pre-receipt submit whose `provider_ids[0]` is an upload id will not join its status run. `operationIdFor` has the same weakness, so the result stays consistent with receipts. Document it rather than guess.
+
+### M1. Legacy credits move off the submit row to the latest run (where the path is reachable)
+
+`src/catalog/usage-aggregate.ts:96-101, 107-113`
+
+- Every legacy run with a job is now `role: "observation"`, so `creditsByEntry` finds no charge. It falls back to the latest run that reported credits. That is usually the status run, which has no `model_resolved` and a different command.
+- Probe with `by: "model"` (submit `model_resolved: "flux"`, status run without one, 12 credits each): before the commit the rows were `flux 12`, `(unknown model) 12`. After it, they are `(unknown model) 12`, `flux undefined`.
+- This contradicts the docstring at `:73-76` ("placed on its first charge run (the submit, which names the model)") and the intent of 045091f.
+- It is latent today because of H1. If H1 is fixed with `provider_ids`, it becomes reachable and real.
+- Fix: for legacy owners, prefer the earliest run, or the run with `model_resolved`, over the latest run.
+
+### M2. USD across rows stays doubled for legacy jobs with `by` model or command
+
+`src/catalog/usage-aggregate.ts:215-216`
+
+- `aggregateUsage` settles receipts per row. A legacy submit (model row) and its status run (unknown-model row) each settle $3 as an observation.
+- This predates the commit and is already filed as #444. The commit message and test names still claim "counts a job's cost once", which holds only when both runs share a row.
+- Narrow the claim in the test names, or link #444 in the commit message.
+
+### L1. Legacy runs with a job are always "observation", so a real second charge under one id would be swallowed
+
+`src/catalog/usage-aggregate.ts:60`
+
+- With observation semantics, the latest figure replaces the sum (`cost-receipt.ts:338-341`). Two pre-receipt runs that each billed under the same provider id would undercount. Example: a resubmit that reused an id, or a provider whose GET re-bills.
+- I found no provider that does this. Accepted risk; note it in the docstring.
+
+### Checked and found correct, or not affected
+
+- Job provider vs entry provider: both come from `run.group` (`run-state.ts:180`, `agent-runtime.ts:317`), so `${entry.provider}|${op}` in `creditsByEntry` cannot split. No divergence path exists.
+- Legacy entries whose job has failed attempts: `attempt` counts failed sends inside one run, not separate entries. `retries` is unchanged. Failed (`ok: false`) unreceipted runs are excluded from `unreceipted` as before.
+- `estimated_usd`: legacy receipts carry no `estimate`. When the operation ids join, a known legacy figure now suppresses a newer receipt's estimate, which is correct. Unreachable today (H1).
+- `per_success_usd` and `allPriced`: unchanged for real ledgers (H1). For the synthetic shape, operations dedupe, so per-success is $3 rather than $3 over 2 operations.
+- Consumers: `receiptOf` is used by `historyStats` (`history-command.ts:120`) and re-exported at `:22`. `operationOf` is used only inside `usage-aggregate.ts` and its test. Nothing in `worker/` imports either. Dropping the `job:` prefix from `operationOf` changes no persisted data.
+- `legacyCreditsReceipt` (`status: "unknown"`, observation): `settleOperations` counts its credits and skips it from `operations` (no charge, no reported figure), so the USD unknown counts do not move.
+
+Status: DONE_WITH_CONCERNS
+Summary: Tests and typecheck pass, but the new legacy-job path never runs on real ledgers: `job` was added after receipts, so entries without receipts have no `job`. The $3 + $3 double count from #424 still reproduces with real pre-receipt entries.
+
+## Resolution of the d5f3ea2 review (author)
+
+- H1 (legacy path never runs): `legacyOperationId` now builds the id with `operationIdFor` from `job.id`, else from `provider_ids[0]`, else from the run id. Pre-receipt entries carry `provider_ids`, so a submit and its status run share `<provider>:<id>`. A legacy entry that joins a job reads as a status read (role observation). Only an entry with no provider id stays a charge of its own run. The tests now use the real ledger shape (`provider_ids`, no `job`): $3 + $3 settles to $3, and 12 + 12 credits to 12.
+- M1 (latest owner): the legacy credits owner is now the earliest run that reported credits. This is the submit, which names the model. Covered by "puts an old job's credits once, on its first run's row".
+- M2 (USD across rows): still tracked in #444. The PR body links it.
+- L1 (second charge under one id is swallowed): accepted. The `receiptOf` docstring states it.
+- Gates: lint, typecheck, build, full test suite (2518 passed), verify:docs and check:mcp are clean.

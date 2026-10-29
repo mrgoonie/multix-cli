@@ -27,7 +27,7 @@
 
 import type { HistoryEntry } from "../agent/history-store.js";
 import type { CostReceipt } from "../budget/cost-receipt.js";
-import { settleOperations } from "../budget/cost-receipt.js";
+import { operationIdFor, settleOperations } from "../budget/cost-receipt.js";
 import { commandCapability } from "../capabilities/command-capabilities.js";
 
 export const USAGE_GROUPS = ["provider", "model", "offering", "task", "command"] as const;
@@ -36,28 +36,35 @@ export type UsageGroup = (typeof USAGE_GROUPS)[number];
 export const UNKNOWN_MODEL = "(unknown model)";
 
 /**
- * Operation id of an entry written before receipts existed: its job in the
- * receipts' own `<provider>:<job id>` form (operationIdFor), so its runs join
- * each other and newer runs of the same job; else its own run.
+ * Operation id of an entry with no receipt of its own, built the way receipts
+ * build theirs (operationIdFor) from the job or the first provider id the run
+ * saw, so the runs of one job join each other and newer runs of the job; a
+ * run with neither is its own operation.
  */
 function legacyOperationId(e: HistoryEntry): string {
-  return e.job ? `${e.job.provider}:${e.job.id}` : `run:${e.id}`;
+  return operationIdFor({
+    provider: e.provider,
+    providerIds: e.job ? [e.job.id] : (e.provider_ids ?? []),
+    runId: e.id,
+  });
 }
 
 /**
  * The entry's cost receipt; entries written before receipts existed get one
  * from their provider-reported cost. Runs of one job share its operation and
  * read as status reads (the latest settles it), so a submit and a later
- * status run of the job count its cost once; a run with no job is its own
- * operation.
+ * status run of the job count its cost once; a run with no provider id is
+ * its own operation. Two old runs that each billed under one id would count
+ * only the latest figure; no provider is known to do that.
  */
 export function receiptOf(e: HistoryEntry): CostReceipt | undefined {
   if (e.cost) return e.cost;
   if (e.usage?.cost_usd === undefined) return undefined;
+  const operation_id = legacyOperationId(e);
   return {
     schema: "multix.cost/v1",
-    operation_id: legacyOperationId(e),
-    role: e.job ? "observation" : "charge",
+    operation_id,
+    role: operation_id.startsWith("run:") ? "charge" : "observation",
     status: "settled",
     currency: "USD",
     provider_reported: { cost_usd: e.usage.cost_usd, credits: e.usage.credits ?? null },
@@ -71,8 +78,8 @@ export function receiptOf(e: HistoryEntry): CostReceipt | undefined {
 /**
  * Credits per ledger entry, each operation's credits counted once: settled
  * over all of its runs (settleOperations) and placed on its first charge run
- * (the submit, which names the model), else on its latest run that reported
- * credits. A status run of the same task then adds nothing to any row, even
+ * (the submit, which names the model), else on its earliest run that
+ * reported credits. A status run of the same task then adds nothing to any row, even
  * when it is grouped apart from its submit (no model, another command).
  * Credits are settled per provider within an operation: one MULTIX_OPERATION_ID
  * shared across providers never mixes their credits, which are different units.
@@ -97,7 +104,7 @@ export function creditsByEntry(entries: HistoryEntry[]): Map<HistoryEntry, numbe
       runs.find((r) => r.receipt.role === "charge" && !sentNothing(r.receipt)) ??
       runs
         .filter((r) => r.receipt.provider_reported.credits !== null)
-        .reduce((latest, r) => (r.receipt.at >= latest.receipt.at ? r : latest));
+        .reduce((earliest, r) => (r.receipt.at < earliest.receipt.at ? r : earliest));
     out.set(owner.entry, credits);
   }
   return out;
