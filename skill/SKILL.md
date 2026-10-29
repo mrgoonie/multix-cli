@@ -1,6 +1,6 @@
 ---
 name: multix
-description: AI multimodal CLI (multix) — generate and edit images, generate, edit and extend video, text-to-speech, speech-to-text, voice cloning, music and sound effects, multi-character dialogue audio, 3D models, media analysis and document-to-Markdown conversion, ffmpeg/ImageMagick media optimization, offline media QA receipts, and self-update. Use whenever the user wants to create, edit, or transform images/video/audio/3D/documents from a CLI or the multix remote MCP server, or mentions any of OpenAI, Codex image driver, Gemini, Nano Banana, Gemini Omni, Veo, OpenRouter, MiniMax, Hailuo, Leonardo, BytePlus, Seedream, Seedance, Hyper3D, Kling, Flux, Cloudflare Workers AI, AI Gateway, fal.ai, Atlas Cloud, Replicate, Runway, Gen-4.5, HeyGen, avatar video, lipsync, dubbing, ElevenLabs, Fish Audio, Drama 3, image-to-image, i2i, image-to-video, i2v, text-to-video, TTS, STT, transcription, updating/upgrading multix, or batch media optimization.
+description: AI multimodal CLI (multix) — generate and edit images, generate, edit and extend video, text-to-speech, speech-to-text, voice cloning, music and sound effects, multi-character dialogue audio, 3D models, media analysis and document-to-Markdown conversion, ffmpeg/ImageMagick media optimization, offline media QA receipts, and self-update. Use whenever the user wants to create, edit, or transform images/video/audio/3D/documents from a CLI or the multix remote MCP server, or mentions any of OpenAI, Codex image driver, Gemini, Nano Banana, Gemini Omni, Veo, OpenRouter, MiniMax, Hailuo, Leonardo, BytePlus, Seedream, Seedance, Hyper3D, Kling, Flux, Cloudflare Workers AI, AI Gateway, fal.ai, Atlas Cloud, Replicate, Runway, Gen-4.5, HeyGen, avatar video, lipsync, dubbing, Sume, TopView, product marketing video, product avatar, product photos, ElevenLabs, Fish Audio, Drama 3, image-to-image, i2i, image-to-video, i2v, text-to-video, TTS, STT, transcription, updating/upgrading multix, or batch media optimization.
 version: 1.22.0-beta.3 # x-release-please-version
 license: MIT
 metadata:
@@ -30,12 +30,12 @@ multix <group> <cmd> ... --json         # stdout = ONE line, schema multix.resul
 
 ## Task skills
 
-This file covers what every task shares: the protocol above, setup, keys, output, the generic fal.ai / Atlas Cloud / Replicate runners, the remote MCP server and security rules. Task-specific commands, flags, caveats and decision trees live in one task skill each. Read only the task skill you need.
+This file covers what every task shares: the protocol above, setup, keys, output, the generic fal.ai / Atlas Cloud / Replicate / Sume runners, the remote MCP server and security rules. Task-specific commands, flags, caveats and decision trees live in one task skill each. Read only the task skill you need.
 
 | Skill | File | When to use |
 |---|---|---|
 | `image-generation` | [image-generation/SKILL.md](image-generation/SKILL.md) | Text-to-image on any provider, image-to-image / i2i edits, WebP output rules, Cloudflare Workers AI image |
-| `video-production` | [video-production/SKILL.md](video-production/SKILL.md) | Text/image-to-video, Gemini Omni edit/extend, Runway, HeyGen avatar video/translation/lipsync, provider decision tree |
+| `video-production` | [video-production/SKILL.md](video-production/SKILL.md) | Text/image-to-video, Gemini Omni edit/extend, Runway, HeyGen avatar video/translation/lipsync, TopView product videos/avatars/photos and API Platform models, provider decision tree |
 | `speech-production` | [speech-production/SKILL.md](speech-production/SKILL.md) | `multix speech`, provider TTS, Fish Audio, voice cloning, STT/transcription, music and SFX, `multix scene` dialogue |
 | `media-qa` | [media-qa/SKILL.md](media-qa/SKILL.md) | Optimize/convert/split/batch media; offline inspect, verify, frames and sha256-bound QA receipts |
 | `document-conversion` | [document-conversion/SKILL.md](document-conversion/SKILL.md) | Documents to Markdown; Gemini analyze/transcribe/extract on media and docs |
@@ -48,6 +48,7 @@ Activate this skill for any multix task, then open the matching task skill above
 - Run any fal.ai model (generic queue-API runner), or fal.ai's default image/video models and text-to-speech (Gemini 3.8 Flash/Flash-Lite TTS, ElevenLabs v4/v4 Turbo) with typed inputs
 - Run any Atlas Cloud model (image, image edit, video, TTS/STT, 3D) with schema-validated inputs and resumable async predictions
 - Run any Replicate model (official or versioned) via the direct API, generate Replicate images/video, or resume/cancel a Replicate prediction by id
+- Generate images or video (incl. lip-sync and captions) with any model in Sume's catalog on one key, with catalog-checked flags, cost pre-flight, and resumable/cancellable jobs (`multix sume`)
 - Update multix itself to the latest (or a given dist-tag) npm version
 
 ## Self-update
@@ -76,6 +77,10 @@ ATLASCLOUD_API_KEY    # Atlas Cloud (any model: image, edit, video, audio, 3D)
 REPLICATE_API_TOKEN   # Replicate direct API (REPLICATE_API_KEY accepted as fallback)
 RUNWAYML_API_SECRET   # Runway API (Gen-4.5 / Gen-4 Turbo video, Gen-4 images)
 HEYGEN_API_KEY        # HeyGen v3 (avatar video, Video Agent, translation); API billed separately from web plans
+SUME_API_KEY          # Sume (image/video catalog, USD balance); https://app.sume.com
+TOPVIEW_API_KEY       # TopView Legacy API (plan credits), with TOPVIEW_UID; https://www.topview.ai/api-settings
+TOPVIEW_UID           # TopView account id sent with TOPVIEW_API_KEY
+TOPVIEW_PLATFORM_API_KEY # TopView API Platform (separate USD balance); https://platform.topview.ai
 CLOUDFLARE_ACCOUNT_ID # Cloudflare Workers AI / AI Gateway account
 CLOUDFLARE_API_TOKEN  # Cloudflare Workers AI / AI Gateway token
 # Video additionally requires CLOUDFLARE_AI_GATEWAY_ID and REPLICATE_API_TOKEN.
@@ -169,6 +174,26 @@ Shared flags: `--async`, `--wait`, `--prefer-wait [seconds]` (integer 1-60, bare
 
 Output downloads are `https://` only; `localhost` and loopback/private/link-local/special-purpose IP literals (including redirects; hostnames are not resolved) are refused, hosts other than `replicate.delivery` and Replicate's R2 output bucket are downloaded with a warning, network errors, dropped connections and 408/429/5xx download failures are retried twice (if it still fails, `multix replicate status <id>` prints the output URLs), and each file is capped at `MULTIX_MAX_DOWNLOAD_MB` (default 2048). If submitting fails with a network error, timeout, 5xx, or an unreadable 2xx response, the prediction may still exist and bill: check https://replicate.com/predictions before retrying instead of resubmitting blindly.
 
+## Sume
+
+Auth is `SUME_API_KEY` (base `https://api.sume.com`). One key reaches every image and video model in Sume's catalog; the catalog decides which models exist and which flags each takes. multix checks every flag against the model's catalog row before uploading or billing. There is no built-in default model and no fallback: pass `-m` or set `SUME_IMAGE_MODEL` / `SUME_VIDEO_MODEL`.
+
+```bash
+multix sume models [--kind image|video|lipsync|captions] [--refresh] [--json]   # public catalog, no key, cached
+multix sume image "<text>" -m <model> [--image <path|url>]... [--aspect-ratio 16:9] [--resolution 2K] [--num-images N] [--param key=value]
+multix sume video "<text>" -m <model> [--image <path|url>] [--end-image <path|url>] [--reference-image <path|url>]... [--duration 8] [--generate-audio]
+multix sume video -m <lipsync-model> --image ./face.png --audio ./speech.mp3 --duration 12   # lip-sync: --duration is the audio length
+multix sume status <job_id> [--wait] [--download]
+multix sume cancel <job_id>                      # only while queued; once generation starts the job is billed
+multix sume estimate "<text>" -m <model> [...]   # Sume's own quote (not billed; media must be https URLs)
+```
+
+- `image` and `video` print the job ID with check/resume/cancel commands unless `--wait`; `--output`, `--download` and `--no-download` need `--wait`.
+- Inputs: public `https://` URLs (Sume fetches them) or local files (uploaded first, up to 2 GiB); `data:` URIs are refused.
+- Cost: `--estimate` / `--max-cost` price the request from the cached catalog (unknown, never $0, when the cache is missing or older than 24 h). Sume reserves the price on submit; failed and canceled jobs are refunded.
+- Every submit carries an `Idempotency-Key`; if the outcome stays unknown, re-run with the printed `--idempotency-key` instead of submitting again.
+- Full reference: https://multix.zuey.me/commands/sume/
+
 ## Environment variables (selected)
 
 Task-specific model defaults are listed in each task skill.
@@ -176,7 +201,7 @@ Task-specific model defaults are listed in each task skill.
 | Variable | Purpose |
 |---|---|
 | `MULTIX_OUTPUT_DIR` | Override default output dir |
-| `MULTIX_MAX_DOWNLOAD_MB` | Size limit per downloaded Replicate, Runway or Atlas Cloud output file (default 2048) |
+| `MULTIX_MAX_DOWNLOAD_MB` | Size limit per downloaded Replicate, Runway, Atlas Cloud, Sume or TopView output file (default 2048) |
 | `MULTIX_UPLOAD_MIN_KBPS` | Slowest upload speed to allow for (Gemini Files API, Runway requests with inline images), in KB/s (default 1000); lower it on slow links |
 | `OPENAI_IMAGE_MODEL` / `OPENAI_TTS_MODEL` / `OPENAI_STT_MODEL` | OpenAI model defaults |
 | `OPENROUTER_SITE_URL` / `OPENROUTER_APP_NAME` | HTTP-Referer / X-Title headers |
@@ -199,6 +224,9 @@ Task-specific model defaults are listed in each task skill.
 | `REPLICATE_IMAGE_MODEL` / `REPLICATE_VIDEO_MODEL` | Replicate default models (default `black-forest-labs/flux-schnell`, `prunaai/p-video`) |
 | `RUNWAY_BASE_URL` | Override Runway API root (default `https://api.dev.runwayml.com`) |
 | `RUNWAY_VIDEO_MODEL` / `RUNWAY_IMAGE_MODEL` | Runway default models (default `gen4.5`, `gen4_image`) |
+| `SUME_BASE_URL` | Override Sume API root (default `https://api.sume.com`) |
+| `SUME_IMAGE_MODEL` / `SUME_VIDEO_MODEL` | Sume default models; no built-in default, so without these or `-m` the command refuses |
+| `TOPVIEW_BASE_URL` / `TOPVIEW_PLATFORM_BASE_URL` | Override TopView Legacy API root (default `https://api.topview.ai`) / API Platform root (default `https://platform-backend.topview.ai`) |
 | `CLOUDFLARE_AI_IMAGE_MODEL` / `CLOUDFLARE_AI_TTS_MODEL` | Fixed-model settings: only `@cf/black-forest-labs/flux-1-schnell` and `@cf/myshell-ai/melotts` respectively are accepted |
 | `MULTIX_DISABLE_HOME_ENV` | `1` to skip every home-directory env file (`~/.multix/.env`, `~/.claude/...`) |
 | `MULTIX_LEGACY_CLAUDE_ENV` | `1` to also read legacy `.claude` env files (credential names only); shell or `~/.multix/.env` only, ignored in a project `.env` |
@@ -218,6 +246,12 @@ goes through the CLI runner. `multix_catalog`, `multix_model_catalog` and `multi
 listed; `multix_run`, `multix_job_status` and `multix_job_cancel` need the job
 container. `multix_skills` (search/get/read) serves the server's own skills
 (`skill://multix/...`); prefer them to this file when their versions differ.
+`multix_skills_manage` (when listed) authors the user's own skills: `save_draft`
+→ `publish` (immutable revisions; `set_current` rolls back), with
+`expected_digest`/`expected_revision` to get `CONFLICT` instead of overwriting.
+A team skill reaches another account only after `grant` (owner) and
+`add_shared` (grantee). It never runs a skill. MCP requests are capped at
+64 KiB; upload larger files with REST `PUT /api/v1/skills/{skill}/draft`.
 1. `multix_catalog` lists groups and whether the user saved keys
    (`has_keys`); `multix_catalog {"group": "gemini"}` shows each command's
    options and which ones take files.

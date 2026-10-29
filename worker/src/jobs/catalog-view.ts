@@ -69,6 +69,14 @@ function commandDetail(command: CliCommand): Record<string, unknown> {
       if (policy.forced?.[name] !== undefined) view.forced = policy.forced[name];
       if (policy.nameOptions?.includes(name)) view.format = "letters, digits, _ and - only";
       if (name === OUTPUT_FILE_OPTION) view.output = "plain file name inside the job output";
+      if (policy.uncappedOptions?.includes(name))
+        view.uncapped_spend = "with this option, the server caps do not bound the request";
+      if (policy.caps?.countFromModel && policy.caps.count?.includes(name)) {
+        view.uncapped_spend = "when omitted, the model picks the number of outputs";
+      }
+      if (policy.caps?.resolutionFromModel && policy.caps.resolution?.includes(name)) {
+        view.uncapped_spend = "when omitted, the model picks the resolution";
+      }
       return view;
     });
   const positionals = command.positionals.map((p) => ({
@@ -83,6 +91,7 @@ function commandDetail(command: CliCommand): Record<string, unknown> {
     command: command.command,
     description: command.description,
     ...(cap ? capabilityFields(command, cap.tasks) : {}),
+    ...(policy.uncappedSpend ? { uncapped_spend: policy.uncappedSpend } : {}),
     positionals,
     options,
   };

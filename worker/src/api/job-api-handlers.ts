@@ -4,14 +4,17 @@
  * input checks, ownership and output scrubbing are the same on both surfaces.
  */
 
+import { COST_POLICIES, type CostPolicy } from "../../../src/budget/command-cost.js";
 import type { Limits } from "../config.js";
 import { json } from "../http-responses.js";
 import { MODEL_ID_RE, catalogPayload } from "../jobs/catalog-view.js";
 import { type JobStatus, isTerminal } from "../jobs/job-protocol.js";
 import { DEFAULT_WAIT_SECONDS, JobRunner, MAX_WAIT_SECONDS } from "../jobs/job-runner.js";
 import type { JobToolsContext } from "../jobs/job-runner.js";
+import { costPreflight } from "../jobs/job-tools.js";
 import { modelCatalogPayload } from "../jobs/model-catalog-view.js";
 import { type RunRequest, prepareRun } from "../jobs/run-argv-builder.js";
+import { assertSpendGuard } from "../jobs/run-option-caps.js";
 import type { ProviderKeys } from "../provider-secret-names.js";
 import { ApiError, readJsonObject } from "./api-http.js";
 
@@ -91,8 +94,25 @@ function requireJobs(jobs: JobToolsContext | undefined): JobToolsContext {
 }
 
 /** Same shape as multix_run's arguments; prepareRun validates the details. */
-function runRequest(body: Record<string, unknown>): { request: RunRequest; wait: number } {
-  const { command, args, options, inputs, wait_seconds: wait } = body;
+interface RunBudget {
+  max_cost_usd?: number;
+  cost_policy?: CostPolicy;
+}
+
+function runRequest(body: Record<string, unknown>): {
+  request: RunRequest;
+  wait: number;
+  budget: RunBudget;
+} {
+  const {
+    command,
+    args,
+    options,
+    inputs,
+    wait_seconds: wait,
+    max_cost_usd: maxCost,
+    cost_policy: costPolicy,
+  } = body;
   if (typeof command !== "string" || !command.trim() || command.length > 100) {
     throw new ApiError(400, "bad_request", 'command is required, e.g. "gemini generate"');
   }
@@ -120,6 +140,15 @@ function runRequest(body: Record<string, unknown>): { request: RunRequest; wait:
       `wait_seconds must be an integer from 0 to ${MAX_WAIT_SECONDS}`,
     );
   }
+  if (
+    maxCost !== undefined &&
+    (typeof maxCost !== "number" || !Number.isFinite(maxCost) || maxCost < 0)
+  ) {
+    throw new ApiError(400, "bad_request", "max_cost_usd must be a number of USD, at least 0");
+  }
+  if (costPolicy !== undefined && !COST_POLICIES.includes(costPolicy as CostPolicy)) {
+    throw new ApiError(400, "bad_request", `cost_policy must be ${COST_POLICIES.join(" or ")}`);
+  }
   return {
     request: {
       command,
@@ -128,6 +157,7 @@ function runRequest(body: Record<string, unknown>): { request: RunRequest; wait:
       inputs: inputs as RunRequest["inputs"],
     },
     wait: (wait as number | undefined) ?? DEFAULT_WAIT_SECONDS,
+    budget: { max_cost_usd: maxCost, cost_policy: costPolicy as CostPolicy | undefined },
   };
 }
 
@@ -146,8 +176,15 @@ export async function postJob(
   request: Request,
 ): Promise<Response> {
   const ctx = requireJobs(jobs);
-  const { request: run, wait } = runRequest(await readJsonObject(request));
+  const { request: run, wait, budget } = runRequest(await readJsonObject(request));
   const prepared = prepareRun(run, limits);
+  assertSpendGuard(prepared.command, prepared.uncappedSpend, limits, budget.max_cost_usd);
+  // The estimate cannot see the uncapped part, so only a proven ceiling counts.
+  costPreflight(prepared.command, {
+    options: run.options,
+    ...budget,
+    ...(prepared.uncappedSpend ? { cost_policy: "strict" } : {}),
+  });
   return jobResponse(await new JobRunner(ctx).run(prepared, wait));
 }
 

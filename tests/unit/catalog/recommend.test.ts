@@ -7,8 +7,8 @@ import { describe, expect, it } from "vitest";
 import { buildOfferings } from "../../../src/catalog/catalog-build.js";
 import type { Review, UseCaseNote } from "../../../src/catalog/catalog-types.js";
 import {
+  MIN_OPERATIONS,
   MIN_RATINGS,
-  MIN_RUNS,
   type RecommendInput,
   recommend,
 } from "../../../src/catalog/recommend.js";
@@ -33,15 +33,21 @@ const SEEDANCE_REQUEST = {
   at: AT,
 } as const;
 
-function usage(key: string, requests: number, completed: number): UsageRow {
+/** A usage row; `requests` (runs, polls included) defaults to one per operation. */
+function usage(
+  key: string,
+  operations: number,
+  completed: number,
+  requests = operations,
+): UsageRow {
   return {
     key,
     requests,
-    operations: requests,
+    operations,
     completed,
-    failed: requests - completed,
+    failed: operations - completed,
     canceled: 0,
-    success_rate: requests ? completed / requests : null,
+    success_rate: operations ? completed / operations : null,
     retries: 0,
     p50_s: null,
     p95_s: null,
@@ -57,7 +63,7 @@ function usage(key: string, requests: number, completed: number): UsageRow {
     },
     first_at: "2026-10-27T10:00:00.000Z",
     last_at: "2026-10-27T10:00:00.000Z",
-    sample: { n: requests, confidence: "low" },
+    sample: { n: operations, confidence: "low" },
   };
 }
 
@@ -131,19 +137,30 @@ describe("exclusion by note", () => {
 });
 
 describe("sample thresholds", () => {
-  it("leaves reliability out below five runs and says how many are needed", () => {
-    const result = recommend(input({ usage: [usage(SEEDANCE_FAL, MIN_RUNS - 1, MIN_RUNS - 1)] }));
+  it("leaves reliability out below five operations and says how many are needed", () => {
+    const result = recommend(
+      input({ usage: [usage(SEEDANCE_FAL, MIN_OPERATIONS - 1, MIN_OPERATIONS - 1)] }),
+    );
     const row = find(result, SEEDANCE_FAL);
     expect(row.factors.reliability).toBeUndefined();
-    expect(row.reasons).toContain(`reliability: ${MIN_RUNS - 1} runs (needs ${MIN_RUNS})`);
+    expect(row.reasons).toContain(
+      `reliability: ${MIN_OPERATIONS - 1} operations (needs ${MIN_OPERATIONS})`,
+    );
   });
 
-  it("counts reliability from five runs, with the completed runs as evidence", () => {
-    const result = recommend(input({ usage: [usage(SEEDANCE_FAL, 5, 4)] }));
+  it("does not let status polls reach the minimum: two jobs with many runs are two operations", () => {
+    const result = recommend(input({ usage: [usage(SEEDANCE_FAL, 2, 2, 8)] }));
+    const row = find(result, SEEDANCE_FAL);
+    expect(row.factors.reliability).toBeUndefined();
+    expect(row.reasons).toContain(`reliability: 2 operations (needs ${MIN_OPERATIONS})`);
+  });
+
+  it("counts reliability from five operations, with the completed operations as evidence", () => {
+    const result = recommend(input({ usage: [usage(SEEDANCE_FAL, 5, 4, 12)] }));
     expect(find(result, SEEDANCE_FAL).factors.reliability).toEqual({
       value: 0.8,
       weight: 0.35,
-      evidence: "4/5 runs completed through multix",
+      evidence: "4/5 operations completed through multix",
     });
   });
 
@@ -291,7 +308,7 @@ describe("factors, coverage and score", () => {
     const bare = find(result, SEEDANCE_ATLAS);
     expect(bare).toMatchObject({ score: 0, coverage: 0, quote_usd: null });
     expect(bare.reasons).toEqual([
-      "reliability: 0 runs (needs 5)",
+      "reliability: 0 operations (needs 5)",
       "rating: 0 ratings (needs 3)",
       "price: no comparable quote for this request",
     ]);
@@ -303,7 +320,10 @@ describe("factors, coverage and score", () => {
       SEEDANCE_FAL,
     );
     expect(rec.coverage).toBe(0.4);
-    expect(rec.reasons).toEqual(["reliability: 0 runs (needs 5)", "rating: 0 ratings (needs 3)"]);
+    expect(rec.reasons).toEqual([
+      "reliability: 0 operations (needs 5)",
+      "rating: 0 ratings (needs 3)",
+    ]);
   });
 
   it("marks a provider without a key and says so", () => {

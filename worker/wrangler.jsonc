@@ -82,6 +82,8 @@
     "MULTIX_MCP_MAX_OUTPUTS": "4",
     "MULTIX_MCP_MAX_VIDEO_SECONDS": "10",
     "MULTIX_MCP_ALLOWED_RESOLUTIONS": "480p,720p,768p,1080p",
+    // Runs the caps above cannot bound (fal run, heygen translate, ...): budget | deny | allow.
+    "MULTIX_MCP_UNCAPPED_SPEND": "budget",
     // multix_run jobs running at once: per account, and across the server.
     "MULTIX_MAX_JOBS_PER_ACCOUNT": "2",
     "MULTIX_MAX_JOBS_TOTAL": "10"

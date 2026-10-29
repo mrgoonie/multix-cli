@@ -4,7 +4,7 @@ import { limitsFrom } from "../src/config.js";
 import { jobEnv } from "../src/jobs/job-runner.js";
 import { type RunRequest, prepareRun } from "../src/jobs/run-argv-builder.js";
 import { safeFileName } from "../src/jobs/run-input-files.js";
-import { normaliseResolution } from "../src/jobs/run-option-caps.js";
+import { assertSpendGuard, normaliseResolution } from "../src/jobs/run-option-caps.js";
 import type { ProviderKeys } from "../src/provider-secret-names.js";
 import { parseWithCli } from "./cli-program.js";
 
@@ -476,7 +476,41 @@ describe("prepareRun: rejections", () => {
       { command: "gemini edit-video", options: { prompt: "p", video: "/etc/passwd" } },
       /video/,
     ],
+    [
+      "count in exponent form the CLI reads as 100",
+      { command: "fal image", args: ["p"], options: { "num-images": "100e-2" } },
+      /--num-images must be a plain decimal number of at least 1/,
+    ],
+    [
+      "duration in exponent form the CLI reads as 60",
+      { command: "byteplus video", options: { prompt: "p", duration: "60e-1" } },
+      /--duration must be a plain decimal number of at least 1/,
+    ],
+    [
+      "fractional duration the CLI reads as 0",
+      { command: "byteplus video", options: { prompt: "p", duration: "0.5" } },
+      /--duration must be a plain decimal number of at least 1/,
+    ],
+    [
+      "hex count",
+      { command: "fal image", args: ["p"], options: { "num-images": "0x2" } },
+      /--num-images must be a plain decimal number/,
+    ],
+    [
+      "signed count",
+      { command: "fal image", args: ["p"], options: { "num-images": "+2" } },
+      /--num-images must be a plain decimal number/,
+    ],
   ])("rejects %s", (_label, request, message) => rejects(request, message));
+
+  it("accepts padded and fractional values within the caps", () => {
+    expect(() =>
+      run({ command: "fal image", args: ["p"], options: { "num-images": " 2 " } }),
+    ).not.toThrow();
+    expect(() =>
+      run({ command: "byteplus video", options: { prompt: "p", duration: "4.9" } }),
+    ).not.toThrow();
+  });
 });
 
 describe("prepareRun: speech", () => {
@@ -626,5 +660,189 @@ describe("helpers", () => {
     expect(safeFileName("https://a.example.com/x/..%2F..%2Fetc%2Fpasswd")).toBe("_.._etc_passwd");
     expect(safeFileName("https://a.example.com/")).toBe("input");
     expect(safeFileName("https://a.example.com/..")).toBe("input");
+  });
+});
+
+describe("prepareRun: runs the caps cannot bound", () => {
+  it("marks pass-through and source-length commands", () => {
+    expect(run({ command: "fal run", args: ["a/b"], options: { input: "{}" } }).uncappedSpend).toBe(
+      "the request body is passed to the provider as given",
+    );
+    expect(
+      run({ command: "replicate run", args: ["a/b"], options: { input: "{}" } }).uncappedSpend,
+    ).toBeDefined();
+    expect(
+      run({ command: "atlas run", args: ["a/b"], options: { input: "{}" } }).uncappedSpend,
+    ).toBeDefined();
+    expect(
+      run({ command: "heygen run", args: ["/v3/videos"], options: { input: "{}" } }).uncappedSpend,
+    ).toBeDefined();
+    expect(
+      run({
+        command: "heygen translate",
+        options: { languages: "es" },
+        inputs: { source: "https://cdn.example.com/in.mp4" },
+      }).uncappedSpend,
+    ).toBe("billed by the length of the source media");
+    expect(run({ command: "elevenlabs dub", options: { "target-lang": "es" } }).uncappedSpend).toBe(
+      "billed by the length of the source media",
+    );
+  });
+
+  it("marks a raw --input body merged under a convenience command", () => {
+    expect(
+      run({ command: "replicate image", args: ["a cat"], options: { "num-outputs": 1 } }),
+    ).not.toHaveProperty("uncappedSpend");
+    expect(
+      run({
+        command: "replicate image",
+        args: ["a cat"],
+        options: { "num-outputs": 1, input: '{"num_outputs": 8}' },
+      }).uncappedSpend,
+    ).toBe("with --input, the server caps do not bound the request");
+    expect(
+      run({
+        command: "replicate video",
+        args: ["a wave"],
+        options: { input: "{}" },
+      }).uncappedSpend,
+    ).toBe("with --input, the server caps do not bound the request");
+    expect(run({ command: "fal tts", options: { text: "hi" } })).not.toHaveProperty(
+      "uncappedSpend",
+    );
+    expect(
+      run({
+        command: "fal tts",
+        options: { text: "hi", model: "fal-ai/veo3", "text-field": "prompt" },
+      }).uncappedSpend,
+    ).toBe("with --text-field, the server caps do not bound the request");
+  });
+
+  it("marks an omitted count the model picks, and accepts one within the cap", () => {
+    expect(run({ command: "atlas image", args: ["a cat"] }).uncappedSpend).toBe(
+      "--num-images is omitted, so the model picks the number of outputs (pass --num-images, at most 4)",
+    );
+    expect(
+      run({ command: "atlas image", args: ["a cat"], options: { "num-images": 2 } }),
+    ).not.toHaveProperty("uncappedSpend");
+    rejects(
+      { command: "atlas image", args: ["a cat"], options: { "num-images": 5 } },
+      /--num-images must be at most 4/,
+    );
+    expect(run({ command: "replicate image", args: ["a cat"] }).uncappedSpend).toContain(
+      "--num-outputs is omitted",
+    );
+  });
+
+  it("marks an omitted resolution the model picks, and accepts an allowed one", () => {
+    expect(run({ command: "atlas video", args: ["a wave"] }).uncappedSpend).toBe(
+      "--resolution is omitted, so the model picks the resolution (pass --resolution: 480p, 720p, 768p, 1080p)",
+    );
+    expect(
+      run({ command: "atlas video", args: ["a wave"], options: { resolution: "720p" } }),
+    ).not.toHaveProperty("uncappedSpend");
+    rejects(
+      { command: "atlas video", args: ["a wave"], options: { resolution: "4k" } },
+      /--resolution must be one of/,
+    );
+    for (const request of [
+      { command: "replicate video", args: ["a wave"] },
+      { command: "heygen model-video", args: ["a wave"] },
+      { command: "atlas image-to-video" },
+      {
+        command: "openrouter image-to-video",
+        options: { prompt: "a wave", "image-url": "https://example.com/a.png" },
+      },
+    ]) {
+      expect(run(request).uncappedSpend, request.command).toMatch(/^--resolution is omitted/);
+    }
+    // The CLI default (1080p) is checked, so an omitted resolution stays capped.
+    expect(run({ command: "byteplus video", options: { prompt: "a wave" } })).not.toHaveProperty(
+      "uncappedSpend",
+    );
+  });
+
+  it("marks fal video and the raw provider options uncapped", () => {
+    expect(run({ command: "fal video", args: ["a wave"] }).uncappedSpend).toBe(
+      "the model picks the resolution (fal video has no --resolution)",
+    );
+    expect(run({ command: "openrouter tts", options: { text: "hi" } })).not.toHaveProperty(
+      "uncappedSpend",
+    );
+    expect(
+      run({
+        command: "openrouter tts",
+        options: { text: "hi", "provider-options": '{"openai":{"model":"x"}}' },
+      }).uncappedSpend,
+    ).toBe("with --provider-options, the server caps do not bound the request");
+    expect(
+      run({ command: "byteplus generate-3d", options: { prompt: "a cube", flags: "--ff 2" } })
+        .uncappedSpend,
+    ).toBe("with --flags, the server caps do not bound the request");
+    expect(run({ command: "elevenlabs music", options: { prompt: "jazz" } }).uncappedSpend).toBe(
+      "billed by length, which the model picks (up to 10 minutes) unless given",
+    );
+  });
+
+  it("marks Sume and TopView runs the caps cannot bound", () => {
+    expect(
+      run({ command: "sume image", args: ["a cat"], options: { model: "m" } }).uncappedSpend,
+    ).toContain("--num-images is omitted");
+    expect(
+      run({ command: "sume image", args: ["a cat"], options: { model: "m", "num-images": 2 } }),
+    ).not.toHaveProperty("uncappedSpend");
+    expect(
+      run({
+        command: "sume image",
+        args: ["a cat"],
+        options: { model: "m", "num-images": 1, param: ["seed=1"] },
+      }).uncappedSpend,
+    ).toBe("with --param, the server caps do not bound the request");
+    const video = run({ command: "sume video", args: ["a wave"], options: { model: "m" } });
+    expect(video.uncappedSpend).toContain("catalog row sets the price");
+    expect(video.argv).not.toContain("--duration");
+    expect(
+      run({ command: "topview run", args: ["route"], options: { input: "{}" } }).uncappedSpend,
+    ).toBe("the request body is passed to the provider as given");
+    expect(
+      run({
+        command: "topview video-avatar",
+        options: { "avatar-id": "a", "tts-text": "hi", "voice-id": "v" },
+      }).uncappedSpend,
+    ).toBe("billed by the length of the script or audio");
+    expect(
+      run({ command: "topview url-to-video", args: ["https://example.com/p"] }).uncappedSpend,
+    ).toContain("15-60 s");
+    expect(
+      run({
+        command: "topview product-anyshoot",
+        options: { mode: "background", count: 2 },
+      }),
+    ).not.toHaveProperty("uncappedSpend");
+  });
+
+  it("leaves capped commands unmarked and caps the voice-design count", () => {
+    expect(run({ command: "gemini generate", options: { prompt: "a cat" } })).not.toHaveProperty(
+      "uncappedSpend",
+    );
+    rejects(
+      { command: "fish voice-design", options: { instruction: "warm", count: 9 } },
+      /--count must be at most 4/,
+    );
+  });
+
+  it("applies MULTIX_MCP_UNCAPPED_SPEND, with budget for unknown values", () => {
+    const why = "the request body is passed to the provider as given";
+    const mode = (value?: string) => limitsFrom({ MULTIX_MCP_UNCAPPED_SPEND: value });
+    expect(mode().uncappedSpend).toBe("budget");
+    expect(mode(" DENY ").uncappedSpend).toBe("deny");
+    expect(mode("yes please").uncappedSpend).toBe("budget");
+    expect(() => assertSpendGuard("fal run", why, mode(), undefined)).toThrow(/Pass max_cost_usd/);
+    expect(() => assertSpendGuard("fal run", why, mode(), 1)).not.toThrow();
+    expect(() => assertSpendGuard("fal run", why, mode("deny"), 1)).toThrow(
+      /does not run such commands/,
+    );
+    expect(() => assertSpendGuard("fal run", why, mode("allow"), undefined)).not.toThrow();
+    expect(() => assertSpendGuard("gemini generate", undefined, mode(), undefined)).not.toThrow();
   });
 });

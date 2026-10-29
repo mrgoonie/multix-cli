@@ -12,6 +12,7 @@ interface CliProviderEntry {
   envPrimary: string;
   envFallback?: string;
   link: string;
+  companions?: string[];
 }
 
 // Loaded at run time only: a static import would pull the CLI's Node types
@@ -32,7 +33,11 @@ describe("provider secret names", () => {
     const expected = (await cliTable()).map((entry) => ({
       provider: entry.name,
       link: entry.link,
-      names: entry.envFallback ? [entry.envPrimary, entry.envFallback] : [entry.envPrimary],
+      names: [
+        entry.envPrimary,
+        ...(entry.envFallback ? [entry.envFallback] : []),
+        ...(entry.companions ?? []),
+      ],
     }));
     expect(CLI_PROVIDER_KEY_GROUPS).toEqual(expected);
   });
@@ -57,6 +62,7 @@ describe("provider secret names", () => {
       CLOUDFLARE_API_TOKEN: "cf-token-value-123456",
       CLOUDFLARE_ACCOUNT_ID: "0123456789abcdef0123456789abcdef",
       CLOUDFLARE_AI_GATEWAY_ID: "gateway-id-1234",
+      TOPVIEW_UID: "topview-account-uid-1",
       FAL_KEY: "short",
     });
     expect(values.sort()).toEqual(

@@ -90,8 +90,10 @@ async function handleAuthenticatedMcp(
   const toolEnv = toolEnvFor(serverSettings(env), keys);
   const jobs = jobsContextFor(env, app, account.id, keys, deps);
   const events = eventsContextFor(env, app, deps, account.id, auth.clientId);
-  const skills = { userId: account.id, registries: env.MULTIX_SKILLS };
-  return handleMcpRequest(request, toolEnv, { jobs, events, skills });
+  const registries = deps.skills ?? env.MULTIX_SKILLS;
+  const skills = { userId: account.id, registries };
+  const authoring = registries ? { userId: account.id, registries } : undefined;
+  return handleMcpRequest(request, toolEnv, { jobs, events, skills, authoring });
 }
 
 /** Everything that is not the protected /mcp resource or a library-owned OAuth endpoint. */

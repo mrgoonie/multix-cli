@@ -13,8 +13,8 @@ import { compareOfferings, notRankedReasons } from "./price-compare.js";
 import { summarizeReviews } from "./reviews.js";
 import type { UsageRow } from "./usage-aggregate.js";
 
-/** Minimum runs before reliability counts, and ratings before the average counts. */
-export const MIN_RUNS = 5;
+/** Minimum operations before reliability counts, and ratings before the average counts. */
+export const MIN_OPERATIONS = 5;
 export const MIN_RATINGS = 3;
 
 export const WEIGHTS = { reliability: 0.35, rating: 0.25, note: 0.2, price: 0.2 } as const;
@@ -100,13 +100,13 @@ export function recommend(input: RecommendInput): RecommendResult {
     const factors: Recommendation["factors"] = {};
     const reasons: string[] = [];
     const u = usage.get(o.id);
-    if (u && u.requests >= MIN_RUNS && u.success_rate !== null) {
+    if (u && u.operations >= MIN_OPERATIONS && u.success_rate !== null) {
       factors.reliability = {
         value: u.success_rate,
         weight: WEIGHTS.reliability,
-        evidence: `${u.completed}/${u.requests} runs completed through multix`,
+        evidence: `${u.completed}/${u.operations} operations completed through multix`,
       };
-    } else reasons.push(`reliability: ${u?.requests ?? 0} runs (needs ${MIN_RUNS})`);
+    } else reasons.push(`reliability: ${u?.operations ?? 0} operations (needs ${MIN_OPERATIONS})`);
 
     const own = input.reviews.filter(
       (r) => r.offering === o.id && (!use_case || r.use_case === use_case),
