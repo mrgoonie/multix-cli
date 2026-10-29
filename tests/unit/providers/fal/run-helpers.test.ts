@@ -332,15 +332,49 @@ describe("submitAndWait", () => {
   });
 
   it("waits out a 429 on the status poll for Retry-After, then polls again", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "Date"] });
+    try {
+      const pollTimes: number[] = [];
+      mockQueue(
+        () => {
+          pollTimes.push(Date.now());
+          return pollTimes.length === 1
+            ? new Response("Too Many Requests", { status: 429, headers: { "retry-after": "2" } })
+            : new Response(JSON.stringify({ status: "COMPLETED" }), { status: 200 });
+        },
+        () => new Response(JSON.stringify({ images: [] }), { status: 200 }),
+      );
+      const run = submitAndWait({
+        model: "fal-ai/flux/schnell",
+        input: { prompt: "x" },
+        logger: noopLogger,
+        pollIntervalMs: 5,
+      });
+      await vi.advanceTimersByTimeAsync(1999);
+      expect(pollTimes).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(1);
+      const { requestId } = await run;
+      expect(requestId).toBe("req-1");
+      expect(pollTimes).toHaveLength(2);
+      expect(pollTimes[1] - pollTimes[0]).toBe(2000);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([
+    ["a 408", () => new Response("Request Timeout", { status: 408 })],
+    ["a 429 without Retry-After", () => new Response("Too Many Requests", { status: 429 })],
+    ["a network failure", () => Promise.reject(new TypeError("fetch failed"))],
+  ])("retries %s on the status poll after the poll interval", async (_name, failure) => {
     let polls = 0;
     mockQueue(
       () =>
-        ++polls === 1
-          ? new Response("Too Many Requests", { status: 429, headers: { "retry-after": "1" } })
-          : new Response(JSON.stringify({ status: "COMPLETED" }), { status: 200 }),
+        (++polls === 1
+          ? failure()
+          : new Response(JSON.stringify({ status: "COMPLETED" }), { status: 200 })) as Response,
       () => new Response(JSON.stringify({ images: [] }), { status: 200 }),
     );
-    const started = Date.now();
     const { requestId } = await submitAndWait({
       model: "fal-ai/flux/schnell",
       input: { prompt: "x" },
@@ -349,7 +383,33 @@ describe("submitAndWait", () => {
     });
     expect(requestId).toBe("req-1");
     expect(polls).toBe(2);
-    expect(Date.now() - started).toBeGreaterThanOrEqual(950);
+  });
+
+  it("does not name a transient error in the timeout once a later poll succeeded", async () => {
+    let polls = 0;
+    mockQueue(
+      () =>
+        ++polls === 1
+          ? new Response("Too Many Requests", { status: 429 })
+          : new Response(JSON.stringify({ status: "IN_PROGRESS" }), { status: 200 }),
+      () => new Response("{}", { status: 200 }),
+    );
+    const err = await submitAndWait({
+      model: "fal-ai/flux/schnell",
+      input: { prompt: "x" },
+      logger: noopLogger,
+      pollIntervalMs: 5,
+      waitTimeoutMs: 50,
+    }).then(
+      () => expect.unreachable("submitAndWait should reject"),
+      (e: unknown) => e,
+    );
+    expect(polls).toBeGreaterThan(1);
+    expect((err as Error).message).toMatch(
+      /^Timed out waiting for fal request req-1 after 50ms\. /,
+    );
+    expect((err as Error).message).not.toContain("Last error");
+    expect(classifyError(err).code).toBe("TIMEOUT");
   });
 
   it("never waits a 429's Retry-After past the deadline, and names it in the timeout", async () => {
