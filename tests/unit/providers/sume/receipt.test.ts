@@ -166,6 +166,45 @@ describe("cost receipt of a Sume run", () => {
     });
   });
 
+  it("counts one job's charge once when several GET paths report it", async () => {
+    const summary = {
+      usage_summary: { status: "captured", captured_credits: 1, captured_usd_cents: 1 },
+    };
+    const sume = client({
+      [`GET /v1/jobs/${JOB_ID}/status`]: [{ json: status("completed", summary) }],
+      [`GET /v1/jobs/${JOB_ID}`]: [{ json: jobBody("completed", summary.usage_summary) }],
+      [`GET /v1/jobs/${JOB_ID}/result`]: [{ json: { data: { ...result().data, ...summary } } }],
+    });
+    await sume.getStatus(JOB_ID);
+    await sume.getJob(JOB_ID);
+    await sume.getResult(JOB_ID);
+    await settleTelemetry();
+
+    expect(summarizeUsage()).toMatchObject({ cost_usd: 0.01, credits: 1 });
+  });
+
+  it("still adds up the charges of different jobs read in one run", async () => {
+    const other = "job_9f9e9d9c-1111-4222-8333-444455556666";
+    const captured = (id: string, cents: number) => ({
+      data: {
+        job: {
+          id,
+          status: "completed",
+          usage_summary: { status: "captured", captured_credits: cents, captured_usd_cents: cents },
+        },
+      },
+    });
+    const sume = client({
+      [`GET /v1/jobs/${JOB_ID}`]: [{ json: captured(JOB_ID, 1) }],
+      [`GET /v1/jobs/${other}`]: [{ json: captured(other, 2) }],
+    });
+    await sume.getJob(JOB_ID);
+    await sume.getJob(other);
+    await settleTelemetry();
+
+    expect(summarizeUsage()).toMatchObject({ cost_usd: 0.03, credits: 3 });
+  });
+
   it.each([["failed" as const], ["canceled" as const]])(
     "records no spend for a %s job whose reservation was refunded",
     async (state) => {

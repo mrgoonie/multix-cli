@@ -321,8 +321,20 @@ async function recordUsage(
     );
   }
   if (method === "GET") {
-    // Polls repeat the job's running totals: keep the latest per endpoint family.
-    run.getUsage.set(`${host}${path.replace(/[^/]{16,}/g, ":id")}`, usage);
+    // Polls repeat the job's running totals: keep the latest per job, or per
+    // endpoint family when the response names none. Each read of a job (status,
+    // result, the job itself) reports its whole charge, so a reading replaces
+    // any earlier one that names the same job.
+    for (const [key, earlier] of run.getUsage) {
+      if (key.startsWith(`${host}/`) && earlier.ids.some((id) => usage.ids.includes(id))) {
+        run.getUsage.delete(key);
+      }
+    }
+    const job = usage.ids[0];
+    run.getUsage.set(
+      job ? `${host}/#job/${job}` : `${host}${path.replace(/[^/]{16,}/g, ":id")}`,
+      usage,
+    );
   } else {
     run.postUsage.push(usage);
   }
