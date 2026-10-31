@@ -80,7 +80,7 @@
     },
     {
       "group": "gemini",
-      "description": "Gemini: analyze, transcribe, extract data, generate images (Nano Banana), video (Omni Flash, Veo), and speech (Flash TTS)",
+      "description": "Gemini: analyze, transcribe, extract data, generate images (Nano Banana), video (Omni Flash, Veo), speech (Flash TTS), and music (Lyria)",
       "commands": [
         {
           "command": "gemini analyze",
@@ -1219,6 +1219,297 @@
               "long": "--output",
               "flags": "--output <path>",
               "description": "Copy output audio to this path",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        },
+        {
+          "command": "gemini generate-music",
+          "description": "Generate music with Google Lyria (30 s clip or full song)",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--prompt",
+              "flags": "--prompt <str>",
+              "description": "Music description: genre, mood, instruments, structure, timing",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--model",
+              "flags": "--model <id>",
+              "description": "Lyria model (lyria-3-clip-preview|lyria-3.5)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--lyrics",
+              "flags": "--lyrics <str>",
+              "description": "Lyrics, with optional [Verse]/[Chorus] section tags",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--lyrics-file",
+              "flags": "--lyrics-file <path>",
+              "description": "Read the lyrics from a text file",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--image",
+              "flags": "--image <path>",
+              "description": "Reference image that steers the mood (repeatable, max 10)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--output-format",
+              "flags": "--output-format <fmt>",
+              "description": "Audio format (mp3|wav; wav needs lyria-3.5)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "mp3"
+            },
+            {
+              "long": "--output",
+              "flags": "--output <path>",
+              "description": "Copy output audio to this path",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        },
+        {
+          "command": "gemini music-live",
+          "description": "Record instrumental music from Lyria RealTime (experimental, WebSocket) to a WAV file",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--prompt",
+              "flags": "--prompt <text>",
+              "description": "Weighted prompt text (repeatable)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--weight",
+              "flags": "--weight <n>",
+              "description": "Weight of the matching --prompt (repeatable, default 1.0)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--prompts-file",
+              "flags": "--prompts-file <path>",
+              "description": "JSON {prompts:[{text,weight}], config?, changes?:[{at,prompts?,config?}]}",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--model",
+              "flags": "--model <id>",
+              "description": "Model (lyria-realtime-exp)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--duration",
+              "flags": "--duration <seconds>",
+              "description": "Seconds of audio to record (1-600)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "30"
+            },
+            {
+              "long": "--bpm",
+              "flags": "--bpm <n>",
+              "description": "Beats per minute (60-200)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--density",
+              "flags": "--density <n>",
+              "description": "Density of notes (0-1)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--brightness",
+              "flags": "--brightness <n>",
+              "description": "Tonal brightness (0-1)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--guidance",
+              "flags": "--guidance <n>",
+              "description": "How strictly prompts are followed (0-6, default 4)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--temperature",
+              "flags": "--temperature <n>",
+              "description": "Randomness (0-3, default 1.1)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--top-k",
+              "flags": "--top-k <n>",
+              "description": "Top-k sampling (1-1000, default 40)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--seed",
+              "flags": "--seed <n>",
+              "description": "Seed (0-2147483647)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--scale",
+              "flags": "--scale <scale>",
+              "description": "Musical scale (C_MAJOR_A_MINOR, …)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--mode",
+              "flags": "--mode <mode>",
+              "description": "Generation mode (QUALITY|DIVERSITY|VOCALIZATION)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--mute-bass",
+              "flags": "--mute-bass",
+              "description": "Leave out the bass",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--mute-drums",
+              "flags": "--mute-drums",
+              "description": "Leave out the drums",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--only-bass-and-drums",
+              "flags": "--only-bass-and-drums",
+              "description": "Bass and drums only",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--output",
+              "flags": "--output <path>",
+              "description": "Copy the WAV recording to this path",
               "required": false,
               "takesValue": true,
               "valueOptional": false,

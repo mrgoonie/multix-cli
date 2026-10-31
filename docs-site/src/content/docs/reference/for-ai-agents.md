@@ -153,6 +153,7 @@ Estimate: $0.00136 expected, $0.00136–$0.00136 range (proven ceiling)
 | Command | Billed on | Ceiling |
 | --- | --- | --- |
 | `gemini generate-speech` | Text tokens in, audio tokens out (25 tokens per second of audio) | Estimated: the model decides the audio length, so `--max-cost` needs `--cost-policy estimate`. |
+| `gemini generate-music` | A flat price per song: $0.04 for a `lyria-3-clip-preview` clip, $0.08 for a `lyria-3.5` song; the receipt counts the request | Proven. `gemini music-live` (Lyria RealTime) has no published price and stays `unknown`. |
 | `elevenlabs tts` | Characters (Unicode code points as sent) | Proven. `--previous-text` and `--next-text` count only in the high end. |
 | `openrouter tts` | The model's OpenRouter price: characters for most models, UTF-8 bytes for Fish Audio, tokens for Gemini TTS, seconds of output audio for Seed Audio | Proven for character and byte prices (`--instructions` counts only in the high end); estimated for token and output-second prices. Text must come from `--text`. |
 | `fish tts` | UTF-8 bytes of the text as sent, tags included; text from `--text`, or from the CLI a readable `--text-file` or `--turns-file` (the tagged text multix builds) | Proven. Over MCP, file text is not priced. |
@@ -204,7 +205,7 @@ Transcribe models, whose price unit is not stated, stay `unknown`. The OpenRoute
 prices of Fish Audio Drama 3 and Gemini 3.8 TTS end with their direct-API price
 changes (2026-11-12 and 2027-01-01) and become `unknown` until re-checked.
 
-Gemini prices are the paid Standard tier; the free tier costs nothing.
+Gemini prices are the paid Standard tier; the free tier costs nothing (Lyria has no free tier).
 ElevenLabs subscription plans spend credits instead of USD. The `fish/*` rates
 price the native Fish Audio API (`fish tts`, `speech generate --provider fish`,
 `fish voice-design`);

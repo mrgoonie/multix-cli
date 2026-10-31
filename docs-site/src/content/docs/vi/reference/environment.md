@@ -167,6 +167,7 @@ chuyển key sang `.env` hoặc `~/.multix/.env`.
 
 Chỉ đặt override khi cần thay default. Các biến gồm `IMAGE_GEN_MODEL`,
 `VIDEO_GEN_MODEL`, `MULTIMODAL_MODEL`, `GEMINI_TTS_MODEL`,
+`GEMINI_MUSIC_MODEL` (mặc định `lyria-3-clip-preview`),
 `OPENAI_IMAGE_MODEL`, `OPENAI_TTS_MODEL`, `OPENAI_STT_MODEL`,
 `OPENROUTER_IMAGE_MODEL`, `OPENROUTER_TTS_MODEL` (mặc định
 `google/gemini-3.8-flash-tts`), `OPENROUTER_STT_MODEL` (mặc định
