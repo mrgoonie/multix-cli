@@ -142,6 +142,14 @@ function addGlobalFlags(cmd: Command, group = ""): void {
   for (const sub of cmd.commands) addGlobalFlags(sub, group || sub.name());
 }
 
+function isDirectory(file: string): boolean {
+  try {
+    return fs.statSync(file).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 /** Quote one argument for a POSIX shell when it needs it. */
 export function shellQuote(arg: string): string {
   return /^[\w@%+=:,./-]+$/.test(arg) ? arg : `'${arg.replace(/'/g, "'\\''")}'`;
@@ -310,10 +318,15 @@ export function finalizeRun(input: FinalizeInput): number {
   const exitCode = !failed ? 0 : run.json ? jsonExitCode : input.exitCode || 1;
 
   const warnings: OutputWarning[] = [];
-  const extra = typeof run.options.output === "string" ? [run.options.output] : [];
-  const outputDirs = [run.options.outputDir, run.options.outDir].filter(
-    (dir): dir is string => typeof dir === "string",
-  );
+  const output = typeof run.options.output === "string" ? run.options.output : undefined;
+  const extra = output ? [output] : [];
+  // --output names a file or, for commands that save several, a directory;
+  // files saved into that directory are asked for even when it is in the temp dir.
+  const outputDirs = [
+    run.options.outputDir,
+    run.options.outDir,
+    output && isDirectory(output) ? output : undefined,
+  ].filter((dir): dir is string => typeof dir === "string");
   const outputs: OutputFile[] = notSent
     ? []
     : producedFiles(extra, outputDirs).flatMap((file) => {
