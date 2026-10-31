@@ -135,6 +135,12 @@ Gemini transcription (`multix gemini transcribe`) is in [../document-conversion/
 
 ```bash
 multix minimax generate-music --lyrics "..." [--model music-2.5]
+# Gemini Lyria: 30 s MP3 clip (default) or a full song with lyria-3.5 (mp3|wav); billed per song, never re-sent on timeout.
+# Lyrics/structure the model returns are saved next to the audio as gemini_music_<stamp>.txt.
+multix gemini generate-music --prompt "warm folk ballad" [--model lyria-3.5] [--lyrics-file lyrics.txt] [--image mood.png] [--output-format wav]
+# Lyria RealTime (experimental, instrumental only, Node 22+, unpriced, local CLI only): weighted prompts to a 48 kHz WAV.
+# --prompts-file JSON {prompts:[{text,weight}], config?, changes?:[{at,prompts?,config?}]}; Ctrl-C keeps a valid WAV.
+multix gemini music-live --prompt "minimal techno" --prompt "rain" --weight 1 --weight 0.4 [--bpm 124] [--duration 60] [--output live.wav]
 multix elevenlabs music --prompt "dreamy synthwave loop" [--music-length-ms 30000]
 multix elevenlabs sfx --text "car engine starting" [--duration-seconds 5]
 ```

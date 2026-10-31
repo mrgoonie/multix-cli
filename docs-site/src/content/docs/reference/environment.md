@@ -167,7 +167,7 @@ values). Moving the keys to `.env` or `~/.multix/.env` is still recommended.
 
 Use explicit overrides only when you need a different default. Available
 settings include `IMAGE_GEN_MODEL`, `VIDEO_GEN_MODEL`, `MULTIMODAL_MODEL`,
-`GEMINI_TTS_MODEL`, `OPENAI_IMAGE_MODEL`, `OPENAI_TTS_MODEL`,
+`GEMINI_TTS_MODEL`, `GEMINI_MUSIC_MODEL` (default `lyria-3-clip-preview`), `OPENAI_IMAGE_MODEL`, `OPENAI_TTS_MODEL`,
 `OPENAI_STT_MODEL`, `OPENROUTER_IMAGE_MODEL`, `OPENROUTER_TTS_MODEL` (default
 `google/gemini-3.8-flash-tts`), `OPENROUTER_STT_MODEL` (default
 `openai/whisper-large-v3-turbo`), `LEONARDO_BASE_URL`,

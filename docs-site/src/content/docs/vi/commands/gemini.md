@@ -1,6 +1,6 @@
 ---
 title: Lệnh Gemini
-description: Dùng Gemini để phân tích đa phương thức, extract tài liệu, tạo ảnh/video và speech.
+description: Dùng Gemini để phân tích đa phương thức, extract tài liệu, tạo ảnh/video, speech và nhạc Lyria.
 ---
 
 Lệnh Gemini cần `GEMINI_API_KEY`. Các key phụ `GEMINI_API_KEY_2`, `GEMINI_API_KEY_3`, … được dùng khi một key hết quota; xem [Biến môi trường](/vi/reference/environment/#xoay-vòng-gemini-key). Chạy `multix gemini <command> --help` trước
@@ -191,3 +191,74 @@ multix gemini generate-speech --text "Welcome to multix." \
 ```
 
 `--style` yêu cầu model Gemini 3.8 TTS và sẽ bị từ chối với model cũ hơn.
+
+## Music
+
+`generate-music` tạo nhạc bằng Google Lyria qua Interactions API. Model mặc
+định `lyria-3-clip-preview` trả về một đoạn MP3 dài 30 giây; `lyria-3.5` trả về
+một bài hát hoàn chỉnh dài khoảng vài phút, dạng MP3 hoặc WAV khi dùng
+`--output-format wav`. Ghi đè model mặc định bằng `--model` hoặc
+`GEMINI_MUSIC_MODEL`.
+
+```bash
+multix gemini generate-music --prompt "upbeat synthwave with a driving bassline"
+multix gemini generate-music --model lyria-3.5 --output-format wav \
+  --prompt "warm acoustic folk ballad, female vocals" --lyrics-file lyrics.txt
+multix gemini generate-music --prompt "a soundtrack for this scene" --image scene.png
+```
+
+- `--lyrics` hoặc `--lyrics-file` (UTF-8, tối đa 64 KB) thêm lời bài hát vào
+  prompt; các thẻ đoạn như `[Verse]`, `[Chorus]` và mốc thời gian như
+  `[0:00 - 0:15] Intro` định hướng cấu trúc bài.
+- `--image` (lặp lại được, tối đa 10 ảnh PNG, JPEG, WebP hoặc HEIC) định hướng
+  cảm xúc của bài.
+- Bài hát được lưu thành `gemini_music_<stamp>.mp3` (hoặc `.wav`). Lời hoặc cấu
+  trúc bài mà model trả về được lưu cạnh đó thành `gemini_music_<stamp>.txt`.
+- Lyria tính phí theo bài (US$0,04 cho một đoạn clip, US$0,08 cho một bài
+  `lyria-3.5`, không có free tier), nên `--estimate` và `--max-cost` dùng được.
+  Request chỉ gửi một lần: khi timeout hoặc mất kết nối, request không được gửi
+  lại vì Google có thể đã tạo và tính phí bài hát; lỗi trả về là
+  `UNKNOWN_REMOTE_STATE` và không retry được. Chỉ khi bị giới hạn tốc độ
+  (rate limit) thì mới chuyển sang key `GEMINI_API_KEY_<n>` kế tiếp.
+
+### Lyria RealTime
+
+`music-live` ghi một phiên nhạc không lời từ Lyria RealTime
+(`lyria-realtime-exp`, thử nghiệm) ra file WAV stereo 48 kHz, 16-bit. Phiên
+chạy qua WebSocket nên cần Node.js 22 trở lên.
+
+```bash
+multix gemini music-live --prompt "minimal techno" --prompt "rain" --weight 1 --weight 0.4 \
+  --bpm 124 --density 0.6 --duration 60
+multix gemini music-live --prompts-file session.json --duration 120 --output live.wav
+```
+
+- Lặp `--prompt` cùng `--weight` tương ứng (mặc định 1.0) để pha trộn phong
+  cách.
+- Tham số điều khiển: `--bpm` (60–200), `--density` và `--brightness` (0–1),
+  `--guidance` (0–6), `--temperature` (0–3), `--top-k` (1–1000), `--seed`,
+  `--scale` (ví dụ `C_MAJOR_A_MINOR`), `--mode`
+  (`QUALITY|DIVERSITY|VOCALIZATION`), `--mute-bass`, `--mute-drums` và
+  `--only-bass-and-drums`. Đổi BPM hoặc scale sẽ reset ngữ cảnh của model, tạo
+  ra một đoạn chuyển nghe rõ.
+- `--prompts-file` nhận JSON gồm `prompts`, `config` tùy chọn (các flag ghi đè
+  lên nó) và `changes` tùy chọn để áp dụng prompt hoặc config mới tại một thời
+  điểm trong bản ghi:
+
+  ```json
+  {
+    "prompts": [{ "text": "lo-fi hip hop", "weight": 1 }],
+    "config": { "bpm": 80, "density": 0.4 },
+    "changes": [{ "at": 30, "prompts": [{ "text": "jazz piano", "weight": 1 }] }]
+  }
+  ```
+
+- `--duration` (1–600 giây, mặc định 30) là độ dài âm thanh cần ghi. Ctrl-C
+  dừng ghi sớm, vẫn ghi ra file WAV hợp lệ (sao chép sang `--output` nếu có) và
+  thoát với mã 130. Nếu server kết thúc phiên sớm,
+  phần đã ghi được giữ lại, lệnh thoát với mã 1 và phiên không được khởi động
+  lại.
+- Đầu ra chỉ có nhạc không lời. Google chưa công bố giá cho Lyria RealTime, nên
+  `--estimate` báo không rõ giá và `--max-cost` từ chối chạy. `--dry-run` in các
+  message của phiên mà không kết nối.
+- Remote MCP server không chạy `music-live`.

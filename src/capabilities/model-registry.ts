@@ -126,7 +126,73 @@ function geminiTts(model: string, name: string): ModelCapability {
   };
 }
 
+const LYRIA_DOCS = "https://ai.google.dev/gemini-api/docs/music-generation";
+
+function lyria(model: string, name: string, formats: string[]): ModelCapability {
+  return {
+    provider: "gemini",
+    model,
+    name,
+    tasks: ["music"],
+    command: "gemini generate-music",
+    example: `multix gemini generate-music --model ${model} --prompt "Warm lo-fi jazz piano, instrumental only" --output song.${formats[0]}`,
+    inputs: {
+      prompt: {
+        type: "string",
+        required: true,
+        note: "genre, mood, instruments, structure, timing",
+      },
+      lyrics: { type: "string", note: "[Verse]/[Chorus] tags; sent in the prompt text" },
+      image: { type: "array", note: "up to 10 reference images" },
+      output_format: { type: "string", values: formats, default: "mp3" },
+    },
+    outputs: [{ field: "audio", modality: "audio", formats }],
+    languages: "auto",
+    async: false,
+    limits: { max_images: 10 },
+    source: { url: LYRIA_DOCS, verified_at: "2026-10-31" },
+  };
+}
+
 export const MODEL_CAPABILITIES: readonly ModelCapability[] = [
+  lyria("lyria-3-clip-preview", "Lyria 3 Clip (30 s)", ["mp3"]),
+  lyria("lyria-3.5", "Lyria 3.5 (full song)", ["mp3", "wav"]),
+  {
+    provider: "gemini",
+    model: "lyria-realtime-exp",
+    name: "Lyria RealTime (experimental, instrumental)",
+    tasks: ["music"],
+    command: "gemini music-live",
+    example:
+      'multix gemini music-live --model lyria-realtime-exp --prompt "Ambient synthwave, warm pads" --duration 30 --output session.wav',
+    inputs: {
+      prompt: { type: "array", required: true, note: "weighted prompts {text, weight}" },
+      bpm: { type: "integer", note: "60-200" },
+      density: { type: "number", note: "0-1" },
+      brightness: { type: "number", note: "0-1" },
+      guidance: { type: "number", default: 4, note: "0-6" },
+      temperature: { type: "number", default: 1.1, note: "0-3" },
+      top_k: { type: "integer", default: 40, note: "1-1000" },
+      seed: { type: "integer" },
+      scale: { type: "string", note: "C_MAJOR_A_MINOR, …" },
+      mode: {
+        type: "string",
+        values: ["QUALITY", "DIVERSITY", "VOCALIZATION"],
+        default: "QUALITY",
+      },
+      mute_bass: { type: "boolean", default: false },
+      mute_drums: { type: "boolean", default: false },
+      only_bass_and_drums: { type: "boolean", default: false },
+    },
+    outputs: [{ field: "audio", modality: "audio", formats: ["wav"] }],
+    async: false,
+    streaming: true,
+    limits: { sample_rate_hz: 48000, channels: 2, max_seconds: 600 },
+    source: {
+      url: "https://ai.google.dev/gemini-api/docs/realtime-music-generation",
+      verified_at: "2026-10-31",
+    },
+  },
   elevenV4("elevenlabs/tts/eleven-v4", "Eleven v4 (fal)"),
   elevenV4("elevenlabs/tts/eleven-v4-turbo", "Eleven v4 Turbo (fal)"),
   geminiTts("google/gemini-3.8-flash-tts", "Gemini 3.8 Flash TTS (fal)"),

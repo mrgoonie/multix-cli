@@ -4,6 +4,7 @@
  */
 
 import { envDefault } from "../../core/env-default.js";
+import { MUSIC_MODEL_DEFAULT } from "./lyria.js";
 import { TTS_MODEL_DEFAULT } from "./voices.js";
 
 /**
@@ -42,6 +43,9 @@ export const ANALYSIS_MODEL_DEFAULT = TEXT_MODEL_DEFAULT;
 
 /** Default TTS model (defined with the voices, which the runtime-neutral budget code reads). */
 export { TTS_MODEL_DEFAULT };
+
+/** Default Lyria music model (defined with the Lyria request code). */
+export { MUSIC_MODEL_DEFAULT };
 
 /** Default document conversion model. */
 export const DOC_MODEL_DEFAULT = TEXT_MODEL_DEFAULT;
@@ -84,7 +88,14 @@ export type ImageSize = (typeof IMAGE_SIZES)[number];
  * Get default model for a given task, with env overrides matching the Python source.
  */
 export function getDefaultModel(
-  task: "generate" | "generate-video" | "generate-speech" | "analyze" | "transcribe" | "extract",
+  task:
+    | "generate"
+    | "generate-video"
+    | "generate-speech"
+    | "generate-music"
+    | "analyze"
+    | "transcribe"
+    | "extract",
 ): string {
   // A blank name (as in a copied .env.example) falls through to the next one.
   if (task === "generate") {
@@ -95,6 +106,9 @@ export function getDefaultModel(
   }
   if (task === "generate-speech") {
     return envDefault("GEMINI_TTS_MODEL", envDefault("TTS_MODEL", TTS_MODEL_DEFAULT));
+  }
+  if (task === "generate-music") {
+    return envDefault("GEMINI_MUSIC_MODEL", MUSIC_MODEL_DEFAULT);
   }
   // analyze / transcribe / extract
   return envDefault("MULTIMODAL_MODEL", envDefault("GEMINI_MODEL", ANALYSIS_MODEL_DEFAULT));
