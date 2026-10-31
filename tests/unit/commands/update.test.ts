@@ -39,8 +39,9 @@ describe("fetchRegistryVersion", () => {
 });
 
 describe("getCurrentVersion", () => {
-  it("returns a non-empty semver-ish string from package.json", async () => {
+  it("returns the version the root program reports", async () => {
+    const { Command } = await import("commander");
     const { getCurrentVersion } = await import("../../../src/commands/update.js");
-    expect(getCurrentVersion()).toMatch(/^\d+\.\d+\.\d+/);
+    expect(getCurrentVersion(new Command().version("1.2.3"))).toBe("1.2.3");
   });
 });

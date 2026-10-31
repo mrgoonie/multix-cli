@@ -6,7 +6,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { type Options, execa } from "execa";
 import { describe, expect, it } from "vitest";
 import { isolatedEnv } from "./child-env.js";
@@ -306,6 +306,38 @@ describe("multix --help (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     const result = await run(["--version"]);
     expect(result.exitCode).toBe(0);
     expect(result.stdout.trim()).toMatch(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/);
+  });
+});
+
+describe("multix update (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
+  // --import takes a URL; a bare Windows path (D:\...) reads as a URL scheme.
+  const FAKE_REGISTRY = pathToFileURL(
+    path.resolve(__dirname, "fixtures/fake-npm-registry-fetch.mjs"),
+  ).href;
+  const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, "../../package.json"), "utf8"));
+
+  it("update --check --json reads the installed version from the bundle", async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "multix-smoke-update-"));
+    try {
+      const result = await execa(
+        "node",
+        ["--import", FAKE_REGISTRY, CLI, "update", "--check", "--json"],
+        {
+          reject: false,
+          cwd: tmp,
+          extendEnv: false,
+          env: { ...isolatedEnv(tmp), FAKE_REGISTRY_VERSION: "999.0.0" },
+          timeout: SPAWN_TIMEOUT - 1_000,
+        },
+      );
+      expect(result.stdout + result.stderr).not.toContain("Cannot find module");
+      expect(result.exitCode).toBe(0);
+      const out = JSON.parse(result.stdout.trim());
+      expect(out).toMatchObject({ ok: true, command: "update" });
+      expect(JSON.stringify(out)).toContain(`${pkg.version} -> 999.0.0`);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
   });
 });
 
