@@ -1,7 +1,7 @@
 ---
 name: video-production
 description: Generate, edit and extend video with multix — text-to-video and image-to-video (i2v) on Gemini Omni Flash (plus legacy Veo), MiniMax Hailuo, OpenRouter (Veo, Seedance, Kling), Leonardo (Motion, Veo, Kling, Hailuo, Seedance, LTX), BytePlus Seedance reference-to-video, Cloudflare AI Gateway via Replicate, fal.ai and Runway Gen-4.5 / Gen-4 Turbo, plus HeyGen Video Agent, scripted avatar videos, video translation, dubbing and lipsync, and TopView product marketing videos, talking/product avatars, product photos and API Platform models (Seedance, Wan). Sume catalog video is in the root multix skill. Includes a provider decision tree and resume/cancel rules for async jobs.
-version: 1.22.0-beta.3 # x-release-please-version
+version: 1.22.0-beta.4 # x-release-please-version
 license: MIT
 metadata:
   tasks: video, image-to-video, video-edit, avatar-video

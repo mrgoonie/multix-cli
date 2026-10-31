@@ -5,6 +5,69 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.22.0-beta.4](https://github.com/mrgoonie/multix-cli/compare/v1.22.0-beta.3...v1.22.0-beta.4) (2026-10-31)
+
+
+### Added
+
+* **mcp:** author skills with drafts, revisions and team sharing ([#451](https://github.com/mrgoonie/multix-cli/issues/451)) ([f96162b](https://github.com/mrgoonie/multix-cli/commit/f96162b608099961e978198359b2773f9ba8c7eb)), closes [#431](https://github.com/mrgoonie/multix-cli/issues/431)
+* **mcp:** run skill workflows after explicit authorization ([#481](https://github.com/mrgoonie/multix-cli/issues/481)) ([fd646e9](https://github.com/mrgoonie/multix-cli/commit/fd646e9044c68cf855542ec1e9705dd2d8e0c7df)), closes [#432](https://github.com/mrgoonie/multix-cli/issues/432)
+* **providers:** add Sume and TopView native providers ([#446](https://github.com/mrgoonie/multix-cli/issues/446)) ([9c7a73c](https://github.com/mrgoonie/multix-cli/commit/9c7a73c0ac2a977cccf72e53654828ef30510862)), closes [#413](https://github.com/mrgoonie/multix-cli/issues/413)
+
+
+### Fixed
+
+* **agent:** count a task's credits once across its submit and status runs ([#465](https://github.com/mrgoonie/multix-cli/issues/465)) ([095cff3](https://github.com/mrgoonie/multix-cli/commit/095cff34abb7b177cdca91db719a0ef89fc114ce)), closes [#424](https://github.com/mrgoonie/multix-cli/issues/424)
+* **agent:** keep a run's job id after many uploads and name the job a fal result reads ([#490](https://github.com/mrgoonie/multix-cli/issues/490)) ([ca05c7b](https://github.com/mrgoonie/multix-cli/commit/ca05c7bd73f00359b2c23b0b3d96f05ba5571393))
+* **agent:** name the job a status read was given so a failed read joins its operation ([#503](https://github.com/mrgoonie/multix-cli/issues/503)) ([c908fb7](https://github.com/mrgoonie/multix-cli/commit/c908fb7dd5c201c0b913bb92360e80efd9e5d965))
+* **agent:** name the job in a receipt's default operation id ([#478](https://github.com/mrgoonie/multix-cli/issues/478)) ([fb9c77b](https://github.com/mrgoonie/multix-cli/commit/fb9c77bae9c20df910b0415f7cc824b0d60cf95c)), closes [#439](https://github.com/mrgoonie/multix-cli/issues/439)
+* **agent:** record a file: URL write as its decoded OS path in --json outputs ([#523](https://github.com/mrgoonie/multix-cli/issues/523)) ([dd7dd81](https://github.com/mrgoonie/multix-cli/commit/dd7dd810eeeccd9d368863997aea7897296a282f))
+* **agent:** report outputs written to an output dir inside the temp dir ([#507](https://github.com/mrgoonie/multix-cli/issues/507)) ([85b6957](https://github.com/mrgoonie/multix-cli/commit/85b695704a12d7a44a62f4212b5fe28092e0fbae))
+* **agent:** resume an accepted job instead of offering a paid rerun after a failure ([#522](https://github.com/mrgoonie/multix-cli/issues/522)) ([bb477c9](https://github.com/mrgoonie/multix-cli/commit/bb477c9516438422817fc5b52821578115d86249)), closes [#501](https://github.com/mrgoonie/multix-cli/issues/501)
+* **agent:** treat only ~/.multix itself as CLI state in --json outputs ([#512](https://github.com/mrgoonie/multix-cli/issues/512)) ([550475b](https://github.com/mrgoonie/multix-cli/commit/550475be32728ee798461c3ce08426a65d62a2f1))
+* **byteplus:** send --audio as generate_audio, not the Seedance --wm watermark flag ([#472](https://github.com/mrgoonie/multix-cli/issues/472)) ([053a6f4](https://github.com/mrgoonie/multix-cli/commit/053a6f4b11279779b47a53122d2f3c0e1647fb84)), closes [#458](https://github.com/mrgoonie/multix-cli/issues/458)
+* **byteplus:** throw when a succeeded task has no output URL instead of logging and exiting ([#517](https://github.com/mrgoonie/multix-cli/issues/517)) ([72db49d](https://github.com/mrgoonie/multix-cli/commit/72db49dbb726bafe806c157d4451b90a73437a86)), closes [#510](https://github.com/mrgoonie/multix-cli/issues/510)
+* **catalog:** count a job the provider failed as failed, and classify provider job failures as JOB_FAILED ([#486](https://github.com/mrgoonie/multix-cli/issues/486)) ([4c78730](https://github.com/mrgoonie/multix-cli/commit/4c78730a014daef3226dd94e9778f4d010bc4389)), closes [#471](https://github.com/mrgoonie/multix-cli/issues/471) [#473](https://github.com/mrgoonie/multix-cli/issues/473)
+* **catalog:** count a task's USD once when its status run lands in another row ([#482](https://github.com/mrgoonie/multix-cli/issues/482)) ([babc981](https://github.com/mrgoonie/multix-cli/commit/babc981cf551ff15684ad479d1dce65cba13a963))
+* **catalog:** count usage outcomes per operation and skip runs that sent nothing ([#448](https://github.com/mrgoonie/multix-cli/issues/448)) ([f912aea](https://github.com/mrgoonie/multix-cli/commit/f912aea26dd39645d0ee4cdf113abb3f7aa5e1f3)), closes [#434](https://github.com/mrgoonie/multix-cli/issues/434)
+* **catalog:** rank only confirmed list prices in compare and recommend ([#461](https://github.com/mrgoonie/multix-cli/issues/461)) ([074add9](https://github.com/mrgoonie/multix-cli/commit/074add97ce8a1aeea6374bffed0e014fd5caee10)), closes [#435](https://github.com/mrgoonie/multix-cli/issues/435)
+* **catalog:** redact bare base64 keys and arrow, double-equals and quoted secret pairs in reviews ([#515](https://github.com/mrgoonie/multix-cli/issues/515)) ([1c17401](https://github.com/mrgoonie/multix-cli/commit/1c1740157ffd3fc789df7e14c20d112468bc26fc)), closes [#474](https://github.com/mrgoonie/multix-cli/issues/474)
+* **catalog:** scrub secrets from reviews and verify review run references ([#488](https://github.com/mrgoonie/multix-cli/issues/488)) ([60afbdd](https://github.com/mrgoonie/multix-cli/commit/60afbdd76dd83421231cbdae826c690c014379ec)), closes [#436](https://github.com/mrgoonie/multix-cli/issues/436)
+* **catalog:** treat catalog as a local command group without dry-run or cost flags ([#433](https://github.com/mrgoonie/multix-cli/issues/433)) ([b7dd761](https://github.com/mrgoonie/multix-cli/commit/b7dd761ce6416899c7d07e567196e2f302254771)), closes [#430](https://github.com/mrgoonie/multix-cli/issues/430)
+* **errors:** classify TopView payment_required as quota and Gemini generate errors by their own class ([#491](https://github.com/mrgoonie/multix-cli/issues/491)) ([f583bde](https://github.com/mrgoonie/multix-cli/commit/f583bde575ea50b378f05130472f8d811ce4ea58))
+* **errors:** let fal result and MiniMax image-to-image errors propagate ([#497](https://github.com/mrgoonie/multix-cli/issues/497)) ([c34d7de](https://github.com/mrgoonie/multix-cli/commit/c34d7ded464422b055477b22982bf68a96a9c635))
+* **errors:** throw provider-failed and timed-out poll jobs instead of logging and exiting ([#511](https://github.com/mrgoonie/multix-cli/issues/511)) ([6c42af8](https://github.com/mrgoonie/multix-cli/commit/6c42af884a17c992258f0671f1179f866b797881))
+* **fal:** keep the error class and Retry-After when fal run wraps a poll or result failure ([#502](https://github.com/mrgoonie/multix-cli/issues/502)) ([20d2888](https://github.com/mrgoonie/multix-cli/commit/20d288886f8915838531c773e53e1983d856d1f7)), closes [#495](https://github.com/mrgoonie/multix-cli/issues/495)
+* **fal:** retry a transient result fetch and bound each poll request by the wait deadline ([#518](https://github.com/mrgoonie/multix-cli/issues/518)) ([f833ceb](https://github.com/mrgoonie/multix-cli/commit/f833cebe733f556280ea08c84d5e4d05f09fcb43))
+* **fal:** wait out a rate-limited status poll in fal run instead of failing ([#513](https://github.com/mrgoonie/multix-cli/issues/513)) ([309c6d5](https://github.com/mrgoonie/multix-cli/commit/309c6d529fb443826fb5a4076cfe279ce2e03c70))
+* **gemini:** report saved images and request only the rest when a later --num-images request fails ([#505](https://github.com/mrgoonie/multix-cli/issues/505)) ([4512fb5](https://github.com/mrgoonie/multix-cli/commit/4512fb5393e6d6c36febc4de1e5a47af8b93c098))
+* **mcp:** accept only plain decimals of at least 1 for capped counts and durations ([#450](https://github.com/mrgoonie/multix-cli/issues/450)) ([f2f6fd7](https://github.com/mrgoonie/multix-cli/commit/f2f6fd78c666d5dc868676dcf4c3baf6776e1f61)), closes [#442](https://github.com/mrgoonie/multix-cli/issues/442)
+* **mcp:** cap elevenlabs sfx and music lengths with MULTIX_MCP_MAX_AUDIO_SECONDS ([#459](https://github.com/mrgoonie/multix-cli/issues/459)) ([3701939](https://github.com/mrgoonie/multix-cli/commit/3701939fc71e91922f26171bfa96190fb605fabe)), closes [#449](https://github.com/mrgoonie/multix-cli/issues/449)
+* **mcp:** classify the remaining spend gaps and test every catalog command ([#455](https://github.com/mrgoonie/multix-cli/issues/455)) ([4c19b0b](https://github.com/mrgoonie/multix-cli/commit/4c19b0b3b483da63ae0499fa7e9a81f2e47466b0))
+* **mcp:** keep BytePlus prompt text from overriding the video caps ([#463](https://github.com/mrgoonie/multix-cli/issues/463)) ([aedc482](https://github.com/mrgoonie/multix-cli/commit/aedc482e95afb95cfa2a5c260cf8638887b2a8a7))
+* **mcp:** let the operator limit the image models multix_run may use ([#467](https://github.com/mrgoonie/multix-cli/issues/467)) ([094fd8b](https://github.com/mrgoonie/multix-cli/commit/094fd8bcf526c6f0842fdffaee04b71e239ec232)), closes [#452](https://github.com/mrgoonie/multix-cli/issues/452)
+* **mcp:** refuse leonardo video when the video length cap is below what it renders ([#462](https://github.com/mrgoonie/multix-cli/issues/462)) ([7402491](https://github.com/mrgoonie/multix-cli/commit/740249185d1857b8b67b1ee204b0dea78a7db8dc))
+* **mcp:** refuse runs the operator spend caps cannot bound unless a budget proves them ([#441](https://github.com/mrgoonie/multix-cli/issues/441)) ([8ea79d8](https://github.com/mrgoonie/multix-cli/commit/8ea79d8d47e296743829ea407d3f986e9d1d3f0d)), closes [#425](https://github.com/mrgoonie/multix-cli/issues/425)
+* **mcp:** treat image size, quality and tier options as uncapped spend in multix_run ([#453](https://github.com/mrgoonie/multix-cli/issues/453)) ([750752d](https://github.com/mrgoonie/multix-cli/commit/750752da690c42363b32ca0d67edb7363c955864))
+* **openrouter:** stop waiting on a cancelled or expired video job ([#516](https://github.com/mrgoonie/multix-cli/issues/516)) ([961f5b4](https://github.com/mrgoonie/multix-cli/commit/961f5b46bf4b6cdb009b03aa20fc96b3ea5fe146)), closes [#509](https://github.com/mrgoonie/multix-cli/issues/509)
+* **site:** list Sume and TopView on the landing page ([3875570](https://github.com/mrgoonie/multix-cli/commit/3875570cd29b746ac344df346f26eaf1e66c1666))
+
+
+### Performance
+
+* **catalog:** group a usage operation's runs in place ([#484](https://github.com/mrgoonie/multix-cli/issues/484)) ([6b8344b](https://github.com/mrgoonie/multix-cli/commit/6b8344b62ba2fd7fad76650c6c6ab731a060f6c0)), closes [#445](https://github.com/mrgoonie/multix-cli/issues/445)
+
+
+### Changed
+
+* **agent:** derive the history, provider and dry-run group lists from one list of tooling groups ([#440](https://github.com/mrgoonie/multix-cli/issues/440)) ([0ea402f](https://github.com/mrgoonie/multix-cli/commit/0ea402f6349319f6cbadfd1554edc8f4cbfda5ba)), closes [#438](https://github.com/mrgoonie/multix-cli/issues/438)
+
+
+### Documentation
+
+* **agents:** require a documentation impact check for every change ([#487](https://github.com/mrgoonie/multix-cli/issues/487)) ([1fd21c0](https://github.com/mrgoonie/multix-cli/commit/1fd21c03ca93c855e125a24a0e20afdfe3017879)), closes [#485](https://github.com/mrgoonie/multix-cli/issues/485)
+* **mcp:** say sume video --duration is neither capped nor filled ([#470](https://github.com/mrgoonie/multix-cli/issues/470)) ([6c67eeb](https://github.com/mrgoonie/multix-cli/commit/6c67eebdc4e7d6f4e07e568a6f237a7ddb7a5a93))
+
 ## [1.22.0-beta.3](https://github.com/mrgoonie/multix-cli/compare/v1.22.0-beta.2...v1.22.0-beta.3) (2026-10-28)
 
 
