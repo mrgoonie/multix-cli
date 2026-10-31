@@ -32,7 +32,7 @@ import {
 import { SUME_IMAGE_MODEL_ENV, SUME_VIDEO_MODEL_ENV } from "../providers/sume/models.js";
 import { sumeCatalogSnapshot } from "../providers/sume/node-catalog.js";
 import { probeDuration } from "./output-file-inspect.js";
-import { run } from "./run-state.js";
+import { jobIdentity, run } from "./run-state.js";
 
 /** Same limit as `speech generate` applies when it reads --text-file. */
 const MAX_SPEECH_TEXT_FILE_BYTES = 1024 * 1024;
@@ -177,7 +177,8 @@ export function costReceiptFor(opts: {
     operation_id: operationIdFor({
       explicit: process.env.MULTIX_OPERATION_ID,
       provider: run.group,
-      providerIds: run.ids,
+      // The job the run is about, not an upload's or a rejected call's id.
+      providerIds: [jobIdentity()?.id, ...run.ids].filter((id): id is string => Boolean(id)),
       runId: opts.historyId ?? `h_${run.startedAt.toString(36)}`,
     }),
     outcome: opts.notSent ? "not_sent" : opts.failed ? "failed" : "ok",

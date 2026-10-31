@@ -12,16 +12,24 @@
  *   receipt operation id (submit, status polls, result download, resume)
  *   count once, so polls and resumes never double the operation count;
  * - outcomes are per operation, decided over the whole ledger before
- *   grouping: completed when any of its runs succeeded, otherwise failed or
- *   canceled by its latest run. A failed poll recorded under the job's
- *   operation is not a failure, even when it lands in another row (no
+ *   grouping: a run that reports the provider's own verdict that the job
+ *   failed (JOB_FAILED) makes it failed, even when its
+ *   submit was accepted and a later read-only poll exited ok, unless a run
+ *   under the same operation id succeeded for another provider job (a
+ *   resubmit under an explicit operation id); otherwise it is
+ *   completed when any of its runs succeeded, else failed or canceled by its
+ *   latest run. A poll that failed for any other reason (network, timeout)
+ *   is not a failure of the job, even when it lands in another row (no
  *   resolved model, a status command); success rate and sample size count
  *   operations;
  * - retries are failed sends of the same submit before the one that returned
  *   the job (`job.attempt - 1`);
- * - spend is settled per operation (settleOperations): provider-reported
- *   figures settle it, uncertain or unknown costs stay out of the total and
- *   are counted instead, never added as $0;
+ * - spend (USD and credits) is settled per operation over the whole ledger
+ *   (settleOperations) and shown on the operation's submit run
+ *   (spendByEntry), so a status read that repeats a task's cost counts it
+ *   once, in whichever row it lands; provider-reported figures settle it,
+ *   uncertain or unknown costs stay out of the total and are counted
+ *   instead, never added as $0;
  * - the model is the resolved model the provider ran; runs without one are
  *   grouped under "(unknown model)" rather than guessed from the command.
  *
@@ -29,8 +37,8 @@
  */
 
 import type { HistoryEntry } from "../agent/history-store.js";
-import type { CostReceipt } from "../budget/cost-receipt.js";
-import { settleOperations } from "../budget/cost-receipt.js";
+import type { CostReceipt, OperationSpend } from "../budget/cost-receipt.js";
+import { isNoSpend, operationIdFor, settleOperations } from "../budget/cost-receipt.js";
 import { commandCapability } from "../capabilities/command-capabilities.js";
 
 export const USAGE_GROUPS = ["provider", "model", "offering", "task", "command"] as const;
@@ -39,21 +47,132 @@ export type UsageGroup = (typeof USAGE_GROUPS)[number];
 export const UNKNOWN_MODEL = "(unknown model)";
 
 /**
+ * Operation id of an entry with no receipt of its own, built the way receipts
+ * build theirs (operationIdFor) from the job or the first provider id the run
+ * saw, so the runs of one job join each other and newer runs of the job; a
+ * run with neither is its own operation.
+ */
+function legacyOperationId(e: HistoryEntry): string {
+  return operationIdFor({
+    provider: e.provider,
+    providerIds: e.job ? [e.job.id] : (e.provider_ids ?? []),
+    runId: e.id,
+  });
+}
+
+/**
  * The entry's cost receipt; entries written before receipts existed get one
- * from their provider-reported cost (one operation per run).
+ * from their provider-reported cost. Runs of one job share its operation and
+ * read as status reads (the latest settles it), so a submit and a later
+ * status run of the job count its cost once; a run with no provider id is
+ * its own operation. Two old runs that each billed under one id would count
+ * only the latest figure; no provider is known to do that.
  */
 export function receiptOf(e: HistoryEntry): CostReceipt | undefined {
   if (e.cost) return e.cost;
   if (e.usage?.cost_usd === undefined) return undefined;
+  const operation_id = legacyOperationId(e);
   return {
     schema: "multix.cost/v1",
-    operation_id: `run:${e.id}`,
-    role: "charge",
+    operation_id,
+    role: operation_id.startsWith("run:") ? "charge" : "observation",
     status: "settled",
     currency: "USD",
     provider_reported: { cost_usd: e.usage.cost_usd, credits: e.usage.credits ?? null },
     actual_usd: e.usage.cost_usd,
     actual_source: "provider_reported",
+    variance_usd: null,
+    at: e.ts,
+  };
+}
+
+/** What one operation spent, shown on the one ledger entry that owns it. */
+export interface OwnedSpend {
+  /** Settled USD of the operation; absent when no run reported or charged any. */
+  spend?: OperationSpend;
+  /** Settled credits of the operation; absent when no run reported any. */
+  credits?: number;
+  /** Latest pre-flight expected estimate, only while the operation's cost is not known. */
+  estimate_usd?: number;
+}
+
+const isKnown = (op: OperationSpend) =>
+  op.actual_usd !== null && (op.status === "settled" || op.status === "computed");
+
+/**
+ * Each operation's spend (USD and credits) settled once over all of its runs
+ * (settleOperations) and placed on one run: its successful charge run (the
+ * submit, which names the model; a failed attempt before a resubmit under the
+ * same id does not own it), else its first charge run, else its earliest run
+ * that reported a figure. A
+ * status run of the same task then adds nothing to any row, even when it is
+ * grouped apart from its submit (no model, another command). Spend is
+ * settled per provider within an operation: one MULTIX_OPERATION_ID shared
+ * across providers never mixes their credits, which are different units.
+ * Entries without a receipt read as status reads of their job (or of their
+ * own run when they have none).
+ */
+export function spendByEntry(entries: HistoryEntry[]): Map<HistoryEntry, OwnedSpend> {
+  const out = new Map<HistoryEntry, OwnedSpend>();
+  const byOp = new Map<string, { entry: HistoryEntry; receipt: CostReceipt }[]>();
+  for (const entry of entries) {
+    const receipt = receiptOf(entry) ?? legacyCreditsReceipt(entry);
+    if (!receipt) continue;
+    const key = `${entry.provider}|${receipt.operation_id}`;
+    const runs = byOp.get(key);
+    if (runs) runs.push({ entry, receipt });
+    else byOp.set(key, [{ entry, receipt }]);
+  }
+  const earliest = <T extends { receipt: CostReceipt }>(list: T[]) =>
+    list.reduce<T | undefined>(
+      (first, r) => (!first || r.receipt.at < first.receipt.at ? r : first),
+      undefined,
+    );
+  const reported = (r: CostReceipt) =>
+    !isNoSpend(r) &&
+    (r.provider_reported.credits !== null || (r.status === "settled" && r.actual_usd !== null));
+  for (const runs of byOp.values()) {
+    const summary = settleOperations(runs.map((r) => r.receipt));
+    const spend = summary.operations[0];
+    const credits = summary.total_credits;
+    if (!spend && credits === null) continue;
+    const charges = runs.filter((r) => r.receipt.role === "charge" && !isNoSpend(r.receipt));
+    const owner =
+      charges.find((r) => r.entry.ok && r.entry.model_resolved) ??
+      charges.find((r) => r.entry.ok) ??
+      charges[0] ??
+      earliest(runs.filter((r) => reported(r.receipt))) ??
+      earliest(runs);
+    const estimate = runs
+      .filter((r) => typeof r.receipt.estimate?.expected_usd === "number")
+      .reduce<CostReceipt | undefined>(
+        (latest, r) => (!latest || r.receipt.at >= latest.at ? r.receipt : latest),
+        undefined,
+      )?.estimate?.expected_usd;
+    if (!owner) continue;
+    out.set(owner.entry, {
+      ...(spend ? { spend } : {}),
+      ...(credits !== null ? { credits } : {}),
+      ...(typeof estimate === "number" && !(spend && isKnown(spend))
+        ? { estimate_usd: estimate }
+        : {}),
+    });
+  }
+  return out;
+}
+
+/** A credits-only stand-in receipt for an entry written before receipts existed. */
+function legacyCreditsReceipt(e: HistoryEntry): CostReceipt | undefined {
+  if (e.usage?.credits === undefined) return undefined;
+  return {
+    schema: "multix.cost/v1",
+    operation_id: legacyOperationId(e),
+    role: "observation",
+    status: "unknown",
+    currency: "USD",
+    provider_reported: { cost_usd: null, credits: e.usage.credits },
+    actual_usd: null,
+    actual_source: null,
     variance_usd: null,
     at: e.ts,
   };
@@ -66,9 +185,7 @@ export function resolvedModel(e: HistoryEntry): string | undefined {
 
 /** Logical operation a run belongs to. */
 export function operationOf(e: HistoryEntry): string {
-  return (
-    receiptOf(e)?.operation_id ?? (e.job ? `job:${e.job.provider}:${e.job.id}` : `run:${e.id}`)
-  );
+  return receiptOf(e)?.operation_id ?? legacyOperationId(e);
 }
 
 export function keyOf(e: HistoryEntry, by: UsageGroup): string {
@@ -93,24 +210,47 @@ export function sentRequest(e: HistoryEntry): boolean {
 }
 
 const isCancel = (e: HistoryEntry) => e.error?.code === "CANCELLED";
+/** The provider's own verdict that the job failed, not a transient failure to read it. */
+const isJobFailure = (e: HistoryEntry) => !e.ok && e.error?.code === "JOB_FAILED";
+
+/** Provider job ids a run names. */
+const jobIdsOf = (e: HistoryEntry) => [...(e.provider_ids ?? []), ...(e.job ? [e.job.id] : [])];
+
+/** Latest run by timestamp; ledger order breaks ties (it is append order). */
+const latestOf = (runs: HistoryEntry[]) => runs.reduce((a, b) => (b.ts >= a.ts ? b : a));
 
 type Outcome = "completed" | "failed" | "canceled";
 
-/** Outcome of each operation: completed if any run succeeded, else its latest run decides. */
+/**
+ * Outcome of each operation: failed if a run reported the provider failed
+ * the job and no run succeeded for another job, else completed if any run
+ * succeeded, else its latest run decides.
+ */
 function operationOutcomes(list: HistoryEntry[]): Map<string, Outcome> {
   const runs = new Map<string, HistoryEntry[]>();
   for (const e of list) {
     const id = operationOf(e);
-    runs.set(id, [...(runs.get(id) ?? []), e]);
+    const ops = runs.get(id);
+    if (ops) ops.push(e);
+    else runs.set(id, [e]);
   }
   const outcomes = new Map<string, Outcome>();
   for (const [id, ops] of runs) {
-    if (ops.some((e) => e.ok)) outcomes.set(id, "completed");
-    else {
-      // Latest by timestamp; ledger order breaks ties (it is append order).
-      const latest = ops.reduce((a, b) => (b.ts >= a.ts ? b : a));
-      outcomes.set(id, isCancel(latest) ? "canceled" : "failed");
-    }
+    const failures = ops.filter(isJobFailure);
+    if (failures.length > 0) {
+      // The failure sticks to the jobs it names: a resubmit under the same explicit
+      // operation id that returned another job can still complete the operation.
+      const failed = new Set(failures.flatMap(jobIdsOf));
+      const otherJobOk = ops.some(
+        (e) =>
+          e.ok &&
+          failed.size > 0 &&
+          e.job !== undefined &&
+          jobIdsOf(e).every((j) => !failed.has(j)),
+      );
+      outcomes.set(id, otherJobOk ? "completed" : "failed");
+    } else if (ops.some((e) => e.ok)) outcomes.set(id, "completed");
+    else outcomes.set(id, isCancel(latestOf(ops)) ? "canceled" : "failed");
   }
   return outcomes;
 }
@@ -138,9 +278,9 @@ export interface UsageRow {
   requests: number;
   /** Logical operations (a job and its polls/resumes count once). */
   operations: number;
-  /** Operations with a successful run. */
+  /** Operations with a successful run and no run reporting the provider failed the job. */
   completed: number;
-  /** Operations with no successful run whose latest run failed. */
+  /** Operations a run reported the provider failed, or with no successful run whose latest run failed. */
   failed: number;
   /** Operations with no successful run whose latest run was canceled. */
   canceled: number;
@@ -163,7 +303,11 @@ export interface UsageRow {
     /** Operations whose cost stays unknown or uncertain (not counted as $0). */
     unknown_operations: number;
     uncertain_operations: number;
-    /** known_usd / successful operations, only when no operation's cost is unknown or uncertain. */
+    /**
+     * known_usd / successful operations, only when the row holds the known cost
+     * of every operation it completed (none unknown or uncertain, none counted
+     * in another row).
+     */
     per_success_usd: number | null;
   };
   credits?: number;
@@ -178,39 +322,56 @@ export function aggregateUsage(entries: HistoryEntry[], by: UsageGroup): UsageRo
   // Decided once over every row: the runs of one operation can fall under different keys.
   const outcomes = operationOutcomes(sent);
   const groups = new Map<string, HistoryEntry[]>();
+  const owned = spendByEntry(sent);
+  // Completed runs with no receipt at all (ledger entries before receipts): cost unknown,
+  // counted once on the operation's first such run. An operation a receipt accounts for is not unknown.
+  const accounted = new Set(
+    [...owned].flatMap(([e, o]) => (o.spend ? [`${e.provider}|${o.spend.operation_id}`] : [])),
+  );
+  const unreceipted = new Map<string, HistoryEntry>();
+  for (const e of sent) {
+    const id = `${e.provider}|${operationOf(e)}`;
+    if (e.ok && !receiptOf(e) && !accounted.has(id) && !unreceipted.has(id)) unreceipted.set(id, e);
+  }
+  const unreceiptedRuns = new Set(unreceipted.values());
   for (const e of sent) {
     const key = keyOf(e, by);
-    groups.set(key, [...(groups.get(key) ?? []), e]);
+    const list = groups.get(key);
+    if (list) list.push(e);
+    else groups.set(key, [e]);
   }
   const rows: UsageRow[] = [];
   for (const [key, list] of groups) {
-    const receipts = list.map(receiptOf).filter((r): r is CostReceipt => r !== undefined);
-    const spend = settleOperations(receipts);
-    const known = spend.operations.filter(
-      (op) => op.actual_usd !== null && (op.status === "settled" || op.status === "computed"),
-    );
+    // Each operation's spend lands in the row of the run that owns it.
+    const rowSpends = list.flatMap((e) => {
+      const s = owned.get(e)?.spend;
+      return s ? [s] : [];
+    });
+    const known = rowSpends.filter(isKnown);
     const sum = (ops: typeof known) => round(ops.reduce((s, op) => s + (op.actual_usd ?? 0), 0));
-    const knownIds = new Set(known.map((op) => op.operation_id));
+    const rowKnownIds = new Set(known.map((op) => op.operation_id));
+    const unknownOps =
+      rowSpends.filter((op) => op.status === "unknown").length +
+      list.filter((e) => unreceiptedRuns.has(e)).length;
+    const uncertainOps = rowSpends.filter((op) => op.status === "uncertain").length;
     // Estimates of operations still without a known cost: what they were expected to cost.
-    const estimates = new Map<string, number>();
-    for (const r of receipts) {
-      const v = r.estimate?.expected_usd;
-      if (!knownIds.has(r.operation_id) && typeof v === "number") estimates.set(r.operation_id, v);
-    }
+    const estimates = list.flatMap((e) => {
+      const v = owned.get(e)?.estimate_usd;
+      return v === undefined ? [] : [v];
+    });
     const opIds = [...new Set(list.map(operationOf))];
     const ops = opIds.length;
     const count = (o: Outcome) => opIds.filter((id) => outcomes.get(id) === o).length;
-    // Completed runs with no receipt at all (ledger entries before receipts): cost unknown.
-    const unreceipted = new Set(list.filter((e) => e.ok && !receiptOf(e)).map(operationOf));
     const completedOps = new Set(opIds.filter((id) => outcomes.get(id) === "completed"));
+    // Per success only when this row holds the known cost of every operation it completed.
     const allPriced =
       completedOps.size > 0 &&
-      spend.unknown + spend.uncertain + unreceipted.size === 0 &&
-      [...completedOps].every((id) => knownIds.has(id));
-    const credits = list.reduce<number | undefined>(
-      (s, e) => (e.usage?.credits === undefined ? s : (s ?? 0) + e.usage.credits),
-      undefined,
-    );
+      unknownOps + uncertainOps === 0 &&
+      [...completedOps].every((id) => rowKnownIds.has(id));
+    const credits = list.reduce<number | undefined>((s, e) => {
+      const c = owned.get(e)?.credits;
+      return c === undefined ? s : (s ?? 0) + c;
+    }, undefined);
     const durations = list.map((e) => e.duration_ms);
     const times = list.map((e) => e.ts).sort();
     rows.push({
@@ -229,11 +390,9 @@ export function aggregateUsage(entries: HistoryEntry[], by: UsageGroup): UsageRo
         known_usd: sum(known),
         provider_reported_usd: sum(known.filter((op) => op.status === "settled")),
         computed_usd: sum(known.filter((op) => op.status === "computed")),
-        estimated_usd: estimates.size
-          ? round([...estimates.values()].reduce((a, b) => a + b, 0))
-          : null,
-        unknown_operations: spend.unknown + unreceipted.size,
-        uncertain_operations: spend.uncertain,
+        estimated_usd: estimates.length ? round(estimates.reduce((a, b) => a + b, 0)) : null,
+        unknown_operations: unknownOps,
+        uncertain_operations: uncertainOps,
         per_success_usd: allPriced ? round(sum(known) / completedOps.size) : null,
       },
       ...(credits !== undefined ? { credits: round(credits) } : {}),

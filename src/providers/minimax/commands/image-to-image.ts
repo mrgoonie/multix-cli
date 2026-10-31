@@ -95,15 +95,10 @@ export function registerMinimaxImageToImageCommand(parent: Command): void {
 
         logger.debug(`MiniMax i2i: model=${model}, ref=${opts.ref}, n=${numImages}`);
 
-        let resp: ImageGenerationResponse;
-        try {
-          resp = await apiPost<ImageGenerationResponse>("image_generation", payload, apiKey, {
-            logger,
-          });
-        } catch (e) {
-          logger.error(e instanceof Error ? e.message : String(e));
-          process.exit(1);
-        }
+        // A failed call throws: the run is classified from the error itself, not a log line.
+        const resp = await apiPost<ImageGenerationResponse>("image_generation", payload, apiKey, {
+          logger,
+        });
 
         const imageUrls = resp.data?.image_urls ?? [];
         if (imageUrls.length === 0) {

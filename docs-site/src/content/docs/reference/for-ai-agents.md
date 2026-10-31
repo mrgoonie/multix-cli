@@ -95,13 +95,13 @@ https://multix.zuey.me/llms.txt
 | `usage` | What the provider reported: `tokens` (`input`, `output`, `total`, `thinking`), `cost_usd`, `credits`, and other numeric `metrics` by key path. `sources.cost_usd` / `sources.credits` name where each number came from (for example `api.elevenlabs.io header.character-cost`). Nothing is estimated: a provider's own estimate or quote (such as Runway `estimatedCost`) stays in `metrics` and is never reported as `cost_usd` or `credits`. `cost_usd` and `credits` are what the run spent: an account balance (Leonardo `apiCredit` from `leonardo me`, HeyGen remaining or included credits from `heygen me`, TopView `remainCredit` from `topview credit`) is never reported as `credits` or `cost_usd`. |
 | `http` | Provider request count, failed requests and total time. |
 | `model_requested` / `model_resolved` | The model the run asked for (named in the provider request, else `--model`) and the one the provider response reported serving (a top-level `model`, Gemini `modelVersion`, or the same keys under `data`). `model_resolved` is `null` when the provider reported none, and always on a dry run or estimate; it is never guessed. `model` is kept and equals `model_requested`. |
-| `job` | `{ provider, id, attempt }` when a successful provider response returned an id: the in-flight job (an Atlas prediction), else the first id a successful submit returned (file uploads excluded), else the first id a successful status read returned. Ids of failed requests stay in `provider_ids` only. `attempt` is 1, plus one for each failed send of the same submit before it (for example a Gemini call retried on another key after a 429); failed status reads do not count. |
-| `provider_ids` | Request, job or prediction ids the provider returned. |
+| `job` | `{ provider, id, attempt }` for the job the run is about: the in-flight job (an Atlas prediction, a Sume job or a fal request the run was waiting on), else the job the command was given (`fal result <model> <requestId>`, `replicate status <id>` and the other status readers, named even when the read fails, so a failed read joins that job's operation), else the first id a successful submit returned (file uploads excluded), else the first id a successful status read returned. Ids of failed requests stay in `provider_ids` only. `attempt` is 1, plus one for each failed send of the same submit before it (for example a Gemini call retried on another key after a 429); failed status reads do not count. |
+| `provider_ids` | Request, job or prediction ids the provider returned: the first 10, plus the job's id when a run saw more ids before its submit (for example many uploaded inputs). |
 | `request` | With `--dry-run`: the request that would have been sent. Header values, secret-named fields and URL query strings (pre-signed URLs) are redacted; the one header value shown is Fish Audio's `model` (in `header_values`), because it chooses what runs and is billed and holds no secret. |
 | `estimate` | Pre-flight price of the run (with `--estimate`, `--max-cost`, or on a priced command). `estimate_only: true` marks an `--estimate` run. |
 | `budget` | With `--max-cost`: `ok`, `max_cost_usd`, `policy`, and the refusal `code` and `message`. |
 | `cost` | The run's cost receipt (`multix.cost/v1`); see [Cost receipt](#cost-receipt). |
-| `next[]` | Commands to run next: a status command for an async job, `multix check` for a key problem, `multix rerun <id>` for a temporary failure. |
+| `next[]` | Commands to run next: a status command for an async job, `multix check` for a key problem, `multix rerun <id>` for a temporary failure. When a run saved some outputs before a later request failed (`gemini generate --num-images N`), the saved files stay in `outputs`, the hint says so, and `next[]` has a run that requests only the rest instead of a rerun that would pay for them again: first after a temporary failure, last after any other (fix the key, quota or input first). When a fal, Atlas or Sume run fails or stops after the provider accepted its job (a rate limit, network error, provider outage or key error while it reads the job's status or result, a wait timeout, a failed download), `next[0]` is that job's resume command and `next` has no `multix rerun`: the job runs on and is billed, so `error.retryable` is `false` and the hint says not to rerun (wait `retry_after_s` first when it is set; after a key error, fix the key first). This does not apply when the job itself was rejected (invalid input, blocked content) or the provider failed or canceled it (fal reports a failed request as `JOB_FAILED` with its own reason): the usual advice stands. Other providers still offer a rerun. |
 
 ## Exit codes and error codes
 
@@ -110,7 +110,7 @@ https://multix.zuey.me/llms.txt
 | 0 | success | | |
 | 2 | usage or invalid input | `USAGE`, `INVALID_INPUT`, `BUDGET_EXCEEDED`, `BUDGET_UNPROVEN` | Fix the flags; nothing was billed. For a budget error, run the `--estimate` command in `next[]`. |
 | 3 | key or setup | `MISSING_KEY`, `INVALID_KEY`, `CONFIG_ERROR`, `BINARY_MISSING` | `multix check`, set the key named in `error.env`. |
-| 4 | temporary | `RATE_LIMITED`, `PROVIDER_UNAVAILABLE`, `NETWORK_ERROR` | Wait `retry_after_s`, then `multix rerun <id>`. |
+| 4 | temporary | `RATE_LIMITED`, `PROVIDER_UNAVAILABLE`, `NETWORK_ERROR` | Wait `retry_after_s`, then `multix rerun <id>`, or `next[0]` when files were already saved (`outputs`). If fal, Atlas or Sume had already accepted the job, `next[0]` resumes it instead (no rerun is offered). |
 | 5 | rejected | `QUOTA_EXCEEDED`, `CONTENT_BLOCKED`, `MODEL_NOT_FOUND`, `NOT_FOUND`, `PROVIDER_REJECTED`, `JOB_FAILED`, `RESPONSE_TOO_LARGE` | Change the input, model or provider. |
 | 6 | timed out or unknown | `TIMEOUT`, `UNKNOWN_REMOTE_STATE` | The job may still run: use the status command in `next[]`. `UNKNOWN_REMOTE_STATE`: the submit failed without proof that the provider rejected it (cut off, 5xx gateway error), so it may have been queued; check the provider's request list before resubmitting. |
 | 129, 130, 143 | cancelled | `CANCELLED` | The run was stopped by SIGHUP, Ctrl-C (SIGINT) or SIGTERM after cleaning up; nothing was left behind. Rerun the command. If a provider request was already sent, the hint says so instead: fetch the result by `provider_ids` before rerunning, or you may pay twice. When the command knows more, the hint is specific: a job it submitted and was waiting on is resumed with `next[0]` (never rerun); a submit stopped in flight may have been accepted under an unknown id (check the provider's console first); a stop before the submit left nothing billed. A second signal stops the run before its cleanup: it then ends with the same status but no envelope, and temporary files may remain. |
@@ -236,7 +236,9 @@ once: status polls and downloads add nothing, a replayed receipt counts once,
 a provider-reported figure settles the operation, and only each distinct paid
 submit (a resubmit is billed again) adds its cost. A run that sent nothing never
 lowers the operation's cost. The default is
-`<provider>:<job id>`, or `run:<history id>` when the provider returned no id.
+`<provider>:<id>`, where the id is the run's `job` (which never names an
+uploaded input file or a rejected call), else the first id any response
+returned, or `run:<history id>` when the provider returned no id.
 Set it in the shell for the run; a project `.env` cannot set it.
 
 ## Run history
@@ -257,7 +259,9 @@ multix rerun h_mfz3k2ab1c9d         # run it again (extra args are appended)
 ```
 
 `history stats` skips `--dry-run` and `--estimate` runs and counts each
-operation's cost once, from known figures only; `cost_uncertain_ops` and
+operation's cost and credits once (a task's cost and credits show once,
+normally on its submit run's row, however many `status` runs repeat them), from
+known figures only; `cost_uncertain_ops` and
 `cost_unknown_ops` count the operations whose cost is uncertain or unknown, so
 `cost_usd` is a lower bound when either is present.
 

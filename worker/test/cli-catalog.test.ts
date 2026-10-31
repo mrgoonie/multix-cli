@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildCliCatalog } from "../scripts/cli-catalog-builder.js";
+import { catalogPayload } from "../src/jobs/catalog-view.js";
 import { CLI_CATALOG, CatalogIndex, isRepeatable, optionName } from "../src/jobs/cli-catalog.js";
 import {
   COMMAND_POLICIES,
@@ -37,6 +38,8 @@ describe("CLI catalog", () => {
         ...(policy.caps?.count ?? []),
         ...(policy.caps?.duration ?? []),
         ...(policy.caps?.resolution ?? []),
+        ...(policy.uncappedOptions ?? []),
+        ...(policy.priceOptions ?? []),
       ];
       for (const name of named) expect(options.has(name), `${path} --${name}`).toBe(true);
       for (const name of policy.filePositionals ?? []) {
@@ -119,5 +122,21 @@ describe("CLI catalog", () => {
       }
     }
     expect(missing).toEqual([]);
+  });
+
+  it("marks price options in the group view, by whether the option has a default", () => {
+    const view = catalogPayload({}, "openai") as {
+      commands: { command: string; options: { name: string; uncapped_spend?: string }[] }[];
+    };
+    const generate = view.commands.find((c) => c.command === "openai generate");
+    const quality = generate?.options.find((o) => o.name === "quality");
+    expect(quality?.uncapped_spend).toBe(
+      "a value other than the default sets the price of each output",
+    );
+    const gemini = catalogPayload({}, "gemini") as typeof view;
+    const size = gemini.commands
+      .find((c) => c.command === "gemini generate")
+      ?.options.find((o) => o.name === "size");
+    expect(size?.uncapped_spend).toBe("when given, this option sets the price of each output");
   });
 });

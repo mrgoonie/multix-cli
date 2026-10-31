@@ -68,7 +68,7 @@ multix fal image "a red fox" --json           # one-line multix.result/v1 envelo
 multix elevenlabs tts --text "Hi" --estimate  # price range, units, rate and source; nothing is sent
 multix elevenlabs tts --text "Hi" --max-cost 0.01  # refuse before sending unless the cost fits
 multix history stats --by model               # runs, success rate, p50/p90 time, cost, credits, tokens
-multix catalog compare -t video --resolution 720p --duration 10 --audio on  # rank prices for one exact request
+multix catalog compare -t video --resolution 720p --duration 10 --audio on --aspect-ratio 16:9  # rank prices for one exact request
 multix rerun last                             # repeat a recorded run
 ```
 
@@ -1038,7 +1038,8 @@ instance runs at `https://multix.zuey.me/mcp` (invited GitHub accounts only).
   ffmpeg and ImageMagick; waits up to `wait_seconds`, default 25, max 40,
   container start included), `multix_job_status`, `multix_job_cancel`,
   `multix_skills` (read-only skills catalogue; always listed), and
-  `multix_skills_manage` (author your own skills; listed with `MULTIX_SKILLS`).
+  `multix_skills_manage` (author your own skills; listed with `MULTIX_SKILLS`),
+  and `multix_workflow` (run a skill's workflow; listed with `MULTIX_SKILLS`).
   Each account runs at most `MULTIX_MAX_JOBS_PER_ACCOUNT` jobs at once
   (default 2; `busy: …` otherwise) and the server at most
   `MULTIX_MAX_JOBS_TOTAL` (default 10, keep it at or below the container
@@ -1068,6 +1069,15 @@ instance runs at `https://multix.zuey.me/mcp` (invited GitHub accounts only).
   `/api/v1/skill-shares` draft, publish, roll back and share them (owner-only
   writes; a grantee adds a shared team skill before it is listed). See
   [Skills](https://multix.zuey.me/guides/mcp-server/#skills).
+- Skill workflows: a private or team skill may ship `multix.workflow.json`, up
+  to 10 multix CLI steps with typed inputs and `{{inputs.x}}` /
+  `{{steps.<id>.outputs[n]}}` templates (each value stays one argument).
+  `multix_workflow` and `/api/v1/workflow-runs` run it only after the account
+  authorized that exact revision and manifest digest over REST
+  (`/api/v1/workflow-authorizations`, optional `max_cost_usd` for the whole
+  run); MCP cannot authorize. Each step is a normal job under the same caps and
+  checks, and a run advances when it is read. See
+  [Skill workflows](https://multix.zuey.me/guides/mcp-server/#skill-workflows).
 - Auth: OAuth 2.1 (dynamic client registration, PKCE) with GitHub sign-in.
   Only GitHub logins or verified emails in the `MULTIX_ALLOWED_USERS` secret
   can sign in.
@@ -1084,8 +1094,19 @@ instance runs at `https://multix.zuey.me/mcp` (invited GitHub accounts only).
   bounds each `gemini extend-video` continuation, not a stored clip that
   chained extends grew, nor a `gemini edit-video` of it),
   `MULTIX_MCP_ALLOWED_RESOLUTIONS` (default `480p,720p,768p,1080p`),
+  `MULTIX_MCP_MAX_AUDIO_SECONDS` (default `30`, ceiling `300`: caps
+  `elevenlabs sfx --duration-seconds` and `elevenlabs music --music-length-ms`;
+  an omitted music length is sent as the cap, since the model would pick up to
+  10 minutes),
+  `MULTIX_MCP_ALLOWED_IMAGE_MODELS` (default any: the model sets the price of
+  each image, so when set to `<group>:<model>` entries such as
+  `fal:fal-ai/flux/schnell`, image commands run only with a model listed for
+  their group, given as `--model` or as the catalog default; a command without
+  a catalog default needs an explicit listed `--model`, and a group with no
+  entry is refused),
   `MULTIX_MCP_UNCAPPED_SPEND` (default `budget`: runs those caps cannot bound,
-  such as `fal run` or `heygen translate`, start only with a `max_cost_usd`
+  such as `fal run`, `heygen translate` or an image size/quality tier other
+  than the default, start only with a `max_cost_usd`
   their price estimate proves; `deny` refuses them, `allow` runs them),
   `MULTIX_MCP_ALLOWED_ORIGINS` (exact browser origins, with CORS), and the
   approximate per-account rate limiter. JSON-RPC batches are rejected.

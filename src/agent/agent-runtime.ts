@@ -16,11 +16,13 @@
 import fs from "node:fs";
 import type { Command } from "commander";
 import {
+  type ErrorCode,
   type ErrorInfo,
   classifyError,
   classifyMessage,
   classifySignalExit,
 } from "../core/error-classify.js";
+import { ProviderJobFailedError } from "../core/errors.js";
 import { setExternalRunGuard } from "../core/external-run-guard.js";
 import { redactUrlsInText } from "../core/redact.js";
 import { costReceiptFor, formatEstimate, formatReceipt, preflightCost } from "./cost-preflight.js";
@@ -156,6 +158,19 @@ function withoutCostLimit(argv: string[]): string[] {
   return out;
 }
 
+/** argv with each option replaced by its new value, or dropped when the value is null. */
+export function withOptions(argv: string[], options: Record<string, string | null>): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i] ?? "";
+    const name = arg.split("=")[0] ?? "";
+    if (!Object.hasOwn(options, name)) out.push(arg);
+    else if (!arg.includes("=")) i++;
+  }
+  for (const [name, value] of Object.entries(options)) if (value !== null) out.push(name, value);
+  return out;
+}
+
 function captureStreams(): void {
   process.stdout.write = ((chunk: unknown, ...rest: unknown[]) => {
     if (run.json) {
@@ -217,6 +232,33 @@ interface FinalizeInput {
   estimateOnly?: boolean;
 }
 
+/**
+ * Failures that leave an accepted job to be fetched by its resume command: the run,
+ * the network or the key failed, not the job. A rejection (bad input, blocked
+ * content, a failed job) ends the job too, so its own advice stands.
+ */
+const RESUMABLE_FAILURES = new Set<ErrorCode>([
+  "RATE_LIMITED",
+  "PROVIDER_UNAVAILABLE",
+  "NETWORK_ERROR",
+  "TIMEOUT",
+  "UNKNOWN_REMOTE_STATE",
+  "MISSING_KEY",
+  "INVALID_KEY",
+  "UNKNOWN",
+]);
+
+const KEY_FAILURES = new Set<ErrorCode>(["MISSING_KEY", "INVALID_KEY"]);
+
+/** True when the provider itself ended the job (failed, canceled or paused it), not the run. */
+function jobEndedByProvider(info: ErrorInfo, error: unknown): boolean {
+  if (!RESUMABLE_FAILURES.has(info.code)) return true;
+  for (let e = error, depth = 0; e instanceof Error && depth < 5; e = e.cause, depth++) {
+    if (e instanceof ProviderJobFailedError) return true;
+  }
+  return false;
+}
+
 /** Build the envelope, record history, print it (JSON) or the hint (text). Returns the exit code. */
 export function finalizeRun(input: FinalizeInput): number {
   if (run.finalized) return input.exitCode;
@@ -236,23 +278,30 @@ export function finalizeRun(input: FinalizeInput): number {
             run.requestsStarted > 0 || run.externalRuns.length > 0,
           ) ?? classifyMessage(run.lastErrorLine ?? `Command exited with code ${input.exitCode}`));
   }
-  // A job submitted before the signal keeps running and is billed: resume it, never rerun.
+  const signalExit = input.error === undefined && SIGNAL_EXITS.has(input.exitCode);
+  // A job the provider accepted keeps running (or has finished) and is billed,
+  // whether the run stopped on a signal or failed after the submit (a 429 on the
+  // result fetch, a timeout): resume it, never rerun. Not when the provider
+  // ended the job itself (failed, canceled, paused): resuming cannot help there.
   const inFlight =
-    info && input.error === undefined && SIGNAL_EXITS.has(input.exitCode)
+    info && run.inFlight && (signalExit || !jobEndedByProvider(info, input.error))
       ? run.inFlight
       : undefined;
   if (info && inFlight) {
+    const wait = KEY_FAILURES.has(info.code)
+      ? "fix the key, then "
+      : !signalExit && info.retry_after_s !== undefined
+        ? `wait ${info.retry_after_s}s, then `
+        : "";
+    const keyHint = KEY_FAILURES.has(info.code) ? ` ${info.hint}` : "";
     info = {
       ...info,
       retryable: false,
-      hint: `Job ${inFlight.id} was submitted before the run stopped; it runs on (or has finished) and is billed. Do not rerun; resume it with the next command.`,
+      hint: signalExit
+        ? `Job ${inFlight.id} was submitted before the run stopped; it runs on (or has finished) and is billed. Do not rerun; resume it with the next command.`
+        : `Job ${inFlight.id} was accepted before the run failed; it runs on (or has finished) and is billed. Do not rerun; ${wait}resume it with the next command.${keyHint}`,
     };
-  } else if (
-    info &&
-    run.interrupted &&
-    input.error === undefined &&
-    SIGNAL_EXITS.has(input.exitCode)
-  ) {
+  } else if (info && run.interrupted && signalExit) {
     info = { ...info, ...run.interrupted };
   }
   // Exit classes (2-6) are part of agent mode; plain runs keep the historical exit 1.
@@ -262,9 +311,12 @@ export function finalizeRun(input: FinalizeInput): number {
 
   const warnings: OutputWarning[] = [];
   const extra = typeof run.options.output === "string" ? [run.options.output] : [];
+  const outputDirs = [run.options.outputDir, run.options.outDir].filter(
+    (dir): dir is string => typeof dir === "string",
+  );
   const outputs: OutputFile[] = notSent
     ? []
-    : producedFiles(extra).flatMap((file) => {
+    : producedFiles(extra, outputDirs).flatMap((file) => {
         try {
           return [inspectOutput(file, warnings)];
         } catch {
@@ -294,11 +346,32 @@ export function finalizeRun(input: FinalizeInput): number {
   const duration = Date.now() - run.startedAt;
   const cost = costReceiptFor({ failed, notSent, historyId, model, usage });
 
+  // Files saved before a later request failed are kept: ask only for the rest, never a full
+  // rerun. A temporary failure gets that run first; any other is fixed first (key, quota, input).
+  const partial = info && !inFlight && outputs.length ? run.partial : undefined;
+  const rest = partial
+    ? `multix ${redactArgv(withOptions(run.argv, partial.options)).map(shellQuote).join(" ")}`
+    : undefined;
+  if (info && partial) {
+    info = {
+      ...info,
+      hint: info.retryable
+        ? `Files saved before the failure are listed in outputs; keep them and request only the rest with the next command. ${info.hint}`
+        : `Files saved before the failure are listed in outputs; keep them. ${info.hint} Then request only the rest with the last command in next.`,
+    };
+  }
+  // With a job in flight, a rerun would submit (and bill) it a second time.
   const next = [
     ...(inFlight ? [inFlight.resume] : []),
-    ...(info ? nextForError(info, run.command, run.group, historyId) : []),
+    ...(rest && info?.retryable ? [rest] : []),
+    ...(info
+      ? nextForError(info, run.command, run.group, historyId).filter(
+          (cmd) => !partial || !cmd.startsWith("multix rerun "),
+        )
+      : []),
     ...suggestedCommands([...run.stdout, ...run.stderr], run.command, knownGroups),
-  ];
+    ...(rest && !info?.retryable ? [rest] : []),
+  ].filter((cmd) => !inFlight || !cmd.startsWith("multix rerun "));
   if (info?.code === "BUDGET_EXCEEDED" || info?.code === "BUDGET_UNPROVEN") {
     next.unshift(
       `multix ${redactArgv(withoutCostLimit(run.argv)).map(shellQuote).join(" ")} --estimate`,

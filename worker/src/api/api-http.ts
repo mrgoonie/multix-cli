@@ -12,6 +12,7 @@ import { json } from "../http-responses.js";
 import { JobCapacityError, JobNotFoundError } from "../jobs/job-runner.js";
 import { logEvent, sanitizeText } from "../redaction.js";
 import { registryRefusal } from "../skills/skill-registry.js";
+import { WorkflowError, type WorkflowErrorReason } from "../skills/workflow-manager.js";
 
 export type ApiErrorCode =
   | "bad_request"
@@ -75,6 +76,15 @@ export async function readJsonObject(
   return body as Record<string, unknown>;
 }
 
+const WORKFLOW_STATUS: Record<WorkflowErrorReason, [number, ApiErrorCode]> = {
+  invalid: [400, "bad_request"],
+  not_found: [404, "not_found"],
+  not_authorized: [403, "forbidden"],
+  conflict: [409, "conflict"],
+  busy: [429, "busy"],
+  unavailable: [503, "unavailable"],
+};
+
 /**
  * Turn a thrown error into a response. Expected errors keep their message
  * (validation, unknown job, capacity) after the caller's key values, bearer
@@ -92,6 +102,10 @@ export function errorResponse(
   if (error instanceof JobNotFoundError) return apiError(404, "not_found", error.message);
   if (error instanceof JobCapacityError) {
     return apiError(429, "busy", error.message, { "retry-after": "60" });
+  }
+  if (error instanceof WorkflowError) {
+    const [status, code] = WORKFLOW_STATUS[error.reason];
+    return apiError(status, code, sanitizeText(error.message, secrets));
   }
   const refusal = registryRefusal(error);
   if (refusal && refusal !== "corrupt") {

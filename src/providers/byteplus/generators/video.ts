@@ -6,12 +6,14 @@
  * Param encoding:
  *   - flags (default): append `--rs 1080p --dur 8 --rt 16:9 ...` inside content[0].text
  *   - structured: emit top-level `parameters` object
+ * Audio is always the top-level `generate_audio` field.
  */
 
+import { ProviderJobFailedError } from "../../../core/errors.js";
 import { downloadFile } from "../../../core/http-client.js";
 import { type ResolvedImage, refUrl } from "../../../core/image-input.js";
 import type { Logger } from "../../../core/logger.js";
-import { poll } from "../../leonardo/poll.js";
+import { failureReason, poll, toPollJobError } from "../../leonardo/poll.js";
 import type { BytePlusClient } from "../client.js";
 import { BYTEPLUS_DEFAULTS, type VideoParamsMode, bytePlusVideoParamsMode } from "../models.js";
 import type {
@@ -44,7 +46,6 @@ function buildFlagSuffix(opts: BuildVideoBodyOptions): string {
   if (opts.aspectRatio) parts.push(`--rt ${opts.aspectRatio}`);
   if (opts.cameraFixed !== undefined) parts.push(`--cf ${opts.cameraFixed}`);
   if (opts.seed !== undefined) parts.push(`--seed ${opts.seed}`);
-  if (opts.audio !== undefined) parts.push(`--wm ${opts.audio}`);
   return parts.length > 0 ? ` ${parts.join(" ")}` : "";
 }
 
@@ -80,6 +81,8 @@ export function buildVideoTaskBody(opts: BuildVideoBodyOptions): VideoTaskReques
   }
 
   const body: VideoTaskRequest = { model: opts.model, content };
+  // Audio is a request field, not a text command (`--wm` in the text is the watermark).
+  if (opts.audio !== undefined) body.generate_audio = opts.audio;
 
   if (mode === "structured") {
     body.parameters = {
@@ -136,6 +139,41 @@ export async function waitForVideoTask(
     maxAttempts,
     onTick: (attempt, v) => opts.logger?.debug(`attempt ${attempt} — status: ${v.status}`),
   });
+}
+
+/**
+ * Map a failed or timed-out BytePlus task wait (video or 3D) onto the CLI
+ * errors. Only a "failed" status is the provider failing the job; a
+ * "cancelled" task is reported as a non-terminal job failure.
+ */
+export function toTaskWaitError(error: unknown, taskId: string, resumeCommand: string): unknown {
+  return toPollJobError(error, {
+    provider: "byteplus",
+    noun: "Task",
+    id: taskId,
+    resumeCommand,
+    describe: (value) => {
+      const task = (value ?? {}) as { status?: unknown; error?: unknown };
+      return {
+        status: task.status,
+        reason: failureReason(task.error),
+        terminal: task.status === "failed",
+      };
+    },
+  });
+}
+
+/**
+ * A task that succeeded but returned no output URL: the provider did not fail
+ * it, but there is nothing to download, so it is a non-terminal job failure.
+ * The task payload stays out of the message (it echoes the prompt and signed URLs).
+ */
+export function missingTaskOutputError(taskId: string, output: string): ProviderJobFailedError {
+  return new ProviderJobFailedError(
+    `BytePlus task ${taskId} succeeded but returned no ${output}; inspect it with: multix byteplus status ${taskId}`,
+    "byteplus",
+    { terminal: false },
+  );
 }
 
 export async function downloadVideo(

@@ -14,7 +14,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Command } from "commander";
 import { run, trackInFlight } from "../../../agent/run-state.js";
-import { ProviderError, ValidationError } from "../../../core/errors.js";
+import { ProviderError, ProviderJobFailedError, ValidationError } from "../../../core/errors.js";
 import { maxDownloadBytes } from "../../../core/http-client.js";
 import {
   finalizeGeneratedImages,
@@ -348,11 +348,13 @@ export async function deliverPrediction(
   const classified = classifyOutputs(prediction);
 
   if (classified.mode === "empty") {
-    throw new ProviderError(
+    // The prediction ended without usable output: resuming it would return the same.
+    throw new ProviderJobFailedError(
       hasNsfwFlag(prediction)
         ? `Prediction ${id} returned no output: blocked by content safety (has_nsfw_contents). Try a different prompt or input.`
         : `Prediction ${id} completed but returned no outputs.`,
       ATLAS_PROVIDER,
+      { terminal: false },
     );
   }
 

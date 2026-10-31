@@ -9,7 +9,7 @@
  * requestId, code, message }` (e.g. 401 UNAUTHENTICATED, 403 IDENTITY_FORBIDDEN).
  */
 
-import { HttpError, ProviderError } from "../../core/errors.js";
+import { HttpError, ProviderError, ProviderJobFailedError } from "../../core/errors.js";
 import {
   TOPVIEW_API_SETTINGS_LINK,
   TOPVIEW_DASHBOARD_LINK,
@@ -41,21 +41,27 @@ export class TopviewApiError extends ProviderError {
 }
 
 /** A legacy task reached `fail`, or finished without the output the next step needs. */
-export class TopviewTaskError extends ProviderError {
+export class TopviewTaskError extends ProviderJobFailedError {
   constructor(
     public readonly task: LegacyTask,
     detail?: string,
   ) {
     const why = detail ?? (task.errorMsg ? `: ${task.errorMsg.slice(0, DETAIL_MAX)}` : "");
-    super(`TopView ${task.kind} task ${task.taskId} ${task.status}${why}`, PROVIDER);
+    // A task that succeeded but whose output the next step cannot use is not a failed job.
+    super(`TopView ${task.kind} task ${task.taskId} ${task.status}${why}`, PROVIDER, {
+      terminal: task.status === "fail",
+    });
     this.name = "TopviewTaskError";
   }
 }
 
 /** A prediction ended `failed` or `payment_required`: never a success. */
-export class TopviewPredictionError extends ProviderError {
+export class TopviewPredictionError extends ProviderJobFailedError {
   constructor(public readonly prediction: PlatformPrediction) {
-    super(predictionFailureMessage(prediction), PROVIDER);
+    // payment_required resumes after a top-up: not a failed job.
+    super(predictionFailureMessage(prediction), PROVIDER, {
+      terminal: prediction.status === "failed",
+    });
     this.name = "TopviewPredictionError";
   }
 }

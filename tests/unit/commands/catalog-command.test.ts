@@ -33,11 +33,11 @@ afterAll(() => {
 });
 
 /** Run the built CLI inside the temp directory with its own notes file and run ledger. */
-function run(args: string[], extra: Record<string, string> = {}) {
+function run(args: string[], extra: Record<string, string> = {}, cwd = dir) {
   return execa("node", [CLI, ...args], {
     reject: false,
     timeout: SPAWN_TIMEOUT - 1_000,
-    cwd: dir,
+    cwd,
     extendEnv: false,
     env: {
       ...isolatedEnv(dir),
@@ -87,6 +87,8 @@ describe("multix catalog (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
       "10",
       "--audio",
       "on",
+      "--aspect-ratio",
+      "16:9",
     ]);
     expect(body.ok).toBe(true);
     expect(body.data.schema).toBe("multix.catalog/v1");
@@ -101,6 +103,34 @@ describe("multix catalog (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     } else {
       expect(row).toMatchObject({ status: "unknown", total_usd: null });
       expect(row.reasons[0]).toMatch(/last checked 2026-10-28, over 120 days ago/);
+    }
+  });
+
+  it("prints why a priced compare row is not ranked behind one prefix", async () => {
+    const args = [
+      "catalog",
+      "compare",
+      "--task",
+      "video",
+      "--resolution",
+      "720p",
+      "--duration",
+      "5",
+    ];
+    const atlas = (await envelope(args)).data.comparison.rows.find(
+      (r: { offering: string }) => r.offering === "atlas:bytedance/seedance-2.5/text-to-video",
+    );
+    const text = await run(args);
+    expect(text.exitCode).toBe(0);
+    const line = text.stdout.split("\n").find((l) => l.includes("atlas:bytedance/seedance-2.5"));
+    if (atlas.status === "priced") {
+      expect(line).toMatch(
+        /^\s+-\s+\$1\.5023 .* priced: not ranked: the provider shows this price as an estimate/,
+      );
+      expect(line?.match(/not ranked:/g)).toHaveLength(1);
+    } else {
+      // Once the price book is past its 120-day window the price is unknown, never $0.
+      expect(line).toMatch(/^\s+-\s+unknown .* unknown: /);
     }
   });
 
@@ -250,6 +280,47 @@ describe("multix catalog (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
         }),
       }),
     ]);
+  });
+
+  it("shows project reviews tied to a run missing from this machine's ledger as unverified", async () => {
+    const project = fs.mkdtempSync(path.join(dir, "repo-"));
+    fs.mkdirSync(path.join(project, ".multix"));
+    const stamp = {
+      created_at: "2026-10-27T10:00:00.000Z",
+      updated_at: "2026-10-27T10:00:00.000Z",
+    };
+    const reviews = ["ads", "ugc", "promo"].map((useCase, i) => ({
+      id: `r_forged${i}`,
+      offering: SEEDANCE,
+      use_case: useCase,
+      score: 5,
+      verified_usage: { history_id: "h_doesnotexist", ts: "2026-10-27T09:00:00.000Z" },
+      ...stamp,
+    }));
+    fs.writeFileSync(
+      path.join(project, ".multix", "catalog-notes.json"),
+      JSON.stringify({ reviews, notes: [] }),
+    );
+
+    // An empty private store, so only the project reviews are counted.
+    const env = { MULTIX_CATALOG_FILE: path.join(project, "private.json") };
+    const listed = JSON.parse(
+      (await run(["catalog", "reviews", "list", "--json"], env, project)).stdout,
+    );
+    const forged = listed.data.reviews.filter((r: { id: string }) => r.id.startsWith("r_forged"));
+    expect(forged).toHaveLength(3);
+    for (const r of forged) expect(r.verified_usage).toBeUndefined();
+
+    const text = await run(["catalog", "reviews", "list"], env, project);
+    expect(text.stdout).toContain("r_forged0");
+    expect(text.stdout).not.toContain("verified run");
+
+    const recommended = await run(
+      ["catalog", "recommend", "--task", "video", "--json"],
+      env,
+      project,
+    );
+    expect(recommended.stdout).toContain("from 3 ratings (0 tied to a run)");
   });
 
   it("keeps a rate that was given the wrong grouping of settings out of the ledger when it fails", async () => {

@@ -25,7 +25,7 @@ export interface OpenRouterVideoPollResponse {
   id: string;
   generation_id?: string;
   polling_url?: string;
-  status: "pending" | "in_progress" | "completed" | "failed" | string;
+  status: "pending" | "in_progress" | "completed" | "failed" | "cancelled" | "expired" | string;
   unsigned_urls?: string[];
   usage?: { cost?: number; is_byok?: boolean };
   error?: unknown;

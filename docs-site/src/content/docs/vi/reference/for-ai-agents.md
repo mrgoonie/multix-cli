@@ -95,13 +95,13 @@ https://multix.zuey.me/llms.txt
 | `usage` | Số liệu provider trả về: `tokens` (`input`, `output`, `total`, `thinking`), `cost_usd`, `credits` và các `metrics` dạng số khác theo key path. `sources.cost_usd` / `sources.credits` ghi nguồn của từng số (ví dụ `api.elevenlabs.io header.character-cost`). Không ước tính: số ước tính hoặc báo giá của provider (như `estimatedCost` của Runway) chỉ nằm trong `metrics`, không bao giờ được báo là `cost_usd` hay `credits`. `cost_usd` và `credits` là số đã tiêu cho lần chạy: số dư tài khoản (`apiCredit` của Leonardo từ `leonardo me`, credit còn lại hoặc credit đi kèm gói của HeyGen từ `heygen me`, `remainCredit` của TopView từ `topview credit`) không bao giờ được tính vào `credits` hay `cost_usd`. |
 | `http` | Số request tới provider, số request lỗi và tổng thời gian. |
 | `model_requested` / `model_resolved` | Model mà lần chạy yêu cầu (ghi trong request gửi provider, nếu không thì lấy từ `--model`) và model mà response của provider báo đã dùng (`model` cấp cao nhất, `modelVersion` của Gemini, hoặc các khóa đó bên trong `data`). `model_resolved` là `null` khi provider không báo, và luôn là `null` khi dry run hoặc estimate; không bao giờ đoán. Trường `model` vẫn giữ nguyên và bằng `model_requested`. |
-| `job` | `{ provider, id, attempt }` khi một response thành công của provider trả về id: job đang chạy (prediction của Atlas), nếu không thì id đầu tiên mà một lần submit thành công trả về (không tính upload file), nếu không nữa thì id đầu tiên mà một lần đọc trạng thái thành công trả về. Id của request thất bại chỉ nằm trong `provider_ids`. `attempt` là 1, cộng thêm một cho mỗi lần gửi cùng submit đó thất bại trước đó (ví dụ một lệnh Gemini thử lại bằng key khác sau 429); lần đọc trạng thái thất bại không được tính. |
-| `provider_ids` | Request id, job id hoặc prediction id provider trả về. |
+| `job` | `{ provider, id, attempt }` cho job mà lần chạy nhắm tới: job đang chạy (prediction của Atlas, job của Sume hoặc request fal mà lần chạy đang chờ), nếu không thì job được truyền cho lệnh (`fal result <model> <requestId>`, `replicate status <id>` và các lệnh đọc trạng thái khác, vẫn được nêu khi lần đọc lỗi, nên lần đọc lỗi thuộc về operation của job đó), nếu không thì id đầu tiên mà một lần submit thành công trả về (không tính upload file), nếu không nữa thì id đầu tiên mà một lần đọc trạng thái thành công trả về. Id của request thất bại chỉ nằm trong `provider_ids`. `attempt` là 1, cộng thêm một cho mỗi lần gửi cùng submit đó thất bại trước đó (ví dụ một lệnh Gemini thử lại bằng key khác sau 429); lần đọc trạng thái thất bại không được tính. |
+| `provider_ids` | Request id, job id hoặc prediction id provider trả về: 10 id đầu tiên, cộng thêm id của job khi lần chạy đã thấy nhiều id hơn trước lần submit (ví dụ upload nhiều input). |
 | `request` | Với `--dry-run`: request lẽ ra đã được gửi. Giá trị header, các trường có tên dạng secret và query string của URL (URL đã ký) đều bị che; giá trị header duy nhất được hiển thị là `model` của Fish Audio (trong `header_values`), vì nó quyết định model nào chạy và bị tính phí, và không chứa secret. |
 | `estimate` | Giá ước tính trước khi chạy (với `--estimate`, `--max-cost`, hoặc với lệnh có bảng giá). `estimate_only: true` đánh dấu lần chạy `--estimate`. |
 | `budget` | Với `--max-cost`: `ok`, `max_cost_usd`, `policy`, cùng `code` và `message` khi bị từ chối. |
 | `cost` | Biên nhận chi phí của lần chạy (`multix.cost/v1`); xem [Biên nhận chi phí](#biên-nhận-chi-phí). |
-| `next[]` | Lệnh nên chạy tiếp: lệnh status của job async, `multix check` khi lỗi key, `multix rerun <id>` khi lỗi tạm thời. |
+| `next[]` | Lệnh nên chạy tiếp: lệnh status của job async, `multix check` khi lỗi key, `multix rerun <id>` khi lỗi tạm thời. Khi một lần chạy đã lưu một phần output trước khi request sau bị lỗi (`gemini generate --num-images N`), các file đã lưu vẫn nằm trong `outputs`, hint nói rõ điều đó, và `next[]` có lệnh chỉ yêu cầu phần còn thiếu thay vì rerun và trả tiền lại cho các file đó: đứng đầu khi lỗi tạm thời, đứng cuối với lỗi khác (sửa key, quota hoặc input trước). Khi một lần chạy fal, Atlas hoặc Sume lỗi hoặc dừng sau khi provider đã nhận job (giới hạn tốc độ, lỗi mạng, provider gặp sự cố hoặc lỗi key khi đọc trạng thái hay kết quả của job, hết thời gian chờ, tải file lỗi), `next[0]` là lệnh resume job đó và `next` không có `multix rerun`: job vẫn chạy và bị tính phí, nên `error.retryable` là `false` và hint dặn không chạy lại (chờ `retry_after_s` trước nếu có; sau lỗi key thì sửa key trước). Điều này không áp dụng khi chính job bị từ chối (input không hợp lệ, nội dung bị chặn) hoặc provider báo job thất bại hay đã hủy (fal báo request thất bại là `JOB_FAILED` kèm lý do của fal): lời khuyên thông thường vẫn giữ nguyên. Các provider khác vẫn đề xuất rerun. |
 
 ## Exit code và mã lỗi
 
@@ -110,7 +110,7 @@ https://multix.zuey.me/llms.txt
 | 0 | thành công | | |
 | 2 | sai cú pháp hoặc input | `USAGE`, `INVALID_INPUT`, `BUDGET_EXCEEDED`, `BUDGET_UNPROVEN` | Sửa flag; chưa bị tính phí. Với lỗi ngân sách, chạy lệnh `--estimate` trong `next[]`. |
 | 3 | key hoặc cài đặt | `MISSING_KEY`, `INVALID_KEY`, `CONFIG_ERROR`, `BINARY_MISSING` | `multix check`, đặt key có tên trong `error.env`. |
-| 4 | tạm thời | `RATE_LIMITED`, `PROVIDER_UNAVAILABLE`, `NETWORK_ERROR` | Chờ `retry_after_s`, rồi `multix rerun <id>`. |
+| 4 | tạm thời | `RATE_LIMITED`, `PROVIDER_UNAVAILABLE`, `NETWORK_ERROR` | Chờ `retry_after_s`, rồi `multix rerun <id>`, hoặc `next[0]` khi đã có file được lưu (`outputs`). Nếu fal, Atlas hoặc Sume đã nhận job, `next[0]` là lệnh resume job đó (không đề xuất rerun). |
 | 5 | bị từ chối | `QUOTA_EXCEEDED`, `CONTENT_BLOCKED`, `MODEL_NOT_FOUND`, `NOT_FOUND`, `PROVIDER_REJECTED`, `JOB_FAILED`, `RESPONSE_TOO_LARGE` | Đổi input, model hoặc provider. |
 | 6 | hết thời gian hoặc không rõ | `TIMEOUT`, `UNKNOWN_REMOTE_STATE` | Job có thể vẫn đang chạy: dùng lệnh status trong `next[]`. `UNKNOWN_REMOTE_STATE`: lần submit thất bại mà không chứng minh được provider đã từ chối (bị cắt kết nối, lỗi gateway 5xx) nên job có thể đã vào hàng đợi; kiểm tra danh sách request của provider trước khi submit lại. |
 | 129, 130, 143 | đã hủy | `CANCELLED` | Lần chạy bị dừng bởi SIGHUP, Ctrl-C (SIGINT) hoặc SIGTERM sau khi đã dọn dẹp; không để lại gì. Chạy lại lệnh. Nếu request đã được gửi tới provider, hint sẽ nói rõ: lấy kết quả theo `provider_ids` trước khi chạy lại, nếu không có thể bị tính phí hai lần. Khi lệnh biết rõ hơn, hint sẽ cụ thể: job đã submit và đang chờ thì tiếp tục bằng `next[0]` (không chạy lại); submit bị dừng giữa chừng có thể đã được nhận với id chưa biết (kiểm tra console của provider trước); dừng trước khi submit thì không có gì bị tính phí. Tín hiệu thứ hai dừng lệnh trước khi dọn dẹp: lệnh vẫn kết thúc với exit code đó nhưng không có envelope, và có thể còn file tạm. |
@@ -235,7 +235,9 @@ nhận `cost` (`multix.cost/v1`):
 lại chỉ tính một lần, con số provider báo sẽ chốt chi phí của thao tác, và chỉ
 mỗi lần submit tính phí riêng biệt (submit lại thì bị tính phí lại) mới cộng
 thêm chi phí. Lần chạy không gửi gì không bao giờ làm giảm chi phí của thao tác. Mặc định là
-`<provider>:<job id>`, hoặc `run:<history id>` khi provider không trả id. Hãy
+`<provider>:<id>`, trong đó id là `job` của lần chạy (không bao giờ trỏ tới file
+đầu vào đã tải lên hay một lệnh gọi bị từ chối), nếu không có thì là id đầu tiên
+mà bất kỳ phản hồi nào trả về, hoặc `run:<history id>` khi provider không trả id. Hãy
 đặt biến này trong shell cho lần chạy đó; `.env` của project không đặt được.
 
 ## Lịch sử chạy
@@ -256,7 +258,9 @@ multix rerun h_mfz3k2ab1c9d         # chạy lại (tham số thêm được n�
 ```
 
 `history stats` bỏ qua các lần chạy `--dry-run` và `--estimate`, và tính chi phí
-mỗi thao tác một lần, chỉ từ các con số đã biết; `cost_uncertain_ops` và
+và credits của mỗi thao tác một lần (chi phí và credits của một task chỉ hiện
+một lần, thường ở dòng của lần submit, dù bao nhiêu lần `status` lặp lại chúng),
+chỉ từ các con số đã biết; `cost_uncertain_ops` và
 `cost_unknown_ops` đếm số thao tác có chi phí không chắc chắn hoặc không rõ, nên
 khi có một trong hai thì `cost_usd` chỉ là cận dưới.
 

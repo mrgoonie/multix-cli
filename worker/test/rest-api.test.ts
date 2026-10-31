@@ -524,7 +524,7 @@ describe("REST API model catalogue", () => {
     const compare = await api(
       browser,
       key,
-      "/model-catalog?view=compare&task=video&resolution=720p&duration_s=10&audio=true",
+      "/model-catalog?view=compare&task=video&resolution=720p&duration_s=10&audio=true&aspect_ratio=16:9",
     );
     expect(compare.status).toBe(200);
     const rows = (await body(compare)).comparison.rows as Json[];
@@ -547,6 +547,96 @@ describe("REST API model catalogue", () => {
     expect((await api(browser, key, "/model-catalog?view=compare&duration_s=0")).status).toBe(400);
     expect((await api(browser, key, "/model-catalog?task=telepathy")).status).toBe(400);
     expect((await api(browser, undefined, "/model-catalog")).status).toBe(401);
+  });
+});
+
+describe("REST API workflows", () => {
+  const SKILL_MD =
+    "---\nname: storyboard\ndescription: Draw a storyboard frame\n---\n\nRun the workflow.";
+  const WORKFLOW = JSON.stringify({
+    version: 1,
+    inputs: { subject: { type: "string", required: true } },
+    steps: [{ id: "draw", command: "gemini generate", options: { prompt: "{{inputs.subject}}" } }],
+  });
+  const URI = "skill://private/storyboard/SKILL.md";
+  const post = (value: unknown): RequestInit => ({ method: "POST", body: JSON.stringify(value) });
+
+  it("runs a workflow only after the account authorized its revision and digest", async () => {
+    const { namespace, specs } = fakeNamespace();
+    const { browser } = await signedInBrowser({
+      MULTIX_SKILLS: fakeRegistries(),
+      MULTIX_JOBS: namespace,
+      MULTIX_JOB_QUOTA: fakeQuotaNamespace(),
+    });
+    const key = await createApiKey(browser);
+    await api(browser, key, "/provider-keys", {
+      method: "PATCH",
+      body: JSON.stringify({ keys: { GEMINI_API_KEY: GEMINI_KEY } }),
+    });
+    const files = [
+      { path: "SKILL.md", text: SKILL_MD },
+      { path: "multix.workflow.json", text: WORKFLOW },
+    ];
+    await api(browser, key, "/skills/storyboard/draft", {
+      method: "PUT",
+      body: JSON.stringify({ files }),
+    });
+    expect((await api(browser, key, "/skills/storyboard/publish", post({}))).status).toBe(201);
+
+    const described = await body(
+      await api(browser, key, `/workflows?uri=${encodeURIComponent(URI)}`),
+    );
+    expect(described).toMatchObject({ authorized: false, revision: 1 });
+    const refused = await api(browser, key, "/workflow-runs", post({ uri: URI, inputs: {} }));
+    expect(refused.status).toBe(403);
+    expect((await body(refused)).error.code).toBe("forbidden");
+    expect(specs.size).toBe(0);
+
+    const stale = await api(
+      browser,
+      key,
+      "/workflow-authorizations",
+      post({ uri: URI, revision: 2, digest: described.digest }),
+    );
+    expect(stale.status).toBe(409);
+    const granted = await api(
+      browser,
+      key,
+      "/workflow-authorizations",
+      post({ uri: URI, revision: 1, digest: described.digest }),
+    );
+    expect(granted.status).toBe(201);
+
+    const badInputs = await api(browser, key, "/workflow-runs", post({ uri: URI, inputs: {} }));
+    expect(badInputs.status).toBe(400);
+    const started = await api(
+      browser,
+      key,
+      "/workflow-runs",
+      post({ uri: URI, inputs: { subject: "a fox" } }),
+    );
+    expect(started.status).toBe(201);
+    const run = await body(started);
+    expect(run.steps[0].job_id).toEqual(expect.any(String));
+    expect(specs.get(run.steps[0].job_id)?.env).toEqual({ GEMINI_API_KEY: GEMINI_KEY });
+
+    const read = await body(await api(browser, key, `/workflow-runs/${run.run_id}`));
+    expect(read.status).toBe("succeeded");
+    expect(JSON.stringify(read)).not.toContain(GEMINI_KEY);
+    const list = await body(await api(browser, key, "/workflow-runs"));
+    expect(list.runs.map((r: Json) => r.run_id)).toEqual([run.run_id]);
+
+    const me = await body(await api(browser, key, "/me"));
+    const revoked = await api(browser, key, `/workflow-authorizations/${me.id}/storyboard`, {
+      method: "DELETE",
+    });
+    expect(await body(revoked)).toEqual({ revoked: true });
+    expect(
+      (await api(browser, key, "/workflow-runs", post({ uri: URI, inputs: { subject: "x" } })))
+        .status,
+    ).toBe(403);
+    expect((await api(browser, key, "/workflow-runs/wfr_nope")).status).toBe(404);
+    expect((await api(browser, key, "/workflows", post({}))).status).toBe(405);
   });
 });
 

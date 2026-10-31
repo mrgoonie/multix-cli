@@ -556,6 +556,22 @@ describe("prepareRun: rejections", () => {
       run({ command: "byteplus video", options: { prompt: "a cat -- then a dog—slowly, 2-3 s" } }),
     ).not.toThrow();
   });
+
+  it("refuses leonardo video, which can render 10 s, when the length cap is below 10", () => {
+    for (const model of ["kling-2.6", "KLING2_1", undefined]) {
+      const request: RunRequest = {
+        command: "leonardo video",
+        args: ["waves"],
+        options: model ? { model } : {},
+      };
+      expect(() =>
+        prepareRun(request, limitsFrom({ MULTIX_MCP_MAX_VIDEO_SECONDS: "10" })),
+      ).not.toThrow();
+      expect(() => prepareRun(request, limitsFrom({ MULTIX_MCP_MAX_VIDEO_SECONDS: "9" }))).toThrow(
+        /renders up to 10 seconds of video and has no length option; this server allows at most 9 seconds/,
+      );
+    }
+  });
 });
 
 describe("prepareRun: speech", () => {
@@ -744,14 +760,14 @@ describe("prepareRun: runs the caps cannot bound", () => {
         args: ["a cat"],
         options: { "num-outputs": 1, input: '{"num_outputs": 8}' },
       }).uncappedSpend,
-    ).toBe("with --input, the request reaches the provider as given");
+    ).toBe("with --input, the server caps do not bound the request");
     expect(
       run({
         command: "replicate video",
         args: ["a wave"],
         options: { input: "{}" },
       }).uncappedSpend,
-    ).toBe("with --input, the request reaches the provider as given");
+    ).toBe("with --input, the server caps do not bound the request");
     expect(run({ command: "fal tts", options: { text: "hi" } })).not.toHaveProperty(
       "uncappedSpend",
     );
@@ -760,7 +776,7 @@ describe("prepareRun: runs the caps cannot bound", () => {
         command: "fal tts",
         options: { text: "hi", model: "fal-ai/veo3", "text-field": "prompt" },
       }).uncappedSpend,
-    ).toBe("with --text-field, the request reaches the provider as given");
+    ).toBe("with --text-field, the server caps do not bound the request");
   });
 
   it("marks an omitted count the model picks, and accepts one within the cap", () => {
@@ -779,6 +795,109 @@ describe("prepareRun: runs the caps cannot bound", () => {
     );
   });
 
+  it("marks an image size, quality or tier the caller changes from the default", () => {
+    const priced = (command: string, options: Record<string, string | number>, args?: string[]) =>
+      run({ command, args, options }).uncappedSpend;
+    expect(priced("gemini generate", { prompt: "a cat", size: "4K" })).toBe(
+      "--size sets the price of each output, which this server's caps do not bound (omit it to use the default)",
+    );
+    expect(priced("openai generate", { prompt: "a cat", quality: "high" })).toContain("--quality");
+    expect(priced("openai generate", { prompt: "a cat", size: "1536x1024" })).toContain("--size");
+    expect(priced("openrouter generate", { prompt: "a cat", "image-size": "2K" })).toContain(
+      "--image-size",
+    );
+    expect(priced("fal image", { "image-size": "square_hd" }, ["a cat"])).toContain("--image-size");
+    expect(priced("byteplus generate", { prompt: "a cat", size: "4K" })).toContain("--size");
+    expect(priced("atlas image", { "num-images": 1, resolution: "4k" }, ["a cat"])).toContain(
+      "--resolution",
+    );
+    expect(priced("leonardo generate", { width: 1536 }, ["a cat"])).toContain("--width");
+    expect(
+      run({ command: "leonardo generate", args: ["a cat"], options: { ultra: true } })
+        .uncappedSpend,
+    ).toContain("--ultra");
+    expect(priced("runway image", { ratio: "1920:1080" }, ["a cat"])).toContain("--ratio");
+    expect(priced("leonardo upscale", { multiplier: 2 }, ["abc"])).toContain("--multiplier");
+  });
+
+  it("keeps a run capped when the price option is omitted or repeats the CLI default", () => {
+    expect(run({ command: "openai generate", options: { prompt: "a cat" } })).not.toHaveProperty(
+      "uncappedSpend",
+    );
+    expect(
+      run({ command: "openai generate", options: { prompt: "a cat", quality: "medium" } }),
+    ).not.toHaveProperty("uncappedSpend");
+    expect(
+      run({ command: "atlas image", args: ["a cat"], options: { "num-images": 1 } }),
+    ).not.toHaveProperty("uncappedSpend");
+    expect(
+      run({ command: "leonardo upscale", args: ["abc"], options: { multiplier: "1.50" } }),
+    ).not.toHaveProperty("uncappedSpend");
+    expect(
+      run({ command: "leonardo generate", args: ["a cat"], options: { quality: "LOW" } }),
+    ).not.toHaveProperty("uncappedSpend");
+  });
+
+  it("marks an omitted resolution the model picks, and accepts an allowed one", () => {
+    expect(run({ command: "atlas video", args: ["a wave"] }).uncappedSpend).toBe(
+      "--resolution is omitted, so the model picks the resolution (pass --resolution: 480p, 720p, 768p, 1080p)",
+    );
+    expect(
+      run({ command: "atlas video", args: ["a wave"], options: { resolution: "720p" } }),
+    ).not.toHaveProperty("uncappedSpend");
+    rejects(
+      { command: "atlas video", args: ["a wave"], options: { resolution: "4k" } },
+      /--resolution must be one of/,
+    );
+    for (const request of [
+      { command: "replicate video", args: ["a wave"] },
+      { command: "heygen model-video", args: ["a wave"] },
+      { command: "atlas image-to-video" },
+      {
+        command: "openrouter image-to-video",
+        options: { prompt: "a wave", "image-url": "https://example.com/a.png" },
+      },
+    ]) {
+      expect(run(request).uncappedSpend, request.command).toMatch(/^--resolution is omitted/);
+    }
+    // The CLI default (1080p) is checked, so an omitted resolution stays capped.
+    expect(run({ command: "byteplus video", options: { prompt: "a wave" } })).not.toHaveProperty(
+      "uncappedSpend",
+    );
+  });
+
+  it("marks fal video and the raw provider options uncapped", () => {
+    expect(run({ command: "fal video", args: ["a wave"] }).uncappedSpend).toBe(
+      "the model picks the resolution (fal video has no --resolution)",
+    );
+    expect(run({ command: "openrouter tts", options: { text: "hi" } })).not.toHaveProperty(
+      "uncappedSpend",
+    );
+    expect(
+      run({
+        command: "openrouter tts",
+        options: { text: "hi", "provider-options": '{"openai":{"model":"x"}}' },
+      }).uncappedSpend,
+    ).toBe("with --provider-options, the server caps do not bound the request");
+    expect(
+      run({ command: "byteplus generate-3d", options: { prompt: "a cube", flags: "--ff 2" } })
+        .uncappedSpend,
+    ).toBe("with --flags, the server caps do not bound the request");
+    expect(run({ command: "elevenlabs music", options: { prompt: "jazz" } })).not.toHaveProperty(
+      "uncappedSpend",
+    );
+    expect(
+      run({ command: "elevenlabs music", options: { prompt: "jazz", "music-length-ms": 20000 } }),
+    ).not.toHaveProperty("uncappedSpend");
+    expect(
+      run({
+        command: "elevenlabs music",
+        options: {},
+        inputs: { plan: "https://cdn.example.com/plan.json" },
+      }).uncappedSpend,
+    ).toBe("with --plan, the server caps do not bound the request");
+  });
+
   it("marks Sume and TopView runs the caps cannot bound", () => {
     expect(
       run({ command: "sume image", args: ["a cat"], options: { model: "m" } }).uncappedSpend,
@@ -792,7 +911,7 @@ describe("prepareRun: runs the caps cannot bound", () => {
         args: ["a cat"],
         options: { model: "m", "num-images": 1, param: ["seed=1"] },
       }).uncappedSpend,
-    ).toBe("with --param, the request reaches the provider as given");
+    ).toBe("with --param, the server caps do not bound the request");
     const video = run({ command: "sume video", args: ["a wave"], options: { model: "m" } });
     expect(video.uncappedSpend).toContain("catalog row sets the price");
     expect(video.argv).not.toContain("--duration");
@@ -806,12 +925,72 @@ describe("prepareRun: runs the caps cannot bound", () => {
       }).uncappedSpend,
     ).toBe("billed by the length of the script or audio");
     expect(
+      run({ command: "topview url-to-video", args: ["https://example.com/p"] }).uncappedSpend,
+    ).toContain("15-60 s");
+    expect(
       run({
         command: "topview product-anyshoot",
         options: { mode: "background", count: 2 },
       }),
     ).not.toHaveProperty("uncappedSpend");
   });
+
+  it("caps the generated audio length with MULTIX_MCP_MAX_AUDIO_SECONDS", async () => {
+    expect(limits.maxAudioSeconds).toBe(30);
+    expect(limitsFrom({ MULTIX_MCP_MAX_AUDIO_SECONDS: "9999" }).maxAudioSeconds).toBe(300);
+    expect(limitsFrom({ MULTIX_MCP_MAX_AUDIO_SECONDS: "abc" }).maxAudioSeconds).toBe(30);
+    rejects(
+      { command: "elevenlabs music", options: { prompt: "jazz", "music-length-ms": 300000 } },
+      /--music-length-ms must be at most 30000 \(30 seconds\)/,
+    );
+    rejects(
+      { command: "elevenlabs music", options: { prompt: "jazz", "music-length-ms": "1e6" } },
+      /--music-length-ms must be a plain decimal number of at least 1/,
+    );
+    rejects(
+      { command: "elevenlabs sfx", options: { text: "rain", "duration-seconds": 30.5 } },
+      /--duration-seconds must be at most 30 \(30 seconds\)/,
+    );
+    const sfx = run({
+      command: "elevenlabs sfx",
+      options: { text: "rain", "duration-seconds": 0.5 },
+    });
+    expect(sfx.argv).toContain("--duration-seconds=0.5");
+    rejects(
+      { command: "elevenlabs sfx", options: { text: "rain", "duration-seconds": "0.4" } },
+      /--duration-seconds must be a plain decimal number of at least 0.5/,
+    );
+    expect(sfx).not.toHaveProperty("uncappedSpend");
+    // Within the default cap, an omitted sfx length is left to the provider (auto, at most 30 s).
+    expect(run({ command: "elevenlabs sfx", options: { text: "rain" } }).argv).toEqual([
+      "elevenlabs",
+      "sfx",
+      "--text=rain",
+    ]);
+    // The music model picks up to 10 minutes on its own, so an omitted length gets the cap.
+    const song = run({ command: "elevenlabs music", options: { prompt: "jazz" } });
+    expect(song.argv).toContain("--music-length-ms=30000");
+    expect(song).not.toHaveProperty("uncappedSpend");
+    // The API rejects a length next to a composition plan: none is filled, and the run is uncapped.
+    const planned = prepareRun(
+      { command: "elevenlabs music", inputs: { plan: "https://cdn.example.com/plan.json" } },
+      limitsFrom({ MULTIX_MCP_MAX_AUDIO_SECONDS: "10" }),
+    );
+    expect(planned.argv.some((a) => a.startsWith("--music-length-ms"))).toBe(false);
+    expect(planned.uncappedSpend).toBe("with --plan, the server caps do not bound the request");
+    const tight = limitsFrom({ MULTIX_MCP_MAX_AUDIO_SECONDS: "10" });
+    const music = prepareRun({ command: "elevenlabs music", options: { prompt: "jazz" } }, tight);
+    expect(music.argv).toContain("--music-length-ms=10000");
+    expect((await parseWithCli(music.argv, "elevenlabs music")).opts.musicLengthMs).toBe("10000");
+    const auto = prepareRun({ command: "elevenlabs sfx", options: { text: "rain" } }, tight);
+    expect(auto.argv).toContain("--duration-seconds=10");
+    expect(() =>
+      prepareRun(
+        { command: "elevenlabs sfx", options: { text: "rain", "duration-seconds": 11 } },
+        tight,
+      ),
+    ).toThrow(/--duration-seconds must be at most 10 \(10 seconds\)/);
+  }, 120_000);
 
   it("leaves capped commands unmarked and caps the voice-design count", () => {
     expect(run({ command: "gemini generate", options: { prompt: "a cat" } })).not.toHaveProperty(
@@ -836,5 +1015,74 @@ describe("prepareRun: runs the caps cannot bound", () => {
     );
     expect(() => assertSpendGuard("fal run", why, mode("allow"), undefined)).not.toThrow();
     expect(() => assertSpendGuard("gemini generate", undefined, mode(), undefined)).not.toThrow();
+  });
+
+  it("limits image commands to the MULTIX_MCP_ALLOWED_IMAGE_MODELS of their group", () => {
+    const allowed = limitsFrom({
+      MULTIX_MCP_ALLOWED_IMAGE_MODELS: " fal:fal-ai/flux/schnell , openai:gpt-image-2,,",
+    });
+    expect(limitsFrom({}).allowedImageModels).toEqual([]);
+    expect(allowed.allowedImageModels).toEqual(["fal:fal-ai/flux/schnell", "openai:gpt-image-2"]);
+    const runWith = (request: RunRequest) => prepareRun(request, allowed);
+    const refused = (request: RunRequest, message: RegExp) =>
+      expect(() => runWith(request)).toThrow(message);
+
+    // A model listed for the group, given or as the catalog default, runs.
+    expect(
+      runWith({ command: "fal image", args: ["cat"], options: { model: "fal-ai/flux/schnell" } })
+        .argv,
+    ).toContain("--model=fal-ai/flux/schnell");
+    expect(() => runWith({ command: "fal image", args: ["cat"] })).not.toThrow();
+    expect(() => runWith({ command: "openai generate", options: { prompt: "cat" } })).not.toThrow();
+    // Any other model is refused, including a near miss.
+    refused(
+      { command: "fal image", args: ["cat"], options: { model: "fal-ai/flux-pro/v1.1-ultra" } },
+      /--model must be one of fal-ai\/flux\/schnell for "fal image"/,
+    );
+    refused(
+      { command: "fal image", args: ["cat"], options: { model: " fal-ai/flux/schnell" } },
+      /--model must be one of/,
+    );
+    refused(
+      { command: "openai image-to-image", options: { prompt: "x", model: "gpt-image-1" } },
+      /--model must be one of gpt-image-2 for/,
+    );
+    // An id listed for one provider does not unlock it on another.
+    refused(
+      { command: "leonardo generate", args: ["cat"], options: { model: "gpt-image-2" } },
+      /"leonardo generate" is not available on this server: no leonardo image model is allowed/,
+    );
+    refused({ command: "replicate image", args: ["cat"] }, /no replicate image model is allowed/);
+    refused({ command: "sume image", args: ["cat"] }, /no sume image model is allowed/);
+    // When the CLI picks the model at run time, the caller must name a listed one.
+    const replicate = limitsFrom({
+      MULTIX_MCP_ALLOWED_IMAGE_MODELS: "replicate:black-forest-labs/flux-schnell",
+    });
+    expect(() => prepareRun({ command: "replicate image", args: ["cat"] }, replicate)).toThrow(
+      /pass --model one of black-forest-labs\/flux-schnell for "replicate image"/,
+    );
+    expect(() =>
+      prepareRun(
+        {
+          command: "replicate image",
+          args: ["cat"],
+          options: { model: "black-forest-labs/flux-schnell", "num-outputs": 1 },
+        },
+        replicate,
+      ),
+    ).not.toThrow();
+    // Commands without image outputs or without --model are not affected.
+    expect(() =>
+      runWith({ command: "openai generate-speech", options: { text: "hi", model: "tts-1-hd" } }),
+    ).not.toThrow();
+    expect(() => runWith({ command: "leonardo upscale", args: ["image-id"] })).not.toThrow();
+    // Unset, any model runs.
+    expect(() =>
+      run({
+        command: "fal image",
+        args: ["cat"],
+        options: { model: "fal-ai/flux-pro/v1.1-ultra" },
+      }),
+    ).not.toThrow();
   });
 });

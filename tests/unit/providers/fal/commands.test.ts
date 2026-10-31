@@ -10,6 +10,7 @@ import os from "node:os";
 import path from "node:path";
 import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { run } from "../../../../src/agent/run-state.js";
 import { classifyError } from "../../../../src/core/error-classify.js";
 import { MultixError, ValidationError } from "../../../../src/core/errors.js";
 import { _resetOutputDir } from "../../../../src/core/output-dir.js";
@@ -54,6 +55,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  run.inFlight = undefined;
+  run.ids = [];
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
@@ -434,5 +437,132 @@ describe("fal run without --detach (unchanged default)", () => {
     });
     await cli("run", MODEL, "--input", '{"prompt":"x"}', "--no-download");
     expect(JSON.parse(stdout.join("\n"))).toEqual({ text: "ok" });
+  });
+});
+
+describe("fal result failures", () => {
+  const RESULT_URL = `https://queue.fal.run/${MODEL}/requests/${REQUEST_ID}`;
+
+  async function resultError(): Promise<unknown> {
+    vi.spyOn(process, "exit").mockImplementation((code?: unknown) => {
+      throw new Error(`process.exit(${String(code)})`);
+    });
+    try {
+      await cli("result", MODEL, REQUEST_ID);
+    } catch (error) {
+      return error;
+    }
+    throw new Error("expected fal result to throw");
+  }
+
+  it("throws a rate limit as itself, keeping Retry-After and the request id", async () => {
+    stub({
+      [`GET ${RESULT_URL}`]: [
+        { status: 429, json: { detail: "slow down" }, headers: { "retry-after": "30" } },
+      ],
+    });
+    const error = await resultError();
+    expect(String(error)).not.toMatch(/process\.exit/);
+    expect(classifyError(error)).toMatchObject({
+      code: "RATE_LIMITED",
+      http_status: 429,
+      retry_after_s: 30,
+    });
+    expect(String((error as Error).message)).toContain(REQUEST_ID);
+    expect(stderr.join("\n")).not.toMatch(/Failed to fetch result/);
+  });
+
+  it("throws a network failure as itself, not as a logged exit", async () => {
+    stub({ [`GET ${RESULT_URL}`]: [{ error: new TypeError("fetch failed") }] });
+    const error = await resultError();
+    expect(String(error)).not.toMatch(/process\.exit/);
+    expect(classifyError(error).code).toBe("NETWORK_ERROR");
+  });
+});
+
+describe("a run that fails after fal accepted the job", () => {
+  // Not retried (unlike a 429 or a network error), yet a resume can fix it once the key is.
+  const unauthorized = { status: 401, json: { detail: "unauthorized" } };
+
+  it("fal run tracks the job with a resume that keeps --output-dir", async () => {
+    const fake = stub({
+      ...submitRoute,
+      [`GET https://queue.fal.run/${MODEL}/requests/${REQUEST_ID}/status`]: [
+        { json: { status: "COMPLETED" } },
+      ],
+      [`GET https://queue.fal.run/${MODEL}/requests/${REQUEST_ID}`]: [unauthorized],
+    });
+    const outDir = path.join(tmp, "my clips");
+    const error = await cli("run", MODEL, "--input", '{"prompt":"x"}', "--output-dir", outDir).then(
+      () => expect.unreachable("fal run should fail"),
+      (e: unknown) => e,
+    );
+    expect(classifyError(error)).toMatchObject({ code: "INVALID_KEY", http_status: 401 });
+    expect(run.inFlight).toEqual({
+      id: REQUEST_ID,
+      resume: `multix fal result ${MODEL} ${REQUEST_ID} --download --output-dir '${outDir}'`,
+    });
+    expect(fake.calls.filter((c) => c.method === "POST")).toHaveLength(1);
+  });
+
+  it("fal run --no-download resumes with the result JSON, not a download", async () => {
+    stub({
+      ...submitRoute,
+      [`GET https://queue.fal.run/${MODEL}/requests/${REQUEST_ID}/status`]: [
+        { json: { status: "COMPLETED" } },
+      ],
+      [`GET https://queue.fal.run/${MODEL}/requests/${REQUEST_ID}`]: [unauthorized],
+    });
+    await expect(
+      cli("run", MODEL, "--input", '{"prompt":"x"}', "--no-download", "--output-dir", tmp),
+    ).rejects.toThrow(/Failed to fetch result/);
+    expect(run.inFlight).toEqual({
+      id: REQUEST_ID,
+      resume: `multix fal result ${MODEL} ${REQUEST_ID}`,
+    });
+  });
+
+  it("fal image (submitAndWait) tracks the job with the default resume", async () => {
+    const model = "fal-ai/flux/schnell";
+    const app = "fal-ai/flux";
+    stub({
+      [`POST https://queue.fal.run/${model}`]: [
+        { json: { request_id: REQUEST_ID, status: "IN_QUEUE", ...queueUrls(app) } },
+      ],
+      [`GET https://queue.fal.run/${app}/requests/${REQUEST_ID}/status`]: [
+        { status: 400, json: { detail: "bad request" } },
+      ],
+    });
+    await expect(cli("image", "a cat", "-m", model)).rejects.toThrow(/Failed to poll status/);
+    expect(run.inFlight).toEqual({
+      id: REQUEST_ID,
+      resume: `multix fal result ${model} ${REQUEST_ID} --download`,
+    });
+  });
+
+  it("fal image --no-download resumes with the result JSON, not a download", async () => {
+    const model = "fal-ai/flux/schnell";
+    const app = "fal-ai/flux";
+    stub({
+      [`POST https://queue.fal.run/${model}`]: [
+        { json: { request_id: REQUEST_ID, status: "IN_QUEUE", ...queueUrls(app) } },
+      ],
+      [`GET https://queue.fal.run/${app}/requests/${REQUEST_ID}/status`]: [
+        { status: 401, json: { detail: "unauthorized" } },
+      ],
+    });
+    await expect(cli("image", "a cat", "-m", model, "--no-download")).rejects.toThrow(
+      /Failed to poll status/,
+    );
+    expect(run.inFlight).toEqual({
+      id: REQUEST_ID,
+      resume: `multix fal result ${model} ${REQUEST_ID}`,
+    });
+  });
+
+  it("--detach tracks nothing: it returns once fal queued the job", async () => {
+    stub(submitRoute);
+    await cli("run", MODEL, "--input", '{"prompt":"x"}', "--detach");
+    expect(run.inFlight).toBeUndefined();
   });
 });

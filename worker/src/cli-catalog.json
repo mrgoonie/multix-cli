@@ -2427,7 +2427,7 @@
             {
               "long": "--wait",
               "flags": "--wait",
-              "description": "Poll until status is 'completed' or 'failed'",
+              "description": "Poll until the job completes, fails, is cancelled or expires",
               "required": false,
               "takesValue": false,
               "valueOptional": false,
@@ -2503,7 +2503,7 @@
             {
               "long": "--wait",
               "flags": "--wait",
-              "description": "Poll until status is 'completed' or 'failed'",
+              "description": "Poll until the job completes, fails, is cancelled or expires",
               "required": false,
               "takesValue": false,
               "valueOptional": false,
@@ -4142,7 +4142,7 @@
             {
               "long": "--audio",
               "flags": "--audio",
-              "description": "Enable audio track",
+              "description": "Generate an audio track (model default when omitted)",
               "required": false,
               "takesValue": false,
               "valueOptional": false,
@@ -4152,7 +4152,7 @@
             {
               "long": "--no-audio",
               "flags": "--no-audio",
-              "description": "Disable audio track",
+              "description": "Generate no audio track",
               "required": false,
               "takesValue": false,
               "valueOptional": false,
@@ -4313,7 +4313,7 @@
             {
               "long": "--audio",
               "flags": "--audio",
-              "description": "Enable audio",
+              "description": "Generate an audio track (model default when omitted)",
               "required": false,
               "takesValue": false,
               "valueOptional": false,
@@ -4323,7 +4323,7 @@
             {
               "long": "--no-audio",
               "flags": "--no-audio",
-              "description": "Disable audio",
+              "description": "Generate no audio track",
               "required": false,
               "takesValue": false,
               "valueOptional": false,
@@ -4520,7 +4520,7 @@
             {
               "long": "--audio",
               "flags": "--audio",
-              "description": "Enable audio",
+              "description": "Generate an audio track (model default when omitted)",
               "required": false,
               "takesValue": false,
               "valueOptional": false,
@@ -4530,7 +4530,7 @@
             {
               "long": "--no-audio",
               "flags": "--no-audio",
-              "description": "Disable audio",
+              "description": "Generate no audio track",
               "required": false,
               "takesValue": false,
               "valueOptional": false,
@@ -6003,7 +6003,7 @@
             {
               "long": "--music-length-ms",
               "flags": "--music-length-ms <n>",
-              "description": "Total length in milliseconds (default 30000)",
+              "description": "Total length in milliseconds (the model picks one when omitted; not with --plan)",
               "required": false,
               "takesValue": true,
               "valueOptional": false,
@@ -15601,7 +15601,7 @@
             {
               "long": "--aspect-ratio",
               "flags": "--aspect-ratio <ratio>",
-              "description": "Aspect ratio (16:9) for token-billed video",
+              "description": "Aspect ratio (16:9); pin it to rank token-billed video",
               "required": false,
               "takesValue": true,
               "valueOptional": false,
@@ -15751,7 +15751,7 @@
             {
               "long": "--aspect-ratio",
               "flags": "--aspect-ratio <ratio>",
-              "description": "Aspect ratio (16:9)",
+              "description": "Aspect ratio (16:9); pin it to rank token-billed video",
               "required": false,
               "takesValue": true,
               "valueOptional": false,

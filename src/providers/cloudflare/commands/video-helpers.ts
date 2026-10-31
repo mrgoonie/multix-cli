@@ -1,4 +1,4 @@
-import { ProviderError, ValidationError } from "../../../core/errors.js";
+import { ProviderError, ProviderJobFailedError, ValidationError } from "../../../core/errors.js";
 import { type CloudflareVideoPrediction, downloadVideo, getVideoPrediction } from "../client.js";
 import { saveBytes } from "../media-output.js";
 
@@ -41,7 +41,13 @@ export async function waitForVideo(
     onTick?.(current.status);
   }
   if (current.status !== "succeeded")
-    throw new ProviderError("Cloudflare video generation failed", "Cloudflare");
+    throw new ProviderJobFailedError(
+      current.status === "failed"
+        ? "Cloudflare video generation failed"
+        : `Cloudflare video generation ${current.status}`,
+      "Cloudflare",
+      { terminal: current.status === "failed" },
+    );
   return current;
 }
 

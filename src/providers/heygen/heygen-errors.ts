@@ -3,7 +3,7 @@
  * into actionable messages, and models failed async jobs. Runtime-neutral.
  */
 
-import { HttpError, ProviderError } from "../../core/errors.js";
+import { HttpError, ProviderError, ProviderJobFailedError } from "../../core/errors.js";
 import { HEYGEN_API_SETTINGS_URL, HEYGEN_USAGE_URL } from "./models.js";
 import type { HeygenApiErrorBody } from "./types.js";
 
@@ -28,12 +28,14 @@ export class HeygenApiError extends HttpError {
 }
 
 /** A HeyGen job reached a terminal failure state (failed, cancelled, paused for input). */
-export class HeygenJobFailedError extends ProviderError {
+export class HeygenJobFailedError extends ProviderJobFailedError {
   constructor(
     message: string,
     public readonly failureCode?: string,
+    /** False when the failures include a poll or a download, not only the provider's verdict. */
+    terminal = true,
   ) {
-    super(message, "heygen");
+    super(message, "heygen", { terminal });
     this.name = "HeygenJobFailedError";
   }
 }
