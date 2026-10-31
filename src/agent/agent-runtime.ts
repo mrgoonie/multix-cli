@@ -504,14 +504,14 @@ export function installAgentRuntime(program: Command, cliVersion: string): void 
   installFetchTelemetry((request) =>
     realExit(finalizeRun({ exitCode: 0, dryRunRequest: request })),
   );
-  // Paid work outside fetch (the Codex image driver) stops here in a dry run.
-  setExternalRunGuard(({ program: name, args }) => {
+  // Paid work outside fetch (the Codex image driver, WebSockets) stops here in a dry run.
+  setExternalRunGuard(({ program: name, args, method = "EXEC" }) => {
     if (!run.dryRun) {
       run.externalRuns.push(name);
       return;
     }
     const body = args.map((a) => (a.length > 400 ? `<${a.length} chars>` : a));
-    realExit(finalizeRun({ exitCode: 0, dryRunRequest: { method: "EXEC", url: name, body } }));
+    realExit(finalizeRun({ exitCode: 0, dryRunRequest: { method, url: name, body } }));
   });
 
   process.exit = ((code?: number | string | null) => {

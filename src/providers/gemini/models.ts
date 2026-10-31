@@ -43,6 +43,48 @@ export const ANALYSIS_MODEL_DEFAULT = TEXT_MODEL_DEFAULT;
 /** Default TTS model (defined with the voices, which the runtime-neutral budget code reads). */
 export { TTS_MODEL_DEFAULT };
 
+/** Lyria music model capabilities (Interactions API). */
+export interface LyriaMusicModel {
+  id: string;
+  name: string;
+  /** Output containers the model can return; the first is its default. */
+  outputFormats: readonly ("mp3" | "wav")[];
+  /** Images accepted alongside the prompt. */
+  maxImages: number;
+  /** How long a generation runs. */
+  duration: string;
+}
+
+/**
+ * Lyria music models served by POST /v1beta/interactions
+ * (https://ai.google.dev/gemini-api/docs/music-generation). Both return
+ * 44.1 kHz stereo audio and take up to 10 reference images.
+ */
+export const LYRIA_MUSIC_MODELS: readonly LyriaMusicModel[] = [
+  {
+    id: "lyria-3-clip-preview",
+    name: "Lyria 3 Clip (preview)",
+    outputFormats: ["mp3"],
+    maxImages: 10,
+    duration: "always 30 seconds",
+  },
+  {
+    id: "lyria-3.5",
+    name: "Lyria 3.5",
+    outputFormats: ["mp3", "wav"],
+    maxImages: 10,
+    duration: "a couple of minutes, steered by the prompt",
+  },
+];
+
+/** The cheaper 30-second clip model is the default. */
+export const MUSIC_MODEL_DEFAULT = "lyria-3-clip-preview";
+
+export function findLyriaMusicModel(model: string): LyriaMusicModel | undefined {
+  const id = model.replace(/^models\//, "");
+  return LYRIA_MUSIC_MODELS.find((m) => m.id === id);
+}
+
 /** Default document conversion model. */
 export const DOC_MODEL_DEFAULT = TEXT_MODEL_DEFAULT;
 
@@ -84,7 +126,14 @@ export type ImageSize = (typeof IMAGE_SIZES)[number];
  * Get default model for a given task, with env overrides matching the Python source.
  */
 export function getDefaultModel(
-  task: "generate" | "generate-video" | "generate-speech" | "analyze" | "transcribe" | "extract",
+  task:
+    | "generate"
+    | "generate-video"
+    | "generate-speech"
+    | "generate-music"
+    | "analyze"
+    | "transcribe"
+    | "extract",
 ): string {
   // A blank name (as in a copied .env.example) falls through to the next one.
   if (task === "generate") {
@@ -95,6 +144,9 @@ export function getDefaultModel(
   }
   if (task === "generate-speech") {
     return envDefault("GEMINI_TTS_MODEL", envDefault("TTS_MODEL", TTS_MODEL_DEFAULT));
+  }
+  if (task === "generate-music") {
+    return envDefault("GEMINI_MUSIC_MODEL", MUSIC_MODEL_DEFAULT);
   }
   // analyze / transcribe / extract
   return envDefault("MULTIMODAL_MODEL", envDefault("GEMINI_MODEL", ANALYSIS_MODEL_DEFAULT));

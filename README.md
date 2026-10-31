@@ -4,7 +4,7 @@ AI multimodal CLI — generate images/video/speech/music, analyze and transcribe
 
 ![Isometric technical illustration of multix media workflows](docs-site/public/images/multix-isometric-banner.png)
 
-Supports **OpenAI** (image, image edits, TTS, STT, optional Codex image driver), **Gemini** (analyze, transcribe, generate, Omni Flash video generation and editing, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation, image-to-video, TTS, STT), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), **Cloudflare** (Workers AI image and speech; AI Gateway-routed Replicate video), **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment), **Fish Audio** (native Drama 3 TTS, multi-speaker turns, pronunciation dictionaries, voice design, voice cloning, voice models), **fal.ai** (generic model runner, image, video, text-to-speech via the fal queue API), and **Atlas Cloud** (any model: image, image edit, video, audio, 3D, with resumable async predictions), **Replicate** (generic model runner, image, video, async prediction status/cancel via the direct Replicate API), **Runway** (Gen-4.5 and Gen-4 Turbo video, Gen-4 images, resumable task status/cancel), **HeyGen** (v3 Video Agent prompt-to-video, scripted avatar videos, video translation, lipsync, TTS), **Sume** (any image or video model in Sume's catalog, including lip-sync and captions, on one key, with resumable or cancellable jobs), **TopView** (Legacy API product marketing videos, talking and product avatars, product shots; API Platform models such as Seedance, Wan and GPT Image 2).
+Supports **OpenAI** (image, image edits, TTS, STT, optional Codex image driver), **Gemini** (analyze, transcribe, generate, Omni Flash video generation and editing, Flash TTS, Lyria music), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation, image-to-video, TTS, STT), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), **Cloudflare** (Workers AI image and speech; AI Gateway-routed Replicate video), **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment), **Fish Audio** (native Drama 3 TTS, multi-speaker turns, pronunciation dictionaries, voice design, voice cloning, voice models), **fal.ai** (generic model runner, image, video, text-to-speech via the fal queue API), and **Atlas Cloud** (any model: image, image edit, video, audio, 3D, with resumable async predictions), **Replicate** (generic model runner, image, video, async prediction status/cancel via the direct Replicate API), **Runway** (Gen-4.5 and Gen-4 Turbo video, Gen-4 images, resumable task status/cancel), **HeyGen** (v3 Video Agent prompt-to-video, scripted avatar videos, video translation, lipsync, TTS), **Sume** (any image or video model in Sume's catalog, including lip-sync and captions, on one key, with resumable or cancellable jobs), **TopView** (Legacy API product marketing videos, talking and product avatars, product shots; API Platform models such as Seedance, Wan and GPT Image 2).
 
 ## Documentation
 
@@ -78,7 +78,7 @@ metrics, and `sources` naming the header or body field each money number came
 from), `error` (`code`, `retryable`, `retry_after_s`, `hint`) and `next`
 commands, plus a `cost` receipt (`multix.cost/v1`: estimate, provider-reported
 and actual cost, variance; unknown stays `null`, never $0). Only
-`gemini generate-speech`, `elevenlabs tts`, `fish tts`, `openrouter tts`,
+`gemini generate-speech`, `gemini generate-music`, `elevenlabs tts`, `fish tts`, `openrouter tts`,
 `openrouter transcribe` (local files, measured with `ffprobe`) and
 `speech generate` on its Gemini, ElevenLabs and Fish routes (a `--fallback` plan at
 its most expensive route) are priced so far; `--max-cost`
@@ -198,6 +198,7 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `VIDEO_GEN_MODEL` | No | Override Gemini video generation model (default `gemini-omni-1.1-flash`; `veo-*` selects the legacy Veo path) |
 | `GEMINI_MODEL` / `MULTIMODAL_MODEL` | No | Override Gemini analyze/transcribe/extract model (doc convert uses `--model`; default `gemini-3.6-flash`) |
 | `GEMINI_TTS_MODEL` / `TTS_MODEL` | No | Override Gemini TTS model (default `gemini-3.8-flash-lite-tts`) |
+| `GEMINI_MUSIC_MODEL` | No | Override the `gemini generate-music` model (default `lyria-3-clip-preview`) |
 
 ### Gemini key rotation
 
@@ -274,12 +275,20 @@ multix gemini generate-speech (--text|--prompt) "Have a wonderful day!" [--model
 # Multi-speaker (max 2): repeat --speaker name:voice; prompt should prefix lines with "<name>:"
 multix gemini generate-speech --text "Joe: How's it going? Jane: Not too bad!" \
   --speaker Joe:Kore --speaker Jane:Puck
+
+# Music with Google Lyria (paid tier): a 30 s clip (default) or a full song
+multix gemini generate-music --prompt "Warm lo-fi jazz piano and bass, instrumental only" [--model lyria-3-clip-preview|lyria-3.5] [--lyrics <str> | --lyrics-file lyrics.txt] [--image cover.jpg ...] [--output-format mp3|wav] [--output <path>] [--timeout 600] [-v]
+multix gemini generate-music --interaction-id <id>   # save a stored song again, no new charge
+
+# Live instrumental music with Lyria RealTime (Node 22+), recorded to a 48 kHz stereo WAV
+multix gemini music-live --prompt "Minimal techno, deep bass" [--weighted-prompt "strings:0.4" ...] [--prompts-file timeline.json] [--duration 30] [--bpm 124] [--density 0.3] [--brightness 0.7] [--scale D_MAJOR_B_MINOR] [--mode quality|diversity|vocalization] [--mute-drums] [--output <path>] [-v]
 ```
 
 **Gemini models:**
 - Text output (analyze, transcribe, extract, doc convert): `gemini-3.6-flash` (default), `gemini-3.5-flash` (manual override)
 - Image gen: `gemini-3.1-flash-image` (Nano Banana 2, default), `gemini-3.1-flash-lite-image` (fast, low cost), `gemini-3-pro-image` (4K text), `gemini-nano-banana-2.1` (Google's recommended successor). Imagen 4 is no longer served on the Gemini API, and the `-preview` image ids are past their earliest announced shutdown date and may stop at any time.
 - Video: `gemini-omni-1.1-flash` (default, Interactions API, requires billing). Legacy `veo-*` models still run with an explicit `--model`; see [Gemini video migration](#gemini-video-migration-veo-to-omni-flash).
+- Music: `lyria-3-clip-preview` (default, always 30 s, MP3, $0.04 per clip) and `lyria-3.5` (a couple of minutes steered by the prompt, vocals and timed lyrics, MP3 or `--output-format wav`, $0.08 per song). Both run on the Interactions API, return 44.1 kHz stereo audio, take up to 10 JPEG/PNG/WebP `--image` references, and have no free tier. Lyrics go in `--lyrics`/`--lyrics-file` with `[Verse]`/`[Chorus]` tags or `[0:00 - 0:10]` timings; the lyrics or song structure the model returns are saved next to the audio as `gemini_music_<timestamp>.txt`. A request is never re-sent after a timeout or 5xx (the song may already be billed); `--interaction-id` re-reads a stored one. Live: `lyria-realtime-exp` (`music-live`, instrumental only, experimental, price not published) streams over a WebSocket; `--prompts-file` steers it over time, Ctrl-C keeps the audio recorded so far, and it is not offered by the remote MCP server.
 - TTS: `gemini-3.8-flash-lite-tts` (default, fast/cheap, 101 languages), `gemini-3.8-flash-tts` (highest fidelity, 130 languages), legacy `gemini-3.1-flash-tts-preview`, `gemini-2.5-flash-preview-tts`, `gemini-2.5-pro-preview-tts`. Gemini 3.8 models use the Interactions API, read the text verbatim, take delivery direction via `--style`, and also accept custom `voice_…`/`voicekey_…` voice ids.
 
 `gemini-3.6-flash` is a text-output model. Use Nano Banana for images, Gemini Omni Flash for video, and Gemini Flash TTS for speech.

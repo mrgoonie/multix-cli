@@ -191,3 +191,79 @@ multix gemini generate-speech --text "Welcome to multix." \
 ```
 
 `--style` yêu cầu model Gemini 3.8 TTS và sẽ bị từ chối với model cũ hơn.
+
+## Music
+
+`generate-music` tạo nhạc bằng Google Lyria qua Interactions API. Lệnh cần key
+gói trả phí; Lyria không có free tier.
+
+```bash
+multix gemini generate-music --prompt "Warm lo-fi jazz piano and bass, instrumental only"
+multix gemini generate-music --model lyria-3.5 --prompt "Melodic indie pop, female vocals" \
+  --lyrics-file lyrics.txt --image cover.jpg --output-format wav --output song.wav
+multix gemini generate-music --interaction-id <id>   # lưu lại bài đã lưu trữ, không tính phí mới
+```
+
+| Model | Độ dài | Định dạng | Giá |
+|---|---|---|---|
+| `lyria-3-clip-preview` (mặc định) | luôn 30 giây | MP3 | $0.04 mỗi clip |
+| `lyria-3.5` | vài phút, điều khiển qua prompt | MP3 hoặc WAV | $0.08 mỗi bài |
+
+Cả hai model trả audio stereo 44.1 kHz và nhận tối đa 10 ảnh tham chiếu
+`--image` dạng JPEG, PNG hoặc WebP (tổng 20 MB). Ghi đè model mặc định bằng
+`--model` hoặc `GEMINI_MUSIC_MODEL`. `--output-format wav` bị từ chối với model
+clip thay vì bị bỏ qua.
+
+Đặt lời bài hát vào `--lyrics` hoặc `--lyrics-file` (UTF-8, tối đa 64 KB) với
+thẻ đoạn như `[Verse]`, `[Chorus]` hoặc mốc thời gian như `[0:00 - 0:10] Intro:`.
+Audio được lưu thành `gemini_music_<timestamp>.mp3` (hoặc `.wav`) trong thư mục
+output; lời hoặc cấu trúc bài mà model trả về được lưu cạnh đó thành
+`gemini_music_<timestamp>.txt`.
+
+Bài hát được tạo xong trước khi response bắt đầu, nên `--timeout` mặc định là
+600 giây. Request không bao giờ bị gửi lại sau timeout, mất kết nối hoặc lỗi
+5xx, vì bài có thể đã được tạo và tính phí; chỉ lỗi 429 mới chuyển sang key kế
+tiếp. Lệnh in ra interaction id, và `--interaction-id` đọc lại interaction đã
+lưu mà không tính phí mới.
+
+### Nhạc trực tiếp (Lyria RealTime)
+
+`music-live` stream nhạc không lời từ `lyria-realtime-exp` qua WebSocket và
+ghi lại thành file WAV stereo 16-bit, 48 kHz. Lệnh cần Node 22 trở lên
+(`WebSocket` có sẵn). Google chưa công bố giá cho model thử nghiệm này, nên
+`--estimate` và `--max-cost` báo chi phí là không xác định.
+
+```bash
+multix gemini music-live --prompt "Minimal techno, deep bass" --duration 60 --bpm 124
+multix gemini music-live --weighted-prompt "piano:1.0" --weighted-prompt "strings:0.4" \
+  --scale D_MAJOR_B_MINOR --density 0.3 --brightness 0.7 --output ambient.wav
+multix gemini music-live --prompts-file timeline.json --duration 60
+```
+
+- `--prompt` (trọng số 1.0) và `--weighted-prompt text:weight` lặp lại được;
+  trọng số nằm sau dấu hai chấm cuối cùng và không được bằng 0.
+- `--duration` là số giây audio cần ghi (mặc định 30, tối đa 600); file được
+  cắt đúng độ dài đó.
+- Điều khiển tạo nhạc: `--bpm` (60–200), `--density` và `--brightness`
+  (0–1), `--guidance` (0–6), `--temperature` (0–3), `--top-k` (1–1000),
+  `--seed`, `--scale` (ví dụ `C_MAJOR_A_MINOR`), `--mode`
+  (`quality`, `diversity` hoặc `vocalization`), `--mute-bass`, `--mute-drums` và
+  `--only-bass-and-drums`.
+- Ctrl-C dừng phiên và giữ phần audio đã ghi. Khi mất kết nối, lệnh báo lỗi và
+  không kết nối lại; audio nhận được trước đó vẫn được giữ.
+
+`--prompts-file` điều khiển nhạc theo thời gian. Mỗi bước chạy khi đã nhận đủ
+số giây audio tương ứng; `config` của bước được gộp vào config trước đó, và khi
+đổi `bpm` hoặc `scale` thì context của model được reset theo yêu cầu của Lyria,
+tạo ra một đoạn chuyển nghe rõ.
+
+```json
+{"steps":[
+  {"at":0,"prompts":[{"text":"Ambient synthwave, warm pads","weight":1}],"config":{"bpm":90,"density":0.3}},
+  {"at":20,"prompts":[{"text":"Ambient synthwave","weight":1},{"text":"Driving drums","weight":0.6}]},
+  {"at":40,"config":{"brightness":0.8}}
+]}
+```
+
+`music-live` không có trên remote MCP server, vì phiên được điều khiển trong
+lúc đang phát.

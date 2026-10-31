@@ -1,6 +1,6 @@
 ---
 name: speech-production
-description: Produce and transcribe audio with multix — text-to-speech on any provider through multix speech or provider commands (OpenAI, Gemini Flash TTS incl. Gemini 3.8 delivery style, OpenRouter, MiniMax, ElevenLabs v4, native Fish Audio Drama 3 with multi-speaker turns, pronunciation dictionaries and voice design, fal.ai, Cloudflare MeloTTS), voice cloning, speech-to-text and transcription (OpenAI, ElevenLabs Scribe, OpenRouter Whisper and others), music and sound effects, and multi-character dialogue audio with per-character voice profiles, cached takes and stem export (multix scene).
+description: Produce and transcribe audio with multix — text-to-speech on any provider through multix speech or provider commands (OpenAI, Gemini Flash TTS incl. Gemini 3.8 delivery style, OpenRouter, MiniMax, ElevenLabs v4, native Fish Audio Drama 3 with multi-speaker turns, pronunciation dictionaries and voice design, fal.ai, Cloudflare MeloTTS), voice cloning, speech-to-text and transcription (OpenAI, ElevenLabs Scribe, OpenRouter Whisper and others), music (Gemini Lyria songs and live Lyria RealTime, MiniMax, ElevenLabs) and sound effects, and multi-character dialogue audio with per-character voice profiles, cached takes and stem export (multix scene).
 version: 1.25.0 # x-release-please-version
 license: MIT
 metadata:
@@ -134,10 +134,15 @@ Gemini transcription (`multix gemini transcribe`) is in [../document-conversion/
 ## Music + SFX
 
 ```bash
+multix gemini generate-music --prompt "Warm lo-fi jazz, instrumental" [--model lyria-3-clip-preview|lyria-3.5] [--lyrics-file lyrics.txt] [--image cover.jpg] [--output-format mp3|wav]
+multix gemini generate-music --interaction-id <id>   # re-save a stored song, no new charge
+multix gemini music-live --prompt "Minimal techno" --duration 60 [--bpm 124] [--prompts-file timeline.json]
 multix minimax generate-music --lyrics "..." [--model music-2.5]
 multix elevenlabs music --prompt "dreamy synthwave loop" [--music-length-ms 30000]
 multix elevenlabs sfx --text "car engine starting" [--duration-seconds 5]
 ```
+
+Gemini Lyria: `lyria-3-clip-preview` (default) is always a 30 s MP3 at $0.04; `lyria-3.5` makes songs of a couple of minutes with vocals, MP3 or WAV, at $0.08. Lyrics take `[Verse]`/`[Chorus]` tags or `[0:00 - 0:10]` timings, and the returned lyrics or song structure are saved as `<name>.txt` next to the audio. A song is never re-sent after a timeout or 5xx because it may already be billed; use `--interaction-id` with the printed id instead. `music-live` streams instrumental `lyria-realtime-exp` music to a 48 kHz stereo WAV (Node 22+, price not published, local CLI only); `--prompts-file` holds `{"steps":[{"at":<seconds>,"prompts":[{"text","weight"}],"config":{...}}]}` and Ctrl-C keeps what was recorded.
 
 ## Scenes (multi-character dialogue)
 
@@ -169,3 +174,4 @@ multix scene export --out stems [--approved-only] [--allow-missing]
 | `OPENROUTER_STT_MODEL` | Default `openrouter transcribe` model (default `openai/whisper-large-v3-turbo`) |
 | `FAL_TTS_MODEL` | Default `multix fal tts` model (default `google/gemini-3.8-flash-tts`) |
 | `GEMINI_TTS_MODEL` / `TTS_MODEL` | Override Gemini TTS model (default `gemini-3.8-flash-lite-tts`) |
+| `GEMINI_MUSIC_MODEL` | Override the `gemini generate-music` model (default `lyria-3-clip-preview`) |

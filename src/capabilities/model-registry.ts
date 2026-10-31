@@ -126,7 +126,33 @@ function geminiTts(model: string, name: string): ModelCapability {
   };
 }
 
+const LYRIA_DOCS = "https://ai.google.dev/gemini-api/docs/music-generation";
+
+/** Lyria over the Gemini Interactions API; inputs are `gemini generate-music` flags. */
+function lyria(model: string, name: string, formats: readonly string[]): ModelCapability {
+  return {
+    provider: "gemini",
+    model,
+    name,
+    tasks: ["music"],
+    command: "gemini generate-music",
+    example: `multix gemini generate-music --model ${model} --prompt "Warm lo-fi jazz piano and bass, instrumental only"`,
+    inputs: {
+      prompt: { type: "string", required: true, note: "genre, mood, instruments, structure" },
+      lyrics: { type: "string", note: "[Verse]/[Chorus] tags or [0:00 - 0:10] timings" },
+      image: { type: "array", note: "up to 10 JPEG/PNG/WebP reference images" },
+      output_format: { type: "string", values: formats, default: "mp3" },
+    },
+    outputs: [{ field: "audio", modality: "audio", formats }],
+    async: false,
+    limits: { max_images: 10, ...(model === "lyria-3-clip-preview" ? { seconds: 30 } : {}) },
+    source: { url: LYRIA_DOCS, verified_at: "2026-10-31" },
+  };
+}
+
 export const MODEL_CAPABILITIES: readonly ModelCapability[] = [
+  lyria("lyria-3-clip-preview", "Lyria 3 Clip (preview)", ["mp3"]),
+  lyria("lyria-3.5", "Lyria 3.5", ["mp3", "wav"]),
   elevenV4("elevenlabs/tts/eleven-v4", "Eleven v4 (fal)"),
   elevenV4("elevenlabs/tts/eleven-v4-turbo", "Eleven v4 Turbo (fal)"),
   geminiTts("google/gemini-3.8-flash-tts", "Gemini 3.8 Flash TTS (fal)"),

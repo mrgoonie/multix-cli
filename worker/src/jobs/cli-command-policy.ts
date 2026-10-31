@@ -158,6 +158,8 @@ export const EXCLUDED_COMMANDS: ReadonlySet<string> = new Set([
   "scene reject",
   "scene status",
   "scene export",
+  // A live WebSocket session steered while it plays; it does not fit one remote request.
+  "gemini music-live",
 ]);
 
 /** Options no remote command may use: stdin is not available in the container. */
@@ -237,6 +239,14 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
     forced: OMNI_MODEL,
     fileOptions: { video: "file", "reference-images": "file" },
     caps: OMNI_VIDEO_CAPS,
+  },
+  // One flat charge per song. The default lyria-3-clip-preview always returns
+  // 30 s; lyria-3.5 runs a couple of minutes (set by the prompt, which no cap
+  // can bound), so choosing a model makes the run uncapped. --interaction-id
+  // re-reads a stored song without a new charge.
+  "gemini generate-music": {
+    fileOptions: { image: "file", "lyrics-file": "file" },
+    uncappedOptions: ["model"],
   },
   "minimax generate": { caps: IMAGE_COUNT },
   "minimax image-to-image": { fileOptions: { ref: "file" }, caps: IMAGE_COUNT },

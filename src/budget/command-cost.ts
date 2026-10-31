@@ -9,6 +9,7 @@
 import { BudgetError } from "../core/errors.js";
 import { TASK_DEFAULTS as ELEVENLABS_DEFAULTS } from "../providers/elevenlabs/models.js";
 import { DEFAULT_FISH_TTS_MODEL } from "../providers/fish/models.js";
+import { MUSIC_MODEL_DEFAULT as GEMINI_MUSIC_DEFAULT } from "../providers/gemini/models.js";
 import { TTS_MODEL_DEFAULT as GEMINI_TTS_DEFAULT } from "../providers/gemini/voices.js";
 import {
   DEFAULT_OPENROUTER_STT_MODEL,
@@ -68,6 +69,16 @@ const BUILDERS: Record<string, RequestBuilder> = {
       ...(style ? { extra_text: [style] } : {}),
     };
   },
+  // One flat charge per song; prompt, lyrics and images do not change it.
+  // --interaction-id re-reads a stored song and starts no new one.
+  "gemini generate-music": (o, d) => {
+    if (opt(o, "interaction-id") !== undefined) return undefined;
+    return {
+      provider: "gemini",
+      model: (opt(o, "model") ?? d.model ?? GEMINI_MUSIC_DEFAULT).replace(/^models\//, ""),
+      text: "",
+    };
+  },
   "elevenlabs tts": (o, d) => {
     const text = opt(o, "text") ?? opt(o, "prompt");
     if (text === undefined) return undefined;
@@ -118,6 +129,8 @@ const BUILDERS: Record<string, RequestBuilder> = {
 const NEEDS: Record<string, string> = {
   "openrouter tts": "--text or --prompt (text from --text-file or --turns-file is not priced)",
   "openrouter transcribe": "the audio to transcribe (--input)",
+  "gemini generate-music":
+    "a new generation (--interaction-id re-reads a stored song and is not priced)",
   "fish tts": "--text, --prompt or (from the CLI) a readable --text-file or --turns-file",
 };
 

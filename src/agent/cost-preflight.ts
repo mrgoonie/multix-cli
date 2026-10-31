@@ -88,6 +88,7 @@ function fishTurnsText(path: unknown): string | undefined {
 /** Defaults a command resolves at run time (env overrides, file probes), not in commander. */
 function runtimeDefaults(command: string, options: Record<string, unknown>): CommandDefaults {
   if (command === "gemini generate-speech") return { model: getDefaultModel("generate-speech") };
+  if (command === "gemini generate-music") return { model: getDefaultModel("generate-music") };
   if (command === "openrouter transcribe") {
     const audioSeconds = localAudioSeconds(options.input);
     return audioSeconds !== undefined ? { audioSeconds } : {};

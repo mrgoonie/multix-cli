@@ -34,7 +34,16 @@ const topLevelCommands = [
 ];
 
 const subcommands: Record<string, string[]> = {
-  gemini: ["analyze", "transcribe", "extract", "generate", "generate-video", "image-to-image"],
+  gemini: [
+    "analyze",
+    "transcribe",
+    "extract",
+    "generate",
+    "generate-video",
+    "image-to-image",
+    "generate-music",
+    "music-live",
+  ],
   minimax: ["generate", "generate-video", "generate-speech", "generate-music", "image-to-image"],
   openrouter: ["generate", "image-to-image"],
   openai: ["generate", "image-to-image", "generate-speech", "transcribe"],

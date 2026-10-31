@@ -194,3 +194,79 @@ multix gemini generate-speech --text "Welcome to multix." \
 ```
 
 `--style` requires a Gemini 3.8 TTS model and is rejected for older models.
+
+## Music
+
+`generate-music` creates music with Google Lyria over the Interactions API. It
+needs a paid-tier key; Lyria has no free tier.
+
+```bash
+multix gemini generate-music --prompt "Warm lo-fi jazz piano and bass, instrumental only"
+multix gemini generate-music --model lyria-3.5 --prompt "Melodic indie pop, female vocals" \
+  --lyrics-file lyrics.txt --image cover.jpg --output-format wav --output song.wav
+multix gemini generate-music --interaction-id <id>   # save a stored song again, no new charge
+```
+
+| Model | Length | Formats | Price |
+|---|---|---|---|
+| `lyria-3-clip-preview` (default) | always 30 s | MP3 | $0.04 per clip |
+| `lyria-3.5` | a couple of minutes, steered by the prompt | MP3 or WAV | $0.08 per song |
+
+Both models return 44.1 kHz stereo audio and take up to 10 JPEG, PNG or WebP
+`--image` references (20 MB in total). Override the default model with
+`--model` or `GEMINI_MUSIC_MODEL`. `--output-format wav` is rejected for the
+clip model instead of being dropped.
+
+Put lyrics in `--lyrics` or `--lyrics-file` (UTF-8, up to 64 KB) with section
+tags such as `[Verse]` and `[Chorus]`, or timings such as `[0:00 - 0:10] Intro:`.
+The audio is saved as `gemini_music_<timestamp>.mp3` (or `.wav`) in the output
+directory, and the lyrics or song structure the model returns go next to it as
+`gemini_music_<timestamp>.txt`.
+
+A song is generated before the response starts, so `--timeout` defaults to 600
+seconds. A request is never re-sent after a timeout, a dropped connection or a
+5xx, because the song may already be generated and billed; only a 429 moves on
+to the next key. The command prints the interaction id, and
+`--interaction-id` reads a stored interaction again without a new charge.
+
+### Live music (Lyria RealTime)
+
+`music-live` streams instrumental music from `lyria-realtime-exp` over a
+WebSocket and records it as a 16-bit, 48 kHz stereo WAV. It needs Node 22 or
+newer (built-in `WebSocket`). Google has not published a price for this
+experimental model, so `--estimate` and `--max-cost` report it as unknown.
+
+```bash
+multix gemini music-live --prompt "Minimal techno, deep bass" --duration 60 --bpm 124
+multix gemini music-live --weighted-prompt "piano:1.0" --weighted-prompt "strings:0.4" \
+  --scale D_MAJOR_B_MINOR --density 0.3 --brightness 0.7 --output ambient.wav
+multix gemini music-live --prompts-file timeline.json --duration 60
+```
+
+- `--prompt` (weight 1.0) and `--weighted-prompt text:weight` are repeatable;
+  the weight follows the last colon and must not be 0.
+- `--duration` is seconds of audio to record (default 30, up to 600); the file
+  is cut to exactly that length.
+- Generation controls: `--bpm` (60–200), `--density` and `--brightness`
+  (0–1), `--guidance` (0–6), `--temperature` (0–3), `--top-k` (1–1000),
+  `--seed`, `--scale` (for example `C_MAJOR_A_MINOR`), `--mode`
+  (`quality`, `diversity` or `vocalization`), `--mute-bass`, `--mute-drums` and
+  `--only-bass-and-drums`.
+- Ctrl-C stops the session and keeps the audio recorded so far. A dropped
+  connection is reported and never reopened; audio received before it is kept.
+
+`--prompts-file` steers the music over time. Each step fires once that many
+seconds of audio have arrived; its `config` is merged into the one before it,
+and a change of `bpm` or `scale` resets the model's context, as Lyria requires,
+which makes an audible transition.
+
+```json
+{"steps":[
+  {"at":0,"prompts":[{"text":"Ambient synthwave, warm pads","weight":1}],"config":{"bpm":90,"density":0.3}},
+  {"at":20,"prompts":[{"text":"Ambient synthwave","weight":1},{"text":"Driving drums","weight":0.6}]},
+  {"at":40,"config":{"brightness":0.8}}
+]}
+```
+
+`music-live` is not available through the remote MCP server, because the
+session is steered while it plays.

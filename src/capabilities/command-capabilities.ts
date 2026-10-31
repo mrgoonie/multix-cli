@@ -32,6 +32,8 @@ export const COMMAND_CAPABILITIES: Readonly<Record<string, CommandCapability>> =
   "gemini edit-video": fixed(["video-edit"], ["video"]),
   "gemini extend-video": fixed(["video-edit"], ["video"]),
   "gemini generate-speech": fixed(["speech"], ["audio"]),
+  "gemini generate-music": fixed(["music"], ["audio"]),
+  "gemini music-live": fixed(["music"], ["audio"]),
   "minimax generate": fixed(["image"], ["image"]),
   "minimax image-to-image": fixed(["image-edit"], ["image"]),
   "minimax generate-video": fixed(["video", "image-to-video"], ["video"]),
