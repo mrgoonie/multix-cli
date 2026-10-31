@@ -183,15 +183,18 @@ the option that makes a run uncapped):
   generate` / `image-to-image`, `--alchemy` / `--ultra` of `leonardo
   generate`, `--multiplier` of `leonardo upscale` and `--ratio` of `runway
   image`. Omitting the option, or repeating the `default` that
-  `multix_catalog` lists for it, keeps the run capped.
+  `multix_catalog` lists for it, keeps the run capped;
+- `--model` of `gemini generate-music`, which picks the price of each song
+  (`lyria-3.5` costs twice the default clip model). It has no listed default,
+  so any `--model` makes the run uncapped; omit it for the clip model.
 
 The operator decides what such a run needs with `MULTIX_MCP_UNCAPPED_SPEND`.
 In `budget` mode (the default) the call must give `max_cost_usd`, and the job
 starts only when the price estimate proves the run fits (`cost_policy` is
 treated as `strict` for these runs, since the estimate cannot see the uncapped
-part). Of these, only `openrouter tts` has a price estimate, and only for a
-model whose price is known, so in practice `budget` refuses the rest, closed
-rather than open. `deny` always refuses them; `allow` runs them as before, on
+part). Of these, only `openrouter tts` (for a model whose price is known) and
+`gemini generate-music` (a flat price per song for each model) have a price
+estimate, so in practice `budget` refuses the rest, closed rather than open. `deny` always refuses them; `allow` runs them as before, on
 the caller's own keys. An `estimate: true` call is answered in every mode, since it
 starts nothing. The REST API (`POST /api/v1/jobs`) takes the same
 `max_cost_usd` and `cost_policy` fields and applies the same rule.

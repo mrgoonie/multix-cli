@@ -818,6 +818,13 @@ describe("prepareRun: runs the caps cannot bound", () => {
     ).toContain("--ultra");
     expect(priced("runway image", { ratio: "1920:1080" }, ["a cat"])).toContain("--ratio");
     expect(priced("leonardo upscale", { multiplier: 2 }, ["abc"])).toContain("--multiplier");
+    expect(priced("gemini generate-music", { prompt: "jazz", model: "lyria-3.5" })).toContain(
+      "--model",
+    );
+    // --model has no listed default, so even the clip model given explicitly is gated.
+    expect(
+      priced("gemini generate-music", { prompt: "jazz", model: "lyria-3-clip-preview" }),
+    ).toContain("--model");
   });
 
   it("keeps a run capped when the price option is omitted or repeats the CLI default", () => {
@@ -835,6 +842,9 @@ describe("prepareRun: runs the caps cannot bound", () => {
     ).not.toHaveProperty("uncappedSpend");
     expect(
       run({ command: "leonardo generate", args: ["a cat"], options: { quality: "LOW" } }),
+    ).not.toHaveProperty("uncappedSpend");
+    expect(
+      run({ command: "gemini generate-music", options: { prompt: "jazz" } }),
     ).not.toHaveProperty("uncappedSpend");
   });
 
