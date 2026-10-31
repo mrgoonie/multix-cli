@@ -9,13 +9,14 @@ import {
   installFetchTelemetry,
   settleTelemetry,
 } from "../../../src/agent/fetch-telemetry.js";
-import { run } from "../../../src/agent/run-state.js";
+import { run, summarizeUsage } from "../../../src/agent/run-state.js";
 
 const original = globalThis.fetch;
 
 afterEach(() => {
   globalThis.fetch = original;
   run.postUsage = [];
+  run.getUsage = new Map();
   run.calls = [];
   run.ids = [];
   run.requestModel = undefined;
@@ -45,6 +46,26 @@ describe("installFetchTelemetry", () => {
     expect(run.postUsage[0]?.sources).toEqual({
       credits: "api.elevenlabs.io header.character-cost",
     });
+  });
+});
+
+describe("GET usage", () => {
+  it("keeps the latest poll when only a per-request header id names the response", async () => {
+    let n = 0;
+    globalThis.fetch = vi.fn(async () => {
+      n++;
+      return new Response(JSON.stringify({ status: "done", usage: { cost_usd: 0.5 } }), {
+        status: 200,
+        headers: { "content-type": "application/json", "x-request-id": `req-${n}` },
+      });
+    }) as typeof fetch;
+    installFetchTelemetry(() => {
+      throw new Error("not a dry run");
+    });
+    await fetch("https://api.example.test/v1/tasks/current");
+    await fetch("https://api.example.test/v1/tasks/current");
+    await settleTelemetry();
+    expect(summarizeUsage()?.cost_usd).toBe(0.5);
   });
 });
 

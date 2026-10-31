@@ -178,7 +178,8 @@ export function buildOfferings(at: Date = new Date()): Offering[] {
     for (const t of cap.tasks) addTask(o, t);
   }
   for (const entry of PRICING_CATALOG) {
-    const task = taskOfMeters(entry.windows.flatMap((w) => w.components.map((c) => c.meter)));
+    const task =
+      entry.task ?? taskOfMeters(entry.windows.flatMap((w) => w.components.map((c) => c.meter)));
     for (const model of entry.models) {
       const o = get(entry.provider, model);
       addTask(o, task);

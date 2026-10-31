@@ -6,11 +6,13 @@ import type { Command } from "commander";
 import { registerAnalyzeCommand } from "./analyze.js";
 import { registerGeminiEditVideoCommands } from "./edit-video.js";
 import { registerExtractCommand } from "./extract.js";
+import { registerGeminiGenerateMusicCommand } from "./generate-music.js";
 import { registerGeminiGenerateSpeechCommand } from "./generate-speech.js";
 import { registerGenerateVideoCommand } from "./generate-video.js";
 import { registerGenerateCommand } from "./generate.js";
 import { registerGeminiImageToImageCommand } from "./image-to-image.js";
 import { registerGeminiImageToVideoCommand } from "./image-to-video.js";
+import { registerGeminiMusicLiveCommand } from "./music-live.js";
 import { registerTranscribeCommand } from "./transcribe.js";
 import { registerGeminiVideoStatusCommands } from "./video-status.js";
 
@@ -18,7 +20,7 @@ export function registerGeminiCommands(program: Command): void {
   const gemini = program
     .command("gemini")
     .description(
-      "Gemini: analyze, transcribe, extract data, generate images (Nano Banana), video (Omni Flash, Veo), and speech (Flash TTS)",
+      "Gemini: analyze, transcribe, extract data, generate images (Nano Banana), video (Omni Flash, Veo), speech (Flash TTS), and music (Lyria)",
     );
 
   registerAnalyzeCommand(gemini);
@@ -31,4 +33,6 @@ export function registerGeminiCommands(program: Command): void {
   registerGeminiEditVideoCommands(gemini);
   registerGeminiVideoStatusCommands(gemini);
   registerGeminiGenerateSpeechCommand(gemini);
+  registerGeminiGenerateMusicCommand(gemini);
+  registerGeminiMusicLiveCommand(gemini);
 }

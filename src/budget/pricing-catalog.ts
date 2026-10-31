@@ -22,6 +22,8 @@
  * "unknown".
  */
 
+import type { Task } from "../capabilities/capability-types.js";
+
 export const PRICING_SCHEMA = "multix.pricing/v1";
 
 /** What a price is charged on. */
@@ -70,6 +72,8 @@ export interface PriceEntry {
   /** CLI group the price applies to (gemini, elevenlabs) or the provider name. */
   provider: string;
   models: string[];
+  /** Task the models serve, when the meters alone do not tell (a per-request price). */
+  task?: Task;
   /** Billing tier the price is for; free tiers and plan credits are not modelled. */
   tier: string;
   currency: "USD";
@@ -430,6 +434,34 @@ export const PRICING_CATALOG: PriceEntry[] = [
     last_checked: "2026-10-26",
     source: GEMINI_PRICING,
     verified: true,
+  },
+  {
+    id: "gemini/lyria-3-clip-preview@paid-standard",
+    provider: "gemini",
+    task: "music",
+    models: ["lyria-3-clip-preview"],
+    tier: "paid-standard",
+    currency: "USD",
+    region: "global",
+    windows: [{ components: [{ meter: "requests", usd: 0.04, per: 1 }] }],
+    last_checked: "2026-10-31",
+    source: GEMINI_PRICING,
+    verified: true,
+    notes: "Billed per 30-second clip; no free tier.",
+  },
+  {
+    id: "gemini/lyria-3.5@paid-standard",
+    provider: "gemini",
+    task: "music",
+    models: ["lyria-3.5"],
+    tier: "paid-standard",
+    currency: "USD",
+    region: "global",
+    windows: [{ components: [{ meter: "requests", usd: 0.08, per: 1 }] }],
+    last_checked: "2026-10-31",
+    source: GEMINI_PRICING,
+    verified: true,
+    notes: "Billed per full song, whatever its length; no free tier.",
   },
   {
     id: "elevenlabs/multilingual@api",

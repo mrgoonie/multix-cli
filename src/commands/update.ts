@@ -8,7 +8,6 @@
  * of running it.
  */
 
-import { createRequire } from "node:module";
 import type { Command } from "commander";
 import { execa } from "execa";
 import { HttpError } from "../core/errors.js";
@@ -24,12 +23,15 @@ import {
 const PACKAGE_NAME = "@mrgoonie/multix";
 const REGISTRY_BASE = "https://registry.npmjs.org";
 
-const require = createRequire(import.meta.url);
-
-export function getCurrentVersion(): string {
-  // biome-ignore lint/suspicious/noExplicitAny: JSON import
-  const pkg = require("../../package.json") as any;
-  return pkg.version as string;
+/**
+ * The running CLI's version, as `multix --version` reports it. The root
+ * program reads package.json relative to the bundled dist/cli.js; a path
+ * relative to this source file points outside the installed package.
+ */
+export function getCurrentVersion(program: Command): string {
+  const version = program.version();
+  if (!version) throw new Error("multix version is not set on the root command");
+  return version;
 }
 
 interface RegistryVersionDoc {
@@ -72,7 +74,7 @@ export function registerUpdateCommand(program: Command): void {
     .action(
       async (opts: { check?: boolean; tag?: string; dryRun?: boolean; verbose?: boolean }) => {
         const logger = createLogger({ verbose: opts.verbose ?? false });
-        const currentVersion = getCurrentVersion();
+        const currentVersion = getCurrentVersion(program);
         const explicitTag = opts.tag !== undefined;
         const tag = opts.tag ?? "latest";
 

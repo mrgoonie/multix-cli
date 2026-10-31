@@ -158,6 +158,9 @@ export const EXCLUDED_COMMANDS: ReadonlySet<string> = new Set([
   "scene reject",
   "scene status",
   "scene export",
+  // A long-lived WebSocket stream (Lyria RealTime) with no published price;
+  // a request/response job cannot steer it or bound its spend.
+  "gemini music-live",
 ]);
 
 /** Options no remote command may use: stdin is not available in the container. */
@@ -205,6 +208,14 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   "gemini extract": { fileOptions: { files: "file" } },
   "gemini generate": { caps: IMAGE_COUNT, priceOptions: IMAGE_SIZE },
   "gemini image-to-image": { fileOptions: { ref: "file" } },
+  // One flat price per song; the length is not an option. lyria-3.5 costs twice
+  // the default clip model and no operator cap bounds that. --model has no CLI
+  // default (GEMINI_MUSIC_MODEL), so any --model goes through the uncapped-spend
+  // gate; omitting it runs the clip model.
+  "gemini generate-music": {
+    fileOptions: { image: "file", "lyrics-file": "file" },
+    priceOptions: ["model"],
+  },
   // Gemini Omni video only (Veo is forced out): when --duration or --resolution
   // is omitted an allowed server value is sent, so the operator caps hold.
   // --no-wait and `video-status`/`video-cancel` run as-is, like runway/replicate.

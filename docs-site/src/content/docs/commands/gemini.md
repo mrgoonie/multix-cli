@@ -1,6 +1,6 @@
 ---
 title: Gemini commands
-description: Use Gemini for multimodal analysis, document extraction, image/video generation, and speech.
+description: Use Gemini for multimodal analysis, document extraction, image/video generation, speech, and Lyria music.
 ---
 
 Gemini commands require `GEMINI_API_KEY`. Extra keys in `GEMINI_API_KEY_2`, `GEMINI_API_KEY_3`, … are used when a key hits its quota; see [Environment variables](/reference/environment/#gemini-key-rotation). Run `multix gemini <command> --help`
@@ -194,3 +194,72 @@ multix gemini generate-speech --text "Welcome to multix." \
 ```
 
 `--style` requires a Gemini 3.8 TTS model and is rejected for older models.
+
+## Music
+
+`generate-music` makes music with Google Lyria through the Interactions API.
+The default `lyria-3-clip-preview` returns a 30-second MP3 clip; `lyria-3.5`
+returns a full song of about a couple of minutes, as MP3 or, with
+`--output-format wav`, WAV. Override the default with `--model` or
+`GEMINI_MUSIC_MODEL`.
+
+```bash
+multix gemini generate-music --prompt "upbeat synthwave with a driving bassline"
+multix gemini generate-music --model lyria-3.5 --output-format wav \
+  --prompt "warm acoustic folk ballad, female vocals" --lyrics-file lyrics.txt
+multix gemini generate-music --prompt "a soundtrack for this scene" --image scene.png
+```
+
+- `--lyrics` or `--lyrics-file` (UTF-8, up to 64 KB) adds lyrics to the
+  prompt; section tags such as `[Verse]` and `[Chorus]`, and timings such as
+  `[0:00 - 0:15] Intro`, steer the structure.
+- `--image` (repeatable, up to 10 PNG, JPEG, WebP or HEIC images) steers the
+  mood.
+- The song is saved as `gemini_music_<stamp>.mp3` (or `.wav`). Lyrics or a song
+  structure the model returns are saved next to it as `gemini_music_<stamp>.txt`.
+- Lyria is billed per song (US$0.04 for a clip, US$0.08 for a `lyria-3.5`
+  song, no free tier), so `--estimate` and `--max-cost` work. The request is
+  sent once: after a timeout or a dropped connection it is not re-sent,
+  because Google may already have generated and billed the song; the error is
+  `UNKNOWN_REMOTE_STATE` and not retryable. Only a
+  rate-limit answer moves on to the next `GEMINI_API_KEY_<n>` key.
+
+### Lyria RealTime
+
+`music-live` records an instrumental session from Lyria RealTime
+(`lyria-realtime-exp`, experimental) to a 48 kHz, 16-bit stereo WAV file. The
+session runs over a WebSocket, so it needs Node.js 22 or newer.
+
+```bash
+multix gemini music-live --prompt "minimal techno" --prompt "rain" --weight 1 --weight 0.4 \
+  --bpm 124 --density 0.6 --duration 60
+multix gemini music-live --prompts-file session.json --duration 120 --output live.wav
+```
+
+- Repeat `--prompt` with a matching `--weight` (default 1.0) to blend styles.
+- Controls: `--bpm` (60–200), `--density` and `--brightness` (0–1),
+  `--guidance` (0–6), `--temperature` (0–3), `--top-k` (1–1000), `--seed`,
+  `--scale` (for example `C_MAJOR_A_MINOR`), `--mode`
+  (`QUALITY|DIVERSITY|VOCALIZATION`), `--mute-bass`, `--mute-drums` and
+  `--only-bass-and-drums`. A BPM or scale change resets the model's context,
+  which makes an audible transition.
+- `--prompts-file` takes JSON with `prompts`, an optional `config` (flags
+  override it) and optional `changes` that apply new prompts or config at a
+  point in the recording:
+
+  ```json
+  {
+    "prompts": [{ "text": "lo-fi hip hop", "weight": 1 }],
+    "config": { "bpm": 80, "density": 0.4 },
+    "changes": [{ "at": 30, "prompts": [{ "text": "jazz piano", "weight": 1 }] }]
+  }
+  ```
+
+- `--duration` (1–600 seconds, default 30) is the length of audio to record.
+  Ctrl-C ends the recording early, writes a valid WAV file (copied to
+  `--output` when given) and exits 130. If the server ends the session early, the partial recording is kept, the command
+  exits 1, and the session is not restarted.
+- The output is instrumental only. Google publishes no price for Lyria
+  RealTime yet, so `--estimate` reports it as unknown and `--max-cost` refuses
+  it. `--dry-run` prints the session messages without connecting.
+- The remote MCP server does not run `music-live`.

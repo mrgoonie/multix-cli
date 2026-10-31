@@ -182,15 +182,20 @@ hạn):
   generate` / `image-to-image`, `--alchemy` / `--ultra` của `leonardo
   generate`, `--multiplier` của `leonardo upscale` và `--ratio` của `runway
   image`. Bỏ trống option, hoặc truyền đúng `default` mà `multix_catalog` liệt
-  kê cho option đó, thì lần chạy vẫn được giới hạn.
+  kê cho option đó, thì lần chạy vẫn được giới hạn;
+- `--model` của `gemini generate-music`, option quyết định giá mỗi bài
+  (`lyria-3.5` đắt gấp đôi model clip mặc định). Option này không có `default`
+  được liệt kê, nên mọi `--model` đều khiến lần chạy không được giới hạn; bỏ
+  trống để dùng model clip.
 
 Operator quyết định điều kiện cho các lần chạy này bằng
 `MULTIX_MCP_UNCAPPED_SPEND`. Ở chế độ `budget` (mặc định), lệnh gọi phải có
 `max_cost_usd` và job chỉ khởi động khi ước tính giá chứng minh lần chạy nằm
 trong mức đó (`cost_policy` được coi là `strict` với các lần chạy này, vì ước
 tính không nhìn thấy phần không bị giới hạn). Trong số này chỉ
-`openrouter tts` có ước tính giá, và chỉ với model đã biết giá, nên trên thực
-tế `budget` từ chối các lệnh còn lại (đóng thay vì mở). `deny` luôn từ chối;
+`openrouter tts` (với model đã biết giá) và `gemini generate-music` (giá cố
+định mỗi bài cho từng model) có ước tính giá, nên trên thực tế `budget` từ chối
+các lệnh còn lại (đóng thay vì mở). `deny` luôn từ chối;
 `allow` chạy như trước, bằng key của chính người gọi. Lệnh gọi `estimate: true` luôn được trả
 lời ở mọi chế độ vì nó không khởi động gì. REST API (`POST /api/v1/jobs`) nhận
 cùng các trường `max_cost_usd` và `cost_policy` và áp dụng cùng quy tắc.
