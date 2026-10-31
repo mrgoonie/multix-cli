@@ -36,6 +36,13 @@ export interface RunState {
   /** Usage from POST responses (summed) and the latest GET responses (last wins). */
   postUsage: ResponseUsage[];
   getUsage: Map<string, ResponseUsage>;
+  /**
+   * The run's POST responses report an amount the provider reserves, not one
+   * it charged (Sume refunds a submit's usage when the job fails or is
+   * canceled): they stay in metrics but never count as cost or credits. The
+   * charge comes from a later read of the job.
+   */
+  postAmountsReserved?: boolean;
   ids: string[];
   /** Index in calls[] of the response that first returned each id in ids. */
   idCalls: Map<string, number>;
@@ -76,12 +83,21 @@ export interface RunState {
    * signal reports how to resume it instead of a rerun that would pay twice.
    */
   inFlight?: { id: string; resume: string };
+  /** A job the command named itself (a read of a job given on the command line). */
+  namedJob?: string;
   /**
    * What a signal left behind, recorded by the handler of a phase that knows better
    * than request counting: an upload before submit billed nothing, while a submit
    * still in flight may have been accepted under an id the run never saw.
    */
   interrupted?: { hint: string; retryable: boolean };
+  /**
+   * Set by a command that saved part of its outputs before a later paid request
+   * failed: the option changes that request only what is still missing (null
+   * drops an option, such as an --output already written). The failure suggests
+   * that run instead of a rerun that pays again for the saved files.
+   */
+  partial?: { options: Record<string, string | null> };
   /** True once a command action started (help and parse errors never get there). */
   actionStarted: boolean;
   finalized: boolean;
@@ -116,6 +132,19 @@ export function trackInFlight(id: string, resume: string, state: RunState = run)
   if (!state.ids.includes(id)) state.ids.unshift(id);
 }
 
+/**
+ * Name the job a command acts on when its responses may not carry the id (a
+ * result read), so the run joins that job's operation; its id goes in provider_ids.
+ */
+export function nameJob(given: string, state: RunState = run): void {
+  // Clients trim the id they send, so name the job by the same trimmed form.
+  const id = given.trim();
+  // Same bound as an id read from a response: a longer argument is not a job id.
+  if (!id || id.length > 128) return;
+  state.namedJob = id;
+  if (!state.ids.includes(id)) state.ids.unshift(id);
+}
+
 export interface UsageSummary {
   tokens?: UsageTokens;
   cost_usd?: number;
@@ -143,24 +172,27 @@ export interface JobIdentity {
 /** Upload endpoints: the id they return names an input file, not the job. */
 const UPLOAD_PATH = /upload|\/(files|assets)(\/|$)/i;
 
+/** A call whose returned id can name the job: it succeeded and is not an upload (a GET only when `submit` is false). */
+export function namesJob(call: HttpCall | undefined, submit: boolean): boolean {
+  if (!call || call.status === 0 || call.status >= 400 || UPLOAD_PATH.test(call.path)) return false;
+  return !submit || call.method !== "GET";
+}
+
 /**
  * The provider job or request this run is about: the in-flight job when one
- * was tracked, else the first id a successful submit (non-GET, not an upload)
+ * was tracked, else the job the command named, else the first id a successful submit (non-GET, not an upload)
  * returned, else the first id a successful GET returned. Ids from failed calls
  * stay in provider_ids but never name the job.
  */
 export function jobIdentity(state: RunState = run): JobIdentity | undefined {
   if (!state.group) return undefined;
-  const callOf = (id: string) => state.calls[state.idCalls.get(id) ?? -1];
-  const ok = (id: string, submit: boolean) => {
-    const call = callOf(id);
-    if (!call || call.status === 0 || call.status >= 400 || UPLOAD_PATH.test(call.path)) {
-      return false;
-    }
-    return !submit || call.method !== "GET";
-  };
+  const ok = (id: string, submit: boolean) =>
+    namesJob(state.calls[state.idCalls.get(id) ?? -1], submit);
   const id =
-    state.inFlight?.id ?? state.ids.find((i) => ok(i, true)) ?? state.ids.find((i) => ok(i, false));
+    state.inFlight?.id ??
+    state.namedJob ??
+    state.ids.find((i) => ok(i, true)) ??
+    state.ids.find((i) => ok(i, false));
   if (!id) return undefined;
   const at = state.idCalls.get(id) ?? -1;
   const call = state.calls[at];
@@ -199,7 +231,7 @@ export function summarizeUsage(state: RunState = run): UsageSummary | undefined 
   for (const [i, r] of records.entries()) {
     const isPost = i < state.postUsage.length;
     const settled = (key: "cost_usd" | "credits") =>
-      isPost && r.ids.some((id) => charged[key].has(id));
+      isPost && (state.postAmountsReserved === true || r.ids.some((id) => charged[key].has(id)));
     for (const key of ["cost_usd", "credits"] as const) {
       const src = r.sources?.[key];
       if (src && r[key] !== undefined && !settled(key) && !sources[key]?.includes(src)) {

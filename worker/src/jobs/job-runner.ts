@@ -130,9 +130,13 @@ export class JobRunner {
     this.now = ctx.now ?? Date.now;
   }
 
-  async run(prepared: PreparedRun, waitSeconds: number): Promise<Record<string, unknown>> {
+  /** `jobId` lets a caller record the id before the job starts (workflow steps). */
+  async run(
+    prepared: PreparedRun,
+    waitSeconds: number,
+    jobId: string = crypto.randomUUID(),
+  ): Promise<Record<string, unknown>> {
     const r2 = await this.ctx.r2Settings();
-    const jobId = crypto.randomUUID();
     const spec: JobSpec = {
       jobId,
       argv: prepared.argv,

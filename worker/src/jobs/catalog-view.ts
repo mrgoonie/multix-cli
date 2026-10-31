@@ -70,7 +70,7 @@ function commandDetail(command: CliCommand): Record<string, unknown> {
       if (policy.nameOptions?.includes(name)) view.format = "letters, digits, _ and - only";
       if (name === OUTPUT_FILE_OPTION) view.output = "plain file name inside the job output";
       if (policy.uncappedOptions?.includes(name))
-        view.uncapped_spend = "with this option, the request reaches the provider as given";
+        view.uncapped_spend = "with this option, the server caps do not bound the request";
       if (policy.priceOptions?.includes(name)) {
         view.uncapped_spend =
           option.default === undefined
@@ -79,6 +79,9 @@ function commandDetail(command: CliCommand): Record<string, unknown> {
       }
       if (policy.caps?.countFromModel && policy.caps.count?.includes(name)) {
         view.uncapped_spend = "when omitted, the model picks the number of outputs";
+      }
+      if (policy.caps?.resolutionFromModel && policy.caps.resolution?.includes(name)) {
+        view.uncapped_spend = "when omitted, the model picks the resolution";
       }
       return view;
     });

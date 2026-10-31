@@ -7,7 +7,9 @@
  * subscription store. Every server serves the skills catalog
  * (skills/skills-methods.ts) as resources and the read-only multix_skills
  * tool; modern servers also declare the MCP Skills Extension and answer
- * skills/list, skills/get and resources/directory/read.
+ * skills/list, skills/get and resources/directory/read. With an account
+ * registry, multix_skills_manage authors the caller's own skills and
+ * multix_workflow runs skill workflows the caller authorized over REST.
  */
 
 import { type CallToolResult, McpServer } from "@modelcontextprotocol/server";
@@ -20,12 +22,15 @@ import type { JobToolsContext } from "./jobs/job-runner.js";
 import { registerJobTools } from "./jobs/job-tools.js";
 import { logEvent, sanitizeText } from "./redaction.js";
 import type { SkillsContext } from "./skills/skill-catalog.js";
+import type { AuthoringContext } from "./skills/skill-manager.js";
+import { registerSkillsManageTool } from "./skills/skills-manage-tool.js";
 import {
   registerSkillMethods,
   registerSkillResources,
   skillsCapabilities,
 } from "./skills/skills-methods.js";
 import { registerSkillsTool } from "./skills/skills-tool.js";
+import { registerWorkflowTool } from "./skills/workflow-tool.js";
 
 export const SERVER_NAME = "multix";
 
@@ -42,6 +47,8 @@ export interface ServerDeps {
   events?: EventsContext;
   /** The caller's skills context; built-in skills only when absent. */
   skills?: SkillsContext;
+  /** The caller's own skills registry; multix_skills_manage and multix_workflow are registered only when present. */
+  authoring?: AuthoringContext;
 }
 
 function ok(payload: Record<string, unknown>): CallToolResult {
@@ -139,6 +146,16 @@ export function createMcpServer(env: Env, deps: ServerDeps): McpServer {
   registerSkillResources(server, skills);
   if (deps.era === "modern") registerSkillMethods(server, skills);
   registerSkillsTool(server, skills, (tool, fields, body) => runTool(env, tool, fields, body));
+  if (deps.authoring) {
+    registerSkillsManageTool(server, deps.authoring, (tool, fields, body) =>
+      runTool(env, tool, fields, body),
+    );
+    registerWorkflowTool(
+      server,
+      { ...deps.authoring, jobs: deps.jobs, limits },
+      (tool, fields, body) => runTool(env, tool, fields, body),
+    );
+  }
 
   return server;
 }

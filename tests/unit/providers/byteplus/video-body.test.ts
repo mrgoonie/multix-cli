@@ -73,6 +73,31 @@ describe("buildVideoTaskBody — flags mode (default)", () => {
   });
 });
 
+describe("buildVideoTaskBody — audio", () => {
+  it("sends --audio as generate_audio, never as the --wm watermark text command", () => {
+    for (const audio of [true, false]) {
+      const body = buildVideoTaskBody({ model: "m", prompt: "p", audio, paramsMode: "flags" });
+      expect(body.generate_audio).toBe(audio);
+      expect((body.content[0] as { text: string }).text).toBe("p");
+    }
+  });
+
+  it("omits generate_audio when audio is not set", () => {
+    const body = buildVideoTaskBody({ model: "m", prompt: "p", paramsMode: "flags" });
+    expect(body).not.toHaveProperty("generate_audio");
+  });
+
+  it("sends generate_audio in structured mode too", () => {
+    const body = buildVideoTaskBody({
+      model: "m",
+      prompt: "p",
+      audio: true,
+      paramsMode: "structured",
+    });
+    expect(body.generate_audio).toBe(true);
+  });
+});
+
 describe("buildVideoTaskBody — structured mode", () => {
   it("emits top-level parameters object", () => {
     const body = buildVideoTaskBody({

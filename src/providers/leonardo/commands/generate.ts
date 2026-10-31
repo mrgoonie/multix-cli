@@ -23,7 +23,7 @@ import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import { createLeonardoClient } from "../client.js";
 import { LEONARDO_DEFAULTS, isGptImageModel } from "../models.js";
-import { poll } from "../poll.js";
+import { poll, toGenerationError } from "../poll.js";
 import type {
   CreateGenerationInput,
   CreateGenerationResponse,
@@ -160,6 +160,12 @@ export function registerLeonardoGenerateCommand(parent: Command): void {
           maxAttempts: Math.ceil(waitTimeout / intervalMs),
           onTick: (attempt, v) =>
             logger.debug(`attempt ${attempt} — status: ${v.generations_by_pk?.status ?? "?"}`),
+        }).catch((e: unknown) => {
+          throw toGenerationError(
+            e,
+            generationId,
+            `multix leonardo status ${generationId} --wait${opts.download === false ? "" : " --download"}`,
+          );
         });
 
         const images = final.generations_by_pk?.generated_images ?? [];

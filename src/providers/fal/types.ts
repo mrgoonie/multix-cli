@@ -21,6 +21,10 @@ export interface FalStatusResponse {
   logs?: Array<{ message: string; timestamp?: string }>;
   metrics?: { inference_time?: number };
   response_url?: string;
+  /** Why the request failed; set only on a failed request, whose status is still COMPLETED. */
+  error?: string;
+  /** Machine-readable kind of that failure. */
+  error_type?: string;
 }
 
 /** Result shape is model-specific; the CLI extracts known media-URL fields generically. */

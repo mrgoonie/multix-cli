@@ -5,14 +5,20 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { isRetryableServerStatus } from "../../core/async-poll.js";
+import { trackInFlight } from "../../agent/run-state.js";
+import {
+  PollTimeoutError,
+  isRetryableServerStatus,
+  isTransientHttpError,
+} from "../../core/async-poll.js";
 import { audioExtFromMime } from "../../core/audio-kind.js";
-import { MultixError, ProviderError } from "../../core/errors.js";
+import { MultixError, ProviderError, ProviderJobFailedError } from "../../core/errors.js";
 import { downloadFile } from "../../core/http-client.js";
 import { parseJsonInput } from "../../core/json-input.js";
 import type { Logger } from "../../core/logger.js";
 import { redactUrl } from "../../core/redact.js";
 import { type FalClient, HttpError, createFalClient, submitPath } from "./client.js";
+import { resultCommand, resumeCommand } from "./request-receipt.js";
 import type { FalResultResponse, FalStatusResponse, FalSubmitResponse } from "./types.js";
 
 /** Parse `--input` as inline JSON or `@path/to/file.json`. */
@@ -27,17 +33,13 @@ export interface SubmitAndWaitOptions {
   waitTimeoutMs?: number;
   /** Poll interval override — mainly for tests. Defaults to 3000ms. */
   pollIntervalMs?: number;
+  /** False for `--no-download`: resuming then prints the result rather than downloading it. */
+  download?: boolean;
 }
 
 export interface SubmitAndWaitResult {
   requestId: string;
   result: FalResultResponse;
-}
-
-/** True for errors worth retrying while polling: network failures and 5xx responses except 501/505. */
-function isTransientError(e: unknown): boolean {
-  if (e instanceof HttpError) return isRetryableServerStatus(e.status);
-  return false;
 }
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
@@ -123,18 +125,47 @@ export interface WaitForResultOptions {
   waitTimeoutMs?: number;
   /** Poll interval override — mainly for tests. Defaults to 3000ms. */
   pollIntervalMs?: number;
+  /**
+   * Command that fetches the accepted job's output without submitting it again
+   * (default `multix fal result <model> <id> --download`).
+   */
+  resume?: string;
+}
+
+/** Longest a single status or result request may take; fal's client default. */
+const MAX_REQUEST_TIMEOUT_MS = 120_000;
+/** Shortest timeout a request is started with, even right at the wait deadline. */
+const MIN_REQUEST_TIMEOUT_MS = 10_000;
+
+/** A request's timeout: the time left before the deadline, within the bounds above. */
+function requestTimeoutMs(deadline: number): number {
+  return Math.min(MAX_REQUEST_TIMEOUT_MS, Math.max(MIN_REQUEST_TIMEOUT_MS, deadline - Date.now()));
+}
+
+/** Wait before retrying a transient failure: Retry-After, at least the poll interval, never past the deadline. */
+function retryDelayMs(error: unknown, intervalMs: number, deadline: number): number {
+  const retryAfterMs = error instanceof HttpError ? error.retryAfterMs : undefined;
+  const delay = Math.max(retryAfterMs ?? 0, intervalMs);
+  return Math.min(delay, Math.max(1, deadline - Date.now()));
 }
 
 /**
  * Poll a submitted request's status_url until COMPLETED (bounded by a real
- * deadline, retrying transient network/5xx errors), then fetch response_url.
+ * deadline, retrying transient network/408/429/5xx errors), then fetch
+ * response_url, retrying those errors except 500/504 while the deadline allows.
+ * Each status request's timeout is bounded by the time left (see requestTimeoutMs).
  * Uses the URLs fal itself returned from submit rather than reconstructing
  * them, since the queue's status/result URLs are keyed by app id (first two
  * path segments of the model id), not the full endpoint id. Never submits.
+ * A failed poll or fetch is rethrown with the request id and resume hint, and
+ * the original error as `cause` so classifyError keeps its class and Retry-After.
+ * The job is tracked as in flight first: it is billed, so a run that fails or
+ * stops from here reports the resume command instead of a rerun.
  */
 export async function waitForFalResult(opts: WaitForResultOptions): Promise<FalResultResponse> {
   const { client, model, submit, logger } = opts;
   const requestId = submit.request_id;
+  trackInFlight(requestId, opts.resume ?? resultCommand(model, requestId));
   logger.info("Polling for completion...");
 
   const waitTimeoutMs = opts.waitTimeoutMs ?? 480_000;
@@ -143,46 +174,96 @@ export async function waitForFalResult(opts: WaitForResultOptions): Promise<FalR
   const resumeHint = `Resume with: multix fal status ${model} ${requestId}  or  multix fal result ${model} ${requestId}`;
 
   let attempt = 0;
+  let lastError: unknown;
   for (;;) {
-    if (Date.now() >= deadline) {
-      throw new Error(
-        `Timed out waiting for fal request ${requestId} after ${waitTimeoutMs}ms. ${resumeHint}`,
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) {
+      const last = lastError instanceof Error ? ` Last error: ${lastError.message}.` : "";
+      throw new PollTimeoutError(
+        `Timed out waiting for fal request ${requestId} after ${waitTimeoutMs}ms.${last} ${resumeHint}`,
       );
     }
 
     attempt++;
     let statusRes: FalStatusResponse;
     try {
-      statusRes = await client.getAbsolute<FalStatusResponse>(submit.status_url, logger);
+      statusRes = await client.requestAbsolute<FalStatusResponse>(submit.status_url, {
+        logger,
+        timeoutMs: requestTimeoutMs(deadline),
+      });
+      lastError = undefined;
     } catch (e) {
-      if (isTransientError(e)) {
+      // The job is already submitted: a network error, 408, 429 or retryable 5xx is waited out
+      // (honouring Retry-After, never past the deadline) rather than ending the run.
+      if (isTransientHttpError(e)) {
+        lastError = e;
         const msg = e instanceof Error ? e.message : String(e);
         logger.debug(`attempt ${attempt} — transient error, retrying: ${msg}`);
-        await sleep(intervalMs);
+        await sleep(retryDelayMs(e, intervalMs, deadline));
         continue;
       }
       const msg = e instanceof Error ? e.message : String(e);
-      throw new Error(`Failed to poll status for fal request ${requestId}: ${msg}. ${resumeHint}`);
+      throw new Error(`Failed to poll status for fal request ${requestId}: ${msg}. ${resumeHint}`, {
+        cause: e,
+      });
     }
 
     logger.debug(`attempt ${attempt} — status: ${statusRes.status}`);
-    if (statusRes.status === "COMPLETED") break;
+    if (statusRes.status === "COMPLETED") {
+      // fal ends a failed request as COMPLETED with an error: its result fetch cannot succeed.
+      if (statusRes.error) {
+        const kind = statusRes.error_type ? ` (${statusRes.error_type})` : "";
+        throw new ProviderJobFailedError(
+          `fal request ${requestId} failed${kind}: ${statusRes.error}`,
+          "fal",
+        );
+      }
+      break;
+    }
     await sleep(intervalMs);
   }
 
-  try {
-    return await client.getAbsolute<FalResultResponse>(submit.response_url, logger);
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    throw new Error(`Failed to fetch result for fal request ${requestId}: ${msg}. ${resumeHint}`);
+  // The job is finished and billed: a network error, 408, 429, 502 or 503 fetching its result is
+  // retried while the deadline allows. fal answers 500 (model or platform failed) and 504 (job
+  // never started) for the job's own failure, so those end the run at once. The first fetch gets
+  // the full request timeout, as an inline (sync_mode) result can be large.
+  for (let first = true; ; first = false) {
+    try {
+      return await client.requestAbsolute<FalResultResponse>(submit.response_url, {
+        logger,
+        timeoutMs: first ? MAX_REQUEST_TIMEOUT_MS : requestTimeoutMs(deadline),
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const delay = retryDelayMs(e, intervalMs, deadline);
+      if (isRetryableResultError(e) && Date.now() + delay < deadline) {
+        logger.debug(`result fetch — transient error, retrying: ${msg}`);
+        await sleep(delay);
+        continue;
+      }
+      throw new Error(
+        `Failed to fetch result for fal request ${requestId}: ${msg}. ${resumeHint}`,
+        {
+          cause: e,
+        },
+      );
+    }
   }
+}
+
+/** A result-fetch failure worth retrying: transient, but not fal's 500/504 for a failed job. */
+function isRetryableResultError(error: unknown): boolean {
+  if (!isTransientHttpError(error)) return false;
+  const status = (error as HttpError).status;
+  return status !== 500 && status !== 504;
 }
 
 /** Submit a job and wait for its result (see submitFalRequest and waitForFalResult). */
 export async function submitAndWait(opts: SubmitAndWaitOptions): Promise<SubmitAndWaitResult> {
   const client = createFalClient();
   const submit = await submitFalRequest(client, opts.model, opts.input, opts.logger);
-  const result = await waitForFalResult({ ...opts, client, submit });
+  const resume = resumeCommand(opts.model, submit.request_id, { download: opts.download });
+  const result = await waitForFalResult({ ...opts, client, submit, resume });
   return { requestId: submit.request_id, result };
 }
 

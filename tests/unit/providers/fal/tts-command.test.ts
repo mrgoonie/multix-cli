@@ -12,6 +12,8 @@ import os from "node:os";
 import path from "node:path";
 import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { shellQuote } from "../../../../src/agent/agent-runtime.js";
+import { run } from "../../../../src/agent/run-state.js";
 import { modelRows } from "../../../../src/commands/agent/models-command.js";
 import { MultixError, ProviderError, ValidationError } from "../../../../src/core/errors.js";
 import { _resetOutputDir } from "../../../../src/core/output-dir.js";
@@ -313,6 +315,36 @@ describe("fal tts — queue receipts and resume", () => {
     await cli("result", ELEVEN, REQUEST_ID, "--download", "--format", "ulaw_8000");
     expect(fake.calls.every((c) => c.method === "GET")).toBe(true);
     expect(saved()).toEqual([`fal-${REQUEST_ID}-01.ulaw`]);
+  });
+
+  it("a raw-format job that fails after the submit resumes with --format and --output-dir", async () => {
+    const app = ELEVEN.split("/").slice(0, 2).join("/");
+    vi.stubGlobal(
+      "fetch",
+      createFakeFal({
+        [`POST https://queue.fal.run/${ELEVEN}`]: [
+          { json: { request_id: REQUEST_ID, status: "IN_QUEUE", ...queueUrls(app) } },
+        ],
+        [`GET https://queue.fal.run/${app}/requests/${REQUEST_ID}/status`]: [
+          { json: { status: "COMPLETED" } },
+        ],
+        [`GET https://queue.fal.run/${app}/requests/${REQUEST_ID}`]: [
+          { status: 401, json: { detail: "unauthorized" } },
+        ],
+      }).fetch,
+    );
+    try {
+      await expect(
+        cli("tts", "Hi", "-m", ELEVEN, "--format", "ulaw_8000", "--output-dir", out),
+      ).rejects.toThrow(/Failed to fetch result/);
+      expect(run.inFlight).toEqual({
+        id: REQUEST_ID,
+        resume: `multix fal result ${ELEVEN} ${REQUEST_ID} --download --format ulaw_8000 --output-dir ${shellQuote(out)}`,
+      });
+    } finally {
+      run.inFlight = undefined;
+      run.ids = [];
+    }
   });
 
   it("fal result refuses a --format the model does not have", async () => {

@@ -15,8 +15,8 @@ import {
   readHistory,
 } from "../../agent/history-store.js";
 import { run } from "../../agent/run-state.js";
-import { type CostReceipt, settleOperations } from "../../budget/cost-receipt.js";
-import { receiptOf } from "../../catalog/usage-aggregate.js";
+import type { OperationSpend } from "../../budget/cost-receipt.js";
+import { receiptOf, spendByEntry } from "../../catalog/usage-aggregate.js";
 import { ValidationError } from "../../core/errors.js";
 
 export { receiptOf };
@@ -86,7 +86,8 @@ interface Bucket {
   runs: number;
   ok: number;
   duration_ms: number[];
-  receipts: CostReceipt[];
+  /** Spend of the operations whose owning run is in this bucket. */
+  spends: OperationSpend[];
   credits?: number;
   tokens?: number;
   outputs: number;
@@ -100,8 +101,10 @@ function percentile(values: number[], p: number): number {
 
 export function historyStats(entries: HistoryEntry[], by: "provider" | "model" | "command") {
   const buckets = new Map<string, Bucket>();
-  for (const e of entries) {
-    if (e.dry_run || e.estimate_only) continue;
+  const counted = entries.filter((e) => !e.dry_run && !e.estimate_only);
+  // Each operation's spend once, on its submit run, whatever bucket a status run lands in.
+  const owned = spendByEntry(counted);
+  for (const e of counted) {
     const key = (by === "model" ? e.model : by === "command" ? e.command : e.provider) || "(none)";
     const b = buckets.get(key) ?? {
       key,
@@ -109,15 +112,15 @@ export function historyStats(entries: HistoryEntry[], by: "provider" | "model" |
       ok: 0,
       duration_ms: [],
       outputs: 0,
-      receipts: [],
+      spends: [],
     };
     b.runs++;
     if (e.ok) b.ok++;
     b.duration_ms.push(e.duration_ms);
     b.outputs += e.outputs?.length ?? 0;
-    const receipt = receiptOf(e);
-    if (receipt) b.receipts.push(receipt);
-    if (e.usage?.credits !== undefined) b.credits = (b.credits ?? 0) + e.usage.credits;
+    const own = owned.get(e);
+    if (own?.spend) b.spends.push(own.spend);
+    if (own?.credits !== undefined) b.credits = (b.credits ?? 0) + own.credits;
     const tok =
       e.usage?.tokens?.total ?? (e.usage?.tokens?.input ?? 0) + (e.usage?.tokens?.output ?? 0);
     if (tok) b.tokens = (b.tokens ?? 0) + tok;
@@ -126,9 +129,10 @@ export function historyStats(entries: HistoryEntry[], by: "provider" | "model" |
   return [...buckets.values()]
     .sort((a, b) => b.runs - a.runs)
     .map((b) => {
-      // Spend counts each operation once (submit, polls and result reads share one).
-      const spend = settleOperations(b.receipts);
-      const priced = spend.operations.some((op) => op.actual_usd !== null);
+      const priced = b.spends.some((op) => op.actual_usd !== null);
+      const usd = b.spends.reduce((s, op) => s + (op.actual_usd ?? 0), 0);
+      const uncertain = b.spends.filter((op) => op.status === "uncertain").length;
+      const unknown = b.spends.filter((op) => op.status === "unknown").length;
       return {
         [by]: b.key,
         runs: b.runs,
@@ -136,9 +140,9 @@ export function historyStats(entries: HistoryEntry[], by: "provider" | "model" |
         p50_s: Math.round(percentile(b.duration_ms, 50) / 100) / 10,
         p90_s: Math.round(percentile(b.duration_ms, 90) / 100) / 10,
         outputs: b.outputs,
-        ...(priced ? { cost_usd: Math.round(spend.total_usd * 1e4) / 1e4 } : {}),
-        ...(spend.uncertain ? { cost_uncertain_ops: spend.uncertain } : {}),
-        ...(spend.unknown ? { cost_unknown_ops: spend.unknown } : {}),
+        ...(priced ? { cost_usd: Math.round(Math.round(usd * 1e6) / 1e2) / 1e4 } : {}),
+        ...(uncertain ? { cost_uncertain_ops: uncertain } : {}),
+        ...(unknown ? { cost_unknown_ops: unknown } : {}),
         ...(b.credits !== undefined ? { credits: Math.round(b.credits * 1e6) / 1e6 } : {}),
         ...(b.tokens !== undefined ? { tokens: b.tokens } : {}),
       };

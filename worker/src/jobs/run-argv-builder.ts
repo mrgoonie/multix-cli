@@ -22,7 +22,12 @@ import {
 } from "./cli-command-policy.js";
 import type { JobInputFile } from "./job-protocol.js";
 import { type FileTarget, resolveInputs } from "./run-input-files.js";
-import { type OptionValues, applyCaps, uncappedReason } from "./run-option-caps.js";
+import {
+  type OptionValues,
+  applyCaps,
+  assertAllowedImageModel,
+  uncappedReason,
+} from "./run-option-caps.js";
 
 export type RunOptionValue = string | number | boolean | string[];
 
@@ -199,6 +204,7 @@ export function prepareRun(
   for (const [name, forced] of Object.entries(policy.forced ?? {})) values.set(name, [forced]);
   if (options.has(OUTPUT_DIR_OPTION)) values.set(OUTPUT_DIR_OPTION, [OUTPUT_DIR]);
   applyCaps(policy.caps, options, values, limits);
+  assertAllowedImageModel(path, group, options, values, limits);
 
   for (const [name, option] of options) {
     if (option.required && !values.has(name)) {

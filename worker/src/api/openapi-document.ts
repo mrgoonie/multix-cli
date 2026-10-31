@@ -15,6 +15,8 @@ import {
   MIN_SUBSCRIPTION_TTL_SECONDS,
 } from "../events/event-hub.js";
 import { MAX_WAIT_SECONDS } from "../jobs/job-runner.js";
+import { MAX_WORKFLOW_COST_USD } from "../skills/workflow-manager.js";
+import { MAX_ACTIVE_RUNS, MAX_AUTHORIZATIONS } from "../skills/workflow-store.js";
 
 type Json = Record<string, unknown>;
 
@@ -49,6 +51,46 @@ const JOB_ERRORS: Json = { "503": { $ref: "#/components/responses/Unavailable" }
 /** Extra error of the event operations when the server has no event hub. */
 const EVENT_ERRORS: Json = { "503": { $ref: "#/components/responses/Unavailable" } };
 
+/** Extra errors of the skills operations: no skills store, a stale expected digest or revision. */
+const SKILL_ERRORS: Json = {
+  "404": { $ref: "#/components/responses/NotFound" },
+  "409": { $ref: "#/components/responses/Conflict" },
+  "503": { $ref: "#/components/responses/Unavailable" },
+};
+
+const SKILL_NAME = {
+  name: "skill",
+  in: "path",
+  required: true,
+  schema: { type: "string", pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$", maxLength: 64 },
+  description: "Skill name, as in its SKILL.md frontmatter",
+};
+
+const REVISION = {
+  name: "revision",
+  in: "path",
+  required: true,
+  schema: { type: "integer", minimum: 1 },
+  description: "Revision number",
+};
+
+const EXPECTED_REVISION = {
+  type: ["integer", "null"],
+  minimum: 1,
+  description: "Served revision you last saw (null: none is served); 409 if it changed",
+};
+
+const SKILL_SETTINGS: Json = {
+  visibility: { type: "string", enum: ["private", "team"] },
+  tags: { type: "array", items: { type: "string", maxLength: 32 } },
+  capabilities: { type: "array", items: { type: "string" } },
+};
+
+const optionalJsonBody = (schema: Json, example: unknown): Json => ({
+  ...jsonBody(schema, example),
+  required: false,
+});
+
 const SUBSCRIPTION_ID = {
   name: "id",
   in: "path",
@@ -63,6 +105,14 @@ const JOB_ID = {
   required: true,
   schema: { type: "string", format: "uuid" },
   description: "Job id returned by POST /api/v1/jobs",
+};
+
+const WORKFLOW_RUN_ID = {
+  name: "id",
+  in: "path",
+  required: true,
+  schema: { type: "string" },
+  description: "Run id returned by POST /api/v1/workflow-runs",
 };
 
 export function openApiDocument(origin: string): Json {
@@ -216,7 +266,7 @@ export function openApiDocument(origin: string): Json {
         get: {
           summary: "Model & provider catalogue",
           description:
-            "The same views as `multix catalog --json`. view=providers: provider links and whether your saved keys cover each. view=models (default): offerings (provider + model) with tasks, the multix command and prices per configuration, each with its source URL and check date; a price that is unknown, unverified or stale says so and is never $0. view=show&offering=<provider>:<model>: one offering. view=compare: quote every offering for one exact request (task, resolution, duration_s, audio, aspect_ratio, images); only prices the source confirms for that configuration are ranked.",
+            "The same views as `multix catalog --json`. view=providers: provider links and whether your saved keys cover each. view=models (default): offerings (provider + model) with tasks, the multix command and prices per configuration, each with its source URL and check date; a price that is unknown, unverified or stale says so and is never $0. view=show&offering=<provider>:<model>: one offering. view=compare: quote every offering for one exact request (task, resolution, duration_s, audio, aspect_ratio, images); only list prices the source confirms for that configuration, with nothing assumed, are ranked; estimates, assumed settings and audio left unstated while a ranked price covers it stay priced but unranked, with reasons.",
           operationId: "getModelCatalog",
           parameters: [
             {
@@ -469,6 +519,507 @@ export function openApiDocument(origin: string): Json {
           },
         },
       },
+      "/skills": {
+        get: {
+          summary: "List your skills",
+          description:
+            "Your skills (served or not), the names of your drafts, and the team skills of other accounts you added with POST /skill-shares (`available` is false once the owner revoked, unpublished or deleted it).",
+          operationId: "listSkills",
+          responses: { ...ok("Skills", ref("SkillList")), ...ERRORS, ...SKILL_ERRORS },
+        },
+      },
+      "/skills/{skill}": {
+        parameters: [SKILL_NAME],
+        get: {
+          summary: "One skill",
+          description: "Settings, the served revision with its files, the draft and the grants.",
+          operationId: "getSkill",
+          responses: { ...ok("Skill", ref("SkillDetail")), ...ERRORS, ...SKILL_ERRORS },
+        },
+        patch: {
+          summary: "Change visibility, tags or capabilities",
+          description:
+            "A visibility change revokes every grant; the revoked account ids are returned.",
+          operationId: "updateSkill",
+          requestBody: jsonBody(
+            {
+              type: "object",
+              properties: { ...SKILL_SETTINGS, expected_revision: EXPECTED_REVISION },
+            },
+            { visibility: "team", tags: ["brand"] },
+          ),
+          responses: {
+            ...ok("Updated", {
+              type: "object",
+              properties: {
+                skill: ref("Skill"),
+                revoked_grants: { type: "array", items: { type: "string" } },
+              },
+            }),
+            ...ERRORS,
+            ...BODY_ERRORS,
+            ...SKILL_ERRORS,
+          },
+        },
+        delete: {
+          summary: "Delete a skill",
+          description: "Removes every revision, the draft and the grants.",
+          operationId: "deleteSkill",
+          responses: {
+            ...ok("Deleted", {
+              type: "object",
+              properties: {
+                deleted: { type: "boolean" },
+                name: { type: "string" },
+                revoked_grants: { type: "array", items: { type: "string" } },
+              },
+            }),
+            ...ERRORS,
+            ...SKILL_ERRORS,
+          },
+        },
+      },
+      "/skills/{skill}/draft": {
+        parameters: [SKILL_NAME],
+        get: {
+          summary: "The draft",
+          operationId: "getSkillDraft",
+          responses: {
+            ...ok("Draft", { type: "object", properties: { draft: ref("SkillDraft") } }),
+            ...ERRORS,
+            ...SKILL_ERRORS,
+          },
+        },
+        put: {
+          summary: "Create or update the draft",
+          description:
+            "Adds or replaces files (`text`, or `base64` for any file type) and removes `delete` paths. A new draft starts from the served revision, from `from_revision`, or from nothing with `replace`. One update carries at most 8 MiB of decoded files; upload a larger skill in several updates. Send `expected_digest` (null when you expect no draft) to get 409 instead of overwriting another change.",
+          operationId: "putSkillDraft",
+          requestBody: jsonBody(ref("SkillDraftInput"), {
+            files: [
+              {
+                path: "SKILL.md",
+                text: "---\nname: brand-voice\ndescription: Write in our brand voice\n---\n\nUse short sentences.",
+              },
+            ],
+            expected_digest: null,
+          }),
+          responses: {
+            ...ok("Draft", { type: "object", properties: { draft: ref("SkillDraft") } }),
+            ...ERRORS,
+            ...BODY_ERRORS,
+            ...SKILL_ERRORS,
+          },
+        },
+        delete: {
+          summary: "Discard the draft",
+          operationId: "deleteSkillDraft",
+          parameters: [
+            {
+              name: "expected_digest",
+              in: "query",
+              schema: { type: "string" },
+              description: "Draft digest you last saw; 409 if it changed",
+            },
+          ],
+          responses: {
+            ...ok("Discarded", { type: "object", properties: { discarded: { type: "boolean" } } }),
+            ...ERRORS,
+            ...SKILL_ERRORS,
+          },
+        },
+      },
+      "/skills/{skill}/files": {
+        parameters: [SKILL_NAME],
+        get: {
+          summary: "Read one file",
+          description:
+            "A file of the draft, or of a stored revision with `revision`. Text files come back as `text`, others as `base64`.",
+          operationId: "getSkillFile",
+          parameters: [
+            { name: "path", in: "query", required: true, schema: { type: "string" } },
+            { name: "revision", in: "query", schema: { type: "integer", minimum: 1 } },
+          ],
+          responses: { ...ok("File", ref("SkillFileContent")), ...ERRORS, ...SKILL_ERRORS },
+        },
+      },
+      "/skills/{skill}/publish": {
+        parameters: [SKILL_NAME],
+        post: {
+          summary: "Publish the draft",
+          description:
+            "The draft becomes the next immutable revision and is served at the skill's `skill://` URI; the draft is removed. Settings in the body apply with it.",
+          operationId: "publishSkill",
+          requestBody: optionalJsonBody(
+            {
+              type: "object",
+              properties: {
+                ...SKILL_SETTINGS,
+                expected_digest: { type: "string" },
+                expected_revision: EXPECTED_REVISION,
+              },
+            },
+            { visibility: "private" },
+          ),
+          responses: {
+            ...ok("Published", ref("ServedSkill"), "201"),
+            ...ERRORS,
+            ...BODY_ERRORS,
+            ...SKILL_ERRORS,
+          },
+        },
+      },
+      "/skills/{skill}/revisions": {
+        parameters: [SKILL_NAME],
+        get: {
+          summary: "List revisions",
+          operationId: "listSkillRevisions",
+          responses: {
+            ...ok("Revisions", {
+              type: "object",
+              properties: {
+                current_revision: { type: ["integer", "null"] },
+                revisions: { type: "array", items: ref("SkillRevisionSummary") },
+              },
+            }),
+            ...ERRORS,
+            ...SKILL_ERRORS,
+          },
+        },
+      },
+      "/skills/{skill}/revisions/{revision}": {
+        parameters: [SKILL_NAME, REVISION],
+        get: {
+          summary: "One revision with its files",
+          operationId: "getSkillRevision",
+          responses: {
+            ...ok("Revision", { type: "object", properties: { revision: ref("SkillRevision") } }),
+            ...ERRORS,
+            ...SKILL_ERRORS,
+          },
+        },
+        delete: {
+          summary: "Delete a stored revision",
+          description: "The served revision cannot be deleted; its number is never reused.",
+          operationId: "deleteSkillRevision",
+          responses: {
+            ...ok("Deleted", {
+              type: "object",
+              properties: { deleted: { type: "boolean" }, revision: { type: "integer" } },
+            }),
+            ...ERRORS,
+            ...SKILL_ERRORS,
+          },
+        },
+      },
+      "/skills/{skill}/current": {
+        parameters: [SKILL_NAME],
+        post: {
+          summary: "Serve another revision (roll back or forward)",
+          operationId: "setSkillCurrent",
+          requestBody: jsonBody(
+            {
+              type: "object",
+              required: ["revision"],
+              properties: {
+                revision: { type: "integer", minimum: 1 },
+                expected_revision: EXPECTED_REVISION,
+              },
+            },
+            { revision: 1, expected_revision: 2 },
+          ),
+          responses: {
+            ...ok("Served", ref("ServedSkill")),
+            ...ERRORS,
+            ...BODY_ERRORS,
+            ...SKILL_ERRORS,
+          },
+        },
+      },
+      "/skills/{skill}/unpublish": {
+        parameters: [SKILL_NAME],
+        post: {
+          summary: "Stop serving the skill",
+          description: "Keeps its revisions; publish or set a current revision to serve it again.",
+          operationId: "unpublishSkill",
+          requestBody: optionalJsonBody(
+            { type: "object", properties: { expected_revision: EXPECTED_REVISION } },
+            { expected_revision: 2 },
+          ),
+          responses: {
+            ...ok("Unpublished", { type: "object", properties: { skill: ref("Skill") } }),
+            ...ERRORS,
+            ...BODY_ERRORS,
+            ...SKILL_ERRORS,
+          },
+        },
+      },
+      "/skills/{skill}/grants": {
+        parameters: [SKILL_NAME],
+        get: {
+          summary: "Accounts a team skill is shared with",
+          operationId: "listSkillGrants",
+          responses: {
+            ...ok("Grants", {
+              type: "object",
+              properties: { grants: { type: "array", items: ref("SkillGrant") } },
+            }),
+            ...ERRORS,
+            ...SKILL_ERRORS,
+          },
+        },
+      },
+      "/skills/{skill}/grants/{account}": {
+        parameters: [
+          SKILL_NAME,
+          {
+            name: "account",
+            in: "path",
+            required: true,
+            schema: { type: "string", pattern: "^gh-[0-9]{1,20}$" },
+            description: "Account id of the grantee (`gh-<digits>`, the `id` of GET /me)",
+          },
+        ],
+        put: {
+          summary: "Share a team skill with an account",
+          description:
+            "The grantee then lists it with POST /skill-shares; nothing appears in their catalog before that. Idempotent.",
+          operationId: "grantSkill",
+          responses: {
+            ...ok("Granted", {
+              type: "object",
+              properties: { grant: ref("SkillGrant"), uri: { type: "string" } },
+            }),
+            ...ERRORS,
+            ...SKILL_ERRORS,
+          },
+        },
+        delete: {
+          summary: "Revoke a grant",
+          operationId: "revokeSkill",
+          responses: {
+            ...ok("Revoked", { type: "object", properties: { revoked: { type: "boolean" } } }),
+            ...ERRORS,
+            ...SKILL_ERRORS,
+          },
+        },
+      },
+      "/skill-shares": {
+        get: {
+          summary: "Team skills shared with you that you listed",
+          operationId: "listSkillShares",
+          responses: {
+            ...ok("Shared skills", {
+              type: "object",
+              properties: { shared: { type: "array", items: ref("SharedSkill") } },
+            }),
+            ...ERRORS,
+            ...SKILL_ERRORS,
+          },
+        },
+        post: {
+          summary: "List a team skill shared with you",
+          description:
+            "The owner must have granted it to you. Revoking (even with a later re-grant) drops it until you add it again.",
+          operationId: "addSkillShare",
+          requestBody: jsonBody(
+            { type: "object", required: ["uri"], properties: { uri: { type: "string" } } },
+            { uri: "skill://team/gh-123/brand-voice/SKILL.md" },
+          ),
+          responses: {
+            ...ok(
+              "Added",
+              {
+                type: "object",
+                properties: { uri: { type: "string" }, added: { type: "boolean" } },
+              },
+              "201",
+            ),
+            ...ERRORS,
+            ...BODY_ERRORS,
+            ...SKILL_ERRORS,
+          },
+        },
+      },
+      "/skill-shares/{owner}/{skill}": {
+        parameters: [
+          {
+            name: "owner",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+            description: "Owner account id (`gh-<digits>`)",
+          },
+          SKILL_NAME,
+        ],
+        delete: {
+          summary: "Stop listing a shared skill",
+          operationId: "removeSkillShare",
+          responses: {
+            ...ok("Removed", { type: "object", properties: { removed: { type: "boolean" } } }),
+            ...ERRORS,
+            ...SKILL_ERRORS,
+          },
+        },
+      },
+      "/workflows": {
+        get: {
+          summary: "Describe a skill's workflow",
+          description:
+            "The workflow (`multix.workflow.json`) the skill serves to you: inputs, steps, revision and digest, and whether your account authorized exactly that revision and digest. Review the steps before authorizing them. 404 when the skill serves no workflow.",
+          operationId: "describeWorkflow",
+          parameters: [
+            {
+              name: "uri",
+              in: "query",
+              required: true,
+              schema: { type: "string", maxLength: 512 },
+              description:
+                "skill://private/<name>/SKILL.md or skill://team/<owner>/<name>/SKILL.md",
+            },
+          ],
+          responses: {
+            ...ok("Workflow", ref("Workflow")),
+            ...ERRORS,
+            ...SKILL_ERRORS,
+          },
+        },
+      },
+      "/workflow-authorizations": {
+        get: {
+          summary: "Workflows you authorized",
+          operationId: "listWorkflowAuthorizations",
+          responses: {
+            ...ok("Authorizations", {
+              type: "object",
+              properties: {
+                authorizations: { type: "array", items: ref("WorkflowAuthorization") },
+              },
+            }),
+            ...ERRORS,
+            ...SKILL_ERRORS,
+          },
+        },
+        post: {
+          summary: "Authorize a workflow",
+          description: `Lets your account run the workflow the skill serves now. revision and digest must be the ones GET /workflows returns (409 otherwise); a new revision, another digest or a recreated skill voids the authorization. Only this endpoint can authorize: MCP clients cannot. Optional max_cost_usd (0 to ${MAX_WORKFLOW_COST_USD}) caps a whole run: each step then needs a known price that fits what is left. Replaces your earlier authorization of the same skill (at most ${MAX_AUTHORIZATIONS}).`,
+          operationId: "authorizeWorkflow",
+          requestBody: jsonBody(
+            {
+              type: "object",
+              required: ["uri", "revision", "digest"],
+              properties: {
+                uri: { type: "string" },
+                revision: { type: "integer", minimum: 1 },
+                digest: { type: "string", pattern: "^sha256:[0-9a-f]{64}$" },
+                max_cost_usd: { type: "number", minimum: 0, maximum: MAX_WORKFLOW_COST_USD },
+                cost_policy: { type: "string", enum: ["strict", "estimate"] },
+              },
+            },
+            {
+              uri: "skill://private/storyboard/SKILL.md",
+              revision: 3,
+              digest: `sha256:${"0".repeat(64)}`,
+              max_cost_usd: 2,
+            },
+          ),
+          responses: {
+            ...ok(
+              "Authorized",
+              { type: "object", properties: { authorization: ref("WorkflowAuthorization") } },
+              "201",
+            ),
+            ...ERRORS,
+            ...BODY_ERRORS,
+            ...SKILL_ERRORS,
+          },
+        },
+      },
+      "/workflow-authorizations/{owner}/{skill}": {
+        parameters: [
+          {
+            name: "owner",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+            description: "Owner account id (`gh-<digits>`); your own id for a private skill",
+          },
+          SKILL_NAME,
+        ],
+        delete: {
+          summary: "Withdraw an authorization",
+          description: "Runs under it stop before their next step.",
+          operationId: "revokeWorkflowAuthorization",
+          responses: {
+            ...ok("Revoked", { type: "object", properties: { revoked: { type: "boolean" } } }),
+            ...ERRORS,
+            ...SKILL_ERRORS,
+          },
+        },
+      },
+      "/workflow-runs": {
+        get: {
+          summary: "Your workflow runs and authorizations",
+          operationId: "listWorkflowRuns",
+          responses: {
+            ...ok("Runs", {
+              type: "object",
+              properties: {
+                runs: { type: "array", items: ref("WorkflowRunSummary") },
+                authorizations: { type: "array", items: ref("WorkflowAuthorization") },
+              },
+            }),
+            ...ERRORS,
+            ...SKILL_ERRORS,
+          },
+        },
+        post: {
+          summary: "Run an authorized workflow",
+          description: `Starts the run and its first step. 403 when your account has not authorized the served revision and digest. Each step is one job with the same command policy, caps, URL guard and cost checks as POST /jobs. A run advances when it is read: poll GET /workflow-runs/{id}. 429 \`busy\` with ${MAX_ACTIVE_RUNS} runs active.`,
+          operationId: "startWorkflowRun",
+          requestBody: jsonBody(
+            {
+              type: "object",
+              required: ["uri"],
+              properties: { uri: { type: "string" }, inputs: { type: "object" } },
+            },
+            { uri: "skill://private/storyboard/SKILL.md", inputs: { subject: "a red fox" } },
+          ),
+          responses: {
+            ...ok("Run", ref("WorkflowRun"), "201"),
+            ...ERRORS,
+            ...BODY_ERRORS,
+            ...SKILL_ERRORS,
+          },
+        },
+      },
+      "/workflow-runs/{id}": {
+        parameters: [WORKFLOW_RUN_ID],
+        get: {
+          summary: "Read a run",
+          description:
+            "Advances the run first: collects a finished step's outputs and starts the next step.",
+          operationId: "getWorkflowRun",
+          responses: {
+            ...ok("Run", ref("WorkflowRun")),
+            ...ERRORS,
+            ...SKILL_ERRORS,
+          },
+        },
+      },
+      "/workflow-runs/{id}/cancel": {
+        parameters: [WORKFLOW_RUN_ID],
+        post: {
+          summary: "Cancel a run",
+          description: "Stops the run and the job of its current step.",
+          operationId: "cancelWorkflowRun",
+          responses: {
+            ...ok("Run", ref("WorkflowRun")),
+            ...ERRORS,
+            ...SKILL_ERRORS,
+          },
+        },
+      },
     },
     components: {
       securitySchemes: {
@@ -492,7 +1043,8 @@ export function openApiDocument(origin: string): Json {
           content: { "application/json": { schema: ref("Error") } },
         },
         PayloadTooLarge: {
-          description: "Body larger than 64 KiB",
+          description:
+            "Body larger than 64 KiB (PUT /skills/{skill}/draft: about 11 MiB, 8 MiB of decoded files)",
           content: { "application/json": { schema: ref("Error") } },
         },
         UnsupportedMediaType: {
@@ -506,6 +1058,11 @@ export function openApiDocument(origin: string): Json {
         },
         NotFound: {
           description: "Not found or not yours",
+          content: { "application/json": { schema: ref("Error") } },
+        },
+        Conflict: {
+          description:
+            "The draft digest or served revision changed since you read it (code conflict); read it again and retry",
           content: { "application/json": { schema: ref("Error") } },
         },
         RateLimited: {
@@ -782,6 +1339,213 @@ export function openApiDocument(origin: string): Json {
             actor: { type: "string" },
             subscription_id: { type: ["string", "null"] },
             detail: { type: ["string", "null"] },
+          },
+        },
+        Skill: {
+          type: "object",
+          properties: {
+            name: { type: "string" },
+            id: { type: "string" },
+            uri: { type: "string", description: "skill:// URI of its SKILL.md" },
+            visibility: { type: "string", enum: ["private", "team"] },
+            tags: { type: "array", items: { type: "string" } },
+            capabilities: { type: "array", items: { type: "string" } },
+            current_revision: { type: ["integer", "null"] },
+            created_at: { type: "string", format: "date-time" },
+            updated_at: { type: "string", format: "date-time" },
+          },
+        },
+        SkillFile: {
+          type: "object",
+          properties: {
+            path: { type: "string" },
+            media_type: { type: "string" },
+            size: { type: "integer" },
+            digest: { type: "string" },
+          },
+        },
+        SkillFileContent: {
+          allOf: [
+            ref("SkillFile"),
+            {
+              type: "object",
+              properties: { text: { type: "string" }, base64: { type: "string" } },
+            },
+          ],
+        },
+        SkillRevisionSummary: {
+          type: "object",
+          properties: {
+            revision: { type: "integer" },
+            version: { type: ["string", "null"] },
+            manifest_digest: { type: "string" },
+            description: { type: "string" },
+            files: { type: "integer" },
+            bytes: { type: "integer" },
+            published_at: { type: "string", format: "date-time" },
+          },
+        },
+        SkillRevision: {
+          allOf: [
+            ref("SkillRevisionSummary"),
+            {
+              type: "object",
+              properties: {
+                frontmatter: { type: "object" },
+                files: { type: "array", items: ref("SkillFile") },
+              },
+            },
+          ],
+        },
+        SkillDraft: {
+          type: "object",
+          properties: {
+            name: { type: "string" },
+            base_revision: { type: ["integer", "null"] },
+            digest: { type: "string", description: "Pass as expected_digest" },
+            files: { type: "array", items: ref("SkillFile") },
+            bytes: { type: "integer" },
+            created_at: { type: "string", format: "date-time" },
+            updated_at: { type: "string", format: "date-time" },
+          },
+        },
+        SkillDraftInput: {
+          type: "object",
+          properties: {
+            files: {
+              type: "array",
+              items: {
+                type: "object",
+                required: ["path"],
+                properties: {
+                  path: { type: "string", maxLength: 256 },
+                  text: { type: "string" },
+                  base64: { type: "string" },
+                },
+              },
+            },
+            delete: { type: "array", items: { type: "string" } },
+            replace: { type: "boolean" },
+            from_revision: { type: "integer", minimum: 1 },
+            expected_digest: { type: ["string", "null"] },
+          },
+        },
+        SkillGrant: {
+          type: "object",
+          properties: {
+            principal: { type: "string" },
+            grant_id: { type: "string" },
+            granted_at: { type: "string", format: "date-time" },
+          },
+        },
+        SharedSkill: {
+          type: "object",
+          properties: {
+            uri: { type: "string" },
+            owner: { type: "string" },
+            name: { type: "string" },
+            available: { type: "boolean" },
+            added_at: { type: "string", format: "date-time" },
+          },
+        },
+        SkillList: {
+          type: "object",
+          properties: {
+            skills: { type: "array", items: ref("Skill") },
+            drafts: { type: "array", items: { type: "string" } },
+            shared: { type: "array", items: ref("SharedSkill") },
+          },
+        },
+        SkillDetail: {
+          type: "object",
+          properties: {
+            skill: { oneOf: [ref("Skill"), { type: "null" }] },
+            current: { oneOf: [ref("SkillRevision"), { type: "null" }] },
+            draft: { oneOf: [ref("SkillDraft"), { type: "null" }] },
+            grants: { type: "array", items: ref("SkillGrant") },
+          },
+        },
+        ServedSkill: {
+          type: "object",
+          properties: { skill: ref("Skill"), revision: ref("SkillRevisionSummary") },
+        },
+        Workflow: {
+          type: "object",
+          properties: {
+            uri: { type: "string" },
+            owner: { type: "string" },
+            skill: { type: "string" },
+            revision: { type: "integer" },
+            digest: { type: "string" },
+            description: { type: ["string", "null"] },
+            inputs: { type: "object", description: "Declared inputs by name" },
+            steps: { type: "array", items: { type: "object" } },
+            authorized: { type: "boolean" },
+            authorization: { oneOf: [ref("WorkflowAuthorization"), { type: "null" }] },
+            authorize: {
+              type: "object",
+              description: "Present when not authorized: the request that would authorize it",
+            },
+          },
+        },
+        WorkflowAuthorization: {
+          type: "object",
+          properties: {
+            authorization_id: { type: "string" },
+            uri: { type: "string" },
+            owner: { type: "string" },
+            skill: { type: "string" },
+            revision: { type: "integer" },
+            digest: { type: "string" },
+            max_cost_usd: { type: ["number", "null"] },
+            cost_policy: { type: "string" },
+            granted_at: { type: "string", format: "date-time" },
+          },
+        },
+        WorkflowRunSummary: {
+          type: "object",
+          properties: {
+            run_id: { type: "string" },
+            status: { type: "string", enum: ["running", "succeeded", "failed", "canceled"] },
+            uri: { type: "string" },
+            current_step: { type: ["string", "null"] },
+            created_at: { type: "string", format: "date-time" },
+          },
+        },
+        WorkflowRun: {
+          type: "object",
+          properties: {
+            run_id: { type: "string" },
+            status: { type: "string", enum: ["running", "succeeded", "failed", "canceled"] },
+            uri: { type: "string" },
+            revision: { type: "integer" },
+            digest: { type: "string" },
+            inputs: { type: "object" },
+            current_step: { type: ["string", "null"] },
+            steps: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  id: { type: "string" },
+                  command: { type: "string" },
+                  status: { type: "string" },
+                  job_id: { type: ["string", "null"] },
+                  outputs: { type: "array", items: { type: "object" } },
+                  estimate_usd: { type: ["number", "null"] },
+                  error: { type: "string" },
+                  note: { type: "string" },
+                },
+              },
+            },
+            max_cost_usd: { type: ["number", "null"] },
+            spent_usd: {
+              type: "number",
+              description: "Sum of the started steps' price ceilings (only under max_cost_usd)",
+            },
+            error: { type: "string" },
+            created_at: { type: "string", format: "date-time" },
+            updated_at: { type: "string", format: "date-time" },
           },
         },
       },

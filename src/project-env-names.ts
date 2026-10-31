@@ -30,6 +30,16 @@ import { LEONARDO_ROUTING } from "./providers/leonardo/models.js";
 import { PROVIDER_KEYS } from "./providers/provider-keys.js";
 import { REPLICATE_ROUTING } from "./providers/replicate/models.js";
 import { RUNWAY_ROUTING } from "./providers/runway/models.js";
+import {
+  SUME_IMAGE_MODEL_ENV,
+  SUME_ROUTING,
+  SUME_VIDEO_MODEL_ENV,
+} from "./providers/sume/models.js";
+import {
+  TOPVIEW_PLATFORM_ROUTING,
+  TOPVIEW_ROUTING,
+  TOPVIEW_UID_ENV,
+} from "./providers/topview/models.js";
 
 /**
  * Names multix reads that a project `.env` may NOT set: opt-ins that widen
@@ -120,11 +130,15 @@ const ROUTING = [
   LEONARDO_ROUTING,
   REPLICATE_ROUTING,
   RUNWAY_ROUTING,
+  SUME_ROUTING,
+  TOPVIEW_ROUTING,
+  TOPVIEW_PLATFORM_ROUTING,
 ];
 
 /** Every fixed name a project `.env` may set (numbered Gemini keys are matched by pattern). */
 export const PROJECT_ENV_NAMES: ReadonlySet<string> = new Set([
   ...PROVIDER_KEYS.flatMap((p) => (p.envFallback ? [p.envPrimary, p.envFallback] : [p.envPrimary])),
+  ...PROVIDER_KEYS.flatMap((p) => p.companions ?? []),
   ...ROUTING.flatMap((r) => [r.name, ...r.keyEnvs]),
   CLOUDFLARE_ACCOUNT_ID_ENV,
   CLOUDFLARE_GATEWAY_ID_ENV,
@@ -132,6 +146,9 @@ export const PROJECT_ENV_NAMES: ReadonlySet<string> = new Set([
   ...Object.values(ATLAS_MODEL_ENV),
   MAX_UPLOAD_ENV,
   FAL_MAX_UPLOAD_ENV,
+  SUME_IMAGE_MODEL_ENV,
+  SUME_VIDEO_MODEL_ENV,
+  TOPVIEW_UID_ENV,
   ...OWN_SETTINGS,
   ...INLINE_SETTINGS,
 ]);

@@ -26,6 +26,7 @@ import { SECURITY_HEADERS, jsonRpcError, text } from "./http-responses.js";
 import type { JobToolsContext } from "./jobs/job-runner.js";
 import { createMcpServer } from "./mcp-server.js";
 import type { SkillsContext } from "./skills/skill-catalog.js";
+import type { AuthoringContext } from "./skills/skill-manager.js";
 
 export interface McpDeps {
   /** The caller's job context for the CLI runner tools (absent = tools not offered). */
@@ -34,6 +35,8 @@ export interface McpDeps {
   events?: EventsContext;
   /** The caller's skills context (absent = built-in skills only). */
   skills?: SkillsContext;
+  /** The caller's own registry for multix_skills_manage (absent = no authoring tool). */
+  authoring?: AuthoringContext;
 }
 
 /**
@@ -112,6 +115,7 @@ export async function handleMcpRequest(
     version,
     jobs: deps.jobs,
     skills: deps.skills,
+    authoring: deps.authoring,
     era: "legacy",
   });
   const transport = new WebStandardStreamableHTTPServerTransport({
@@ -157,6 +161,7 @@ async function handleModern(
         jobs: deps.jobs,
         events: deps.events,
         skills: deps.skills,
+        authoring: deps.authoring,
         era: "modern",
       }),
     { legacy: "reject", responseMode: "json", maxRequestBodySize: MAX_BODY_BYTES },

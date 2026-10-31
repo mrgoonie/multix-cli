@@ -5,7 +5,13 @@
  * exit code class.
  */
 
-import { BudgetError, HttpError, MultixError, ResponseTooLargeError } from "./errors.js";
+import {
+  BudgetError,
+  HttpError,
+  MultixError,
+  ProviderJobFailedError,
+  ResponseTooLargeError,
+} from "./errors.js";
 import { redactUrlsInText } from "./redact.js";
 
 export type ErrorCode =
@@ -157,11 +163,18 @@ const TEXT_RULES: Array<[RegExp, ErrorCode]> = [
     "INVALID_KEY",
   ],
   [
+    // A logged job failure is the provider's verdict, whatever reason its payload names
+    // (moderation, quota, an internal timeout). An id between noun and verb must hold a
+    // digit, so "task polling failed" is not one; a payload whose status is canceled is not.
+    /^(?!.*"status"\s*:\s*"(?:cancell?ed|aborted)")(?:.*\b(task|job|prediction|generation|interaction) (?:(?=[\w.:-]*\d)[\w.:-]+ )?(failed|was canceled|errored)|.*status:? ?"?failed)/is,
+    "JOB_FAILED",
+  ],
+  [
     /(safety|content policy|moderation|blocked|nsfw|prohibited|sensitive content|responsible ai|flagged)/i,
     "CONTENT_BLOCKED",
   ],
   [
-    /(quota|insufficient (credit|balance|funds)|out of credits|billing|payment required|exceeded your)/i,
+    /(quota|insufficient (credit|balance|funds)|out of credits|billing|payment[ _]required|exceeded your)/i,
     "QUOTA_EXCEEDED",
   ],
   [/(rate.?limit|too many requests)/i, "RATE_LIMITED"],
@@ -169,10 +182,6 @@ const TEXT_RULES: Array<[RegExp, ErrorCode]> = [
   [
     /(model).{0,40}(not found|does not exist|unknown|not supported|invalid)|(unknown|invalid) model/i,
     "MODEL_NOT_FOUND",
-  ],
-  [
-    /(task|job|prediction|generation|request) (failed|was canceled|errored)|status: ?failed/i,
-    "JOB_FAILED",
   ],
   [/(ENOENT|no such file|file not found|does not exist)/i, "NOT_FOUND"],
   [
@@ -269,6 +278,13 @@ export function classifyError(error: unknown): ErrorInfo {
   if (typeof commanderCode === "string" && commanderCode.startsWith("commander.")) {
     return build("USAGE", message.replace(/^error: /, ""));
   }
+  if (error instanceof ProviderJobFailedError) {
+    // The provider's own reason (moderation, quota) is in the message; the run is a failed job.
+    if (error.terminal) return build("JOB_FAILED", message);
+    // Canceled, paused or unusable output: never reported as a failed job, whatever the text says.
+    const info = classifyMessage(message);
+    return info.code === "JOB_FAILED" ? build("UNKNOWN", message) : info;
+  }
   if (error instanceof MultixError) {
     if (error.code === "CONFIG_ERROR") {
       const code = codeFromText(message);
@@ -284,6 +300,20 @@ export function classifyError(error: unknown): ErrorInfo {
     if (error.code === "POLL_TIMEOUT") return build("TIMEOUT", message);
     if (error.code === "UNKNOWN_REMOTE_STATE") return build("UNKNOWN_REMOTE_STATE", message);
     if (error instanceof BudgetError) return build(error.code as ErrorCode, message);
+  }
+  // A plain Error that only adds context (request id, resume hint) to a typed
+  // error: classify the cause, so its class, HTTP status and Retry-After count,
+  // and keep the outer message.
+  if (
+    error instanceof Error &&
+    Object.getPrototypeOf(error) === Error.prototype &&
+    error.cause instanceof MultixError
+  ) {
+    const { code, http_status, retry_after_s } = classifyError(error.cause);
+    return build(code, message, {
+      ...(http_status !== undefined ? { http_status } : {}),
+      ...(retry_after_s !== undefined ? { retry_after_s } : {}),
+    });
   }
   return classifyMessage(message);
 }

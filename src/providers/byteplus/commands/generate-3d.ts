@@ -10,7 +10,6 @@ import { resolveImageInput } from "../../../core/image-input.js";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import { outputStamp } from "../../../core/output-name.js";
-import { PollFailedError, PollTimeoutError } from "../../leonardo/poll.js";
 import { createBytePlusClient } from "../client.js";
 import {
   buildThreeDTaskBody,
@@ -19,6 +18,7 @@ import {
   submitThreeDTask,
   waitForThreeDTask,
 } from "../generators/three-d.js";
+import { missingTaskOutputError, toTaskWaitError } from "../generators/video.js";
 import { BYTEPLUS_3D_MODELS, BYTEPLUS_DEFAULTS } from "../models.js";
 
 export function registerBytePlusGenerate3DCommand(parent: Command): void {
@@ -98,10 +98,7 @@ export function registerBytePlusGenerate3DCommand(parent: Command): void {
             logger,
           });
           const url = final.content?.file_url;
-          if (!url) {
-            logger.error(`Task succeeded but no file_url in response: ${JSON.stringify(final)}`);
-            process.exit(1);
-          }
+          if (!url) throw missingTaskOutputError(taskId, "3D file URL");
           const ext = inferModelFileExt(url);
           const outPath =
             opts.output ??
@@ -110,17 +107,7 @@ export function registerBytePlusGenerate3DCommand(parent: Command): void {
           console.log(`\nTask: ${taskId}`);
           console.log(`Saved: ${outPath}`);
         } catch (e) {
-          if (e instanceof PollTimeoutError) {
-            logger.error(
-              `Polling timed out — keep the task and check later: multix byteplus status ${taskId} --wait --download`,
-            );
-            process.exit(1);
-          }
-          if (e instanceof PollFailedError) {
-            logger.error(`Task failed: ${JSON.stringify(e.value)}`);
-            process.exit(1);
-          }
-          throw e;
+          throw toTaskWaitError(e, taskId, `multix byteplus status ${taskId} --wait --download`);
         }
       },
     );
