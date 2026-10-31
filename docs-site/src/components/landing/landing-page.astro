@@ -1,0 +1,60 @@
+---
+/**
+ * The landing page for one locale. src/pages/index.astro (EN) and
+ * src/pages/vi/index.astro (VI) render it; as static routes they win over
+ * Starlight's catch-all route for `/` and `/vi/`. The splash entry
+ * src/content/docs/index.md stays, because /index.md and llms.txt serve it.
+ */
+// Inlined rather than linked: one small stylesheet should not block first paint.
+import fontsCss from "../../styles/fonts.css?inline";
+import tokensCss from "../../styles/tokens.css?inline";
+import { caseStudies } from "./case-studies-data";
+import CaseStudies from "./case-studies.astro";
+import { type Lang, copy } from "./landing-copy";
+import LandingFooter from "./landing-footer.astro";
+import LandingHead from "./landing-head.astro";
+import LandingHero from "./landing-hero.astro";
+import LandingInstall from "./landing-install.astro";
+import LandingNav from "./landing-nav.astro";
+import LandingProviders from "./landing-providers.astro";
+import providersCss from "./landing-providers.css?inline";
+import LandingSenses from "./landing-senses.astro";
+import LandingSpecs from "./landing-specs.astro";
+import LandingSurfaces from "./landing-surfaces.astro";
+import landingCss from "./landing.css?inline";
+
+interface Props {
+  lang: Lang;
+}
+
+const t = copy[Astro.props.lang];
+---
+
+<!doctype html>
+<html lang={t.htmlLang} dir="ltr">
+  <head>
+    <LandingHead t={t} caseStudies={caseStudies} />
+    <style is:inline set:html={fontsCss + tokensCss + landingCss + providersCss}></style>
+  </head>
+  <body class="mx-landing">
+    <a class="mx-skip" href="#main">{t.skip}</a>
+    <div class="mx-light" aria-hidden="true"></div>
+    <div class="mx-wrap">
+      <LandingNav t={t} />
+      <main id="main">
+        <LandingHero t={t} />
+        <LandingSpecs t={t} />
+        <LandingSenses t={t} />
+        <LandingProviders t={t} />
+        <LandingInstall t={t} />
+        <LandingSurfaces t={t} />
+        <CaseStudies t={t} items={caseStudies} />
+      </main>
+      <LandingFooter t={t} />
+    </div>
+    <div class="mx-grain" aria-hidden="true"></div>
+    <script>
+      import "../../scripts/landing/landing-main";
+    </script>
+  </body>
+</html>

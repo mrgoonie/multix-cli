@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="en" data-theme="system">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>multix hero demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script>
+  // Theme is applied before first paint so there is no flash.
+  try { document.documentElement.dataset.theme = localStorage.getItem("mx-theme") || "system"; } catch {}
+</script>
+<style>
+:root{
+  --display:"Bricolage Grotesque",system-ui,sans-serif;--body:"Instrument Sans",system-ui,sans-serif;--mono:"JetBrains Mono",ui-monospace,monospace;
+  --m-image:#ffb020;--m-video:#ff3d7f;--m-voice:#20c5b5;--m-music:#8a6bff;--m-3d:#4da3ff;
+  --bg:#0d0e11;--bg-2:#16181d;--line:#2c3039;--text:#f3efe6;--mute:#8b8f99;--signal:#ff5a1f;--signal-text:#ff7a45;--dot:#c9c2b2;--glow-a:#ff5a1f30;--glow-b:#8a6bff22;
+}
+:root[data-theme="light"]{--bg:#f3efe6;--bg-2:#ebe5d8;--line:#d9d1c0;--text:#0d0e11;--mute:#5d5a52;--signal-text:#c23a08;--dot:#1b1c21;--glow-a:#ff5a1f22;--glow-b:#8a6bff18}
+@media (prefers-color-scheme:light){:root[data-theme="system"]{--bg:#f3efe6;--bg-2:#ebe5d8;--line:#d9d1c0;--text:#0d0e11;--mute:#5d5a52;--signal-text:#c23a08;--dot:#1b1c21;--glow-a:#ff5a1f22;--glow-b:#8a6bff18}}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:16px/1.55 var(--body);transition:background .3s,color .3s}
+body{--mx:60%;--my:40%;min-height:100vh;overflow-x:hidden}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:radial-gradient(520px circle at var(--mx) var(--my),var(--glow-a),transparent 62%),
+  radial-gradient(820px circle at calc(100% - var(--mx)) calc(100% - var(--my)),var(--glow-b),transparent 60%),
+  repeating-linear-gradient(90deg,color-mix(in srgb,var(--text) 5%,transparent) 0 1px,transparent 1px 56px),
+  repeating-linear-gradient(0deg,color-mix(in srgb,var(--text) 5%,transparent) 0 1px,transparent 1px 56px)}
+.wrap{position:relative;z-index:1;max-width:1200px;margin:0 auto;padding:0 16px}
+.demo-note{position:relative;z-index:2;background:var(--signal);color:#0d0e11;font:600 12px var(--mono);padding:8px 16px;text-align:center}
+nav{display:flex;justify-content:space-between;align-items:center;padding:18px 0;border-bottom:1px solid var(--line);gap:12px;flex-wrap:wrap}
+.logo{font:800 22px var(--display);letter-spacing:-.03em;display:flex;align-items:center;gap:8px}
+.bars{display:inline-flex;gap:2px;align-items:flex-end;height:18px}.bars i{width:3px;border-radius:1px}
+.links{display:flex;gap:18px;align-items:center;font-size:14px}.links a{color:var(--mute);text-decoration:none}.links a:hover{color:var(--text)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:2px}
+.seg button{all:unset;cursor:pointer;font:600 12px var(--mono);padding:5px 10px;border-radius:999px;color:var(--mute)}
+.seg button[aria-pressed="true"]{background:var(--text);color:var(--bg)}
+.seg button:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+.hero{display:grid;grid-template-columns:1fr 1.05fr;gap:24px;align-items:center;min-height:calc(100vh - 120px);padding:24px 0 48px}
+.tag{font:600 11px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--signal-text)}
+h1{font:800 clamp(42px,6.4vw,84px)/.94 var(--display);letter-spacing:-.045em;margin:18px 0 18px}
+h1 em{font-style:normal;background:linear-gradient(90deg,var(--m-image),var(--m-video) 35%,var(--m-music) 60%,var(--m-voice) 85%);-webkit-background-clip:text;background-clip:text;color:transparent}
+.lead{color:var(--mute);font-size:19px;max-width:36ch;margin:0}
+.lead b{color:var(--text);font-weight:600}
+.cta{display:flex;gap:12px;margin-top:30px;flex-wrap:wrap}
+.btn{font:600 15px var(--body);padding:12px 18px;border-radius:8px;border:1px solid var(--line);color:var(--text);text-decoration:none;background:transparent;cursor:pointer}
+.btn.p{background:var(--signal);border-color:var(--signal);color:#0d0e11;font-family:var(--mono);font-size:14px}
+.btn:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+.stage{position:relative;aspect-ratio:1/1.02;width:100%;max-width:640px;justify-self:end}
+.stage canvas{position:absolute;inset:0;width:100%;height:100%;cursor:crosshair;touch-action:manipulation}
+.sense{position:absolute;left:0;top:0;transform:translate(-50%,-50%);pointer-events:none;opacity:0;transition:opacity .4s;
+  font:600 12px var(--mono);padding:4px 9px;border-radius:999px;border:1px solid currentColor;background:color-mix(in srgb,var(--bg) 80%,transparent);white-space:nowrap}
+.sense.on{opacity:1}
+.sense small{color:var(--mute);font-weight:400;margin-left:6px}
+.hint{position:absolute;bottom:4%;left:50%;transform:translateX(-50%);display:flex;gap:10px;align-items:center}
+.hint .btn{font:600 13px var(--mono);padding:8px 14px;border-radius:999px;background:color-mix(in srgb,var(--bg) 70%,transparent);backdrop-filter:blur(6px)}
+.hint .btn .pulse{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--signal);margin-right:8px;box-shadow:0 0 0 0 var(--signal);animation:pl 1.6s infinite}
+@keyframes pl{70%{box-shadow:0 0 0 10px transparent}100%{box-shadow:0 0 0 0 transparent}}
+.legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:28px;font:12px var(--mono);color:var(--mute)}
+.legend span::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--c);margin-right:6px}
+@media (max-width:860px){.hero{grid-template-columns:1fr;min-height:0}.stage{justify-self:center;max-width:520px}.links a{display:none}}
+@media (prefers-reduced-motion:reduce){.hint .btn .pulse{animation:none}}
+</style>
+</head>
+<body>
+<div class="demo-note">DEMO DUYỆT HÌNH THỨC — đầu dựng procedural; bản thật lấy mẫu từ mesh tạo bằng multix</div>
+<div class="wrap">
+  <nav>
+    <div class="logo"><span class="bars" aria-hidden="true"><i style="height:8px;background:var(--m-image)"></i><i style="height:16px;background:var(--m-video)"></i><i style="height:11px;background:var(--m-voice)"></i><i style="height:18px;background:var(--m-music)"></i><i style="height:6px;background:var(--m-3d)"></i></span>multix</div>
+    <div class="links"><a href="#">Docs</a><a href="#">MCP</a><a href="#">REST API</a><a href="#">Providers</a><a href="#">EN / VI</a>
+      <div class="seg" role="group" aria-label="Theme">
+        <button type="button" data-set-theme="system">System</button><button type="button" data-set-theme="light">Light</button><button type="button" data-set-theme="dark">Dark</button>
+      </div>
+    </div>
+  </nav>
+
+  <section class="hero">
+    <div>
+      <span class="tag">The multimodal layer for AI agents</span>
+      <h1>Give every AI agent <em>eyes, ears and a voice.</em></h1>
+      <p class="lead"><b>Unlock multimodal for every AI agent</b> — 17 providers behind one CLI, one MCP server and one REST API.</p>
+      <div class="cta"><a class="btn p" href="#">npm i -g @mrgoonie/multix</a><a class="btn" href="#">Connect MCP →</a></div>
+      <div class="legend"><span style="--c:var(--m-image)">see · image/video</span><span style="--c:var(--m-voice)">hear · stt/music</span><span style="--c:var(--signal)">speak · tts/voice</span></div>
+    </div>
+    <div class="stage" id="stage">
+      <canvas id="head" aria-hidden="true"></canvas>
+      <span class="sense" data-sense="eyes" style="color:var(--m-image)">--see<small>gemini analyze · runway video</small></span>
+      <span class="sense" data-sense="ears" style="color:var(--m-voice)">--hear<small>elevenlabs stt · music</small></span>
+      <span class="sense" data-sense="mouth" style="color:var(--signal-text)">--speak<small>fish tts · heygen</small></span>
+      <div class="hint"><button class="btn" id="unlock" type="button"><span class="pulse"></span><span id="unlock-label">Unlock senses</span></button></div>
+    </div>
+  </section>
+</div>
+
+<script>
+(() => {
+  /* ---------- theme switch (system / light / dark) ---------- */
+  const root = document.documentElement;
+  const buttons = document.querySelectorAll("[data-set-theme]");
+  const syncButtons = () => buttons.forEach(b => b.setAttribute("aria-pressed", String(b.dataset.setTheme === root.dataset.theme)));
+  buttons.forEach(b => b.addEventListener("click", () => {
+    root.dataset.theme = b.dataset.setTheme;
+    try { localStorage.setItem("mx-theme", b.dataset.setTheme); } catch {}
+    syncButtons(); readPalette();
+  }));
+  syncButtons();
+  matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => readPalette());
+
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ---------- background follows the pointer ---------- */
+  if (!reduced) addEventListener("pointermove", e => {
+    document.body.style.setProperty("--mx", e.clientX + "px");
+    document.body.style.setProperty("--my", e.clientY + "px");
+  }, { passive: true });
+
+  /* ---------- procedural head as a signed distance field ---------- */
+  const len = (x, y, z) => Math.hypot(x, y, z);
+  const ell = (px, py, pz, cx, cy, cz, rx, ry, rz) => {
+    const x = px - cx, y = py - cy, z = pz - cz;
+    const k0 = len(x / rx, y / ry, z / rz), k1 = len(x / (rx * rx), y / (ry * ry), z / (rz * rz));
+    return k0 * (k0 - 1) / (k1 || 1e-6);
+  };
+  const sph = (px, py, pz, cx, cy, cz, r) => len(px - cx, py - cy, pz - cz) - r;
+  const cap = (px, py, pz, ax, ay, az, bx, by, bz, r) => {
+    const pax = px - ax, pay = py - ay, paz = pz - az, bax = bx - ax, bay = by - ay, baz = bz - az;
+    const h = Math.min(1, Math.max(0, (pax * bax + pay * bay + paz * baz) / (bax * bax + bay * bay + baz * baz)));
+    return len(pax - bax * h, pay - bay * h, paz - baz * h) - r;
+  };
+  const smin = (a, b, k) => { const h = Math.max(k - Math.abs(a - b), 0) / k; return Math.min(a, b) - h * h * k * 0.25; };
+  const ssub = (a, b, k) => -smin(-a, b, k); // subtract b from a
+
+  function head(x, y, z) {
+    const ax = Math.abs(x);
+    let d = ell(x, y, z, 0, 0.28, -0.05, 0.76, 0.86, 0.9);                    // cranium
+    d = smin(d, ell(x, y, z, 0, -0.32, 0.16, 0.58, 0.62, 0.68), 0.3);          // face mass
+    d = smin(d, ell(x, y, z, 0, -0.84, 0.42, 0.26, 0.2, 0.22), 0.22);          // chin
+    d = smin(d, ell(ax, y, z, 0.42, -0.62, 0.3, 0.2, 0.2, 0.3), 0.2);          // jaw corners
+    d = smin(d, ell(ax, y, z, 0.44, -0.12, 0.52, 0.2, 0.17, 0.2), 0.18);       // cheekbones
+    d = smin(d, ell(x, y, z, 0, 0.24, 0.66, 0.6, 0.11, 0.2), 0.14);           // brow ridge
+    d = smin(d, cap(x, y, z, 0, 0.12, 0.8, 0, -0.26, 0.98, 0.075), 0.12);      // nose bridge
+    d = smin(d, sph(x, y, z, 0, -0.28, 0.96, 0.1), 0.1);                       // nose tip
+    d = ssub(d, sph(ax, y, z, 0.29, 0.06, 0.82, 0.16), 0.07);                  // eye sockets
+    d = Math.min(d, sph(ax, y, z, 0.29, 0.05, 0.69, 0.13));                    // eyeballs
+    d = smin(d, ell(x, y, z, 0, -0.52, 0.8, 0.22, 0.075, 0.12), 0.06);        // lips
+    d = ssub(d, ell(x, y, z, 0, -0.53, 0.92, 0.19, 0.012, 0.08), 0.02);        // mouth line
+    d = smin(d, ell(ax, y, z, 0.79, -0.04, -0.02, 0.09, 0.24, 0.15), 0.08);    // ears
+    d = smin(d, cap(x, y, z, 0, -0.75, -0.12, 0, -1.7, -0.2, 0.4), 0.3);       // neck
+    return d;
+  }
+
+  const EYE = [0.29, 0.05, 0.72], EAR = [0.81, -0.04, 0], MOUTH = [0, -0.52, 0.85];
+
+  /* Contour sampling: rings of dots at evenly spaced heights, found by marching
+     each ray inward from outside the head until it hits the surface. */
+  function sampleHead(levels, perRing) {
+    const pts = [];
+    for (let i = 0; i < levels; i++) {
+      const y = 1.2 - (i / (levels - 1)) * 2.9;
+      const offset = (i % 2) * 0.5;
+      for (let j = 0; j < perRing; j++) {
+        const a = ((j + offset) / perRing) * Math.PI * 2;
+        const dx = Math.sin(a), dz = Math.cos(a), cz = -0.05;
+        let r = 1.5, hit = false;
+        for (let s = 0; s < 48; s++) {
+          const d = head(dx * r, y, cz + dz * r);
+          if (d < 0.002) { hit = true; break; }
+          r -= Math.max(d, 0.004);
+          if (r < 0) break;
+        }
+        if (!hit) continue;
+        const x = dx * r, z = cz + dz * r;
+        const ax = Math.abs(x);
+        let region = 0;
+        if (len(ax - EYE[0], y - EYE[1], z - EYE[2]) < 0.23) region = 1;
+        else if (len(ax - EAR[0], y - EAR[1], z - EAR[2]) < 0.3) region = 2;
+        else if (len(x - MOUTH[0], y - MOUTH[1], z - MOUTH[2]) < 0.24) region = 3;
+        pts.push(x, y, z, region, Math.random());
+      }
+    }
+    // Sound-wave particles in front of the mouth: x = angle, y = ring index.
+    for (let ring = 0; ring < 3; ring++) for (let j = 0; j < 90; j++) {
+      const ang = -1.1 + (j / 89) * 2.2;
+      pts.push(ang, ring, 0, 4, Math.random());
+    }
+    return new Float32Array(pts);
+  }
+
+  /* ---------- WebGL renderer ---------- */
+  const canvas = document.getElementById("head");
+  const gl = canvas.getContext("webgl", { premultipliedAlpha: true, antialias: false, alpha: true });
+  if (!gl) return; // a static poster would show here in production
+
+  const small = matchMedia("(max-width: 860px)").matches;
+  const data = sampleHead(small ? 90 : 128, small ? 150 : 210);
+  const count = data.length / 5;
+
+  const vs = `
+  attribute vec3 aPos; attribute float aRegion; attribute float aSeed;
+  uniform float uYaw, uPitch, uTime, uAspect, uDpr, uSize, uMouseOn, uPulse, uDark;
+  uniform vec2 uMouse; uniform vec3 uUnlock;
+  uniform vec3 uBase, uHot, cImage, cVideo, cVoice, cMusic, cSpeak;
+  varying vec3 vColor; varying float vAlpha;
+  mat3 rotY(float a){float c=cos(a),s=sin(a);return mat3(c,0.,-s, 0.,1.,0., s,0.,c);}
+  mat3 rotX(float a){float c=cos(a),s=sin(a);return mat3(1.,0.,0., 0.,c,s, 0.,-s,c);}
+  bool is(float r){return abs(aRegion-r)<0.5;}
+  void main(){
+    vec3 p = aPos; float wave = -1.0;
+    if (is(4.0)) {
+      float t = fract(uTime*0.55 + aPos.y/3.0);
+      float r = 0.12 + t*0.95;
+      p = vec3(sin(aPos.x)*r, -0.52 + cos(aPos.x)*r*0.15 - 0.0, 0.92 + cos(aPos.x)*r*0.9);
+      wave = t;
+    }
+    vec3 dir = normalize(p - vec3(0.0,-0.2,-0.05) + 1e-4);
+    float breathe = sin(uTime*1.2 + aPos.y*3.0)*0.006;
+    p += dir*breathe;
+    if (is(3.0)) p += dir*uUnlock.z*0.045*sin(uTime*16.0 + aSeed*6.28);
+    if (is(2.0)) p += dir*uUnlock.y*0.035*sin(uTime*7.0 - aPos.y*14.0);
+    if (is(1.0)) p += dir*uUnlock.x*0.02*(0.5+0.5*sin(uTime*3.0));
+    p = rotX(uPitch)*(rotY(uYaw)*p);
+    float dist = 4.3 - p.z;
+    vec2 ndc = vec2(p.x*2.75/dist/uAspect, (p.y+0.2)*2.75/dist);
+
+    vec2 dm = ndc - uMouse; dm.x *= uAspect;
+    float md = length(dm);
+    float field = exp(-md*md*16.0)*uMouseOn;
+    float ripple = 0.5 + 0.5*sin(md*46.0 - uTime*8.0);
+    vec2 push = normalize(dm + 1e-5)*field*0.06*(0.55 + 0.45*ripple);
+    ndc += vec2(push.x/uAspect, push.y);
+
+    float sweepY = 1.25 - uPulse*1.5;
+    float sweep = (wave < 0.0) ? exp(-pow((aPos.y - sweepY)*7.0, 2.0)) : 0.0;
+
+    float depth = clamp((p.z + 1.0)*0.5, 0.0, 1.0);
+    vec3 col = uBase;
+    float a = mix(0.10, 0.85, depth*depth);
+    float size = uSize*(0.6 + 0.7*depth);
+    float flick = 0.5 + 0.5*sin(uTime*2.0 + aSeed*12.0);
+    if (is(1.0)) { col = mix(col, mix(cImage, cVideo, flick), uUnlock.x); size *= 1.0 + uUnlock.x*0.9; a = mix(a, 1.0, uUnlock.x); }
+    if (is(2.0)) { col = mix(col, mix(cVoice, cMusic, flick), uUnlock.y); size *= 1.0 + uUnlock.y*0.8; a = mix(a, 1.0, uUnlock.y); }
+    if (is(3.0)) { col = mix(col, cSpeak, uUnlock.z); size *= 1.0 + uUnlock.z*0.8; a = mix(a, 1.0, uUnlock.z); }
+    col = mix(col, uHot, field*0.9); size *= 1.0 + field*1.4; a = max(a, field*0.95);
+    col = mix(col, uHot, sweep*0.8); size *= 1.0 + sweep*1.2; a = max(a, sweep);
+    a *= 0.8 + 0.2*sin(uTime*1.7 + aSeed*31.0);
+    a *= smoothstep(-1.7, -1.15, aPos.y) + float(wave >= 0.0);
+    if (wave >= 0.0) { col = cSpeak; a = uUnlock.z*(1.0 - wave)*0.9; size = uSize*(1.6 - wave); }
+    vColor = col; vAlpha = clamp(a, 0.0, 1.0);
+    gl_PointSize = size*uDpr*(4.3/dist);
+    gl_Position = vec4(ndc, 0.0, 1.0);
+  }`;
+  const fs = `
+  precision mediump float; varying vec3 vColor; varying float vAlpha;
+  void main(){ float d = length(gl_PointCoord - 0.5); float a = smoothstep(0.5, 0.12, d)*vAlpha; if (a < 0.01) discard; gl_FragColor = vec4(vColor*a, a); }`;
+
+  const compile = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; };
+  const prog = gl.createProgram();
+  gl.attachShader(prog, compile(gl.VERTEX_SHADER, vs));
+  gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(prog); gl.useProgram(prog);
+
+  gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+  gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+  const attr = (name, size, off) => { const l = gl.getAttribLocation(prog, name); gl.enableVertexAttribArray(l); gl.vertexAttribPointer(l, size, gl.FLOAT, false, 20, off); };
+  attr("aPos", 3, 0); attr("aRegion", 1, 12); attr("aSeed", 1, 16);
+  const U = {}; ["uYaw","uPitch","uTime","uAspect","uDpr","uSize","uMouseOn","uPulse","uDark","uMouse","uUnlock","uBase","uHot","cImage","cVideo","cVoice","cMusic","cSpeak"].forEach(n => U[n] = gl.getUniformLocation(prog, n));
+  gl.enable(gl.BLEND);
+
+  const hex = h => { const n = parseInt(h.trim().slice(1), 16); return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255]; };
+  let dark = true;
+  function readPalette() {
+    const cs = getComputedStyle(root);
+    const v = n => hex(cs.getPropertyValue(n));
+    dark = cs.getPropertyValue("--bg").trim().toLowerCase() === "#0d0e11";
+    gl.uniform3fv(U.uBase, v("--dot")); gl.uniform3fv(U.uHot, v("--signal"));
+    gl.uniform3fv(U.cImage, v("--m-image")); gl.uniform3fv(U.cVideo, v("--m-video"));
+    gl.uniform3fv(U.cVoice, v("--m-voice")); gl.uniform3fv(U.cMusic, v("--m-music")); gl.uniform3fv(U.cSpeak, v("--signal"));
+    gl.uniform1f(U.uDark, dark ? 1 : 0);
+    // Additive light on dark paper; regular "ink" blending on light paper.
+    if (dark) gl.blendFunc(gl.ONE, gl.ONE); else gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    if (reduced) draw(performance.now());
+  }
+
+  /* ---------- interaction state ---------- */
+  const stage = document.getElementById("stage");
+  const labels = [...document.querySelectorAll(".sense")];
+  const unlockBtn = document.getElementById("unlock"), unlockLabel = document.getElementById("unlock-label");
+  let yaw = 0, pitch = 0, tYaw = 0, tPitch = 0;
+  let mouse = [9, 9], mouseOn = 0, tMouseOn = 0;
+  let unlockedAt = -1, lockedAt = -1, unlocked = false;
+  const unlock = [0, 0, 0];
+
+  stage.addEventListener("pointermove", e => {
+    const r = canvas.getBoundingClientRect();
+    const nx = ((e.clientX - r.left) / r.width) * 2 - 1, ny = -(((e.clientY - r.top) / r.height) * 2 - 1);
+    mouse = [nx, ny]; tMouseOn = 1;
+    tYaw = nx * 0.55; tPitch = -ny * 0.22;
+  });
+  stage.addEventListener("pointerleave", () => { tMouseOn = 0; tYaw = 0; tPitch = 0; });
+  // Repeat-trigger the global page pointer glow too on touch devices
+  function toggle() {
+    const now = performance.now() / 1000;
+    if (unlocked) { unlocked = false; lockedAt = now; unlockLabel.textContent = "Unlock senses"; }
+    else { unlocked = true; unlockedAt = now; unlockLabel.textContent = "Lock senses"; }
+    if (reduced) { unlock.fill(unlocked ? 1 : 0); draw(performance.now()); }
+  }
+  canvas.addEventListener("click", toggle);
+  unlockBtn.addEventListener("click", toggle);
+
+  /* Mirror of the shader projection, used to pin the DOM labels to the head. */
+  function project(x, y, z) {
+    const cy = Math.cos(yaw), sy = Math.sin(yaw);
+    let px = cy * x + sy * z, pz = -sy * x + cy * z, py = y;
+    const cp = Math.cos(pitch), sp = Math.sin(pitch);
+    const ry = cp * py - sp * pz, rz = sp * py + cp * pz;
+    const dist = 4.3 - rz, aspect = canvas.clientWidth / canvas.clientHeight;
+    return [((px * 2.75 / dist / aspect) + 1) / 2 * canvas.clientWidth, (1 - ((ry + 0.2) * 2.75 / dist + 1) / 2) * canvas.clientHeight];
+  }
+
+  function resize() {
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+    canvas.width = Math.round(canvas.clientWidth * dpr); canvas.height = Math.round(canvas.clientHeight * dpr);
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.uniform1f(U.uDpr, dpr); gl.uniform1f(U.uAspect, canvas.clientWidth / canvas.clientHeight);
+    gl.uniform1f(U.uSize, small ? 2.4 : 2.2);
+  }
+  addEventListener("resize", () => { resize(); if (reduced) draw(performance.now()); });
+
+  const clamp01 = v => Math.min(1, Math.max(0, v));
+  const ease = v => v * v * (3 - 2 * v);
+  function draw(ms) {
+    const t = ms / 1000;
+    yaw += (tYaw + (reduced ? 0 : Math.sin(t * 0.35) * 0.18) - yaw) * 0.06;
+    pitch += (tPitch - pitch) * 0.06;
+    mouseOn += (tMouseOn - mouseOn) * 0.08;
+    if (!reduced) {
+      if (unlocked) {
+        const e = t - unlockedAt;
+        unlock[0] = ease(clamp01(e / 0.6)); unlock[1] = ease(clamp01((e - 0.45) / 0.6)); unlock[2] = ease(clamp01((e - 0.9) / 0.6));
+      } else if (lockedAt > 0) {
+        const k = 1 - clamp01((t - lockedAt) / 0.5);
+        for (let i = 0; i < 3; i++) unlock[i] = Math.min(unlock[i], k);
+      }
+    }
+    gl.uniform1f(U.uTime, reduced ? 2 : t); gl.uniform1f(U.uYaw, yaw); gl.uniform1f(U.uPitch, pitch);
+    gl.uniform2fv(U.uMouse, mouse); gl.uniform1f(U.uMouseOn, mouseOn);
+    gl.uniform3fv(U.uUnlock, unlock);
+    gl.uniform1f(U.uPulse, unlocked && !reduced ? t - unlockedAt : 99);
+    gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.drawArrays(gl.POINTS, 0, count);
+
+    const anchors = { eyes: [EYE[0] + 0.32, EYE[1] + 0.18, EYE[2]], ears: [-EAR[0] - 0.12, EAR[1] + 0.32, EAR[2]], mouth: [MOUTH[0] + 0.5, MOUTH[1] - 0.12, MOUTH[2]] };
+    labels.forEach((el, i) => {
+      const [x, y] = project(...anchors[el.dataset.sense]);
+      el.style.left = x + "px"; el.style.top = y + "px";
+      el.classList.toggle("on", unlock[i] > 0.6);
+    });
+  }
+
+  resize(); readPalette();
+  if (reduced) { draw(performance.now()); return; }
+  let visible = true, raf = 0;
+  new IntersectionObserver(([e]) => { visible = e.isIntersecting; if (visible && !raf) loop(performance.now()); }).observe(canvas);
+  function loop(ms) { if (!visible) { raf = 0; return; } draw(ms); raf = requestAnimationFrame(loop); }
+  raf = requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

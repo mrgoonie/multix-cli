@@ -1,0 +1,116 @@
+/*
+ * Providers section: one card per provider with its command group, modalities
+ * and popular models. Builds on .mx-section/.mx-card from landing.css and uses
+ * tokens.css only. Modalities are text pills, so nothing relies on colour.
+ */
+
+.mx-providers {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 16.5rem), 1fr));
+}
+
+/* Phones: one row that scrolls sideways and snaps to each card, instead of 14 stacked cards.
+   The next card peeks in to show there is more. */
+@media (max-width: 559px) {
+  .mx-providers {
+    grid-auto-columns: 84%;
+    grid-auto-flow: column;
+    grid-template-columns: none;
+    margin-inline: calc(-1 * var(--mx-space-4));
+    padding: var(--mx-space-1) var(--mx-space-4) var(--mx-space-3);
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-padding-inline: var(--mx-space-4);
+    scroll-snap-type: x mandatory;
+    scrollbar-width: thin;
+  }
+
+  .mx-provider {
+    scroll-snap-align: start;
+  }
+}
+
+.mx-card.mx-provider h3 {
+  margin: 0;
+  font-size: var(--mx-text-xl);
+  letter-spacing: var(--mx-tracking-tight);
+}
+
+.mx-provider-cmd {
+  margin-top: var(--mx-space-1);
+}
+
+.mx-card .mx-provider-cmd code {
+  color: var(--mx-text-muted);
+  font-size: var(--mx-text-xs);
+}
+
+.mx-provider-label {
+  margin: var(--mx-space-5) 0 var(--mx-space-2);
+  color: var(--mx-text-muted);
+  font: 500 var(--mx-text-xs) var(--mx-font-mono);
+  letter-spacing: var(--mx-tracking-caps);
+  text-transform: uppercase;
+}
+
+.mx-provider-tags,
+.mx-provider-models {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mx-provider-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--mx-space-2);
+}
+
+.mx-provider-tags li {
+  padding: 2px var(--mx-space-3);
+  border: 1px solid var(--mx-line-strong);
+  border-radius: var(--mx-radius-pill);
+  background: var(--mx-surface);
+  color: var(--mx-text);
+  font-size: var(--mx-text-xs);
+  line-height: 1.6;
+}
+
+.mx-provider-models {
+  overflow: hidden;
+  border: 1px solid var(--mx-line);
+  border-radius: var(--mx-radius-md);
+  background: var(--mx-bg-deep);
+}
+
+.mx-provider-models li {
+  padding: var(--mx-space-2) var(--mx-space-3);
+  color: var(--mx-text);
+  font-size: var(--mx-text-xs);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.mx-provider-models li + li {
+  border-top: 1px solid var(--mx-line);
+}
+
+.mx-card.mx-provider .mx-card-link {
+  margin-top: auto;
+  padding-top: var(--mx-space-5);
+}
+
+.mx-providers-more {
+  margin: var(--mx-space-5) 0 0;
+  font-size: var(--mx-text-sm);
+  font-weight: 500;
+}
+
+.mx-providers-more a {
+  text-decoration: underline;
+  text-decoration-color: var(--mx-line-strong);
+  text-underline-offset: 4px;
+}
+
+.mx-providers-more a:hover {
+  text-decoration-color: currentColor;
+}

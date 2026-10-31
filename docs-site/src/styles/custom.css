@@ -1,38 +1,145 @@
-:root {
-  --sl-color-accent-low: #e9e6ff;
-  --sl-color-accent: #6451d4;
-  --sl-color-accent-high: #352588;
-}
+/*
+ * Starlight theme variables mapped onto the shared multix tokens (tokens.css).
+ * Every colour here comes from a --mx-* token; values that tokens.css does not
+ * define are docs-local aliases (--mxd-*) derived from its primitives.
+ *
+ * Starlight scales run from --sl-color-white (strongest text) to
+ * --sl-color-black (page background), so the ramp flips with the theme. The
+ * light ramp is declared twice: once for the resolved html[data-theme=light]
+ * and once for the no-JS case, where the system preference decides.
+ * Component styling lives in starlight-chrome.css and starlight-content.css.
+ */
 
+:root,
 :root[data-theme="dark"] {
-  --sl-color-accent-low: #2f285f;
-  --sl-color-accent: #aa9dff;
-  --sl-color-accent-high: #ded9ff;
+  --mxd-gray-1: #e3e6eb;
+  --mxd-gray-5: var(--mx-graphite-1);
+  --mxd-tint: 12%;
+
+  --sl-color-white: var(--mx-text);
+  --sl-color-gray-1: var(--mxd-gray-1);
+  --sl-color-gray-2: var(--mx-graphite-4);
+  --sl-color-gray-3: var(--mx-graphite-3);
+  --sl-color-gray-4: var(--mx-graphite-2);
+  --sl-color-gray-5: var(--mxd-gray-5);
+  --sl-color-gray-6: var(--mx-obsidian-4);
+  --sl-color-gray-7: var(--mx-obsidian-3);
+  --sl-color-black: var(--mx-bg);
 }
 
-.multix-footer {
-  border-top: 1px solid var(--sl-color-hairline);
-  color: var(--sl-color-gray-3);
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem 1.5rem;
-  justify-content: space-between;
-  margin-top: 3rem;
-  padding: 1.5rem 0 0;
+:root[data-theme="light"] {
+  --mxd-gray-5: #d6d7d2;
+  --mxd-tint: 10%;
+
+  --sl-color-white: var(--mx-text);
+  --sl-color-gray-1: var(--mx-obsidian-4);
+  --sl-color-gray-2: var(--mx-graphite-1);
+  --sl-color-gray-3: var(--mx-text-muted);
+  --sl-color-gray-4: var(--mx-graphite-3);
+  --sl-color-gray-5: var(--mxd-gray-5);
+  --sl-color-gray-6: var(--mx-porcelain-2);
+  --sl-color-gray-7: var(--mx-porcelain-3);
+  --sl-color-black: var(--mx-bg);
 }
 
-.multix-footer p {
-  margin: 0;
+/*
+ * No-JS fallback. Starlight renders html[data-theme="dark"] on the server and
+ * its inline ThemeProvider script resolves it before first paint, so the
+ * tokens.css fallback (:root:not([data-theme])) never applies here. Without
+ * scripting the system preference decides instead: these are the light values
+ * of tokens.css, repeated because that file keys them on the attribute.
+ */
+@media (prefers-color-scheme: light) and (scripting: none) {
+  :root[data-theme] {
+    color-scheme: light;
+    --mx-bg: var(--mx-porcelain-1);
+    --mx-bg-deep: var(--mx-porcelain-2);
+    --mx-surface: var(--mx-porcelain-3);
+    --mx-surface-raised: var(--mx-white);
+    --mx-surface-glass: rgba(245, 245, 242, 0.72);
+    --mx-line: rgba(10, 11, 13, 0.09);
+    --mx-line-strong: rgba(10, 11, 13, 0.18);
+    --mx-text: #0a0b0d;
+    --mx-text-muted: #545963;
+    --mx-text-faint: #6b707a;
+    --mx-accent: #0a0b0d;
+    --mx-accent-contrast: var(--mx-porcelain-1);
+    --mx-glow: rgba(10, 11, 13, 0.18);
+    --mx-glow-soft: rgba(10, 11, 13, 0.05);
+    --mx-ok: #0d7a4c;
+    --mx-warn: #8a5800;
+    --mx-danger: #b4261b;
+    --mx-focus: #0a0b0d;
+    --mx-shadow-lg: 0 30px 70px -30px rgba(10, 11, 13, 0.35), 0 0 0 1px var(--mx-line);
+
+    --mxd-gray-5: #d6d7d2;
+    --mxd-tint: 10%;
+
+    --sl-color-white: var(--mx-text);
+    --sl-color-gray-1: var(--mx-obsidian-4);
+    --sl-color-gray-2: var(--mx-graphite-1);
+    --sl-color-gray-3: var(--mx-text-muted);
+    --sl-color-gray-4: var(--mx-graphite-3);
+    --sl-color-gray-5: var(--mxd-gray-5);
+    --sl-color-gray-6: var(--mx-porcelain-2);
+    --sl-color-gray-7: var(--mx-porcelain-3);
+    --sl-color-black: var(--mx-bg);
+  }
 }
 
-.multix-footer a {
-  color: inherit;
-  font-weight: 600;
+/* Theme-independent mapping: these follow the --mx-* semantic tokens, which already flip. */
+:root {
+  /* Accent is light itself: white on obsidian, ink on porcelain. */
+  --sl-color-accent-low: var(--mx-glow-soft);
+  --sl-color-accent: var(--mx-accent);
+  --sl-color-accent-high: var(--mx-text);
+
+  /* Status hues come from the token set; "blue" and "purple" stay neutral in the Mono palette. */
+  --sl-color-green: var(--mx-ok);
+  --sl-color-green-high: var(--mx-ok);
+  --sl-color-green-low: color-mix(in srgb, var(--mx-ok) var(--mxd-tint), var(--mx-bg));
+  --sl-color-orange: var(--mx-warn);
+  --sl-color-orange-high: var(--mx-warn);
+  --sl-color-orange-low: color-mix(in srgb, var(--mx-warn) var(--mxd-tint), var(--mx-bg));
+  --sl-color-red: var(--mx-danger);
+  --sl-color-red-high: var(--mx-danger);
+  --sl-color-red-low: color-mix(in srgb, var(--mx-danger) var(--mxd-tint), var(--mx-bg));
+  --sl-color-blue: var(--mx-text);
+  --sl-color-blue-high: var(--mx-text);
+  --sl-color-blue-low: var(--mx-surface-raised);
+  --sl-color-purple: var(--mx-text);
+  --sl-color-purple-high: var(--mx-text);
+  --sl-color-purple-low: var(--mx-surface-raised);
+
+  --sl-color-text: var(--sl-color-gray-2);
+  --sl-color-text-accent: var(--mx-text);
+  --sl-color-text-invert: var(--mx-accent-contrast);
+  --sl-color-bg: var(--mx-bg);
+  --sl-color-bg-nav: var(--mx-surface-glass);
+  --sl-color-bg-sidebar: var(--mx-bg);
+  --sl-color-bg-inline-code: var(--mx-surface-raised);
+  --sl-color-bg-accent: var(--mx-accent);
+  --sl-color-hairline-light: var(--mx-line-strong);
+  --sl-color-hairline: var(--mx-line);
+  --sl-color-hairline-shade: var(--mx-line);
+  --sl-color-backdrop-overlay: color-mix(in srgb, var(--mx-bg-deep) 72%, transparent);
+
+  --sl-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.18);
+  --sl-shadow-md: 0 12px 32px -12px rgba(0, 0, 0, 0.45), 0 0 0 1px var(--mx-line);
+  --sl-shadow-lg: var(--mx-shadow-lg);
+
+  /* Typography: Geist body, Geist Mono code, Newsreader italic for accents. */
+  --sl-font: var(--mx-font-sans);
+  --sl-font-mono: var(--mx-font-mono);
+  --sl-line-height: 1.7;
+  --sl-line-height-headings: 1.15;
+
+  --sl-nav-height: 3.5rem;
+  --sl-content-width: 46rem;
 }
 
-@media (max-width: 36rem) {
-  .multix-footer {
-    align-items: flex-start;
-    flex-direction: column;
+@media (min-width: 50em) {
+  :root {
+    --sl-nav-height: 3.75rem;
   }
 }

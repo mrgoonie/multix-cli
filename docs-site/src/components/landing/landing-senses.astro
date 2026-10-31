@@ -1,0 +1,34 @@
+---
+/** The four senses, each tied to a real multix command. */
+import type { LandingCopy } from "./landing-copy";
+
+interface Props {
+  t: LandingCopy;
+}
+
+const { t } = Astro.props;
+const { senses } = t;
+---
+
+<section class="mx-section" id="senses" aria-labelledby="senses-title">
+  <header class="mx-section-head">
+    <p class="mx-kicker">{senses.eyebrow}</p>
+    <h2 id="senses-title">{senses.title}</h2>
+    <p class="mx-section-lead">{senses.lead}</p>
+  </header>
+  <ul class="mx-grid mx-grid-4">
+    {
+      senses.items.map((sense) => (
+        <li class="mx-card mx-tilt">
+          <p class="mx-flag">
+            <code>{sense.flag}</code>
+            <span>{sense.organ}</span>
+          </p>
+          <h3>{sense.title}</h3>
+          <p>{sense.body}</p>
+          <pre class="mx-cmd"><code>{sense.command}</code></pre>
+        </li>
+      ))
+    }
+  </ul>
+</section>

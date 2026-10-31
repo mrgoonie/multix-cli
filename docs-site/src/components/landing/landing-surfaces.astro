@@ -1,0 +1,36 @@
+---
+/** CLI, MCP and REST, each linking to its docs page. */
+import { type LandingCopy, localePath } from "./landing-copy";
+
+interface Props {
+  t: LandingCopy;
+}
+
+const { t } = Astro.props;
+const lang = t.lang as "en" | "vi";
+const { surfaces } = t;
+---
+
+<section class="mx-section" id="surfaces" aria-labelledby="surfaces-title">
+  <header class="mx-section-head">
+    <p class="mx-kicker">{surfaces.eyebrow}</p>
+    <h2 id="surfaces-title">{surfaces.title}</h2>
+  </header>
+  <ul class="mx-grid mx-grid-3">
+    {
+      surfaces.items.map((surface) => (
+        <li class="mx-card mx-tilt mx-surface">
+          <p class="mx-flag">
+            <code>{surface.name}</code>
+          </p>
+          <h3>{surface.title}</h3>
+          <p>{surface.body}</p>
+          <pre class="mx-cmd"><code>{surface.code}</code></pre>
+          <a class="mx-card-link" href={localePath(lang, surface.href)}>
+            {surface.cta} <span aria-hidden="true">→</span>
+          </a>
+        </li>
+      ))
+    }
+  </ul>
+</section>

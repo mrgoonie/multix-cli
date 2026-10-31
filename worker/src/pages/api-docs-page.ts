@@ -7,7 +7,9 @@
 import { openApiDocument } from "../api/openapi-document.js";
 import { escapeHtml } from "../http-responses.js";
 import { copyBlock } from "./copy-button.js";
-import { page } from "./page-layout.js";
+import { type Lang, messagesFor } from "./i18n.js";
+import { appShell } from "./page-layout.js";
+import { DEFAULT_PREFERENCES, type Preferences } from "./preferences.js";
 
 type Json = Record<string, unknown>;
 
@@ -45,40 +47,66 @@ function statusList(operation: Json): string {
     .join(" · ");
 }
 
-function operationCard(base: string, path: string, method: string, operation: Json): string {
+function operationCard(
+  base: string,
+  path: string,
+  method: string,
+  operation: Json,
+  lang: Lang,
+): string {
+  const label = messagesFor(lang).apiDocs.example(`${method.toUpperCase()} ${path}`);
   const description = operation.description
-    ? `<p class="muted"><small>${escapeHtml(String(operation.description))}</small></p>`
+    ? `<p class="muted" lang="en"><small>${escapeHtml(String(operation.description))}</small></p>`
     : "";
   return `<div class="secret">
-<div class="secret-head"><div><span class="badge ok mono">${method.toUpperCase()}</span> <span class="mono">/api/v1${escapeHtml(path)}</span></div></div>
-<p><strong>${escapeHtml(String(operation.summary ?? ""))}</strong></p>
+<h3 class="secret-head"><span><span class="method">${method.toUpperCase()}</span><span class="mono">/api/v1${escapeHtml(path)}</span></span></h3>
+<p lang="en"><strong>${escapeHtml(String(operation.summary ?? ""))}</strong></p>
 ${description}
-${copyBlock(curlFor(base, method, path, exampleOf(operation)), `${method.toUpperCase()} ${path} example`)}
+${copyBlock(curlFor(base, method, path, exampleOf(operation)), label, lang)}
 <p class="muted"><small>${statusList(operation)}</small></p>
 </div>`;
 }
 
-export function apiDocsPage(origin: string): string {
+/** API reference language and theme follow the visitor; the spec's own text stays English. */
+export function apiDocsPage(origin: string, prefs: Preferences = DEFAULT_PREFERENCES): string {
+  const t = messagesFor(prefs.lang);
+  const d = t.apiDocs;
   const doc = openApiDocument(origin);
   const base = `${origin}/api/v1`;
   const paths = doc.paths as Record<string, Json>;
   const operations = Object.entries(paths)
     .flatMap(([path, item]) =>
-      METHODS.filter((m) => item[m]).map((m) => operationCard(base, path, m, item[m] as Json)),
+      METHODS.filter((m) => item[m]).map((m) =>
+        operationCard(base, path, m, item[m] as Json, prefs.lang),
+      ),
     )
     .join("");
   const info = doc.info as Json;
-  return page(
-    "multix REST API",
-    `<section class="card">
-<h1>multix REST API</h1>
-<p>${escapeHtml(String(info.description))}</p>
-<p class="muted"><small>Base URL <span class="mono">${escapeHtml(base)}</span> · machine-readable spec: <a href="/api/v1/openapi.json">/api/v1/openapi.json</a> · create keys in <a href="/dashboard">/dashboard</a></small></p>
-${copyBlock("export MULTIX_API_KEY='paste the key from /dashboard here'", "export command")}
-<p class="muted"><small>Errors are JSON: <span class="mono">{"error":{"code":"bad_request","message":"…"}}</span>. Requests share the per-account rate limit of the MCP endpoint.</small></p>
+  return appShell(
+    {
+      title: d.title,
+      prefs,
+      here: "/api/docs",
+      navLabel: t.nav.apiDocs,
+      nav: [
+        { href: "#intro", label: t.nav.gettingStarted, icon: "overview" },
+        { href: "#endpoints", label: t.nav.endpoints, icon: "code" },
+        { href: "/api/v1/openapi.json", label: t.nav.openapi, icon: "file" },
+        { href: "/dashboard", label: t.nav.dashboard, icon: "back" },
+      ],
+    },
+    `<section id="intro" class="intro" aria-labelledby="intro-h">
+<p class="eyebrow">${escapeHtml(t.nav.apiDocs)}</p>
+<h1 id="intro-h">${d.heading}</h1>
+<p class="lede" lang="en">${escapeHtml(String(info.description))}</p>
 </section>
-<section class="card">
-<h2>Endpoints</h2>
+<section class="card" aria-label="${escapeHtml(t.nav.gettingStarted)}">
+<p class="muted"><small>${escapeHtml(d.baseUrl)} <span class="mono">${escapeHtml(base)}</span> · ${escapeHtml(d.spec)} <a href="/api/v1/openapi.json">/api/v1/openapi.json</a> · ${escapeHtml(d.createKeys)} <a href="/dashboard">/dashboard</a></small></p>
+${copyBlock(d.exportCommand, d.exportLabel, prefs.lang)}
+<p class="muted"><small>${d.errors}</small></p>
+</section>
+<section class="card" id="endpoints" aria-labelledby="endpoints-h">
+<h2 id="endpoints-h">${escapeHtml(d.endpoints)}</h2>
 ${operations}
 </section>`,
   );

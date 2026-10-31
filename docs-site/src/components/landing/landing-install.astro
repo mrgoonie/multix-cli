@@ -1,0 +1,37 @@
+---
+/** Quick start. The copy button needs JS; without it the code is plain, selectable text. */
+import { type LandingCopy, installCommands, localePath } from "./landing-copy";
+
+interface Props {
+  t: LandingCopy;
+}
+
+const { t } = Astro.props;
+const lang = t.lang as "en" | "vi";
+const { install } = t;
+---
+
+<section class="mx-section mx-install" id="install" aria-labelledby="install-title">
+  <header class="mx-section-head">
+    <p class="mx-kicker">{install.eyebrow}</p>
+    <h2 id="install-title">{install.title}</h2>
+    <p class="mx-section-lead">{install.lead}</p>
+  </header>
+  <figure class="mx-terminal">
+    <figcaption>
+      <span class="mx-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span>{install.codeLabel}</span>
+      <button
+        class="mx-copy"
+        type="button"
+        data-copy-target="mx-install-code"
+        data-copied={install.copied}
+        hidden>{install.copy}</button
+      >
+    </figcaption>
+    <pre id="mx-install-code"><code>{installCommands.join("\n")}</code></pre>
+  </figure>
+  <p class="mx-more">
+    <a href={localePath(lang, "/getting-started/")}>{install.more} <span aria-hidden="true">→</span></a>
+  </p>
+</section>

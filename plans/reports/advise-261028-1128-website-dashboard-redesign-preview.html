@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>multix redesign preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#0d0e11;--ink-2:#16181d;--ink-3:#23262e;--line:#2c3039;
+  --paper:#f3efe6;--paper-2:#e9e3d6;--mute:#8b8f99;
+  --signal:#ff5a1f;
+  --m-image:#ffb020;--m-video:#ff3d7f;--m-voice:#20c5b5;--m-music:#8a6bff;--m-3d:#4da3ff;
+  --display:"Bricolage Grotesque",system-ui,sans-serif;--body:"Instrument Sans",system-ui,sans-serif;--mono:"JetBrains Mono",ui-monospace,monospace;
+}
+*{box-sizing:border-box}body{margin:0;background:var(--ink);color:var(--paper);font:16px/1.55 var(--body)}
+.wrap{max-width:1120px;margin:0 auto;padding:0 16px}
+.tag{font:600 11px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--signal)}
+.banner{background:var(--signal);color:var(--ink);font:600 12px var(--mono);padding:8px 16px;text-align:center}
+nav{display:flex;justify-content:space-between;align-items:center;padding:20px 0;border-bottom:1px solid var(--line)}
+.logo{font:800 22px var(--display);letter-spacing:-.03em;display:flex;align-items:center;gap:8px}
+.bars{display:inline-flex;gap:2px;align-items:flex-end;height:18px}.bars i{width:3px;border-radius:1px}
+nav a{color:var(--mute);text-decoration:none;margin-left:20px;font-size:14px}
+.hero{display:grid;grid-template-columns:1.1fr .9fr;gap:40px;padding:72px 0 56px;align-items:center}
+h1{font:800 clamp(40px,6vw,76px)/.95 var(--display);letter-spacing:-.045em;margin:16px 0}
+h1 em{font-style:normal;background:linear-gradient(90deg,var(--m-image),var(--m-video),var(--m-music),var(--m-voice),var(--m-3d));-webkit-background-clip:text;color:transparent}
+.lead{color:#c9c4b8;font-size:19px;max-width:34ch}
+.cta{display:flex;gap:12px;margin-top:28px;flex-wrap:wrap}
+.btn{font:600 15px var(--body);padding:12px 18px;border-radius:6px;border:1px solid var(--line);color:var(--paper);text-decoration:none}
+.btn.p{background:var(--signal);border-color:var(--signal);color:var(--ink)}
+.term{background:var(--ink-2);border:1px solid var(--line);border-radius:10px;font:13px/1.7 var(--mono);overflow:hidden}
+.term .bar{display:flex;gap:6px;padding:10px 12px;border-bottom:1px solid var(--line)}.term .bar i{width:9px;height:9px;border-radius:50%;background:var(--ink-3)}
+.term pre{margin:0;padding:16px;white-space:pre-wrap}.c{color:var(--mute)}.s{color:var(--signal)}
+.spectrum{display:grid;grid-template-columns:repeat(5,1fr);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.spectrum div{padding:20px 16px;border-right:1px solid var(--line)}.spectrum div:last-child{border:0}
+.spectrum b{display:block;font:700 22px var(--display)}.spectrum span{font:12px var(--mono);color:var(--mute)}
+.sec{padding:56px 0}.sec h2{font:700 36px/1 var(--display);letter-spacing:-.03em;margin:10px 0 24px}
+.three{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line)}
+.three div{background:var(--ink);padding:24px}.three h3{font:700 20px var(--display);margin:8px 0}
+.three p{color:#bdb8ac;font-size:14px;margin:0}
+.paper{background:var(--paper);color:var(--ink);border-radius:14px;padding:28px;margin:40px 0}
+.paper h2{margin-top:0}
+.dash{display:grid;grid-template-columns:200px 1fr;border:1px solid var(--paper-2);border-radius:10px;overflow:hidden;background:#fbf9f4}
+.side{background:var(--ink);color:var(--paper);padding:18px;font-size:14px}.side a{display:block;color:var(--mute);padding:6px 0;text-decoration:none}.side a.on{color:var(--paper);border-left:2px solid var(--signal);padding-left:8px}
+.main{padding:22px}.steps{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}.steps span{font:12px var(--mono);padding:6px 10px;border:1px solid var(--paper-2);border-radius:999px}
+.steps .done{background:var(--ink);color:var(--paper)}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.prov{border:1px solid var(--paper-2);border-radius:8px;padding:10px;font-size:13px;display:flex;justify-content:space-between}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;background:#1f9d5b}.dot.off{background:#c8c1b1}
+.swatches{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.sw{width:118px;font:11px var(--mono)}.sw i{display:block;height:44px;border-radius:6px;margin-bottom:4px;border:1px solid #0002}
+.assume{border:1px dashed var(--signal);padding:16px;border-radius:8px;font-size:14px;color:#d8d2c4}
+body{--mx:50%;--my:30%}
+body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:radial-gradient(600px circle at var(--mx) var(--my),#ff5a1f33,transparent 60%),radial-gradient(900px circle at calc(100% - var(--mx)) calc(100% - var(--my)),#8a6bff22,transparent 60%),repeating-linear-gradient(90deg,#ffffff06 0 1px,transparent 1px 48px),repeating-linear-gradient(0deg,#ffffff06 0 1px,transparent 1px 48px)}
+.hero .term{transform:perspective(900px) rotateY(-8deg) rotateX(4deg);box-shadow:30px 40px 80px #0008,0 0 0 1px #ff5a1f22;transition:transform .4s}
+.hero .term:hover{transform:perspective(900px) rotateY(-2deg) rotateX(1deg)}
+.cases{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.case{margin:0;background:var(--ink-2);border:1px solid var(--line);border-radius:10px;overflow:hidden;transform-style:preserve-3d;transition:transform .2s}
+.vid{aspect-ratio:16/9;display:grid;place-items:center;font-size:32px;background:radial-gradient(circle at 30% 30%,var(--c),transparent 70%),var(--ink-3);color:var(--paper)}
+.vid small{display:block;font:11px var(--mono);color:var(--paper)}
+.case figcaption{padding:14px;display:grid;gap:4px;font-size:14px}.case span{color:var(--mute);font:12px var(--mono)}.case code{font:12px var(--mono);color:var(--signal)}
+.wave{display:flex;gap:3px;align-items:center;height:28px;margin-top:20px}.wave i{width:4px;border-radius:2px;background:var(--signal);animation:w 1.2s ease-in-out infinite}
+@keyframes w{50%{transform:scaleY(.3)}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}.case{transform:none!important}}
+@media (max-width:760px){.cases{grid-template-columns:1fr}.hero,.three,.dash{grid-template-columns:1fr}.spectrum{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:1fr 1fr}.side{display:none}}
+</style>
+</head>
+<body>
+<div class="banner">BẢN XEM TRƯỚC GIẢ ĐỊNH — trạng thái đích đề xuất, không phải code đã triển khai</div>
+<div class="wrap">
+<nav><div class="logo"><span class="bars"><i style="height:8px;background:var(--m-image)"></i><i style="height:16px;background:var(--m-video)"></i><i style="height:11px;background:var(--m-voice)"></i><i style="height:18px;background:var(--m-music)"></i><i style="height:6px;background:var(--m-3d)"></i></span>multix</div>
+<div><a href="#">Docs</a><a href="#">MCP</a><a href="#">REST API</a><a href="#">Providers</a><a href="#">GitHub ★</a></div></nav>
+
+<section class="hero">
+<div><span class="tag">Lớp multimodal cho AI agent</span>
+<h1>Give every AI agent <em>eyes, ears and a voice.</em></h1>
+<p class="lead">Unlock multimodal for every AI agent — 17 providers behind one CLI, one MCP server and one REST API.</p>
+<div class="cta"><a class="btn p" href="#">npm i -g @mrgoonie/multix</a><a class="btn" href="#">Kết nối MCP →</a></div>
+<div class="wave" aria-hidden="true"><i style="height:30%"></i><i style="height:70%;animation-delay:.1s"></i><i style="height:45%;animation-delay:.2s"></i><i style="height:90%;animation-delay:.3s"></i><i style="height:55%;animation-delay:.4s"></i><i style="height:80%;animation-delay:.5s"></i><i style="height:35%;animation-delay:.6s"></i><i style="height:65%;animation-delay:.7s"></i></div></div>
+<div class="term"><div class="bar"><i></i><i></i><i></i></div><pre><span class="c"># agent hỏi: model nào làm video, key đã có?</span>
+<span class="s">$</span> multix models --task video --ready --json
+<span class="c">[{"command":"runway video","model":"gen4.5"},…]</span>
+<span class="s">$</span> multix runway video --prompt "…" --dry-run
+<span class="c">✓ valid · est. cost shown · no API call</span></pre></div>
+</section>
+
+<div class="spectrum">
+<div style="box-shadow:inset 0 3px var(--m-image)"><b>Ảnh</b><span>generate · edit · upscale</span></div>
+<div style="box-shadow:inset 0 3px var(--m-video)"><b>Video</b><span>t2v · i2v · lipsync</span></div>
+<div style="box-shadow:inset 0 3px var(--m-voice)"><b>Giọng nói</b><span>tts · stt · clone</span></div>
+<div style="box-shadow:inset 0 3px var(--m-music)"><b>Nhạc & SFX</b><span>music · dubbing</span></div>
+<div style="box-shadow:inset 0 3px var(--m-3d)"><b>3D & tài liệu</b><span>3d · doc→md · ffmpeg</span></div>
+</div>
+
+<section class="sec"><span class="tag">Ba cửa vào, một hợp đồng</span><h2>CLI · MCP · REST</h2>
+<div class="three"><div><span class="tag">01</span><h3>CLI</h3><p>Chạy local, key trong .env, tối ưu media bằng ffmpeg/ImageMagick.</p></div>
+<div><span class="tag">02</span><h3>MCP server</h3><p>Dán 1 URL vào Claude/Cursor, OAuth GitHub, job chạy trên Cloudflare.</p></div>
+<div><span class="tag">03</span><h3>REST API</h3><p>API key theo tài khoản, output lưu R2 của bạn.</p></div></div>
+<p class="c" style="font-size:13px;margin-top:12px">+ Các section tiếp: lưới provider (logo chữ), "Dành cho AI agent" (llms.txt, .md, Open in ChatGPT/Claude), so sánh, FAQ (FAQPage JSON-LD), footer song ngữ.</p></section>
+
+<section class="sec"><span class="tag">Case studies · video mẫu</span><h2>Làm bằng multix</h2>
+<div class="cases">
+<figure class="case tilt"><div class="vid" style="--c:var(--m-video)">▶<small>poster · click mới tải video</small></div><figcaption><b>[Tên case từ danh sách của bạn]</b><span>runway video · gen4.5 · 10s</span><code>multix runway video --prompt "…"</code></figcaption></figure>
+<figure class="case tilt"><div class="vid" style="--c:var(--m-music)">▶<small>poster</small></div><figcaption><b>[Case 2]</b><span>byteplus seedance · elevenlabs music</span><code>multix scene …</code></figcaption></figure>
+<figure class="case tilt"><div class="vid" style="--c:var(--m-voice)">▶<small>poster</small></div><figcaption><b>[Case 3]</b><span>heygen avatar · fish tts</span><code>multix heygen …</code></figcaption></figure>
+</div></section>
+
+<div class="paper"><span class="tag">Dashboard · light mode “giấy”</span><h2 style="font:700 30px var(--display);letter-spacing:-.03em">Khung app mới, giữ nguyên route & form</h2>
+<div class="dash"><div class="side"><div class="logo" style="font-size:18px;margin-bottom:14px">multix</div><a class="on" href="#">Tổng quan</a><a href="#">Kết nối MCP</a><a href="#">Provider keys</a><a href="#">API keys</a><a href="#">Lưu trữ R2</a><a href="#">API docs</a></div>
+<div class="main"><div class="steps"><span class="done">1 · Đăng nhập GitHub ✓</span><span class="done">2 · Thêm 1 provider key ✓</span><span>3 · Dán MCP URL vào client</span></div>
+<div class="grid"><div class="prov"><span><span class="dot"></span> OpenAI</span><small>đã lưu</small></div><div class="prov"><span><span class="dot"></span> Gemini</span><small>đã lưu</small></div><div class="prov"><span><span class="dot off"></span> Runway</span><small>chưa có</small></div><div class="prov"><span><span class="dot off"></span> ElevenLabs</span><small>chưa có</small></div><div class="prov"><span><span class="dot off"></span> fal.ai</span><small>chưa có</small></div><div class="prov"><span><span class="dot off"></span> Replicate</span><small>chưa có</small></div></div></div></div>
+<div class="swatches">
+<div class="sw"><i style="background:var(--ink)"></i>ink #0d0e11</div><div class="sw"><i style="background:var(--paper)"></i>paper #f3efe6</div><div class="sw"><i style="background:var(--signal)"></i>signal #ff5a1f</div><div class="sw"><i style="background:var(--m-image)"></i>image #ffb020</div><div class="sw"><i style="background:var(--m-video)"></i>video #ff3d7f</div><div class="sw"><i style="background:var(--m-voice)"></i>voice #20c5b5</div><div class="sw"><i style="background:var(--m-music)"></i>music #8a6bff</div><div class="sw"><i style="background:var(--m-3d)"></i>3d #4da3ff</div></div>
+<p style="font-size:14px;margin:0">Font: Bricolage Grotesque (hiển thị) · Instrument Sans (nội dung) · JetBrains Mono (lệnh) — tự host, không gọi Google Fonts ở production.</p></div>
+
+<div class="assume"><b>Giả định cần bạn xác nhận:</b> landing có bản EN + VI; logo mới = chữ "multix" + 5 vạch phổ (thay ảnh banner isometric cũ khỏi hero); docs giữ nguyên nội dung, chỉ đổi theme; dashboard dark/light theo hệ thống; ngưỡng chất lượng: Lighthouse mobile ≥ 95 cả 4 mục cho landing, 0 lỗi axe mức serious/critical.</div>
+<p style="height:40px"></p>
+</div>
+<script>
+const rm=matchMedia("(prefers-reduced-motion: reduce)").matches;
+if(!rm){addEventListener("pointermove",e=>{document.body.style.setProperty("--mx",e.clientX+"px");document.body.style.setProperty("--my",e.clientY+"px")},{passive:true});
+document.querySelectorAll(".tilt").forEach(el=>{el.addEventListener("pointermove",e=>{const r=el.getBoundingClientRect(),x=(e.clientX-r.left)/r.width-.5,y=(e.clientY-r.top)/r.height-.5;el.style.transform=`perspective(700px) rotateY(${x*10}deg) rotateX(${-y*10}deg) translateZ(6px)`});el.addEventListener("pointerleave",()=>el.style.transform="")})}
+</script>
+</body>
+</html>

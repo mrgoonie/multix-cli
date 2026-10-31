@@ -1,0 +1,226 @@
+/** Vietnamese UI strings of the HTML pages; same entries as i18n-en.ts. */
+
+import { escapeHtml } from "../http-responses.js";
+import type { Messages } from "./i18n-en.js";
+
+export const VI: Messages = {
+  langName: "Tiếng Việt",
+  skipToContent: "Bỏ qua, tới nội dung",
+  brandTag: "MCP",
+  tagline: "Lớp đa phương thức cho các AI agent.",
+  prefs: {
+    theme: "Giao diện",
+    language: "Ngôn ngữ",
+    auto: "Tự động",
+    light: "Sáng",
+    dark: "Tối",
+  },
+  nav: {
+    label: "Bảng điều khiển",
+    overview: "Tổng quan",
+    providerKeys: "Khóa nhà cung cấp",
+    storage: "Lưu trữ R2",
+    apiKeys: "Khóa API",
+    clients: "Client đã kết nối",
+    apiDocs: "Tài liệu API",
+    dashboard: "Bảng điều khiển",
+    openapi: "OpenAPI JSON",
+    endpoints: "Endpoint",
+    gettingStarted: "Bắt đầu",
+  },
+  account: {
+    signedInAs: "Đăng nhập với",
+    signOut: "Đăng xuất",
+    signOutTitle: "Kết thúc phiên bảng điều khiển trên mọi thiết bị",
+  },
+  signIn: {
+    title: "Bảng điều khiển multix MCP",
+    heading: "Khóa của bạn, <em>agent của bạn</em>.",
+    body: "Đăng nhập bằng GitHub để lưu khóa nhà cung cấp mà các MCP client của bạn dùng và xem client nào đang kết nối. Chỉ tài khoản được mời mới truy cập được.",
+    button: "Đăng nhập bằng GitHub",
+  },
+  overview: {
+    title: "Bảng điều khiển multix MCP",
+    eyebrow: "Bảng điều khiển MCP",
+    welcome: (login) => `Chào mừng, <em>${escapeHtml(login)}</em>`,
+    lede: "Một MCP server từ xa cho ảnh, video, giọng nói và âm nhạc. Bạn dùng khóa nhà cung cấp của chính mình; agent gọi chúng qua multix.",
+    setupHeading: "Thiết lập",
+    done: "Xong",
+    todo: "Cần làm",
+    stepSignIn: "Đăng nhập bằng GitHub",
+    stepSignInDone: (login) => `Đã đăng nhập với <strong>${escapeHtml(login)}</strong>.`,
+    stepKey: "Thêm một khóa nhà cung cấp",
+    stepKeyDone: (n) => `${n} nhà cung cấp đã sẵn sàng.`,
+    stepKeyTodo: "Yêu cầu MCP dùng khóa của chính bạn. Hãy thêm khóa cho ít nhất một nhà cung cấp.",
+    stepKeyLink: "Thêm khóa",
+    stepConnect: "Dán URL MCP vào client của bạn",
+    stepConnectBody:
+      "Thêm URL MCP server này vào Claude, Cursor, VS Code hoặc client khác. Client sẽ mở trang này để đăng nhập và chấp thuận kết nối.",
+    stepConnectDone: (n) => `${n} client đã kết nối.`,
+    mcpUrlLabel: "URL MCP server",
+    claudeCode: "Claude Code:",
+    claudeCodeLabel: "lệnh Claude Code",
+    statusHeading: "Trạng thái nhà cung cấp",
+    statusReady: "Sẵn sàng",
+    statusNotSet: "Chưa đặt",
+    statusSummary: (ready, total) => `${ready}/${total} nhà cung cấp sẵn sàng`,
+    statProviders: "Nhà cung cấp sẵn sàng",
+    statStorage: "Lưu trữ R2",
+    statStorageOn: "Đã cấu hình",
+    statStorageOff: "Chưa cấu hình",
+    statApiKeys: "Khóa API",
+    statClients: "Client đã kết nối",
+  },
+  providerKeys: {
+    heading: "Khóa nhà cung cấp",
+    intro:
+      "Khóa được mã hóa khi lưu và chỉ dùng cho yêu cầu MCP của chính bạn. Giá trị đã lưu không bao giờ hiển thị lại. Thay đổi có thể mất tới một phút để tới mọi vùng.",
+    getKey: "Lấy khóa",
+    savedCount: (n) => `Đã lưu ${n}`,
+    notSet: "Chưa đặt",
+    savedAt: (date) => `Lưu lúc ${escapeHtml(date)}`,
+    remove: "Xóa",
+    save: "Lưu",
+    replace: "Thay giá trị đã lưu",
+    paste: "Dán giá trị",
+    apiKey: "Khóa API",
+    alternative: (primary) => `Tên thay thế, chỉ được đọc khi ${escapeHtml(primary)} chưa được đặt`,
+    labels: {
+      REPLICATE_API_TOKEN: "API token",
+      RUNWAYML_API_SECRET: "API secret",
+      CLOUDFLARE_ACCOUNT_ID: "Account ID",
+      CLOUDFLARE_API_TOKEN: "API token (quyền Workers AI)",
+      CLOUDFLARE_AI_GATEWAY_ID: "AI Gateway ID (không bắt buộc)",
+      TOPVIEW_UID: "Topview UID (id tài khoản gửi kèm key)",
+    },
+  },
+  storage: {
+    heading: "Lưu trữ R2",
+    intro:
+      'Bucket Cloudflare R2 của riêng bạn cho các tệp mà job MCP tạo ra. Dùng R2 API token có quyền Object Read &amp; Write trên bucket này. Khi lưu, hệ thống liệt kê bucket rồi ghi và xóa một object rỗng <span class="mono">.multix-probe-*</span>; nếu một bước kiểm tra thất bại thì không có gì được lưu. Thông tin đăng nhập đã lưu được mã hóa và không bao giờ hiển thị lại.',
+    notConfigured: "Chưa cấu hình",
+    notConfiguredBody:
+      "Đầu ra dạng tệp của job MCP cần một bucket; nếu không có, chỉ trả về văn bản và URL của nhà cung cấp.",
+    configured: "Đã cấu hình",
+    bucketLine: (bucket, prefix) =>
+      `Bucket <span class="mono">${escapeHtml(bucket)}</span>, thư mục <span class="mono">${escapeHtml(prefix)}/</span>`,
+    publicLinks: (url) =>
+      `Đầu ra có URL công khai dưới <span class="mono">${escapeHtml(url)}</span>.`,
+    presignedLinks: "Đầu ra có link ký sẵn, hiệu lực tối đa 7 ngày.",
+    remove: "Xóa",
+    accountId: "Cloudflare account ID",
+    accessKeyId: "Access key ID",
+    secretAccessKey: "Secret access key",
+    bucket: "Tên bucket",
+    prefix: (fallback) =>
+      `Đường dẫn thư mục (không bắt buộc, mặc định <span class="mono">${escapeHtml(fallback)}</span>; đầu ra nằm ở <span class="mono">&lt;path&gt;/&lt;account&gt;/&lt;job&gt;/</span>)`,
+    publicBaseUrl: "URL gốc công khai (không bắt buộc, tên miền https riêng hoặc r2.dev)",
+    checkAndSave: "Kiểm tra và lưu",
+    checkAndReplace: "Kiểm tra và thay thế",
+  },
+  apiKeys: {
+    heading: "Khóa API",
+    intro: (origin) =>
+      `Dành cho REST API (<a href="/api/docs">tài liệu</a>, URL gốc <span class="mono">${escapeHtml(origin)}/api/v1</span>). Một khóa hoạt động thay tài khoản của bạn: nó có thể đổi khóa nhà cung cấp, lưu trữ và chạy job. Chỉ lưu bản băm. Khóa đã thu hồi có thể còn hoạt động tối đa một phút.`,
+    none: "Chưa có khóa API nào.",
+    created: (date) => `Tạo lúc ${escapeHtml(date)}`,
+    revoke: "Thu hồi",
+    namePlaceholder: "Tên khóa, ví dụ laptop hoặc CI",
+    nameLabel: "Tên khóa",
+    create: "Tạo khóa API",
+    limit: (max) => `Bạn đã có tối đa ${max} khóa; hãy thu hồi một khóa để tạo khóa mới.`,
+    newHeading: (name) => `Đã tạo khóa API: ${escapeHtml(name)}`,
+    newBody:
+      "Hãy sao chép ngay. Khóa chỉ hiển thị một lần; nếu làm mất, hãy thu hồi và tạo khóa khác. Đừng tải lại trang này: việc đó gửi lại biểu mẫu và tạo thêm một khóa.",
+    newLabel: "khóa API mới",
+  },
+  clients: {
+    heading: "MCP client đã kết nối",
+    none: "Chưa có MCP client nào kết nối.",
+    connectedAt: (date) => `Kết nối lúc ${escapeHtml(date)}`,
+    disconnect: "Ngắt kết nối",
+  },
+  consent: {
+    title: (client) => `Cấp quyền cho ${client}`,
+    heading: (client) => `Cho phép <em>${escapeHtml(client)}</em> dùng multix?`,
+    publishedBy: (domain) => `Phát hành bởi <strong>${escapeHtml(domain)}</strong>.`,
+    unverified: "Ứng dụng này tự đăng ký; tên của nó chưa được xác minh.",
+    sendsTo: (host) => `Quyền truy cập sẽ được gửi tới <strong>${escapeHtml(host)}</strong>.`,
+    loopback:
+      "<strong>Quyền truy cập sẽ được gửi tới một ứng dụng trên máy tính của bạn.</strong> Chỉ tiếp tục nếu bạn vừa bắt đầu kết nối từ ứng dụng đó.",
+    costs:
+      "Ứng dụng sẽ có thể tạo ảnh và video bằng các khóa nhà cung cấp đã lưu trong tài khoản của bạn, việc này có thể tốn phí ở các nhà cung cấp đó.",
+    scopes: "Phạm vi:",
+    notYou: (login) =>
+      `Đăng nhập với <strong>${escapeHtml(login)}</strong>. Không phải bạn? <a href="/dashboard">Mở bảng điều khiển</a> và đăng xuất trước.`,
+    allow: "Cho phép",
+    deny: "Từ chối",
+  },
+  apiDocs: {
+    title: "multix REST API",
+    heading: "multix <em>REST API</em>",
+    baseUrl: "URL gốc",
+    spec: "đặc tả cho máy đọc:",
+    createKeys: "tạo khóa tại",
+    exportLabel: "lệnh export",
+    exportCommand: "export MULTIX_API_KEY='dán khóa từ /dashboard vào đây'",
+    errors:
+      'Lỗi trả về dạng JSON: <span class="mono">{"error":{"code":"bad_request","message":"…"}}</span>. Các yêu cầu dùng chung giới hạn tốc độ theo tài khoản với endpoint MCP.',
+    endpoints: "Endpoint",
+    example: (operation) => `ví dụ ${operation}`,
+  },
+  copy: {
+    copy: (label) => `Sao chép ${label}`,
+    title: "Sao chép",
+    copied: "Đã sao chép",
+    failed: "Sao chép thất bại: văn bản đã được chọn, hãy tự sao chép",
+  },
+  messages: {
+    back: "Quay lại bảng điều khiển",
+    authorizationFailed: "Cấp quyền thất bại",
+    unverifiedApp: "Không xác minh được ứng dụng này.",
+    signedOut: "Đã đăng xuất",
+    signedOutBody: "Phiên của bạn đã kết thúc. Hãy bắt đầu kết nối lại từ MCP client.",
+    signInExpired: "Liên kết đăng nhập hết hạn",
+    signInExpiredBody:
+      "Liên kết đăng nhập này đã hết hạn hoặc được mở trong trình duyệt khác. Hãy bắt đầu lại.",
+    signInCancelled: "Đã hủy đăng nhập",
+    signInCancelledBody: "Đăng nhập GitHub đã bị hủy.",
+    signInFailed: "Đăng nhập thất bại",
+    signInNoCode: "GitHub không trả về mã cấp quyền.",
+    signInError: "Không thể hoàn tất đăng nhập GitHub. Vui lòng thử lại.",
+    notInvited: "Chưa được mời",
+    notInvitedBody: (login) =>
+      `Tài khoản GitHub ${login} không có trong danh sách truy cập của server này.`,
+  },
+  notices: {
+    saved: "Đã lưu khóa.",
+    removed: "Đã xóa khóa.",
+    disconnected: "Đã ngắt kết nối client. Client phải đăng nhập lại để dùng tài khoản của bạn.",
+    invalid: "Giá trị chưa được lưu: phải dài 1–1024 ký tự, không có khoảng trắng hay xuống dòng.",
+    "api-key-revoked": "Đã thu hồi khóa API. Khóa có thể còn hoạt động tối đa một phút.",
+    "api-key-not-found": "Không thu hồi khóa API nào: không tìm thấy khóa, có thể đã bị xóa.",
+    "api-key-invalid-name": "Chưa tạo khóa API: tên phải dài 1–64 ký tự in được.",
+    "api-key-limit": "Chưa tạo khóa API: hãy thu hồi một khóa trước, mỗi tài khoản có tối đa 10.",
+    "r2-saved": "Đã lưu cấu hình R2. Quyền truy cập đã được kiểm tra bằng liệt kê, tải lên và xóa.",
+    "r2-removed": "Đã xóa cấu hình R2.",
+    "r2-invalid-account": "Chưa lưu cấu hình R2: account ID phải gồm 32 ký tự thập lục phân.",
+    "r2-invalid-keys":
+      "Chưa lưu cấu hình R2: access key ID phải gồm 16–128 chữ cái hoặc chữ số và secret dài 16–1024 ký tự, không có khoảng trắng.",
+    "r2-invalid-bucket":
+      "Chưa lưu cấu hình R2: tên bucket phải gồm 3–63 chữ thường, chữ số hoặc dấu gạch ngang.",
+    "r2-invalid-url":
+      "Chưa lưu cấu hình R2: URL gốc công khai phải là URL https, không có query string hay fragment.",
+    "r2-invalid-prefix":
+      "Chưa lưu cấu hình R2: đường dẫn thư mục chỉ được dùng chữ cái, chữ số, dấu chấm, gạch dưới, gạch ngang và gạch chéo (không có đoạn . hay .., tối đa 256 ký tự).",
+    "r2-denied":
+      "Chưa lưu cấu hình R2: R2 từ chối thông tin đăng nhập. Hãy kiểm tra cặp khóa và token có bao gồm bucket này.",
+    "r2-no-bucket": "Chưa lưu cấu hình R2: bucket không tồn tại trong tài khoản đó.",
+    "r2-read-only":
+      "Chưa lưu cấu hình R2: token đọc được bucket nhưng không ghi được. Hãy dùng Object Read & Write.",
+    "r2-no-delete":
+      "Chưa lưu cấu hình R2: token tải lên được nhưng không xóa được object thử. Hãy dùng Object Read & Write.",
+    "r2-unreachable": "Chưa lưu cấu hình R2: không kết nối được tới R2. Hãy thử lại.",
+    "r2-error": "Chưa lưu cấu hình R2: R2 trả về lỗi không mong đợi. Hãy thử lại.",
+  },
+};

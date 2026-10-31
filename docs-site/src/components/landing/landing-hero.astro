@@ -1,0 +1,81 @@
+---
+/**
+ * Hero: headline (the LCP element), install CTA and the halftone dot head.
+ * The head is inline SVG drawn by scripts/hero/draw-head-dots.mjs, so it shows
+ * without JS; the landing script adds the unlock toggle, then swaps in the spinning
+ * canvas (head-spin.ts) with its pause button.
+ */
+import anchors from "./head-anchors.json";
+import headSvg from "./head-dots.svg?raw";
+import { type LandingCopy, localePath } from "./landing-copy";
+
+interface Props {
+  t: LandingCopy;
+}
+
+const { t } = Astro.props;
+const lang = t.lang as "en" | "vi";
+const { hero } = t;
+const senses = [
+  { key: "eyes", flag: "--see", label: hero.labels.eyes },
+  { key: "ears", flag: "--hear", label: hero.labels.ears },
+  { key: "mouth", flag: "--speak", label: hero.labels.mouth },
+  { key: "create", flag: "--create", label: hero.labels.create },
+];
+---
+
+<section class="mx-hero" aria-labelledby="mx-headline">
+  <div class="mx-hero-copy">
+    <p class="mx-eyebrow"><i aria-hidden="true"></i>{hero.eyebrow}</p>
+    <h1 id="mx-headline">
+      {hero.headline.lead} <span class="mx-soft">{hero.headline.soft}</span>{" "}
+      <em>{hero.headline.em}</em>
+    </h1>
+    <p class="mx-lead"><strong>{hero.subline.strong}</strong>{hero.subline.rest}</p>
+    <div class="mx-cta">
+      <a class="mx-btn mx-btn-primary" href={hero.installHref}>{hero.install}</a>
+      <a class="mx-btn" href={localePath(lang, "/guides/mcp-server/")}
+        >{hero.mcp}<span aria-hidden="true">&nbsp;&nbsp;→</span></a
+      >
+    </div>
+  </div>
+  <div class="mx-stage" id="mx-stage">
+    <div class="mx-head-art" role="img" aria-label={hero.headAlt} set:html={headSvg} />
+    {
+      senses.map((sense) => (
+        <span
+          class="mx-sense"
+          data-sense={sense.key}
+          style={`left:${anchors[sense.key as keyof typeof anchors][0]}%;top:${anchors[sense.key as keyof typeof anchors][1]}%`}
+          aria-hidden="true"
+        >
+          {sense.flag}
+          <small>{sense.label}</small>
+        </span>
+      ))
+    }
+    <div class="mx-hint">
+      <button
+        class="mx-btn mx-spin"
+        id="mx-spin"
+        type="button"
+        data-pause={hero.pause}
+        data-spin={hero.spin}
+        hidden
+      >
+        <i aria-hidden="true"></i>
+      </button>
+      <button
+        class="mx-btn mx-unlock"
+        id="mx-unlock"
+        type="button"
+        aria-pressed="false"
+        data-unlock={hero.unlock}
+        data-lock={hero.lock}
+        hidden
+      >
+        <i aria-hidden="true"></i><span>{hero.unlock}</span>
+      </button>
+    </div>
+  </div>
+</section>

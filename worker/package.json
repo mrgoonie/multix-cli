@@ -16,7 +16,8 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
     "pretest": "npm run skills",
     "test": "vitest run",
-    "catalog": "tsx scripts/build-cli-catalog.ts"
+    "catalog": "tsx scripts/build-cli-catalog.ts",
+    "tokens": "tsx scripts/sync-design-tokens.ts"
   },
   "dependencies": {
     "@cfworker/json-schema": "4.1.1",

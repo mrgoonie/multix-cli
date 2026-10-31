@@ -1,0 +1,247 @@
+/*
+ * Docs content in the Obsidian style: headings, links, inline code, code
+ * frames, asides, cards, tabs, badges, tables, the docs footer and the 404
+ * page. Colours come from --mx-* tokens via the Starlight mapping in custom.css.
+ */
+
+/* Page title and headings */
+.content-panel h1#_top {
+  color: var(--mx-text);
+  font-weight: 600;
+  letter-spacing: var(--mx-tracking-tight);
+}
+
+.sl-markdown-content :is(h1, h2, h3, h4, h5, h6) {
+  color: var(--mx-text);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+/* A hairline above each section, except the first one under the title. */
+.sl-markdown-content > .sl-heading-wrapper.level-h2:not(:first-child) {
+  border-top: 1px solid var(--mx-line);
+  margin-top: 2.75rem;
+  padding-top: 2rem;
+}
+
+/* Serif italic is the accent voice: emphasis inside headings and the title. */
+:is(.content-panel h1#_top, .sl-markdown-content :is(h1, h2, h3)) :is(em, i) {
+  font-family: var(--mx-font-serif);
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+.sl-markdown-content :is(p, li) {
+  color: var(--sl-color-gray-2);
+}
+
+.sl-markdown-content strong {
+  color: var(--mx-text);
+  font-weight: 600;
+}
+
+/* Links: text-coloured, with a hairline underline that firms up on hover. */
+.sl-markdown-content a:not(:where(.not-content *)) {
+  color: var(--mx-text);
+  text-decoration-color: var(--mx-line-strong);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.22em;
+}
+.sl-markdown-content a:not(:where(.not-content *)):hover {
+  color: var(--mx-text);
+  text-decoration-color: currentColor;
+}
+
+.sl-markdown-content hr {
+  border-top-color: var(--mx-line);
+}
+
+.sl-markdown-content blockquote {
+  border-inline-start: 2px solid var(--mx-line-strong);
+  color: var(--mx-text-muted);
+}
+
+/* Inline code */
+.sl-markdown-content :not(pre) > code:not(:where(.not-content *)) {
+  background-color: var(--mx-surface-raised);
+  border: 1px solid var(--mx-line);
+  border-radius: var(--mx-radius-sm);
+  color: var(--mx-text);
+  font-size: 0.875em;
+  padding: 0.1em 0.38em;
+}
+
+kbd {
+  background-color: var(--mx-surface-raised);
+  border: 1px solid var(--mx-line-strong);
+  border-radius: var(--mx-radius-sm);
+  font-family: var(--mx-font-mono);
+}
+
+/* Code frames: obsidian wells in both themes (see expressiveCode in astro.config.mjs). */
+.expressive-code .frame {
+  border-radius: var(--mx-radius-lg);
+  box-shadow: 0 0 0 1px var(--mx-line);
+}
+
+/* Tables */
+.sl-markdown-content table:not(:where(.not-content *)) {
+  border: 1px solid var(--mx-line);
+  border-collapse: separate;
+  border-radius: var(--mx-radius-md);
+  border-spacing: 0;
+  font-size: var(--mx-text-sm);
+}
+.sl-markdown-content :is(th, td):not(:where(.not-content *)) {
+  border-bottom: 1px solid var(--mx-line);
+  padding: 0.6rem 0.9rem;
+}
+.sl-markdown-content tr:last-child > td:not(:where(.not-content *)) {
+  border-bottom: 0;
+}
+.sl-markdown-content th:not(:where(.not-content *)) {
+  background-color: var(--mx-surface);
+  color: var(--mx-text);
+  font-family: var(--mx-font-mono);
+  font-size: var(--mx-text-xs);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.sl-markdown-content tr:nth-child(2n):not(:where(.not-content *)) {
+  background-color: transparent;
+}
+
+/* Asides: a neutral glass card; the status colour is only a line of light. */
+.starlight-aside {
+  --mxd-aside-light: var(--mx-line-strong);
+  background-color: var(--mx-surface);
+  border: 1px solid var(--mx-line);
+  border-inline-start: 2px solid var(--mxd-aside-light);
+  border-radius: var(--mx-radius-md);
+  color: var(--sl-color-gray-2);
+}
+.starlight-aside--tip {
+  --mxd-aside-light: var(--mx-ok);
+}
+.starlight-aside--caution {
+  --mxd-aside-light: var(--mx-warn);
+}
+.starlight-aside--danger {
+  --mxd-aside-light: var(--mx-danger);
+}
+.starlight-aside__title {
+  color: var(--mx-text);
+  font-weight: 600;
+}
+.starlight-aside__icon {
+  color: var(--mxd-aside-light);
+}
+.starlight-aside--note .starlight-aside__icon {
+  color: var(--mx-text);
+}
+
+/* Cards and link cards */
+.card,
+.sl-link-card {
+  background-color: var(--mx-surface);
+  border: 1px solid var(--mx-line) !important;
+  border-radius: var(--mx-radius-lg);
+  box-shadow: none;
+}
+.sl-link-card:hover {
+  background-color: var(--mx-surface-raised);
+  border-color: var(--mx-line-strong) !important;
+}
+.card .icon {
+  background-color: var(--mx-surface-raised);
+  border: 1px solid var(--mx-line);
+  border-radius: var(--mx-radius-sm);
+  color: var(--mx-text);
+}
+.card .title,
+.sl-link-card .title {
+  color: var(--mx-text);
+  letter-spacing: -0.01em;
+}
+
+/* Tabs */
+starlight-tabs .tablist-wrapper {
+  border-bottom: 1px solid var(--mx-line);
+}
+starlight-tabs [role="tablist"] {
+  border-bottom: 0;
+}
+starlight-tabs [role="tab"] {
+  border-bottom: 1px solid transparent;
+  color: var(--mx-text-muted);
+  font-size: var(--mx-text-sm);
+}
+starlight-tabs [role="tab"]:hover {
+  color: var(--mx-text);
+}
+starlight-tabs [role="tab"][aria-selected="true"] {
+  border-bottom-color: var(--mx-accent);
+  color: var(--mx-text);
+  font-weight: 500;
+}
+
+/* Badges: hairline pills in mono type. */
+.sl-badge {
+  background-color: var(--mx-surface-raised);
+  border: 1px solid var(--mx-line-strong);
+  border-radius: var(--mx-radius-pill);
+  color: var(--mx-text);
+  font-family: var(--mx-font-mono);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+.sl-badge.tip,
+.sl-badge.success {
+  border-color: color-mix(in srgb, var(--mx-ok) 55%, transparent);
+  color: var(--mx-ok);
+}
+.sl-badge.caution {
+  border-color: color-mix(in srgb, var(--mx-warn) 55%, transparent);
+  color: var(--mx-warn);
+}
+.sl-badge.danger {
+  border-color: color-mix(in srgb, var(--mx-danger) 55%, transparent);
+  color: var(--mx-danger);
+}
+
+/* Docs footer (src/components/DocsFooter.astro) */
+.multix-footer {
+  border-top: 1px solid var(--mx-line);
+  color: var(--mx-text-muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: var(--mx-text-sm);
+  gap: 0.35rem 1.5rem;
+  justify-content: space-between;
+  margin-top: 3rem;
+  padding: 1.5rem 0 0;
+}
+
+.multix-footer p {
+  margin: 0;
+}
+
+.multix-footer a {
+  color: var(--mx-text);
+  font-weight: 500;
+  text-decoration-color: var(--mx-line-strong);
+  text-underline-offset: 0.22em;
+}
+
+.multix-footer a:hover {
+  text-decoration-color: currentColor;
+}
+
+@media (max-width: 36rem) {
+  .multix-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
