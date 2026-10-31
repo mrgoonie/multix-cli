@@ -7,34 +7,40 @@
 import type { ConsentDescription } from "@cloudflare/workers-oauth-provider";
 import type { Account } from "../accounts/account-store.js";
 import { escapeHtml } from "../http-responses.js";
-import { page } from "./page-layout.js";
+import { messagesFor } from "./i18n.js";
+import { focusPage } from "./page-layout.js";
+import { DEFAULT_PREFERENCES, type Preferences } from "./preferences.js";
 
-export function consentPage(details: ConsentDescription, handle: string, account: Account): string {
-  const name = escapeHtml(details.clientName);
-  const origin = details.clientDomain
-    ? `Published by <strong>${escapeHtml(details.clientDomain)}</strong>.`
-    : "This app registered itself; its name is not verified.";
-  const loopback = details.redirectIsLoopback
-    ? `<p class="notice warn"><strong>This sends access to an app on your computer.</strong> Continue only if you just started connecting from it.</p>`
-    : "";
+export function consentPage(
+  details: ConsentDescription,
+  handle: string,
+  account: Account,
+  prefs: Preferences = DEFAULT_PREFERENCES,
+  here?: string,
+): string {
+  const c = messagesFor(prefs.lang).consent;
+  const origin = details.clientDomain ? c.publishedBy(details.clientDomain) : c.unverified;
+  const loopback = details.redirectIsLoopback ? `<p class="notice warn">${c.loopback}</p>` : "";
   const scopes =
     details.scope.length > 0
-      ? `<p class="muted"><small>Scopes: <span class="mono">${details.scope.map(escapeHtml).join(", ")}</span></small></p>`
+      ? `<p class="muted"><small>${escapeHtml(c.scopes)} <span class="mono">${details.scope.map(escapeHtml).join(", ")}</span></small></p>`
       : "";
-  return page(
-    `Authorize ${details.clientName}`,
-    `<section class="card">
-<h1>Allow ${name} to use multix?</h1>
-<p>${origin} Access will be sent to <strong>${escapeHtml(details.redirectHost)}</strong>.</p>
+  return focusPage(
+    c.title(details.clientName),
+    `<section class="panel">
+<h1>${c.heading(details.clientName)}</h1>
+<p>${origin} ${c.sendsTo(details.redirectHost)}</p>
 ${loopback}
-<p>It will be able to generate images and videos with the provider keys saved in your account, which may cost money at those providers.</p>
+<p>${escapeHtml(c.costs)}</p>
 ${scopes}
-<p class="muted"><small>Signed in as <strong>${escapeHtml(account.login)}</strong>. Not you? <a href="/dashboard">Open the dashboard</a> and sign out first.</small></p>
-<form method="post" class="row">
+<p class="muted"><small>${c.notYou(account.login)}</small></p>
+<form method="post" class="row actions">
 <input type="hidden" name="handle" value="${escapeHtml(handle)}">
-<button class="btn" name="decision" value="approve">Allow</button>
-<button class="btn secondary" name="decision" value="deny">Deny</button>
+<button class="btn" name="decision" value="approve">${escapeHtml(c.allow)}</button>
+<button class="btn secondary" name="decision" value="deny">${escapeHtml(c.deny)}</button>
 </form>
 </section>`,
+    prefs,
+    here,
   );
 }

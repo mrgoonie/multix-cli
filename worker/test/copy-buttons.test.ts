@@ -4,7 +4,7 @@ import { HTML_SECURITY_HEADERS } from "../src/http-responses.js";
 import { apiDocsPage } from "../src/pages/api-docs-page.js";
 import { copyBlock, copyField } from "../src/pages/copy-button.js";
 import { COPY_SCRIPT, COPY_SCRIPT_HASH } from "../src/pages/copy-script.js";
-import { page } from "../src/pages/page-layout.js";
+import { focusPage as page } from "../src/pages/page-layout.js";
 
 describe("copy buttons", () => {
   it("allows the copy script by its hash and no other script", () => {

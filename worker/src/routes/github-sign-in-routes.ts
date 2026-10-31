@@ -29,7 +29,9 @@ import {
 } from "../auth/signed-cookies.js";
 import { tokensMatch } from "../http-guards.js";
 import { html, redirect } from "../http-responses.js";
+import { type Messages, messagesFor } from "../pages/i18n.js";
 import { messagePage } from "../pages/page-layout.js";
+import { resolvePreferences } from "../pages/preferences.js";
 import { logEvent } from "../redaction.js";
 
 export const GITHUB_CALLBACK_PATH = "/oauth/github/callback";
@@ -67,11 +69,19 @@ export async function startGithubSignIn(ctx: AppContext, returnTo: string): Prom
   );
 }
 
-function failure(status: number, title: string, message: string): Response {
+/** An error page in the visitor's language; `pick` chooses its title and message. */
+function failure(
+  request: Request,
+  status: number,
+  pick: (m: Messages["messages"]) => [title: string, message: string],
+): Response {
+  const { prefs } = resolvePreferences(request);
+  const m = messagesFor(prefs.lang).messages;
+  const [title, message] = pick(m);
   const headers = new Headers({ "set-cookie": clearCookie(LOGIN_COOKIE) });
   return html(
     status,
-    messagePage(title, message, { href: "/dashboard", label: "Back to the dashboard" }),
+    messagePage(title, message, { href: "/dashboard", label: m.back }, prefs),
     headers,
   );
 }
@@ -85,17 +95,13 @@ export async function finishGithubSignIn(ctx: AppContext, request: Request): Pro
   );
   const state = url.searchParams.get("state") ?? "";
   if (!login || !state || !(await tokensMatch(state, login.state))) {
-    return failure(
-      400,
-      "Sign-in expired",
-      "This sign-in link expired or was opened in another browser. Please start again.",
-    );
+    return failure(request, 400, (m) => [m.signInExpired, m.signInExpiredBody]);
   }
   if (url.searchParams.get("error")) {
-    return failure(400, "Sign-in cancelled", "GitHub sign-in was cancelled.");
+    return failure(request, 400, (m) => [m.signInCancelled, m.signInCancelledBody]);
   }
   const code = url.searchParams.get("code");
-  if (!code) return failure(400, "Sign-in failed", "GitHub did not return an authorization code.");
+  if (!code) return failure(request, 400, (m) => [m.signInFailed, m.signInNoCode]);
 
   let identity: Awaited<ReturnType<typeof fetchGithubIdentity>>;
   try {
@@ -110,20 +116,12 @@ export async function finishGithubSignIn(ctx: AppContext, request: Request): Pro
     logEvent("warn", "github_sign_in_failed", {
       error: error instanceof GithubSignInError ? error.message : "unexpected",
     });
-    return failure(
-      502,
-      "Sign-in failed",
-      "GitHub sign-in could not be completed. Please try again.",
-    );
+    return failure(request, 502, (m) => [m.signInFailed, m.signInError]);
   }
 
   if (!isAllowed(ctx.env.MULTIX_ALLOWED_USERS, identity)) {
     logEvent("warn", "sign_in_denied", { github_id: identity.githubId });
-    return failure(
-      403,
-      "Not invited",
-      `The GitHub account ${identity.login} is not on this server's access list.`,
-    );
+    return failure(request, 403, (m) => [m.notInvited, m.notInvitedBody(identity.login)]);
   }
   const account = await ctx.accounts.upsertFromGithub(identity);
   logEvent("info", "sign_in", { user: account.id });

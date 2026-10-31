@@ -1,0 +1,31 @@
+---
+/** Footer, matching the docs footer (src/components/DocsFooter.astro). */
+import { type LandingCopy, localePath } from "./landing-copy";
+import LandingLogo from "./landing-logo.astro";
+
+interface Props {
+  t: LandingCopy;
+}
+
+const { t } = Astro.props;
+const lang = t.lang as "en" | "vi";
+---
+
+<footer class="mx-footer">
+  <div class="mx-footer-brand">
+    <LandingLogo />
+    <span>multix</span>
+  </div>
+  <ul class="mx-footer-links">
+    <li><a href={localePath(lang, "/getting-started/")}>{t.footer.docs}</a></li>
+    <li><a href={localePath(lang, "/guides/mcp-server/")}>MCP</a></li>
+    <li><a href={localePath(lang, "/guides/rest-api/")}>REST API</a></li>
+    <li><a href="https://github.com/mrgoonie/multix-cli">GitHub</a></li>
+    <li><a href="/llms.txt">llms.txt</a></li>
+  </ul>
+  <div class="mx-footer-meta">
+    {/* prettier-ignore */}
+    <p>{t.footer.made} <span role="img" aria-label={t.footer.love}>❤️</span> {t.footer.by} <a href="https://agentkit.best">AgentKit.best</a></p>
+    <p>{t.footer.author} <a href="https://x.com/goon_nguyen">@goon_nguyen (X)</a></p>
+  </div>
+</footer>

@@ -1,0 +1,54 @@
+---
+/**
+ * Case-study videos. Each one starts as a link around its poster, so it works
+ * without JS; the landing script swaps the link for the player on click, which
+ * is the only time the video loads. Renders nothing when the list is empty.
+ */
+import { type CaseStudy, youtubeId } from "./case-studies-data";
+import type { LandingCopy } from "./landing-copy";
+
+interface Props {
+  t: LandingCopy;
+  items: CaseStudy[];
+}
+
+const { t, items } = Astro.props;
+const lang = t.lang as "en" | "vi";
+---
+
+{
+  items.length > 0 && (
+    <section class="mx-section" id="case-studies" aria-labelledby="case-studies-title">
+      <header class="mx-section-head">
+        <p class="mx-kicker">{t.caseStudies.eyebrow}</p>
+        <h2 id="case-studies-title">{t.caseStudies.title}</h2>
+      </header>
+      <ul class="mx-grid mx-grid-2">
+        {items.map((item) => {
+          const id = youtubeId(item.url);
+          return (
+            <li class="mx-card mx-case">
+              <a
+                class="mx-case-media"
+                href={item.url}
+                data-video={id ? `https://www.youtube-nocookie.com/embed/${id}?autoplay=1` : item.url}
+                data-video-kind={id ? "embed" : "file"}
+                data-video-title={item.title}
+              >
+                <img src={item.poster} alt="" loading="lazy" decoding="async" width="1280" height="720" />
+                <span class="mx-play">
+                  <i aria-hidden="true" />
+                  {t.caseStudies.play}
+                  <span class="mx-sr">: {item.title}</span>
+                </span>
+              </a>
+              <h3>{item.title}</h3>
+              <p>{item.description[lang]}</p>
+              <pre class="mx-cmd"><code>{item.command}</code></pre>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  )
+}

@@ -35,6 +35,7 @@ import { html, json, text } from "./http-responses.js";
 import { jobsContextFor } from "./jobs/job-context.js";
 import { handleMcpRequest } from "./mcp-api-handler.js";
 import { apiDocsPage } from "./pages/api-docs-page.js";
+import { resolvePreferences, withPreferenceCookies } from "./pages/preferences.js";
 import { logEvent } from "./redaction.js";
 import { handleDashboard } from "./routes/dashboard-routes.js";
 import { GITHUB_CALLBACK_PATH, finishGithubSignIn } from "./routes/github-sign-in-routes.js";
@@ -113,7 +114,8 @@ async function handleDefault(request: Request, env: WorkerEnv, deps: AppDeps): P
     if (request.method !== "GET" && request.method !== "HEAD") {
       return text(405, "Method Not Allowed", { allow: "GET, HEAD" });
     }
-    return html(200, apiDocsPage(origin));
+    const preferences = resolvePreferences(request);
+    return html(200, apiDocsPage(origin, preferences.prefs), withPreferenceCookies(preferences));
   }
   if (pathname !== AUTHORIZE_PATH && pathname !== GITHUB_CALLBACK_PATH && !isDashboard && !isApi) {
     return text(404, "Not Found");

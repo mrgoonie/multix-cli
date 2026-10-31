@@ -28,33 +28,11 @@ import { SESSION_COOKIE, clearCookie, csrfToken, csrfValid } from "../auth/signe
 import { html, redirect, text } from "../http-responses.js";
 import type { NewApiKey } from "../pages/api-keys-card.js";
 import { type ConnectedClient, dashboardPage, signInPage } from "../pages/dashboard-page.js";
+import { isNoticeCode } from "../pages/notice-codes.js";
+import { resolvePreferences, withPreferenceCookies } from "../pages/preferences.js";
 import { logEvent } from "../redaction.js";
 import { startGithubSignIn } from "./github-sign-in-routes.js";
-import { type Notice, R2_NOTICES, handleR2SettingsPost } from "./r2-settings-routes.js";
-
-const NOTICES: Record<string, Notice> = {
-  saved: { text: "Key saved." },
-  removed: { text: "Key removed." },
-  disconnected: { text: "Client disconnected. It must sign in again to use your account." },
-  invalid: {
-    text: "That value was not saved: it must be 1–1024 characters without spaces or line breaks.",
-    warn: true,
-  },
-  "api-key-revoked": { text: "API key revoked. It can keep working for up to a minute." },
-  "api-key-not-found": {
-    text: "No API key was revoked: it was not found, it may already be gone.",
-    warn: true,
-  },
-  "api-key-invalid-name": {
-    text: "API key not created: the name must be 1–64 printable characters.",
-    warn: true,
-  },
-  "api-key-limit": {
-    text: "API key not created: revoke a key first, an account can hold at most 10.",
-    warn: true,
-  },
-  ...R2_NOTICES,
-};
+import { handleR2SettingsPost } from "./r2-settings-routes.js";
 
 /** The parts of an OAuth grant summary the revoke needs. */
 interface Grant {
@@ -100,14 +78,15 @@ async function showDashboard(
   request: Request,
   newApiKey?: NewApiKey,
 ): Promise<Response> {
+  const preferences = resolvePreferences(request);
+  const headers = withPreferenceCookies(preferences);
   const signedIn = await signedInSession(ctx, request);
   if (!signedIn) {
-    const headers = new Headers();
     // A cookie that no longer maps to an allowed account is dropped.
     if (request.headers.get("cookie")?.includes(SESSION_COOKIE)) {
-      headers.set("set-cookie", clearCookie(SESSION_COOKIE));
+      headers.append("set-cookie", clearCookie(SESSION_COOKIE));
     }
-    return html(200, signInPage(), headers);
+    return html(200, signInPage(preferences.prefs), headers);
   }
   const { account, session } = signedIn;
   const noticeKey = new URL(request.url).searchParams.get("notice") ?? "";
@@ -124,8 +103,10 @@ async function showDashboard(
       apiKeys: await new ApiKeyStore(ctx.env.ACCOUNTS_KV).list(account.id),
       newApiKey,
       clients: await connectedClients(ctx, account),
-      notice: !newApiKey && Object.hasOwn(NOTICES, noticeKey) ? NOTICES[noticeKey] : undefined,
+      notice: !newApiKey && isNoticeCode(noticeKey) ? noticeKey : undefined,
+      prefs: preferences.prefs,
     }),
+    headers,
   );
 }
 
