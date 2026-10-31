@@ -8,7 +8,7 @@ description: Chọn nhóm lệnh multix phù hợp với workflow media của b�
 | Lệnh | Dùng cho |
 | --- | --- |
 | `multix check` | Kiểm tra tool, credential, Gemini connectivity và Codex image. |
-| [Gemini](/vi/commands/gemini/) | Phân tích, transcript, extract, tạo ảnh, tạo/chỉnh sửa/nối dài video và Gemini TTS. |
+| [Gemini](/vi/commands/gemini/) | Phân tích, transcript, extract, tạo ảnh, tạo/chỉnh sửa/nối dài video, Gemini TTS và nhạc Lyria. |
 | [OpenAI](/vi/commands/openai/) | Tạo/chỉnh ảnh, Codex image driver, TTS và transcription. |
 | [MiniMax](/vi/commands/minimax/) | Ảnh/video, i2i giữ chủ thể, speech và music. |
 | [OpenRouter](/vi/commands/openrouter/) | Image generation/editing, image-to-video async, TTS và STT qua routing. |

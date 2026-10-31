@@ -112,6 +112,11 @@ export function registerGeminiGenerateMusicCommands(parent: Command): void {
       if (opts.lyrics !== undefined && opts.lyricsFile !== undefined) {
         throw new ValidationError("Use --lyrics or --lyrics-file, not both");
       }
+      if (opts.wait === false && opts.output !== undefined) {
+        throw new ValidationError(
+          "--output needs the finished song; with --no-wait pass it to `music-status <id> --download` instead",
+        );
+      }
       const format = resolveMusicFormat(opts.outputFormat, opts.output);
       // Checked before the lyrics file or images are read.
       validateLyriaRequest({
@@ -181,7 +186,8 @@ export function registerGeminiGenerateMusicCommands(parent: Command): void {
         });
         let interaction: Interaction = found.interaction;
         const id = String(interaction.id ?? interactionId);
-        if (interaction.model && !Object.hasOwn(LYRIA_MODELS, interaction.model)) {
+        const model = interaction.model?.replace(/^models\//, "");
+        if (model && !Object.hasOwn(LYRIA_MODELS, model)) {
           throw new ValidationError(
             `Interaction ${id} is a ${interaction.model} interaction, not Lyria music`,
           );

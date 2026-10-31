@@ -8,7 +8,7 @@ description: Choose the multix command group that matches your media workflow.
 | Command | Use it for |
 | --- | --- |
 | `multix check` | Verify tools, credentials, Gemini connectivity, and Codex image availability. |
-| [Gemini](/commands/gemini/) | Analyze, transcribe, extract, generate images, generate/edit/extend video, image-to-video, and Gemini TTS. |
+| [Gemini](/commands/gemini/) | Analyze, transcribe, extract, generate images, generate/edit/extend video, image-to-video, Gemini TTS, and Lyria music. |
 | [OpenAI](/commands/openai/) | Image generation/editing, Codex image driver, TTS, and transcription. |
 | [MiniMax](/commands/minimax/) | Image/video, subject-preserving image-to-image, speech, and music. |
 | [OpenRouter](/commands/openrouter/) | Routed image generation/editing, async image-to-video, TTS, and STT. |

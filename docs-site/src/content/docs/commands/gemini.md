@@ -1,6 +1,6 @@
 ---
 title: Gemini commands
-description: Use Gemini for multimodal analysis, document extraction, image/video generation, and speech.
+description: Use Gemini for multimodal analysis, document extraction, image/video generation, speech, and Lyria music.
 ---
 
 Gemini commands require `GEMINI_API_KEY`. Extra keys in `GEMINI_API_KEY_2`, `GEMINI_API_KEY_3`, … are used when a key hits its quota; see [Environment variables](/reference/environment/#gemini-key-rotation). Run `multix gemini <command> --help`
@@ -228,9 +228,12 @@ multix gemini generate-music --model lyria-3.5 --prompt "Melodic indie pop, 2 mi
   `gemini_lyria_<stamp>.json` before polling, and a submit that fails without
   a response (or with a 5xx) is never retried, since the song may already be
   billed. Resume a timed-out or `--no-wait` run with
-  `multix gemini music-status <id> --download` instead of generating again.
+  `multix gemini music-status <id> --download` instead of generating again
+  (`--output` goes on that command; `generate-music --no-wait` refuses it).
 - `--estimate` and `--max-cost` price each run at the list price above (a
-  proven ceiling); the receipt settles at that price once the song completes.
+  proven ceiling). A run that waits for the song computes its receipt at that
+  price; with `--no-wait` the cost stays unknown, and a later `music-status`
+  run is a status read that adds no spend.
 - All Lyria audio carries a SynthID watermark. Prompts naming specific artists
   or copyrighted lyrics are blocked.
 - `lyria-realtime-exp` (Lyria RealTime) streams over a different API and is

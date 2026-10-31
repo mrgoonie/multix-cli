@@ -181,7 +181,9 @@ export function buildOfferings(at: Date = new Date()): Offering[] {
     const task = taskOfMeters(entry.windows.flatMap((w) => w.components.map((c) => c.meter)));
     for (const model of entry.models) {
       const o = get(entry.provider, model);
-      addTask(o, task);
+      // A per-request price says nothing about the task (Fish voice design,
+      // Lyria songs): a model with verified tasks keeps only those.
+      if (!(task === "voice" && o.verified_capability)) addTask(o, task);
       o.rates.push(rateView(entry, model, at));
     }
   }

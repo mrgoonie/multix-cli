@@ -1,6 +1,6 @@
 ---
 title: Lệnh Gemini
-description: Dùng Gemini để phân tích đa phương thức, extract tài liệu, tạo ảnh/video và speech.
+description: Dùng Gemini để phân tích đa phương thức, extract tài liệu, tạo ảnh/video, speech và nhạc Lyria.
 ---
 
 Lệnh Gemini cần `GEMINI_API_KEY`. Các key phụ `GEMINI_API_KEY_2`, `GEMINI_API_KEY_3`, … được dùng khi một key hết quota; xem [Biến môi trường](/vi/reference/environment/#xoay-vòng-gemini-key). Chạy `multix gemini <command> --help` trước
@@ -225,9 +225,12 @@ multix gemini generate-music --model lyria-3.5 --prompt "Melodic indie pop, 2 mi
   `gemini_lyria_<stamp>.json` trước khi polling, và một lần gửi thất bại mà
   không nhận được phản hồi (hoặc gặp lỗi 5xx) sẽ không được gửi lại, vì bài hát
   có thể đã bị tính phí. Tiếp tục một lần chạy bị hết thời gian hoặc dùng
-  `--no-wait` bằng `multix gemini music-status <id> --download` thay vì tạo lại.
+  `--no-wait` bằng `multix gemini music-status <id> --download` thay vì tạo lại
+  (`--output` đặt ở lệnh đó; `generate-music --no-wait` từ chối flag này).
 - `--estimate` và `--max-cost` tính mỗi lần chạy theo giá niêm yết ở trên (mức
-  trần đã chứng minh); biên nhận chốt theo giá đó khi bài hát hoàn tất.
+  trần đã chứng minh). Lần chạy chờ đến khi có bài hát sẽ tính biên nhận theo
+  giá đó; với `--no-wait` chi phí là unknown, và lần chạy `music-status` sau đó
+  chỉ đọc trạng thái nên không cộng thêm chi phí.
 - Mọi âm thanh Lyria đều có watermark SynthID. Prompt nêu tên nghệ sĩ cụ thể
   hoặc lời bài hát có bản quyền sẽ bị chặn.
 - `lyria-realtime-exp` (Lyria RealTime) stream qua một API khác và không được

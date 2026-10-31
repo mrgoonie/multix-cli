@@ -240,8 +240,13 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   },
   // Lyria bills a flat price per song whatever its length (lyria-3.5 runs about
   // a couple of minutes, set by the prompt), so the audio-length cap does not
-  // bound its spend and is not applied. --no-wait and `music-status` run as-is.
-  "gemini generate-music": { fileOptions: { image: "file", "lyrics-file": "file" } },
+  // bound its spend and is not applied. lyria-3.5 costs twice the default clip
+  // model, so choosing it goes through the uncapped-spend gate. --no-wait and
+  // `music-status` run as-is.
+  "gemini generate-music": {
+    fileOptions: { image: "file", "lyrics-file": "file" },
+    priceOptions: ["model"],
+  },
   "minimax generate": { caps: IMAGE_COUNT },
   "minimax image-to-image": { fileOptions: { ref: "file" }, caps: IMAGE_COUNT },
   "minimax generate-video": { urlOptions: ["first-frame"], caps: VIDEO_CAPS },

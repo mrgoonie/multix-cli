@@ -48,6 +48,12 @@ describe("offerings", () => {
     expect(offerings.every((o) => o.tasks.length > 0)).toBe(true);
   });
 
+  it("keeps a verified model's tasks when its price is per request (Lyria is music, not voice)", () => {
+    for (const id of ["gemini:lyria-3-clip-preview", "gemini:lyria-3.5"]) {
+      expect(byId(id)).toMatchObject({ tasks: ["music"], verified_capability: true });
+    }
+  });
+
   it("describes fal Seedance 2.5 as a priced, unverified video offering with its family and command", () => {
     expect(byId("fal:bytedance/seedance-2.5/text-to-video")).toMatchObject({
       provider: "fal",
