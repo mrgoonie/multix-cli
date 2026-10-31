@@ -1,7 +1,7 @@
 ---
 name: 3d-generation
 description: Generate 3D models with multix from reference images and a prompt on BytePlus Hyper3D / Hitem3d, or from text or an image through Atlas Cloud. Use when the user asks for a 3D model, mesh or asset from views or a description.
-version: 1.25.0 # x-release-please-version
+version: 1.26.0 # x-release-please-version
 license: MIT
 metadata:
   tasks: 3d

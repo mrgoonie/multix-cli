@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.26.0](https://github.com/mrgoonie/multix-cli/compare/v1.25.0...v1.26.0) (2026-10-31)
+
+
+### Added
+
+* **gemini:** add Lyria music generation and Lyria RealTime recording ([#532](https://github.com/mrgoonie/multix-cli/issues/532)) ([a045f03](https://github.com/mrgoonie/multix-cli/commit/a045f03effe903349559e174fb01ecadccb9d874)), closes [#527](https://github.com/mrgoonie/multix-cli/issues/527)
+
+
+### Fixed
+
+* **agent:** list files saved into an --output directory in outputs ([#543](https://github.com/mrgoonie/multix-cli/issues/543)) ([eff86cb](https://github.com/mrgoonie/multix-cli/commit/eff86cb339b024d4d9b4a222a2513c285e7403fb))
+* **mcp:** gate remote gemini generate-music --model through the uncapped-spend policy ([#537](https://github.com/mrgoonie/multix-cli/issues/537)) ([92b824b](https://github.com/mrgoonie/multix-cli/commit/92b824b75ca5701afcef7a7e4091247dfa60b444)), closes [#536](https://github.com/mrgoonie/multix-cli/issues/536)
+* **sume:** count a job's captured charge once per job, not per GET path ([#541](https://github.com/mrgoonie/multix-cli/issues/541)) ([40609be](https://github.com/mrgoonie/multix-cli/commit/40609be57495ccd698777c6d546051cd2ffaa710))
+* **update:** read the running version from the root program ([#542](https://github.com/mrgoonie/multix-cli/issues/542)) ([f2d7f35](https://github.com/mrgoonie/multix-cli/commit/f2d7f35bb1e3b1c2c56cf714e33a48d5c00a39b9))
+
 ## [1.25.0](https://github.com/mrgoonie/multix-cli/compare/v1.24.0...v1.25.0) (2026-10-31)
 
 
