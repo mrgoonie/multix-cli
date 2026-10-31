@@ -80,7 +80,7 @@
     },
     {
       "group": "gemini",
-      "description": "Gemini: analyze, transcribe, extract data, generate images (Nano Banana), video (Omni Flash, Veo), and speech (Flash TTS)",
+      "description": "Gemini: analyze, transcribe, extract data, generate images (Nano Banana), video (Omni Flash, Veo), speech (Flash TTS) and music (Lyria)",
       "commands": [
         {
           "command": "gemini analyze",
@@ -1224,6 +1224,182 @@
               "valueOptional": false,
               "variadic": false,
               "negatable": false
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        },
+        {
+          "command": "gemini generate-music",
+          "description": "Generate music with Google Lyria: 30 s clips (lyria-3-clip-preview) or full songs (lyria-3.5)",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--prompt",
+              "flags": "--prompt <text>",
+              "description": "Genre, mood, instruments, structure, tempo",
+              "required": true,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--model",
+              "flags": "--model <id>",
+              "description": "Lyria model: lyria-3-clip-preview | lyria-3.5",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "lyria-3-clip-preview"
+            },
+            {
+              "long": "--lyrics",
+              "flags": "--lyrics <text>",
+              "description": "Lyrics to sing; [Verse]/[Chorus]/[Bridge] tags mark sections",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--lyrics-file",
+              "flags": "--lyrics-file <path>",
+              "description": "Read the lyrics from a UTF-8 text file",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--image",
+              "flags": "--image <paths...>",
+              "description": "Reference images that set the mood (lyria-3.5 only, up to 10)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": true,
+              "negatable": false
+            },
+            {
+              "long": "--output-format",
+              "flags": "--output-format <fmt>",
+              "description": "mp3 (default) or wav (lyria-3.5 only); inferred from a .mp3/.wav --output",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--output",
+              "flags": "--output <path>",
+              "description": "Copy the generated audio to this path",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--no-wait",
+              "flags": "--no-wait",
+              "description": "Submit, print the interaction id and exit (resume with music-status)",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": true
+            },
+            {
+              "long": "--wait-timeout",
+              "flags": "--wait-timeout <ms>",
+              "description": "How long to wait for the song",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "600000"
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        },
+        {
+          "command": "gemini music-status",
+          "description": "Get a Gemini Lyria music interaction's status; --wait/--download to resume it",
+          "positionals": [
+            {
+              "name": "interactionId",
+              "description": "",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--wait",
+              "flags": "--wait",
+              "description": "Poll until the interaction reaches a terminal status",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--download",
+              "flags": "--download",
+              "description": "Save the audio once completed",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--output",
+              "flags": "--output <path>",
+              "description": "Copy the saved audio to this path",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--wait-timeout",
+              "flags": "--wait-timeout <ms>",
+              "description": "Polling timeout in milliseconds",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "600000"
             },
             {
               "long": "--verbose",

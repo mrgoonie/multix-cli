@@ -191,3 +191,44 @@ multix gemini generate-speech --text "Welcome to multix." \
 ```
 
 `--style` yêu cầu model Gemini 3.8 TTS và sẽ bị từ chối với model cũ hơn.
+
+## Nhạc
+
+`generate-music` tạo nhạc bằng Google Lyria qua Interactions API. Lệnh cần key
+gói trả phí (đã bật billing); cả hai model đều không có gói miễn phí.
+
+| Model | Đầu ra | Độ dài | Giá |
+| --- | --- | --- | --- |
+| `lyria-3-clip-preview` (mặc định) | MP3 | 30 giây, cố định | $0.04 mỗi clip |
+| `lyria-3.5` | MP3 (mặc định) hoặc WAV (`--output-format wav`) | Khoảng vài phút, điều chỉnh qua prompt | $0.08 mỗi bài |
+
+```bash
+# Clip nhạc không lời 30 giây
+multix gemini generate-music --prompt "Warm lo-fi jazz piano and bass, instrumental only" --output clip.mp3
+
+# Bài hát đầy đủ có lời và ảnh gợi cảm hứng, xuất WAV
+multix gemini generate-music --model lyria-3.5 --prompt "Melodic indie pop, 2 minutes" \
+  --lyrics-file lyrics.txt --image cover.jpg --output song.wav
+```
+
+- `--lyrics` hoặc `--lyrics-file` thêm lời bài hát sau prompt; đánh dấu đoạn
+  bằng `[Verse]`, `[Chorus]` và `[Bridge]`, và mô tả thời điểm trong prompt
+  (`[0:00 - 0:10] Intro: ...`). Ghi "instrumental only" để không có giọng hát.
+- `--image` (tối đa 10 ảnh PNG, JPEG, WebP hoặc HEIC, tổng 20 MB) và đầu ra
+  WAV chỉ dùng được với `lyria-3.5`; model clip từ chối chúng trước khi gửi
+  request. `--output` có đuôi `.mp3` hoặc `.wav` quyết định định dạng khi không
+  có `--output-format`, và một cặp mâu thuẫn sẽ bị từ chối.
+- Tên file theo đúng dữ liệu trả về (`gemini_lyria_<stamp>.mp3` hoặc `.wav`).
+  Lời hoặc cấu trúc bài mà model trả về dạng text được lưu vào
+  `gemini_lyria_<stamp>.lyrics.txt`.
+- Request là một interaction được lưu và chạy nền: id được ghi vào
+  `gemini_lyria_<stamp>.json` trước khi polling, và một lần gửi thất bại mà
+  không nhận được phản hồi (hoặc gặp lỗi 5xx) sẽ không được gửi lại, vì bài hát
+  có thể đã bị tính phí. Tiếp tục một lần chạy bị hết thời gian hoặc dùng
+  `--no-wait` bằng `multix gemini music-status <id> --download` thay vì tạo lại.
+- `--estimate` và `--max-cost` tính mỗi lần chạy theo giá niêm yết ở trên (mức
+  trần đã chứng minh); biên nhận chốt theo giá đó khi bài hát hoàn tất.
+- Mọi âm thanh Lyria đều có watermark SynthID. Prompt nêu tên nghệ sĩ cụ thể
+  hoặc lời bài hát có bản quyền sẽ bị chặn.
+- `lyria-realtime-exp` (Lyria RealTime) stream qua một API khác và không được
+  nhận ở lệnh này.

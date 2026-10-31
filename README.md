@@ -78,7 +78,7 @@ metrics, and `sources` naming the header or body field each money number came
 from), `error` (`code`, `retryable`, `retry_after_s`, `hint`) and `next`
 commands, plus a `cost` receipt (`multix.cost/v1`: estimate, provider-reported
 and actual cost, variance; unknown stays `null`, never $0). Only
-`gemini generate-speech`, `elevenlabs tts`, `fish tts`, `openrouter tts`,
+`gemini generate-speech`, `gemini generate-music`, `elevenlabs tts`, `fish tts`, `openrouter tts`,
 `openrouter transcribe` (local files, measured with `ffprobe`) and
 `speech generate` on its Gemini, ElevenLabs and Fish routes (a `--fallback` plan at
 its most expensive route) are priced so far; `--max-cost`
@@ -274,6 +274,10 @@ multix gemini generate-speech (--text|--prompt) "Have a wonderful day!" [--model
 # Multi-speaker (max 2): repeat --speaker name:voice; prompt should prefix lines with "<name>:"
 multix gemini generate-speech --text "Joe: How's it going? Jane: Not too bad!" \
   --speaker Joe:Kore --speaker Jane:Puck
+
+# Music with Lyria (paid tier): 30 s MP3 clip (default) or a full lyria-3.5 song (MP3/WAV, lyrics, up to 10 images)
+multix gemini generate-music --prompt "Warm lo-fi jazz piano, instrumental only" [--model lyria-3-clip-preview|lyria-3.5] [--lyrics <text>|--lyrics-file <path>] [--image <paths...>] [--output-format mp3|wav] [--no-wait] [--output <path>] [-v]
+multix gemini music-status <interactionId> [--wait] [--download] [--output <path>] [--wait-timeout <ms>]
 ```
 
 **Gemini models:**
@@ -281,6 +285,7 @@ multix gemini generate-speech --text "Joe: How's it going? Jane: Not too bad!" \
 - Image gen: `gemini-3.1-flash-image` (Nano Banana 2, default), `gemini-3.1-flash-lite-image` (fast, low cost), `gemini-3-pro-image` (4K text), `gemini-nano-banana-2.1` (Google's recommended successor). Imagen 4 is no longer served on the Gemini API, and the `-preview` image ids are past their earliest announced shutdown date and may stop at any time.
 - Video: `gemini-omni-1.1-flash` (default, Interactions API, requires billing). Legacy `veo-*` models still run with an explicit `--model`; see [Gemini video migration](#gemini-video-migration-veo-to-omni-flash).
 - TTS: `gemini-3.8-flash-lite-tts` (default, fast/cheap, 101 languages), `gemini-3.8-flash-tts` (highest fidelity, 130 languages), legacy `gemini-3.1-flash-tts-preview`, `gemini-2.5-flash-preview-tts`, `gemini-2.5-pro-preview-tts`. Gemini 3.8 models use the Interactions API, read the text verbatim, take delivery direction via `--style`, and also accept custom `voice_…`/`voicekey_…` voice ids.
+- Music: `lyria-3-clip-preview` (default, 30 s MP3, $0.04 per clip) and `lyria-3.5` (full songs, MP3 or WAV, lyrics and up to 10 reference images, $0.08 per song), Interactions API, paid tier only. Runs are stored background interactions: the id is saved to `gemini_lyria_<stamp>.json` before polling and a timed-out run resumes with `multix gemini music-status <id> --download`, never by paying for a second song.
 
 `gemini-3.6-flash` is a text-output model. Use Nano Banana for images, Gemini Omni Flash for video, and Gemini Flash TTS for speech.
 

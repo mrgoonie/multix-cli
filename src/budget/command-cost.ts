@@ -9,6 +9,7 @@
 import { BudgetError } from "../core/errors.js";
 import { TASK_DEFAULTS as ELEVENLABS_DEFAULTS } from "../providers/elevenlabs/models.js";
 import { DEFAULT_FISH_TTS_MODEL } from "../providers/fish/models.js";
+import { LYRIA_MODEL_DEFAULT } from "../providers/gemini/lyria.js";
 import { TTS_MODEL_DEFAULT as GEMINI_TTS_DEFAULT } from "../providers/gemini/voices.js";
 import {
   DEFAULT_OPENROUTER_STT_MODEL,
@@ -91,6 +92,12 @@ const BUILDERS: Record<string, RequestBuilder> = {
       ...(instructions ? { extra_text: [instructions] } : {}),
     };
   },
+  // One flat charge per song; the prompt, lyrics and format do not change it.
+  "gemini generate-music": (o, d) => ({
+    provider: "gemini",
+    model: (opt(o, "model") ?? d.model ?? LYRIA_MODEL_DEFAULT).trim().replace(/^models\//, ""),
+    text: "",
+  }),
   // One flat charge per successful request; the prompt does not change it.
   "fish voice-design": () => ({ provider: "fish", model: "voice-design-1", text: "" }),
   "fish tts": (o, d) => {

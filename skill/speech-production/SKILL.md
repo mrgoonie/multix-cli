@@ -134,6 +134,9 @@ Gemini transcription (`multix gemini transcribe`) is in [../document-conversion/
 ## Music + SFX
 
 ```bash
+multix gemini generate-music --prompt "warm lo-fi piano, instrumental only"   # Lyria 3 Clip: 30 s MP3, $0.04
+multix gemini generate-music --model lyria-3.5 --prompt "indie pop, 2 minutes" --lyrics-file lyrics.txt --output song.wav  # full song, $0.08
+multix gemini music-status <interactionId> --download   # resume; never rerun a paid song
 multix minimax generate-music --lyrics "..." [--model music-2.5]
 multix elevenlabs music --prompt "dreamy synthwave loop" [--music-length-ms 30000]
 multix elevenlabs sfx --text "car engine starting" [--duration-seconds 5]

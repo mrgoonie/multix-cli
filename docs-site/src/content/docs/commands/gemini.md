@@ -194,3 +194,44 @@ multix gemini generate-speech --text "Welcome to multix." \
 ```
 
 `--style` requires a Gemini 3.8 TTS model and is rejected for older models.
+
+## Music
+
+`generate-music` makes music with Google Lyria over the Interactions API. It
+needs a paid-tier (billing-enabled) key; neither model has a free tier.
+
+| Model | Output | Length | Price |
+| --- | --- | --- | --- |
+| `lyria-3-clip-preview` (default) | MP3 | 30 s, fixed | $0.04 per clip |
+| `lyria-3.5` | MP3 (default) or WAV (`--output-format wav`) | About a couple of minutes, steered by the prompt | $0.08 per song |
+
+```bash
+# 30-second instrumental clip
+multix gemini generate-music --prompt "Warm lo-fi jazz piano and bass, instrumental only" --output clip.mp3
+
+# Full song with lyrics and a mood image, as WAV
+multix gemini generate-music --model lyria-3.5 --prompt "Melodic indie pop, 2 minutes" \
+  --lyrics-file lyrics.txt --image cover.jpg --output song.wav
+```
+
+- `--lyrics` or `--lyrics-file` adds lyrics after the prompt; mark sections
+  with `[Verse]`, `[Chorus]` and `[Bridge]`, and describe timing in the prompt
+  (`[0:00 - 0:10] Intro: ...`). Ask for "instrumental only" to get no vocals.
+- `--image` (up to 10 PNG, JPEG, WebP or HEIC images, 20 MB in total) and WAV
+  output are `lyria-3.5` only; the clip model refuses them before anything is
+  sent. A `.mp3` or `.wav` `--output` sets the format when `--output-format`
+  is omitted, and a conflicting pair is refused.
+- The file is named after the bytes returned (`gemini_lyria_<stamp>.mp3` or
+  `.wav`). Lyrics or structure the model returns as text go to
+  `gemini_lyria_<stamp>.lyrics.txt`.
+- The request is a stored background interaction: its id is written to
+  `gemini_lyria_<stamp>.json` before polling, and a submit that fails without
+  a response (or with a 5xx) is never retried, since the song may already be
+  billed. Resume a timed-out or `--no-wait` run with
+  `multix gemini music-status <id> --download` instead of generating again.
+- `--estimate` and `--max-cost` price each run at the list price above (a
+  proven ceiling); the receipt settles at that price once the song completes.
+- All Lyria audio carries a SynthID watermark. Prompts naming specific artists
+  or copyrighted lyrics are blocked.
+- `lyria-realtime-exp` (Lyria RealTime) streams over a different API and is
+  not accepted here.

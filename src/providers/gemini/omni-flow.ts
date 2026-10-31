@@ -106,15 +106,22 @@ function interactionReadLimits(timeoutMs: number): InteractionReadOptions {
   };
 }
 
+/** The command that resumes an interaction by id (video-status for Omni, music-status for Lyria). */
+export type ResumeCommand = (interactionId: string) => string;
+
 /** Explain an Interaction body over the cap; other errors pass through. */
-function oversizedInteraction(error: unknown, interactionId?: string): unknown {
+function oversizedInteraction(
+  error: unknown,
+  interactionId?: string,
+  resume: ResumeCommand = resumeCommand,
+): unknown {
   if (!(error instanceof ResponseTooLargeError)) return error;
   const what = interactionId ? `interaction ${interactionId}` : "response";
   const next = interactionId
-    ? `Raise MULTIX_MAX_DOWNLOAD_MB and resume with: ${resumeCommand(interactionId)}`
-    : "The video was not saved but may be billed; raise MULTIX_MAX_DOWNLOAD_MB before trying again.";
+    ? `Raise MULTIX_MAX_DOWNLOAD_MB and resume with: ${resume(interactionId)}`
+    : "The output was not saved but may be billed; raise MULTIX_MAX_DOWNLOAD_MB before trying again.";
   return new ProviderError(
-    `Gemini Omni ${what} is larger than ${error.limitBytes} bytes because the video came back inline. ${next}`,
+    `Gemini ${what} is larger than ${error.limitBytes} bytes because the output came back inline. ${next}`,
     "gemini",
     { cause: error },
   );
@@ -226,9 +233,9 @@ async function buildMediaParts(
 export async function findInteractionKey(
   interactionId: string,
   logger: Logger,
-  opts: { timeoutMs?: number; env?: NodeJS.ProcessEnv } = {},
+  opts: { timeoutMs?: number; env?: NodeJS.ProcessEnv; resume?: ResumeCommand } = {},
 ): Promise<GeminiKeyChoice & { interaction: Interaction }> {
-  const { timeoutMs = DOWNLOAD_TIMEOUT_MS, env = process.env } = opts;
+  const { timeoutMs = DOWNLOAD_TIMEOUT_MS, env = process.env, resume } = opts;
   const id = assertInteractionId(interactionId);
   const keys = listGeminiKeys(env);
   if (keys.length === 0) {
@@ -246,7 +253,7 @@ export async function findInteractionKey(
       return { apiKey: key.value, keyName: key.name, interaction };
     } catch (error) {
       if (!(error instanceof HttpError) || ![403, 404, 429].includes(error.status)) {
-        throw oversizedInteraction(error, id);
+        throw oversizedInteraction(error, id, resume);
       }
       lastError = error;
       if (keys.length > 1) logger.debug(`${key.name} cannot read ${id} (HTTP ${error.status})`);
@@ -463,6 +470,7 @@ export async function waitForInteraction(
   timeoutMs: number,
   logger: Logger,
   sleep?: (ms: number) => Promise<void>,
+  resume: ResumeCommand = resumeCommand,
 ): Promise<Interaction> {
   return pollUntil<Interaction>({
     // The final GET may carry the video inline, so its body gets the rest of
@@ -473,7 +481,7 @@ export async function waitForInteraction(
         apiKey,
         ...interactionReadLimits(remainingMs),
       }).catch((error: unknown) => {
-        throw oversizedInteraction(error, interactionId);
+        throw oversizedInteraction(error, interactionId, resume);
       }) as Promise<Interaction>,
     isTerminal: (it) => isTerminalInteraction(it.status),
     timeoutMs,
@@ -481,7 +489,7 @@ export async function waitForInteraction(
     maxIntervalMs: 15_000,
     sleep,
     onPoll: (it, attempt) => logger.debug(`Status ${it.status ?? "?"} (poll ${attempt})`),
-    resumeHint: `Interaction ${interactionId} is still running server-side. Resume with: ${resumeCommand(interactionId)}`,
+    resumeHint: `Interaction ${interactionId} is still running server-side. Resume with: ${resume(interactionId)}`,
   });
 }
 

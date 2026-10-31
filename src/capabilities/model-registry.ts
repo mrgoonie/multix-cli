@@ -15,6 +15,7 @@ import {
   ELEVENLABS_FORMATS as ELEVEN_FORMATS,
   GEMINI_VOICES as GEMINI_TTS_VOICES,
 } from "../providers/fal/speech-models.js";
+import { LYRIA_MODELS, type LyriaModelSpec } from "../providers/gemini/lyria.js";
 import type { InputSpec, ModelCapability, Task } from "./capability-types.js";
 
 const falSchema = (id: string) => `https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=${id}`;
@@ -126,7 +127,43 @@ function geminiTts(model: string, name: string): ModelCapability {
   };
 }
 
+/**
+ * Lyria through `gemini generate-music`: inputs are the command's flags
+ * (snake_case), checked against the live Interactions API on 2026-10-31.
+ */
+function geminiLyria(spec: LyriaModelSpec): ModelCapability {
+  const inputs: Record<string, InputSpec> = {
+    prompt: { type: "string", required: true, note: "genre, mood, instruments, structure, tempo" },
+    lyrics: { type: "string", note: "lyrics to sing; [Verse]/[Chorus]/[Bridge] tags" },
+    lyrics_file: { type: "string", note: "UTF-8 file with the lyrics (instead of lyrics)" },
+    output_format: { type: "string", values: spec.formats, default: "mp3" },
+  };
+  if (spec.maxImages > 0) {
+    inputs.image = { type: "array", note: `up to ${spec.maxImages} local reference images` };
+  }
+  return {
+    provider: "gemini",
+    model: spec.id,
+    name: spec.name,
+    tasks: ["music"],
+    command: "gemini generate-music",
+    example: `multix gemini generate-music --model ${spec.id} --prompt "Warm lo-fi jazz piano, instrumental"`,
+    inputs,
+    outputs: [{ field: "audio", modality: "audio", formats: spec.formats }],
+    async: true,
+    limits: {
+      max_images: spec.maxImages,
+      ...(spec.fixedSeconds ? { seconds: spec.fixedSeconds } : {}),
+    },
+    source: {
+      url: "https://ai.google.dev/gemini-api/docs/music-generation",
+      verified_at: "2026-10-31",
+    },
+  };
+}
+
 export const MODEL_CAPABILITIES: readonly ModelCapability[] = [
+  ...Object.values(LYRIA_MODELS).map(geminiLyria),
   elevenV4("elevenlabs/tts/eleven-v4", "Eleven v4 (fal)"),
   elevenV4("elevenlabs/tts/eleven-v4-turbo", "Eleven v4 Turbo (fal)"),
   geminiTts("google/gemini-3.8-flash-tts", "Gemini 3.8 Flash TTS (fal)"),

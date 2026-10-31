@@ -178,6 +178,16 @@ describe("verified model registry", () => {
         expect(findSpeechModel(m.model), m.model).toBeDefined();
         continue;
       }
+      // Commands with typed flags: every flag in the example is an input (kebab-case → snake_case).
+      if (!m.example.includes(" --input ")) {
+        const flags = [...m.example.matchAll(/ --([a-z-]+)/g)].map((f) =>
+          (f[1] ?? "").replace(/-/g, "_"),
+        );
+        for (const flag of flags.filter((f) => f !== "model")) {
+          expect(m.inputs[flag], `${m.model} --${flag}`).toBeDefined();
+        }
+        continue;
+      }
       const json = m.example.match(/--input '(.+)'$/)?.[1];
       expect(json, m.model).toBeDefined();
       expect(checkModelInput(m, JSON.parse(json ?? "{}")), m.model).toEqual({
@@ -189,7 +199,14 @@ describe("verified model registry", () => {
   });
 
   it("filters by task and provider and finds a model by id", () => {
-    expect(verifiedModels({ task: "speech" }).length).toBe(MODEL_CAPABILITIES.length);
+    expect(verifiedModels({ task: "speech" }).length).toBe(
+      MODEL_CAPABILITIES.filter((m) => m.tasks.includes("speech")).length,
+    );
+    expect(verifiedModels({ task: "music" }).map((m) => m.model)).toEqual([
+      "lyria-3-clip-preview",
+      "lyria-3.5",
+    ]);
+    expect(findModelCapability("lyria-3.5", "gemini")?.command).toBe("gemini generate-music");
     expect(verifiedModels({ task: "image" })).toEqual([]);
     expect(verifiedModels({ provider: "openrouter" })).toEqual([]);
     expect(findModelCapability("elevenlabs/tts/eleven-v4")?.provider).toBe("fal");
