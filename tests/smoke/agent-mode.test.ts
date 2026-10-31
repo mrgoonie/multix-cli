@@ -18,6 +18,9 @@ const CLI = path.resolve(__dirname, "../../dist/cli.js");
 const SPAWN_TIMEOUT = 15_000;
 // --import takes a URL; a bare Windows path (D:\...) reads as a URL scheme.
 const FAKE_CDN = pathToFileURL(path.resolve(__dirname, "fixtures/fake-atlas-cdn-fetch.mjs")).href;
+const FAKE_MEDIA_CDN = pathToFileURL(
+  path.resolve(__dirname, "fixtures/fake-media-cdn-fetch.mjs"),
+).href;
 
 // Windows cannot deliver POSIX signals to a child process: kill() ends it outright.
 const describeSignals = process.platform === "win32" ? describe.skip : describe;
@@ -437,6 +440,87 @@ describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
         });
       },
     );
+  });
+
+  describe("status --download --output <dir> lists the saved files in outputs", () => {
+    const SUME_JOB = "job_0f0e0d0c-1111-4222-8333-444455556666";
+    const cdn = (name: string) => `https://cdn.multix.example/${name}`;
+    /** Loopback fake of the Atlas Cloud and Sume job reads, both completed with two outputs. */
+    const routes: Record<string, unknown> = {
+      "/api/v1/model/prediction/pred_dl01": {
+        code: 200,
+        data: { id: "pred_dl01", status: "completed", outputs: [cdn("a.png"), cdn("b.png")] },
+      },
+      [`/v1/jobs/${SUME_JOB}/status`]: {
+        data: { job_id: SUME_JOB, status: "COMPLETED", sume_status: "completed", terminal: true },
+      },
+      [`/v1/jobs/${SUME_JOB}`]: { data: { job: { id: SUME_JOB, status: "completed" } } },
+      [`/v1/jobs/${SUME_JOB}/result`]: {
+        data: {
+          job_id: SUME_JOB,
+          status: "COMPLETED",
+          result: {
+            artifacts: ["a.png", "b.png"].map((name, i) => ({
+              id: `artf_${i + 1}`,
+              type: "image",
+              url: cdn(name),
+              content_type: "image/png",
+            })),
+          },
+        },
+      },
+    };
+
+    async function withFakeApi(fn: (base: string) => Promise<void>): Promise<void> {
+      const server = http.createServer((req, res) => {
+        req.resume();
+        const body = routes[(req.url ?? "").split("?")[0] ?? ""];
+        res.writeHead(body ? 200 : 404, { "content-type": "application/json" });
+        res.end(JSON.stringify(body ?? { error: { code: "not_found", message: req.url } }));
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      const { port } = server.address() as AddressInfo;
+      try {
+        await fn(`http://127.0.0.1:${port}`);
+      } finally {
+        server.closeAllConnections();
+        await new Promise((resolve) => server.close(resolve));
+      }
+    }
+
+    it.each([
+      ["atlas", ["atlas", "status", "pred_dl01"]],
+      ["sume", ["sume", "status", SUME_JOB]],
+    ])("%s status", async (_name, args) => {
+      await withFakeApi(async (base) => {
+        // An existing directory, as a caller collecting a job's files passes it.
+        const outDir = path.join(tmp, "saved");
+        fs.mkdirSync(outDir);
+        const result = await execa(
+          "node",
+          ["--import", FAKE_MEDIA_CDN, CLI, ...args, "--download", "--output", outDir, "--json"],
+          {
+            reject: false,
+            cwd: tmp,
+            extendEnv: false,
+            env: {
+              ...env,
+              ATLASCLOUD_API_KEY: "test-key-not-real",
+              ATLASCLOUD_BASE_URL: `${base}/api/v1`,
+              SUME_API_KEY: "test-key-not-real",
+              SUME_BASE_URL: base,
+            },
+            timeout: SPAWN_TIMEOUT - 1_000,
+          },
+        );
+        const out = envelope(result.stdout);
+        expect(out.ok).toBe(true);
+        const saved = fs.readdirSync(outDir).map((name) => path.join(outDir, name));
+        expect(saved).toHaveLength(2);
+        const listed = out.outputs.map((o: { path: string }) => path.resolve(tmp, o.path));
+        expect(listed.sort()).toEqual(saved.sort());
+      });
+    });
   });
 
   it("records runs in the ledger and shows them with history", async () => {
