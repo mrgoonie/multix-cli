@@ -427,6 +427,7 @@ describe("recordGeminiMusicLive", () => {
   /** A server that answers setup and streams `chunks` of `bytes` each, asynchronously. */
   function server(chunks: number, bytes: number, closeAfter = false) {
     const sockets: FakeSocket[] = [];
+    let sent = 0;
     const factory = (url: string) => {
       const ws = new FakeSocket(url);
       sockets.push(ws);
@@ -437,7 +438,10 @@ describe("recordGeminiMusicLive", () => {
         if (msg.setup) setTimeout(() => ws.message({ setupComplete: {} }), 0);
         if (msg.playbackControl === "PLAY") {
           setTimeout(() => {
-            for (let i = 0; i < chunks && ws.readyState === 1; i++) ws.audio(bytes);
+            for (let i = 0; i < chunks && ws.readyState === 1; i++) {
+              ws.audio(bytes);
+              sent++;
+            }
             if (closeAfter && ws.readyState === 1) ws.emit("close", { code: 1011 });
           }, 0);
         }
@@ -445,7 +449,12 @@ describe("recordGeminiMusicLive", () => {
       setTimeout(() => ws.open(), 0);
       return ws;
     };
-    return { factory, sockets };
+    /** Resolves once the fake server has sent its first audio chunk. */
+    const audioSent = async () => {
+      const deadline = Date.now() + 2_000;
+      while (sent === 0 && Date.now() < deadline) await new Promise((r) => setTimeout(r, 5));
+    };
+    return { factory, sockets, audioSent };
   }
 
   it("records the planned length to a WAV and copies it to --output", async () => {
@@ -494,7 +503,7 @@ describe("recordGeminiMusicLive", () => {
   });
 
   it("on a signal finalises the WAV, copies it to --output and exits through the runtime", async () => {
-    const { factory } = server(1, ONE_SECOND / 4);
+    const { factory, audioSent } = server(1, ONE_SECOND / 4);
     const before = process.listenerCount("SIGINT");
     const exits: number[] = [];
     const output = path.join(tmp, "copy", "live.wav");
@@ -508,7 +517,8 @@ describe("recordGeminiMusicLive", () => {
         signals: ["SIGINT"],
         exit: (code) => exits.push(code),
       });
-      await new Promise((r) => setTimeout(r, 20));
+      // A fixed delay races the fake session's timers (coarse on Windows): wait for the audio.
+      await audioSent();
       expect(process.listenerCount("SIGINT")).toBe(before + 1);
       process.emit("SIGINT", "SIGINT");
       expect(exits).toEqual([130]);
