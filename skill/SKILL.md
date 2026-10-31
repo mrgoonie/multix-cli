@@ -1,7 +1,7 @@
 ---
 name: multix
 description: AI multimodal CLI (multix) — generate and edit images, generate, edit and extend video, text-to-speech, speech-to-text, voice cloning, music and sound effects, multi-character dialogue audio, 3D models, media analysis and document-to-Markdown conversion, ffmpeg/ImageMagick media optimization, offline media QA receipts, and self-update. Use whenever the user wants to create, edit, or transform images/video/audio/3D/documents from a CLI or the multix remote MCP server, or mentions any of OpenAI, Codex image driver, Gemini, Nano Banana, Gemini Omni, Veo, OpenRouter, MiniMax, Hailuo, Leonardo, BytePlus, Seedream, Seedance, Hyper3D, Kling, Flux, Cloudflare Workers AI, AI Gateway, fal.ai, Atlas Cloud, Replicate, Runway, Gen-4.5, HeyGen, avatar video, lipsync, dubbing, Sume, TopView, product marketing video, product avatar, product photos, ElevenLabs, Fish Audio, Drama 3, image-to-image, i2i, image-to-video, i2v, text-to-video, TTS, STT, transcription, updating/upgrading multix, or batch media optimization.
-version: 1.22.0-beta.3 # x-release-please-version
+version: 1.25.0 # x-release-please-version
 license: MIT
 metadata:
   tasks: any
