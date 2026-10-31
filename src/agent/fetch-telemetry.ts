@@ -321,8 +321,23 @@ async function recordUsage(
     );
   }
   if (method === "GET") {
-    // Polls repeat the job's running totals: keep the latest per endpoint family.
-    run.getUsage.set(`${host}${path.replace(/[^/]{16,}/g, ":id")}`, usage);
+    // Polls repeat the job's running totals: keep the latest per job, or per
+    // endpoint family when the response names none. Each read of a job (status,
+    // result, the job itself) reports its whole charge, so a reading replaces
+    // any earlier one that names the same job.
+    // A per-request header id (x-request-id) names the request, not the job.
+    const headerValues = new Set(response.headers.values());
+    const jobIds = usage.ids.filter((id) => !headerValues.has(id));
+    for (const [key, earlier] of run.getUsage) {
+      if (key.startsWith(`${host}/`) && earlier.ids.some((id) => jobIds.includes(id))) {
+        run.getUsage.delete(key);
+      }
+    }
+    const job = jobIds[0];
+    run.getUsage.set(
+      job ? `${host}/#job/${job}` : `${host}${path.replace(/[^/]{16,}/g, ":id")}`,
+      usage,
+    );
   } else {
     run.postUsage.push(usage);
   }
