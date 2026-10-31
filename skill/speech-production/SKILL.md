@@ -1,7 +1,7 @@
 ---
 name: speech-production
 description: Produce and transcribe audio with multix — text-to-speech on any provider through multix speech or provider commands (OpenAI, Gemini Flash TTS incl. Gemini 3.8 delivery style, OpenRouter, MiniMax, ElevenLabs v4, native Fish Audio Drama 3 with multi-speaker turns, pronunciation dictionaries and voice design, fal.ai, Cloudflare MeloTTS), voice cloning, speech-to-text and transcription (OpenAI, ElevenLabs Scribe, OpenRouter Whisper and others), music and sound effects, and multi-character dialogue audio with per-character voice profiles, cached takes and stem export (multix scene).
-version: 1.24.0 # x-release-please-version
+version: 1.25.0 # x-release-please-version
 license: MIT
 metadata:
   tasks: speech, transcription, music, sfx, voice

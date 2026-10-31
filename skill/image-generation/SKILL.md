@@ -1,7 +1,7 @@
 ---
 name: image-generation
 description: Generate images from a text prompt and edit existing images (image-to-image, i2i) with multix across OpenAI (API or Codex driver), Gemini Nano Banana, MiniMax, OpenRouter, Leonardo, BytePlus Seedream, Cloudflare Workers AI FLUX.1 Schnell, fal.ai, Atlas Cloud, Replicate and Runway Gen-4 Image, including provider decision trees, reference image limits and WebP output rules. Use for text-to-image, image edit, style transfer (watercolor, cyberpunk), reference images or character consistency.
-version: 1.24.0 # x-release-please-version
+version: 1.25.0 # x-release-please-version
 license: MIT
 metadata:
   tasks: image, image-edit

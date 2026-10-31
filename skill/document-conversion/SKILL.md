@@ -1,7 +1,7 @@
 ---
 name: document-conversion
 description: Convert PDFs, DOCX and images to Markdown with multix doc convert, and analyze, transcribe or extract structured data from media and documents with Gemini text-output models (multix gemini analyze, transcribe, extract). Use for document-to-Markdown, summarizing a video, describing an image, or pulling data out of files.
-version: 1.24.0 # x-release-please-version
+version: 1.25.0 # x-release-please-version
 license: MIT
 metadata:
   tasks: document, analysis
