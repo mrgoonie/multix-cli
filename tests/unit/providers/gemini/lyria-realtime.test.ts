@@ -8,7 +8,8 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { run } from "../../../../src/agent/run-state.js";
 import { ValidationError } from "../../../../src/core/errors.js";
 import { _resetOutputDir } from "../../../../src/core/output-dir.js";
 import { planFromFlags } from "../../../../src/providers/gemini/commands/music-live.js";
@@ -157,7 +158,13 @@ describe("RealTime plan validation", () => {
       }),
     );
     expect(p.changes?.map((c) => c.at)).toEqual([3, 8]);
-    expect(() => validateSessionPlan(plan({ durationSeconds: 0 }))).toThrow(ValidationError);
+    expect(() => validateSessionPlan(plan({ durationSeconds: 0.5 }))).toThrow(ValidationError);
+    expect(() =>
+      validateSessionPlan(plan({ changes: [null as unknown as { at: number }] })),
+    ).toThrow(/must be an object/);
+    expect(() =>
+      validateSessionPlan(plan({ changes: [{ at: 1, config: {}, when: 3 } as never] })),
+    ).toThrow(/unknown fields: when/);
     expect(() => validateSessionPlan(plan({ durationSeconds: 601 }))).toThrow(ValidationError);
     expect(() =>
       validateSessionPlan(plan({ durationSeconds: 5, changes: [{ at: 5, config: {} }] })),
@@ -239,6 +246,61 @@ describe("LyriaRealtimeSession", () => {
     ]);
     t.s.stop();
     expect((await t.promise).reason).toBe("stopped");
+  });
+
+  it("carries a partial frame into the next chunk instead of dropping it", async () => {
+    const t = session(plan({ durationSeconds: 1 }));
+    const ws = t.ws();
+    ws.open();
+    ws.message({ setupComplete: {} });
+    const bytes = (from: number, n: number) =>
+      Buffer.from(Array.from({ length: n }, (_, i) => (from + i) % 256));
+    for (const [from, n] of [
+      [0, 6],
+      [6, 8],
+      [14, 2],
+    ] as const) {
+      ws.message({ serverContent: { audioChunks: [{ data: bytes(from, n).toString("base64") }] } });
+    }
+    expect(Buffer.concat(t.audio)).toEqual(bytes(0, 16));
+    t.s.stop();
+    await t.promise;
+  });
+
+  it("sends each timed config merged with the config in effect, resetting only on a bpm or scale change", async () => {
+    const t = session(
+      plan({
+        durationSeconds: 3,
+        config: { bpm: 100, muteDrums: true },
+        changes: [
+          { at: 1, config: { density: 0.2 } },
+          { at: 2, config: { bpm: 120 } },
+        ],
+      }),
+    );
+    const ws = t.ws();
+    ws.open();
+    ws.message({ setupComplete: {} });
+    ws.audio(ONE_SECOND);
+    expect(ws.sent.at(-1)).toEqual({
+      musicGenerationConfig: { bpm: 100, muteDrums: true, density: 0.2 },
+    });
+    ws.audio(ONE_SECOND);
+    expect(ws.sent.slice(-2)).toEqual([
+      { musicGenerationConfig: { bpm: 120, muteDrums: true, density: 0.2 } },
+      { playbackControl: "RESET_CONTEXT" },
+    ]);
+    t.s.stop();
+    await t.promise;
+  });
+
+  it("ends a recording as closed when the socket errors after audio arrived", async () => {
+    const t = session(plan());
+    t.ws().open();
+    t.ws().message({ setupComplete: {} });
+    t.ws().audio(ONE_SECOND / 2);
+    t.ws().emit("error", { message: "connection reset" });
+    expect(await t.promise).toMatchObject({ reason: "closed", seconds: 0.5 });
   });
 
   it("reports filtered prompts", () => {
@@ -431,28 +493,34 @@ describe("recordGeminiMusicLive", () => {
     expect(fs.existsSync(out) ? fs.readdirSync(out) : []).toEqual([]);
   });
 
-  it("finalises the WAV on a signal, removes its handlers and re-raises the signal", async () => {
+  it("on a signal finalises the WAV, copies it to --output and exits through the runtime", async () => {
     const { factory } = server(1, ONE_SECOND / 4);
-    // Keep the re-raised signal from ending the test process.
-    const noop = () => {};
-    process.on("SIGUSR2", noop);
-    const before = process.listenerCount("SIGUSR2");
+    const before = process.listenerCount("SIGINT");
+    const exits: number[] = [];
+    const output = path.join(tmp, "copy", "live.wav");
+    run.interrupted = undefined;
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
     try {
       const pending = recordGeminiMusicLive({
         plan: plan({ durationSeconds: 5 }),
+        output,
         createWebSocket: factory,
-        signals: ["SIGUSR2"],
+        signals: ["SIGINT"],
+        exit: (code) => exits.push(code),
       });
       await new Promise((r) => setTimeout(r, 20));
-      expect(process.listenerCount("SIGUSR2")).toBe(before + 1);
-      process.emit("SIGUSR2", "SIGUSR2");
+      expect(process.listenerCount("SIGINT")).toBe(before + 1);
+      process.emit("SIGINT", "SIGINT");
+      expect(exits).toEqual([130]);
+      expect(process.listenerCount("SIGINT")).toBe(before);
+      // The copy is made before the process would exit.
+      expect(fs.readFileSync(output).readUInt32LE(40)).toBe(ONE_SECOND / 4);
+      expect(run.interrupted).toMatchObject({ retryable: false });
       const result = await pending;
       expect(result.reason).toBe("stopped");
-      expect(fs.readFileSync(result.generatedAudio).readUInt32LE(40)).toBe(ONE_SECOND / 4);
-      await new Promise((r) => setTimeout(r, 20));
-      expect(process.listenerCount("SIGUSR2")).toBe(before);
     } finally {
-      process.removeListener("SIGUSR2", noop);
+      stderr.mockRestore();
+      run.interrupted = undefined;
     }
   });
 });

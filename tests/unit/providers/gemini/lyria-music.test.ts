@@ -9,6 +9,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { run } from "../../../../src/agent/run-state.js";
+import { classifyError } from "../../../../src/core/error-classify.js";
 import { ProviderError, ValidationError } from "../../../../src/core/errors.js";
 import { _resetOutputDir } from "../../../../src/core/output-dir.js";
 import { readLyricsFile } from "../../../../src/providers/gemini/commands/generate-music.js";
@@ -252,9 +253,25 @@ describe("generateGeminiMusic", () => {
     });
     await expect(
       generateGeminiMusic({ model: "lyria-3.5", prompt: "x", outputFormat: "mp3", fetch: fn }),
-    ).rejects.toThrow(/not re-sent/);
+    ).rejects.toSatisfy((e: Error) => {
+      expect(e.message).toMatch(/not re-sent/);
+      expect(classifyError(e)).toMatchObject({ code: "UNKNOWN_REMOTE_STATE", retryable: false });
+      return true;
+    });
     expect(calls).toHaveLength(1);
     expect(run.postUsage).toEqual([]);
+  });
+
+  it("treats a gateway timeout after a long generation as unknown, not retryable", async () => {
+    const { fn, calls } = fetchReturning(json({ error: { message: "deadline" } }, 504));
+    const err = (await generateGeminiMusic({
+      model: "lyria-3.5",
+      prompt: "x",
+      outputFormat: "mp3",
+      fetch: fn,
+    }).catch((e: Error) => e)) as Error;
+    expect(classifyError(err)).toMatchObject({ code: "UNKNOWN_REMOTE_STATE", retryable: false });
+    expect(calls).toHaveLength(1);
   });
 
   it("rotates to the next key on a rate limit, where nothing was generated", async () => {

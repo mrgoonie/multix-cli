@@ -217,7 +217,8 @@ multix gemini generate-music --prompt "a soundtrack for this scene" --image scen
 - Lyria tính phí theo bài (US$0,04 cho một đoạn clip, US$0,08 cho một bài
   `lyria-3.5`, không có free tier), nên `--estimate` và `--max-cost` dùng được.
   Request chỉ gửi một lần: khi timeout hoặc mất kết nối, request không được gửi
-  lại vì Google có thể đã tạo và tính phí bài hát. Chỉ khi bị giới hạn tốc độ
+  lại vì Google có thể đã tạo và tính phí bài hát; lỗi trả về là
+  `UNKNOWN_REMOTE_STATE` và không retry được. Chỉ khi bị giới hạn tốc độ
   (rate limit) thì mới chuyển sang key `GEMINI_API_KEY_<n>` kế tiếp.
 
 ### Lyria RealTime
@@ -253,7 +254,8 @@ multix gemini music-live --prompts-file session.json --duration 120 --output liv
   ```
 
 - `--duration` (1–600 giây, mặc định 30) là độ dài âm thanh cần ghi. Ctrl-C
-  dừng ghi sớm mà vẫn ghi ra file WAV hợp lệ. Nếu server kết thúc phiên sớm,
+  dừng ghi sớm, vẫn ghi ra file WAV hợp lệ (sao chép sang `--output` nếu có) và
+  thoát với mã 130. Nếu server kết thúc phiên sớm,
   phần đã ghi được giữ lại, lệnh thoát với mã 1 và phiên không được khởi động
   lại.
 - Đầu ra chỉ có nhạc không lời. Google chưa công bố giá cho Lyria RealTime, nên

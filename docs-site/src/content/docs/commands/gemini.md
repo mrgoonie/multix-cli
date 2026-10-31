@@ -220,7 +220,8 @@ multix gemini generate-music --prompt "a soundtrack for this scene" --image scen
 - Lyria is billed per song (US$0.04 for a clip, US$0.08 for a `lyria-3.5`
   song, no free tier), so `--estimate` and `--max-cost` work. The request is
   sent once: after a timeout or a dropped connection it is not re-sent,
-  because Google may already have generated and billed the song. Only a
+  because Google may already have generated and billed the song; the error is
+  `UNKNOWN_REMOTE_STATE` and not retryable. Only a
   rate-limit answer moves on to the next `GEMINI_API_KEY_<n>` key.
 
 ### Lyria RealTime
@@ -255,8 +256,8 @@ multix gemini music-live --prompts-file session.json --duration 120 --output liv
   ```
 
 - `--duration` (1–600 seconds, default 30) is the length of audio to record.
-  Ctrl-C ends the recording early and still writes a valid WAV file. If the
-  server ends the session early, the partial recording is kept, the command
+  Ctrl-C ends the recording early, writes a valid WAV file (copied to
+  `--output` when given) and exits 130. If the server ends the session early, the partial recording is kept, the command
   exits 1, and the session is not restarted.
 - The output is instrumental only. Google publishes no price for Lyria
   RealTime yet, so `--estimate` reports it as unknown and `--max-cost` refuses

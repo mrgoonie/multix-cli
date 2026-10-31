@@ -180,15 +180,23 @@ export function validateSessionPlan(plan: SessionPlan): SessionPlan {
   const { durationSeconds } = plan;
   if (
     !Number.isFinite(durationSeconds) ||
-    durationSeconds <= 0 ||
+    durationSeconds < 1 ||
     durationSeconds > REALTIME_MAX_SECONDS
   ) {
     throw new ValidationError(`--duration must be from 1 to ${REALTIME_MAX_SECONDS} seconds`);
   }
   const prompts = validateWeightedPrompts(plan.prompts);
   const config = plan.config ? validateMusicConfig(plan.config) : undefined;
-  const changes = (plan.changes ?? []).map((c, i) => {
+  const changes = (plan.changes ?? []).map((raw, i) => {
     const where = `changes[${i}]`;
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+      throw new ValidationError(`${where} must be an object {at, prompts?, config?}`);
+    }
+    const extra = Object.keys(raw).filter((k) => !["at", "prompts", "config"].includes(k));
+    if (extra.length > 0) {
+      throw new ValidationError(`${where} has unknown fields: ${extra.join(", ")}`);
+    }
+    const c = raw as SessionChange;
     if (
       typeof c.at !== "number" ||
       !Number.isFinite(c.at) ||
@@ -230,9 +238,12 @@ export function parsePromptsFile(raw: unknown): Omit<SessionPlan, "durationSecon
   };
 }
 
-/** bpm and scale only take effect after a context reset (or stop/play). */
-function needsReset(config: MusicGenerationConfig | undefined): boolean {
-  return config?.bpm !== undefined || config?.scale !== undefined;
+/**
+ * bpm and scale only take effect after a context reset (or stop/play); the
+ * reset makes an audible break, so it is sent only when one of them changes.
+ */
+function needsReset(prev: MusicGenerationConfig, next: MusicGenerationConfig): boolean {
+  return prev.bpm !== next.bpm || prev.scale !== next.scale;
 }
 
 /** The subset of the WHATWG WebSocket the session uses (Node 22+ global, browsers, Workers). */
@@ -315,6 +326,10 @@ export class LyriaRealtimeSession {
   private bytes = 0;
   private readonly targetBytes: number;
   private nextChange = 0;
+  /** Config in effect: a config message replaces the whole config, so changes are merged into it. */
+  private config: MusicGenerationConfig = {};
+  /** Trailing bytes of a chunk that did not fill a whole frame, prepended to the next chunk. */
+  private carry: Uint8Array = new Uint8Array(0);
   private settled = false;
   private timer: unknown;
   private resolveFn: ((r: SessionResult) => void) | undefined;
@@ -359,6 +374,14 @@ export class LyriaRealtimeSession {
       ws.addEventListener("message", (event) => this.onMessage(event.data));
       ws.addEventListener("error", (event) => {
         const msg = (event as { message?: unknown })?.message;
+        // A dropped stream after audio arrived ends the recording like a close does.
+        if (this.bytes > 0) {
+          this.debug(
+            `socket error after audio${typeof msg === "string" ? `: ${this.scrub(msg)}` : ""}`,
+          );
+          this.finish("closed");
+          return;
+        }
         this.fail(
           new ProviderError(
             `Lyria RealTime socket error${typeof msg === "string" ? `: ${this.scrub(msg)}` : ""}`,
@@ -440,10 +463,17 @@ export class LyriaRealtimeSession {
     }
   }
 
-  private onAudio(pcm: Uint8Array): void {
-    const room = this.targetBytes - this.bytes;
-    // Keep whole frames so the channels never swap.
-    const take = Math.min(pcm.length - (pcm.length % BYTES_PER_FRAME), room);
+  private onAudio(chunk: Uint8Array): void {
+    let pcm = chunk;
+    if (this.carry.length > 0) {
+      pcm = new Uint8Array(this.carry.length + chunk.length);
+      pcm.set(this.carry);
+      pcm.set(chunk, this.carry.length);
+    }
+    // Write whole frames only and keep the rest for the next chunk, so the channels never swap.
+    const whole = pcm.length - (pcm.length % BYTES_PER_FRAME);
+    this.carry = pcm.slice(whole);
+    const take = Math.min(whole, this.targetBytes - this.bytes);
     if (take > 0) {
       this.opts.events.onAudio(take === pcm.length ? pcm : pcm.subarray(0, take));
       this.bytes += take;
@@ -468,9 +498,11 @@ export class LyriaRealtimeSession {
     this.send({ clientContent: { weightedPrompts: prompts } });
   }
 
-  private sendConfig(config: MusicGenerationConfig): void {
-    this.send({ musicGenerationConfig: config });
-    if (needsReset(config)) this.send({ playbackControl: "RESET_CONTEXT" });
+  private sendConfig(change: MusicGenerationConfig): void {
+    const prev = this.config;
+    this.config = { ...prev, ...change };
+    this.send({ musicGenerationConfig: this.config });
+    if (needsReset(prev, this.config)) this.send({ playbackControl: "RESET_CONTEXT" });
   }
 
   private send(message: unknown): void {

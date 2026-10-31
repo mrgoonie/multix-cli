@@ -10,14 +10,16 @@ import fs from "node:fs";
 import path from "node:path";
 import { run } from "../../../agent/run-state.js";
 import { sniffAudioKind } from "../../../core/audio-kind.js";
-import { HttpError, ProviderError, ValidationError } from "../../../core/errors.js";
+import { HttpError, MultixError, ProviderError, ValidationError } from "../../../core/errors.js";
 import type { Logger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import { outputStamp } from "../../../core/output-name.js";
+import { NOT_SENT_CODES, UNKNOWN_REMOTE_STATE, errorCodes } from "../../../core/response-read.js";
 import { createInteraction } from "../client.js";
 import { withGeminiKey } from "../key-pool.js";
 import { INLINE_MAX_BYTES } from "../local-files.js";
 import {
+  LYRIA_MAX_IMAGES,
   type LyriaImage,
   type LyriaResult,
   type MusicOutputFormat,
@@ -73,8 +75,24 @@ export function readLyriaImages(paths: string[]): LyriaImage[] {
   });
 }
 
+/**
+ * A failure after the request may have reached Google: a dropped connection
+ * or timeout (unless the connection was never made), or a gateway error after
+ * a long generation. The song may exist and be billed, so it is not retryable.
+ */
+function isAmbiguousFailure(e: unknown): boolean {
+  if (!(e instanceof HttpError)) return false;
+  if (e.status === 0) return !errorCodes(e).some((c) => NOT_SENT_CODES.has(c));
+  return e.status === 502 || e.status === 503 || e.status === 504;
+}
+
 export async function generateGeminiMusic(opts: GeminiMusicOpts): Promise<GeminiMusicResult> {
   const { model, outputFormat, logger } = opts;
+  if ((opts.imagePaths?.length ?? 0) > LYRIA_MAX_IMAGES) {
+    throw new ValidationError(
+      `Lyria takes at most ${LYRIA_MAX_IMAGES} images (got ${opts.imagePaths?.length})`,
+    );
+  }
   const body = buildLyriaInteractionBody({
     model,
     prompt: opts.prompt,
@@ -100,10 +118,10 @@ export async function generateGeminiMusic(opts: GeminiMusicOpts): Promise<Gemini
       { logger },
     );
   } catch (e) {
-    if (e instanceof HttpError && e.status === 0) {
-      throw new ProviderError(
-        `${e.message}. The music request was not re-sent: Google may still have generated and billed it.`,
-        "gemini",
+    if (isAmbiguousFailure(e)) {
+      throw new MultixError(
+        `${(e as Error).message}. The music request was not re-sent: Google may still have generated and billed it. Check before running it again, or you may pay twice.`,
+        UNKNOWN_REMOTE_STATE,
         { cause: e },
       );
     }

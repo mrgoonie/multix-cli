@@ -9,6 +9,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { run } from "../../../agent/run-state.js";
 import { ConfigError } from "../../../core/errors.js";
 import { guardExternalRun } from "../../../core/external-run-guard.js";
 import type { Logger } from "../../../core/logger.js";
@@ -107,6 +108,8 @@ export interface MusicLiveOpts {
   createWebSocket?: WebSocketFactory;
   /** Test seam: signals to stop on (default SIGINT, SIGTERM, SIGHUP). */
   signals?: NodeJS.Signals[];
+  /** Test seam: how a signal ends the process (default process.exit, through the agent runtime). */
+  exit?: (code: number) => void;
   idleTimeoutMs?: number;
   setupTimeoutMs?: number;
 }
@@ -119,6 +122,17 @@ export interface MusicLiveResult {
 }
 
 const SIGNALS: NodeJS.Signals[] = ["SIGINT", "SIGTERM", "SIGHUP"];
+/** Shell exit status for a run stopped by each signal: 128 + the signal number. */
+const SIGNAL_EXIT: Partial<Record<NodeJS.Signals, number>> = {
+  SIGHUP: 129,
+  SIGINT: 130,
+  SIGTERM: 143,
+};
+
+function copyToOutput(dest: string, output: string): void {
+  fs.mkdirSync(path.dirname(path.resolve(output)), { recursive: true });
+  fs.copyFileSync(dest, output);
+}
 
 export async function recordGeminiMusicLive(opts: MusicLiveOpts): Promise<MusicLiveResult> {
   const { logger } = opts;
@@ -166,16 +180,38 @@ export async function recordGeminiMusicLive(opts: MusicLiveOpts): Promise<MusicL
       });
 
       // A signal ends the session cleanly: close the socket, finalise the WAV,
-      // then re-raise so the process still exits with 128 + n.
+      // copy it to --output, then exit with 128 + n through the agent runtime
+      // so the envelope and history still record the run.
       const signals = opts.signals ?? SIGNALS;
+      const exit = opts.exit ?? ((code: number) => process.exit(code));
       const onSignal = (signal: NodeJS.Signals) => {
+        removeHandlers();
         session.stop();
         writer.finish();
-        logger?.warn(
-          `${signal}: recording stopped at ${(writer.bytes / REALTIME_BYTES_PER_SECOND).toFixed(1)}s, saved ${dest}`,
+        const seconds = (writer.bytes / REALTIME_BYTES_PER_SECOND).toFixed(1);
+        let saved = dest;
+        if (opts.output && writer.bytes > 0) {
+          try {
+            copyToOutput(dest, opts.output);
+            saved = opts.output;
+          } catch (e) {
+            logger?.warn(`Could not copy to ${opts.output}: ${(e as Error).message}`);
+          }
+        }
+        if (writer.bytes === 0) fs.rmSync(dest, { force: true });
+        process.stderr.write(
+          writer.bytes > 0
+            ? `${signal}: recording stopped at ${seconds}s; saved ${saved}\n`
+            : `${signal}: recording stopped before any audio arrived\n`,
         );
-        removeHandlers();
-        process.kill(process.pid, signal);
+        run.interrupted = {
+          hint:
+            writer.bytes > 0
+              ? `The recording was stopped by ${signal} after ${seconds}s and saved to ${saved}.`
+              : `The recording was stopped by ${signal} before any audio arrived.`,
+          retryable: false,
+        };
+        exit(SIGNAL_EXIT[signal] ?? 130);
       };
       const removeHandlers = () => {
         for (const s of signals) process.removeListener(s, onSignal);
@@ -196,8 +232,7 @@ export async function recordGeminiMusicLive(opts: MusicLiveOpts): Promise<MusicL
         logger?.success(`Saved: ${dest} (${(writer.bytes / 1024 / 1024).toFixed(1)} MB)`);
         let output: string | undefined;
         if (opts.output) {
-          fs.mkdirSync(path.dirname(path.resolve(opts.output)), { recursive: true });
-          fs.copyFileSync(dest, opts.output);
+          copyToOutput(dest, opts.output);
           output = opts.output;
           logger?.success(`Copied to: ${opts.output}`);
         }
