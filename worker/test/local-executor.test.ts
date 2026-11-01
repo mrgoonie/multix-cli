@@ -5,8 +5,8 @@
  * the real job runner against the fake `multix` binary. No network, no provider.
  */
 
-import { execFile } from "node:child_process";
-import { mkdtemp, readFile, readdir, rm, utimes, writeFile } from "node:fs/promises";
+import { execFile, spawn } from "node:child_process";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -54,13 +54,21 @@ async function create(options: Any) {
   const { createLocalExecutor } = await mod();
   // Short waits so lock and shutdown paths finish within a test.
   const executor = await createLocalExecutor({
-    lockWaitMs: 100,
-    lockPollMs: 10,
     closeTimeoutMs: 200,
     ...options,
   });
   executors.push(executor);
   return executor;
+}
+/** Bind a Unix socket in a child process and SIGKILL it, leaving the socket file behind. */
+async function leaveDeadSocket(path: string) {
+  const child = spawn(process.execPath, [
+    "-e",
+    `require("node:net").createServer().listen(${JSON.stringify(path)}, () => console.log("up"))`,
+  ]);
+  await new Promise((r) => child.stdout.once("data", r));
+  child.kill("SIGKILL");
+  await new Promise((r) => child.once("exit", r));
 }
 const tick = () => new Promise((r) => setTimeout(r, 10));
 async function until(check: () => Promise<boolean> | boolean) {
@@ -140,7 +148,12 @@ describe("local executor", () => {
 
   it("cancel is final and idempotent, and keeps the slot until the CLI has exited", async () => {
     const run = controlledRun();
-    const ex = await create({ stateDir: await stateDir(), runJob: run.runJob });
+    const finals: Any[] = [];
+    const ex = await create({
+      stateDir: await stateDir(),
+      runJob: run.runJob,
+      onFinal: (id: string, view: Any) => finals.push([id, view.status]),
+    });
     await ex.start(ID1, spec(ID1), "u");
     await until(() => run.calls.length === 1);
     const [c1, c2] = await Promise.all([ex.cancel(ID1), ex.cancel(ID1)]);
@@ -154,6 +167,12 @@ describe("local executor", () => {
     await until(() => ex.activeJobs() === 0);
     expect((await ex.status(ID1)).status).toBe("canceled");
     expect((await ex.start(ID3, spec(ID3), "u")).status).toBe("running");
+    // One final notice per job: the cancel, and the refusal of the job tried while the slot was taken.
+    await tick();
+    expect(finals).toEqual([
+      [ID1, "canceled"],
+      [ID2, "failed"],
+    ]);
   });
 
   it("records a crashed runner as failed with a fixed message", async () => {
@@ -173,7 +192,7 @@ describe("local executor", () => {
 
   it("marks jobs left running by a dead server as interrupted and never runs them again", async () => {
     const dir = await stateDir();
-    // What a server killed mid-job leaves behind: a running record, a lock of a dead pid, a torn write.
+    // What a server killed mid-job leaves behind: a running record, its socket file, a torn write.
     await writeFile(
       join(dir, `${ID1}.json`),
       JSON.stringify({
@@ -182,11 +201,7 @@ describe("local executor", () => {
       }),
     );
     await writeFile(join(dir, `${ID2}.json.123.${ID3}.tmp`), "{");
-    // Another process's lock attempt in progress: not ours to remove.
-    await writeFile(join(dir, `executor.lock.456.${ID3}.tmp`), "{}");
-    await writeFile(join(dir, "executor.lock"), JSON.stringify({ id: "dead-server" }));
-    const old = new Date(Date.now() - 5 * 60_000);
-    await utimes(join(dir, "executor.lock"), old, old);
+    await leaveDeadSocket(join(dir, "executor.sock"));
     const run = controlledRun();
     const finals: Any[] = [];
     const ex = await create({
@@ -202,9 +217,7 @@ describe("local executor", () => {
     });
     expect(finals).toEqual([ID1]);
     expect(run.calls).toHaveLength(0);
-    expect((await readdir(dir)).filter((n) => n.endsWith(".tmp"))).toEqual([
-      `executor.lock.456.${ID3}.tmp`,
-    ]);
+    expect((await readdir(dir)).filter((n) => n.endsWith(".tmp"))).toEqual([]);
   });
 
   it("close() records running jobs as interrupted, stops them and frees the lock", async () => {
@@ -219,7 +232,7 @@ describe("local executor", () => {
         run.first().finish({ ...RESULT, status: "canceled" }),
       );
     await ex.close();
-    expect(await readdir(dir)).not.toContain("executor.lock");
+    expect(await readdir(dir)).not.toContain("executor.sock");
     const record = JSON.parse(await readFile(join(dir, `${ID1}.json`), "utf8"));
     expect(record.view).toMatchObject({ status: "failed", interrupted: true });
     // A new server on the same volume starts cleanly and keeps the record.
@@ -227,7 +240,7 @@ describe("local executor", () => {
     expect((await next.status(ID1)).interrupted).toBe(true);
   });
 
-  it("refuses a state directory another live server holds and takes over an abandoned one", async () => {
+  it("refuses a state directory another live server holds and replaces a dead one's socket", async () => {
     const { ExecutorLockedError } = await mod();
     const dir = await stateDir();
     const run = controlledRun();
@@ -238,35 +251,27 @@ describe("local executor", () => {
     );
 
     const other = await stateDir();
-    const lock = join(other, "executor.lock");
-    // A fresh lock is never taken over, even one naming our own pid (pid 1 in every container).
-    await writeFile(lock, JSON.stringify({ id: "live", pid: process.pid }));
-    await expect(create({ stateDir: other, runJob: run.runJob })).rejects.toBeInstanceOf(
-      ExecutorLockedError,
-    );
-    // An empty lock (never written by this module, which creates it complete) is not abandoned either.
-    await writeFile(lock, "");
-    await expect(create({ stateDir: other, runJob: run.runJob })).rejects.toBeInstanceOf(
-      ExecutorLockedError,
-    );
-    // The same lock after its heartbeat stopped.
-    const old = new Date(Date.now() - 5 * 60_000);
-    await utimes(lock, old, old);
+    const sock = join(other, "executor.sock");
+    // Another live process listening on the socket.
+    const holder = spawn(process.execPath, [
+      "-e",
+      `require("node:net").createServer(s => s.destroy()).listen(${JSON.stringify(sock)}, () => console.log("up"))`,
+    ]);
+    try {
+      await new Promise((r) => holder.stdout.once("data", r));
+      await expect(create({ stateDir: other, runJob: run.runJob })).rejects.toBeInstanceOf(
+        ExecutorLockedError,
+      );
+    } finally {
+      holder.kill("SIGKILL");
+      await new Promise((r) => holder.once("exit", r));
+    }
+    // Killed without cleanup, it leaves its socket file behind: replaced at once, no waiting.
+    expect(await readdir(other)).toContain("executor.sock");
     const ex = await create({ stateDir: other, runJob: run.runJob });
     expect(ex.accepting()).toBe(true);
-    expect(JSON.parse(await readFile(lock, "utf8")).id).not.toBe("live");
-    expect((await readdir(other)).filter((n) => n !== "executor.lock")).toEqual([]);
-  });
-
-  it("waits for a lock that is released during start-up", async () => {
-    const dir = await stateDir();
-    const lock = join(dir, "executor.lock");
-    await writeFile(lock, JSON.stringify({ id: "stopping" }));
-    setTimeout(() => {
-      rm(lock, { force: true });
-    }, 50);
-    const ex = await create({ stateDir: dir, runJob: controlledRun().runJob, lockWaitMs: 2000 });
-    expect(ex.accepting()).toBe(true);
+    await ex.close();
+    expect(await readdir(other)).toEqual([]);
   });
 
   it("lets exactly one of several processes starting together hold the directory", async () => {
@@ -274,6 +279,8 @@ describe("local executor", () => {
     const script = local("./fixtures/lock-contender.mjs");
     const moduleUrl = new URL("../container/local-executor.mjs", testFileUrl).href;
     for (let round = 0; round < 5; round++) {
+      // Every other round starts from a socket file left by a killed server.
+      if (round % 2 === 1) await leaveDeadSocket(join(dir, "executor.sock"));
       const results = await Promise.all(
         [0, 1, 2, 3].map(
           () =>
@@ -288,33 +295,18 @@ describe("local executor", () => {
     }
   });
 
-  it("stops accepting jobs when another process took its lock over", async () => {
-    const dir = await stateDir();
-    const run = controlledRun();
-    const ex = await create({ stateDir: dir, runJob: run.runJob, lockHeartbeatMs: 20 });
-    await writeFile(join(dir, "executor.lock"), JSON.stringify({ id: "new-owner" }));
-    await until(() => !ex.accepting());
-    const { SERVER_AT_CAPACITY_ERROR } = await mod();
-    expect(await ex.start(ID1, spec(ID1), "u")).toMatchObject({
-      status: "failed",
-      error: SERVER_AT_CAPACITY_ERROR,
-    });
-    expect(run.calls).toHaveLength(0);
-    await ex.close();
-    // The new owner's lock is left alone.
-    expect(JSON.parse(await readFile(join(dir, "executor.lock"), "utf8")).id).toBe("new-owner");
-  });
-
   it("does not start a job whose start raced with close()", async () => {
     const dir = await stateDir();
     const run = controlledRun();
     const ex = await create({ stateDir: dir, runJob: run.runJob });
     const starting = ex.start(ID1, spec(ID1), "u");
+    // close() once the slot is taken, while the job record is still being written.
+    while (ex.activeJobs() === 0) await new Promise((r) => setImmediate(r));
     await ex.close();
     expect((await starting).status).toBe("failed");
     await tick();
     expect(run.calls).toHaveLength(0);
-    expect(await readdir(dir)).not.toContain("executor.lock");
+    expect(await readdir(dir)).not.toContain("executor.sock");
   });
 
   it("ignores an async onFinal that rejects", async () => {

@@ -23,29 +23,20 @@
  *  - Restart: a job that was still running when the server stopped is
  *    recorded as failed and `interrupted`, never run again, so a billed
  *    provider call is not repeated without the caller starting a new job.
- *  - One process per state directory: a lock file, created complete in one
- *    step and touched every LOCK_HEARTBEAT_MS, keeps a second server process
- *    (another replica on a shared volume) from sharing the cap and from
- *    marking the first one's live jobs as interrupted. A lock is taken over
- *    only once it has gone untouched for LOCK_STALE_MS, so a server that
- *    crashed without removing it delays the next start by up to that long.
- *    A holder that finds its lock replaced stops accepting jobs.
+ *  - One process per state directory: the executor listens on a Unix socket
+ *    in `stateDir` (no network port) for as long as it runs. A second server
+ *    process (another replica on a shared volume) finds the socket answering
+ *    and refuses to start, so it can neither share the cap nor mark the first
+ *    one's live jobs as interrupted. The kernel decides liveness: a socket
+ *    left by a crashed process refuses connections and is replaced at once,
+ *    with no heartbeat or timeout. Supported layout: one replica per volume
+ *    (a ReadWriteOnce PVC); the socket path must stay under ~100 bytes.
  */
 
 import { randomUUID } from "node:crypto";
-import {
-  chmod,
-  link,
-  mkdir,
-  open,
-  readFile,
-  readdir,
-  rename,
-  rm,
-  stat,
-  utimes,
-} from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { chmod, link, mkdir, open, readFile, readdir, rename, rm, stat } from "node:fs/promises";
+import { connect, createServer } from "node:net";
+import { dirname, join, resolve } from "node:path";
 import { runJob as defaultRunJob, validateSpec } from "./job-runner.mjs";
 
 /** Same text as SERVER_AT_CAPACITY_ERROR in worker/src/jobs/job-protocol.ts. */
@@ -57,12 +48,11 @@ export const CANCELED_ERROR = "Canceled by the caller";
 export const RUNNER_FAILED_ERROR = "The job failed inside the server";
 /** Same as JOB_RETENTION_SECONDS in job-protocol.ts. */
 export const DEFAULT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
-export const LOCK_FILE = "executor.lock";
-/** The lock holder touches the lock this often; a lock untouched for LOCK_STALE_MS is abandoned. */
-export const LOCK_HEARTBEAT_MS = 15_000;
-export const LOCK_STALE_MS = 60_000;
-/** How long start-up waits for an abandoned lock to become stale before giving up. */
-export const DEFAULT_LOCK_WAIT_MS = LOCK_STALE_MS + LOCK_HEARTBEAT_MS;
+export const LOCK_SOCKET = "executor.sock";
+const TAKEOVER_FILE = "executor.takeover";
+/** A takeover marker older than this was left by a process that crashed mid-takeover. */
+const TAKEOVER_STALE_MS = 5_000;
+const LOCK_ATTEMPTS = 50;
 /** How long close() waits for running CLI processes to exit after stopping them. */
 export const DEFAULT_CLOSE_TIMEOUT_MS = 10_000;
 const PRUNE_INTERVAL_MS = 60 * 60_000;
@@ -72,8 +62,6 @@ const JOB_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
 /** Temporary file of a job record write (`<job id>.json.<pid>.<uuid>.tmp`). */
 const JOB_TEMP_RE = /^[0-9a-f-]{36}\.json\.\d+\.[0-9a-f-]{36}\.tmp$/;
 const TERMINAL = new Set(["succeeded", "failed", "timed_out", "canceled"]);
-/** Lock files held by an executor in this process. */
-const heldInProcess = new Set();
 
 export class ExecutorLockedError extends Error {
   constructor() {
@@ -139,6 +127,7 @@ async function writeAtomic(file, data) {
     await rm(tmp, { force: true });
     throw error;
   }
+  await syncDir(dirname(file));
 }
 
 /** Create `file` with `data` only when it does not exist yet; false when it already exists. */
@@ -146,6 +135,7 @@ async function createExclusive(file, data) {
   const tmp = await writeTemp(file, data);
   try {
     await link(tmp, file);
+    await syncDir(dirname(file));
     return true;
   } catch (error) {
     if (error?.code === "EEXIST") return false;
@@ -155,65 +145,75 @@ async function createExclusive(file, data) {
   }
 }
 
-async function readLockId(file) {
-  try {
-    return JSON.parse(await readFile(file, "utf8")).id;
-  } catch {
-    return undefined;
-  }
+/** "live" when a process accepts connections on the socket, "dead" when none does. */
+function probeSocket(path) {
+  return new Promise((resolveProbe, reject) => {
+    const socket = connect(path);
+    socket.once("connect", () => {
+      socket.destroy();
+      resolveProbe("live");
+    });
+    socket.once("error", (error) => {
+      socket.destroy();
+      if (error?.code === "ECONNREFUSED" || error?.code === "ENOENT") resolveProbe("dead");
+      else reject(error);
+    });
+  });
+}
+
+function listenOn(path) {
+  return new Promise((resolveListen, reject) => {
+    // Contenders only probe: accept and drop their connections.
+    const server = createServer((socket) => socket.destroy());
+    server.once("error", reject);
+    server.listen(path, () => {
+      server.off("error", reject);
+      server.unref();
+      resolveListen(server);
+    });
+  });
 }
 
 /**
- * Create the lock with its full content in one step (`link` fails when the
- * name exists), so no reader ever sees an empty or partial lock. A lock held
- * by someone else is taken over only after it has gone untouched for
- * LOCK_STALE_MS; until then start-up waits, up to `waitMs`.
+ * Hold `stateDir` by listening on its socket. A socket file nobody answers on
+ * is removed, but only under the takeover marker (created exclusively) and
+ * after probing again, so a socket another contender has just bound is never
+ * removed. After the removal any contender may bind; the first one wins and
+ * the others find it answering.
  */
-async function acquireLock(stateDir, { now, waitMs, pollMs }) {
-  const file = join(stateDir, LOCK_FILE);
-  if (heldInProcess.has(file)) throw new ExecutorLockedError();
-  const id = randomUUID();
-  const tmp = await writeTemp(file, JSON.stringify({ id, pid: process.pid, at: now() }));
-  const giveUpAt = now() + waitMs;
-  try {
-    for (;;) {
-      try {
-        await link(tmp, file);
-        heldInProcess.add(file);
-        await syncDir(stateDir);
-        return { file, id };
-      } catch (error) {
-        if (error?.code !== "EEXIST") throw error;
-      }
-      let touchedAt;
-      try {
-        touchedAt = (await stat(file)).mtimeMs;
-      } catch {
-        continue; // Removed meanwhile: try to create it again.
-      }
-      if (now() - touchedAt > LOCK_STALE_MS) {
-        const staleId = await readLockId(file);
-        const tomb = `${file}.${randomUUID()}.stale`;
-        try {
-          await rename(file, tomb);
-        } catch {
-          continue; // Someone else moved it first.
-        }
-        if ((await readLockId(tomb)) !== staleId) {
-          // A contender replaced the stale lock between our read and our rename: give it back.
-          await link(tomb, file).catch(() => {});
-          await rm(tomb, { force: true });
-          throw new ExecutorLockedError();
-        }
-        await rm(tomb, { force: true });
-        continue;
-      }
-      if (now() >= giveUpAt) throw new ExecutorLockedError();
-      await sleep(pollMs);
+async function acquireLock(stateDir) {
+  const path = join(stateDir, LOCK_SOCKET);
+  const marker = join(stateDir, TAKEOVER_FILE);
+  for (let attempt = 0; attempt < LOCK_ATTEMPTS; attempt++) {
+    try {
+      return { path, server: await listenOn(path) };
+    } catch (error) {
+      if (error?.code !== "EADDRINUSE") throw error;
     }
-  } finally {
-    await rm(tmp, { force: true });
+    if ((await probeSocket(path)) === "live") throw new ExecutorLockedError();
+    let marked = false;
+    try {
+      await open(marker, "wx", 0o600).then((handle) => handle.close());
+      marked = true;
+    } catch (error) {
+      if (error?.code !== "EEXIST") throw error;
+      const age = await stat(marker).then(
+        (info) => Date.now() - info.mtimeMs,
+        () => 0,
+      );
+      if (age > TAKEOVER_STALE_MS) await rm(marker, { force: true });
+    }
+    if (marked) {
+      try {
+        if ((await probeSocket(path)) === "dead") await rm(path, { force: true });
+      } finally {
+        await rm(marker, { force: true });
+      }
+    } else {
+      await sleep(20 + Math.floor(Math.random() * 30));
+    }
   }
+  throw new ExecutorLockedError();
 }
 
 /**
@@ -221,10 +221,7 @@ async function acquireLock(stateDir, { now, waitMs, pollMs }) {
  *   stateDir: string,
  *   maxConcurrent?: number,
  *   retentionMs?: number,
- *   lockWaitMs?: number,
- *   lockPollMs?: number,
  *   closeTimeoutMs?: number,
- *   lockHeartbeatMs?: number,
  *   runJob?: (spec: object, options: { signal: AbortSignal }) => Promise<object>,
  *   now?: () => number,
  *   onFinal?: (jobId: string, view: object, owner: { userId: string, command: string }) => unknown,
@@ -245,11 +242,7 @@ export async function createLocalExecutor(options) {
 
   await mkdir(stateDir, { recursive: true, mode: 0o700 });
   await chmod(stateDir, 0o700).catch(() => {});
-  const lock = await acquireLock(stateDir, {
-    now,
-    waitMs: options.lockWaitMs ?? DEFAULT_LOCK_WAIT_MS,
-    pollMs: options.lockPollMs ?? 1000,
-  });
+  const lock = await acquireLock(stateDir);
 
   /** jobId -> { abort, done } for every job whose CLI may still be running; its size is the cap. */
   const running = new Map();
@@ -258,19 +251,9 @@ export async function createLocalExecutor(options) {
   /** Per-job chain that serializes read-modify-write of the job file. */
   const fileLocks = new Map();
   let closed = false;
-  let lockLost = false;
-
-  const heartbeat = setInterval(async () => {
-    if ((await readLockId(lock.file)) !== lock.id) {
-      // Taken over (this process stalled past LOCK_STALE_MS): stop accepting jobs.
-      lockLost = true;
-      clearInterval(heartbeat);
-      return;
-    }
-    const at = new Date(now());
-    await utimes(lock.file, at, at).catch(() => {});
-  }, options.lockHeartbeatMs ?? LOCK_HEARTBEAT_MS);
-  heartbeat.unref();
+  let closing;
+  /** Final views whose write failed even after retries: served until a restart records the job as interrupted. */
+  const unsaved = new Map();
 
   const fileOf = (jobId) => join(stateDir, `${jobId}.json`);
 
@@ -282,6 +265,7 @@ export async function createLocalExecutor(options) {
   }
 
   async function loadRecord(jobId) {
+    if (unsaved.has(jobId)) return unsaved.get(jobId);
     try {
       const record = JSON.parse(await readFile(fileOf(jobId), "utf8"));
       return record && typeof record === "object" && record.view ? record : undefined;
@@ -320,9 +304,19 @@ export async function createLocalExecutor(options) {
       try {
         return await finish(jobId, status, fields);
       } catch {
-        // Left as running, the job is recorded as interrupted on the next start-up.
-        if (attempt >= FINAL_WRITE_ATTEMPTS) return undefined;
-        await sleep(250 * attempt);
+        if (attempt < FINAL_WRITE_ATTEMPTS) {
+          await sleep(250 * attempt);
+          continue;
+        }
+        // The disk refuses the write: answer the final view from memory. The file still says
+        // running, so a restart records the job as interrupted; it is never run again.
+        const record = await loadRecord(jobId);
+        if (!record) return undefined;
+        if (isTerminal(record.view.status)) return record.view;
+        const view = { status, createdAt: record.view.createdAt, finishedAt: now(), ...fields };
+        unsaved.set(jobId, { ...record, view });
+        notifyFinal(jobId, view, record.owner);
+        return view;
       }
     }
   }
@@ -336,8 +330,7 @@ export async function createLocalExecutor(options) {
     }
     for (const name of names) {
       if (recover && JOB_TEMP_RE.test(name)) {
-        // A job write that never reached its rename; the job file itself is intact. Lock
-        // files (temporary or stale) are left alone: other processes may be using them.
+        // A job write that never reached its rename; the job file itself is intact.
         await rm(join(stateDir, name), { force: true });
         continue;
       }
@@ -357,9 +350,7 @@ export async function createLocalExecutor(options) {
   try {
     await sweep({ recover: true });
   } catch (error) {
-    clearInterval(heartbeat);
-    heldInProcess.delete(lock.file);
-    if ((await readLockId(lock.file)) === lock.id) await rm(lock.file, { force: true });
+    await new Promise((r) => lock.server.close(r));
     throw error;
   }
   const pruner = setInterval(() => {
@@ -379,7 +370,7 @@ export async function createLocalExecutor(options) {
   async function startJob(jobId, spec, userId, command) {
     const existing = await loadRecord(jobId);
     if (existing) return existing.view;
-    if (closed || lockLost) return refusedView(SERVER_AT_CAPACITY_ERROR);
+    if (closed) return refusedView(SERVER_AT_CAPACITY_ERROR);
     // Check and take the slot in one synchronous step: no await between them.
     if (running.has(jobId)) return { status: "starting", createdAt: now() };
     const owner = { userId, command: String(command) };
@@ -404,7 +395,7 @@ export async function createLocalExecutor(options) {
       running.delete(jobId);
       throw error;
     }
-    if (closed || lockLost) {
+    if (closed) {
       // close() began while the record was written: do not start a provider call now.
       running.delete(jobId);
       return (
@@ -436,8 +427,8 @@ export async function createLocalExecutor(options) {
     /** How many job slots are taken now (CLI processes that may still run). */
     activeJobs: () => running.size,
 
-    /** False once close() ran or another process took the state directory over. */
-    accepting: () => !closed && !lockLost,
+    /** False once close() has been called. */
+    accepting: () => !closed,
 
     async start(jobId, spec, userId, command = "") {
       if (!JOB_ID_RE.test(jobId) || spec?.jobId !== jobId) throw new Error("Invalid job id");
@@ -478,30 +469,34 @@ export async function createLocalExecutor(options) {
     /**
      * Graceful stop (SIGTERM): no new job starts, running jobs are recorded
      * as interrupted and their CLI processes are stopped; waits up to
-     * `closeTimeoutMs` for them to exit, then frees the lock if it is still ours.
+     * `closeTimeoutMs` for them to exit, then releases the state directory.
+     * Every call returns the same promise.
      */
-    async close() {
-      if (closed) return;
-      closed = true;
-      clearInterval(heartbeat);
-      clearInterval(pruner);
-      await Promise.allSettled([...inflight]);
-      const live = [...running.entries()];
-      for (const [jobId] of live) {
-        await finishWithRetry(jobId, "failed", { error: INTERRUPTED_ERROR, interrupted: true });
-      }
-      for (const [, slot] of live) slot.abort.abort();
-      let timer;
-      await Promise.race([
-        Promise.allSettled(live.map(([, slot]) => slot.done)),
-        new Promise((r) => {
-          timer = setTimeout(r, closeTimeoutMs);
-        }),
-      ]);
-      clearTimeout(timer);
-      await Promise.allSettled([...fileLocks.values()]);
-      if ((await readLockId(lock.file)) === lock.id) await rm(lock.file, { force: true });
-      heldInProcess.delete(lock.file);
+    close() {
+      closing ??= shutdown();
+      return closing;
     },
   };
+
+  async function shutdown() {
+    closed = true;
+    clearInterval(pruner);
+    await Promise.allSettled([...inflight]);
+    const live = [...running.entries()];
+    for (const [jobId] of live) {
+      await finishWithRetry(jobId, "failed", { error: INTERRUPTED_ERROR, interrupted: true });
+    }
+    for (const [, slot] of live) slot.abort.abort();
+    let timer;
+    await Promise.race([
+      Promise.allSettled(live.map(([, slot]) => slot.done)),
+      new Promise((r) => {
+        timer = setTimeout(r, closeTimeoutMs);
+      }),
+    ]);
+    clearTimeout(timer);
+    await Promise.allSettled([...fileLocks.values()]);
+    // Closing the server removes the socket file.
+    await new Promise((r) => lock.server.close(r));
+  }
 }

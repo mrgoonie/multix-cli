@@ -4,7 +4,7 @@
 const [moduleUrl, stateDir] = process.argv.slice(2);
 const { createLocalExecutor, ExecutorLockedError } = await import(moduleUrl);
 try {
-  const executor = await createLocalExecutor({ stateDir, lockWaitMs: 0, runJob: async () => ({}) });
+  const executor = await createLocalExecutor({ stateDir, runJob: async () => ({}) });
   // Hold long enough for every contender to have tried.
   await new Promise((r) => setTimeout(r, 400));
   await executor.close();
