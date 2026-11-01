@@ -34,12 +34,17 @@
  *    different nodes sharing one volume (ReadWriteMany, NFS) are NOT
  *    detected: run one replica per volume (a ReadWriteOnce PVC). The socket
  *    path (`stateDir` + "/executor.sock") must fit in MAX_SOCKET_PATH_BYTES.
+ *  - Egress: the CLI runs in the server's own network namespace, so its
+ *    HTTP(S) goes through a loopback proxy (egress-proxy.mjs) that connects
+ *    to public addresses only, checked at connect time. URL-valued CLI
+ *    options can therefore not reach metadata, private or cluster addresses.
  */
 
 import { randomUUID } from "node:crypto";
 import { chmod, link, mkdir, open, readFile, readdir, rename, rm, stat } from "node:fs/promises";
 import { connect, createServer } from "node:net";
 import { dirname, join, resolve } from "node:path";
+import { startEgressProxy as defaultStartEgressProxy } from "./egress-proxy.mjs";
 import { runJob as defaultRunJob, validateSpec } from "./job-runner.mjs";
 
 /** Same text as SERVER_AT_CAPACITY_ERROR in worker/src/jobs/job-protocol.ts. */
@@ -234,11 +239,13 @@ async function acquireLock(stateDir) {
  *   maxConcurrent?: number,
  *   retentionMs?: number,
  *   closeTimeoutMs?: number,
- *   runJob?: (spec: object, options: { signal: AbortSignal }) => Promise<object>,
+ *   runJob?: (spec: object, options: { signal: AbortSignal, egressEnv: Record<string, string> }) => Promise<object>,
+ *   startEgressProxy?: () => Promise<{ env: Record<string, string>, close(): Promise<void> }>,
  *   now?: () => number,
  *   onFinal?: (jobId: string, view: object, owner: { userId: string, command: string }) => unknown,
  * }} options
- *   `runJob` is injected in tests; `onFinal` is told once about each job's final view
+ *   `runJob` is injected in tests; a replacement must pass `egressEnv` on to job-runner.mjs
+ *   `runJob` so the CLI keeps going through the egress proxy. `onFinal` is told once about each job's final view
  *   (events, slot accounting); its errors, sync or async, are ignored.
  */
 export async function createLocalExecutor(options) {
@@ -362,6 +369,22 @@ export async function createLocalExecutor(options) {
     await new Promise((r) => lock.server.close(r));
     throw error;
   }
+  /** Loopback proxy every job CLI's HTTP(S) goes through (public addresses only). */
+  let egress;
+  try {
+    egress = await (options.startEgressProxy ?? defaultStartEgressProxy)();
+  } catch (error) {
+    await new Promise((r) => lock.server.close(r));
+    throw error;
+  }
+  try {
+    // A job CLI whose Node ignores the proxy variables would connect directly: refuse to start.
+    await egress.verify?.();
+  } catch (error) {
+    await egress.close().catch(() => {});
+    await new Promise((r) => lock.server.close(r));
+    throw error;
+  }
   const pruner = setInterval(() => {
     sweep({ recover: false }).catch(() => {});
   }, PRUNE_INTERVAL_MS);
@@ -413,7 +436,7 @@ export async function createLocalExecutor(options) {
       return (await finishWithRetry(jobId, final.status, final.fields)) ?? view;
     }
     slot.done = Promise.resolve()
-      .then(() => run(spec, { signal: slot.abort.signal }))
+      .then(() => run(spec, { signal: slot.abort.signal, egressEnv: egress.env }))
       .catch(() => ({
         status: "failed",
         exitCode: null,
@@ -514,6 +537,7 @@ export async function createLocalExecutor(options) {
     ]);
     clearTimeout(timer);
     await Promise.allSettled([...fileLocks.values()]);
+    await egress.close().catch(() => {});
     // Closing the server removes the socket file.
     await new Promise((r) => lock.server.close(r));
   }
