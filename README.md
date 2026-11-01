@@ -1171,8 +1171,10 @@ one-time bootstrap admin. With `MULTIX_LOCAL_JOBS=true` it also runs
 `multix_run` and the job endpoints in the same container, one job at a time by
 default (`MULTIX_LOCAL_MAX_CONCURRENT_JOBS`); output files go to the account's
 R2 or S3-compatible bucket. On Kubernetes, `MULTIX_JOB_EXECUTOR=kubernetes`
-runs each job as its own Kubernetes Job of `ghcr.io/mrgoonie/multix-job:<version>`
-behind a required NetworkPolicy (`worker/server/k8s/job-executor.yaml`). Guide, including Docker, Compose and Kubernetes:
+runs each job as its own Kubernetes Job of the job image (published as
+`ghcr.io/mrgoonie/multix-job:<version>` by releases that include its publish
+workflow; build it from `worker/container/Dockerfile` for earlier ones) behind
+a required NetworkPolicy (`worker/server/k8s/job-executor.yaml`). Guide, including Docker, Compose and Kubernetes:
 [Self-hosted server](https://multix.zuey.me/guides/self-hosted-server/).
 
 ### REST API

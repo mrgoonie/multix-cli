@@ -47,10 +47,16 @@ echo "multix: $version"
 
 if [ "$kind" = "job" ]; then
   name="multix-job-check-$$"
-  docker run -d --rm --name "$name" --read-only --tmpfs /tmp --cap-drop ALL \
-    -p 127.0.0.1::8080 "$image" >/dev/null
+  # No --rm: if the job server exits at start, its logs must still be readable.
   trap 'docker rm -f "$name" >/dev/null 2>&1 || true' EXIT
-  port=$(docker port "$name" 8080/tcp | head -1 | sed 's/.*://')
+  docker run -d --name "$name" --read-only --tmpfs /tmp --cap-drop ALL \
+    -p 127.0.0.1::8080 "$image" >/dev/null
+  if ! ports=$(docker port "$name" 8080/tcp 2>&1); then
+    echo "::error::$image: the job server container is not running ($ports)."
+    docker logs "$name" || true
+    exit 1
+  fi
+  port=$(sed -n '1s/.*://p' <<<"$ports")
   body=""
   for _ in $(seq 1 30); do
     body=$(curl -fsS "http://127.0.0.1:$port/" 2>/dev/null || true)

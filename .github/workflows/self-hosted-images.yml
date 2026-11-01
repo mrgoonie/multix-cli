@@ -73,4 +73,8 @@ jobs:
           tags: ${{ matrix.name }}:check
 
       - name: Smoke check
-        run: .github/scripts/check-self-hosted-image.sh "${{ matrix.name }}:check" "${{ matrix.kind }}" "${{ steps.meta.outputs.version }}"
+        env:
+          IMAGE: ${{ matrix.name }}:check
+          KIND: ${{ matrix.kind }}
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: .github/scripts/check-self-hosted-image.sh "$IMAGE" "$KIND" "$VERSION"

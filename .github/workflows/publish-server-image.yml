@@ -9,8 +9,14 @@ name: Publish self-hosted images
 # There is no `latest` tag: deployments pin a version tag, or better the
 # digest printed in the run summary (image@sha256:…). Each image is pushed by
 # its own matrix job, so a version that already exists for one image does not
-# stop the other (for example when publishing multix-job for an older release
-# by hand).
+# stop the other: running this by hand for a tag whose multix-server is
+# already published pushes multix-job and marks the multix-server leg failed
+# ("already exists"). Tags before the Kubernetes Job executor build a job
+# image without its job-id contract; use it with that release's server only.
+#
+# GHCR creates a new package as private. After the first publish of each
+# image, the repository owner sets it to Public once (package settings), or
+# anonymous pulls, including the Kubernetes job pods, are denied.
 #
 # Runs after a stable release (called by release-please.yml, whose own tag
 # push cannot trigger workflows), on a manually pushed v* tag, or by hand.
