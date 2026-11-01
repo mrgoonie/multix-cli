@@ -13,3 +13,4 @@ docs-site/.astro/
 .dev.vars
 # Generated from skill/ by `npm run skills --prefix worker`
 worker/src/skills/builtin-skills.json
+worker/dist-server/

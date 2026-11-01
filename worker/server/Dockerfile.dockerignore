@@ -1,0 +1,15 @@
+# Used by BuildKit for worker/server/Dockerfile (context: repository root).
+**/node_modules
+**/dist
+**/dist-server
+**/.wrangler
+**/.env
+**/.env.*
+!**/.env.example
+**/*.sqlite*
+.git
+docs-site
+plans
+tests
+coverage
+worker/src/skills/builtin-skills.json

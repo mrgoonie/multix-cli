@@ -2,7 +2,7 @@
  * The OAuth authorization endpoint for MCP clients (/oauth/authorize).
  *
  * GET: validate the request, require a signed-in, allowlisted account (else
- * send the browser through GitHub sign-in and back), then show the consent
+ * send the browser through GitHub or local sign-in and back), then show the consent
  * page. POST: the consent form; on Allow, issue the grant with the account id
  * in `props` so /mcp can load that account's own provider keys.
  *

@@ -4,6 +4,7 @@
  * key. Everything is derived from the data the dashboard already loads.
  */
 
+import { isLocalAccountId } from "../accounts/local-auth.js";
 import { escapeHtml } from "../http-responses.js";
 import { PROVIDER_KEY_GROUPS } from "../provider-secret-names.js";
 import { copyBlock } from "./copy-button.js";
@@ -40,7 +41,11 @@ function setupCard(view: DashboardView, t: Messages): string {
   const ready = readyProviders(view);
   const clients = view.clients.length;
   const steps: Step[] = [
-    { done: true, title: o.stepSignIn, body: `<p>${o.stepSignInDone(view.account.login)}</p>` },
+    {
+      done: true,
+      title: isLocalAccountId(view.account.id) ? o.stepSignInLocal : o.stepSignIn,
+      body: `<p>${o.stepSignInDone(view.account.login)}</p>`,
+    },
     {
       done: ready > 0,
       title: o.stepKey,

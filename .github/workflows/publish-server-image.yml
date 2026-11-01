@@ -1,0 +1,138 @@
+name: Publish multix-server image
+
+# Builds worker/server/Dockerfile (the self-hosted MCP server, dashboard and
+# REST API) and pushes it to GHCR with immutable tags only:
+#   ghcr.io/<owner>/multix-server:<version>      e.g. 1.27.0 (from the vX.Y.Z tag)
+#   ghcr.io/<owner>/multix-server:sha-<12 hex>   the source commit
+# There is no `latest` tag: deployments pin a version tag, or better the
+# digest printed in the run summary (image@sha256:…).
+#
+# Runs after a stable release (called by release-please.yml, whose own tag
+# push cannot trigger workflows), on a manually pushed v* tag, or by hand.
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag to build, e.g. v1.27.0
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to build, e.g. v1.27.0
+        type: string
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: publish-server-image-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  image:
+    name: Build and push multix-server
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - name: Validate tag
+        id: meta
+        run: |
+          if ! [[ "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)$ ]]; then
+            echo "::error::Tag must look like v1.2.3 or v1.2.3-beta.1 (got '$TAG')."
+            exit 1
+          fi
+          echo "version=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/multix-server" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout the tag
+        uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ env.TAG }}
+
+      - name: Source commit
+        id: src
+        run: echo "sha=$(git rev-parse HEAD | cut -c1-12)" >> "$GITHUB_OUTPUT"
+
+      # The image runs the same Worker code: test it before publishing.
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            worker/package-lock.json
+
+      - name: Install and test
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm ci --prefix worker
+          npm run typecheck --prefix worker
+          npm test --prefix worker
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Refuse to move an existing version tag: published tags are immutable.
+      - name: Refuse to overwrite an existing version
+        run: |
+          if docker manifest inspect "${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}" > /dev/null 2>&1; then
+            echo "::error::${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }} already exists."
+            exit 1
+          fi
+
+      - name: Build and push
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: worker/server/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: mode=max
+          sbom: true
+          build-args: |
+            MULTIX_VERSION=${{ steps.meta.outputs.version }}
+          tags: |
+            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}
+            ${{ steps.meta.outputs.image }}:sha-${{ steps.src.outputs.sha }}
+          labels: |
+            org.opencontainers.image.revision=${{ steps.src.outputs.sha }}
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ steps.meta.outputs.image }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
+      - name: Summary
+        run: |
+          {
+            echo "### multix-server ${{ steps.meta.outputs.version }}"
+            echo
+            echo "Pin this digest in deployments:"
+            echo
+            echo '```'
+            echo "${{ steps.meta.outputs.image }}@${{ steps.push.outputs.digest }}"
+            echo '```'
+            echo
+            echo "Tags: \`${{ steps.meta.outputs.version }}\`, \`sha-${{ steps.src.outputs.sha }}\` (no \`latest\`)."
+          } >> "$GITHUB_STEP_SUMMARY"

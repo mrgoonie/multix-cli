@@ -15,6 +15,9 @@ permissions:
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created == 'true' || steps.merged-release.outputs.release_created == 'true' }}
+      tag_name: ${{ steps.release.outputs.tag_name || steps.merged-release.outputs.tag_name }}
     steps:
       - uses: googleapis/release-please-action@v4
         id: release
@@ -118,3 +121,16 @@ jobs:
           npm run build
           npm test
           npm publish --access public --tag latest
+
+  # The self-hosted server image (worker/server/Dockerfile) for this release.
+  server-image:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' && needs.release-please.outputs.tag_name != '' }}
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/publish-server-image.yml
+    with:
+      tag: ${{ needs.release-please.outputs.tag_name }}

@@ -2,7 +2,9 @@
  * Accounts in ACCOUNTS_KV, up to four entries per account:
  *
  * - `account:<userId>`: the GitHub identity used for the allowlist, rewritten
- *   at every sign-in.
+ *   at every sign-in. Local accounts (`local-<random>`, local-auth.ts, which
+ *   also documents their `local-user:*` and `local-setup*` entries) use the
+ *   same record with `githubId: 0` and no emails.
  * - `secrets:<userId>`: the provider keys, each AES-GCM encrypted
  *   (provider-secret-crypto.ts), written only by the dashboard. Keeping them
  *   apart means a sign-in that reads a stale copy cannot drop a saved key.
@@ -46,8 +48,12 @@ export type SecretRecords = Partial<Record<ProviderSecretName, StoredSecret>>;
 export type { R2Settings };
 
 export interface Account {
-  /** `gh-<numeric GitHub id>`: stable across login renames; no `:` (OAuth token format). */
+  /**
+   * `gh-<numeric GitHub id>` (stable across login renames) or `local-<random>`
+   * for a local account; no `:` (OAuth token format).
+   */
   id: string;
+  /** 0 for local accounts. */
   githubId: number;
   login: string;
   name?: string;
@@ -121,6 +127,21 @@ export class AccountStore {
       name: identity.name,
       avatarUrl: identity.avatarUrl,
       emails: identity.emails.map((e) => e.toLowerCase()),
+      createdAt: existing?.createdAt ?? now,
+      lastLoginAt: now,
+    };
+    await this.put(account);
+    return account;
+  }
+
+  /** Create a local account (username and password sign-in) or record its latest sign-in. */
+  async upsertLocal(id: string, username: string, now = Date.now()): Promise<Account> {
+    const existing = await this.get(id);
+    const account: Account = {
+      id,
+      githubId: 0,
+      login: username,
+      emails: [],
       createdAt: existing?.createdAt ?? now,
       lastLoginAt: now,
     };

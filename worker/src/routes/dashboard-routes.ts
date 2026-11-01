@@ -2,7 +2,10 @@
  * Account dashboard.
  *
  *   GET  /dashboard                       sign-in landing, or the account view
- *   GET  /dashboard/login                 start GitHub sign-in
+ *   GET  /dashboard/login                 start GitHub sign-in, or the local sign-in form
+ *   GET  /dashboard/login/github          start GitHub sign-in (when configured)
+ *   POST /dashboard/login                 local sign-in (MULTIX_LOCAL_AUTH=true)
+ *   GET/POST /dashboard/setup             create the bootstrap admin once (local sign-in)
  *   POST /dashboard/secrets               save or remove one provider key
  *   POST /dashboard/storage               check and save, or remove, the account's R2 settings
  *   POST /dashboard/api-keys              create (shown once) or revoke a REST API key
@@ -10,7 +13,8 @@
  *   POST /dashboard/logout                end every dashboard session of the account
  *
  * Every POST needs a same-origin Origin header, a valid session and the
- * account's CSRF token. Values are validated but never echoed back.
+ * account's CSRF token (local sign-in and setup: same-origin only, see
+ * local-sign-in-routes.ts). Values are validated but never echoed back.
  */
 
 import { isProviderSecretName, isValidSecretValue } from "../accounts/account-store.js";
@@ -32,6 +36,14 @@ import { isNoticeCode } from "../pages/notice-codes.js";
 import { resolvePreferences, withPreferenceCookies } from "../pages/preferences.js";
 import { logEvent } from "../redaction.js";
 import { startGithubSignIn } from "./github-sign-in-routes.js";
+import {
+  LOCAL_LOGIN_PATH,
+  SETUP_PATH,
+  finishLocalLogin,
+  finishSetup,
+  showLocalLogin,
+  showSetup,
+} from "./local-sign-in-routes.js";
 import { handleR2SettingsPost } from "./r2-settings-routes.js";
 
 /** The parts of an OAuth grant summary the revoke needs. */
@@ -86,6 +98,7 @@ async function showDashboard(
     if (request.headers.get("cookie")?.includes(SESSION_COOKIE)) {
       headers.append("set-cookie", clearCookie(SESSION_COOKIE));
     }
+    if (ctx.localAuth) return showLocalLogin(ctx, request, "/dashboard", headers);
     return html(200, signInPage(preferences.prefs), headers);
   }
   const { account, session } = signedIn;
@@ -198,11 +211,21 @@ export async function handleDashboard(
   const { pathname } = url;
   if (request.method === "GET" || request.method === "HEAD") {
     if (pathname === "/dashboard" || pathname === "/dashboard/") return showDashboard(ctx, request);
-    if (pathname === "/dashboard/login") {
-      return startGithubSignIn(ctx, url.searchParams.get("return_to") ?? "/dashboard");
+    const returnTo = url.searchParams.get("return_to");
+    if (pathname === LOCAL_LOGIN_PATH) {
+      if (ctx.localAuth) return showLocalLogin(ctx, request, returnTo);
+      return startGithubSignIn(ctx, returnTo ?? "/dashboard");
     }
+    if (pathname === `${LOCAL_LOGIN_PATH}/github` && ctx.githubEnabled) {
+      return startGithubSignIn(ctx, returnTo ?? "/dashboard");
+    }
+    if (pathname === SETUP_PATH && ctx.localAuth) return showSetup(ctx, request);
     return text(404, "Not Found");
   }
-  if (request.method === "POST") return handlePost(ctx, deps, request, pathname);
+  if (request.method === "POST") {
+    if (ctx.localAuth && pathname === LOCAL_LOGIN_PATH) return finishLocalLogin(ctx, request);
+    if (ctx.localAuth && pathname === SETUP_PATH) return finishSetup(ctx, request);
+    return handlePost(ctx, deps, request, pathname);
+  }
   return text(405, "Method Not Allowed", { allow: "GET, POST" });
 }

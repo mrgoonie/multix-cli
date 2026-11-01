@@ -78,8 +78,21 @@ export interface WorkerEnv extends ServerSettings {
   /** Comma-separated GitHub logins and/or verified emails allowed to sign in. Empty = nobody. */
   MULTIX_ALLOWED_USERS?: string;
 
+  /** GitHub OAuth App for sign-in. Optional when MULTIX_LOCAL_AUTH is "true"; required otherwise. */
   GITHUB_CLIENT_ID?: string;
   GITHUB_CLIENT_SECRET?: string;
+  /**
+   * "true" enables local sign-in with a username and password (accounts/local-auth.ts),
+   * plus the one-time /dashboard/setup page that creates the first admin. Any other
+   * value (or unset) leaves only GitHub sign-in.
+   */
+  MULTIX_LOCAL_AUTH?: string;
+  /**
+   * Secret (32+ chars) that /dashboard/setup asks for before it creates the
+   * bootstrap admin. Shorter values are ignored. Optional: the Node server can
+   * instead store the hash of a token it generates at boot.
+   */
+  MULTIX_BOOTSTRAP_TOKEN?: string;
   /** HMAC key (32+ chars) for dashboard session and sign-in cookies. */
   SESSION_SECRET?: string;
   /** Base64 of 32 random bytes: AES-256-GCM key for stored provider keys. */

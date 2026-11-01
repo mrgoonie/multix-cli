@@ -49,7 +49,7 @@
  */
 
 import { toolEnvFor } from "../accounts/account-store.js";
-import { isAllowed } from "../accounts/allowlist.js";
+import { accountAllowed } from "../accounts/allowlist.js";
 import { ApiKeyStore } from "../accounts/api-key-store.js";
 import type { AppContext, AppDeps } from "../app-context.js";
 import { limitsFrom, secretValues, serverSettings } from "../config.js";
@@ -128,7 +128,7 @@ async function authenticate(app: AppContext, request: Request): Promise<ApiCalle
     }
   }
   const account = await app.accounts.get(owner.userId);
-  if (!account || !isAllowed(app.env.MULTIX_ALLOWED_USERS, account)) {
+  if (!account || !(await accountAllowed(app.env, account))) {
     return apiError(403, "forbidden", "This account may not use the API");
   }
   return { account, keyId: owner.keyId };
