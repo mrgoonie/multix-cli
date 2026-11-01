@@ -291,6 +291,10 @@ tuân theo cùng quy tắc:
   được kiểm tra ngay. Tên miền đổi địa chỉ giữa các lần phân giải (DNS
   rebinding) bị kiểm tra lại ở mỗi kết nối.
 - Input của job (`inputs`) được bộ chạy job tải về với cùng phép kiểm tra.
+- `fetch` của Node chỉ tôn trọng các biến này từ Node 22.21 (hoặc 24.0). Khi
+  khởi động, bộ chạy job chạy `node` trong `PATH` của nó với các biến proxy và
+  từ chối khởi động nếu request đó không tới được proxy, nên một runtime cũ
+  không thể âm thầm kết nối trực tiếp. Image phát hành đã kèm Node tương thích.
 
 Cơ chế này áp dụng cho các client tôn trọng biến proxy. Để phòng thủ nhiều lớp,
 hãy chặn thêm egress tới dải mạng riêng cho pod của server ở tầng mạng. Trên
@@ -323,11 +327,14 @@ spec:
             except: ["fc00::/7", "fe80::/10", "::1/128"]
 ```
 
-Kiểm tra dải pod, dải service và nhãn DNS của cluster trước khi áp dụng. Với
+Kiểm tra dải pod, dải service và nhãn DNS của cluster trước khi áp dụng, và
+thêm vào `except` những dải không thuộc mạng riêng hoặc CGNAT. Với
 Docker thuần, đặt server vào một bridge network riêng và chặn lưu lượng từ
 bridge đó tới các dải mạng riêng trong chain iptables `DOCKER-USER`, ví dụ
 `iptables -I DOCKER-USER -i <bridge> -d 169.254.0.0/16 -j DROP` (lặp lại cho
-các dải ở trên).
+các dải ở trên). `DOCKER-USER` chỉ lọc lưu lượng được chuyển tiếp; để chặn
+container truy cập các dịch vụ trên chính máy chủ Docker, hãy chặn thêm lưu
+lượng từ bridge đó trong chain `INPUT`.
 
 ## Sao lưu và khôi phục
 

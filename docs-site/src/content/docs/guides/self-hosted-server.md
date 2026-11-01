@@ -290,6 +290,11 @@ same rule:
   checked. IP literals are checked directly. A host name that rebinds between
   lookups is checked again on every connection.
 - Job inputs (`inputs`) are downloaded by the executor with the same check.
+- Node's `fetch` honours these variables only from Node 22.21 (or 24.0). At
+  start-up the executor runs `node` from its `PATH` with the proxy variables
+  and refuses to start when that request does not reach the proxy, so an older
+  runtime cannot silently connect directly. The published image ships a
+  compatible Node.
 
 This covers clients that honour the proxy variables. As defence in depth, also
 deny private egress for the server pod at the network layer. On Kubernetes,
@@ -322,12 +327,15 @@ spec:
             except: ["fc00::/7", "fe80::/10", "::1/128"]
 ```
 
-Check your cluster's pod and service ranges and DNS labels before applying it.
+Check your cluster's pod and service ranges and DNS labels before applying it,
+and add any of them that are not in private or CGNAT space to `except`.
 With plain Docker, put the server on its own bridge network and drop traffic
 from that bridge to private ranges in the `DOCKER-USER` iptables chain, for
 example
 `iptables -I DOCKER-USER -i <bridge> -d 169.254.0.0/16 -j DROP` (repeat for
-the ranges above).
+the ranges above). `DOCKER-USER` only filters forwarded traffic; to keep the
+container away from services on the Docker host itself, also drop traffic from
+the bridge in the `INPUT` chain.
 
 ## Backup and restore
 

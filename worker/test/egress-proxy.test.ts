@@ -174,16 +174,27 @@ describe("egress proxy: blocked destinations", () => {
   it("checks every connection again, so a rebinding host gets its private answer refused", async () => {
     const internal = await internalService();
     closers.push(() => internal.server.close());
-    // First lookup: a public address (unreachable on this port, so the tunnel fails with 502
-    // or times out); second lookup of the same name: loopback.
-    const { lookup, calls } = await publicOnly({
-      "rebind.attacker.test": [[v4("8.8.8.8")], [v4("127.0.0.1")]],
+    // First lookup: a public address; second lookup of the same name: loopback.
+    const checked = await publicOnly({
+      "rebind.attacker.test": [[v4("93.184.216.34")], [v4("127.0.0.1")]],
     });
-    const proxy = await startProxy({ lookup, connectTimeoutMs: 300 });
+    const { calls } = checked;
+    // Keep the test off the network: an address that passed the check is dialled on 127.0.0.2,
+    // where nothing listens (the internal service is bound to 127.0.0.1 only).
+    const lookup = (host: string, opts: Any, cb: Any) =>
+      checked.lookup(host, opts, (error: Any, address: Any, family: Any) => {
+        if (error) return cb(error);
+        if (Array.isArray(address))
+          return cb(
+            null,
+            address.map(() => v4("127.0.0.2")),
+          );
+        return cb(null, "127.0.0.2", family);
+      });
+    const proxy = await startProxy({ lookup });
     const auth = basicAuth(proxy.url);
     const first = await raw(proxy, connectReq(`rebind.attacker.test:${internal.port}`, auth));
-    expect([200, 502]).toContain(first.status);
-    first.socket.destroy();
+    expect(first.status).toBe(502);
     const second = await raw(proxy, connectReq(`rebind.attacker.test:${internal.port}`, auth));
     expect(second.status).toBe(403);
     expect(calls).toEqual(["rebind.attacker.test", "rebind.attacker.test"]);
@@ -315,16 +326,16 @@ describe("egress proxy: the job CLI goes through it", () => {
     expect(internal.hits).toEqual([]);
   });
 
-  it("runJob applies egressEnv after the spec's keys, and the CLI's fetch is refused", async () => {
+  it("runJob applies egressEnv, the CLI's fetch of loopback is refused and the credential is redacted", async () => {
     const internal = await internalService();
     closers.push(() => internal.server.close());
-    const { lookup } = await publicOnly({ "metadata.attacker.test": [[v4("169.254.169.254")]] });
-    const proxy = await startProxy({ lookup });
+    const proxy = await startProxy();
     const { runJob } = await load("../container/job-runner.mjs");
     const result = await runJob(
       {
         jobId: "11111111-2222-4333-8444-555555555555",
-        argv: ["image", "describe", `--fetch=http://metadata.attacker.test:${internal.port}/`],
+        // Reachable directly: only the proxy stands between the CLI and this service.
+        argv: ["image", "describe", "--print-proxy", `--fetch=http://127.0.0.1:${internal.port}/`],
         env: { GEMINI_API_KEY: "AIza-gemini-secret-value-1234" },
         inputs: [],
         timeoutMs: 20_000,
@@ -344,5 +355,45 @@ describe("egress proxy: the job CLI goes through it", () => {
     expect(outcome?.error).toBeTruthy();
     expect(result.stderrTail).not.toContain("internal-secret");
     expect(internal.hits).toEqual([]);
+    expect(result.stderrTail).toContain("proxy http://multix-job:[redacted]@127.0.0.1:");
+    expect(result.stderrTail).not.toContain(proxy.token);
+  });
+
+  it("ends the client's response when a forwarded http upstream aborts mid-body", async () => {
+    const upstream = createServer((_req, res) => {
+      res.writeHead(200, { "content-length": "100" });
+      res.write("partial");
+      setTimeout(() => res.socket?.destroy(), 20);
+    });
+    upstream.listen(0, "127.0.0.1");
+    await once(upstream, "listening");
+    closers.push(() => upstream.close());
+    const proxy = await startProxy({ lookup: loopbackLookup });
+    const port = (upstream.address() as { port: number }).port;
+    const reply = await raw(
+      proxy,
+      `GET http://public.example.test:${port}/ HTTP/1.1\r\nHost: x\r\nProxy-Authorization: ${basicAuth(proxy.url)}\r\n\r\n`,
+    );
+    expect(reply.status).toBe(200);
+    reply.socket.resume();
+    const closed = await Promise.race([
+      once(reply.socket, "close").then(() => true),
+      new Promise((r) => setTimeout(() => r(false), 3_000)),
+    ]);
+    expect(closed).toBe(true);
+  });
+
+  it("verify() passes when node honours the proxy and fails closed when it does not", async () => {
+    const proxy = await startProxy();
+    await expect(proxy.verify()).resolves.toBeUndefined();
+    // A `node` that ignores the proxy (here: does nothing) must make verify() throw.
+    const { mkdtemp, writeFile, chmod, rm } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const dir = await mkdtemp(join(tmpdir(), "multix-fake-node-"));
+    closers.push(() => rm(dir, { recursive: true, force: true }));
+    await writeFile(join(dir, "node"), "#!/bin/sh\nexit 0\n");
+    await chmod(join(dir, "node"), 0o755);
+    await expect(proxy.verify(`${dir}:/usr/bin:/bin`)).rejects.toThrow(/HTTPS_PROXY/);
   });
 });

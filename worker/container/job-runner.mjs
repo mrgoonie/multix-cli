@@ -84,8 +84,15 @@ function tail(text) {
   return text.length > MAX_TEXT_BYTES ? `…[truncated]\n${text.slice(-MAX_TEXT_BYTES)}` : text;
 }
 
-function secretsOf(spec) {
+function secretsOf(spec, egressEnv) {
   const values = Object.values(spec.env);
+  // The egress proxy credential: not a provider key, but no reason to hand it back either.
+  try {
+    if (egressEnv?.HTTPS_PROXY)
+      values.push(decodeURIComponent(new URL(egressEnv.HTTPS_PROXY).password));
+  } catch {
+    // Not a URL: nothing to redact.
+  }
   if (spec.upload) values.push(spec.upload.r2.secretAccessKey, spec.upload.r2.accessKeyId);
   return values
     .filter((v) => typeof v === "string" && v.length >= 8)
@@ -120,7 +127,7 @@ function runCli(bin, argv, options) {
  *   it is applied after the spec's keys so nothing in the spec can replace it.
  */
 export async function runJob(spec, options = {}) {
-  const secrets = secretsOf(spec);
+  const secrets = secretsOf(spec, options.egressEnv);
   const budget = Math.min(spec.timeoutMs, MAX_JOB_TIMEOUT_MS);
   const startedAt = Date.now();
   const deadline = AbortSignal.timeout(budget);

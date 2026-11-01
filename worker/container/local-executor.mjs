@@ -377,6 +377,14 @@ export async function createLocalExecutor(options) {
     await new Promise((r) => lock.server.close(r));
     throw error;
   }
+  try {
+    // A job CLI whose Node ignores the proxy variables would connect directly: refuse to start.
+    await egress.verify?.();
+  } catch (error) {
+    await egress.close().catch(() => {});
+    await new Promise((r) => lock.server.close(r));
+    throw error;
+  }
   const pruner = setInterval(() => {
     sweep({ recover: false }).catch(() => {});
   }, PRUNE_INTERVAL_MS);

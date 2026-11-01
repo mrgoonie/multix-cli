@@ -22,9 +22,11 @@
  * other processes cannot use it as a relay.
  */
 
+import { execFile } from "node:child_process";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { createServer, request as httpRequest } from "node:http";
 import { connect, isIP } from "node:net";
+import { pipeline } from "node:stream";
 import { createPublicLookup, isPublicAddress } from "./job-network.mjs";
 
 const PROXY_USER = "multix-job";
@@ -42,6 +44,10 @@ const HOP_BY_HOP = new Set([
   "upgrade",
 ]);
 export const DEFAULT_CONNECT_TIMEOUT_MS = 30_000;
+/** A tunnel or forwarded request with no traffic in either direction for this long is closed. */
+export const IDLE_TIMEOUT_MS = 10 * 60_000;
+/** Host name only the probe uses; `.invalid` never resolves, so a direct connection fails. */
+const PROBE_SUFFIX = ".egress-probe.invalid";
 const MAX_CONNECTIONS = 256;
 
 export class EgressBlockedError extends Error {
@@ -100,6 +106,8 @@ export async function startEgressProxy(options = {}) {
   const token = randomBytes(24).toString("hex");
   const expected = Buffer.from(`Basic ${Buffer.from(`${PROXY_USER}:${token}`).toString("base64")}`);
   const sockets = new Set();
+  /** Nonces of probe requests that reached the proxy. */
+  const probes = new Set();
 
   function authorized(req) {
     const given = Buffer.from(String(req.headers["proxy-authorization"] ?? ""));
@@ -112,8 +120,8 @@ export async function startEgressProxy(options = {}) {
     if (isIP(bare) && !isPublicAddress(bare)) throw new EgressBlockedError(bare);
     const socket = connect({ host: bare, port, lookup, timeout: connectTimeoutMs });
     track(socket);
-    socket.once("connect", () => socket.setTimeout(0));
-    socket.once("timeout", () => socket.destroy(new Error("connect timed out")));
+    socket.once("connect", () => socket.setTimeout(IDLE_TIMEOUT_MS));
+    socket.on("timeout", () => socket.destroy(new Error("connection timed out")));
     socket.once("connect", onConnect);
     return socket;
   }
@@ -151,6 +159,10 @@ export async function startEgressProxy(options = {}) {
     }
     const target = parseAuthority(req.url);
     if (!target) return refuseSocket(client, 400, "Bad Request");
+    if (target.host.endsWith(PROBE_SUFFIX)) {
+      probes.add(target.host.slice(0, -PROBE_SUFFIX.length));
+      return refuseSocket(client, 403, "Forbidden: egress probe");
+    }
     let upstream;
     let established = false;
     try {
@@ -223,14 +235,17 @@ export async function startEgressProxy(options = {}) {
           if (!HOP_BY_HOP.has(name) && value !== undefined) out[name] = value;
         }
         res.writeHead(upRes.statusCode ?? 502, out);
-        upRes.pipe(res);
+        // pipeline, not pipe: an upstream that aborts mid-body must end the client's response too.
+        pipeline(upRes, res, (error) => {
+          if (error) res.destroy();
+        });
       },
     );
     upstream.once("socket", (socket) => {
       track(socket);
-      socket.once("connect", () => upstream.setTimeout(0));
+      socket.once("connect", () => upstream.setTimeout(IDLE_TIMEOUT_MS));
     });
-    upstream.on("timeout", () => upstream.destroy(new Error("connect timed out")));
+    upstream.on("timeout", () => upstream.destroy(new Error("connection timed out")));
     upstream.on("error", (error) => refuseResponse(res, ...statusFor(error)));
     res.on("close", () => upstream.destroy());
     req.pipe(upstream);
@@ -241,10 +256,13 @@ export async function startEgressProxy(options = {}) {
   server.on("connect", handleConnect);
   server.on("connection", track);
   server.on("clientError", (_error, socket) => socket.destroy());
+  server.on("connection", (socket) => socket.setTimeout(IDLE_TIMEOUT_MS, () => socket.destroy()));
   await new Promise((resolve, reject) => {
     server.once("error", reject);
     server.listen(options.port ?? 0, "127.0.0.1", () => {
       server.off("error", reject);
+      // An accept failure (EMFILE) must not crash the server process; the listener keeps going.
+      server.on("error", () => {});
       resolve();
     });
   });
@@ -255,7 +273,31 @@ export async function startEgressProxy(options = {}) {
   return {
     url,
     port,
+    token,
     env: proxyEnvFor(url),
+    /**
+     * Fail closed when a child would bypass the proxy: run `node` from `path`
+     * (the runtime a `#!/usr/bin/env node` CLI resolves to) with the proxy
+     * env and check that its `fetch` reached the proxy. Node before 22.21 and
+     * 24.0 ignores proxy variables in `fetch` and would connect directly.
+     */
+    async verify(path = process.env.PATH ?? "", timeoutMs = 15_000) {
+      const nonce = randomBytes(8).toString("hex");
+      const script = "fetch(process.argv[1]).catch(() => {})";
+      await new Promise((resolve) =>
+        execFile(
+          "node",
+          ["-e", script, `https://${nonce}${PROBE_SUFFIX}/`],
+          { env: { PATH: path, ...proxyEnvFor(url) }, timeout: timeoutMs, windowsHide: true },
+          () => resolve(),
+        ),
+      );
+      if (!probes.delete(nonce)) {
+        throw new Error(
+          "The job CLI's Node does not send fetch through HTTPS_PROXY (needs Node 22.21+ or 24+), so URL options could reach private addresses; refusing to run jobs",
+        );
+      }
+    },
     close() {
       closing ??= new Promise((resolve) => {
         server.close(() => resolve());

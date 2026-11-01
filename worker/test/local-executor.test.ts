@@ -427,6 +427,14 @@ describe("local executor", () => {
 
   it("runs every job CLI through its egress proxy and stops the proxy on close", async () => {
     const { runJob } = await load("../container/job-runner.mjs");
+    const { createServer } = await import("node:http");
+    let hits = 0;
+    const internal = createServer((_q, r) => {
+      hits++;
+      r.end("internal");
+    }).listen(0, "127.0.0.1");
+    await new Promise((r) => internal.once("listening", r));
+    const port = (internal.address() as { port: number }).port;
     const seen: Any[] = [];
     const ex = await create({
       stateDir: await stateDir(),
@@ -435,7 +443,7 @@ describe("local executor", () => {
         return runJob(s, { ...o, bin: FAKE_BIN });
       },
     });
-    await ex.start(ID1, spec(ID1, ["media", "optimize", "--fetch=http://127.0.0.1:9/"]), "u");
+    await ex.start(ID1, spec(ID1, ["media", "optimize", `--fetch=http://127.0.0.1:${port}/`]), "u");
     await until(async () => (await ex.status(ID1))?.status === "succeeded");
     const env = seen[0];
     expect(env.NODE_USE_ENV_PROXY).toBe("1");
@@ -448,11 +456,34 @@ describe("local executor", () => {
       expect.arrayContaining(["HTTP_PROXY", "HTTPS_PROXY", "NODE_USE_ENV_PROXY"]),
     );
     expect(JSON.stringify(view)).not.toContain(proxyUrl.password);
+    expect(hits).toBe(0);
+    internal.close();
     await ex.close();
     const { connect } = await import("node:net");
     const socket = connect(Number(proxyUrl.port), "127.0.0.1");
     const code = await new Promise((r) => socket.once("error", (e: Any) => r(e.code)));
     expect(code).toBe("ECONNREFUSED");
+  });
+
+  it("refuses to start, and releases its proxy and directory, when the CLI's Node would bypass the proxy", async () => {
+    const dir = await stateDir();
+    let closed = false;
+    await expect(
+      create({
+        stateDir: dir,
+        startEgressProxy: async () => ({
+          env: {},
+          verify: async () => {
+            throw new Error("needs Node 22.21+");
+          },
+          close: async () => {
+            closed = true;
+          },
+        }),
+      }),
+    ).rejects.toThrow("needs Node 22.21+");
+    expect(closed).toBe(true);
+    expect((await create({ stateDir: dir })).accepting()).toBe(true);
   });
 
   it("releases the state directory when the egress proxy cannot start", async () => {
