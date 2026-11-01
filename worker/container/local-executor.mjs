@@ -25,12 +25,15 @@
  *    provider call is not repeated without the caller starting a new job.
  *  - One process per state directory: the executor listens on a Unix socket
  *    in `stateDir` (no network port) for as long as it runs. A second server
- *    process (another replica on a shared volume) finds the socket answering
- *    and refuses to start, so it can neither share the cap nor mark the first
- *    one's live jobs as interrupted. The kernel decides liveness: a socket
- *    left by a crashed process refuses connections and is replaced at once,
- *    with no heartbeat or timeout. Supported layout: one replica per volume
- *    (a ReadWriteOnce PVC); the socket path must stay under ~100 bytes.
+ *    process on the same host (a restarted or overlapping container sharing
+ *    the volume) finds the socket answering and refuses to start, so it can
+ *    neither share the cap nor mark the first one's live jobs as interrupted.
+ *    The kernel decides liveness: a socket left by a crashed process refuses
+ *    connections and is replaced at once, with no heartbeat or timeout.
+ *    A Unix socket cannot be reached from another host, so replicas on
+ *    different nodes sharing one volume (ReadWriteMany, NFS) are NOT
+ *    detected: run one replica per volume (a ReadWriteOnce PVC). The socket
+ *    path (`stateDir` + "/executor.sock") must fit in MAX_SOCKET_PATH_BYTES.
  */
 
 import { randomUUID } from "node:crypto";
@@ -52,7 +55,10 @@ export const LOCK_SOCKET = "executor.sock";
 const TAKEOVER_FILE = "executor.takeover";
 /** A takeover marker older than this was left by a process that crashed mid-takeover. */
 const TAKEOVER_STALE_MS = 5_000;
-const LOCK_ATTEMPTS = 50;
+/** How long start-up keeps trying while another contender holds the takeover marker. */
+const LOCK_DEADLINE_MS = TAKEOVER_STALE_MS + 3_000;
+/** Linux `sun_path` is 108 bytes with its NUL; Node truncates a longer path silently. */
+export const MAX_SOCKET_PATH_BYTES = 107;
 /** How long close() waits for running CLI processes to exit after stopping them. */
 export const DEFAULT_CLOSE_TIMEOUT_MS = 10_000;
 const PRUNE_INTERVAL_MS = 60 * 60_000;
@@ -184,7 +190,13 @@ function listenOn(path) {
 async function acquireLock(stateDir) {
   const path = join(stateDir, LOCK_SOCKET);
   const marker = join(stateDir, TAKEOVER_FILE);
-  for (let attempt = 0; attempt < LOCK_ATTEMPTS; attempt++) {
+  if (Buffer.byteLength(path) > MAX_SOCKET_PATH_BYTES) {
+    throw new Error(
+      `The job state directory path is too long for its lock socket (at most ${MAX_SOCKET_PATH_BYTES - LOCK_SOCKET.length - 1} bytes); use a shorter path`,
+    );
+  }
+  const giveUpAt = Date.now() + LOCK_DEADLINE_MS;
+  while (Date.now() < giveUpAt) {
     try {
       return { path, server: await listenOn(path) };
     } catch (error) {
@@ -286,13 +298,20 @@ export async function createLocalExecutor(options) {
   }
 
   /** Record a final state unless one is already recorded; returns the recorded view. */
-  function finish(jobId, status, fields) {
+  function finish(jobId, status, fields, { keepInMemory = false } = {}) {
     return serialized(jobId, async () => {
       const record = await loadRecord(jobId);
       if (!record) return undefined;
       if (isTerminal(record.view.status)) return record.view;
       const view = { status, createdAt: record.view.createdAt, finishedAt: now(), ...fields };
-      await writeAtomic(fileOf(jobId), JSON.stringify({ ...record, view }));
+      try {
+        await writeAtomic(fileOf(jobId), JSON.stringify({ ...record, view }));
+      } catch (error) {
+        if (!keepInMemory) throw error;
+        // The disk refuses the write: answer the final view from memory. The file still says
+        // running, so a restart records the job as interrupted; it is never run again.
+        unsaved.set(jobId, { ...record, view });
+      }
       notifyFinal(jobId, view, record.owner);
       return view;
     });
@@ -301,22 +320,12 @@ export async function createLocalExecutor(options) {
   /** finish() with retries, for paths that have no caller to report a failed write to. */
   async function finishWithRetry(jobId, status, fields) {
     for (let attempt = 1; ; attempt++) {
+      const last = attempt >= FINAL_WRITE_ATTEMPTS;
       try {
-        return await finish(jobId, status, fields);
+        return await finish(jobId, status, fields, { keepInMemory: last });
       } catch {
-        if (attempt < FINAL_WRITE_ATTEMPTS) {
-          await sleep(250 * attempt);
-          continue;
-        }
-        // The disk refuses the write: answer the final view from memory. The file still says
-        // running, so a restart records the job as interrupted; it is never run again.
-        const record = await loadRecord(jobId);
-        if (!record) return undefined;
-        if (isTerminal(record.view.status)) return record.view;
-        const view = { status, createdAt: record.view.createdAt, finishedAt: now(), ...fields };
-        unsaved.set(jobId, { ...record, view });
-        notifyFinal(jobId, view, record.owner);
-        return view;
+        if (last) return undefined;
+        await sleep(250 * attempt);
       }
     }
   }
@@ -395,13 +404,13 @@ export async function createLocalExecutor(options) {
       running.delete(jobId);
       throw error;
     }
-    if (closed) {
-      // close() began while the record was written: do not start a provider call now.
+    if (closed || slot.abort.signal.aborted) {
+      // close() or cancel() came while the record was written: do not start a provider call now.
       running.delete(jobId);
-      return (
-        (await finishWithRetry(jobId, "failed", { error: INTERRUPTED_ERROR, interrupted: true })) ??
-        view
-      );
+      const final = closed
+        ? { status: "failed", fields: { error: INTERRUPTED_ERROR, interrupted: true } }
+        : { status: "canceled", fields: { error: CANCELED_ERROR } };
+      return (await finishWithRetry(jobId, final.status, final.fields)) ?? view;
     }
     slot.done = Promise.resolve()
       .then(() => run(spec, { signal: slot.abort.signal }))
@@ -459,7 +468,13 @@ export async function createLocalExecutor(options) {
     async cancel(jobId) {
       if (!JOB_ID_RE.test(jobId)) return null;
       const record = await loadRecord(jobId);
-      if (!record) return null;
+      if (!record) {
+        // Started but its record is still being written: start() sees the abort and records it.
+        const slot = running.get(jobId);
+        if (!slot) return null;
+        slot.abort.abort();
+        return { status: "canceled", createdAt: now(), finishedAt: now(), error: CANCELED_ERROR };
+      }
       if (isTerminal(record.view.status)) return record.view;
       const view = await finish(jobId, "canceled", { error: CANCELED_ERROR });
       running.get(jobId)?.abort.abort();
@@ -483,9 +498,12 @@ export async function createLocalExecutor(options) {
     clearInterval(pruner);
     await Promise.allSettled([...inflight]);
     const live = [...running.entries()];
-    for (const [jobId] of live) {
-      await finishWithRetry(jobId, "failed", { error: INTERRUPTED_ERROR, interrupted: true });
-    }
+    // In parallel: on a failing disk each one retries for a while, and the grace period is short.
+    await Promise.allSettled(
+      live.map(([jobId]) =>
+        finishWithRetry(jobId, "failed", { error: INTERRUPTED_ERROR, interrupted: true }),
+      ),
+    );
     for (const [, slot] of live) slot.abort.abort();
     let timer;
     await Promise.race([

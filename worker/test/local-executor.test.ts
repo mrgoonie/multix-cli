@@ -6,7 +6,7 @@
  */
 
 import { execFile, spawn } from "node:child_process";
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -293,6 +293,39 @@ describe("local executor", () => {
       );
       expect(results.sort()).toEqual(["held", "locked", "locked", "locked"]);
     }
+  });
+
+  it("refuses a state directory too long for its socket instead of binding elsewhere", async () => {
+    const base = await stateDir();
+    const deep = join(base, "d".repeat(120 - base.length));
+    await expect(create({ stateDir: deep, runJob: controlledRun().runJob })).rejects.toThrow(
+      /too long/,
+    );
+    expect(await readdir(base)).toEqual(["d".repeat(120 - base.length)]);
+  });
+
+  it("removes a takeover marker left by a process that crashed mid-takeover", async () => {
+    const dir = await stateDir();
+    await leaveDeadSocket(join(dir, "executor.sock"));
+    await writeFile(join(dir, "executor.takeover"), "");
+    const old = new Date(Date.now() - 60_000);
+    await utimes(join(dir, "executor.takeover"), old, old);
+    const ex = await create({ stateDir: dir, runJob: controlledRun().runJob });
+    expect(ex.accepting()).toBe(true);
+    expect(await readdir(dir)).toEqual(["executor.sock"]);
+  });
+
+  it("does not start a job canceled while its record was being written", async () => {
+    const run = controlledRun();
+    const ex = await create({ stateDir: await stateDir(), runJob: run.runJob });
+    const starting = ex.start(ID1, spec(ID1), "u");
+    while (ex.activeJobs() === 0) await new Promise((r) => setImmediate(r));
+    expect((await ex.cancel(ID1)).status).toBe("canceled");
+    expect((await starting).status).toBe("canceled");
+    expect((await ex.status(ID1)).status).toBe("canceled");
+    await tick();
+    expect(run.calls).toHaveLength(0);
+    expect(ex.activeJobs()).toBe(0);
   });
 
   it("does not start a job whose start raced with close()", async () => {
