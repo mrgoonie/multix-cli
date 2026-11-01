@@ -198,6 +198,15 @@ describe("container job runner", () => {
     expect(canceled.status).toBe("canceled");
     // Without SIGKILL each run would wait for the 30 s sleep.
     expect(Date.now() - started).toBeLessThan(10_000);
+
+    // An output overflow is answered with SIGTERM too; SIGKILL follows the grace, not the CLI timeout.
+    const floodStart = Date.now();
+    const flooded = await runJob(
+      spec({ argv: ["x", "--ignore-term", "--flood"], inputs: [], timeoutMs: 20_000 }),
+      { bin: FAKE_BIN, fetch, get, killGraceMs: 300 },
+    );
+    expect(flooded.status).toBe("failed");
+    expect(Date.now() - floodStart).toBeLessThan(4_000);
   }, 30_000);
 
   it("follows up to 5 redirects and refuses an input that resolves to a private address", async () => {

@@ -266,3 +266,61 @@ Reviewed 2026-11-01 (UTC): `git show 0c8ebd4` on `claude/relaxed-clarke-yce0xf`.
 3. R2-3: align the grace-period table (en and vi) and soften the "freed before the database closes" claim.
 
 No Critical, High or Medium findings remain.
+
+---
+
+## Round 3: commit b82c364
+
+Reviewed 2026-11-01 (UTC): `git show b82c364` (`runCli` in worker/container/job-runner.mjs, a new test, docs).
+
+### Verification run
+
+- `npx vitest run test/container-job-runner.test.ts test/local-executor.test.ts server/test/standalone-jobs.test.ts`: 49/49 pass
+- `npx biome check worker/container`: clean
+- Node v22.23.4 probes in a scratch directory, outside the repo:
+  - `runJob` with a missing binary (ENOENT) resolves `failed` in 12 ms.
+  - With a signal that is already aborted, it resolves `canceled` in 5 ms.
+  - A CLI that ignores SIGTERM and is aborted after 200 ms, with `killGraceMs: 300`, resolves `canceled` in 506 ms.
+  - After these runs `process.getActiveResourcesInfo()` lists no timer, so nothing leaks.
+
+### Checked and found correct
+
+- **No hang on spawn failure.** On ENOENT, EACCES or EAGAIN there is no `child.pid`, so `exited()` is true and the callback resolves.
+- **No synchronous call before `timeoutTimer` is declared.** Spawn errors and an already-aborted signal reach the callback on a later tick, so `finish` never touches the variable before its declaration.
+- **Either order of 'exit' and the callback works.** Whichever comes second resolves.
+- **Abort.** execFile calls back at once with the AbortError. `escalate` arms SIGKILL, and the promise resolves on 'exit'.
+- **Already-aborted signal.** `escalate` is armed straight away.
+- **Timeout.** execFile's SIGTERM and runCli's `timeoutTimer` start together. SIGKILL comes at `cliTimeout + killGraceMs`, well inside the Durable Object's give-up time of timeout + 5 min.
+- **Cleanup.** `finish` clears both timers and removes the abort listener on every path.
+- **Cloudflare job-server compatibility.**
+  - `JobController.cancel` (src/jobs/job-controller.ts:136-148) records `canceled` and destroys the container without waiting for `runJob`. A `runJob` that resolves later is therefore invisible on that path.
+  - During the extra grace on a timeout, `/jobs/current` reports `running`, which is already a valid state.
+  - On SIGTERM the job-server keeps its 10 s forced `process.exit`, and container teardown kills whatever is left.
+  - The job spec and the response shapes are unchanged.
+- **The job image change is reverted**, so R2-2 is closed.
+- **R2-3 (docs).** The grace-period table now matches the prose in English and Vietnamese, and the claim about freeing slots has been softened.
+- **The new test is meaningful.** Without SIGKILL, both runs would wait for the fixture's 30 s sleep and hit the 30 s test timeout, which matches the author's mutation check.
+
+### Finding
+
+#### R3-1. Low: after an output overflow, SIGKILL comes only at the CLI timeout, not after the 10 s grace
+
+- Where: worker/container/job-runner.mjs:136-138. The comment there says "An overflow or abort was answered with SIGTERM: make sure the process ends", and the commit message says SIGKILL is sent "on cancel, timeout or output overflow".
+- Cause: on maxBuffer overflow, execFile destroys stdio and sends SIGTERM, but it calls back only on 'close', which comes after the process exits. A CLI that ignores SIGTERM therefore never reaches the callback, and the callback is the only place that arms escalation for an overflow. The CLI is killed only when `timeoutTimer` fires, at `cliTimeout + grace`.
+- Evidence:
+  - Probe 1, plain execFile (`maxBuffer: 100`, a child that ignores SIGTERM and lives 4 s): the callback arrived at 4055 ms, right after 'exit' at 4053 ms.
+  - Probe 2, `runJob` (`timeoutMs: 8000`, `killGraceMs: 300`, a child that writes 17 MB, ignores SIGTERM and swallows EPIPE): it resolved `failed` with the overflow error after 6330 ms, which is `cliTimeout` (6000 ms) + 300 ms, not about 300 ms after the overflow.
+- Scenario: in production `cliTimeout` is up to 25 minutes.
+  - A CLI that overflows stdout early and ignores SIGTERM keeps running, and may keep billing a provider call, for up to 25 minutes.
+  - On the self-hosted server it also holds its executor slot and quota slots for that time.
+  - It needs a process that ignores both SIGTERM and EPIPE, so the impact is small.
+  - The documented guarantee ("killed with SIGKILL 10 seconds later") does not hold on this path.
+- Suggested fix: also arm escalation when execFile has itself sent a signal. Calling `escalate` when stdout or stderr closes while `child.killed` is true covers the overflow, because execFile sets `killed` when its `kill()` succeeds:
+  ```js
+  const onStreamClose = () => { if (child.killed && !exited()) escalate(); };
+  child.stdout?.once("close", onStreamClose);
+  child.stderr?.once("close", onStreamClose);
+  ```
+  Add an overflow case to the new test: `--ignore-term` plus enough output to pass 16 MB, and assert it resolves within about the grace period, well below `cliTimeout`.
+
+No other defects in this commit.

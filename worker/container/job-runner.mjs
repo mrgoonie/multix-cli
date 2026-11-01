@@ -139,6 +139,12 @@ function runCli(bin, argv, options, killGraceMs = CLI_KILL_GRACE_MS) {
       },
     );
     child.once("exit", finish);
+    // On an output overflow execFile sends SIGTERM and calls back only at exit: arm SIGKILL here.
+    for (const stream of [child.stdout, child.stderr]) {
+      stream?.once("close", () => {
+        if (child.killed && !exited()) escalate();
+      });
+    }
     if (options.signal?.aborted) escalate();
     else options.signal?.addEventListener("abort", escalate, { once: true });
     const timeoutTimer = options.timeout ? setTimeout(escalate, options.timeout) : undefined;
