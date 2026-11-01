@@ -1,14 +1,16 @@
 /**
  * Per-request context for the sign-in, consent and dashboard routes.
  * Resolving it fails closed: a missing or weak Worker secret means the routes
- * answer 503 instead of running half-configured.
+ * answer 503 instead of running half-configured. GitHub OAuth App secrets may
+ * be left out only when local sign-in (MULTIX_LOCAL_AUTH) is enabled.
  */
 
 import type { OAuthHelpers } from "@cloudflare/workers-oauth-provider";
 import type { FetchLike } from "../../src/core/fetch-json.js";
 import { AccountStore } from "./accounts/account-store.js";
 import type { Account } from "./accounts/account-store.js";
-import { isAllowed } from "./accounts/allowlist.js";
+import { accountAllowed } from "./accounts/allowlist.js";
+import { localAuthEnabled } from "./accounts/local-auth.js";
 import { importEncryptionKey } from "./accounts/provider-secret-crypto.js";
 import { type Session, readSession } from "./auth/signed-cookies.js";
 import { MIN_SESSION_SECRET_LENGTH, type WorkerEnv } from "./config.js";
@@ -32,8 +34,13 @@ export interface AppContext {
   /** Public origin without a trailing slash, e.g. https://multix.zuey.me. */
   origin: string;
   sessionSecret: string;
+  /** Empty when GitHub sign-in is not configured (see githubEnabled). */
   githubClientId: string;
   githubClientSecret: string;
+  /** GitHub sign-in is configured: both GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET are set. */
+  githubEnabled: boolean;
+  /** Local username/password sign-in is enabled (MULTIX_LOCAL_AUTH=true). */
+  localAuth: boolean;
   accounts: AccountStore;
   fetch: FetchLike;
 }
@@ -60,11 +67,12 @@ export async function resolveAppContext(
   const sessionSecret = env.SESSION_SECRET?.trim() ?? "";
   const githubClientId = env.GITHUB_CLIENT_ID?.trim() ?? "";
   const githubClientSecret = env.GITHUB_CLIENT_SECRET?.trim() ?? "";
+  const githubEnabled = githubClientId !== "" && githubClientSecret !== "";
+  const localAuth = localAuthEnabled(env);
   if (
     !origin ||
     sessionSecret.length < MIN_SESSION_SECRET_LENGTH ||
-    !githubClientId ||
-    !githubClientSecret ||
+    (!githubEnabled && !localAuth) ||
     !env.ACCOUNTS_KV
   ) {
     return undefined;
@@ -82,6 +90,8 @@ export async function resolveAppContext(
     sessionSecret,
     githubClientId,
     githubClientSecret,
+    githubEnabled,
+    localAuth,
     accounts: new AccountStore(env.ACCOUNTS_KV, encryptionKey),
     fetch: deps.fetch ?? ((input, init) => fetch(input, init)),
   };
@@ -107,7 +117,7 @@ export async function signedInSession(
     ctx.accounts.get(session.userId),
     ctx.accounts.signedOutAt(session.userId),
   ]);
-  if (!account || !isAllowed(ctx.env.MULTIX_ALLOWED_USERS, account)) return undefined;
+  if (!account || !(await accountAllowed(ctx.env, account))) return undefined;
   // KV may take ~60 s to show a sign-out made in another location.
   if (session.iat <= signedOutAt) return undefined;
   return { account, session };

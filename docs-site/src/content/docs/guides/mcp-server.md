@@ -442,6 +442,13 @@ values, then:
 npm run dev:mcp   # http://localhost:8787/mcp and /dashboard
 ```
 
+### Self-hosting without Cloudflare
+
+The same server also runs as one Node.js container with SQLite storage and
+optional username and password sign-in, on Docker or Kubernetes, without a
+Cloudflare account. It has no job runner, so `multix_run` and the job tools are
+not offered there. See [Self-hosted server](/guides/self-hosted-server/).
+
 ## Connect a client
 
 1. Sign in at `<origin>/dashboard` and save the provider keys you want to use.

@@ -13,11 +13,15 @@
     "build": "wrangler deploy --dry-run --containers-rollout=none --outdir dist",
     "check:bundle": "npm run build && node scripts/check-bundle.mjs dist",
     "pretypecheck": "npm run skills",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json && tsc --noEmit -p tsconfig.server.json",
     "pretest": "npm run skills",
     "test": "vitest run",
     "catalog": "tsx scripts/build-cli-catalog.ts",
-    "tokens": "tsx scripts/sync-design-tokens.ts"
+    "tokens": "tsx scripts/sync-design-tokens.ts",
+    "prebuild:server": "npm run skills",
+    "build:server": "node scripts/build-server.mjs",
+    "start:server": "node --disable-warning=ExperimentalWarning dist-server/multix-server.mjs",
+    "smoke:server": "tsx scripts/smoke-server.ts"
   },
   "dependencies": {
     "@cfworker/json-schema": "4.1.1",
@@ -25,12 +29,15 @@
     "@cloudflare/workers-oauth-provider": "1.2.1",
     "@modelcontextprotocol/server": "2.3.1",
     "aws4fetch": "1.0.20",
-    "zod": "4.6.5"
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20261013.1",
+    "@types/node": "22.20.5",
+    "esbuild": "0.28.2",
     "tsx": "4.23.15",
     "typescript": "5.9.3",
+    "undici": "6.29.1",
     "vitest": "4.1.11",
     "wrangler": "4.149.0"
   }

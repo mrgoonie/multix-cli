@@ -1,0 +1,34 @@
+# Local smoke path for the self-hosted multix-server, no Cloudflare account needed:
+#   cp worker/server/server.env.example worker/server/.env   # then fill in the secrets
+#   docker compose -f worker/server/compose.yaml up --build
+# The first start prints a single-use bootstrap token; open
+# http://localhost:3000/dashboard/setup to create the admin.
+services:
+  multix-server:
+    build:
+      context: ../..
+      dockerfile: worker/server/Dockerfile
+    image: multix-server:local
+    ports:
+      - "127.0.0.1:3000:3000"
+    env_file: .env
+    environment:
+      MULTIX_PUBLIC_URL: http://localhost:3000
+      MULTIX_LOCAL_AUTH: "true"
+    volumes:
+      - multix-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    stop_grace_period: 30s
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health/ready').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+volumes:
+  multix-data:

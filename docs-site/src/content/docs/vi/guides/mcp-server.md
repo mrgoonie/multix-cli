@@ -442,6 +442,13 @@ giá trị, rồi chạy:
 npm run dev:mcp   # http://localhost:8787/mcp và /dashboard
 ```
 
+### Tự host không cần Cloudflare
+
+Cùng server này cũng chạy được thành một container Node.js với lưu trữ SQLite
+và đăng nhập bằng username và mật khẩu (tùy chọn), trên Docker hoặc Kubernetes,
+không cần tài khoản Cloudflare. Bản này không có job runner, nên `multix_run`
+và các tool job không được cung cấp. Xem [Server tự host](/vi/guides/self-hosted-server/).
+
 ## Kết nối client
 
 1. Đăng nhập tại `<origin>/dashboard` và lưu các provider key bạn muốn dùng.

@@ -132,6 +132,15 @@ npm run check:mcp    # when worker/ or a client it imports changed
   `metadata.tasks` with task ids from `src/capabilities/capability-types.ts`;
   add a new task skill to `extra-files` in both `release-please-config.json`
   and `release-please-beta-config.json` (a worker test checks this).
+- `worker/server/` is the self-hosted Node runtime (`multix-server`): it runs
+  the Worker's own handler with Node adapters for its bindings (SQLite KV and
+  Durable Object storage, in-memory rate limits, a public-only `fetch`) and
+  must keep working when a binding or `WorkerEnv` changes. `MULTIX_JOBS` and
+  `MULTIX_JOB_QUOTA` are not bound there, so job tools are absent. Its tests
+  (`worker/server/test/`) run in the worker's `npm test`, `npm run typecheck`
+  covers `tsconfig.server.json`, and `npm run build:server` bundles it
+  (`worker/server/Dockerfile` builds the image). User guide:
+  `docs-site/src/content/docs/guides/self-hosted-server.md`.
 - The job container (`worker/container/`) is rolled out before the Worker
   (`worker/scripts/roll-out-job-container.mjs`, run by `deploy-mcp.yml`), so a
   new container must work with the Worker that is still live, in both

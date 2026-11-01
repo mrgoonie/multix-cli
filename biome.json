@@ -34,6 +34,7 @@
       "package.json",
       "docs-site/.astro/**",
       "worker/.wrangler/**",
+      "worker/dist-server/**",
       "worker/src/skills/builtin-skills.json"
     ]
   }

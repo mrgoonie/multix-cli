@@ -7,9 +7,10 @@
  *   GET  /.well-known/oauth-protected-resource/mcp  RFC 9728 metadata (library)
  *   GET  /.well-known/oauth-authorization-server    RFC 8414 metadata (library)
  *   POST /oauth/register, /oauth/token              DCR and token endpoint (library)
- *   *    /oauth/authorize                           consent page (GitHub sign-in first)
- *   GET  /oauth/github/callback                     GitHub sign-in callback
- *   *    /dashboard[/…]                             account dashboard (provider keys, storage, API keys, clients)
+ *   *    /oauth/authorize                           consent page (sign-in first)
+ *   GET  /oauth/github/callback                     GitHub sign-in callback (404 without GitHub secrets)
+ *   *    /dashboard[/…]                             account dashboard (provider keys, storage, API keys, clients),
+ *                                                   GitHub or local sign-in (MULTIX_LOCAL_AUTH), one-time admin setup
  *   *    /api/v1/…                                  REST API; account API key required (api/api-router.ts)
  *                                                   (incl. /api/v1/events: job event webhooks, events/)
  *   GET  /api/docs                                  REST API reference (public)
@@ -26,7 +27,7 @@ import {
   insufficientScope,
 } from "@cloudflare/workers-oauth-provider";
 import { toolEnvFor } from "./accounts/account-store.js";
-import { isAllowed } from "./accounts/allowlist.js";
+import { accountAllowed } from "./accounts/allowlist.js";
 import { API_PREFIX, handleApi } from "./api/api-router.js";
 import { type AppDeps, publicOrigin, resolveAppContext } from "./app-context.js";
 import { type WorkerEnv, serverSettings } from "./config.js";
@@ -80,7 +81,7 @@ async function handleAuthenticatedMcp(
   if (!app) return notConfigured();
   const props = grantProps(ctx);
   const account = props ? await app.accounts.get(props.userId) : null;
-  if (!account || !isAllowed(env.MULTIX_ALLOWED_USERS, account)) {
+  if (!account || !(await accountAllowed(env, account))) {
     return text(403, "Forbidden");
   }
   if (env.MCP_RATE_LIMITER) {
@@ -125,6 +126,7 @@ async function handleDefault(request: Request, env: WorkerEnv, deps: AppDeps): P
   if (isApi) return handleApi(app, deps, request);
   if (pathname === AUTHORIZE_PATH) return handleAuthorize(app, request);
   if (pathname === GITHUB_CALLBACK_PATH) {
+    if (!app.githubEnabled) return text(404, "Not Found");
     if (request.method !== "GET") return text(405, "Method Not Allowed", { allow: "GET" });
     return finishGithubSignIn(app, request);
   }
@@ -162,6 +164,8 @@ function createOAuthProvider(origin: string, deps: AppDeps): OAuthProvider<Worke
 function isAuthRequest(request: Request, pathname: string): boolean {
   if (
     pathname === "/dashboard/login" ||
+    pathname === "/dashboard/login/github" ||
+    pathname === "/dashboard/setup" ||
     pathname === GITHUB_CALLBACK_PATH ||
     pathname === AUTHORIZE_PATH
   ) {
