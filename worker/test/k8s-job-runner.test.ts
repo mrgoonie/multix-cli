@@ -200,7 +200,7 @@ describe("kubernetesSettingsFromEnv", () => {
     expect(() => kubernetesSettingsFromEnv({ ...base, MULTIX_K8S_JOB_IMAGE: "a b" }, ns)).toThrow();
     expect(() =>
       kubernetesSettingsFromEnv({ ...base, MULTIX_K8S_JOB_IMAGE_PULL_SECRETS: "ok,Bad_Name" }, ns),
-    ).toThrow(/MULTIX_K8S_JOB_IMAGE_PULL_SECRETS/);
+    ).toThrow(/MULTIX_K8S_JOB_IMAGE_PULL_SECRETS: "Bad_Name"/);
   });
 
   it("reads image pull secret names, trimmed and without duplicates", async () => {

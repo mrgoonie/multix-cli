@@ -381,14 +381,24 @@ What changes:
   `ghcr.io/mrgoonie/multix-job:<version>`. Use the same version as the
   server (or pin its digest from the same publish run). For a release
   published before the job image was, or for a private registry, build and
-  push it yourself from that release's source. For a private registry, create
-  a pull Secret in the namespace and name it in
-  `MULTIX_K8S_JOB_IMAGE_PULL_SECRETS`:
+  push it yourself from that release's source:
 
   ```bash
   docker build -f worker/container/Dockerfile -t <registry>/multix-job:<version> .
   docker push <registry>/multix-job:<version>
   ```
+
+  For a private registry, create a pull Secret in the namespace and name it in
+  `MULTIX_K8S_JOB_IMAGE_PULL_SECRETS`:
+
+  ```bash
+  kubectl -n <namespace> create secret docker-registry multix-job-pull \
+    --docker-server=<registry> --docker-username=<user> --docker-password=<token>
+  ```
+
+  A missing or wrong pull Secret leaves the job pod in `ImagePullBackOff`; the
+  job then fails after 5 minutes with "The job pod did not start in time".
+  Check `kubectl -n <namespace> describe pod -l app.kubernetes.io/component=job`.
 
 - The Job never retries (`backoffLimit: 0`, `restartPolicy: Never`), so a
   failed or evicted pod never repeats a billed provider call. The pod has no

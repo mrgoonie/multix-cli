@@ -378,14 +378,24 @@ Những gì thay đổi:
   `ghcr.io/mrgoonie/multix-job:<version>`. Dùng cùng phiên bản với server
   (hoặc ghim digest của nó từ cùng lần chạy publish). Với bản phát hành có
   trước khi job image được publish, hoặc khi dùng registry riêng, hãy tự build
-  và đẩy nó từ mã nguồn của bản phát hành đó. Với registry riêng, hãy tạo một
-  pull Secret trong namespace và ghi tên nó vào
-  `MULTIX_K8S_JOB_IMAGE_PULL_SECRETS`:
+  và đẩy nó từ mã nguồn của bản phát hành đó:
 
   ```bash
   docker build -f worker/container/Dockerfile -t <registry>/multix-job:<version> .
   docker push <registry>/multix-job:<version>
   ```
+
+  Với registry riêng, hãy tạo một pull Secret trong namespace và ghi tên nó vào
+  `MULTIX_K8S_JOB_IMAGE_PULL_SECRETS`:
+
+  ```bash
+  kubectl -n <namespace> create secret docker-registry multix-job-pull \
+    --docker-server=<registry> --docker-username=<user> --docker-password=<token>
+  ```
+
+  Pull Secret thiếu hoặc sai khiến pod job kẹt ở `ImagePullBackOff`; job sẽ
+  thất bại sau 5 phút với thông báo "The job pod did not start in time". Kiểm
+  tra bằng `kubectl -n <namespace> describe pod -l app.kubernetes.io/component=job`.
 
 - Job không bao giờ chạy lại (`backoffLimit: 0`, `restartPolicy: Never`),
   nên một pod lỗi hoặc bị evict không lặp lại một lệnh gọi provider có tính

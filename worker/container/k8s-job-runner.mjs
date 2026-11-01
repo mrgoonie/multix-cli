@@ -132,7 +132,9 @@ export function kubernetesSettingsFromEnv(env = process.env, readNamespace = def
     .filter(Boolean);
   for (const name of imagePullSecrets) {
     if (!SUBDOMAIN_RE.test(name)) {
-      throw new Error("MULTIX_K8S_JOB_IMAGE_PULL_SECRETS must list Kubernetes Secret names");
+      throw new Error(
+        `MULTIX_K8S_JOB_IMAGE_PULL_SECRETS: "${name}" is not a Kubernetes Secret name`,
+      );
     }
   }
   const quantity = (name, fallback) => {
