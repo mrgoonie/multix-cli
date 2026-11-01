@@ -1,11 +1,11 @@
 ---
 title: REST API và API key của tài khoản
-description: Dùng REST API của multix MCP server từ script và CI bằng API key của tài khoản để quản lý provider key và lưu trữ R2, đọc catalog CLI, chạy, theo dõi, hủy job CLI, nhận webhook có chữ ký khi job kết thúc, và tạo, chia sẻ skill.
+description: Dùng REST API của multix MCP server từ script và CI bằng API key của tài khoản để quản lý provider key và lưu trữ đầu ra, đọc catalog CLI, chạy, theo dõi, hủy job CLI, nhận webhook có chữ ký khi job kết thúc, và tạo, chia sẻ skill.
 ---
 
 [MCP server từ xa](/vi/guides/mcp-server/) còn cung cấp một REST API dạng JSON
 tại `/api/v1` cho script và CI không dùng MCP. API làm việc trên cùng tài khoản
-với dashboard và `/mcp`: cùng provider key, cùng bucket R2, và cùng bộ chạy CLI
+với dashboard và `/mcp`: cùng provider key, cùng bucket đầu ra, và cùng bộ chạy CLI
 với `multix_run`, với cùng các bước kiểm tra input, giới hạn job và lọc bỏ key
 khỏi output.
 
@@ -32,7 +32,7 @@ thêm khoảng một phút ở các location khác của Cloudflare, vì kho key
 nhất quán dần.
 
 Một key hành động thay cho tài khoản của bạn: nó đọc được key nào đã được đặt,
-thay đổi được provider key và lưu trữ R2, chạy được job tiêu credit provider
+thay đổi được provider key và lưu trữ đầu ra, chạy được job tiêu credit provider
 của bạn, và thu hồi được API key. Nó không tạo được API key; việc đó chỉ làm
 được trong dashboard. Hãy giữ key như mật khẩu, trong kho secret hoặc biến môi
 trường, không đặt trong mã nguồn.
@@ -65,9 +65,9 @@ Mọi path đều tương đối với `/api/v1`.
 | `PATCH` | `/provider-keys` | Đặt và xóa nhiều key cùng lúc: `{ "keys": { "NAME": "value" \| null } }`. Toàn bộ body được kiểm tra trước khi ghi bất cứ thứ gì. |
 | `PUT` | `/provider-keys/{name}` | Đặt một key: `{ "value": "…" }`. |
 | `DELETE` | `/provider-keys/{name}` | Xóa một key. |
-| `GET` | `/storage` | Cấu hình R2 không kèm credential, hoặc `{ "configured": false }`. |
-| `PUT` | `/storage` | Kiểm tra quyền truy cập bucket, rồi lưu cấu hình R2. |
-| `DELETE` | `/storage` | Xóa cấu hình R2. |
+| `GET` | `/storage` | Cấu hình lưu trữ đầu ra không kèm credential, hoặc `{ "configured": false }`. |
+| `PUT` | `/storage` | Kiểm tra quyền truy cập bucket, rồi lưu cấu hình lưu trữ. |
+| `DELETE` | `/storage` | Xóa cấu hình lưu trữ. |
 | `GET` | `/catalog[?group=&task=&model=]` | Các lệnh CLI server chạy được; cùng payload và bộ lọc với `multix_catalog`. |
 | `GET` | `/model-catalog[?view=&task=&provider=&family=&q=&offering=&priced=&ready=&resolution=&duration_s=&audio=&aspect_ratio=&images=&sort=]` | Offering, giá theo từng cấu hình và so sánh; cùng payload với `multix_model_catalog`. `view` mặc định là `models`. Xem [Danh mục](/vi/commands/catalog/). |
 | `POST` | `/jobs` | Chạy một lệnh CLI; cùng input với `multix_run`. |
@@ -183,13 +183,16 @@ console.log(`saved: ${body.saved.join(", ")}`);
 Chạy bằng `node sync-multix-keys.mjs ~/.multix/.env` hoặc đường dẫn `.env`
 khác. Script không bao giờ xóa key: tên không có trong file được giữ nguyên.
 
-## Lưu trữ R2
+## Lưu trữ đầu ra
 
-`PUT /storage` nhận cùng các trường với thẻ **R2 storage** trong dashboard (xem
-[Lưu trữ R2](/vi/guides/mcp-server/#lưu-trữ-r2)). Trước khi lưu, server liệt kê
-bucket, upload một object thử rỗng rồi xóa nó; nếu bước nào thất bại thì không
-có gì được lưu và response là `422 storage_check_failed`, kèm tên bước thất
-bại.
+`PUT /storage` nhận cùng các trường với thẻ **Lưu trữ đầu ra** trong dashboard
+(xem [Lưu trữ đầu ra](/vi/guides/mcp-server/#lưu-trữ-đầu-ra)). Truyền đúng một
+trong hai: `account_id` (Cloudflare R2) hoặc `endpoint` (bất kỳ dịch vụ tương
+thích S3 nào). Trước khi lưu, server kiểm tra host của endpoint chỉ phân giải ra
+địa chỉ công khai, rồi liệt kê bucket, upload một object thử rỗng và xóa nó;
+nếu bước nào thất bại thì không có gì được lưu và response là
+`422 storage_check_failed`, kèm tên bước thất bại (`endpoint-not-public` khi
+endpoint phân giải ra địa chỉ private).
 
 ```bash
 curl -s -X PUT https://multix.zuey.me/api/v1/storage \
@@ -201,11 +204,37 @@ curl -s -X PUT https://multix.zuey.me/api/v1/storage \
 JSON
 ```
 
-`public_base_url` là tùy chọn. `prefix` (tùy chọn, mặc định `multix`) là thư
-mục trong bucket chứa file đầu ra của job: chữ, số, `.`, `_`, `-` và `/`, tối đa
-256 ký tự, không có đoạn `.` hay `..`. `PUT` thay toàn bộ cấu hình, nên bỏ
-`prefix` sẽ đặt lại thư mục về `multix`. Response, giống `GET /storage`, trả về
-giá trị này và không bao giờ chứa access key.
+Với dịch vụ tương thích S3 khác, thay `account_id` bằng `endpoint`:
+
+```bash
+curl -s -X PUT https://multix.zuey.me/api/v1/storage \
+  -H "Authorization: Bearer $MULTIX_API_KEY" \
+  -H "Content-Type: application/json" \
+  --data @- <<JSON
+{"endpoint": "https://s3.eu-west-1.amazonaws.com", "region": "eu-west-1", "addressing": "virtual",
+ "access_key_id": "$AWS_ACCESS_KEY_ID", "secret_access_key": "$AWS_SECRET_ACCESS_KEY",
+ "bucket": "my-multix-outputs", "link_expiry_seconds": 86400}
+JSON
+```
+
+| Trường | Ghi chú |
+|---|---|
+| `account_id` | Cloudflare account ID (32 ký tự hex). Không dùng cùng `endpoint`. |
+| `endpoint` | Origin `https://` của dịch vụ tương thích S3: tên miền công khai, không có path, query, credential hay port. Không dùng cùng `account_id`. |
+| `region` | Region ký SigV4 cho `endpoint` (mặc định `us-east-1`). R2 chỉ nhận `auto`. |
+| `addressing` | `path` (mặc định, `https://host/bucket/key`) hoặc `virtual` (`https://bucket.host/key`). R2 chỉ nhận `path`; tên bucket có dấu chấm cần `path`. |
+| `access_key_id`, `secret_access_key`, `bucket` | Bắt buộc. |
+| `public_base_url` | URL `https://` tùy chọn phục vụ bucket; khi có, output nhận URL công khai thay vì liên kết presigned. |
+| `prefix` | Thư mục tùy chọn cho output của job (mặc định `multix`): chữ, số, `.`, `_`, `-` và `/`, tối đa 256 ký tự, không có đoạn `.` hay `..`. |
+| `link_expiry_seconds` | Thời hạn liên kết presigned tùy chọn, 60 đến 604800 (mặc định). Bị cắt xuống `MULTIX_OUTPUT_LINK_MAX_SECONDS` của server. |
+
+`PUT` thay toàn bộ cấu hình, nên bỏ `prefix` sẽ đặt lại thư mục về `multix`
+(các trường tùy chọn khác cũng vậy). Response, giống `GET /storage`, trả về
+`provider` (`r2` hoặc `s3`), `account_id`, `endpoint`, `region`, `addressing`,
+`bucket`, `public_base_url`, `prefix` và `link_expiry_seconds` (thời hạn đang
+có hiệu lực), và không bao giờ chứa access key. multix không bao giờ xóa file
+đầu ra; để file tự hết hạn, thêm lifecycle rule cho bucket (xem
+[Thời hạn liên kết và lưu giữ](/vi/guides/mcp-server/#thời-hạn-liên-kết-và-lưu-giữ)).
 
 ## Chạy job và theo dõi
 
@@ -229,7 +258,7 @@ curl -s -X POST https://multix.zuey.me/api/v1/jobs \
 ```
 
 Body có cùng dạng với kết quả của `multix_run` (`job_id`, `status`, `outputs`,
-`stdout`, `stderr_tail`, `exit_code`, và `note` khi chưa cấu hình R2). Mã HTTP
+`stdout`, `stderr_tail`, `exit_code`, và `note` khi chưa cấu hình lưu trữ đầu ra). Mã HTTP
 cho biết có cần theo dõi tiếp hay không:
 
 - `200`: job đã kết thúc (`succeeded`, `failed`, `timed_out` hoặc `canceled`).
@@ -245,7 +274,7 @@ while [ "$(curl -s -o job.json -w '%{http_code}' \
   -H "Authorization: Bearer $MULTIX_API_KEY")" = "202" ]; do
   sleep 15
 done
-cat job.json   # outputs[].url chứa các file trong bucket R2 của bạn
+cat job.json   # outputs[].url chứa các file trong bucket của bạn
 ```
 
 Dừng job đang chạy bằng `POST /jobs/{id}/cancel`. Chỉ tài khoản đã bắt đầu job
@@ -267,7 +296,7 @@ thất lạc.
 | `multix.job.failed` | Job kết thúc với lỗi (CLI lỗi, mất container, không khởi động được). |
 | `multix.job.canceled` | Job bị chủ sở hữu hủy. |
 | `multix.job.timed_out` | Job không xong trong giới hạn thời gian của server. |
-| `multix.asset.ready` | Một file output của job thành công đã được lưu vào bucket R2 của tài khoản (mỗi file đã lưu một sự kiện, tối đa 20 mỗi job). |
+| `multix.asset.ready` | Một file output của job thành công đã được lưu vào bucket đầu ra của tài khoản (mỗi file đã lưu một sự kiện, tối đa 20 mỗi job). |
 
 `GET /events` trả về cùng danh sách này kèm JSON Schema của `data` cho từng sự
 kiện; endpoint đó và `worker/src/events/event-catalog.ts` là nguồn chuẩn cho
@@ -474,7 +503,7 @@ Lỗi là JSON có `code` cố định và thông báo không bao giờ chứa g
 | `415` | `unsupported_media_type` | Body không gửi dưới dạng `application/json`. |
 | `409` | `limit_reached` | Tài khoản đã có 10 subscription sự kiện đang hoạt động. |
 | `409` | `conflict` | Digest bản nháp hoặc revision đang phục vụ của skill khác với `expected_digest` hoặc `expected_revision` đã gửi, hoặc quyền workflow nêu revision hay digest mà skill không phục vụ. |
-| `422` | `storage_check_failed` | Kiểm tra quyền truy cập R2 thất bại; không có gì được lưu. |
+| `422` | `storage_check_failed` | Kiểm tra quyền truy cập bucket thất bại (hoặc endpoint không công khai); không có gì được lưu. |
 | `429` | `rate_limited` | Quá nhiều request; thử lại sau số giây trong `Retry-After`. |
 | `429` | `busy` | Đã chạm giới hạn job: số job đang chạy của tài khoản hoặc tổng số job của server, hoặc đã có 5 lần chạy workflow đang hoạt động. Chờ một job hay lần chạy kết thúc (hoặc hủy một cái) thay vì thử lại ngay. |
 | `503` | `unavailable` | Server không có job container, nên không chạy được job, hoặc không có binding sự kiện, nên các route sự kiện bị tắt, hoặc không có kho skill, nên các route skill và workflow bị tắt; hoặc không phân giải được host `callback_url` của subscription mới (thử lại sau `Retry-After`). |

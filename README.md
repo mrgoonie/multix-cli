@@ -1052,9 +1052,9 @@ instance runs at `https://multix.zuey.me/mcp` (invited GitHub accounts only).
   `MULTIX_MAX_JOBS_TOTAL` (default 10, keep it at or below the container
   `max_instances`; `server at capacity: …` otherwise), and one 30-minute limit covers downloads,
   the CLI and uploads. File inputs are public `https://` URLs. Output files
-  (at most 50, up to 500 MB each) are streamed to the account's own R2 bucket
-  and returned as URLs; without R2 the job still runs and the result says to
-  configure R2 in `/dashboard`. Keys are redacted from stdout and stderr.
+  (at most 50, up to 500 MB each) are streamed to the account's own R2 or
+  S3-compatible bucket and returned as URLs; without a bucket the job still
+  runs and the result says to configure output storage in `/dashboard`. Keys are redacted from stdout and stderr.
   The three job tools need the Workers Paid plan (Containers) and Docker at
   deploy time; they are listed only when the `MULTIX_JOBS` and
   `MULTIX_JOB_QUOTA` bindings exist.
@@ -1092,10 +1092,15 @@ instance runs at `https://multix.zuey.me/mcp` (invited GitHub accounts only).
 - Per-account keys: each account saves its own provider keys at `/dashboard`
   (AES-GCM encrypted in KV) and spends its own credits. The dashboard has an
   input for every key env name the CLI reads (grouped by provider) plus the
-  Cloudflare Workers AI names, and an R2 storage card for the account's own
-  bucket (account ID, access key pair, bucket, optional `https://` public
-  URL, optional directory path, default `multix`; checked with a list, upload and delete of an empty `.multix-probe-*`
-  object before it is saved). It also lists and disconnects MCP clients. Limit exposure further with
+  Cloudflare Workers AI names, and an output storage card for the account's own
+  bucket (a Cloudflare R2 account ID or a public `https://` S3-compatible
+  endpoint with region and path-style or virtual-hosted addressing, access key
+  pair, bucket, optional `https://` public URL, optional directory path,
+  default `multix`, optional presigned link lifetime, capped by
+  `MULTIX_OUTPUT_LINK_MAX_SECONDS`; an endpoint must resolve only to public
+  addresses, and every setting is checked with a list, upload and delete of an
+  empty `.multix-probe-*` object before it is saved). multix never deletes
+  outputs; a bucket lifecycle rule expires them. It also lists and disconnects MCP clients. Limit exposure further with
   `MULTIX_MCP_MAX_OUTPUTS`, `MULTIX_MCP_MAX_VIDEO_SECONDS` (also sent as
   `min(5, cap)` when a command's default duration is unknown or longer; it
   bounds each `gemini extend-video` continuation, not a stored clip that
@@ -1169,7 +1174,7 @@ tools are not offered. Guide, including Docker, Compose and Kubernetes:
 ### REST API
 
 The same server exposes a JSON REST API at `/api/v1` for scripts and CI
-(manage provider keys and R2 storage, read the catalog and the model catalogue
+(manage provider keys and output storage, read the catalog and the model catalogue
 at `GET /api/v1/model-catalog`, run and poll jobs).
 Create an account API key (`mxk_…`, shown once) in the **API keys** card at
 `/dashboard` and send it as `Authorization: Bearer <key>`:

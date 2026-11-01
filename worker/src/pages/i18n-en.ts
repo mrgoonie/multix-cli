@@ -7,6 +7,22 @@
 import { escapeHtml } from "../http-responses.js";
 import type { NoticeCode } from "./notice-codes.js";
 
+/** A link lifetime in the largest whole unit, e.g. "7 days" or "90 minutes". */
+function durationText(seconds: number): string {
+  const units: [number, string][] = [
+    [86_400, "day"],
+    [3_600, "hour"],
+    [60, "minute"],
+  ];
+  for (const [size, name] of units) {
+    if (seconds % size === 0) {
+      const n = seconds / size;
+      return `${n} ${name}${n === 1 ? "" : "s"}`;
+    }
+  }
+  return `${seconds} seconds`;
+}
+
 export const EN = {
   langName: "English",
   skipToContent: "Skip to content",
@@ -101,9 +117,9 @@ export const EN = {
     } as Record<string, string>,
   },
   storage: {
-    heading: "R2 storage",
+    heading: "Output storage",
     intro:
-      'Your own Cloudflare R2 bucket for files your MCP jobs create. Use an R2 API token with Object Read &amp; Write on this bucket. Saving lists the bucket and writes, then deletes, an empty <span class="mono">.multix-probe-*</span> object; nothing is saved if a check fails. Saved credentials are encrypted and never shown again.',
+      'Your own bucket for files your MCP jobs create: Cloudflare R2 (give the account ID) or any S3-compatible service such as AWS S3, Backblaze B2 or MinIO (give its public https endpoint instead). Use credentials with object read and write access on this bucket. Saving lists the bucket and writes, then deletes, an empty <span class="mono">.multix-probe-*</span> object; nothing is saved if a check fails. Saved credentials are encrypted and never shown again.',
     notConfigured: "Not configured",
     notConfiguredBody:
       "File outputs of MCP jobs need a bucket; without one only text output and provider URLs are returned.",
@@ -112,9 +128,20 @@ export const EN = {
       `Bucket <span class="mono">${escapeHtml(bucket)}</span>, directory <span class="mono">${escapeHtml(prefix)}/</span>`,
     publicLinks: (url: string) =>
       `Outputs get public URLs under <span class="mono">${escapeHtml(url)}</span>.`,
-    presignedLinks: "Outputs get presigned links valid for up to 7 days.",
+    presignedLinks: (seconds: number) =>
+      `Outputs get presigned links valid for ${durationText(seconds)}. multix never deletes outputs; set a lifecycle rule on the bucket to expire them.`,
+    r2Line: "Cloudflare R2.",
+    endpointLine: (host: string) =>
+      `S3-compatible endpoint <span class="mono">${escapeHtml(host)}</span>.`,
     remove: "Remove",
-    accountId: "Cloudflare account ID",
+    accountId: "Cloudflare account ID (R2; leave blank when you give an endpoint)",
+    endpoint: "S3-compatible endpoint (other services; https, public host name, no path)",
+    region: "Region (endpoint only; default us-east-1)",
+    addressing: "Bucket addressing (endpoint only)",
+    addressingPath: "Path-style (https://host/bucket/key)",
+    addressingVirtual: "Virtual-hosted (https://bucket.host/key)",
+    linkExpiry: (max: number) =>
+      `Presigned link lifetime in seconds (optional, 60–${max}, default ${max} = 7 days)`,
     accessKeyId: "Access key ID",
     secretAccessKey: "Secret access key",
     bucket: "Bucket name",
@@ -235,27 +262,39 @@ export const EN = {
     "api-key-not-found": "No API key was revoked: it was not found, it may already be gone.",
     "api-key-invalid-name": "API key not created: the name must be 1–64 printable characters.",
     "api-key-limit": "API key not created: revoke a key first, an account can hold at most 10.",
-    "r2-saved": "R2 storage saved. Access was checked with a list, upload and delete.",
-    "r2-removed": "R2 storage removed.",
+    "r2-saved": "Output storage saved. Access was checked with a list, upload and delete.",
+    "r2-removed": "Output storage removed.",
     "r2-invalid-account":
-      "R2 settings not saved: the account ID must be 32 hexadecimal characters.",
+      "Storage settings not saved: give either a Cloudflare account ID of 32 hexadecimal characters or an S3-compatible endpoint, not both.",
+    "r2-invalid-endpoint":
+      "Storage settings not saved: the endpoint must be an https URL with a public host name and no IP address, port, path, query or credentials.",
+    "r2-invalid-region":
+      "Storage settings not saved: the region may only use lower-case letters, digits and hyphens, and R2 accepts only auto.",
+    "r2-invalid-addressing":
+      "Storage settings not saved: addressing must be path-style or virtual-hosted, and R2 accepts only path-style.",
+    "r2-invalid-expiry":
+      "Storage settings not saved: the link lifetime must be a whole number of seconds from 60 to 604800.",
+    "r2-endpoint-not-public":
+      "Storage settings not saved: the endpoint does not resolve, or resolves to a private or reserved address.",
     "r2-invalid-keys":
-      "R2 settings not saved: the access key ID must be 16–128 letters or digits and the secret 16–1024 characters without spaces.",
+      "Storage settings not saved: the access key ID must be 16–128 letters or digits and the secret 16–1024 characters without spaces.",
     "r2-invalid-bucket":
-      "R2 settings not saved: the bucket name must be 3–63 lower-case letters, digits or hyphens.",
+      "Storage settings not saved: the bucket name must be 3–63 lower-case letters, digits or hyphens (dots only with path-style addressing on an endpoint).",
     "r2-invalid-url":
-      "R2 settings not saved: the public base URL must be an https URL without a query string or fragment.",
+      "Storage settings not saved: the public base URL must be an https URL without a query string or fragment.",
     "r2-invalid-prefix":
-      "R2 settings not saved: the directory path may only use letters, digits, dots, underscores, hyphens and slashes (no . or .. segments, at most 256 characters).",
+      "Storage settings not saved: the directory path may only use letters, digits, dots, underscores, hyphens and slashes (no . or .. segments, at most 256 characters).",
     "r2-denied":
-      "R2 settings not saved: R2 refused the credentials. Check the key pair and that the token covers this bucket.",
-    "r2-no-bucket": "R2 settings not saved: the bucket does not exist in that account.",
+      "Storage settings not saved: the storage service refused the credentials. Check the key pair and that the token covers this bucket.",
+    "r2-no-bucket": "Storage settings not saved: the bucket does not exist for those credentials.",
     "r2-read-only":
-      "R2 settings not saved: the token can read the bucket but not write to it. Use Object Read & Write.",
+      "Storage settings not saved: the token can read the bucket but not write to it. Use credentials with object read and write access (R2: Object Read & Write).",
     "r2-no-delete":
-      "R2 settings not saved: the token could upload but not delete the probe object. Use Object Read & Write.",
-    "r2-unreachable": "R2 settings not saved: R2 could not be reached. Try again.",
-    "r2-error": "R2 settings not saved: R2 returned an unexpected error. Try again.",
+      "Storage settings not saved: the token could upload but not delete the probe object. Use credentials with object read and write access (R2: Object Read & Write).",
+    "r2-unreachable":
+      "Storage settings not saved: the storage service could not be reached. Try again.",
+    "r2-error":
+      "Storage settings not saved: the storage service returned an unexpected error. Try again.",
   } satisfies Record<NoticeCode, string>,
 };
 

@@ -114,6 +114,12 @@ export interface WorkerEnv extends ServerSettings {
   MULTIX_MAX_JOBS_PER_ACCOUNT?: string;
   /** Jobs the server may run at the same time (default 10, at most 1000; keep <= containers max_instances). */
   MULTIX_MAX_JOBS_TOTAL?: string;
+  /**
+   * Longest lifetime, in seconds, of the presigned links job outputs get
+   * (default and maximum 604800 = 7 days, at least 60). Caps each account's
+   * own link expiry setting.
+   */
+  MULTIX_OUTPUT_LINK_MAX_SECONDS?: string;
 }
 
 /** Copy only the operator limits out of the Worker env (never Worker secrets). */
@@ -227,4 +233,19 @@ export function jobCapsFrom(env: WorkerEnv): JobCaps {
     ),
     total: boundedInt(env.MULTIX_MAX_JOBS_TOTAL, MAX_ACTIVE_JOBS_TOTAL, JOBS_TOTAL_CEILING),
   };
+}
+
+/** Shortest operator cap for presigned output links. */
+const OUTPUT_LINK_MIN_SECONDS = 60;
+/** Longest lifetime of a presigned output link (the S3 SigV4 limit, 7 days). */
+const OUTPUT_LINK_CEILING_SECONDS = 604_800;
+
+/** Operator cap on presigned output link lifetimes; invalid or missing values use 7 days. */
+export function outputLinkMaxSecondsFrom(env: WorkerEnv): number {
+  const seconds = boundedInt(
+    env.MULTIX_OUTPUT_LINK_MAX_SECONDS,
+    OUTPUT_LINK_CEILING_SECONDS,
+    OUTPUT_LINK_CEILING_SECONDS,
+  );
+  return Math.max(seconds, OUTPUT_LINK_MIN_SECONDS);
 }

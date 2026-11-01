@@ -88,7 +88,7 @@ describe("container job runner", () => {
       { name: "result.txt", url: null, bytes: 5 },
       { name: "1-result.txt", url: null, bytes: 5 },
     ]);
-    expect(result.note).toContain("configure R2 in /dashboard");
+    expect(result.note).toContain("R2 or S3-compatible bucket in /dashboard");
     const fs: Any = await import(/* @vite-ignore */ ["node", "fs"].join(":"));
     expect(fs.existsSync(seen.home)).toBe(false);
   }, 30_000);
@@ -327,6 +327,103 @@ describe("container R2 key rules", () => {
     expect(safeOutputName("..")).toBeUndefined();
     expect(safeOutputName(".")).toBeUndefined();
     expect(safeOutputName("out/")).toBeUndefined();
+  });
+});
+
+describe("container S3-compatible uploads", () => {
+  const S3 = {
+    endpoint: "https://s3.eu-central-1.amazonaws.com",
+    region: "eu-central-1",
+    accessKeyId: "s3-access-key-id-123456",
+    secretAccessKey: "s3-secret-access-key-value-123456",
+    bucket: "media",
+  };
+  const recorder = () => {
+    const calls: { url: string; method: string; auth: string | null }[] = [];
+    const fetch = async (input: string, init: RequestInit) => {
+      calls.push({
+        url: String(input),
+        method: init.method ?? "GET",
+        auth: new Headers(init.headers).get("authorization"),
+      });
+      return new Response("", { status: 200 });
+    };
+    return { fetch, calls };
+  };
+
+  it("PUTs path-style to the endpoint, signed for its region, with presigned links for the chosen lifetime", async () => {
+    const { createR2Uploader } = await load("../container/r2-upload.mjs");
+    const { fetch, calls } = recorder();
+    const uploader = createR2Uploader({ ...S3, linkExpirySeconds: 3600 }, { fetch });
+    const url = new URL(await uploader.put("multix/a/b c.png", "x", "image/png"));
+    expect(calls[0]?.url).toBe("https://s3.eu-central-1.amazonaws.com/media/multix/a/b%20c.png");
+    expect(calls[0]?.auth).toMatch(/\/eu-central-1\/s3\/aws4_request, /);
+    expect(url.origin + url.pathname).toBe(
+      "https://s3.eu-central-1.amazonaws.com/media/multix/a/b%20c.png",
+    );
+    expect(url.searchParams.get("X-Amz-Expires")).toBe("3600");
+    expect(url.searchParams.get("X-Amz-Credential")).toMatch(/\/eu-central-1\/s3\/aws4_request$/);
+    expect(url.toString()).not.toContain(S3.secretAccessKey);
+  });
+
+  it("uses virtual-hosted URLs and keeps R2 on its fixed host and region", async () => {
+    const { createR2Uploader } = await load("../container/r2-upload.mjs");
+    const s3 = recorder();
+    await createR2Uploader({ ...S3, addressing: "virtual" }, { fetch: s3.fetch }).put(
+      "k.txt",
+      "x",
+      "text/plain",
+    );
+    expect(s3.calls[0]?.url).toBe("https://media.s3.eu-central-1.amazonaws.com/k.txt");
+    const r2 = recorder();
+    const link = new URL(
+      await createR2Uploader(R2, { fetch: r2.fetch }).put("k.txt", "x", "text/plain"),
+    );
+    expect(r2.calls[0]?.url).toBe(`https://${R2.accountId}.r2.cloudflarestorage.com/media/k.txt`);
+    expect(r2.calls[0]?.auth).toMatch(/\/auto\/s3\/aws4_request, /);
+    expect(link.searchParams.get("X-Amz-Expires")).toBe("604800");
+  });
+
+  it.each([
+    "https://10.0.0.1",
+    "https://[fd00::1]",
+    "https://localhost",
+    "https://minio.svc.cluster.local",
+    "https://metadata.google.internal",
+    "https://s3.example.com:9000",
+    "https://s3.example.com/path",
+    "http://s3.example.com",
+  ])("refuses the endpoint %s", async (endpoint) => {
+    const { createR2Uploader } = await load("../container/r2-upload.mjs");
+    expect(() => createR2Uploader({ ...S3, endpoint })).toThrow("Invalid storage endpoint");
+  });
+
+  it("refuses both an account id and an endpoint, bad regions and dotted virtual-hosted buckets", async () => {
+    const { createR2Uploader } = await load("../container/r2-upload.mjs");
+    expect(() => createR2Uploader({ ...S3, accountId: R2.accountId })).toThrow();
+    expect(() => createR2Uploader({ ...S3, region: "EU West" })).toThrow("Invalid storage region");
+    expect(() => createR2Uploader({ ...S3, addressing: "virtual", bucket: "a.b.c" })).toThrow(
+      "Invalid bucket name",
+    );
+    expect(() => createR2Uploader({ ...S3, bucket: "a.b.c" })).not.toThrow();
+  });
+
+  it("uploads to a custom endpoint only over a connection checked to be public", async () => {
+    const { createPublicLookup, publicHttpsFetch } = await load("../container/job-network.mjs");
+    for (const address of ["10.0.0.5", "169.254.169.254", "127.0.0.1"]) {
+      const lookup = createPublicLookup(
+        (_host: string, _opts: unknown, cb: (e: unknown, a: unknown) => void) =>
+          cb(null, [{ address, family: 4 }]),
+      );
+      await expect(
+        publicHttpsFetch("https://rebind.example.com/media/k.txt", {
+          method: "PUT",
+          body: new Blob(["data"]).stream(),
+          lookup,
+        }),
+      ).rejects.toMatchObject({ code: "EBLOCKEDADDRESS" });
+    }
+    await expect(publicHttpsFetch("http://s3.example.com/x")).rejects.toThrow("Only https");
   });
 });
 

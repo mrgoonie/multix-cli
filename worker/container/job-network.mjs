@@ -134,6 +134,61 @@ function toHeaders(raw) {
   return headers;
 }
 
+/** Node request body from a fetch-style body: web stream, bytes, string or none. */
+function toNodeBody(body) {
+  if (body === undefined || body === null) return undefined;
+  if (typeof body === "string" || body instanceof Uint8Array) return Readable.from([body]);
+  if (body instanceof ReadableStream) return Readable.fromWeb(body);
+  throw new TypeError("Unsupported request body");
+}
+
+/**
+ * fetch-compatible HTTPS request (no redirects) whose connection may only
+ * reach public addresses, checked by `publicLookup` at connect time. Used to
+ * upload outputs to a custom S3-compatible endpoint, whose name the account
+ * chose: a name re-pointed at a private address after the dashboard checked
+ * it is refused here.
+ * @param {string | URL} input
+ * @param {{ method?: string, headers?: HeadersInit, body?: ReadableStream | Uint8Array | string, signal?: AbortSignal, lookup?: Function }} [init]
+ */
+export function publicHttpsFetch(input, init = {}) {
+  const url = new URL(String(input));
+  if (url.protocol !== "https:") return Promise.reject(new TypeError("Only https is allowed"));
+  const lookup = init.lookup ?? createPublicLookup();
+  const headers = {};
+  for (const [name, value] of new Headers(init.headers)) headers[name] = value;
+  return new Promise((resolve, reject) => {
+    const req = request(
+      url,
+      { method: init.method ?? "GET", agent: false, lookup, signal: init.signal, headers },
+      (res) => {
+        const status = res.statusCode ?? 502;
+        if (status < 200 || status > 599 || NULL_BODY_STATUSES.has(status)) {
+          res.resume();
+          resolve(new Response(null, { status: status < 200 || status > 599 ? 502 : status }));
+          return;
+        }
+        resolve(new Response(Readable.toWeb(res), { status, headers: toHeaders(res.headers) }));
+      },
+    );
+    req.on("error", reject);
+    let body;
+    try {
+      body = toNodeBody(init.body);
+    } catch (error) {
+      req.destroy();
+      reject(error);
+      return;
+    }
+    if (!body) {
+      req.end();
+      return;
+    }
+    body.on("error", (error) => req.destroy(error));
+    body.pipe(req);
+  });
+}
+
 /**
  * One GET without following redirects, connected through `publicLookup`.
  * Resolves to a standard Response so callers handle it like fetch().

@@ -198,16 +198,16 @@ export function openApiDocument(origin: string): Json {
       },
       "/storage": {
         get: {
-          summary: "R2 storage settings",
+          summary: "Output storage settings (R2 or S3-compatible)",
           description:
             "Account id, bucket and public URL of the saved settings; never the access key pair.",
           operationId: "getStorage",
           responses: { ...ok("Storage", ref("Storage")), ...ERRORS },
         },
         put: {
-          summary: "Check and save R2 storage settings",
+          summary: "Check and save output storage settings",
           description:
-            "Lists the bucket, uploads and deletes an empty `.multix-probe-*` object under the directory path, and saves only if every step succeeds (422 otherwise). Use an R2 token with Object Read & Write on the bucket.",
+            "Lists the bucket, uploads and deletes an empty `.multix-probe-*` object under the directory path, and saves only if every step succeeds (422 otherwise). For an S3-compatible `endpoint`, its host must first resolve only to public addresses (422 `endpoint-not-public` otherwise). Use credentials with object read and write access on the bucket (on R2, an API token with Object Read & Write).",
           operationId: "putStorage",
           requestBody: jsonBody(ref("StorageInput"), {
             account_id: "0123456789abcdef0123456789abcdef",
@@ -225,7 +225,7 @@ export function openApiDocument(origin: string): Json {
           },
         },
         delete: {
-          summary: "Remove R2 storage settings",
+          summary: "Remove output storage settings",
           operationId: "deleteStorage",
           responses: { ...ok("Removed", ref("Storage")), ...ERRORS },
         },
@@ -1070,7 +1070,8 @@ export function openApiDocument(origin: string): Json {
           content: { "application/json": { schema: ref("Error") } },
         },
         StorageCheckFailed: {
-          description: "R2 refused the access check; nothing was saved",
+          description:
+            "The storage access check failed (or the endpoint is not public); nothing was saved",
           content: { "application/json": { schema: ref("Error") } },
         },
       },
@@ -1120,20 +1121,66 @@ export function openApiDocument(origin: string): Json {
           type: "object",
           properties: {
             configured: { type: "boolean" },
-            account_id: { type: "string" },
+            provider: {
+              type: "string",
+              enum: ["r2", "s3"],
+              description:
+                "`r2` for a Cloudflare R2 account, `s3` for a custom S3-compatible endpoint",
+            },
+            account_id: { type: ["string", "null"] },
+            endpoint: { type: ["string", "null"], description: "https origin of the S3 API" },
+            region: { type: "string", description: "Signing region (`auto` for R2)" },
+            addressing: { type: "string", enum: ["path", "virtual"] },
             bucket: { type: "string" },
             public_base_url: { type: ["string", "null"] },
             prefix: {
               type: "string",
               description: "Directory job outputs are written under (`<prefix>/<account>/<job>/`)",
             },
+            link_expiry_seconds: {
+              type: "integer",
+              description:
+                "Lifetime of presigned output links: the account's choice, capped by the operator's MULTIX_OUTPUT_LINK_MAX_SECONDS",
+            },
           },
         },
         StorageInput: {
           type: "object",
-          required: ["account_id", "access_key_id", "secret_access_key", "bucket"],
+          description:
+            "Give exactly one of `account_id` (Cloudflare R2) or `endpoint` (any S3-compatible service).",
+          required: ["access_key_id", "secret_access_key", "bucket"],
           properties: {
-            account_id: { type: "string", pattern: "^[0-9a-fA-F]{32}$" },
+            account_id: {
+              type: "string",
+              pattern: "^[0-9a-fA-F]{32}$",
+              description: "Cloudflare account id; selects R2 (region auto, path-style)",
+            },
+            endpoint: {
+              type: "string",
+              format: "uri",
+              description:
+                "https origin of an S3-compatible API, e.g. https://s3.eu-central-1.amazonaws.com. Public host name only: no IP address, internal name, port, path, query or credentials; it must resolve only to public addresses",
+            },
+            region: {
+              type: "string",
+              default: "us-east-1",
+              description: "Signing region of the endpoint (R2 accepts only `auto`)",
+            },
+            addressing: {
+              type: "string",
+              enum: ["path", "virtual"],
+              default: "path",
+              description:
+                "Bucket URLs: path-style `https://host/bucket/key` or virtual-hosted `https://bucket.host/key` (R2 accepts only `path`)",
+            },
+            link_expiry_seconds: {
+              type: "integer",
+              minimum: 60,
+              maximum: 604800,
+              default: 604800,
+              description:
+                "Lifetime of presigned output links. multix never deletes outputs: expire objects with a bucket lifecycle rule",
+            },
             access_key_id: { type: "string" },
             secret_access_key: { type: "string" },
             bucket: { type: "string" },
@@ -1141,7 +1188,7 @@ export function openApiDocument(origin: string): Json {
               type: "string",
               format: "uri",
               description:
-                "Optional https base URL; without it outputs get presigned links valid up to 7 days",
+                "Optional https base URL; without it outputs get presigned links valid for link_expiry_seconds (up to 7 days)",
             },
             prefix: {
               type: "string",
