@@ -57,7 +57,11 @@ export function toFetchRequest(
   options: { trustedHops: number; maxBodyBytes: number; signal: AbortSignal },
 ): Request {
   const path = req.url?.startsWith("/") ? req.url : "/";
-  const url = new URL(path, origin);
+  // Append the path to the origin rather than resolving it against the origin:
+  // `new URL("//evil.example/x", origin)` would take its host from the path.
+  const base = new URL(origin);
+  const url = new URL(`${base.origin}${path}`);
+  if (url.origin !== base.origin) throw new TypeError("request target changes the origin");
   const headers = new Headers();
   for (const [name, value] of Object.entries(req.headers)) {
     const lower = name.toLowerCase();

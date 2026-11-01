@@ -12,6 +12,7 @@ import { type LookupAddress, lookup as dnsLookup } from "node:dns";
 import { isIP } from "node:net";
 import { Agent, buildConnector } from "undici";
 import { isNonPublicIpv4, isNonPublicIpv6 } from "../src/events/callback-guard.js";
+import { releaseTurnDuring } from "./durable-object-host.js";
 
 export class NonPublicAddressError extends Error {
   override name = "NonPublicAddressError";
@@ -76,12 +77,14 @@ export function publicOnlyAgent(): Agent {
 /**
  * Replace globalThis.fetch with one that always uses the public-only agent.
  * The caller's `dispatcher` option is ignored so no code path can opt out.
+ * Inside a Durable Object turn the instance lock is given up while the
+ * request is out (see releaseTurnDuring).
  */
 export function installPublicFetchGuard(): Agent {
   const agent = publicOnlyAgent();
   const original = globalThis.fetch;
   const guarded = (input: RequestInfo | URL, init?: RequestInit) =>
-    original(input, { ...(init ?? {}), dispatcher: agent } as RequestInit);
+    releaseTurnDuring(() => original(input, { ...(init ?? {}), dispatcher: agent } as RequestInit));
   globalThis.fetch = guarded as typeof fetch;
   // What workers-oauth-provider checks before it fetches MCP Client ID
   // Metadata Documents: claim the flag only once the guard is in place.

@@ -5,6 +5,7 @@
 **/.wrangler
 **/.env
 **/.env.*
+**/.dev.vars*
 !**/.env.example
 **/*.sqlite*
 .git

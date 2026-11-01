@@ -2,9 +2,11 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { DurableObjectHost } from "../durable-object-host.js";
+import { bootstrapTokenValid } from "../../src/accounts/local-auth.js";
+import { DurableObjectHost, releaseTurnDuring } from "../durable-object-host.js";
 import { type MultixDatabase, SCHEMA_VERSION, openDatabase } from "../sqlite-database.js";
 import { SqliteKvNamespace, sweepExpired } from "../sqlite-kv-namespace.js";
+import { prepareBootstrap } from "../standalone-bootstrap.js";
 
 const dirs: string[] = [];
 const dbs: MultixDatabase[] = [];
@@ -120,12 +122,36 @@ class Counter {
   async alarm(): Promise<void> {
     await this.ctx.storage.put({ fired: ((await this.ctx.storage.get<number>("fired")) ?? 0) + 1 });
   }
+  /** Read-then-write with no blockConcurrencyWhile: atomic per turn, as with input gates. */
+  async incr(): Promise<number> {
+    const n = ((await this.ctx.storage.get<number>("plain")) ?? 0) + 1;
+    await new Promise((r) => setTimeout(r, 1));
+    await this.ctx.storage.put({ plain: n });
+    return n;
+  }
+  /** A simulated outgoing request; the lock is given up while it is out. */
+  async slowFetch(): Promise<number> {
+    slow.started = true;
+    await releaseTurnDuring(() => slow.response);
+    return this.incr();
+  }
+  /** Parallel simulated requests in one turn take the lock back without deadlock. */
+  async parallelFetches(): Promise<number> {
+    await Promise.all(
+      [3, 1, 2].map((ms) => releaseTurnDuring(() => new Promise((r) => setTimeout(r, ms)))),
+    );
+    return this.incr();
+  }
   async fired(): Promise<number> {
     return (await this.ctx.storage.get<number>("fired")) ?? 0;
   }
 }
 
 const log = () => {};
+const slow: { started: boolean; response: Promise<void> } = {
+  started: false,
+  response: Promise.resolve(),
+};
 
 describe("DurableObjectHost", () => {
   it("serializes blockConcurrencyWhile writes and persists across restarts", async () => {
@@ -147,6 +173,39 @@ describe("DurableObjectHost", () => {
       .namespace("COUNTER", Counter as never)
       .getByName("acct-1") as unknown as Counter;
     expect((await again.read()).n).toBe(20);
+  });
+
+  it("runs each call as one turn, so read-then-write is not lost", async () => {
+    const { db } = tempDb();
+    const host = new DurableObjectHost(db, () => ({}), log);
+    const stub = host.namespace("COUNTER", Counter as never).getByName("a") as unknown as Counter;
+    const results = await Promise.all(Array.from({ length: 10 }, () => stub.incr()));
+    expect(results.sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    await host.stop(100);
+  });
+
+  it("lets other calls run while a turn awaits an outgoing request", async () => {
+    const { db } = tempDb();
+    const host = new DurableObjectHost(db, () => ({}), log);
+    const stub = host.namespace("COUNTER", Counter as never).getByName("a") as unknown as Counter;
+    let respond!: () => void;
+    slow.started = false;
+    slow.response = new Promise<void>((r) => {
+      respond = r;
+    });
+    const pending = stub.slowFetch();
+    await expect.poll(() => slow.started).toBe(true);
+    await expect(stub.incr()).resolves.toBe(1);
+    respond();
+    await expect(pending).resolves.toBe(2);
+    await expect(stub.incr()).resolves.toBe(3);
+    const parallel = await Promise.all([
+      stub.parallelFetches(),
+      stub.incr(),
+      stub.parallelFetches(),
+    ]);
+    expect(parallel.sort((a, b) => a - b)).toEqual([4, 5, 6]);
+    await host.stop(100);
   });
 
   it("does not expose alarm, private or missing members through the stub", () => {
@@ -173,5 +232,27 @@ describe("DurableObjectHost", () => {
     await expect.poll(() => stub2.fired(), { timeout: 2000 }).toBe(1);
     expect(db.db.prepare("SELECT COUNT(*) AS n FROM do_alarm").get()).toEqual({ n: 0 });
     await host2.stop(100);
+  });
+});
+
+describe("prepareBootstrap", () => {
+  it("revokes a generated token once MULTIX_BOOTSTRAP_TOKEN is set", async () => {
+    const { db } = tempDb();
+    const kv = new SqliteKvNamespace(db, "ACCOUNTS_KV") as unknown as KVNamespace;
+    const lines: string[] = [];
+    const base = {
+      ACCOUNTS_KV: kv,
+      MULTIX_LOCAL_AUTH: "true",
+      MULTIX_PUBLIC_URL: "https://m.example",
+    };
+    expect(await prepareBootstrap(base as never, (l) => lines.push(l))).toBe("generated");
+    const generated = /token[^:]*: (\S+)$/.exec(lines.find((l) => l.includes("token")) ?? "")?.[1];
+    expect(generated).toBeTruthy();
+    expect(await bootstrapTokenValid({}, kv, generated as string)).toBe(true);
+    const configured = "c".repeat(40);
+    const withEnv = { ...base, MULTIX_BOOTSTRAP_TOKEN: configured };
+    expect(await prepareBootstrap(withEnv as never, () => {})).toBe("env_token");
+    expect(await bootstrapTokenValid(withEnv, kv, generated as string)).toBe(false);
+    expect(await bootstrapTokenValid(withEnv, kv, configured)).toBe(true);
   });
 });

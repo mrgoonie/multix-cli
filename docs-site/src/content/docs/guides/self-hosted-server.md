@@ -111,7 +111,8 @@ token:
 - If `MULTIX_BOOTSTRAP_TOKEN` is set (a secret of at least 32 characters), use
   it. Shorter values are ignored.
 - Otherwise every start generates a random token, stores only its hash, and
-  prints it once to stdout (the container log). A restart replaces it.
+  prints it once to stdout (the container log). A restart replaces it, and
+  setting `MULTIX_BOOTSTRAP_TOKEN` later revokes it.
 
 The token works once: after the admin exists, `/dashboard/setup` answers `404`
 and the token is void. The username is 3 to 32 lower-case letters, digits,

@@ -1,6 +1,6 @@
 # Portable self-hosted Multix server (issue #549)
 
-Status: in progress · Branch: `claude/relaxed-clarke-wyecmp` → `dev`
+Status: implemented, in review · Branch: `claude/relaxed-clarke-wyecmp` → `dev`
 
 ## Outcome
 `multix-server`: a Node.js container that serves the same Worker code (`/mcp`,

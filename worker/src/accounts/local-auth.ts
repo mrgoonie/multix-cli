@@ -194,6 +194,11 @@ export async function storeBootstrapTokenHash(kv: KVNamespace, token: string): P
   await kv.put(SETUP_TOKEN_KEY, JSON.stringify({ hash: await sha256Base64Url(token) }));
 }
 
+/** Forget a generated bootstrap token (when the operator supplies MULTIX_BOOTSTRAP_TOKEN instead). */
+export async function clearStoredBootstrapToken(kv: KVNamespace): Promise<void> {
+  await kv.delete(SETUP_TOKEN_KEY);
+}
+
 /**
  * Whether `given` is MULTIX_BOOTSTRAP_TOKEN (when that is at least
  * MIN_BOOTSTRAP_TOKEN_LENGTH long) or the token whose hash the server stored.

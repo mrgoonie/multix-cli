@@ -6,6 +6,7 @@
  */
 
 import { mkdtempSync, rmSync } from "node:fs";
+import { request as httpRequest } from "node:http";
 import { createServer as createNetServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -236,6 +237,15 @@ describe("standalone multix-server", () => {
       headers: { "x-forwarded-host": "evil.example", "x-forwarded-proto": "https" },
     });
     expect(((await metadata.json()) as { resource: string }).resource).toBe(`${base}/mcp`);
+    // A request target starting with `//host` must not move the origin either.
+    for (const target of [
+      "//evil.example/.well-known/oauth-authorization-server",
+      "/\\evil.example/.well-known/oauth-authorization-server",
+    ]) {
+      const { status, body } = await rawGet(base, target);
+      expect(body).not.toContain("evil.example");
+      if (status === 200) expect(body).toContain(base);
+    }
   });
 
   it("caps request bodies", async () => {
@@ -256,3 +266,23 @@ describe("standalone multix-server", () => {
     expect(await draining.json()).toMatchObject({ ok: false, draining: true });
   });
 });
+
+/** GET with the request target sent verbatim (fetch would normalize it). */
+function rawGet(base: string, target: string): Promise<{ status: number; body: string }> {
+  const { hostname, port } = new URL(base);
+  return new Promise((resolve, reject) => {
+    const req = httpRequest(
+      { host: hostname, port, path: target, method: "GET", agent: false },
+      (res) => {
+        let body = "";
+        res.setEncoding("utf8");
+        res.on("data", (chunk: string) => {
+          body += chunk;
+        });
+        res.on("end", () => resolve({ status: res.statusCode ?? 0, body }));
+      },
+    );
+    req.on("error", reject);
+    req.end();
+  });
+}

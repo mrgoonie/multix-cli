@@ -6,11 +6,13 @@
  * random token, stores only its SHA-256 hash, and prints the token once to
  * stdout for the operator (container logs). The token stops working when the
  * admin is created (the hash is deleted) or the next start replaces it.
+ * Setting MULTIX_BOOTSTRAP_TOKEN later also revokes a generated token.
  */
 
 import { randomBytes } from "node:crypto";
 import {
   MIN_BOOTSTRAP_TOKEN_LENGTH,
+  clearStoredBootstrapToken,
   isBootstrapDone,
   localAuthEnabled,
   storeBootstrapTokenHash,
@@ -29,6 +31,8 @@ export async function prepareBootstrap(
   const origin = env.MULTIX_PUBLIC_URL?.replace(/\/+$/, "") ?? "";
   const configured = env.MULTIX_BOOTSTRAP_TOKEN?.trim() ?? "";
   if (configured.length >= MIN_BOOTSTRAP_TOKEN_LENGTH) {
+    // A token generated at an earlier start must not stay valid next to it.
+    await clearStoredBootstrapToken(env.ACCOUNTS_KV);
     logEvent("info", "bootstrap_pending", { token_source: "env" });
     print(
       `multix-server: no admin yet. Open ${origin}/dashboard/setup with the MULTIX_BOOTSTRAP_TOKEN secret.`,

@@ -6,15 +6,23 @@
  * `ctx.blockConcurrencyWhile`, `ctx.waitUntil` and the `alarm()` handler.
  *
  * Calls through `getByName(name).method(...)` behave like Workers RPC:
- * arguments and results are structured-cloned, and no call starts while the
- * instance is inside `blockConcurrencyWhile`. Storage values are serialized
- * with v8.serialize (the structured clone format Durable Objects also keep).
+ * arguments and results are structured-cloned. Each call and each alarm of
+ * one instance runs as a turn that holds the instance's lock, so a
+ * read-then-write across `await storage.*` is atomic, as Cloudflare's input
+ * gates make it. While a turn awaits an outgoing `fetch()` (see
+ * `releaseTurnDuring`) it gives the lock up, again like an input gate, so a
+ * slow webhook does not stall other calls; it takes the lock back before it
+ * continues. `blockConcurrencyWhile` inside a turn runs directly (the turn
+ * already holds the lock); outside one (the constructor) it takes the lock.
+ * Storage values are serialized with v8.serialize (the structured clone
+ * format Durable Objects also keep).
  *
  * Alarms fire at their time while the process runs and on the next start
  * when they came due while it was down. A failing alarm is retried with
  * exponential backoff (2 s … 64 s, 6 attempts), as on Cloudflare.
  */
 
+import { AsyncLocalStorage } from "node:async_hooks";
 import { deserialize, serialize } from "node:v8";
 import type { MultixDatabase } from "./sqlite-database.js";
 
@@ -40,26 +48,88 @@ interface ListOptions {
   reverse?: boolean;
 }
 
-/** A FIFO lock: `run(fn)` waits for earlier holders, then runs `fn` alone. */
+/** A FIFO lock: `acquire()` resolves, in call order, with a release function. */
 class Gate {
-  private tail: Promise<unknown> = Promise.resolve();
-  private held = 0;
+  private tail: Promise<void> = Promise.resolve();
 
-  get busy(): boolean {
-    return this.held > 0;
-  }
-
-  async idle(): Promise<void> {
-    while (this.held > 0) await this.tail.catch(() => undefined);
-  }
-
-  run<T>(fn: () => Promise<T>): Promise<T> {
-    this.held++;
-    const result = this.tail.catch(() => undefined).then(fn);
-    this.tail = result.finally(() => {
-      this.held--;
+  acquire(): Promise<() => void> {
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
     });
-    return result;
+    const ready = this.tail.then(() => release);
+    this.tail = this.tail.then(() => released);
+    return ready;
+  }
+
+  async run<T>(fn: () => Promise<T>): Promise<T> {
+    const release = await this.acquire();
+    try {
+      return await fn();
+    } finally {
+      release();
+    }
+  }
+}
+
+/** The turn (instance call or alarm) the current async context runs in, if any. */
+interface Turn {
+  gate: Gate;
+  /** Whether the turn holds the lock now (false while every branch awaits a fetch). */
+  held: boolean;
+  release: () => void;
+  reacquiring?: Promise<void>;
+  done: boolean;
+}
+
+const currentTurn = new AsyncLocalStorage<Turn>();
+
+/** Run `fn` as a turn of `gate`: alone, except while it awaits `releaseTurnDuring`. */
+async function runTurn<T>(gate: Gate, fn: () => Promise<T>): Promise<T> {
+  const turn: Turn = { gate, held: true, release: await gate.acquire(), done: false };
+  try {
+    return await currentTurn.run(turn, fn);
+  } finally {
+    turn.done = true;
+    if (turn.held) {
+      turn.held = false;
+      turn.release();
+    }
+  }
+}
+
+function reacquire(turn: Turn): Promise<void> {
+  if (turn.held || turn.done) return Promise.resolve();
+  turn.reacquiring ??= turn.gate.acquire().then((release) => {
+    turn.reacquiring = undefined;
+    if (turn.done) {
+      release(); // the turn ended while a detached fetch was still out
+      return;
+    }
+    turn.release = release;
+    turn.held = true;
+  });
+  return turn.reacquiring;
+}
+
+/**
+ * Await `work` with the current turn's lock given up (no-op outside a turn),
+ * then take the lock back. The standalone app wraps the global `fetch` with
+ * it, which is what Durable Object input gates do for outgoing requests.
+ * Parallel fetches in one turn share the lock: the first to finish takes it
+ * back for the turn, and the others continue under it.
+ */
+export async function releaseTurnDuring<T>(work: () => Promise<T>): Promise<T> {
+  const turn = currentTurn.getStore();
+  if (!turn) return work();
+  if (turn.held) {
+    turn.held = false;
+    turn.release();
+  }
+  try {
+    return await currentTurn.exit(work);
+  } finally {
+    await reacquire(turn);
   }
 }
 
@@ -290,7 +360,8 @@ export class DurableObjectNamespaceShim {
         equals: (other: { name?: string }) => other?.name === name,
       },
       storage,
-      blockConcurrencyWhile: <T>(fn: () => Promise<T>) => gate.run(fn),
+      blockConcurrencyWhile: <T>(fn: () => Promise<T>) =>
+        currentTurn.getStore()?.gate === gate ? fn() : gate.run(fn),
       waitUntil: (promise: Promise<unknown>) => {
         this.host.track(Promise.resolve(promise)).catch(() => undefined);
       },
@@ -301,7 +372,7 @@ export class DurableObjectNamespaceShim {
     return inst;
   }
 
-  /** An RPC-style stub: every method call is cloned in and out and waits for an idle gate. */
+  /** An RPC-style stub: every method call is cloned in and out and runs as a turn. */
   getByName(name: string): never {
     if (typeof name !== "string" || name.length === 0)
       throw new TypeError("Durable Object name must be a non-empty string");
@@ -326,10 +397,8 @@ export class DurableObjectNamespaceShim {
             host.track(
               (async () => {
                 const input = structuredClone(args);
-                await inst.gate.idle();
-                const result = await (member as (...a: unknown[]) => unknown).apply(
-                  inst.object,
-                  input,
+                const result = await runTurn(inst.gate, async () =>
+                  (member as (...a: unknown[]) => unknown).apply(inst.object, input),
                 );
                 return result === undefined ? undefined : structuredClone(result);
               })(),
@@ -375,8 +444,8 @@ export class DurableObjectNamespaceShim {
     inst.storage.clearFiredAlarm(time);
     if (typeof inst.object.alarm !== "function") return;
     try {
-      await inst.gate.idle();
-      await inst.object.alarm.call(inst.object);
+      const alarm = inst.object.alarm as () => Promise<void>;
+      await runTurn(inst.gate, () => alarm.call(inst.object));
       inst.alarmAttempts = 0;
     } catch (error) {
       inst.alarmAttempts++;

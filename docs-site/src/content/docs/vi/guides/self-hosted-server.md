@@ -112,7 +112,7 @@ token:
   trị đó. Giá trị ngắn hơn bị bỏ qua.
 - Nếu không, mỗi lần khởi động server tạo một token ngẫu nhiên, chỉ lưu hash
   của nó và in token một lần ra stdout (log của container). Lần khởi động sau
-  sẽ thay token đó.
+  sẽ thay token đó, và đặt `MULTIX_BOOTSTRAP_TOKEN` sau này sẽ thu hồi nó.
 
 Token chỉ dùng được một lần: khi admin đã tồn tại, `/dashboard/setup` trả về
 `404` và token mất hiệu lực. Username dài 3 đến 32 ký tự gồm chữ thường, chữ

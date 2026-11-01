@@ -26,23 +26,28 @@ on:
         type: string
         required: true
 
+# Only the publish job gets write and OIDC permissions; it runs no npm
+# install or test code outside the Docker build (which sees no credentials).
 permissions:
   contents: read
-  packages: write
-  id-token: write
-  attestations: write
 
 concurrency:
   group: publish-server-image-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
-  image:
-    name: Build and push multix-server
+  verify:
+    name: Test the tagged source
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
+    permissions:
+      contents: read
     env:
       TAG: ${{ inputs.tag || github.ref_name }}
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      image: ${{ steps.meta.outputs.image }}
+      sha: ${{ steps.src.outputs.sha }}
     steps:
       - name: Validate tag
         id: meta
@@ -58,6 +63,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: refs/tags/${{ env.TAG }}
+          persist-credentials: false
 
       - name: Source commit
         id: src
@@ -80,6 +86,35 @@ jobs:
           npm run typecheck --prefix worker
           npm test --prefix worker
 
+  image:
+    name: Build and push multix-server
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+      IMAGE: ${{ needs.verify.outputs.image }}
+      VERSION: ${{ needs.verify.outputs.version }}
+      SHA: ${{ needs.verify.outputs.sha }}
+    steps:
+      - name: Checkout the tag
+        uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ env.TAG }}
+          persist-credentials: false
+
+      - name: Same commit as verified
+        run: |
+          if [ "$(git rev-parse HEAD | cut -c1-12)" != "$SHA" ]; then
+            echo "::error::The tag moved between test and build."
+            exit 1
+          fi
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -91,10 +126,21 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       # Refuse to move an existing version tag: published tags are immutable.
+      # Only an explicit "not found" counts as absent; any other registry
+      # error stops the run rather than risk overwriting a version.
       - name: Refuse to overwrite an existing version
         run: |
-          if docker manifest inspect "${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}" > /dev/null 2>&1; then
-            echo "::error::${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }} already exists."
+          set +e
+          out=$(docker buildx imagetools inspect "$IMAGE:$VERSION" 2>&1)
+          rc=$?
+          set -e
+          if [ "$rc" -eq 0 ]; then
+            echo "::error::$IMAGE:$VERSION already exists."
+            exit 1
+          fi
+          if ! grep -qiE "not found|manifest unknown" <<<"$out"; then
+            echo "::error::Could not check whether $IMAGE:$VERSION exists:"
+            echo "$out"
             exit 1
           fi
 
@@ -109,30 +155,30 @@ jobs:
           provenance: mode=max
           sbom: true
           build-args: |
-            MULTIX_VERSION=${{ steps.meta.outputs.version }}
+            MULTIX_VERSION=${{ env.VERSION }}
           tags: |
-            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}
-            ${{ steps.meta.outputs.image }}:sha-${{ steps.src.outputs.sha }}
+            ${{ env.IMAGE }}:${{ env.VERSION }}
+            ${{ env.IMAGE }}:sha-${{ env.SHA }}
           labels: |
-            org.opencontainers.image.revision=${{ steps.src.outputs.sha }}
+            org.opencontainers.image.revision=${{ env.SHA }}
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v2
         with:
-          subject-name: ${{ steps.meta.outputs.image }}
+          subject-name: ${{ env.IMAGE }}
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
 
       - name: Summary
         run: |
           {
-            echo "### multix-server ${{ steps.meta.outputs.version }}"
+            echo "### multix-server ${{ env.VERSION }}"
             echo
             echo "Pin this digest in deployments:"
             echo
             echo '```'
-            echo "${{ steps.meta.outputs.image }}@${{ steps.push.outputs.digest }}"
+            echo "${{ env.IMAGE }}@${{ steps.push.outputs.digest }}"
             echo '```'
             echo
-            echo "Tags: \`${{ steps.meta.outputs.version }}\`, \`sha-${{ steps.src.outputs.sha }}\` (no \`latest\`)."
+            echo "Tags: \`${{ env.VERSION }}\`, \`sha-${{ env.SHA }}\` (no \`latest\`)."
           } >> "$GITHUB_STEP_SUMMARY"
