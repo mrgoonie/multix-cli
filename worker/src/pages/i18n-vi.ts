@@ -3,6 +3,19 @@
 import { escapeHtml } from "../http-responses.js";
 import type { Messages } from "./i18n-en.js";
 
+/** Thời hạn link theo đơn vị nguyên lớn nhất, ví dụ "7 ngày" hoặc "90 phút". */
+function durationText(seconds: number): string {
+  const units: [number, string][] = [
+    [86_400, "ngày"],
+    [3_600, "giờ"],
+    [60, "phút"],
+  ];
+  for (const [size, name] of units) {
+    if (seconds % size === 0) return `${seconds / size} ${name}`;
+  }
+  return `${seconds} giây`;
+}
+
 export const VI: Messages = {
   langName: "Tiếng Việt",
   skipToContent: "Bỏ qua, tới nội dung",
@@ -96,9 +109,9 @@ export const VI: Messages = {
     },
   },
   storage: {
-    heading: "Lưu trữ R2",
+    heading: "Lưu trữ đầu ra",
     intro:
-      'Bucket Cloudflare R2 của riêng bạn cho các tệp mà job MCP tạo ra. Dùng R2 API token có quyền Object Read &amp; Write trên bucket này. Khi lưu, hệ thống liệt kê bucket rồi ghi và xóa một object rỗng <span class="mono">.multix-probe-*</span>; nếu một bước kiểm tra thất bại thì không có gì được lưu. Thông tin đăng nhập đã lưu được mã hóa và không bao giờ hiển thị lại.',
+      'Bucket của riêng bạn cho các tệp mà job MCP tạo ra: Cloudflare R2 (nhập account ID) hoặc bất kỳ dịch vụ tương thích S3 nào như AWS S3, Backblaze B2 hay MinIO (nhập endpoint https công khai thay cho account ID). Dùng thông tin đăng nhập có quyền đọc và ghi object trên bucket này. Khi lưu, hệ thống liệt kê bucket rồi ghi và xóa một object rỗng <span class="mono">.multix-probe-*</span>; nếu một bước kiểm tra thất bại thì không có gì được lưu. Thông tin đăng nhập đã lưu được mã hóa và không bao giờ hiển thị lại.',
     notConfigured: "Chưa cấu hình",
     notConfiguredBody:
       "Đầu ra dạng tệp của job MCP cần một bucket; nếu không có, chỉ trả về văn bản và URL của nhà cung cấp.",
@@ -107,9 +120,20 @@ export const VI: Messages = {
       `Bucket <span class="mono">${escapeHtml(bucket)}</span>, thư mục <span class="mono">${escapeHtml(prefix)}/</span>`,
     publicLinks: (url) =>
       `Đầu ra có URL công khai dưới <span class="mono">${escapeHtml(url)}</span>.`,
-    presignedLinks: "Đầu ra có link ký sẵn, hiệu lực tối đa 7 ngày.",
+    presignedLinks: (seconds) =>
+      `Đầu ra có link ký sẵn, hiệu lực ${durationText(seconds)}. multix không bao giờ xóa đầu ra; hãy đặt lifecycle rule trên bucket để chúng hết hạn.`,
+    r2Line: "Cloudflare R2.",
+    endpointLine: (host) =>
+      `Endpoint tương thích S3 <span class="mono">${escapeHtml(host)}</span>.`,
     remove: "Xóa",
-    accountId: "Cloudflare account ID",
+    accountId: "Cloudflare account ID (R2; để trống khi nhập endpoint)",
+    endpoint: "Endpoint tương thích S3 (dịch vụ khác; https, tên miền công khai, không có path)",
+    region: "Region (chỉ cho endpoint; mặc định us-east-1)",
+    addressing: "Kiểu địa chỉ bucket (chỉ cho endpoint)",
+    addressingPath: "Path-style (https://host/bucket/key)",
+    addressingVirtual: "Virtual-hosted (https://bucket.host/key)",
+    linkExpiry: (max) =>
+      `Thời hạn link ký sẵn tính bằng giây (không bắt buộc, 60–${max}, mặc định ${max} = 7 ngày)`,
     accessKeyId: "Access key ID",
     secretAccessKey: "Secret access key",
     bucket: "Tên bucket",
@@ -229,25 +253,39 @@ export const VI: Messages = {
     "api-key-not-found": "Không thu hồi khóa API nào: không tìm thấy khóa, có thể đã bị xóa.",
     "api-key-invalid-name": "Chưa tạo khóa API: tên phải dài 1–64 ký tự in được.",
     "api-key-limit": "Chưa tạo khóa API: hãy thu hồi một khóa trước, mỗi tài khoản có tối đa 10.",
-    "r2-saved": "Đã lưu cấu hình R2. Quyền truy cập đã được kiểm tra bằng liệt kê, tải lên và xóa.",
-    "r2-removed": "Đã xóa cấu hình R2.",
-    "r2-invalid-account": "Chưa lưu cấu hình R2: account ID phải gồm 32 ký tự thập lục phân.",
+    "r2-saved":
+      "Đã lưu cấu hình lưu trữ đầu ra. Quyền truy cập đã được kiểm tra bằng liệt kê, tải lên và xóa.",
+    "r2-removed": "Đã xóa cấu hình lưu trữ đầu ra.",
+    "r2-invalid-account":
+      "Chưa lưu cấu hình lưu trữ: hãy nhập hoặc Cloudflare account ID gồm 32 ký tự thập lục phân, hoặc một endpoint tương thích S3, không nhập cả hai.",
+    "r2-invalid-endpoint":
+      "Chưa lưu cấu hình lưu trữ: endpoint phải là URL https có tên miền công khai, không có địa chỉ IP, cổng, path, query hay thông tin đăng nhập.",
+    "r2-invalid-region":
+      "Chưa lưu cấu hình lưu trữ: region chỉ được dùng chữ thường, chữ số và dấu gạch ngang; R2 chỉ chấp nhận auto.",
+    "r2-invalid-addressing":
+      "Chưa lưu cấu hình lưu trữ: kiểu địa chỉ phải là path-style hoặc virtual-hosted; R2 chỉ chấp nhận path-style.",
+    "r2-invalid-expiry":
+      "Chưa lưu cấu hình lưu trữ: thời hạn link phải là số giây nguyên từ 60 đến 604800.",
+    "r2-endpoint-not-public":
+      "Chưa lưu cấu hình lưu trữ: endpoint không phân giải được, hoặc trỏ tới địa chỉ riêng hay địa chỉ dành riêng.",
     "r2-invalid-keys":
-      "Chưa lưu cấu hình R2: access key ID phải gồm 16–128 chữ cái hoặc chữ số và secret dài 16–1024 ký tự, không có khoảng trắng.",
+      "Chưa lưu cấu hình lưu trữ: access key ID phải gồm 16–128 chữ cái hoặc chữ số và secret dài 16–1024 ký tự, không có khoảng trắng.",
     "r2-invalid-bucket":
-      "Chưa lưu cấu hình R2: tên bucket phải gồm 3–63 chữ thường, chữ số hoặc dấu gạch ngang.",
+      "Chưa lưu cấu hình lưu trữ: tên bucket phải gồm 3–63 chữ thường, chữ số hoặc dấu gạch ngang (dấu chấm chỉ dùng được với path-style trên endpoint).",
     "r2-invalid-url":
-      "Chưa lưu cấu hình R2: URL gốc công khai phải là URL https, không có query string hay fragment.",
+      "Chưa lưu cấu hình lưu trữ: URL gốc công khai phải là URL https, không có query string hay fragment.",
     "r2-invalid-prefix":
-      "Chưa lưu cấu hình R2: đường dẫn thư mục chỉ được dùng chữ cái, chữ số, dấu chấm, gạch dưới, gạch ngang và gạch chéo (không có đoạn . hay .., tối đa 256 ký tự).",
+      "Chưa lưu cấu hình lưu trữ: đường dẫn thư mục chỉ được dùng chữ cái, chữ số, dấu chấm, gạch dưới, gạch ngang và gạch chéo (không có đoạn . hay .., tối đa 256 ký tự).",
     "r2-denied":
-      "Chưa lưu cấu hình R2: R2 từ chối thông tin đăng nhập. Hãy kiểm tra cặp khóa và token có bao gồm bucket này.",
-    "r2-no-bucket": "Chưa lưu cấu hình R2: bucket không tồn tại trong tài khoản đó.",
+      "Chưa lưu cấu hình lưu trữ: dịch vụ lưu trữ từ chối thông tin đăng nhập. Hãy kiểm tra cặp khóa và token có bao gồm bucket này.",
+    "r2-no-bucket": "Chưa lưu cấu hình lưu trữ: bucket không tồn tại với thông tin đăng nhập đó.",
     "r2-read-only":
-      "Chưa lưu cấu hình R2: token đọc được bucket nhưng không ghi được. Hãy dùng Object Read & Write.",
+      "Chưa lưu cấu hình lưu trữ: token đọc được bucket nhưng không ghi được. Hãy dùng thông tin đăng nhập có quyền đọc và ghi object (R2: Object Read & Write).",
     "r2-no-delete":
-      "Chưa lưu cấu hình R2: token tải lên được nhưng không xóa được object thử. Hãy dùng Object Read & Write.",
-    "r2-unreachable": "Chưa lưu cấu hình R2: không kết nối được tới R2. Hãy thử lại.",
-    "r2-error": "Chưa lưu cấu hình R2: R2 trả về lỗi không mong đợi. Hãy thử lại.",
+      "Chưa lưu cấu hình lưu trữ: token tải lên được nhưng không xóa được object thử. Hãy dùng thông tin đăng nhập có quyền đọc và ghi object (R2: Object Read & Write).",
+    "r2-unreachable":
+      "Chưa lưu cấu hình lưu trữ: không kết nối được tới dịch vụ lưu trữ. Hãy thử lại.",
+    "r2-error":
+      "Chưa lưu cấu hình lưu trữ: dịch vụ lưu trữ trả về lỗi không mong đợi. Hãy thử lại.",
   },
 };

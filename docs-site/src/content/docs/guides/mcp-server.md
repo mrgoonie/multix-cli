@@ -1,6 +1,6 @@
 ---
 title: Remote MCP server on Cloudflare Workers
-description: Deploy the multix MCP server to Cloudflare Workers so remote AI agents can run multix CLI commands in a Cloudflare Container, over Streamable HTTP, with GitHub sign-in, OAuth and a dashboard for each account's provider keys and R2 bucket.
+description: Deploy the multix MCP server to Cloudflare Workers so remote AI agents can run multix CLI commands in a Cloudflare Container, over Streamable HTTP, with GitHub sign-in, OAuth and a dashboard for each account's provider keys and output bucket (R2 or S3-compatible).
 ---
 
 The repository ships an optional, stateless [Model Context Protocol](https://modelcontextprotocol.io)
@@ -9,7 +9,7 @@ agents that cannot run the CLI locally (hosted assistants, web IDEs, other
 servers) can run almost any `multix` CLI command remotely: each run gets its
 own [Cloudflare Container](https://developers.cloudflare.com/containers/) with
 the CLI, ffmpeg and ImageMagick installed, and output files are uploaded to the
-caller's own R2 bucket. Every provider call goes through `multix_run`.
+caller's own R2 or S3-compatible bucket. Every provider call goes through `multix_run`.
 
 The worker is a separate package. It is not part of the published npm CLI and
 does not change how `multix` behaves on your machine.
@@ -119,13 +119,13 @@ the CLI's `--json` envelope (see [For AI agents](/reference/for-ai-agents/#exit-
 its `stderr_tail` ends with the CLI's `code:`, `hint:` and `next:` lines, which
 name the error class.
 
-**Output files need R2.** The files the CLI writes are uploaded to your own R2
-bucket under `<directory>/<account hash>/<job id>/<name>` (the directory is
+**Output files need a bucket.** The files the CLI writes are uploaded to your own R2
+or S3-compatible bucket under `<directory>/<account hash>/<job id>/<name>` (the directory is
 `multix` unless you choose another one), and `outputs` lists their
 public or presigned URLs. At most 50 files are reported per job, and a file
-over 500 MB is listed with `url: null` instead of being uploaded. If you have not saved an R2 bucket, the job still
+over 500 MB is listed with `url: null` instead of being uploaded. If you have not saved a bucket, the job still
 runs, but each output has `url: null` and the result carries a `note` asking
-you to configure R2 in `/dashboard`. stdout (with any provider URLs
+you to configure output storage in `/dashboard`. stdout (with any provider URLs
 the CLI prints) is returned either way. Keys never appear in `stdout` or
 `stderr_tail`: the values of your saved keys are replaced with `[redacted]`.
 
@@ -281,7 +281,7 @@ See [Speech commands](/commands/speech/).
 - Interactive and local-only features: `multix update`, `multix check`, the
   Codex image driver, `--stdin-ext`, and reading values from `@file`.
 - Choosing where files go: the server sets the output directory. Download
-  outputs from their R2 URLs.
+  outputs from their storage URLs.
 - Without the job container, only `multix_catalog`, `multix_model_catalog` and
   `multix_skills` are listed, so no command can run.
 - `multix catalog` commands: they read your local usage and reviews. Use
@@ -323,36 +323,77 @@ Worker, and keys set there are ignored.
 
 The **API keys** card in `/dashboard` creates and revokes account API keys
 (`mxk_…`, shown once, at most 10 per account) for the REST API at `/api/v1`,
-which lets scripts and CI manage provider keys and R2 storage and run jobs
+which lets scripts and CI manage provider keys and output storage and run jobs
 without MCP. See [REST API](/guides/rest-api/) and the reference at `/api/docs`.
 
-### R2 storage
+### Output storage
 
-Each account can also save its own Cloudflare R2 bucket. `multix_run` uploads
-every output file there; without a bucket, jobs still run but return no file
-URLs.
+Each account can also save its own bucket: Cloudflare R2 or any
+S3-compatible service (for example AWS S3, Backblaze B2 or a public MinIO).
+`multix_run` uploads every output file there; without a bucket, jobs still run
+but return no file URLs.
 
-1. In the Cloudflare dashboard, create a bucket and an R2 API token with
-   **Object Read & Write** on that bucket.
-2. In the **R2 storage** card at `/dashboard`, enter the account ID (32 hex
-   characters), the token's access key ID and secret access key, the bucket
-   name and, optionally, an `https://` public base URL (a custom domain or
-   `r2.dev` address serving the bucket). Without a public URL, files get
-   presigned links valid for up to 7 days. **Directory path** (default
-   `multix`) is the folder in the bucket that outputs go to, for example
-   `agents/outputs`. It may use letters, digits, `.`, `_`, `-` and `/`
-   (at most 256 characters, no `.` or `..` segments); surrounding slashes are
-   dropped.
-3. **Check and save** lists the bucket (`ListObjectsV2`, one key), uploads an
-   empty `.multix-probe-*` object into the directory path and deletes it again. Nothing is saved if a
-   step fails; the page says which one (credentials refused, bucket missing,
-   read-only token, probe could not be deleted, R2 unreachable). Bucket-scoped
-   tokens are recommended: an account-wide token can reach every bucket.
+1. Create a bucket and credentials with object read and write access on it.
+   On Cloudflare, that is an R2 API token with **Object Read & Write** on the
+   bucket. Bucket-scoped credentials are recommended: an account-wide token can
+   reach every bucket.
+2. In the **Output storage** card at `/dashboard`, enter either:
+   - **R2:** the Cloudflare account ID (32 hex characters). Requests go to
+     `https://<account>.r2.cloudflarestorage.com/<bucket>` and are signed for
+     region `auto`.
+   - **S3-compatible endpoint:** the service's `https://` origin, for example
+     `https://s3.eu-west-1.amazonaws.com` (no path, query, credentials or
+     port). The host must be a public host name: IP literals, `localhost`,
+     internal names such as `*.internal` or `*.local`, and names that resolve
+     to private, loopback, link-local or other special-purpose addresses are
+     refused. **Region** (default `us-east-1`) is the SigV4 signing region.
+     **Bucket addressing** is path-style (`https://host/bucket/key`, the
+     default) or virtual-hosted (`https://bucket.host/key`); bucket names with
+     dots need path-style.
+
+   Then the access key ID and secret access key, the bucket name and,
+   optionally, an `https://` public base URL (a custom domain or `r2.dev`
+   address serving the bucket). **Directory path** (default `multix`) is the
+   folder in the bucket that outputs go to, for example `agents/outputs`. It
+   may use letters, digits, `.`, `_`, `-` and `/` (at most 256 characters, no
+   `.` or `..` segments); surrounding slashes are dropped.
+3. **Check and save** first checks, for an endpoint, that the host the server
+   will call resolves only to public addresses (over DNS-over-HTTPS). It then
+   lists the bucket (`ListObjectsV2`, one key), uploads an empty
+   `.multix-probe-*` object into the directory path and deletes it again.
+   Nothing is saved if a step fails; the page says which one (endpoint not
+   public, credentials refused, bucket missing, read-only credentials, probe
+   could not be deleted, storage service unreachable). The job runner checks
+   every address again when it connects, so a name that later resolves to a
+   private address is refused at upload time too.
 
 The settings are stored as one AES-GCM record under `r2:<account>` in
-`ACCOUNTS_KV`, like provider keys. The page shows only the bucket name and
-public URL; replacing the settings asks for the secret again. **Remove**
-deletes them.
+`ACCOUNTS_KV`, like provider keys; R2 records saved before endpoints existed
+keep working unchanged. The page shows only the bucket name, the endpoint host
+and the public URL; replacing the settings asks for the secret again.
+**Remove** deletes them.
+
+#### Link lifetime and retention
+
+Without a public base URL, output files get presigned `GET` links. **Presigned
+link lifetime** sets how long they stay valid: 60 to 604800 seconds (7 days,
+the SigV4 maximum and the default). The operator can lower the ceiling for
+every account with `MULTIX_OUTPUT_LINK_MAX_SECONDS` (see
+[Configuration](#configuration)); a longer account setting is cut to it, and
+the dashboard and `GET /api/v1/storage` show the lifetime in effect.
+
+The link lifetime does not delete anything. multix never deletes output files
+from your bucket: they stay until you remove them. To expire them, add a
+lifecycle rule to the bucket for the directory path, for example:
+
+- **R2:** bucket **Settings** → **Object lifecycle rules** → add a rule with the
+  prefix `multix/` that deletes objects after the number of days you want.
+- **AWS S3 and most S3-compatible services:** a lifecycle configuration with a
+  `Filter` on the prefix and an `Expiration` in days, for example
+  `aws s3api put-bucket-lifecycle-configuration --bucket <bucket> --lifecycle-configuration '{"Rules":[{"ID":"expire-multix","Status":"Enabled","Filter":{"Prefix":"multix/"},"Expiration":{"Days":30}}]}'`.
+
+Keep the rule's prefix equal to your directory path, so it never touches other
+objects in the bucket.
 
 ## Deploy
 
@@ -501,7 +542,7 @@ The server speaks two MCP protocol revisions on the same `/mcp` endpoint:
 | `multix.job.failed` | It failed. |
 | `multix.job.canceled` | It was canceled. |
 | `multix.job.timed_out` | It ran out of time. |
-| `multix.asset.ready` | One of its output files was stored in your R2 bucket. |
+| `multix.asset.ready` | One of its output files was stored in your output bucket. |
 
 Every event takes one optional argument, `job_id`, to narrow it to one job you
 own; without it the subscription covers all your jobs. `events/list` gives
@@ -721,7 +762,7 @@ for your account. Built-in skills have no workflow.
 - `steps` (1 to 10) are `{ id, command, args?, options?, inputs? }`, in the
   form `multix_run` takes. `command` must be one the server runs.
 - Values may hold `{{inputs.<name>}}` and `{{steps.<id>.outputs[<n>]}}` (an
-  earlier step's output URL, so it needs [R2 storage](#r2-storage)). Command
+  earlier step's output URL, so it needs [output storage](#output-storage)). Command
   paths and option names cannot. Each value stays one argument, so a template
   cannot add a flag or an argument. An absent optional input leaves its value
   out.
@@ -787,6 +828,7 @@ Set these as `vars` in `worker/wrangler.jsonc`:
 | `MULTIX_MCP_ALLOWED_IMAGE_MODELS` | any | Comma-separated `<group>:<model>` entries (for example `fal:fal-ai/flux/schnell`, exact match) that image commands of `multix_run` may use, given as `--model` or as the command's catalog default. When the CLI picks the model at run time, the caller must pass a listed `--model`; a group with no entry is refused. `run` pass-through commands are governed by `MULTIX_MCP_UNCAPPED_SPEND` instead. |
 | `MULTIX_MCP_UNCAPPED_SPEND` | `budget` | Runs the caps above cannot bound (marked `uncapped_spend` in `multix_catalog`): `budget` runs one only with a `max_cost_usd` its price estimate proves (an unknown price is refused), `deny` refuses it, `allow` runs it. Any other value means `budget`. |
 | `MULTIX_MCP_ALLOWED_ORIGINS` | none | Exact browser origins (for example `https://app.example.com`) allowed to call `/mcp`. `*` and other wildcards are not supported: `*` only matches a literal `*` origin, which browsers never send. After the access token is checked, requests with any other `Origin` header get `403`; requests without an `Origin` (server-side clients) are allowed. Listed origins get CORS headers. `OPTIONS` preflights are answered for any origin by the OAuth layer. |
+| `MULTIX_OUTPUT_LINK_MAX_SECONDS` | `604800` (7 days; floor 60) | Longest lifetime of the presigned links for job output files. An account's own [link lifetime](#link-lifetime-and-retention) is cut to it. It never deletes files. |
 | `MULTIX_MAX_JOBS_PER_ACCOUNT` | `2` (ceiling 50) | `multix_run` jobs one account may run at the same time. |
 | `MULTIX_MAX_JOBS_TOTAL` | `10` (ceiling 1000) | `multix_run` jobs the server may run at the same time across all accounts. Keep it at or below the container `max_instances` in `wrangler.jsonc`, which is the platform ceiling. |
 
@@ -863,7 +905,7 @@ within your Cloudflare account. If another Worker already uses `1001` or
   every redirect; the container also resolves each host and refuses to
   connect when any address is private, loopback, link-local, CGNAT or ULA,
     connecting only to the addresses it checked (at most 5 redirects). Output
-  files are streamed to R2 without being loaded into memory. The temporary
+  files are streamed to the bucket without being loaded into memory. The temporary
   directory is deleted when the job ends, stdout and stderr are scrubbed of key
   values and then cut to 16 KB, and only the job ID and status are logged. The `job:<id>` record in `ACCOUNTS_KV` holds the
   owner, command and start time, never keys.

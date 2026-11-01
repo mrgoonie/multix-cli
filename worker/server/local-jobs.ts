@@ -69,7 +69,11 @@ interface JobOwner {
   command: string;
 }
 
-type RunJob = (spec: JobSpec, options: { signal: AbortSignal }) => Promise<unknown>;
+/** `egressEnv` routes the CLI through the executor's public-only egress proxy; pass it on unchanged. */
+type RunJob = (
+  spec: JobSpec,
+  options: { signal: AbortSignal; egressEnv: Record<string, string> },
+) => Promise<unknown>;
 
 /** What the server uses of container/local-executor.mjs. */
 interface LocalExecutor {
@@ -157,6 +161,11 @@ function errorName(error: unknown): string {
  * Start the executor and bind it. `env` must already hold MULTIX_JOB_QUOTA
  * (a LocalAccountJobQuota namespace) and may hold MULTIX_EVENTS.
  */
+/** The production runner: the multix CLI at `cliBin`, behind the executor's egress proxy. */
+export function cliRunner(cliBin: string): RunJob {
+  return (spec, { signal, egressEnv }) => runJob(spec, { signal, egressEnv, bin: cliBin });
+}
+
 export async function startLocalJobs(
   env: WorkerEnv,
   options: LocalJobsOptions,
@@ -166,8 +175,7 @@ export async function startLocalJobs(
   if (!quotaNamespace) throw new Error("MULTIX_JOB_QUOTA must be bound before jobs start");
   const quota = durableJobQuota(quotaNamespace);
   const cliBin = options.cliBin ?? DEFAULT_CLI_BIN;
-  const run: RunJob =
-    options.runJob ?? ((spec, { signal }) => runJob(spec, { signal, bin: cliBin }));
+  const run: RunJob = options.runJob ?? cliRunner(cliBin);
   /** Final hooks still running, awaited by close() so the database outlives them. */
   const finals = new Set<Promise<void>>();
 

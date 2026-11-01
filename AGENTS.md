@@ -144,6 +144,10 @@ npm run check:mcp    # when worker/ or a client it imports changed
   covers `tsconfig.server.json`, and `npm run build:server` bundles it
   (`worker/server/Dockerfile` builds the image). User guide:
   `docs-site/src/content/docs/guides/self-hosted-server.md`.
+  Job CLIs started by `worker/container/local-executor.mjs` share the
+  server's network, so their HTTP(S) must go through the public-only proxy in
+  `worker/container/egress-proxy.mjs`: a `runJob` wrapper passed to the
+  executor has to forward the `egressEnv` it receives to `job-runner.mjs`.
 - The job container (`worker/container/`) is rolled out before the Worker
   (`worker/scripts/roll-out-job-container.mjs`, run by `deploy-mcp.yml`), so a
   new container must work with the Worker that is still live, in both

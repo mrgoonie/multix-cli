@@ -14,7 +14,8 @@
 # are bundled into multix-server.mjs. Each job works in its own directory
 # under /tmp (a tmpfs with a read-only root file system), removed when it ends.
 
-# node:sqlite needs Node >= 22.13; keep the major in step with the undici
+# node:sqlite needs Node >= 22.13, and the job CLI egress proxy needs
+# NODE_USE_ENV_PROXY (Node >= 22.21; the executor refuses to start without it); keep the major in step with the undici
 # version pinned in worker/package.json (it shares the runtime's fetch).
 ARG NODE_IMAGE=node:22.23.4-alpine
 

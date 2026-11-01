@@ -31,6 +31,18 @@ function r2Routes(list: Responder = ok, put: Responder = ok, del: Responder = ok
   ];
 }
 
+/** DNS-over-HTTPS answers: every name resolves to one public (or private) IPv4 address. */
+const dohAnswer = (data: string) =>
+  route("GET", /^https:\/\/cloudflare-dns\.com\/dns-query\?/, (call) =>
+    Response.json(
+      new URL(call.url).searchParams.get("type") === "A"
+        ? { Status: 0, Answer: [{ type: 1, data }] }
+        : { Status: 0, Answer: [] },
+    ),
+  );
+const DNS_PUBLIC = dohAnswer("93.184.216.34");
+const DNS_PRIVATE = dohAnswer("10.0.0.1");
+
 async function signedIn(...extra: Parameters<typeof githubFetch>[1][]) {
   const env = oauthEnv();
   const github = githubFetch(OCTOCAT, ...extra);
@@ -120,7 +132,7 @@ describe("dashboard R2 storage", () => {
     }
 
     const page = await (await browser.request("/dashboard?notice=r2-saved")).text();
-    expect(page).toContain("R2 storage saved.");
+    expect(page).toContain("Output storage saved.");
     expect(page).toContain(
       `Bucket <span class="mono">my-bucket</span>, directory <span class="mono">multix/</span>`,
     );
@@ -200,8 +212,56 @@ describe("dashboard R2 storage", () => {
     expect(response.headers.get("location")).toBe(`/dashboard?notice=${notice}`);
     expect(await store(env).r2Settings(USER_ID)).toBeNull();
     const page = await (await browser.request(`/dashboard?notice=${notice}`)).text();
-    expect(page).toContain("R2 settings not saved");
+    expect(page).toContain("Storage settings not saved");
     expect(page).not.toContain(SECRET);
+  });
+
+  it("saves an S3-compatible endpoint after checking it resolves to public addresses", async () => {
+    const { env, github, browser, csrf } = await signedIn(
+      DNS_PUBLIC,
+      route("GET", /^https:\/\/s3\.example\.com\/my-bucket\?list-type=2/, ok),
+      route("PUT", /^https:\/\/s3\.example\.com\/my-bucket\/multix\/\.multix-probe-/, ok),
+      route("DELETE", /^https:\/\/s3\.example\.com\/my-bucket\/multix\/\.multix-probe-/, ok),
+    );
+    const response = await browser.post(
+      "/dashboard/storage",
+      r2Form(csrf, {
+        account_id: "",
+        endpoint: "https://s3.example.com",
+        region: "eu-west-1",
+        addressing: "path",
+        link_expiry_seconds: "86400",
+      }),
+    );
+    expect(response.headers.get("location")).toBe("/dashboard?notice=r2-saved");
+    expect(github.calls.find((c) => c.method === "PUT")?.headers.authorization).toContain(
+      "/eu-west-1/s3/aws4_request",
+    );
+    expect(await store(env).r2Settings(USER_ID)).toEqual({
+      endpoint: "https://s3.example.com",
+      region: "eu-west-1",
+      linkExpirySeconds: 86_400,
+      accessKeyId: ACCESS_KEY_ID,
+      secretAccessKey: SECRET,
+      bucket: "my-bucket",
+    });
+    const page = await (await browser.request("/dashboard")).text();
+    expect(page).toContain('S3-compatible endpoint <span class="mono">s3.example.com</span>.');
+    expect(page).toContain("presigned links valid for 1 day");
+    expect(page).not.toContain(SECRET);
+  });
+
+  it("refuses an endpoint that resolves to a private address without calling it", async () => {
+    const { env, github, browser, csrf } = await signedIn(DNS_PRIVATE);
+    const response = await browser.post(
+      "/dashboard/storage",
+      r2Form(csrf, { account_id: "", endpoint: "https://rebind.example.com" }),
+    );
+    expect(response.headers.get("location")).toBe("/dashboard?notice=r2-endpoint-not-public");
+    expect(github.calls.some((c) => c.url.includes("rebind.example.com/"))).toBe(false);
+    expect(await store(env).r2Settings(USER_ID)).toBeNull();
+    const page = await (await browser.request("/dashboard?notice=r2-endpoint-not-public")).text();
+    expect(page).toContain("resolves to a private or reserved address");
   });
 
   it("removes the settings", async () => {

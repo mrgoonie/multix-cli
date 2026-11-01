@@ -1,6 +1,6 @@
 ---
 title: MCP server từ xa trên Cloudflare Workers
-description: Triển khai multix MCP server lên Cloudflare Workers để AI agent từ xa chạy lệnh multix CLI trong Cloudflare Container, qua Streamable HTTP, với đăng nhập GitHub, OAuth và dashboard quản lý provider key cùng bucket R2 của từng tài khoản.
+description: Triển khai multix MCP server lên Cloudflare Workers để AI agent từ xa chạy lệnh multix CLI trong Cloudflare Container, qua Streamable HTTP, với đăng nhập GitHub, OAuth và dashboard quản lý provider key cùng bucket đầu ra (R2 hoặc tương thích S3) của từng tài khoản.
 ---
 
 Repository có kèm một [Model Context Protocol](https://modelcontextprotocol.io)
@@ -9,7 +9,7 @@ cung cấp MCP tool qua **Streamable HTTP** tại `/mcp`, để các agent khôn
 được CLI cục bộ (trợ lý hosted, web IDE, server khác) chạy được hầu hết lệnh
 `multix` CLI từ xa: mỗi lần chạy có một
 [Cloudflare Container](https://developers.cloudflare.com/containers/) riêng đã
-cài CLI, ffmpeg và ImageMagick, và file đầu ra được tải lên bucket R2 của chính
+cài CLI, ffmpeg và ImageMagick, và file đầu ra được tải lên bucket R2 hoặc tương thích S3 của chính
 người gọi. Mọi lệnh gọi provider đều đi qua `multix_run`.
 
 Worker là package riêng. Nó không nằm trong CLI phát hành trên npm và không
@@ -117,12 +117,12 @@ envelope `--json` của CLI (xem [Dành cho AI agent](/vi/reference/for-ai-agent
 `stderr_tail` kết thúc bằng các dòng `code:`, `hint:` và `next:` của CLI, cho
 biết nhóm lỗi.
 
-**File đầu ra cần R2.** Các file CLI ghi ra được tải lên bucket R2 của bạn dưới
+**File đầu ra cần bucket.** Các file CLI ghi ra được tải lên bucket R2 hoặc tương thích S3 của bạn dưới
 `<thư mục>/<hash tài khoản>/<job id>/<tên>` (thư mục là `multix` trừ khi bạn
 chọn thư mục khác), và `outputs` liệt kê URL công khai
 hoặc presigned của chúng. Mỗi job báo cáo tối đa 50 file, và file lớn hơn
-500 MB được liệt kê với `url: null` thay vì được tải lên. Nếu bạn chưa lưu bucket R2, job vẫn chạy nhưng mỗi
-output có `url: null` và kết quả kèm `note` nhắc bạn cấu hình R2 tại
+500 MB được liệt kê với `url: null` thay vì được tải lên. Nếu bạn chưa lưu bucket, job vẫn chạy nhưng mỗi
+output có `url: null` và kết quả kèm `note` nhắc bạn cấu hình lưu trữ đầu ra tại
 `/dashboard`. stdout (gồm cả URL provider mà CLI in ra) vẫn được trả về trong
 cả hai trường hợp. Key không bao giờ xuất hiện trong `stdout` hay
 `stderr_tail`: giá trị các key đã lưu của bạn được thay bằng `[redacted]`.
@@ -281,7 +281,7 @@ thay vào đó `multix_catalog` báo `has_keys` theo key bạn đã lưu. Xem
 - File cục bộ: thay bằng URL `https://` công khai trong `inputs`.
 - Tính năng tương tác hoặc chỉ chạy cục bộ: `multix update`, `multix check`,
   Codex image driver, `--stdin-ext`, và đọc giá trị từ `@file`.
-- Chọn nơi lưu file: server tự đặt thư mục đầu ra. Hãy tải output từ URL R2.
+- Chọn nơi lưu file: server tự đặt thư mục đầu ra. Hãy tải output từ URL lưu trữ.
 - Khi không có container chạy job, chỉ `multix_catalog`, `multix_model_catalog`
   và `multix_skills` được liệt kê, nên không lệnh nào chạy được.
 - Các lệnh `multix catalog`: chúng đọc usage và review cục bộ của bạn. Hãy dùng
@@ -322,36 +322,78 @@ bị bỏ qua.
 
 Thẻ **API keys** trong `/dashboard` tạo và thu hồi API key của tài khoản
 (`mxk_…`, chỉ hiển thị một lần, tối đa 10 key mỗi tài khoản) cho REST API tại
-`/api/v1`, giúp script và CI quản lý provider key, lưu trữ R2 và chạy job mà
+`/api/v1`, giúp script và CI quản lý provider key, lưu trữ đầu ra và chạy job mà
 không cần MCP. Xem [REST API](/vi/guides/rest-api/) và tài liệu tham chiếu tại
 `/api/docs`.
 
-### Lưu trữ R2
+### Lưu trữ đầu ra
 
-Mỗi tài khoản cũng có thể lưu bucket Cloudflare R2 của riêng mình.
-`multix_run` tải mọi file đầu ra lên đó; không có bucket thì job vẫn chạy
-nhưng không trả về URL file.
+Mỗi tài khoản cũng có thể lưu bucket của riêng mình: Cloudflare R2 hoặc bất kỳ
+dịch vụ tương thích S3 nào (ví dụ AWS S3, Backblaze B2 hay một MinIO công
+khai). `multix_run` tải mọi file đầu ra lên đó; không có bucket thì job vẫn
+chạy nhưng không trả về URL file.
 
-1. Trong Cloudflare dashboard, tạo một bucket và một R2 API token có quyền
-   **Object Read & Write** trên bucket đó.
-2. Trong thẻ **R2 storage** tại `/dashboard`, nhập account ID (32 ký tự hex),
-   access key ID và secret access key của token, tên bucket và, nếu muốn, một
+1. Tạo một bucket và credential có quyền đọc, ghi object trên bucket đó. Với
+   Cloudflare, đó là một R2 API token có quyền **Object Read & Write** trên
+   bucket. Nên dùng credential chỉ cấp quyền cho một bucket: token toàn tài
+   khoản truy cập được mọi bucket.
+2. Trong thẻ **Lưu trữ đầu ra** (**Output storage**) tại `/dashboard`, nhập
+   một trong hai:
+   - **R2:** Cloudflare account ID (32 ký tự hex). Request được gửi tới
+     `https://<account>.r2.cloudflarestorage.com/<bucket>` và ký với region
+     `auto`.
+   - **Endpoint tương thích S3:** origin `https://` của dịch vụ, ví dụ
+     `https://s3.eu-west-1.amazonaws.com` (không có path, query, credential
+     hay port). Host phải là tên miền công khai: IP literal, `localhost`, tên
+     nội bộ như `*.internal` hay `*.local`, và tên phân giải ra địa chỉ
+     private, loopback, link-local hoặc địa chỉ dùng cho mục đích đặc biệt
+     khác đều bị từ chối. **Region** (mặc định `us-east-1`) là region dùng để
+     ký SigV4. **Kiểu địa chỉ bucket** là path-style
+     (`https://host/bucket/key`, mặc định) hoặc virtual-hosted
+     (`https://bucket.host/key`); tên bucket có dấu chấm cần path-style.
+
+   Sau đó nhập access key ID, secret access key, tên bucket và, nếu muốn, một
    URL gốc công khai `https://` (custom domain hoặc địa chỉ `r2.dev` phục vụ
-   bucket). Không có URL công khai thì file nhận liên kết presigned có hiệu lực
-   tối đa 7 ngày. **Directory path** (mặc định `multix`) là thư mục trong
-   bucket chứa file đầu ra, ví dụ `agents/outputs`. Chỉ dùng chữ, số, `.`, `_`,
-   `-` và `/` (tối đa 256 ký tự, không có đoạn `.` hay `..`); dấu `/` ở đầu và
-   cuối được bỏ đi.
-3. **Check and save** liệt kê bucket (`ListObjectsV2`, một key), tải lên một
-   object rỗng `.multix-probe-*` vào thư mục đó rồi xóa nó. Nếu một bước thất bại thì không có
-   gì được lưu; trang cho biết bước nào (credential bị từ chối, không có
-   bucket, token chỉ đọc, không xóa được object thử, không kết nối được R2).
-   Nên dùng token chỉ cấp quyền cho một bucket: token toàn tài khoản truy cập
-   được mọi bucket.
+   bucket). **Đường dẫn thư mục** (mặc định `multix`) là thư mục trong bucket chứa file
+   đầu ra, ví dụ `agents/outputs`. Chỉ dùng chữ, số, `.`, `_`, `-` và `/`
+   (tối đa 256 ký tự, không có đoạn `.` hay `..`); dấu `/` ở đầu và cuối được
+   bỏ đi.
+3. **Kiểm tra và lưu**, với endpoint, trước tiên kiểm tra host mà server sẽ
+   gọi chỉ phân giải ra địa chỉ công khai (qua DNS-over-HTTPS). Sau đó liệt kê
+   bucket (`ListObjectsV2`, một key), tải lên một object rỗng
+   `.multix-probe-*` vào thư mục đó rồi xóa nó. Nếu một bước thất bại thì
+   không có gì được lưu; trang cho biết bước nào (endpoint không công khai,
+   credential bị từ chối, không có bucket, credential chỉ đọc, không xóa được
+   object thử, không kết nối được dịch vụ lưu trữ). Trình chạy job kiểm tra
+   lại từng địa chỉ khi kết nối, nên một tên về sau phân giải ra địa chỉ
+   private cũng bị từ chối lúc upload.
 
 Thiết lập được lưu thành một bản ghi AES-GCM dưới `r2:<account>` trong
-`ACCOUNTS_KV`, giống provider key. Trang chỉ hiển thị tên bucket và URL công
+`ACCOUNTS_KV`, giống provider key; bản ghi R2 lưu trước khi có endpoint vẫn
+hoạt động như cũ. Trang chỉ hiển thị tên bucket, host của endpoint và URL công
 khai; khi thay thiết lập phải nhập lại secret. **Remove** sẽ xóa chúng.
+
+#### Thời hạn liên kết và lưu giữ
+
+Không có URL gốc công khai thì file đầu ra nhận liên kết `GET` presigned.
+**Thời hạn link ký sẵn** (presigned) quy định liên kết có hiệu lực bao lâu: 60 đến
+604800 giây (7 ngày, mức tối đa của SigV4 và là mặc định). Operator có thể hạ
+mức trần cho mọi tài khoản bằng `MULTIX_OUTPUT_LINK_MAX_SECONDS` (xem
+[Cấu hình](#cấu-hình)); thiết lập dài hơn của tài khoản bị cắt xuống mức này,
+và dashboard cùng `GET /api/v1/storage` hiển thị thời hạn đang có hiệu lực.
+
+Thời hạn liên kết không xóa gì cả. multix không bao giờ xóa file đầu ra khỏi
+bucket của bạn: chúng còn đó cho tới khi bạn xóa. Để file tự hết hạn, thêm một
+lifecycle rule cho thư mục đó trên bucket, ví dụ:
+
+- **R2:** **Settings** của bucket → **Object lifecycle rules** → thêm rule với
+  prefix `multix/` xóa object sau số ngày bạn muốn.
+- **AWS S3 và đa số dịch vụ tương thích S3:** một lifecycle configuration có
+  `Filter` theo prefix và `Expiration` tính theo ngày, ví dụ
+  `aws s3api put-bucket-lifecycle-configuration --bucket <bucket> --lifecycle-configuration '{"Rules":[{"ID":"expire-multix","Status":"Enabled","Filter":{"Prefix":"multix/"},"Expiration":{"Days":30}}]}'`.
+
+Giữ prefix của rule đúng bằng thư mục của bạn để rule không đụng tới các object
+khác trong bucket.
 
 ## Triển khai
 
@@ -501,7 +543,7 @@ Server hỗ trợ hai phiên bản giao thức MCP trên cùng endpoint `/mcp`:
 | `multix.job.failed` | Job thất bại. |
 | `multix.job.canceled` | Job bị hủy. |
 | `multix.job.timed_out` | Job hết thời gian. |
-| `multix.asset.ready` | Một file output của job đã được lưu vào bucket R2 của bạn. |
+| `multix.asset.ready` | Một file output của job đã được lưu vào bucket đầu ra của bạn. |
 
 Mọi sự kiện nhận một tham số tùy chọn, `job_id`, để chỉ theo dõi một job bạn
 sở hữu; bỏ trống thì subscription áp dụng cho mọi job của bạn. `events/list`
@@ -727,7 +769,7 @@ bạn. Skill dựng sẵn không có workflow.
 - `steps` (1 đến 10 bước) có dạng `{ id, command, args?, options?, inputs? }`,
   giống dạng `multix_run` nhận. `command` phải là lệnh server chạy được.
 - Giá trị có thể chứa `{{inputs.<name>}}` và `{{steps.<id>.outputs[<n>]}}`
-  (URL output của một bước trước đó, nên cần [lưu trữ R2](#lưu-trữ-r2)). Đường
+  (URL output của một bước trước đó, nên cần [lưu trữ đầu ra](#lưu-trữ-đầu-ra)). Đường
   dẫn lệnh và tên option thì không. Mỗi giá trị luôn là một đối số, nên
   template không thể thêm flag hay đối số. Input tùy chọn không được truyền thì
   giá trị chứa nó bị bỏ đi.
@@ -794,6 +836,7 @@ closed). `http://localhost` được chấp nhận khi phát triển cục bộ.
 | `MULTIX_MCP_ALLOWED_IMAGE_MODELS` | mọi model | Danh sách mục `<group>:<model>` (ví dụ `fal:fal-ai/flux/schnell`, khớp chính xác, phân tách bằng dấu phẩy) mà các lệnh tạo ảnh của `multix_run` được dùng, qua `--model` hoặc mặc định của lệnh trong catalog. Khi CLI tự chọn model lúc chạy, caller phải truyền một `--model` có trong danh sách; group không có mục nào bị từ chối. Các lệnh `run` chuyển thẳng do `MULTIX_MCP_UNCAPPED_SPEND` quản lý. |
 | `MULTIX_MCP_UNCAPPED_SPEND` | `budget` | Lần chạy mà các giới hạn trên không chặn được (đánh dấu `uncapped_spend` trong `multix_catalog`): `budget` chỉ chạy khi có `max_cost_usd` mà ước tính giá chứng minh được (giá không rõ thì bị từ chối), `deny` từ chối, `allow` cho chạy. Giá trị khác được hiểu là `budget`. |
 | `MULTIX_MCP_ALLOWED_ORIGINS` | không có | Origin trình duyệt chính xác (ví dụ `https://app.example.com`) được phép gọi `/mcp`. Không hỗ trợ `*` hay wildcard khác: `*` chỉ khớp origin `*` theo nghĩa đen, thứ trình duyệt không bao giờ gửi. Sau khi access token được kiểm tra, request có header `Origin` khác nhận `403`; request không có `Origin` (client phía server) được chấp nhận. Origin trong danh sách nhận header CORS. Preflight `OPTIONS` được lớp OAuth trả lời cho mọi origin. |
+| `MULTIX_OUTPUT_LINK_MAX_SECONDS` | `604800` (7 ngày; tối thiểu 60) | Thời hạn dài nhất của liên kết presigned cho file đầu ra của job. [Thời hạn liên kết](#thời-hạn-liên-kết-và-lưu-giữ) của từng tài khoản bị cắt xuống mức này. Biến này không bao giờ xóa file. |
 | `MULTIX_MAX_JOBS_PER_ACCOUNT` | `2` (tối đa 50) | Số job `multix_run` một tài khoản được chạy cùng lúc. |
 | `MULTIX_MAX_JOBS_TOTAL` | `10` (tối đa 1000) | Số job `multix_run` server được chạy cùng lúc trên mọi tài khoản. Giữ giá trị này không vượt `max_instances` của container trong `wrangler.jsonc`, là trần của nền tảng. |
 
@@ -871,7 +914,7 @@ chung bộ đếm.
   container còn phân giải từng host và từ chối kết nối khi có bất kỳ địa chỉ
   nào là private, loopback, link-local, CGNAT hoặc ULA, và chỉ kết nối tới
   đúng các địa chỉ đã kiểm tra (tối đa 5 lần redirect). File đầu ra được
-  stream lên R2 mà không nạp toàn bộ vào bộ nhớ. Thư mục tạm bị xóa khi job
+  stream lên bucket mà không nạp toàn bộ vào bộ nhớ. Thư mục tạm bị xóa khi job
   kết thúc, stdout và stderr được loại bỏ giá trị key rồi mới cắt còn 16 KB,
   và log chỉ ghi job ID và trạng thái. Bản ghi
   `job:<id>` trong `ACCOUNTS_KV` chứa chủ sở hữu, lệnh và thời điểm bắt đầu,

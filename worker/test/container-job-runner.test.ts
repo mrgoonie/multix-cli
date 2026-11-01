@@ -5,6 +5,7 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { isNonPublicIpv6 } from "../src/events/callback-guard.js";
 
 // biome-ignore lint/suspicious/noExplicitAny: untyped .mjs modules
 type Any = any;
@@ -13,6 +14,57 @@ const local = (rel: string) => decodeURIComponent(new URL(rel, testFileUrl).path
 const load = (rel: string): Promise<Any> => import(/* @vite-ignore */ local(rel));
 
 const FAKE_BIN = local("./fixtures/fake-multix.mjs");
+
+// Node built-ins, loaded untyped like the .mjs modules above.
+const nodeModule = (name: string): Promise<Any> => import(/* @vite-ignore */ name);
+const { execFileSync } = await nodeModule("node:child_process");
+const { createServer: createHttpsServer } = await nodeModule("node:https");
+const { mkdtempSync, readFileSync, rmSync } = await nodeModule("node:fs");
+const { tmpdir } = await nodeModule("node:os");
+const { join } = await nodeModule("node:path");
+
+const hasOpenssl = (() => {
+  try {
+    execFileSync("openssl", ["version"], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+})();
+
+/** A throwaway self-signed certificate for localhost, made with openssl. */
+function selfSignedCert(): { key: string; cert: string } {
+  const dir = mkdtempSync(join(tmpdir(), "multix-tls-"));
+  try {
+    execFileSync(
+      "openssl",
+      [
+        "req",
+        "-x509",
+        "-newkey",
+        "rsa:2048",
+        "-nodes",
+        "-days",
+        "1",
+        "-subj",
+        "/CN=localhost",
+        "-addext",
+        "subjectAltName=DNS:localhost",
+        "-keyout",
+        join(dir, "key.pem"),
+        "-out",
+        join(dir, "cert.pem"),
+      ],
+      { stdio: "ignore" },
+    );
+    return {
+      key: readFileSync(join(dir, "key.pem"), "utf8"),
+      cert: readFileSync(join(dir, "cert.pem"), "utf8"),
+    };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
 const KEY = "AIza-gemini-secret-value-1234";
 const R2 = {
   accountId: "0123456789abcdef0123456789abcdef",
@@ -88,7 +140,7 @@ describe("container job runner", () => {
       { name: "result.txt", url: null, bytes: 5 },
       { name: "1-result.txt", url: null, bytes: 5 },
     ]);
-    expect(result.note).toContain("configure R2 in /dashboard");
+    expect(result.note).toContain("R2 or S3-compatible bucket in /dashboard");
     const fs: Any = await import(/* @vite-ignore */ ["node", "fs"].join(":"));
     expect(fs.existsSync(seen.home)).toBe(false);
   }, 30_000);
@@ -362,6 +414,229 @@ describe("container R2 key rules", () => {
     expect(safeOutputName("..")).toBeUndefined();
     expect(safeOutputName(".")).toBeUndefined();
     expect(safeOutputName("out/")).toBeUndefined();
+  });
+});
+
+describe("container S3-compatible uploads", () => {
+  const S3 = {
+    endpoint: "https://s3.eu-central-1.amazonaws.com",
+    region: "eu-central-1",
+    accessKeyId: "s3-access-key-id-123456",
+    secretAccessKey: "s3-secret-access-key-value-123456",
+    bucket: "media",
+  };
+  const recorder = () => {
+    const calls: { url: string; method: string; auth: string | null }[] = [];
+    const fetch = async (input: string, init: RequestInit) => {
+      calls.push({
+        url: String(input),
+        method: init.method ?? "GET",
+        auth: new Headers(init.headers).get("authorization"),
+      });
+      return new Response("", { status: 200 });
+    };
+    return { fetch, calls };
+  };
+
+  it("PUTs path-style to the endpoint, signed for its region, with presigned links for the chosen lifetime", async () => {
+    const { createR2Uploader } = await load("../container/r2-upload.mjs");
+    const { fetch, calls } = recorder();
+    const uploader = createR2Uploader({ ...S3, linkExpirySeconds: 3600 }, { fetch });
+    const url = new URL(await uploader.put("multix/a/b c.png", "x", "image/png"));
+    expect(calls[0]?.url).toBe("https://s3.eu-central-1.amazonaws.com/media/multix/a/b%20c.png");
+    expect(calls[0]?.auth).toMatch(/\/eu-central-1\/s3\/aws4_request, /);
+    expect(url.origin + url.pathname).toBe(
+      "https://s3.eu-central-1.amazonaws.com/media/multix/a/b%20c.png",
+    );
+    expect(url.searchParams.get("X-Amz-Expires")).toBe("3600");
+    expect(url.searchParams.get("X-Amz-Credential")).toMatch(/\/eu-central-1\/s3\/aws4_request$/);
+    expect(url.toString()).not.toContain(S3.secretAccessKey);
+  });
+
+  it("uses virtual-hosted URLs and keeps R2 on its fixed host and region", async () => {
+    const { createR2Uploader } = await load("../container/r2-upload.mjs");
+    const s3 = recorder();
+    await createR2Uploader({ ...S3, addressing: "virtual" }, { fetch: s3.fetch }).put(
+      "k.txt",
+      "x",
+      "text/plain",
+    );
+    expect(s3.calls[0]?.url).toBe("https://media.s3.eu-central-1.amazonaws.com/k.txt");
+    const r2 = recorder();
+    const link = new URL(
+      await createR2Uploader(R2, { fetch: r2.fetch }).put("k.txt", "x", "text/plain"),
+    );
+    expect(r2.calls[0]?.url).toBe(`https://${R2.accountId}.r2.cloudflarestorage.com/media/k.txt`);
+    expect(r2.calls[0]?.auth).toMatch(/\/auto\/s3\/aws4_request, /);
+    expect(link.searchParams.get("X-Amz-Expires")).toBe("604800");
+  });
+
+  it.each([
+    "https://10.0.0.1",
+    "https://[fd00::1]",
+    "https://localhost",
+    "https://minio.svc.cluster.local",
+    "https://metadata.google.internal",
+    "https://s3.example.com:9000",
+    "https://s3.example.com/path",
+    "http://s3.example.com",
+  ])("refuses the endpoint %s", async (endpoint) => {
+    const { createR2Uploader } = await load("../container/r2-upload.mjs");
+    expect(() => createR2Uploader({ ...S3, endpoint })).toThrow("Invalid storage endpoint");
+  });
+
+  it("refuses both an account id and an endpoint, bad regions and dotted virtual-hosted buckets", async () => {
+    const { createR2Uploader } = await load("../container/r2-upload.mjs");
+    expect(() => createR2Uploader({ ...S3, accountId: R2.accountId })).toThrow();
+    expect(() => createR2Uploader({ ...S3, region: "EU West" })).toThrow("Invalid storage region");
+    expect(() => createR2Uploader({ ...S3, addressing: "virtual", bucket: "a.b.c" })).toThrow(
+      "Invalid bucket name",
+    );
+    expect(() => createR2Uploader({ ...S3, bucket: "a.b.c" })).not.toThrow();
+  });
+
+  it("uploads to a custom endpoint only over a connection checked to be public", async () => {
+    const { createPublicLookup, publicHttpsFetch } = await load("../container/job-network.mjs");
+    for (const address of ["10.0.0.5", "169.254.169.254", "127.0.0.1"]) {
+      const lookup = createPublicLookup(
+        (_host: string, _opts: unknown, cb: (e: unknown, a: unknown) => void) =>
+          cb(null, [{ address, family: 4 }]),
+      );
+      await expect(
+        publicHttpsFetch("https://rebind.example.com/media/k.txt", {
+          method: "PUT",
+          body: new Blob(["data"]).stream(),
+          lookup,
+        }),
+      ).rejects.toMatchObject({ code: "EBLOCKEDADDRESS" });
+    }
+    await expect(publicHttpsFetch("http://s3.example.com/x")).rejects.toThrow("Only https");
+  });
+
+  it.skipIf(!hasOpenssl)("streams a PUT with its length and maps the response back", async () => {
+    const { publicHttpsFetch } = await load("../container/job-network.mjs");
+    const { key, cert } = selfSignedCert();
+    const seen: { method?: string; host?: string; length?: string; bytes: number } = { bytes: 0 };
+    const server = createHttpsServer({ key, cert }, (req: Any, res: Any) => {
+      seen.method = req.method;
+      seen.host = req.headers.host;
+      seen.length = req.headers["content-length"];
+      req.on("data", (chunk: Uint8Array) => {
+        seen.bytes += chunk.length;
+      });
+      req.on("end", () => {
+        if (req.url === "/denied") {
+          res.writeHead(403, { "content-type": "application/xml" });
+          res.end("<Error><Code>AccessDenied</Code></Error>");
+          return;
+        }
+        res.writeHead(200, { etag: '"abc"' });
+        res.end();
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const port = server.address().port;
+    // Test-only lookup: the real one refuses loopback, which the tests above cover.
+    const lookup = (_h: string, o: Any, cb: Any) => {
+      const done = typeof o === "function" ? o : cb;
+      if (o?.all) done(null, [{ address: "127.0.0.1", family: 4 }]);
+      else done(null, "127.0.0.1", 4);
+    };
+    try {
+      const payload = new Uint8Array(3 * 1024 * 1024).fill(7);
+      const ok = await publicHttpsFetch(`https://localhost:${port}/media/k.bin`, {
+        method: "PUT",
+        headers: { "content-length": String(payload.length) },
+        body: new Blob([payload]).stream(),
+        lookup,
+        ca: cert,
+      });
+      expect(ok.status).toBe(200);
+      expect(ok.headers.get("etag")).toBe('"abc"');
+      expect(seen).toEqual({
+        method: "PUT",
+        host: `localhost:${port}`,
+        length: String(payload.length),
+        bytes: payload.length,
+      });
+      const denied = await publicHttpsFetch(`https://localhost:${port}/denied`, {
+        method: "PUT",
+        headers: { "content-length": "4" },
+        body: "data",
+        lookup,
+        ca: cert,
+      });
+      expect(denied.status).toBe(403);
+      expect(await denied.text()).toContain("AccessDenied");
+      const aborted = new AbortController();
+      aborted.abort();
+      await expect(
+        publicHttpsFetch(`https://localhost:${port}/x`, {
+          signal: aborted.signal,
+          lookup,
+          ca: cert,
+        }),
+      ).rejects.toThrow();
+    } finally {
+      server.close();
+    }
+  });
+
+  it("refuses at connect time every address the save-time check refuses", async () => {
+    const { isPublicAddress } = await load("../container/job-network.mjs");
+    const addresses = [
+      "::ffff:0:a00:1",
+      "64:ff9b:1:a00:1:0:808:808",
+      "64:ff9b::808:808",
+      "4000::1",
+      "3fff::1",
+      "2001::1",
+      "2001:20::1",
+      "2001:2::1",
+      "2002:808:808::1",
+      "fc00::1",
+      "fe80::1",
+      "::1",
+      "::ffff:10.0.0.1",
+      "::ffff:8.8.8.8",
+      "2606:4700:4700::1111",
+      "2a00:1450:4001::1",
+    ];
+    for (const ip of addresses) {
+      expect(isPublicAddress(ip), ip).toBe(!isNonPublicIpv6(ip));
+    }
+  });
+
+  it("reads at most 64 KiB of an error body", async () => {
+    const { createR2Uploader } = await load("../container/r2-upload.mjs");
+    let pulled = 0;
+    const huge = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled += 16 * 1024;
+        if (pulled > 4 * 1024 * 1024) {
+          controller.close();
+          return;
+        }
+        controller.enqueue(
+          new TextEncoder().encode("<Code>SlowDown</Code>".padEnd(16 * 1024, " ")),
+        );
+      },
+    });
+    const uploader = createR2Uploader(
+      {
+        endpoint: "https://s3.example.com",
+        accessKeyId: "AKIDEXAMPLE",
+        secretAccessKey: "secret",
+        bucket: "media",
+      },
+      { fetch: async () => new Response(huge, { status: 503 }) },
+    );
+    await expect(
+      uploader.put("multix/x/out.txt", new Blob(["data"]).stream(), "text/plain", {
+        contentLength: 4,
+      }),
+    ).rejects.toThrow("Output upload failed: HTTP 503 SlowDown");
+    expect(pulled).toBeLessThanOrEqual(128 * 1024);
   });
 });
 

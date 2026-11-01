@@ -1,6 +1,7 @@
 /**
  * POST /dashboard/storage: save (after a live access check) or remove the
- * account's R2 settings. Called by dashboard-routes.ts after the Origin,
+ * account's output storage settings (Cloudflare R2 or another S3-compatible
+ * bucket). Called by dashboard-routes.ts after the Origin,
  * session and CSRF checks. Outcomes are reported with fixed notice codes
  * (pages/notice-codes.ts); submitted values are never echoed or logged.
  */
@@ -29,6 +30,10 @@ export async function handleR2SettingsPost(
   }
   const parsed = parseR2Settings({
     accountId: field(form, "account_id"),
+    endpoint: field(form, "endpoint"),
+    region: field(form, "region"),
+    addressing: field(form, "addressing"),
+    linkExpirySeconds: field(form, "link_expiry_seconds"),
     accessKeyId: field(form, "access_key_id"),
     secretAccessKey: field(form, "secret_access_key"),
     bucket: field(form, "bucket"),

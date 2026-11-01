@@ -96,7 +96,7 @@ describe("R2Client", () => {
     expect(error).toBeInstanceOf(R2RequestError);
     expect((error as R2RequestError).status).toBe(403);
     expect((error as R2RequestError).code).toBe("AccessDenied");
-    expect((error as Error).message).toBe("R2 upload failed: HTTP 403 AccessDenied");
+    expect((error as Error).message).toBe("Storage upload failed: HTTP 403 AccessDenied");
 
     const offline = mockFetch(() => {
       throw new TypeError(`fetch failed for ${HOST}/my-bucket/k`);

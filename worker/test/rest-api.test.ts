@@ -223,6 +223,77 @@ describe("REST API account endpoints", () => {
     expect(await body(await api(browser, key, "/storage"))).toEqual({ configured: false });
   });
 
+  it("saves an S3-compatible endpoint and reports it without credentials", async () => {
+    const ok = () => new Response(null, { status: 200 });
+    const env = oauthEnv({ MULTIX_OUTPUT_LINK_MAX_SECONDS: "7200" });
+    const fetcher = githubFetch(
+      OCTOCAT,
+      dns,
+      route("GET", /^https:\/\/my-bucket\.store\.example\.com\/\?list-type=2/, ok),
+      route("PUT", /^https:\/\/my-bucket\.store\.example\.com\/out\/\.multix-probe-/, ok),
+      route("DELETE", /^https:\/\/my-bucket\.store\.example\.com\/out\/\.multix-probe-/, ok),
+    );
+    const browser = newBrowser(env, fetcher.fetch);
+    await signIn(browser);
+    const key = await createApiKey(browser);
+    const input = {
+      endpoint: "https://store.example.com",
+      region: "auto",
+      addressing: "virtual",
+      access_key_id: "AKIDEXAMPLE0123456789",
+      secret_access_key: "very-secret-value-0000",
+      bucket: "my-bucket",
+      prefix: "out",
+      link_expiry_seconds: 86_400,
+    };
+    const saved = await api(browser, key, "/storage", {
+      method: "PUT",
+      body: JSON.stringify(input),
+    });
+    expect(saved.status).toBe(200);
+    const expected = {
+      configured: true,
+      provider: "s3",
+      account_id: null,
+      endpoint: "https://store.example.com",
+      region: "auto",
+      addressing: "virtual",
+      bucket: "my-bucket",
+      public_base_url: null,
+      prefix: "out",
+      // The operator cap (2 hours) is lower than the account's choice (1 day).
+      link_expiry_seconds: 7_200,
+    };
+    expect(await saved.json()).toEqual(expected);
+    expect(await body(await api(browser, key, "/storage"))).toEqual(expected);
+    expect(JSON.stringify(fetcher.calls)).not.toContain("very-secret-value-0000");
+
+    const privateEndpoint = await api(browser, key, "/storage", {
+      method: "PUT",
+      body: JSON.stringify({
+        ...input,
+        endpoint: "https://private.example.com",
+        addressing: "path",
+      }),
+    });
+    expect(privateEndpoint.status).toBe(422);
+    expect(await privateEndpoint.text()).toContain("endpoint-not-public");
+    const both = await api(browser, key, "/storage", {
+      method: "PUT",
+      body: JSON.stringify({ ...input, account_id: "0123456789abcdef0123456789abcdef" }),
+    });
+    expect(both.status).toBe(400);
+    expect(await both.text()).toContain("not both");
+    const expiry = await api(browser, key, "/storage", {
+      method: "PUT",
+      body: JSON.stringify({ ...input, link_expiry_seconds: true }),
+    });
+    expect(expiry.status).toBe(400);
+    expect(await expiry.text()).toContain("link_expiry_seconds");
+    // Failed attempts left the saved settings alone.
+    expect(await body(await api(browser, key, "/storage"))).toEqual(expected);
+  });
+
   it("answers unknown paths and wrong methods with JSON errors", async () => {
     const { browser } = await signedInBrowser();
     const key = await createApiKey(browser);

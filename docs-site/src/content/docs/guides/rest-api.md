@@ -1,11 +1,11 @@
 ---
 title: REST API and account API keys
-description: Use the multix MCP server's REST API from scripts and CI with an account API key to manage provider keys and R2 storage, read the CLI catalog, run, poll and cancel CLI jobs, receive signed webhooks when jobs end, and author and share skills.
+description: Use the multix MCP server's REST API from scripts and CI with an account API key to manage provider keys and output storage, read the CLI catalog, run, poll and cancel CLI jobs, receive signed webhooks when jobs end, and author and share skills.
 ---
 
 The [remote MCP server](/guides/mcp-server/) also serves a JSON REST API at
 `/api/v1` for scripts and CI that do not speak MCP. It works on the same
-account as the dashboard and `/mcp`: the same provider keys, the same R2
+account as the dashboard and `/mcp`: the same provider keys, the same output
 bucket, and the same CLI runner as `multix_run`, with the same input checks,
 job caps and output scrubbing.
 
@@ -32,7 +32,7 @@ can keep working for up to about a minute in other Cloudflare locations,
 because the key store (KV) is eventually consistent.
 
 A key acts as your account: it can read which provider keys are set, change
-provider keys and R2 storage, run jobs that spend your provider credits, and
+provider keys and output storage, run jobs that spend your provider credits, and
 revoke API keys. It cannot create API keys; that is only possible in the
 dashboard. Treat it like a password and keep it in a secret store or an
 environment variable, not in source code.
@@ -65,9 +65,9 @@ All paths are relative to `/api/v1`.
 | `PATCH` | `/provider-keys` | Set and remove several keys at once: `{ "keys": { "NAME": "value" \| null } }`. The whole body is validated before anything is written. |
 | `PUT` | `/provider-keys/{name}` | Set one key: `{ "value": "…" }`. |
 | `DELETE` | `/provider-keys/{name}` | Remove one key. |
-| `GET` | `/storage` | R2 settings without credentials, or `{ "configured": false }`. |
-| `PUT` | `/storage` | Check access to the bucket, then save the R2 settings. |
-| `DELETE` | `/storage` | Remove the R2 settings. |
+| `GET` | `/storage` | Output storage settings without credentials, or `{ "configured": false }`. |
+| `PUT` | `/storage` | Check access to the bucket, then save the storage settings. |
+| `DELETE` | `/storage` | Remove the storage settings. |
 | `GET` | `/catalog[?group=&task=&model=]` | CLI commands the server can run; same payload and filters as `multix_catalog`. |
 | `GET` | `/model-catalog[?view=&task=&provider=&family=&q=&offering=&priced=&ready=&resolution=&duration_s=&audio=&aspect_ratio=&images=&sort=]` | Offerings, prices per configuration and comparisons; same payload as `multix_model_catalog`. `view` defaults to `models`. See [Catalogue](/commands/catalog/). |
 | `POST` | `/jobs` | Run one CLI command; same input as `multix_run`. |
@@ -182,13 +182,16 @@ console.log(`saved: ${body.saved.join(", ")}`);
 Run it with `node sync-multix-keys.mjs ~/.multix/.env` or any other `.env`
 path. It never removes a key: names missing from the file are left as they are.
 
-## R2 storage
+## Output storage
 
-`PUT /storage` takes the same fields as the dashboard's **R2 storage** card
-(see [R2 storage](/guides/mcp-server/#r2-storage)). Before saving, the server
-lists the bucket, uploads an empty probe object and deletes it again; if any
-step fails, nothing is saved and the response is
-`422 storage_check_failed` naming the failed step.
+`PUT /storage` takes the same fields as the dashboard's **Output storage** card
+(see [Output storage](/guides/mcp-server/#output-storage)). Give exactly one of
+`account_id` (Cloudflare R2) or `endpoint` (any S3-compatible service). Before
+saving, the server checks that an endpoint's host resolves only to public
+addresses, then lists the bucket, uploads an empty probe object and deletes it
+again; if any step fails, nothing is saved and the response is
+`422 storage_check_failed` naming the failed step (`endpoint-not-public` for an
+endpoint that resolves to a private address).
 
 ```bash
 curl -s -X PUT https://multix.zuey.me/api/v1/storage \
@@ -200,11 +203,38 @@ curl -s -X PUT https://multix.zuey.me/api/v1/storage \
 JSON
 ```
 
-`public_base_url` is optional. `prefix` (optional, default `multix`) is the
-directory in the bucket that job outputs go to: letters, digits, `.`, `_`, `-`
-and `/`, at most 256 characters, no `.` or `..` segments. `PUT` replaces the
-whole setting, so leaving `prefix` out resets it to `multix`. The response, like
-`GET /storage`, returns it and never includes the access keys.
+For another S3-compatible service, replace `account_id` with `endpoint`:
+
+```bash
+curl -s -X PUT https://multix.zuey.me/api/v1/storage \
+  -H "Authorization: Bearer $MULTIX_API_KEY" \
+  -H "Content-Type: application/json" \
+  --data @- <<JSON
+{"endpoint": "https://s3.eu-west-1.amazonaws.com", "region": "eu-west-1", "addressing": "virtual",
+ "access_key_id": "$AWS_ACCESS_KEY_ID", "secret_access_key": "$AWS_SECRET_ACCESS_KEY",
+ "bucket": "my-multix-outputs", "link_expiry_seconds": 86400}
+JSON
+```
+
+| Field | Notes |
+|---|---|
+| `account_id` | Cloudflare account ID (32 hex characters). Not with `endpoint`. |
+| `endpoint` | `https://` origin of an S3-compatible service: a public host name, no path, query, credentials or port. Not with `account_id`. |
+| `region` | SigV4 signing region for `endpoint` (default `us-east-1`). R2 accepts only `auto`. |
+| `addressing` | `path` (default, `https://host/bucket/key`) or `virtual` (`https://bucket.host/key`). R2 accepts only `path`; bucket names with dots need `path`. |
+| `access_key_id`, `secret_access_key`, `bucket` | Required. |
+| `public_base_url` | Optional `https://` URL serving the bucket; outputs then get public URLs instead of presigned links. |
+| `prefix` | Optional directory for job outputs (default `multix`): letters, digits, `.`, `_`, `-` and `/`, at most 256 characters, no `.` or `..` segments. |
+| `link_expiry_seconds` | Optional presigned link lifetime, 60 to 604800 (default). Cut to the server's `MULTIX_OUTPUT_LINK_MAX_SECONDS`. |
+
+`PUT` replaces the whole setting, so leaving `prefix` out resets it to `multix`
+(and likewise for the other optional fields). The response, like
+`GET /storage`, returns `provider` (`r2` or `s3`), `account_id`, `endpoint`,
+`region`, `addressing`, `bucket`, `public_base_url`, `prefix` and
+`link_expiry_seconds` (the lifetime in effect), and never includes the access
+keys. multix never deletes output files; to expire them, add a bucket
+lifecycle rule (see
+[Link lifetime and retention](/guides/mcp-server/#link-lifetime-and-retention)).
 
 ## Run a job and poll it
 
@@ -229,7 +259,7 @@ curl -s -X POST https://multix.zuey.me/api/v1/jobs \
 ```
 
 The body has the same shape as a `multix_run` result (`job_id`, `status`,
-`outputs`, `stdout`, `stderr_tail`, `exit_code`, and `note` when R2 is not
+`outputs`, `stdout`, `stderr_tail`, `exit_code`, and `note` when output storage is not
 configured). The HTTP status tells you whether to poll:
 
 - `200`: the job ended (`succeeded`, `failed`, `timed_out` or `canceled`).
@@ -245,7 +275,7 @@ while [ "$(curl -s -o job.json -w '%{http_code}' \
   -H "Authorization: Bearer $MULTIX_API_KEY")" = "202" ]; do
   sleep 15
 done
-cat job.json   # outputs[].url holds the files in your R2 bucket
+cat job.json   # outputs[].url holds the files in your bucket
 ```
 
 Stop a running job with `POST /jobs/{id}/cancel`. Only the account that
@@ -266,7 +296,7 @@ over MCP) keeps working and is the fallback when a delivery is late or lost.
 | `multix.job.failed` | A job ended with an error (CLI failure, container lost, start failure). |
 | `multix.job.canceled` | A job was canceled by its owner. |
 | `multix.job.timed_out` | A job did not finish within the server's time limit. |
-| `multix.asset.ready` | An output file of a successful job was stored in the account's R2 bucket (one event per stored file, at most 20 per job). |
+| `multix.asset.ready` | An output file of a successful job was stored in the account's output bucket (one event per stored file, at most 20 per job). |
 
 `GET /events` returns the same list with the JSON Schema of each event's
 `data`; it and `worker/src/events/event-catalog.ts` are the authority for the
@@ -475,7 +505,7 @@ submitted values:
 | `415` | `unsupported_media_type` | Body not sent as `application/json`. |
 | `409` | `limit_reached` | The account already has 10 active event subscriptions. |
 | `409` | `conflict` | A skill's draft digest or served revision is not the `expected_digest` or `expected_revision` sent, or a workflow authorization names a revision or digest the skill does not serve. |
-| `422` | `storage_check_failed` | The R2 access check failed; nothing was saved. |
+| `422` | `storage_check_failed` | The storage access check failed (or the endpoint is not public); nothing was saved. |
 | `429` | `rate_limited` | Too many requests; retry after the `Retry-After` seconds. |
 | `429` | `busy` | Job caps reached: the account's running-job limit or the server's total, or 5 active workflow runs. Wait for a job or run to end (or cancel one) instead of retrying at once. |
 | `503` | `unavailable` | The server has no job container, so jobs cannot run, or no events binding, so event routes are off, or no skills store, so skill and workflow routes are off; or a new subscription's `callback_url` host could not be resolved (retry after `Retry-After`). |

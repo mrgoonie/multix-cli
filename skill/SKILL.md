@@ -239,7 +239,7 @@ If the user cannot run the CLI locally but has access to a multix MCP server
 guide: https://multix.zuey.me/guides/mcp-server/), call its tools instead. The
 server signs in with GitHub OAuth and uses the provider keys the user saved at
 `/dashboard` (every key the CLI reads can be saved there, plus the account's
-own R2 bucket for job files); a group with `has_keys: false` in
+own R2 or S3-compatible bucket for job files); a group with `has_keys: false` in
 `multix_catalog` needs a key saved there.
 Every provider call (image, video, audio, media/ffmpeg, `doc convert`, …)
 goes through the CLI runner. `multix_catalog`, `multix_model_catalog` and `multix_skills` are always
@@ -270,9 +270,9 @@ authorize. Never try to authorize it yourself.
    10–30 s; `multix_job_cancel` stops it. An account runs only a few jobs at
    once (2 by default): on `busy: …` wait for one to finish (or cancel one) instead of
    retrying; on `server at capacity: …` retry after a few minutes.
-4. Read `outputs[].url`. Output files go to the user's own R2 bucket; when
-   `url` is null and a `note` mentions R2, tell the user to configure R2 at
-   `/dashboard`. `stdout` still holds any provider URLs the CLI printed.
+4. Read `outputs[].url`. Output files go to the user's own R2 or
+   S3-compatible bucket; when `url` is null and a `note` says output storage is
+   not configured, tell the user to configure a bucket at `/dashboard`. `stdout` still holds any provider URLs the CLI printed.
 
 Without an MCP client, the same server has a REST API at `/api/v1`
 (`Authorization: Bearer <mxk_… key>` from the user's `/dashboard`; `POST /jobs`

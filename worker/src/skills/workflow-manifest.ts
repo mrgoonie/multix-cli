@@ -411,7 +411,7 @@ export function renderStep(
     const url = urls[ref.index];
     if (!url) {
       fail(
-        `${where}: output ${ref.index} of step "${ref.step}" has no URL (configure R2 storage in /dashboard)`,
+        `${where}: output ${ref.index} of step "${ref.step}" has no URL (configure output storage in /dashboard)`,
       );
     }
     return url;

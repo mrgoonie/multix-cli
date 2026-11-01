@@ -36,7 +36,7 @@ import {
 } from "../../src/jobs/account-job-quota.js";
 import { type JobSpec, SERVER_AT_CAPACITY_ERROR } from "../../src/jobs/job-protocol.js";
 import { type MultixHttpServer, createHttpServer } from "../http-server.js";
-import { type LocalQuotaStub, resolveExecutable } from "../local-jobs.js";
+import { type LocalQuotaStub, cliRunner, resolveExecutable } from "../local-jobs.js";
 import { shutdownServer } from "../server-shutdown.js";
 import { runSmoke } from "../smoke-flow.js";
 import { type MultixDatabase, openDatabase } from "../sqlite-database.js";
@@ -330,7 +330,7 @@ describe("standalone multix-server job execution", () => {
     expect(third.body).toMatchObject({ status: "succeeded", exit_code: 0 });
     expect(String(third.body.stderr_tail)).toContain("[redacted]");
     expect(third.body.outputs).toEqual([{ name: "image.png", url: null, bytes: 3 }]);
-    expect(third.body.note).toMatch(/R2 storage is not configured/);
+    expect(third.body.note).toMatch(/Output storage is not configured/);
     const status = await mcpTool("multix_job_status", { job_id: String(third.body.job_id) });
     expect(status.structuredContent).toMatchObject({ status: "succeeded" });
     expect(runnerCalls).toHaveLength(2);
@@ -503,5 +503,28 @@ describe("resolveExecutable", () => {
     expect(await resolveExecutable(HOLD_BIN, "")).toBe(HOLD_BIN);
     expect(await resolveExecutable("multix-missing-binary", fixtures)).toBeUndefined();
     expect(await resolveExecutable("./hold-multix.mjs", fixtures)).toBeUndefined();
+  });
+});
+
+describe("cliRunner", () => {
+  it("runs the CLI with the executor's egress proxy settings", async () => {
+    const fake = decodeURIComponent(
+      new URL("../../test/fixtures/fake-multix.mjs", import.meta.url).pathname,
+    );
+    const result = (await cliRunner(fake)(
+      {
+        jobId: "11111111-2222-4333-8444-555555555555",
+        argv: ["x", "--print-proxy"],
+        env: {},
+        inputs: [],
+        timeoutMs: 10_000,
+      } as unknown as JobSpec,
+      {
+        signal: new AbortController().signal,
+        egressEnv: { HTTPS_PROXY: "http://multix:proxy-credential-value@127.0.0.1:9" },
+      },
+    )) as { stderrTail: string };
+    expect(result.stderrTail).toContain("proxy http://");
+    expect(result.stderrTail).not.toContain("proxy undefined");
   });
 });

@@ -160,7 +160,7 @@ How a job runs:
 - The account's provider keys are passed to the process in memory for that job
   only. They are never written to disk; stdout and stderr are returned with
   the key values replaced by `[redacted]`.
-- Output files are uploaded to the account's Cloudflare R2 bucket set in
+- Output files are uploaded to the account's R2 or S3-compatible bucket set in
   `/dashboard` (Storage) and returned as links. Without a bucket, the files are
   not kept: the result lists their names and sizes with `url: null`, and
   provider URLs printed by the CLI are returned unchanged.
@@ -360,6 +360,73 @@ spec:
         - name: tmp
           emptyDir: { sizeLimit: 2Gi }
 ```
+
+## Network egress
+
+The server process can only `fetch` public addresses (see above). When the
+server runs jobs ([issue #550](https://github.com/mrgoonie/multix-cli/issues/550)),
+each job's `multix` CLI runs as a child process in the server's own network
+namespace, so a URL-valued CLI option the CLI fetches itself is held to the
+same rule:
+
+- The job executor starts a proxy on `127.0.0.1` (random port, random
+  per-process credential) and starts every job CLI with `HTTP_PROXY`,
+  `HTTPS_PROXY`, `ALL_PROXY` (and their lower-case forms) pointing to it,
+  `NO_PROXY` empty and `NODE_USE_ENV_PROXY=1`, so Node's `fetch`, `ffmpeg` and
+  `curl` all go through it. The job's own keys cannot replace these variables.
+- The proxy resolves each host name when it connects, refuses the connection
+  (`403`) when any resolved address is loopback, private (RFC 1918, ULA),
+  link-local (including `169.254.169.254` metadata), CGNAT, multicast,
+  reserved or documentation space, and connects only to the address it
+  checked. IP literals are checked directly. A host name that rebinds between
+  lookups is checked again on every connection.
+- Job inputs (`inputs`) are downloaded by the executor with the same check.
+- Node's `fetch` honours these variables only from Node 22.21 (or 24.0). At
+  start-up the executor runs `node` from its `PATH` with the proxy variables
+  and refuses to start when that request does not reach the proxy, so an older
+  runtime cannot silently connect directly. The published image ships a
+  compatible Node.
+
+This covers clients that honour the proxy variables. As defence in depth, also
+deny private egress for the server pod at the network layer. On Kubernetes,
+with a CNI that enforces NetworkPolicy (the server needs DNS and the public
+internet, and no in-cluster service):
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: multix-server-egress
+spec:
+  podSelector:
+    matchLabels: { app: multix-server }
+  policyTypes: [Egress]
+  egress:
+    - to:   # cluster DNS
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels: { k8s-app: kube-dns }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+    - to:   # public internet only
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10, 169.254.0.0/16, 127.0.0.0/8]
+        - ipBlock:
+            cidr: ::/0
+            except: ["fc00::/7", "fe80::/10", "::1/128"]
+```
+
+Check your cluster's pod and service ranges and DNS labels before applying it,
+and add any of them that are not in private or CGNAT space to `except`.
+With plain Docker, put the server on its own bridge network and drop traffic
+from that bridge to private ranges in the `DOCKER-USER` iptables chain, for
+example
+`iptables -I DOCKER-USER -i <bridge> -d 169.254.0.0/16 -j DROP` (repeat for
+the ranges above). `DOCKER-USER` only filters forwarded traffic; to keep the
+container away from services on the Docker host itself, also drop traffic from
+the bridge in the `INPUT` chain.
 
 ## Backup and restore
 

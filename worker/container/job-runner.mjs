@@ -26,7 +26,7 @@ const MAX_UPLOAD_RESERVE_MS = 5 * 60_000;
 const KEY_NAME_RE =
   /^(?:[A-Z][A-Z0-9]*_API_(?:KEY|TOKEN)|FAL_KEY|CLOUDFLARE_(?:ACCOUNT_ID|AI_GATEWAY_ID))$/;
 const NO_STORAGE_NOTE =
-  "R2 storage is not configured: configure R2 in /dashboard to receive output files. Provider URLs printed by the CLI are returned unchanged.";
+  "Output storage is not configured: configure an R2 or S3-compatible bucket in /dashboard to receive output files. Provider URLs printed by the CLI are returned unchanged.";
 
 export class SpecError extends Error {}
 
@@ -84,8 +84,15 @@ function tail(text) {
   return text.length > MAX_TEXT_BYTES ? `…[truncated]\n${text.slice(-MAX_TEXT_BYTES)}` : text;
 }
 
-function secretsOf(spec) {
+function secretsOf(spec, egressEnv) {
   const values = Object.values(spec.env);
+  // The egress proxy credential: not a provider key, but no reason to hand it back either.
+  try {
+    if (egressEnv?.HTTPS_PROXY)
+      values.push(decodeURIComponent(new URL(egressEnv.HTTPS_PROXY).password));
+  } catch {
+    // Not a URL: nothing to redact.
+  }
   if (spec.upload) values.push(spec.upload.r2.secretAccessKey, spec.upload.r2.accessKeyId);
   return values
     .filter((v) => typeof v === "string" && v.length >= 8)
@@ -153,11 +160,14 @@ function runCli(bin, argv, options, killGraceMs = CLI_KILL_GRACE_MS) {
 
 /**
  * @param {object} spec validated job spec
- * @param {{ signal?: AbortSignal, bin?: string, fetch?: typeof fetch, get?: Function, basePath?: string, killGraceMs?: number }} [options]
- *   `signal` cancels the job; `killGraceMs` is how long a stopped CLI may take to exit before SIGKILL; `fetch` (uploads) and `get` (downloads) are injected in tests.
+ * @param {{ signal?: AbortSignal, bin?: string, fetch?: typeof fetch, get?: Function, basePath?: string, killGraceMs?: number, egressEnv?: Record<string, string> }} [options]
+ *   `signal` cancels the job; `fetch` (uploads) and `get` (downloads) are injected in tests.
+ *   `killGraceMs` is how long a stopped CLI may take to exit before SIGKILL.
+ *   `egressEnv` (egress-proxy.mjs) routes the CLI's own HTTP(S) through a public-only proxy;
+ *   it is applied after the spec's keys so nothing in the spec can replace it.
  */
 export async function runJob(spec, options = {}) {
-  const secrets = secretsOf(spec);
+  const secrets = secretsOf(spec, options.egressEnv);
   const budget = Math.min(spec.timeoutMs, MAX_JOB_TIMEOUT_MS);
   const startedAt = Date.now();
   const deadline = AbortSignal.timeout(budget);
@@ -190,6 +200,7 @@ export async function runJob(spec, options = {}) {
           MULTIX_OUTPUT_DIR: outDir,
           NO_COLOR: "1",
           ...spec.env,
+          ...options.egressEnv,
         },
         timeout: cliTimeout,
         killSignal: "SIGTERM",

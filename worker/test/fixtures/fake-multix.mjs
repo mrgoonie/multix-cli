@@ -26,6 +26,19 @@ if (argv.includes("--ignore-term")) {
   process.on("SIGTERM", () => {});
   process.stdout.on("error", () => {});
 }
+if (argv.includes("--print-proxy")) console.error(`proxy ${process.env.HTTPS_PROXY}`);
+// Fetch a URL the way the CLI fetches a URL-valued option, and record what happened.
+const fetchUrl = argv.find((a) => a.startsWith("--fetch="))?.slice("--fetch=".length);
+if (fetchUrl) {
+  let outcome;
+  try {
+    const res = await fetch(fetchUrl);
+    outcome = { status: res.status, body: await res.text() };
+  } catch (error) {
+    outcome = { error: String(error?.cause?.message ?? error?.message ?? error) };
+  }
+  console.error(`fetch-outcome ${JSON.stringify(outcome)}`);
+}
 if (argv.includes("--sleep")) await new Promise((r) => setTimeout(r, 30_000));
 // A key that straddles the 16 KB cut of stderr's tail.
 if (argv.includes("--key-at-cut")) {
