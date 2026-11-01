@@ -6,9 +6,15 @@
  *
  *   GET /health         liveness, from the Worker: { ok: true }
  *   GET /health/ready   readiness: storage writable, configuration complete, not draining
+ *                       (and, with jobs enabled, the job executor accepting jobs)
+ *
+ * MULTIX_LOCAL_JOBS=true runs `multix_run` jobs as child processes (see
+ * local-jobs.ts); start-up fails when the multix CLI is not on PATH. The
+ * `server_started` log line says whether jobs are enabled.
  *
  * SIGTERM / SIGINT: readiness turns 503, the listener stops accepting, open
  * requests and background work get MULTIX_SHUTDOWN_TIMEOUT_MS to finish,
+ * running jobs are recorded as interrupted and their CLI processes stopped,
  * then the database is closed.
  */
 
@@ -16,6 +22,7 @@
 import "./install-public-fetch-guard.js";
 import { logEvent } from "../src/redaction.js";
 import { createHttpServer } from "./http-server.js";
+import { DEFAULT_CLI_BIN, resolveExecutable } from "./local-jobs.js";
 import { serverConfigFrom, workerVars } from "./server-config.js";
 import { openDatabase } from "./sqlite-database.js";
 import { createStandaloneApp } from "./standalone-app.js";
@@ -28,12 +35,28 @@ declare const MULTIX_SERVER_VERSION: string | undefined;
 async function main(): Promise<void> {
   const config = serverConfigFrom(process.env);
   const vars = workerVars(process.env);
+  let cliBin: string | undefined;
+  if (config.localJobs) {
+    cliBin = await resolveExecutable(DEFAULT_CLI_BIN);
+    if (!cliBin) {
+      throw new Error("MULTIX_LOCAL_JOBS=true but the multix CLI is not on PATH");
+    }
+  }
   const database = openDatabase(config.databasePath);
-  const app = createStandaloneApp({
+  const app = await createStandaloneApp({
     database,
     vars,
     mcpRateLimit: config.mcpRateLimit,
     authRateLimit: config.authRateLimit,
+    jobs: cliBin
+      ? {
+          stateDir: config.jobsStateDir,
+          maxConcurrent: config.maxConcurrentJobs,
+          cliBin,
+          // Leave part of the shutdown budget for the database and alarms.
+          closeTimeoutMs: Math.min(10_000, Math.floor(config.shutdownTimeoutMs / 2)),
+        }
+      : undefined,
   });
   await prepareBootstrap(app.env, (line) => process.stdout.write(`${line}\n`));
 
@@ -65,6 +88,8 @@ async function main(): Promise<void> {
     version: typeof MULTIX_SERVER_VERSION === "string" ? MULTIX_SERVER_VERSION : "dev",
     port: config.port,
     data_dir: config.dataDir,
+    jobs: app.jobs ? "enabled" : "disabled",
+    max_concurrent_jobs: app.jobs?.maxConcurrent,
   });
 
   let stopping = false;

@@ -45,7 +45,7 @@ let current: Running | undefined;
 
 async function start(): Promise<Running> {
   const db = openDatabase(join(dir, "multix.sqlite"));
-  const app = createStandaloneApp({ database: db, vars });
+  const app = await createStandaloneApp({ database: db, vars });
   const printed: string[] = [];
   await prepareBootstrap(app.env, (line) => printed.push(line));
   const http = createHttpServer(app, {
@@ -109,7 +109,7 @@ describe("standalone multix-server", () => {
     });
     expect(result.createdAdmin).toBe(true);
     expect(result.tools).toContain("multix_catalog");
-    // Job execution is not bound in standalone mode (#550): no multix_run.
+    // Job execution is opt-in (MULTIX_LOCAL_JOBS): without it there is no multix_run.
     expect(result.tools).not.toContain("multix_run");
     token = result.accessToken;
     // The generated bootstrap token is single use.
