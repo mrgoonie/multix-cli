@@ -1,6 +1,6 @@
 ---
 title: Self-hosted server (Docker, Kubernetes)
-description: Run the multix MCP server, dashboard and REST API as one Node.js container without Cloudflare, with SQLite on a persistent volume, local admin sign-in, health probes and a Kubernetes deployment contract.
+description: Run the multix MCP server, dashboard and REST API as one Node.js container without Cloudflare, with SQLite on a persistent volume, local admin sign-in, optional job execution in the same container, health probes and a Kubernetes deployment contract.
 ---
 
 `multix-server` runs the same application as the
@@ -12,13 +12,14 @@ SQLite file. Use it on your own host, in Docker Compose or on Kubernetes.
 
 ## What is different from the Cloudflare deployment
 
-- **No job runner.** The per-job containers (`MULTIX_JOBS`, `MULTIX_JOB_QUOTA`)
-  are not available, so `multix_run`, `multix_job_status` and
-  `multix_job_cancel` are not listed, the REST job routes answer `503`, and a
-  workflow cannot start a run. `multix_catalog`, `multix_model_catalog`,
-  skills, events, accounts, API keys and the dashboard work. Self-hosted job
-  execution is tracked in
-  [issue #550](https://github.com/mrgoonie/multix-cli/issues/550).
+- **Jobs run in the server container, and only when enabled.** There are no
+  per-job containers. With `MULTIX_LOCAL_JOBS=true` the server runs each
+  `multix_run` job as a child process of itself (see
+  [Job execution](#job-execution)). Without it, `multix_run`,
+  `multix_job_status` and `multix_job_cancel` are not listed, the REST job
+  routes answer `503`, and a workflow cannot start a run. `multix_catalog`,
+  `multix_model_catalog`, skills, events, accounts, API keys and the dashboard
+  work either way.
 - **Storage:** OAuth state, accounts, encrypted provider keys, skills and event
   subscriptions are kept in `$MULTIX_DATA_DIR/multix.sqlite` (default
   `/data/multix.sqlite`, WAL mode) instead of KV and Durable Objects.
@@ -45,8 +46,9 @@ run summary.
 
 The image runs as the non-root `node` user, listens on port `3000`, declares
 `/data` as a volume, and works with a read-only root file system when `/tmp` is
-a writable tmpfs. No secret is baked in. To build it yourself from the
-repository root:
+a writable tmpfs. For jobs it also contains the `multix` CLI built from the
+same source (same version), `ffmpeg` and ImageMagick 7. No secret is baked in.
+To build it yourself from the repository root:
 
 ```bash
 docker build -f worker/server/Dockerfile -t multix-server:dev .
@@ -68,13 +70,15 @@ SESSION_SECRET=$(openssl rand -hex 32)
 SECRETS_ENCRYPTION_KEY=$(openssl rand -base64 32)
 MULTIX_PUBLIC_URL=http://localhost:3000
 MULTIX_LOCAL_AUTH=true
+MULTIX_LOCAL_JOBS=true
+MULTIX_MCP_UNCAPPED_SPEND=deny
 EOF
 
 docker run -d --name multix-server \
   --env-file multix.env \
   -p 127.0.0.1:3000:3000 \
   -v multix-data:/data \
-  --read-only --tmpfs /tmp \
+  --read-only --tmpfs /tmp:size=2g \
   --cap-drop ALL --security-opt no-new-privileges:true \
   --stop-timeout 30 \
   ghcr.io/mrgoonie/multix-server:<version>
@@ -91,7 +95,10 @@ directory instead of a named volume, it must be writable by the `node` user
 
 [`worker/server/compose.yaml`](https://github.com/mrgoonie/multix-cli/blob/main/worker/server/compose.yaml)
 builds the image from the checkout and runs it on `http://localhost:3000` with
-a named volume, a read-only root file system and a readiness health check:
+a named volume, a read-only root file system, a 2 GB `/tmp` tmpfs for job
+files, a readiness health check, and job execution on
+(`MULTIX_LOCAL_JOBS=true`, one job at a time, `MULTIX_MCP_UNCAPPED_SPEND=deny`;
+set them in `.env` to change them):
 
 ```bash
 cp worker/server/server.env.example worker/server/.env   # fill in the two secrets
@@ -130,6 +137,64 @@ Then connect clients exactly as in
 [Connect a client](/guides/mcp-server/#connect-a-client), with your origin's
 `/mcp`.
 
+## Job execution
+
+Job execution is off unless `MULTIX_LOCAL_JOBS=true`. When it is on, the
+server checks at start that the `multix` CLI is on `PATH` (the image has it)
+and refuses to start otherwise. The `server_started` log line reports
+`"jobs":"enabled"` or `"jobs":"disabled"`, and `/health/ready` reports `jobs`
+the same way.
+
+How a job runs:
+
+- `multix_run`, `multix_job_status`, `multix_job_cancel` and
+  `POST /api/v1/jobs`, `GET /api/v1/jobs/{id}`,
+  `POST /api/v1/jobs/{id}/cancel` use the same code, input checks, caps and
+  spend guard as on Cloudflare. Only the place the CLI runs changes.
+- Each job is one `multix` process started with an argument list (never a
+  shell) in its own directory under `/tmp`, removed when the job ends. Input
+  URLs are downloaded only from public HTTPS addresses, checked on the address
+  actually connected to. The whole job has a 30-minute limit.
+- The account's provider keys are passed to the process in memory for that job
+  only. They are never written to disk; stdout and stderr are returned with
+  the key values replaced by `[redacted]`.
+- Output files are uploaded to the account's Cloudflare R2 bucket set in
+  `/dashboard` (Storage) and returned as links. Without a bucket, the files are
+  not kept: the result lists their names and sizes with `url: null`, and
+  provider URLs printed by the CLI are returned unchanged.
+- Job records (status, result, owner; no keys, no arguments) are kept in
+  `$MULTIX_DATA_DIR/jobs` (mode `0700`) for 7 days.
+
+Concurrency:
+
+- `MULTIX_LOCAL_MAX_CONCURRENT_JOBS` (1 to 64, default `1`) is the number of
+  CLI processes that may run at once. The server-wide cap
+  `MULTIX_MAX_JOBS_TOTAL` is lowered to this value, so a job over the limit is
+  refused with `server at capacity` (MCP error, REST `429`) before any
+  provider is called. `MULTIX_MAX_JOBS_PER_ACCOUNT` (default `2`) still limits
+  each account.
+- Size CPU, memory and `/tmp` for that many jobs: a job may download up to
+  200 MB per input file, and video jobs run `ffmpeg`.
+
+Restart and shutdown:
+
+- On `SIGTERM` running jobs are stopped and recorded as `failed` with an
+  `interrupted` explanation; their slots are freed.
+- A job that was running when the process died is recorded the same way at
+  the next start. It is never run again, so a billed provider call is not
+  repeated: the caller starts a new job to retry.
+
+One replica per volume: the executor holds a lock socket in
+`$MULTIX_DATA_DIR/jobs`, which stops a second process on the same host from
+using the same directory. It cannot see a process on another node, so never
+share the data volume between replicas (use a `ReadWriteOnce` volume and
+`replicas: 1`).
+
+Spend: set `MULTIX_MCP_UNCAPPED_SPEND=deny` (the template default) so a run
+whose cost the operator caps cannot bound is refused. Without it the code
+default is `budget`, which runs such a command only when the caller gives
+`max_cost_usd` and the price is known and fits.
+
 ## Configuration
 
 Required:
@@ -162,6 +227,15 @@ Server:
 | `MULTIX_MCP_RATE_LIMIT` | `60` | Requests per minute per account on `/mcp` and the REST API. |
 | `MULTIX_AUTH_RATE_LIMIT` | `30` | Requests per minute per client IP on sign-in and other auth routes. |
 
+Jobs:
+
+| Variable | Default | Effect |
+|---|---|---|
+| `MULTIX_LOCAL_JOBS` | off | `true` runs `multix_run` jobs as child processes of the server (needs the `multix` CLI on `PATH`). |
+| `MULTIX_LOCAL_MAX_CONCURRENT_JOBS` | `1` | CLI processes that may run at once (1 to 64). Also caps `MULTIX_MAX_JOBS_TOTAL`. |
+| `MULTIX_MAX_JOBS_PER_ACCOUNT` | `2` | Jobs one account may run at once. |
+| `MULTIX_MCP_UNCAPPED_SPEND` | `budget` | `deny` refuses runs the operator caps cannot bound (recommended, the template default); `budget` needs `max_cost_usd`; `allow` runs them. |
+
 The `MULTIX_MCP_*` tool limits in the [Worker configuration](/guides/mcp-server/#configuration)
 are read the same way. An invalid number in the server table stops the process
 at start with a message naming the variable. The parser is
@@ -171,12 +245,15 @@ at start with a message naming the variable. The parser is
 
 - `GET /health` (liveness): `{ "ok": true }` while the process serves requests.
 - `GET /health/ready` (readiness): `200` when the database is writable and the
-  configuration is complete, otherwise `503` with `checks` naming the failing
-  part. It also answers `503` while the server is draining.
+  configuration is complete (and, with jobs enabled, the job executor accepts
+  jobs), otherwise `503` with `checks` naming the failing part. It also
+  answers `503` while the server is draining. `jobs` says `enabled` or
+  `disabled`.
 
 On `SIGTERM` or `SIGINT` readiness turns `503`, the listener stops accepting,
 open requests and background work get `MULTIX_SHUTDOWN_TIMEOUT_MS` to finish,
-then the database is closed. Give the orchestrator a longer grace period than
+running jobs are stopped and recorded as interrupted, then the database is
+closed. Give the orchestrator a longer grace period than
 that timeout.
 
 `npm run smoke:server` in `worker/` checks a running server end to end as an
@@ -208,13 +285,13 @@ What a Kubernetes or TOSE deployment must provide:
 | Replicas | Exactly `1`, with strategy `Recreate`. A rolling update would run two processes on one SQLite file. |
 | Port | Container port `3000` (`PORT`), HTTP. Terminate TLS at the ingress. |
 | Volume | A persistent volume (PVC, `ReadWriteOnce`) at `/data`. An `emptyDir` loses every account at the next restart. |
-| Writable paths | Only `/data` and `/tmp` (an `emptyDir`); the root file system can be read-only. |
+| Writable paths | Only `/data` and `/tmp` (an `emptyDir`, sized for the job files); the root file system can be read-only. |
 | User | Non-root `node` (uid 1000); set `fsGroup: 1000` so the volume is writable. |
-| Environment | `MULTIX_PUBLIC_URL` (the ingress origin), `MULTIX_LOCAL_AUTH=true` and/or GitHub sign-in, `MULTIX_TRUST_PROXY_HOPS=1` behind one ingress. |
+| Environment | `MULTIX_PUBLIC_URL` (the ingress origin), `MULTIX_LOCAL_AUTH=true` and/or GitHub sign-in, `MULTIX_TRUST_PROXY_HOPS=1` behind one ingress; for jobs `MULTIX_LOCAL_JOBS=true`, `MULTIX_LOCAL_MAX_CONCURRENT_JOBS` and `MULTIX_MCP_UNCAPPED_SPEND=deny`. |
 | Secrets | `SESSION_SECRET`, `SECRETS_ENCRYPTION_KEY`, `MULTIX_BOOTSTRAP_TOKEN`, and `GITHUB_CLIENT_SECRET` / `MULTIX_ALLOWED_USERS` if used, injected from the secret store, never written into manifests. |
 | Probes | Liveness `GET /health`, readiness `GET /health/ready`. |
 | Shutdown | `terminationGracePeriodSeconds` above `MULTIX_SHUTDOWN_TIMEOUT_MS` (for example 30 s for the 20 s default). |
-| Resources | No job runs inside this process. The values below are a starting point, not a benchmark; adjust them from observed usage. |
+| Resources | With jobs enabled, the CLI processes (and `ffmpeg`) run inside this container: size CPU, memory and `/tmp` for `MULTIX_LOCAL_MAX_CONCURRENT_JOBS` jobs. The values below are a starting point for one job at a time, not a benchmark; adjust them from observed usage. |
 
 ```yaml
 apiVersion: apps/v1
@@ -245,6 +322,9 @@ spec:
             - { name: MULTIX_PUBLIC_URL, value: https://multix.example.com }
             - { name: MULTIX_LOCAL_AUTH, value: "true" }
             - { name: MULTIX_TRUST_PROXY_HOPS, value: "1" }
+            - { name: MULTIX_LOCAL_JOBS, value: "true" }
+            - { name: MULTIX_LOCAL_MAX_CONCURRENT_JOBS, value: "1" }
+            - { name: MULTIX_MCP_UNCAPPED_SPEND, value: deny }
           envFrom:
             - secretRef:
                 name: multix-server-secrets   # SESSION_SECRET, SECRETS_ENCRYPTION_KEY, MULTIX_BOOTSTRAP_TOKEN
@@ -253,8 +333,8 @@ spec:
           readinessProbe:
             httpGet: { path: /health/ready, port: 3000 }
           resources:
-            requests: { cpu: 100m, memory: 256Mi }
-            limits: { memory: 512Mi }
+            requests: { cpu: 500m, memory: 512Mi }
+            limits: { memory: 2Gi }
           securityContext:
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
@@ -267,13 +347,14 @@ spec:
           persistentVolumeClaim:
             claimName: multix-data
         - name: tmp
-          emptyDir: {}
+          emptyDir: { sizeLimit: 2Gi }
 ```
 
 ## Backup and restore
 
 Everything except the secrets is in `/data`: `multix.sqlite` plus its
-`multix.sqlite-wal` and `multix.sqlite-shm` files while the server runs.
+`multix.sqlite-wal` and `multix.sqlite-shm` files while the server runs, and
+the job records in `/data/jobs`.
 
 - **Offline:** stop the server (or scale to 0), copy the whole `/data`
   directory, start it again.
