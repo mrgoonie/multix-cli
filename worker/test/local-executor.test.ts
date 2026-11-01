@@ -5,8 +5,9 @@
  * the real job runner against the fake `multix` binary. No network, no provider.
  */
 
+import { execFile } from "node:child_process";
 import { mkdtemp, readFile, readdir, rm, utimes, writeFile } from "node:fs/promises";
-import { hostname, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -51,7 +52,13 @@ async function stateDir() {
 }
 async function create(options: Any) {
   const { createLocalExecutor } = await mod();
-  const executor = await createLocalExecutor(options);
+  // Short waits so lock and shutdown paths finish within a test.
+  const executor = await createLocalExecutor({
+    lockWaitMs: 100,
+    lockPollMs: 10,
+    closeTimeoutMs: 200,
+    ...options,
+  });
   executors.push(executor);
   return executor;
 }
@@ -66,8 +73,8 @@ async function until(check: () => Promise<boolean> | boolean) {
 
 afterEach(async () => {
   for (const executor of executors.splice(0)) {
-    // Let controlled jobs end so close() does not wait forever.
-    await Promise.race([executor.close(), tick()]);
+    // close() gives controlled jobs that never finish at most closeTimeoutMs.
+    await executor.close();
   }
   for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true });
 });
@@ -149,7 +156,7 @@ describe("local executor", () => {
     expect((await ex.start(ID3, spec(ID3), "u")).status).toBe("running");
   });
 
-  it("records a crashed runner as failed without leaking the key", async () => {
+  it("records a crashed runner as failed with a fixed message", async () => {
     const ex = await create({
       stateDir: await stateDir(),
       runJob: async () => {
@@ -160,7 +167,8 @@ describe("local executor", () => {
     await until(async () => (await ex.status(ID1))?.status === "failed");
     const view = await ex.status(ID1);
     expect(JSON.stringify(view)).not.toContain(KEY);
-    expect(view.error).toBe("The job failed inside the server");
+    const { RUNNER_FAILED_ERROR } = await mod();
+    expect(view.error).toBe(RUNNER_FAILED_ERROR);
   });
 
   it("marks jobs left running by a dead server as interrupted and never runs them again", async () => {
@@ -173,11 +181,12 @@ describe("local executor", () => {
         view: { status: "running", createdAt: 1 },
       }),
     );
-    await writeFile(join(dir, `${ID2}.json.123.abc.tmp`), "{");
-    await writeFile(
-      join(dir, "executor.lock"),
-      JSON.stringify({ pid: 2 ** 22 + 7, host: hostname() }),
-    );
+    await writeFile(join(dir, `${ID2}.json.123.${ID3}.tmp`), "{");
+    // Another process's lock attempt in progress: not ours to remove.
+    await writeFile(join(dir, `executor.lock.456.${ID3}.tmp`), "{}");
+    await writeFile(join(dir, "executor.lock"), JSON.stringify({ id: "dead-server" }));
+    const old = new Date(Date.now() - 5 * 60_000);
+    await utimes(join(dir, "executor.lock"), old, old);
     const run = controlledRun();
     const finals: Any[] = [];
     const ex = await create({
@@ -193,7 +202,9 @@ describe("local executor", () => {
     });
     expect(finals).toEqual([ID1]);
     expect(run.calls).toHaveLength(0);
-    expect((await readdir(dir)).some((n) => n.endsWith(".tmp"))).toBe(false);
+    expect((await readdir(dir)).filter((n) => n.endsWith(".tmp"))).toEqual([
+      `executor.lock.456.${ID3}.tmp`,
+    ]);
   });
 
   it("close() records running jobs as interrupted, stops them and frees the lock", async () => {
@@ -228,21 +239,118 @@ describe("local executor", () => {
 
     const other = await stateDir();
     const lock = join(other, "executor.lock");
-    // A live process on this host (our parent).
-    await writeFile(lock, JSON.stringify({ pid: process.ppid, host: hostname() }));
+    // A fresh lock is never taken over, even one naming our own pid (pid 1 in every container).
+    await writeFile(lock, JSON.stringify({ id: "live", pid: process.pid }));
     await expect(create({ stateDir: other, runJob: run.runJob })).rejects.toBeInstanceOf(
       ExecutorLockedError,
     );
-    // A replica on another host with a fresh heartbeat.
-    await writeFile(lock, JSON.stringify({ pid: 1, host: "other-pod" }));
+    // An empty lock (never written by this module, which creates it complete) is not abandoned either.
+    await writeFile(lock, "");
     await expect(create({ stateDir: other, runJob: run.runJob })).rejects.toBeInstanceOf(
       ExecutorLockedError,
     );
-    // The same replica after its heartbeat stopped.
+    // The same lock after its heartbeat stopped.
     const old = new Date(Date.now() - 5 * 60_000);
     await utimes(lock, old, old);
     const ex = await create({ stateDir: other, runJob: run.runJob });
-    expect(ex.activeJobs()).toBe(0);
+    expect(ex.accepting()).toBe(true);
+    expect(JSON.parse(await readFile(lock, "utf8")).id).not.toBe("live");
+    expect((await readdir(other)).filter((n) => n !== "executor.lock")).toEqual([]);
+  });
+
+  it("waits for a lock that is released during start-up", async () => {
+    const dir = await stateDir();
+    const lock = join(dir, "executor.lock");
+    await writeFile(lock, JSON.stringify({ id: "stopping" }));
+    setTimeout(() => {
+      rm(lock, { force: true });
+    }, 50);
+    const ex = await create({ stateDir: dir, runJob: controlledRun().runJob, lockWaitMs: 2000 });
+    expect(ex.accepting()).toBe(true);
+  });
+
+  it("lets exactly one of several processes starting together hold the directory", async () => {
+    const dir = await stateDir();
+    const script = local("./fixtures/lock-contender.mjs");
+    const moduleUrl = new URL("../container/local-executor.mjs", testFileUrl).href;
+    for (let round = 0; round < 5; round++) {
+      const results = await Promise.all(
+        [0, 1, 2, 3].map(
+          () =>
+            new Promise<string>((resolve, reject) => {
+              execFile(process.execPath, [script, moduleUrl, dir], (error, stdout) =>
+                error ? reject(error) : resolve(stdout.trim()),
+              );
+            }),
+        ),
+      );
+      expect(results.sort()).toEqual(["held", "locked", "locked", "locked"]);
+    }
+  });
+
+  it("stops accepting jobs when another process took its lock over", async () => {
+    const dir = await stateDir();
+    const run = controlledRun();
+    const ex = await create({ stateDir: dir, runJob: run.runJob, lockHeartbeatMs: 20 });
+    await writeFile(join(dir, "executor.lock"), JSON.stringify({ id: "new-owner" }));
+    await until(() => !ex.accepting());
+    const { SERVER_AT_CAPACITY_ERROR } = await mod();
+    expect(await ex.start(ID1, spec(ID1), "u")).toMatchObject({
+      status: "failed",
+      error: SERVER_AT_CAPACITY_ERROR,
+    });
+    expect(run.calls).toHaveLength(0);
+    await ex.close();
+    // The new owner's lock is left alone.
+    expect(JSON.parse(await readFile(join(dir, "executor.lock"), "utf8")).id).toBe("new-owner");
+  });
+
+  it("does not start a job whose start raced with close()", async () => {
+    const dir = await stateDir();
+    const run = controlledRun();
+    const ex = await create({ stateDir: dir, runJob: run.runJob });
+    const starting = ex.start(ID1, spec(ID1), "u");
+    await ex.close();
+    expect((await starting).status).toBe("failed");
+    await tick();
+    expect(run.calls).toHaveLength(0);
+    expect(await readdir(dir)).not.toContain("executor.lock");
+  });
+
+  it("ignores an async onFinal that rejects", async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      const run = controlledRun();
+      const ex = await create({
+        stateDir: await stateDir(),
+        runJob: run.runJob,
+        onFinal: async () => {
+          throw new Error("listener down");
+        },
+      });
+      await ex.start(ID1, spec(ID1), "u");
+      await until(() => run.calls.length === 1);
+      run.first().finish(RESULT);
+      await until(async () => (await ex.status(ID1))?.status === "succeeded");
+      await tick();
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  });
+
+  it("keeps a finished job's record when the same job id is started again concurrently", async () => {
+    const run = controlledRun();
+    const ex = await create({ stateDir: await stateDir(), runJob: run.runJob, maxConcurrent: 2 });
+    await ex.start(ID1, spec(ID1), "u");
+    await until(() => run.calls.length === 1);
+    run.first().finish(RESULT);
+    await until(() => ex.activeJobs() === 0);
+    const again = await Promise.all([ex.start(ID1, spec(ID1), "u"), ex.start(ID1, spec(ID1), "u")]);
+    expect(again.map((v: Any) => v.status)).toEqual(["succeeded", "succeeded"]);
+    expect(run.calls).toHaveLength(1);
   });
 
   it("rejects job ids that are not UUIDs and specs that do not validate", async () => {
