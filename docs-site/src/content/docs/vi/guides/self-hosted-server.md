@@ -175,7 +175,8 @@ Cách một job chạy:
   nào. `MULTIX_MAX_JOBS_PER_ACCOUNT` (mặc định `2`) vẫn giới hạn từng tài khoản.
 - Job giữ slot cho đến khi tiến trình CLI của nó đã thoát, kể cả sau khi bị
   hủy hoặc hết giờ, nên job tạo ngay sau một lệnh hủy có thể bị từ chối trong
-  chốc lát trong lúc tiến trình cũ dừng lại.
+  chốc lát trong lúc tiến trình cũ dừng lại. CLI nào bỏ qua `SIGTERM` sẽ bị
+  dừng bằng `SIGKILL` sau 10 giây.
 - Cấp CPU, bộ nhớ và `/tmp` cho chừng đó job: một job có thể tải tới 200 MB
   cho mỗi file đầu vào, và job video chạy `ffmpeg`.
 
@@ -183,7 +184,8 @@ Khởi động lại và tắt server:
 
 - Khi nhận `SIGTERM`, các job đang chạy bị dừng ngay và được ghi là `failed`
   kèm giải thích `interrupted`; người gọi còn đang chờ job đó nhận được kết
-  quả này. Slot của chúng được giải phóng trước khi database đóng.
+  quả này. Slot của chúng được giải phóng trước khi database đóng nếu CLI
+  thoát trong thời gian chờ tắt; nếu không, lần khởi động sau sẽ giải phóng chúng.
 - Job đang chạy khi tiến trình chết được ghi theo cùng cách ở lần khởi động
   sau. Nó không bao giờ được chạy lại, nên lệnh gọi provider có tính phí không
   bị lặp lại: người gọi tạo job mới để thử lại. Mọi slot job mà tiến trình
@@ -296,7 +298,7 @@ Những gì một bản triển khai Kubernetes hoặc TOSE phải cung cấp:
 | Biến môi trường | `MULTIX_PUBLIC_URL` (origin của ingress), `MULTIX_LOCAL_AUTH=true` và/hoặc đăng nhập GitHub, `MULTIX_TRUST_PROXY_HOPS=1` khi đứng sau một ingress; để chạy job thêm `MULTIX_LOCAL_JOBS=true`, `MULTIX_LOCAL_MAX_CONCURRENT_JOBS` và `MULTIX_MCP_UNCAPPED_SPEND=deny`. |
 | Secret | `SESSION_SECRET`, `SECRETS_ENCRYPTION_KEY`, `MULTIX_BOOTSTRAP_TOKEN`, và `GITHUB_CLIENT_SECRET` / `MULTIX_ALLOWED_USERS` nếu dùng, nạp từ secret store, không bao giờ ghi vào manifest. |
 | Probe | Liveness `GET /health`, readiness `GET /health/ready`. |
-| Tắt server | `terminationGracePeriodSeconds` lớn hơn `MULTIX_SHUTDOWN_TIMEOUT_MS` (ví dụ 30 giây cho mặc định 20 giây). |
+| Tắt server | `terminationGracePeriodSeconds` lớn hơn giá trị lớn hơn giữa `MULTIX_SHUTDOWN_TIMEOUT_MS` và 15 giây (ví dụ 30 giây cho mặc định 20 giây). |
 | Tài nguyên | Khi bật job, các tiến trình CLI (và `ffmpeg`) chạy trong container này: cấp CPU, bộ nhớ và `/tmp` cho `MULTIX_LOCAL_MAX_CONCURRENT_JOBS` job. Giá trị bên dưới là điểm khởi đầu cho mỗi lần một job, không phải kết quả benchmark; điều chỉnh theo mức sử dụng thực tế. |
 
 ```yaml

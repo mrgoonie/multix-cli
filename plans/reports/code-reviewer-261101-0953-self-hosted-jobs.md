@@ -169,3 +169,100 @@ No plan file was provided. The acceptance criteria stand as follows:
 ## Unresolved questions
 
 - Is a bare-metal (non-container) `multix-server` deployment supported? If so, M1's orphaned-CLI consequence rises in severity.
+
+---
+
+## Round 2: fix commit 0c8ebd4
+
+Reviewed 2026-11-01 (UTC): `git show 0c8ebd4` on `claude/relaxed-clarke-yce0xf`.
+
+### Verification run
+
+- `npx vitest run server/test test/local-executor.test.ts`: 51/51 pass (5 files)
+- `npm run typecheck` (worker, test and server configs): clean
+- `npx biome check worker/server worker/container`: clean
+
+### Status of round-1 findings
+
+| Finding | Status | Evidence |
+|---|---|---|
+| M1 shutdown order | Fixed | server-shutdown.ts:20-26 drains, starts `closeJobs()` before `http.close`, and awaits it before `database.close()`. standalone-app.ts:129-151 bounds `closeJobs` by its own budget (`closeTimeoutMs` + 5 s), not the HTTP leftover. It never rejects and always returns the same promise. `stop()` awaits it (line 196) even when the drain used the whole budget. An open poll now sees the interrupted view and returns, so the drain is short. The new test proves this with a 25 s poll and a 30 s budget: the server stops in under 10 s, the poll gets the interrupted result, the CLI pid is gone and no release failure is logged. |
+| L1 start-up slot clear | Fixed | local-jobs.ts:205-217 clears the slot map of every `MULTIX_JOB_QUOTA` object (`SELECT DISTINCT id FROM do_storage WHERE ns = 'MULTIX_JOB_QUOTA'`). It runs after the executor lock and the recovery sweep, before `host.resumeAlarms()` and before the listener opens (multix-server.ts creates the app before `listen`). See the safety notes below. |
+| L2 slots released only when the CLI exits | Fixed | local-executor.mjs:317-323 defers `notifyFinal` behind `slot.done` while the job holds an executor slot. See the race analysis below. |
+| L3 coders and cwebp | Fixed in both images | `imagemagick-jpeg imagemagick-webp libwebp-tools` are added. These packages exist in Alpine v3.22. |
+| L4 init process | Fixed | `tini` is installed and `ENTRYPOINT ["/sbin/tini","--"]` is set. pkgs.alpinelinux.org confirms the `tini` package installs `/sbin/tini`. The CMD keeps exec form, so node gets the SIGTERM that tini forwards. Neither compose.yaml nor the Kubernetes manifest in the docs overrides `command`, so tini is not bypassed. |
+| L5 test gaps | Closed | New tests cover: no re-run (`runnerCalls` unchanged after `start()`), a per-account cap of 1, an account-only slot, executor refusal releasing its slots, shutdown with a poll open, a canceled CLI keeping its slots (the fake CLI exits 600 ms after SIGTERM), and R2 credentials in the leak check, with an injected upload `fetch` that refuses anything other than a PUT to the fake bucket. |
+
+### L2 race analysis (verified, no defect)
+
+- **Normal completion.** `finish` runs inside the `slot.done` chain, so `slot.done.finally(notify)` fires after the chain's own `finally(() => running.delete)`. The executor slot is freed first, then the quota slots, through microtasks only, so no request can run in between. The order is the reverse of round 1, and the safe one: in the gap a new job is refused by the quota, which writes no record and makes no provider call.
+- **Cancel, then completion.** The cancel's `finish` records `canceled` and defers its notice. The run's later `finish` sees a terminal state and returns, so exactly one notice is sent.
+- **Cancel while the record is being written.** The record becomes visible after `link`, during `syncDir`, while `slot.done` is still undefined. That cancel notifies at once, which is correct: `startJob` then sees the abort, calls `running.delete` and never runs the CLI.
+- **close() alongside a cancel or a running job.** `shutdown()` sees the job still in `running`. `finishWithRetry` either records `interrupted` or finds `canceled` already recorded; either way the notice is deferred once. It fires when `slot.done` settles. That happens before the executor's `allSettled(fileLocks)` and the socket close, and local-jobs adds a `setImmediate` before it awaits `finals`. So `finals` is complete for every CLI that exits within `closeTimeoutMs`.
+- **Restart path.** The sweep runs with an empty `running` map, so interrupted jobs notify at once. The start-up clear then removes whatever is left, and releasing twice does no harm.
+- **Executor refusal.** A refused job id is never in `running`, so it notifies at once. The test proves both slots come back.
+
+### L1 safety: can it clear the slot of a job that is still running?
+
+- **Same host, same data directory:** no. The executor's socket lock (`createLocalExecutor`, then `acquireLock`) refuses a second live process before the clear runs. `databasePath` and `jobsStateDir` are both derived from `MULTIX_DATA_DIR` (server-config.ts:54-66), so one database cannot be paired with two state directories.
+- **Other nodes:** out of scope, as documented (one replica per volume). A ReadWriteOnce volume cannot attach to two nodes.
+- **Residual risk, bare metal only:** after a hard crash (SIGKILL or OOM of node alone), CLI children are not killed, because they are not detached and no parent-death signal is set. The restart then clears their slots while they still run. In the image this cannot happen: tini exits when node exits and the PID namespace is torn down. Round 1 had the same exposure for server slots. This is the open bare-metal question from round 1, not a new defect.
+
+### New or remaining findings
+
+#### R2-1. Low: a CLI that ignores SIGTERM holds its executor slot until restart, and now holds its quota slots until the lease expires
+
+- Where:
+  - worker/container/job-runner.mjs `runCli`: `killSignal: "SIGTERM"`, used for both `timeout` and `signal`, with no SIGKILL escalation.
+  - worker/container/local-executor.mjs:317-323: the notice is deferred until `slot.done` settles.
+- Bound:
+  - The quota slots are bounded by `JOB_SLOT_LEASE_MS`, 45 minutes from acquire (job-protocol.ts:77-85).
+  - The executor slot (`running`) has no bound until the process restarts.
+  - In round 1 a cancel released the quota at once; the executor slot was already unbounded then.
+- Scenario: with `MAX_CONCURRENT=1`, a command whose child process traps SIGTERM keeps running after a cancel or the 30-minute deadline.
+  - For 45 minutes the account and the whole server get `busy` or `server at capacity` from the quota.
+  - After that the quota admits new jobs, but the executor refuses each one: it writes a refused record and publishes a failure event.
+  - `/health/ready` stays 200, so no orchestrator restarts the pod.
+  - The in-tree CLI's signal handlers do exit (music-live.ts, stdin-file.ts), so this needs a stuck process or a misbehaving child. That is why it is Low.
+- Suggested fix:
+  - In `runCli`, after the abort or timeout, send SIGKILL to the child once a grace period (for example 10 s) has passed without an exit.
+  - Optionally spawn the CLI as its own process group (`detached: true`) and kill the group, so ffmpeg and magick children go too.
+  - Both changes are internal to the runner and compatible with the job image rollout.
+  - Optionally fail `/health/ready` when a slot has outlived `JOB_GIVE_UP_MS`.
+
+#### R2-2. Low: the job image change silently switches Cloudflare `multix_run` image outputs to WebP
+
+- Where: worker/container/Dockerfile:22 (`libwebp-tools` added).
+- Evidence:
+  - The CLI's `finalizeGeneratedImages` (src/core/image-webp-finalize.ts:146-165) converts with `cwebp -q 85` whenever `cwebp` is on PATH. Without it, it keeps the provider's format.
+  - Until now the job image had no `cwebp`, so live Cloudflare jobs returned the provider's PNG or JPEG.
+  - After the next container rollout the same request returns a lossy `.webp`, with a different object name and content type in R2.
+- Compatibility: the job spec, the responses and the R2 key layout are unchanged, so the rollout-before-Worker rule is not broken.
+- Why it is still a finding:
+  - It is a user-visible change on the production Cloudflare path.
+  - It ships in a `fix(server)` commit about the self-hosted server, with no note in the MCP server or REST docs.
+  - AGENTS.md asks for a separate issue for a change outside the PR's scope.
+- Scenario: a workflow or client that expects `.png` from `gemini generate`, or passes the output URL to a provider that rejects WebP input, breaks after the container rollout.
+- Suggested fix: keep `imagemagick-jpeg imagemagick-webp` (pure capability). Then either:
+  - move `libwebp-tools` in the job image to its own issue and commit, with docs ("outputs are WebP unless `no-webp`") and a changelog-visible type; or
+  - state the change explicitly in this PR's Documentation impact and in docs-site/.../guides/mcp-server.md and rest-api.md.
+
+#### R2-3. Low: the docs promise more than the code guarantees, and contradict themselves
+
+1. **Contradictory grace-period guidance.** docs-site/src/content/docs/guides/self-hosted-server.md:265 says to give the orchestrator a grace period above "the larger of that timeout and 15 seconds". The deployment-contract table at line 302 (and vi line 299) still says only "above `MULTIX_SHUTDOWN_TIMEOUT_MS`".
+   - Scenario: an operator sets `MULTIX_SHUTDOWN_TIMEOUT_MS=4000` and `terminationGracePeriodSeconds: 5`, which follows the table.
+   - The job budget is then min(10 s, 2 s) + 5 s = 7 s, so the kubelet SIGKILLs the pod before `database.close()`.
+   - The next start recovers (SQLite WAL, interrupted sweep, slot clear), but the documented order is not met.
+   - Fix: make the table match line 265 in both languages.
+2. **"Their slots are freed before the database closes" is not guaranteed.** That is true only for a CLI that exits within `closeTimeoutMs`.
+   - A CLI that is slower than that gets its deferred `onFinal` after `database.close()`, and `job_slot_release_failed` is logged.
+   - This is harmless now that start-up clears all slots.
+   - Fix: change the wording to "freed before the database closes, or cleared at the next start".
+
+### Recommended actions (round 2)
+
+1. R2-2: decide whether the WebP switch on Cloudflare belongs in this PR. If it does, document it; if not, split it out.
+2. R2-1: add SIGKILL escalation, and optionally kill the whole process group, in `runCli`. This can be a separate issue, since it changes the shared runner.
+3. R2-3: align the grace-period table (en and vi) and soften the "freed before the database closes" claim.
+
+No Critical, High or Medium findings remain.

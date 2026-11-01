@@ -92,30 +92,63 @@ function secretsOf(spec) {
     .sort((a, b) => b.length - a.length);
 }
 
-function runCli(bin, argv, options) {
+/** How long a CLI stopped with SIGTERM (cancel or timeout) may take to exit before SIGKILL. */
+export const CLI_KILL_GRACE_MS = 10_000;
+
+/**
+ * execFile the CLI and resolve once it has really exited. execFile sends
+ * SIGTERM on abort and on timeout, and on abort it calls back at once while
+ * the process may still run; so the result waits for the process, and a CLI
+ * that ignores SIGTERM is killed after `killGraceMs`.
+ */
+function runCli(bin, argv, options, killGraceMs = CLI_KILL_GRACE_MS) {
   return new Promise((resolve) => {
-    execFile(
+    /** @type {NodeJS.Timeout | undefined} */
+    let killTimer;
+    /** @type {object | undefined} */
+    let result;
+    const exited = () => child.exitCode !== null || child.signalCode !== null || !child.pid;
+    const escalate = () => {
+      killTimer ??= setTimeout(() => {
+        if (!exited()) child.kill("SIGKILL");
+      }, killGraceMs);
+    };
+    const finish = () => {
+      if (!result || !exited()) return;
+      clearTimeout(killTimer);
+      clearTimeout(timeoutTimer);
+      options.signal?.removeEventListener("abort", escalate);
+      resolve(result);
+    };
+    const child = execFile(
       bin,
       argv,
       { ...options, maxBuffer: MAX_CLI_BUFFER_BYTES, windowsHide: true },
       (error, stdout, stderr) => {
         const exitCode = error ? (typeof error.code === "number" ? error.code : null) : 0;
-        resolve({
+        result = {
           exitCode,
           killed: Boolean(error?.killed),
           overflow: error?.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER",
           stdout: String(stdout),
           stderr: String(stderr),
-        });
+        };
+        // An overflow or abort was answered with SIGTERM: make sure the process ends.
+        if (!exited()) escalate();
+        finish();
       },
     );
+    child.once("exit", finish);
+    if (options.signal?.aborted) escalate();
+    else options.signal?.addEventListener("abort", escalate, { once: true });
+    const timeoutTimer = options.timeout ? setTimeout(escalate, options.timeout) : undefined;
   });
 }
 
 /**
  * @param {object} spec validated job spec
- * @param {{ signal?: AbortSignal, bin?: string, fetch?: typeof fetch, get?: Function, basePath?: string }} [options]
- *   `signal` cancels the job; `fetch` (uploads) and `get` (downloads) are injected in tests.
+ * @param {{ signal?: AbortSignal, bin?: string, fetch?: typeof fetch, get?: Function, basePath?: string, killGraceMs?: number }} [options]
+ *   `signal` cancels the job; `killGraceMs` is how long a stopped CLI may take to exit before SIGKILL; `fetch` (uploads) and `get` (downloads) are injected in tests.
  */
 export async function runJob(spec, options = {}) {
   const secrets = secretsOf(spec);
@@ -137,22 +170,27 @@ export async function runJob(spec, options = {}) {
     await downloadInputs(dir, spec.inputs, { signal, get: options.get });
     const reserve = Math.min(MAX_UPLOAD_RESERVE_MS, Math.floor(budget / 4));
     const cliTimeout = Math.max(1, budget - (Date.now() - startedAt) - reserve);
-    const run = await runCli(options.bin ?? "multix", spec.argv, {
-      cwd: dir,
-      env: {
-        PATH: options.basePath ?? process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin",
-        HOME: dir,
-        MULTIX_DISABLE_HOME_ENV: "1",
-        // The job directory is thrown away: no local run ledger.
-        MULTIX_HISTORY: "0",
-        MULTIX_OUTPUT_DIR: outDir,
-        NO_COLOR: "1",
-        ...spec.env,
+    const run = await runCli(
+      options.bin ?? "multix",
+      spec.argv,
+      {
+        cwd: dir,
+        env: {
+          PATH: options.basePath ?? process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin",
+          HOME: dir,
+          MULTIX_DISABLE_HOME_ENV: "1",
+          // The job directory is thrown away: no local run ledger.
+          MULTIX_HISTORY: "0",
+          MULTIX_OUTPUT_DIR: outDir,
+          NO_COLOR: "1",
+          ...spec.env,
+        },
+        timeout: cliTimeout,
+        killSignal: "SIGTERM",
+        signal,
       },
-      timeout: cliTimeout,
-      killSignal: "SIGTERM",
-      signal,
-    });
+      options.killGraceMs,
+    );
     result.exitCode = run.exitCode;
     // Redact first: a key cut in half by truncation could not be matched any more.
     result.stdout = head(redact(run.stdout, secrets));

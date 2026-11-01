@@ -177,7 +177,8 @@ Concurrency:
   each account.
 - A job keeps its slots until its CLI process has exited, also after a
   cancel or a timeout, so a job started right after a cancel may be refused
-  for a moment while the old process stops.
+  for a moment while the old process stops. A CLI that ignores `SIGTERM` is
+  killed with `SIGKILL` 10 seconds later.
 - Size CPU, memory and `/tmp` for that many jobs: a job may download up to
   200 MB per input file, and video jobs run `ffmpeg`.
 
@@ -185,7 +186,8 @@ Restart and shutdown:
 
 - On `SIGTERM` running jobs are stopped at once and recorded as `failed` with
   an `interrupted` explanation; a caller still waiting on one gets that
-  result. Their slots are freed before the database closes.
+  result. Their slots are freed before the database closes when their CLI
+  exits within the shutdown wait; otherwise the next start frees them.
 - A job that was running when the process died is recorded the same way at
   the next start. It is never run again, so a billed provider call is not
   repeated: the caller starts a new job to retry. Every job slot the previous
@@ -299,7 +301,7 @@ What a Kubernetes or TOSE deployment must provide:
 | Environment | `MULTIX_PUBLIC_URL` (the ingress origin), `MULTIX_LOCAL_AUTH=true` and/or GitHub sign-in, `MULTIX_TRUST_PROXY_HOPS=1` behind one ingress; for jobs `MULTIX_LOCAL_JOBS=true`, `MULTIX_LOCAL_MAX_CONCURRENT_JOBS` and `MULTIX_MCP_UNCAPPED_SPEND=deny`. |
 | Secrets | `SESSION_SECRET`, `SECRETS_ENCRYPTION_KEY`, `MULTIX_BOOTSTRAP_TOKEN`, and `GITHUB_CLIENT_SECRET` / `MULTIX_ALLOWED_USERS` if used, injected from the secret store, never written into manifests. |
 | Probes | Liveness `GET /health`, readiness `GET /health/ready`. |
-| Shutdown | `terminationGracePeriodSeconds` above `MULTIX_SHUTDOWN_TIMEOUT_MS` (for example 30 s for the 20 s default). |
+| Shutdown | `terminationGracePeriodSeconds` above the larger of `MULTIX_SHUTDOWN_TIMEOUT_MS` and 15 s (for example 30 s for the 20 s default). |
 | Resources | With jobs enabled, the CLI processes (and `ffmpeg`) run inside this container: size CPU, memory and `/tmp` for `MULTIX_LOCAL_MAX_CONCURRENT_JOBS` jobs. The values below are a starting point for one job at a time, not a benchmark; adjust them from observed usage. |
 
 ```yaml

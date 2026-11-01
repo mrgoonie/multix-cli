@@ -22,6 +22,7 @@ console.error(`using key ${process.env.GEMINI_API_KEY}`);
 writeFileSync(join(out, "result.txt"), "hello");
 mkdirSync(join(out, "nested"));
 writeFileSync(join(out, "nested", "result.txt"), "again");
+if (argv.includes("--ignore-term")) process.on("SIGTERM", () => {});
 if (argv.includes("--sleep")) await new Promise((r) => setTimeout(r, 30_000));
 // A key that straddles the 16 KB cut of stderr's tail.
 if (argv.includes("--key-at-cut")) {
