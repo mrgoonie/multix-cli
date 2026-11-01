@@ -378,7 +378,9 @@ Những gì thay đổi:
   `ghcr.io/mrgoonie/multix-job:<version>`. Dùng cùng phiên bản với server
   (hoặc ghim digest của nó từ cùng lần chạy publish). Với bản phát hành có
   trước khi job image được publish, hoặc khi dùng registry riêng, hãy tự build
-  và đẩy nó từ mã nguồn của bản phát hành đó:
+  và đẩy nó từ mã nguồn của bản phát hành đó. Với registry riêng, hãy tạo một
+  pull Secret trong namespace và ghi tên nó vào
+  `MULTIX_K8S_JOB_IMAGE_PULL_SECRETS`:
 
   ```bash
   docker build -f worker/container/Dockerfile -t <registry>/multix-job:<version> .
@@ -450,6 +452,7 @@ nên hãy tự kiểm tra cluster của bạn.
 | `MULTIX_K8S_JOB_NETWORK_POLICY` | `multix-job-egress` | NetworkPolicy phải tồn tại và chọn các pod job. |
 | `MULTIX_K8S_INSTANCE` | `multix-server` | Giá trị label của pod job thuộc bản triển khai này; mỗi bản triển khai trong một namespace cần một giá trị riêng, khớp với NetworkPolicy. |
 | `MULTIX_K8S_JOB_CPU`, `MULTIX_K8S_JOB_MEMORY`, `MULTIX_K8S_JOB_TMP_SIZE` | `1`, `2Gi`, `2Gi` | Request và limit của mỗi pod job, và dung lượng `/tmp` của nó. |
+| `MULTIX_K8S_JOB_IMAGE_PULL_SECRETS` | không có | Danh sách tên Secret `kubernetes.io/dockerconfigjson` trong namespace, phân tách bằng dấu phẩy, được gán làm `imagePullSecrets` của pod job khi dùng registry riêng. Job chỉ chứa tên; server không bao giờ đọc nội dung Secret. |
 
 ## Kết nối ra ngoài (egress)
 

@@ -381,7 +381,9 @@ What changes:
   `ghcr.io/mrgoonie/multix-job:<version>`. Use the same version as the
   server (or pin its digest from the same publish run). For a release
   published before the job image was, or for a private registry, build and
-  push it yourself from that release's source:
+  push it yourself from that release's source. For a private registry, create
+  a pull Secret in the namespace and name it in
+  `MULTIX_K8S_JOB_IMAGE_PULL_SECRETS`:
 
   ```bash
   docker build -f worker/container/Dockerfile -t <registry>/multix-job:<version> .
@@ -453,6 +455,7 @@ so check your cluster.
 | `MULTIX_K8S_JOB_NETWORK_POLICY` | `multix-job-egress` | NetworkPolicy that must exist and select the job pods. |
 | `MULTIX_K8S_INSTANCE` | `multix-server` | Label value of this deployment's job pods; give each deployment in a namespace its own, and match it in the NetworkPolicy. |
 | `MULTIX_K8S_JOB_CPU`, `MULTIX_K8S_JOB_MEMORY`, `MULTIX_K8S_JOB_TMP_SIZE` | `1`, `2Gi`, `2Gi` | Requests and limits of each job pod, and the size of its `/tmp`. |
+| `MULTIX_K8S_JOB_IMAGE_PULL_SECRETS` | none | Comma-separated names of `kubernetes.io/dockerconfigjson` Secrets in the namespace, set as the job pods' `imagePullSecrets` for a private registry. Only the names reach the Job; the server never reads the Secrets. |
 
 ## Network egress
 
