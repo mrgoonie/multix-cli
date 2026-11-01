@@ -142,7 +142,12 @@ npm run check:mcp    # when worker/ or a client it imports changed
   and job tools are absent. Its tests
   (`worker/server/test/`) run in the worker's `npm test`, `npm run typecheck`
   covers `tsconfig.server.json`, and `npm run build:server` bundles it
-  (`worker/server/Dockerfile` builds the image). User guide:
+  (`worker/server/Dockerfile` builds the image). Pull requests that touch
+  `worker/**`, `src/**` or `skill/**` build both self-hosted images
+  (`self-hosted-images.yml`) and smoke-check them with
+  `.github/scripts/check-self-hosted-image.sh <image> <server|job> <version>`,
+  which also runs against a local build; releases publish both images
+  (`publish-server-image.yml`). User guide:
   `docs-site/src/content/docs/guides/self-hosted-server.md`.
   Job CLIs started by `worker/container/local-executor.mjs` share the
   server's network, so their HTTP(S) must go through the public-only proxy in

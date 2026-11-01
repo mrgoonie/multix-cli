@@ -1,11 +1,16 @@
-name: Publish multix-server image
+name: Publish self-hosted images
 
-# Builds worker/server/Dockerfile (the self-hosted MCP server, dashboard and
-# REST API) and pushes it to GHCR with immutable tags only:
-#   ghcr.io/<owner>/multix-server:<version>      e.g. 1.27.0 (from the vX.Y.Z tag)
-#   ghcr.io/<owner>/multix-server:sha-<12 hex>   the source commit
+# Builds the two self-hosted images and pushes them to GHCR with immutable
+# tags only:
+#   multix-server  worker/server/Dockerfile     (MCP server, dashboard, REST API)
+#   multix-job     worker/container/Dockerfile  (job pod for MULTIX_JOB_EXECUTOR=kubernetes)
+#   ghcr.io/<owner>/<image>:<version>      e.g. 1.27.0 (from the vX.Y.Z tag)
+#   ghcr.io/<owner>/<image>:sha-<12 hex>   the source commit
 # There is no `latest` tag: deployments pin a version tag, or better the
-# digest printed in the run summary (image@sha256:…).
+# digest printed in the run summary (image@sha256:…). Each image is pushed by
+# its own matrix job, so a version that already exists for one image does not
+# stop the other (for example when publishing multix-job for an older release
+# by hand).
 #
 # Runs after a stable release (called by release-please.yml, whose own tag
 # push cannot trigger workflows), on a manually pushed v* tag, or by hand.
@@ -46,7 +51,7 @@ jobs:
       TAG: ${{ inputs.tag || github.ref_name }}
     outputs:
       version: ${{ steps.meta.outputs.version }}
-      image: ${{ steps.meta.outputs.image }}
+      registry: ${{ steps.meta.outputs.registry }}
       sha: ${{ steps.src.outputs.sha }}
     steps:
       - name: Validate tag
@@ -57,7 +62,7 @@ jobs:
             exit 1
           fi
           echo "version=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
-          echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/multix-server" >> "$GITHUB_OUTPUT"
+          echo "registry=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
 
       - name: Checkout the tag
         uses: actions/checkout@v4
@@ -87,10 +92,18 @@ jobs:
           npm test --prefix worker
 
   image:
-    name: Build and push multix-server
+    name: Build and push ${{ matrix.name }}
     needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: multix-server
+            file: worker/server/Dockerfile
+          - name: multix-job
+            file: worker/container/Dockerfile
     permissions:
       contents: read
       packages: write
@@ -98,7 +111,7 @@ jobs:
       attestations: write
     env:
       TAG: ${{ inputs.tag || github.ref_name }}
-      IMAGE: ${{ needs.verify.outputs.image }}
+      IMAGE: ${{ needs.verify.outputs.registry }}/${{ matrix.name }}
       VERSION: ${{ needs.verify.outputs.version }}
       SHA: ${{ needs.verify.outputs.sha }}
     steps:
@@ -114,6 +127,12 @@ jobs:
             echo "::error::The tag moved between test and build."
             exit 1
           fi
+
+      # The linux/arm64 build runs its RUN steps under QEMU on the amd64 runner.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -149,7 +168,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: worker/server/Dockerfile
+          file: ${{ matrix.file }}
           platforms: linux/amd64,linux/arm64
           push: true
           provenance: mode=max
@@ -172,7 +191,7 @@ jobs:
       - name: Summary
         run: |
           {
-            echo "### multix-server ${{ env.VERSION }}"
+            echo "### ${{ matrix.name }} ${{ env.VERSION }}"
             echo
             echo "Pin this digest in deployments:"
             echo
