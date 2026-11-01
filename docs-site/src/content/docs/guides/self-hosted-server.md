@@ -388,6 +388,18 @@ What changes:
   docker push <registry>/multix-job:<version>
   ```
 
+  For a private registry, create a pull Secret in the namespace and name it in
+  `MULTIX_K8S_JOB_IMAGE_PULL_SECRETS`:
+
+  ```bash
+  kubectl -n <namespace> create secret docker-registry multix-job-pull \
+    --docker-server=<registry> --docker-username=<user> --docker-password=<token>
+  ```
+
+  A missing or wrong pull Secret leaves the job pod in `ImagePullBackOff`; the
+  job then fails after 5 minutes with "The job pod did not start in time".
+  Check `kubectl -n <namespace> describe pod -l app.kubernetes.io/component=job`.
+
 - The Job never retries (`backoffLimit: 0`, `restartPolicy: Never`), so a
   failed or evicted pod never repeats a billed provider call. The pod has no
   service account token and no service links, runs as a non-root user with a
@@ -453,6 +465,7 @@ so check your cluster.
 | `MULTIX_K8S_JOB_NETWORK_POLICY` | `multix-job-egress` | NetworkPolicy that must exist and select the job pods. |
 | `MULTIX_K8S_INSTANCE` | `multix-server` | Label value of this deployment's job pods; give each deployment in a namespace its own, and match it in the NetworkPolicy. |
 | `MULTIX_K8S_JOB_CPU`, `MULTIX_K8S_JOB_MEMORY`, `MULTIX_K8S_JOB_TMP_SIZE` | `1`, `2Gi`, `2Gi` | Requests and limits of each job pod, and the size of its `/tmp`. |
+| `MULTIX_K8S_JOB_IMAGE_PULL_SECRETS` | none | Comma-separated names of `kubernetes.io/dockerconfigjson` Secrets in the namespace, set as the job pods' `imagePullSecrets` for a private registry. Only the names reach the Job; the server never reads the Secrets. |
 
 ## Network egress
 

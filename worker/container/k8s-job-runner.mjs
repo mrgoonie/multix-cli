@@ -81,6 +81,9 @@ export const CANCELED_ERROR = "Canceled by the caller";
 
 const QUANTITY_RE = /^[0-9]+(?:\.[0-9]+)?(?:m|Ki|Mi|Gi|Ti|k|M|G|T)?$/;
 const NAME_RE = /^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$/;
+// A Secret name is a DNS subdomain: dot-separated labels, 253 characters at most.
+const SUBDOMAIN_RE =
+  /^(?=.{1,253}$)[a-z0-9](?:[-a-z0-9]*[a-z0-9])?(?:\.[a-z0-9](?:[-a-z0-9]*[a-z0-9])?)*$/;
 const LABEL_VALUE_RE = /^[A-Za-z0-9](?:[-A-Za-z0-9_.]{0,61}[A-Za-z0-9])?$/;
 
 const sleep = (ms, signal) =>
@@ -102,6 +105,8 @@ const sleep = (ms, signal) =>
  *   MULTIX_K8S_JOB_NETWORK_POLICY  default multix-job-egress
  *   MULTIX_K8S_INSTANCE            default multix-server (label value; one per deployment)
  *   MULTIX_K8S_JOB_CPU / _MEMORY / _TMP_SIZE   limits, defaults 1 / 2Gi / 2Gi
+ *   MULTIX_K8S_JOB_IMAGE_PULL_SECRETS  optional: comma-separated Secret names the job
+ *                                      pods pull the image with (the server never reads them)
  */
 export function kubernetesSettingsFromEnv(env = process.env, readNamespace = defaultNamespace) {
   const get = (name) => env[name]?.trim() || undefined;
@@ -121,6 +126,17 @@ export function kubernetesSettingsFromEnv(env = process.env, readNamespace = def
   if (!LABEL_VALUE_RE.test(instance)) {
     throw new Error("MULTIX_K8S_INSTANCE must be a Kubernetes label value");
   }
+  const imagePullSecrets = (get("MULTIX_K8S_JOB_IMAGE_PULL_SECRETS") ?? "")
+    .split(",")
+    .map((name) => name.trim())
+    .filter(Boolean);
+  for (const name of imagePullSecrets) {
+    if (!SUBDOMAIN_RE.test(name)) {
+      throw new Error(
+        `MULTIX_K8S_JOB_IMAGE_PULL_SECRETS: "${name}" is not a Kubernetes Secret name`,
+      );
+    }
+  }
   const quantity = (name, fallback) => {
     const value = get(name) ?? fallback;
     if (!QUANTITY_RE.test(value)) throw new Error(`${name} must be a Kubernetes quantity`);
@@ -134,6 +150,7 @@ export function kubernetesSettingsFromEnv(env = process.env, readNamespace = def
     cpu: quantity("MULTIX_K8S_JOB_CPU", DEFAULT_CPU),
     memory: quantity("MULTIX_K8S_JOB_MEMORY", DEFAULT_MEMORY),
     tmpSize: quantity("MULTIX_K8S_JOB_TMP_SIZE", DEFAULT_TMP_SIZE),
+    imagePullSecrets: [...new Set(imagePullSecrets)],
   };
 }
 
@@ -261,6 +278,10 @@ export function jobManifest(settings, spec) {
           automountServiceAccountToken: false,
           enableServiceLinks: false,
           terminationGracePeriodSeconds: 15,
+          // Only the Secret names: the kubelet reads them to pull the image.
+          ...(settings.imagePullSecrets?.length
+            ? { imagePullSecrets: settings.imagePullSecrets.map((name) => ({ name })) }
+            : {}),
           securityContext: {
             runAsNonRoot: true,
             runAsUser: 1000,

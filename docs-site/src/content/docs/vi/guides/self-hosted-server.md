@@ -385,6 +385,18 @@ Những gì thay đổi:
   docker push <registry>/multix-job:<version>
   ```
 
+  Với registry riêng, hãy tạo một pull Secret trong namespace và ghi tên nó vào
+  `MULTIX_K8S_JOB_IMAGE_PULL_SECRETS`:
+
+  ```bash
+  kubectl -n <namespace> create secret docker-registry multix-job-pull \
+    --docker-server=<registry> --docker-username=<user> --docker-password=<token>
+  ```
+
+  Pull Secret thiếu hoặc sai khiến pod job kẹt ở `ImagePullBackOff`; job sẽ
+  thất bại sau 5 phút với thông báo "The job pod did not start in time". Kiểm
+  tra bằng `kubectl -n <namespace> describe pod -l app.kubernetes.io/component=job`.
+
 - Job không bao giờ chạy lại (`backoffLimit: 0`, `restartPolicy: Never`),
   nên một pod lỗi hoặc bị evict không lặp lại một lệnh gọi provider có tính
   phí. Pod không có token service account, không có service link, chạy bằng
@@ -450,6 +462,7 @@ nên hãy tự kiểm tra cluster của bạn.
 | `MULTIX_K8S_JOB_NETWORK_POLICY` | `multix-job-egress` | NetworkPolicy phải tồn tại và chọn các pod job. |
 | `MULTIX_K8S_INSTANCE` | `multix-server` | Giá trị label của pod job thuộc bản triển khai này; mỗi bản triển khai trong một namespace cần một giá trị riêng, khớp với NetworkPolicy. |
 | `MULTIX_K8S_JOB_CPU`, `MULTIX_K8S_JOB_MEMORY`, `MULTIX_K8S_JOB_TMP_SIZE` | `1`, `2Gi`, `2Gi` | Request và limit của mỗi pod job, và dung lượng `/tmp` của nó. |
+| `MULTIX_K8S_JOB_IMAGE_PULL_SECRETS` | không có | Danh sách tên Secret `kubernetes.io/dockerconfigjson` trong namespace, phân tách bằng dấu phẩy, được gán làm `imagePullSecrets` của pod job khi dùng registry riêng. Job chỉ chứa tên; server không bao giờ đọc nội dung Secret. |
 
 ## Kết nối ra ngoài (egress)
 
