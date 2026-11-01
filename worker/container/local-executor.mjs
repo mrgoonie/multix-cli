@@ -243,12 +243,16 @@ async function acquireLock(stateDir) {
  *   startEgressProxy?: () => Promise<{ env: Record<string, string>, close(): Promise<void> }>,
  *   now?: () => number,
  *   onFinal?: (jobId: string, view: object, owner: { userId: string, command: string }) => unknown,
+ *   prepare?: () => Promise<unknown>,
  * }} options
  *   `runJob` is injected in tests; a replacement must pass `egressEnv` on to job-runner.mjs
  *   `runJob` so the CLI keeps going through the egress proxy. `onFinal` is told once about
  *   each job's final view (events, slot accounting) when the job no longer holds an executor
  *   slot: at once for a job whose CLI never ran or has exited, otherwise (cancel, shutdown)
  *   only once its CLI process has exited. Its errors, sync or async, are ignored.
+ *   `prepare` runs once after this process holds the state directory and has recorded the
+ *   previous process's jobs as interrupted, before any job can start (the Kubernetes runner
+ *   removes the previous process's job pods there); when it throws, start-up fails.
  */
 export async function createLocalExecutor(options) {
   const stateDir = resolve(options.stateDir);
@@ -373,6 +377,7 @@ export async function createLocalExecutor(options) {
 
   try {
     await sweep({ recover: true });
+    await options.prepare?.();
   } catch (error) {
     await new Promise((r) => lock.server.close(r));
     throw error;

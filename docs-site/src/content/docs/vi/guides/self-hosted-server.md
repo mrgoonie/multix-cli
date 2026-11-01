@@ -1,6 +1,6 @@
 ---
 title: Server tự host (Docker, Kubernetes)
-description: Chạy multix MCP server, dashboard và REST API thành một container Node.js không cần Cloudflare, với SQLite trên volume bền vững, đăng nhập admin cục bộ, tùy chọn chạy job ngay trong container, health probe và hợp đồng triển khai Kubernetes.
+description: Chạy multix MCP server, dashboard và REST API thành một container Node.js không cần Cloudflare, với SQLite trên volume bền vững, đăng nhập admin cục bộ, tùy chọn chạy job ngay trong container hoặc thành Kubernetes Job, health probe và hợp đồng triển khai Kubernetes.
 ---
 
 `multix-server` chạy cùng ứng dụng với
@@ -237,7 +237,7 @@ Job:
 
 | Biến | Mặc định | Tác dụng |
 |---|---|---|
-| `MULTIX_LOCAL_JOBS` | tắt | `true` chạy job `multix_run` thành tiến trình con của server (cần CLI `multix` trên `PATH`). |
+| `MULTIX_LOCAL_JOBS` | tắt | `true` chạy job `multix_run` thành tiến trình con của server (cần CLI `multix` trên `PATH`), hoặc thành Kubernetes Job với `MULTIX_JOB_EXECUTOR=kubernetes` ([Executor Kubernetes Job](#executor-kubernetes-job)). |
 | `MULTIX_LOCAL_MAX_CONCURRENT_JOBS` | `1` | Số tiến trình CLI được chạy cùng lúc (1 đến 64). Cũng giới hạn `MULTIX_MAX_JOBS_TOTAL`. |
 | `MULTIX_MAX_JOBS_PER_ACCOUNT` | `2` | Số job một tài khoản được chạy cùng lúc. |
 | `MULTIX_MCP_UNCAPPED_SPEND` | `budget` | `deny` từ chối run mà giới hạn của operator không chặn được (khuyến nghị, mặc định của file mẫu); `budget` cần `max_cost_usd`; `allow` cho chạy. |
@@ -357,6 +357,81 @@ spec:
         - name: tmp
           emptyDir: { sizeLimit: 2Gi }
 ```
+
+## Executor Kubernetes Job
+
+Mặc định CLI của job chạy bên trong container server. Trên Kubernetes bạn có
+thể cho mỗi job chạy trong pod riêng: đặt `MULTIX_JOB_EXECUTOR=kubernetes`
+cùng với `MULTIX_LOCAL_JOBS=true`. Khi đó server tạo một Kubernetes Job cho
+mỗi job và gọi job server trong pod của nó. Mọi điều ở
+[Chạy job](#chạy-job) vẫn áp dụng: cùng các giới hạn và cơ chế chặn chi phí,
+`MULTIX_LOCAL_MAX_CONCURRENT_JOBS` là số pod job chạy cùng lúc, bản ghi job
+trong `$MULTIX_DATA_DIR/jobs`, và một replica cho mỗi volume dữ liệu.
+
+Những gì thay đổi:
+
+- Mỗi job chạy trong một pod của job image (`worker/container/Dockerfile`).
+  Image này không được phát hành sẵn; hãy build và đẩy nó lên registry mà
+  cluster của bạn kéo được, từ cùng bản phát hành với server:
+
+  ```bash
+  docker build -f worker/container/Dockerfile -t <registry>/multix-job:<version> .
+  docker push <registry>/multix-job:<version>
+  ```
+
+- Job không bao giờ chạy lại (`backoffLimit: 0`, `restartPolicy: Never`),
+  nên một pod lỗi hoặc bị evict không lặp lại một lệnh gọi provider có tính
+  phí. Pod không có token service account, không có service link, chạy bằng
+  user không phải root với root file system chỉ đọc, không có capability, có
+  giới hạn CPU và bộ nhớ, và `/tmp` có giới hạn dung lượng.
+- Job spec, chứa provider key của tài khoản, được gửi một lần tới job server
+  của pod qua mạng pod (`POST :8080/jobs`). Nó không bao giờ được ghi vào
+  object Kubernetes, log hay bản ghi job. Nếu mạng giữa các node không đáng
+  tin, hãy dùng network plugin mã hóa lưu lượng giữa các pod.
+- Khi hủy job hoặc tắt server, CLI của job bị dừng và Job bị xóa; slot được
+  trả lại khi pod đã biến mất. Lúc khởi động, server xóa mọi Job mà tiến trình
+  trước để lại, sau khi ghi các job đó là bị gián đoạn (interrupted); chúng
+  không bao giờ được chạy lại.
+- Kubernetes tự dừng pod job sau giới hạn thời gian của nó cộng một khoảng dư
+  (`activeDeadlineSeconds`), và xóa các Job đã xong sau 5 phút, kể cả khi
+  server không còn chạy.
+
+Cài đặt:
+
+1. Áp dụng [`worker/server/k8s/job-executor.yaml`](https://github.com/mrgoonie/multix-cli/blob/main/worker/server/k8s/job-executor.yaml)
+   trong namespace của server. File này tạo service account `multix-server`,
+   một role chỉ được tạo, đọc và xóa Job, đọc pod và đọc NetworkPolicy, cùng
+   NetworkPolicy `multix-job-egress`.
+2. Chạy pod server với `serviceAccountName: multix-server` và label
+   `app.kubernetes.io/name: multix-server` (pod job chỉ nhận kết nối từ label
+   này), rồi đặt:
+
+   ```yaml
+   - { name: MULTIX_LOCAL_JOBS, value: "true" }
+   - { name: MULTIX_JOB_EXECUTOR, value: kubernetes }
+   - { name: MULTIX_K8S_JOB_IMAGE, value: <registry>/multix-job:<version> }
+   ```
+
+3. Server từ chối khởi động khi thiếu NetworkPolicy, hoặc khi policy không
+   chọn pod job theo label hay không giới hạn cả ingress lẫn egress. Dòng log
+   `server_started` hiển thị `"job_executor":"kubernetes"`.
+
+NetworkPolicy chỉ cho pod job tới DNS của cluster và các địa chỉ công khai,
+không bao giờ tới địa chỉ pod, service, node, metadata link-local hay control
+plane riêng, và chỉ cho server kết nối tới cổng của chúng. Nó chỉ có hiệu lực
+với network plugin thực thi NetworkPolicy (ví dụ Calico hoặc Cilium); server
+không kiểm tra được điều này, nên hãy tự kiểm tra cluster của bạn. Nếu địa chỉ
+API server, node hoặc metadata của bạn là địa chỉ công khai, hãy thêm chúng vào
+các danh sách `except`.
+
+| Biến | Mặc định | Tác dụng |
+|---|---|---|
+| `MULTIX_JOB_EXECUTOR` | `local` | `kubernetes` chạy mỗi job thành một Kubernetes Job (cần `MULTIX_LOCAL_JOBS=true`). |
+| `MULTIX_K8S_JOB_IMAGE` | bắt buộc | Job image build từ `worker/container/Dockerfile`. |
+| `MULTIX_K8S_NAMESPACE` | namespace của pod server | Namespace chứa các Job và NetworkPolicy. |
+| `MULTIX_K8S_JOB_NETWORK_POLICY` | `multix-job-egress` | NetworkPolicy phải tồn tại và chọn các pod job. |
+| `MULTIX_K8S_INSTANCE` | `multix-server` | Giá trị label của pod job thuộc bản triển khai này; mỗi bản triển khai trong một namespace cần một giá trị riêng, khớp với NetworkPolicy. |
+| `MULTIX_K8S_JOB_CPU`, `MULTIX_K8S_JOB_MEMORY`, `MULTIX_K8S_JOB_TMP_SIZE` | `1`, `2Gi`, `2Gi` | Request và limit của mỗi pod job, và dung lượng `/tmp` của nó. |
 
 ## Kết nối ra ngoài (egress)
 

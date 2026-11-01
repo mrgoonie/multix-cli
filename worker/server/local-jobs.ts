@@ -29,6 +29,11 @@ import { constants } from "node:fs";
 import { access } from "node:fs/promises";
 import { delimiter, isAbsolute, join } from "node:path";
 import { runJob } from "../container/job-runner.mjs";
+import {
+  createKubernetesJobRunner,
+  inClusterKubernetesApi,
+  kubernetesSettingsFromEnv,
+} from "../container/k8s-job-runner.mjs";
 import { createLocalExecutor } from "../container/local-executor.mjs";
 import type { WorkerEnv } from "../src/config.js";
 import type { MultixEvent } from "../src/events/event-catalog.js";
@@ -96,8 +101,15 @@ export interface LocalJobsOptions {
   cliBin?: string;
   /** How long close() waits for running CLI processes to exit. */
   closeTimeoutMs?: number;
-  /** Injected in tests instead of job-runner.mjs `runJob`. */
+  /** Injected in tests instead of job-runner.mjs `runJob`; also the Kubernetes runner. */
   runJob?: RunJob;
+  /**
+   * Replaces the loopback egress proxy. The Kubernetes runner passes one that
+   * starts nothing: its job pods are confined by a NetworkPolicy instead.
+   */
+  startEgressProxy?: () => Promise<{ env: Record<string, string>; close(): Promise<void> }>;
+  /** Run after the executor holds its state directory, before any job starts. */
+  prepare?: () => Promise<unknown>;
 }
 
 export interface LocalJobs {
@@ -157,6 +169,27 @@ function errorName(error: unknown): string {
   return error instanceof Error ? error.name : "unknown";
 }
 
+/**
+ * Options that run each job as a Kubernetes Job (MULTIX_JOB_EXECUTOR=kubernetes)
+ * instead of a child process; see container/k8s-job-runner.mjs. Checks the
+ * job NetworkPolicy before returning, so a server without it never starts.
+ */
+export async function kubernetesJobOptions(
+  env: NodeJS.ProcessEnv,
+): Promise<Pick<LocalJobsOptions, "runJob" | "startEgressProxy" | "prepare">> {
+  const settings = kubernetesSettingsFromEnv(env);
+  const runner = createKubernetesJobRunner({ settings, kube: inClusterKubernetesApi(env) });
+  await runner.verify();
+  return {
+    runJob: (spec, { signal }) => runner.runJob(spec, { signal }),
+    startEgressProxy: async () => ({ env: {}, close: async () => {} }),
+    prepare: async () => {
+      const removed = await runner.removeLeftoverJobs();
+      if (removed > 0) logEvent("info", "k8s_leftover_jobs_removed", { removed });
+    },
+  };
+}
+
 /** The production runner: the multix CLI at `cliBin`, behind the executor's egress proxy. */
 export function cliRunner(cliBin: string): RunJob {
   return (spec, { signal, egressEnv }) => runJob(spec, { signal, egressEnv, bin: cliBin });
@@ -204,6 +237,8 @@ export async function startLocalJobs(
     maxConcurrent: options.maxConcurrent,
     closeTimeoutMs: options.closeTimeoutMs,
     runJob: run as never,
+    startEgressProxy: options.startEgressProxy,
+    prepare: options.prepare,
     onFinal: (jobId: string, view: object, owner: JobOwner) => {
       const done = finalHook(jobId, view as JobView, owner);
       finals.add(done);

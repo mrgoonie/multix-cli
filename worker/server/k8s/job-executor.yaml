@@ -1,0 +1,106 @@
+# Kubernetes Job executor for multix-server (MULTIX_JOB_EXECUTOR=kubernetes).
+# Apply in the server's namespace before enabling it:
+#   kubectl apply -n <namespace> -f worker/server/k8s/job-executor.yaml
+# then run the server pod with `serviceAccountName: multix-server` and the
+# label `app.kubernetes.io/name: multix-server` (the job pods accept
+# connections from pods with that label only).
+#
+# The NetworkPolicy is the job pods' only network boundary. It is enforced
+# only by a network plugin that implements NetworkPolicy (Calico, Cilium,
+# kindnet >= 0.24, ...); check yours does. If your API server, node or
+# metadata addresses are public, add them to the `except` lists below.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: multix-server
+---
+# Least privilege: the server creates, watches and deletes its job Jobs and
+# reads its NetworkPolicy. It cannot read Secrets or touch other workloads.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: multix-job-executor
+rules:
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["create", "get", "list", "delete"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: multix-job-executor
+subjects:
+  - kind: ServiceAccount
+    name: multix-server
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: multix-job-executor
+---
+# Job pods: inbound only from the server on the job port; outbound only to
+# cluster DNS and to public addresses (no pod, service, node, metadata or
+# private control-plane address). The server refuses to start without this
+# policy, and checks that it selects its job pods.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: multix-job-egress
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/managed-by: multix-server
+      app.kubernetes.io/component: job
+      multix.dev/instance: multix-server # MULTIX_K8S_INSTANCE
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: multix-server
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 0.0.0.0/8
+              - 10.0.0.0/8
+              - 100.64.0.0/10
+              - 127.0.0.0/8
+              - 169.254.0.0/16
+              - 172.16.0.0/12
+              - 192.0.0.0/24
+              - 192.168.0.0/16
+              - 198.18.0.0/15
+              - 224.0.0.0/4
+              - 240.0.0.0/4
+        - ipBlock:
+            cidr: ::/0
+            except:
+              - ::1/128
+              - ::ffff:0:0/96
+              - 64:ff9b::/96
+              - 100::/64
+              - fc00::/7
+              - fe80::/10
+              - ff00::/8

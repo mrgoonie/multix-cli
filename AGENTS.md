@@ -148,6 +148,12 @@ npm run check:mcp    # when worker/ or a client it imports changed
   server's network, so their HTTP(S) must go through the public-only proxy in
   `worker/container/egress-proxy.mjs`: a `runJob` wrapper passed to the
   executor has to forward the `egressEnv` it receives to `job-runner.mjs`.
+  With `MULTIX_JOB_EXECUTOR=kubernetes` the executor's `runJob` is
+  `worker/container/k8s-job-runner.mjs` instead: each job runs as a
+  Kubernetes Job of the job image, talking to `job-server.mjs` in its pod,
+  so a change to the job server's HTTP contract or result shape must keep
+  that runner working too. Its pods are confined by the NetworkPolicy in
+  `worker/server/k8s/job-executor.yaml`, which the server checks at start.
 - The job container (`worker/container/`) is rolled out before the Worker
   (`worker/scripts/roll-out-job-container.mjs`, run by `deploy-mcp.yml`), so a
   new container must work with the Worker that is still live, in both
