@@ -10,7 +10,9 @@
  *
  * MULTIX_LOCAL_JOBS=true runs `multix_run` jobs as child processes (see
  * local-jobs.ts); start-up fails when the multix CLI is not on PATH. The
- * `server_started` log line says whether jobs are enabled.
+ * `server_started` log line says whether jobs are enabled. With
+ * MULTIX_JOB_EXECUTOR=kubernetes each job runs as a Kubernetes Job instead
+ * (container/k8s-job-runner.mjs); start-up fails when its NetworkPolicy is missing.
  *
  * SIGTERM / SIGINT (see server-shutdown.ts): readiness turns 503 and, at the
  * same time, the listener stops accepting and running jobs are recorded as
@@ -24,7 +26,7 @@
 import "./install-public-fetch-guard.js";
 import { logEvent } from "../src/redaction.js";
 import { createHttpServer } from "./http-server.js";
-import { DEFAULT_CLI_BIN, resolveExecutable } from "./local-jobs.js";
+import { DEFAULT_CLI_BIN, kubernetesJobOptions, resolveExecutable } from "./local-jobs.js";
 import { serverConfigFrom, workerVars } from "./server-config.js";
 import { shutdownServer } from "./server-shutdown.js";
 import { openDatabase } from "./sqlite-database.js";
@@ -39,7 +41,11 @@ async function main(): Promise<void> {
   const config = serverConfigFrom(process.env);
   const vars = workerVars(process.env);
   let cliBin: string | undefined;
-  if (config.localJobs) {
+  let executorOptions: Awaited<ReturnType<typeof kubernetesJobOptions>> | undefined;
+  if (config.localJobs && config.jobExecutor === "kubernetes") {
+    // Jobs run in their own pods: no CLI is needed here, but the NetworkPolicy is.
+    executorOptions = await kubernetesJobOptions(process.env);
+  } else if (config.localJobs) {
     cliBin = await resolveExecutable(DEFAULT_CLI_BIN);
     if (!cliBin) {
       throw new Error("MULTIX_LOCAL_JOBS=true but the multix CLI is not on PATH");
@@ -51,11 +57,12 @@ async function main(): Promise<void> {
     vars,
     mcpRateLimit: config.mcpRateLimit,
     authRateLimit: config.authRateLimit,
-    jobs: cliBin
+    jobs: config.localJobs
       ? {
           stateDir: config.jobsStateDir,
           maxConcurrent: config.maxConcurrentJobs,
           cliBin,
+          ...executorOptions,
           // Leave part of the shutdown budget for the database and alarms.
           closeTimeoutMs: Math.min(10_000, Math.floor(config.shutdownTimeoutMs / 2)),
         }
@@ -92,6 +99,7 @@ async function main(): Promise<void> {
     port: config.port,
     data_dir: config.dataDir,
     jobs: app.jobs ? "enabled" : "disabled",
+    job_executor: app.jobs ? config.jobExecutor : undefined,
     max_concurrent_jobs: app.jobs?.maxConcurrent,
   });
 

@@ -1,6 +1,6 @@
 ---
 title: Self-hosted server (Docker, Kubernetes)
-description: Run the multix MCP server, dashboard and REST API as one Node.js container without Cloudflare, with SQLite on a persistent volume, local admin sign-in, optional job execution in the same container, health probes and a Kubernetes deployment contract.
+description: Run the multix MCP server, dashboard and REST API as one Node.js container without Cloudflare, with SQLite on a persistent volume, local admin sign-in, optional job execution in the same container or as Kubernetes Jobs, health probes and a Kubernetes deployment contract.
 ---
 
 `multix-server` runs the same application as the
@@ -240,7 +240,7 @@ Jobs:
 
 | Variable | Default | Effect |
 |---|---|---|
-| `MULTIX_LOCAL_JOBS` | off | `true` runs `multix_run` jobs as child processes of the server (needs the `multix` CLI on `PATH`). |
+| `MULTIX_LOCAL_JOBS` | off | `true` runs `multix_run` jobs as child processes of the server (needs the `multix` CLI on `PATH`), or as Kubernetes Jobs with `MULTIX_JOB_EXECUTOR=kubernetes` ([Kubernetes Job executor](#kubernetes-job-executor)). |
 | `MULTIX_LOCAL_MAX_CONCURRENT_JOBS` | `1` | CLI processes that may run at once (1 to 64). Also caps `MULTIX_MAX_JOBS_TOTAL`. |
 | `MULTIX_MAX_JOBS_PER_ACCOUNT` | `2` | Jobs one account may run at once. |
 | `MULTIX_MCP_UNCAPPED_SPEND` | `budget` | `deny` refuses runs the operator caps cannot bound (recommended, the template default); `budget` needs `max_cost_usd`; `allow` runs them. |
@@ -317,7 +317,8 @@ spec:
     matchLabels: { app: multix-server }
   template:
     metadata:
-      labels: { app: multix-server }
+      # The second label lets the server reach job pods (Kubernetes Job executor).
+      labels: { app: multix-server, app.kubernetes.io/name: multix-server }
     spec:
       terminationGracePeriodSeconds: 30
       securityContext:
@@ -360,6 +361,93 @@ spec:
         - name: tmp
           emptyDir: { sizeLimit: 2Gi }
 ```
+
+## Kubernetes Job executor
+
+By default a job's CLI runs inside the server container. On Kubernetes you can
+run each job in its own pod instead: set `MULTIX_JOB_EXECUTOR=kubernetes`
+together with `MULTIX_LOCAL_JOBS=true`. The server then creates one Kubernetes
+Job per job and talks to the job server in its pod. Everything in
+[Job execution](#job-execution) still applies: the same caps and spend guard,
+`MULTIX_LOCAL_MAX_CONCURRENT_JOBS` as the number of job pods at once, job
+records in `$MULTIX_DATA_DIR/jobs`, and one replica per data volume.
+
+What changes:
+
+- Each job runs in a pod of the job image (`worker/container/Dockerfile`).
+  It is not published; build and push it to a registry your cluster can pull
+  from, from the same release as the server:
+
+  ```bash
+  docker build -f worker/container/Dockerfile -t <registry>/multix-job:<version> .
+  docker push <registry>/multix-job:<version>
+  ```
+
+- The Job never retries (`backoffLimit: 0`, `restartPolicy: Never`), so a
+  failed or evicted pod never repeats a billed provider call. The pod has no
+  service account token and no service links, runs as a non-root user with a
+  read-only root file system, no capabilities, CPU and memory limits and a
+  size-limited `/tmp`.
+- The job spec, with the account's provider keys, is sent once to the pod's
+  job server over the pod network (`POST :8080/jobs`). It is never written to
+  a Kubernetes object, a log or the job record. Use a network plugin that
+  encrypts pod traffic if your node network is not trusted.
+- However a job ends (finished, canceled, lost or timed out), the server asks
+  its job server to stop the CLI, deletes the Job and keeps the job's slot
+  until the pod is gone, waiting up to 60 seconds. On shutdown it waits only
+  for the shutdown budget; the Job is deleted first, so Kubernetes still
+  stops the pod. At start the server deletes every Job the previous process
+  left, after recording those jobs as interrupted; they are never run again.
+- A result counts only when the job server reports this job's id, so another
+  job (or another pod that got the same IP) is never taken for it.
+- If the server is gone, Kubernetes stops a job pod by itself once its time
+  limit plus a margin has passed (`activeDeadlineSeconds`, a few minutes over
+  the job's own limit) and removes the Job 5 minutes after that.
+
+Setup:
+
+1. Apply [`worker/server/k8s/job-executor.yaml`](https://github.com/mrgoonie/multix-cli/blob/main/worker/server/k8s/job-executor.yaml)
+   in the server's namespace. It creates the `multix-server` service account,
+   a role that may only create, list and delete Jobs, list pods and read the
+   NetworkPolicy, and the `multix-job-egress` NetworkPolicy. The role cannot
+   read Secrets through the API, but a Job it creates could mount any Secret
+   of its namespace: give multix-server a namespace of its own, holding
+   nothing else, labelled `pod-security.kubernetes.io/enforce=restricted`
+   (the job pods meet that profile).
+2. Run the server pod with `serviceAccountName: multix-server` and the label
+   `app.kubernetes.io/name: multix-server` (the job pods accept connections
+   from that label only), and set:
+
+   ```yaml
+   - { name: MULTIX_LOCAL_JOBS, value: "true" }
+   - { name: MULTIX_JOB_EXECUTOR, value: kubernetes }
+   - { name: MULTIX_K8S_JOB_IMAGE, value: <registry>/multix-job:<version> }
+   ```
+
+3. The server refuses to start when the NetworkPolicy is missing, or when it
+   does not select the job pods by label or does not restrict both ingress and
+   egress. The `server_started` log line shows `"job_executor":"kubernetes"`.
+
+The NetworkPolicy lets job pods reach cluster DNS and any address outside the
+private and special ranges (RFC 1918, carrier-grade NAT, loopback,
+link-local metadata, IPv6 unique-local and link-local, and a few more), and
+lets only the server reach their port. That blocks pod, service, node,
+metadata and control-plane addresses only when they lie in those ranges: if
+any of them are public (public IPv4 ranges, or IPv6 global pod addresses as
+on EKS IPv6), add them to the `except` lists. With NodeLocal DNSCache, add an
+egress rule to its address (`169.254.20.10` by default), or job DNS lookups
+fail. The policy works only with a network plugin that enforces
+NetworkPolicy (for example Calico or Cilium); the server cannot check that,
+so check your cluster.
+
+| Variable | Default | Effect |
+|---|---|---|
+| `MULTIX_JOB_EXECUTOR` | `local` | `kubernetes` runs each job as a Kubernetes Job. Needs `MULTIX_LOCAL_JOBS=true`; the server refuses to start without it. |
+| `MULTIX_K8S_JOB_IMAGE` | required | The job image built from `worker/container/Dockerfile`. |
+| `MULTIX_K8S_NAMESPACE` | the server pod's namespace | Namespace of the job Jobs and the NetworkPolicy. |
+| `MULTIX_K8S_JOB_NETWORK_POLICY` | `multix-job-egress` | NetworkPolicy that must exist and select the job pods. |
+| `MULTIX_K8S_INSTANCE` | `multix-server` | Label value of this deployment's job pods; give each deployment in a namespace its own, and match it in the NetworkPolicy. |
+| `MULTIX_K8S_JOB_CPU`, `MULTIX_K8S_JOB_MEMORY`, `MULTIX_K8S_JOB_TMP_SIZE` | `1`, `2Gi`, `2Gi` | Requests and limits of each job pod, and the size of its `/tmp`. |
 
 ## Network egress
 

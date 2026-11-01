@@ -662,8 +662,19 @@ describe("container job server", () => {
         await new Promise((r) => setTimeout(r, 50));
         current = await (await fetch(`${base}/jobs/current`)).json();
       }
-      expect(current).toMatchObject({ state: "done", result: { status: "failed" } });
+      expect(current).toMatchObject({
+        state: "done",
+        jobId: job.jobId,
+        result: { status: "failed" },
+      });
       expect(JSON.stringify(current)).not.toContain(KEY);
+      const other = "99999999-2222-4333-8444-555555555555";
+      const wrong = await fetch(`${base}/jobs/current/cancel?jobId=${other}`, { method: "POST" });
+      expect(wrong.status).toBe(409);
+      const mine = await fetch(`${base}/jobs/current/cancel?jobId=${job.jobId}`, {
+        method: "POST",
+      });
+      expect(mine.status).toBe(202);
       expect((await fetch(`${base}/jobs/current/cancel`, { method: "POST" })).status).toBe(202);
     } finally {
       server.close();

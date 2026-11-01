@@ -25,6 +25,12 @@ export interface ServerConfig {
   jobsStateDir: string;
   /** MULTIX_LOCAL_MAX_CONCURRENT_JOBS, 1 to 64 (default 1). */
   maxConcurrentJobs: number;
+  /**
+   * MULTIX_JOB_EXECUTOR: where jobs run when MULTIX_LOCAL_JOBS=true. `local`
+   * (default): child processes of this server. `kubernetes`: one Kubernetes
+   * Job per job (container/k8s-job-runner.mjs, MULTIX_K8S_* settings).
+   */
+  jobExecutor: "local" | "kubernetes";
 }
 
 function flag(env: NodeJS.ProcessEnv, name: string): boolean {
@@ -50,8 +56,20 @@ function int(
   return value;
 }
 
+function jobExecutor(env: NodeJS.ProcessEnv): "local" | "kubernetes" {
+  const raw = env.MULTIX_JOB_EXECUTOR?.trim().toLowerCase();
+  if (!raw || raw === "local") return "local";
+  if (raw === "kubernetes") return "kubernetes";
+  throw new Error("MULTIX_JOB_EXECUTOR must be local or kubernetes");
+}
+
 export function serverConfigFrom(env: NodeJS.ProcessEnv): ServerConfig {
   const dataDir = env.MULTIX_DATA_DIR?.trim() || "/data";
+  const localJobs = flag(env, "MULTIX_LOCAL_JOBS");
+  const executor = jobExecutor(env);
+  if (executor === "kubernetes" && !localJobs) {
+    throw new Error("MULTIX_JOB_EXECUTOR=kubernetes needs MULTIX_LOCAL_JOBS=true");
+  }
   return {
     host: env.HOST?.trim() || "0.0.0.0",
     port: int(env, "PORT", 3000, 1, 65535),
@@ -62,9 +80,10 @@ export function serverConfigFrom(env: NodeJS.ProcessEnv): ServerConfig {
     shutdownTimeoutMs: int(env, "MULTIX_SHUTDOWN_TIMEOUT_MS", 20_000, 0, 300_000),
     mcpRateLimit: int(env, "MULTIX_MCP_RATE_LIMIT", 60, 1, 100_000),
     authRateLimit: int(env, "MULTIX_AUTH_RATE_LIMIT", 30, 1, 100_000),
-    localJobs: flag(env, "MULTIX_LOCAL_JOBS"),
+    localJobs,
     jobsStateDir: join(dataDir, "jobs"),
     maxConcurrentJobs: maxConcurrentFromEnv(env),
+    jobExecutor: executor,
   };
 }
 
@@ -86,6 +105,7 @@ const SERVER_ONLY = new Set([
   "MULTIX_AUTH_RATE_LIMIT",
   "MULTIX_LOCAL_JOBS",
   "MULTIX_LOCAL_MAX_CONCURRENT_JOBS",
+  "MULTIX_JOB_EXECUTOR",
 ]);
 
 /**
@@ -96,7 +116,8 @@ export function workerVars(env: NodeJS.ProcessEnv): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [name, value] of Object.entries(env)) {
     if (value === undefined) continue;
-    if (WORKER_NAMES.has(name) || (name.startsWith("MULTIX_") && !SERVER_ONLY.has(name))) {
+    const serverOnly = SERVER_ONLY.has(name) || name.startsWith("MULTIX_K8S_");
+    if (WORKER_NAMES.has(name) || (name.startsWith("MULTIX_") && !serverOnly)) {
       out[name] = value;
     }
   }
