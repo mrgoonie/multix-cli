@@ -217,6 +217,14 @@ describe("kubernetesSettingsFromEnv", () => {
       kubernetesSettingsFromEnv({ ...base, MULTIX_K8S_JOB_IMAGE_PULL_SECRETS: "  " }, ns)
         .imagePullSecrets,
     ).toEqual([]);
+    const longest = `${"a".repeat(126)}.${"b".repeat(126)}`;
+    expect(longest).toHaveLength(253);
+    expect(
+      kubernetesSettingsFromEnv(
+        { ...base, MULTIX_K8S_JOB_IMAGE_PULL_SECRETS: `a.b.c,${longest}` },
+        ns,
+      ).imagePullSecrets,
+    ).toEqual(["a.b.c", longest]);
     for (const bad of ["Bad_Name", "a b", "-x", "x.", `${"a".repeat(254)}`]) {
       expect(() =>
         kubernetesSettingsFromEnv({ ...base, MULTIX_K8S_JOB_IMAGE_PULL_SECRETS: bad }, ns),

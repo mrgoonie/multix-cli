@@ -448,7 +448,7 @@ so check your cluster.
 | `MULTIX_K8S_JOB_NETWORK_POLICY` | `multix-job-egress` | NetworkPolicy that must exist and select the job pods. |
 | `MULTIX_K8S_INSTANCE` | `multix-server` | Label value of this deployment's job pods; give each deployment in a namespace its own, and match it in the NetworkPolicy. |
 | `MULTIX_K8S_JOB_CPU`, `MULTIX_K8S_JOB_MEMORY`, `MULTIX_K8S_JOB_TMP_SIZE` | `1`, `2Gi`, `2Gi` | Requests and limits of each job pod, and the size of its `/tmp`. |
-| `MULTIX_K8S_JOB_IMAGE_PULL_SECRETS` | none | Comma-separated names of `kubernetes.io/dockerconfigjson` Secrets in `MULTIX_K8S_NAMESPACE`, set as the job pods' `imagePullSecrets` so the job image can come from a private registry. The pods reference the Secrets by name; the server never reads them, so its Role needs no access to Secrets. Unset, the job pods have no pull Secret and the image pulls with the nodes' own credentials, if any. |
+| `MULTIX_K8S_JOB_IMAGE_PULL_SECRETS` | none | Comma-separated names of image pull Secrets (for example of type `kubernetes.io/dockerconfigjson`) in `MULTIX_K8S_NAMESPACE`, set as the job pods' `imagePullSecrets` so the job image can come from a private registry. The pods reference the Secrets by name; the server never reads them, so its Role needs no access to Secrets. Unset, the job pods get the pull Secrets of the namespace's `default` ServiceAccount, if it has any, or else pull with the nodes' own credentials. Set, this list replaces the ServiceAccount's, so name every Secret the image needs. |
 
 ## Network egress
 

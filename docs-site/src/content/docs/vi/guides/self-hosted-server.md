@@ -445,7 +445,7 @@ nên hãy tự kiểm tra cluster của bạn.
 | `MULTIX_K8S_JOB_NETWORK_POLICY` | `multix-job-egress` | NetworkPolicy phải tồn tại và chọn các pod job. |
 | `MULTIX_K8S_INSTANCE` | `multix-server` | Giá trị label của pod job thuộc bản triển khai này; mỗi bản triển khai trong một namespace cần một giá trị riêng, khớp với NetworkPolicy. |
 | `MULTIX_K8S_JOB_CPU`, `MULTIX_K8S_JOB_MEMORY`, `MULTIX_K8S_JOB_TMP_SIZE` | `1`, `2Gi`, `2Gi` | Request và limit của mỗi pod job, và dung lượng `/tmp` của nó. |
-| `MULTIX_K8S_JOB_IMAGE_PULL_SECRETS` | không có | Danh sách tên Secret kiểu `kubernetes.io/dockerconfigjson` trong `MULTIX_K8S_NAMESPACE`, phân tách bằng dấu phẩy, được gán làm `imagePullSecrets` của pod job để kéo job image từ registry riêng. Pod chỉ tham chiếu Secret theo tên; server không bao giờ đọc chúng nên Role của server không cần quyền với Secret. Nếu không đặt, pod job không có pull Secret và image được kéo bằng thông tin xác thực của chính các node (nếu có). |
+| `MULTIX_K8S_JOB_IMAGE_PULL_SECRETS` | không có | Danh sách tên Secret dùng để kéo image (ví dụ kiểu `kubernetes.io/dockerconfigjson`) trong `MULTIX_K8S_NAMESPACE`, phân tách bằng dấu phẩy, được gán làm `imagePullSecrets` của pod job để kéo job image từ registry riêng. Pod chỉ tham chiếu Secret theo tên; server không bao giờ đọc chúng nên Role của server không cần quyền với Secret. Nếu không đặt, pod job nhận các pull Secret của ServiceAccount `default` trong namespace (nếu có), nếu không thì kéo bằng thông tin xác thực của chính các node. Khi đặt, danh sách này thay thế pull Secret của ServiceAccount, nên hãy liệt kê mọi Secret mà image cần. |
 
 ## Kết nối ra ngoài (egress)
 
