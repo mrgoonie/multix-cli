@@ -1162,8 +1162,10 @@ The same MCP server, dashboard and REST API also run without Cloudflare as one
 Node.js container (`ghcr.io/mrgoonie/multix-server:<version>`, built from
 `worker/server/Dockerfile`), with state in one SQLite file on a persistent
 volume, a single replica, and optional username and password sign-in with a
-one-time bootstrap admin. It has no job runner, so `multix_run` and the job
-tools are not offered. Guide, including Docker, Compose and Kubernetes:
+one-time bootstrap admin. With `MULTIX_LOCAL_JOBS=true` it also runs
+`multix_run` and the job endpoints in the same container, one job at a time by
+default (`MULTIX_LOCAL_MAX_CONCURRENT_JOBS`); output files go to the account's
+Cloudflare R2 bucket. Guide, including Docker, Compose and Kubernetes:
 [Self-hosted server](https://multix.zuey.me/guides/self-hosted-server/).
 
 ### REST API

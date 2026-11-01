@@ -135,8 +135,11 @@ npm run check:mcp    # when worker/ or a client it imports changed
 - `worker/server/` is the self-hosted Node runtime (`multix-server`): it runs
   the Worker's own handler with Node adapters for its bindings (SQLite KV and
   Durable Object storage, in-memory rate limits, a public-only `fetch`) and
-  must keep working when a binding or `WorkerEnv` changes. `MULTIX_JOBS` and
-  `MULTIX_JOB_QUOTA` are not bound there, so job tools are absent. Its tests
+  must keep working when a binding or `WorkerEnv` changes. With `MULTIX_LOCAL_JOBS=true`,
+  `MULTIX_JOBS` is bound to the local child-process executor
+  (`worker/container/local-executor.mjs`, see `worker/server/local-jobs.ts`) and
+  `MULTIX_JOB_QUOTA` to `AccountJobQuota` on SQLite; otherwise both are unbound
+  and job tools are absent. Its tests
   (`worker/server/test/`) run in the worker's `npm test`, `npm run typecheck`
   covers `tsconfig.server.json`, and `npm run build:server` bundles it
   (`worker/server/Dockerfile` builds the image). User guide:
