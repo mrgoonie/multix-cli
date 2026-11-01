@@ -47,7 +47,9 @@ run summary.
 The image runs as the non-root `node` user, listens on port `3000`, declares
 `/data` as a volume, and works with a read-only root file system when `/tmp` is
 a writable tmpfs. For jobs it also contains the `multix` CLI built from the
-same source (same version), `ffmpeg` and ImageMagick 7. No secret is baked in.
+same source (same version), `ffmpeg`, ImageMagick 7 with its JPEG and WebP
+coders, and `cwebp`. `tini` runs as PID 1: it passes `SIGTERM` on to the
+server and reaps processes a job's CLI leaves behind. No secret is baked in.
 To build it yourself from the repository root:
 
 ```bash
@@ -173,16 +175,21 @@ Concurrency:
   refused with `server at capacity` (MCP error, REST `429`) before any
   provider is called. `MULTIX_MAX_JOBS_PER_ACCOUNT` (default `2`) still limits
   each account.
+- A job keeps its slots until its CLI process has exited, also after a
+  cancel or a timeout, so a job started right after a cancel may be refused
+  for a moment while the old process stops.
 - Size CPU, memory and `/tmp` for that many jobs: a job may download up to
   200 MB per input file, and video jobs run `ffmpeg`.
 
 Restart and shutdown:
 
-- On `SIGTERM` running jobs are stopped and recorded as `failed` with an
-  `interrupted` explanation; their slots are freed.
+- On `SIGTERM` running jobs are stopped at once and recorded as `failed` with
+  an `interrupted` explanation; a caller still waiting on one gets that
+  result. Their slots are freed before the database closes.
 - A job that was running when the process died is recorded the same way at
   the next start. It is never run again, so a billed provider call is not
-  repeated: the caller starts a new job to retry.
+  repeated: the caller starts a new job to retry. Every job slot the previous
+  process left behind is cleared at start.
 
 One replica per volume: the executor holds a lock socket in
 `$MULTIX_DATA_DIR/jobs`, which stops a second process on the same host from
@@ -250,11 +257,13 @@ at start with a message naming the variable. The parser is
   answers `503` while the server is draining. `jobs` says `enabled` or
   `disabled`.
 
-On `SIGTERM` or `SIGINT` readiness turns `503`, the listener stops accepting,
-open requests and background work get `MULTIX_SHUTDOWN_TIMEOUT_MS` to finish,
-running jobs are stopped and recorded as interrupted, then the database is
-closed. Give the orchestrator a longer grace period than
-that timeout.
+On `SIGTERM` or `SIGINT` readiness turns `503`, the listener stops accepting
+and running jobs are stopped and recorded as interrupted. Open requests and
+background work get `MULTIX_SHUTDOWN_TIMEOUT_MS` to finish; at the same time
+job processes get the smaller of 10 seconds and half that timeout to exit
+(plus up to 5 seconds to record them and free their slots). Then the database
+is closed. Give the orchestrator a longer grace period than the larger of that
+timeout and 15 seconds.
 
 `npm run smoke:server` in `worker/` checks a running server end to end as an
 MCP client would: readiness, admin setup or sign-in, client registration, PKCE

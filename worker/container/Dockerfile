@@ -19,7 +19,7 @@ COPY worker/container/package.json worker/container/package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund
 
 FROM node:22-alpine
-RUN apk add --no-cache ffmpeg imagemagick ca-certificates
+RUN apk add --no-cache ffmpeg imagemagick imagemagick-jpeg imagemagick-webp libwebp-tools ca-certificates
 
 WORKDIR /app
 COPY --from=build /src/package.json ./package.json

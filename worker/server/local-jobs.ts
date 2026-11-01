@@ -7,16 +7,17 @@
  *  - MULTIX_JOBS: `getByName(jobId)` answers startJob / jobStatus / cancelJob
  *    from the executor (the Durable Object RPC surface, JobContainerStub).
  *  - MULTIX_JOB_QUOTA: the real AccountJobQuota Durable Object on SQLite,
- *    with one read-only addition used at start-up (`heldJobIds`).
+ *    plus `heldJobIds` / `clearSlots`, used only at start-up and in tests.
  *
- * When a job reaches its final state (`onFinal`, once per job) its account
- * and server slots are given back and its lifecycle events are published to
- * the owner's AccountEvents object. A failure there is logged (identifiers
- * only) and never crashes the server: slot leases free a slot that was not
- * given back. At start-up the executor records jobs left running by the
- * previous process as interrupted (which calls `onFinal`), then every server
- * slot left behind is released, because no job of this executor is running
- * yet; this also covers a crash between a final write and its release.
+ * When a job has ended and its CLI process has exited (`onFinal`, once per
+ * job; a canceled job keeps its slots until its CLI is gone) its account and
+ * server slots are given back and its lifecycle events are published to the
+ * owner's AccountEvents object. A failure there is logged (identifiers only)
+ * and never crashes the server: slot leases free a slot that was not given
+ * back. At start-up the executor records jobs left running by the previous
+ * process as interrupted, never running them again, then every job slot
+ * left behind (account and server-wide) is cleared, because no job of this
+ * executor is running yet.
  *
  * Provider keys reach the CLI only through the in-memory job spec: the
  * executor never writes a spec. Input downloads use job-network.mjs (public
@@ -36,7 +37,6 @@ import {
   AccountJobQuota,
   type AccountJobQuotaStub,
   type JobSlots,
-  SERVER_SLOTS_NAME,
   SLOTS_KEY,
   durableJobQuota,
 } from "../src/jobs/account-job-quota.js";
@@ -44,16 +44,24 @@ import type { JobSpec, JobView } from "../src/jobs/job-protocol.js";
 import type { JobContainerStub, JobNamespace } from "../src/jobs/job-store.js";
 import { logEvent } from "../src/redaction.js";
 
-/** The real slot object plus a read used only when the server starts. */
+/** The real slot object plus two calls used only while the server starts and in tests. */
 export class LocalAccountJobQuota extends AccountJobQuota {
   /** Job ids holding a slot here, expired leases included. */
   async heldJobIds(): Promise<string[]> {
     return Object.keys((await this.ctx.storage.get<JobSlots>(SLOTS_KEY)) ?? {});
   }
+
+  /** Give back every slot; how many were held. */
+  async clearSlots(): Promise<number> {
+    const held = await this.heldJobIds();
+    if (held.length > 0) await this.ctx.storage.delete(SLOTS_KEY);
+    return held.length;
+  }
 }
 
-interface LocalQuotaStub extends AccountJobQuotaStub {
+export interface LocalQuotaStub extends AccountJobQuotaStub {
   heldJobIds(): Promise<string[]>;
+  clearSlots(): Promise<number>;
 }
 
 interface JobOwner {
@@ -90,12 +98,29 @@ export interface LocalJobsOptions {
 
 export interface LocalJobs {
   readonly maxConcurrent: number;
+  /** Upper bound of close(): the executor's wait for CLI processes plus its own writes. */
+  readonly closeBudgetMs: number;
   activeJobs(): number;
   accepting(): boolean;
   /** The MULTIX_JOBS binding. */
   readonly namespace: JobNamespace;
-  /** Stop accepting jobs, record running ones as interrupted, wait for their final hooks. */
+  /**
+   * Stop accepting jobs, record running ones as interrupted, stop their CLI
+   * processes and wait for their final hooks (slot release, events). Every
+   * call returns the same promise.
+   */
   close(): Promise<void>;
+}
+
+/** The executor's default wait for CLI processes at close. */
+const EXECUTOR_CLOSE_TIMEOUT_MS = 10_000;
+/** Time close() needs on top of that wait: final writes (with retries) and hooks. */
+const CLOSE_MARGIN_MS = 5_000;
+
+/** Start-up reads of the job slot objects the server keeps. */
+export interface LocalJobsDeps {
+  /** Names of every stored MULTIX_JOB_QUOTA object (accounts and the server-wide one). */
+  quotaObjectNames(): string[];
 }
 
 export const DEFAULT_CLI_BIN = "multix";
@@ -135,6 +160,7 @@ function errorName(error: unknown): string {
 export async function startLocalJobs(
   env: WorkerEnv,
   options: LocalJobsOptions,
+  deps: LocalJobsDeps,
 ): Promise<LocalJobs> {
   const quotaNamespace = env.MULTIX_JOB_QUOTA;
   if (!quotaNamespace) throw new Error("MULTIX_JOB_QUOTA must be bound before jobs start");
@@ -177,17 +203,14 @@ export async function startLocalJobs(
     },
   })) as unknown as LocalExecutor;
 
-  // Final hooks of jobs the previous process left running are under way; any
-  // other server slot is stale, since nothing of this executor runs yet.
+  // Nothing of this executor runs yet and the listener is not open, so every
+  // slot still held (account or server-wide) belongs to a job of an earlier
+  // process: interrupted, never recorded (stopped between taking its slots and
+  // writing its record) or ended without its release. Give them all back.
   try {
-    const server = quotaNamespace.getByName(SERVER_SLOTS_NAME) as LocalQuotaStub;
     let released = 0;
-    for (const jobId of await server.heldJobIds()) {
-      const owner = await executor.ownerOf(jobId);
-      if (owner) await quota.release(owner.userId, jobId);
-      // Unknown to the executor (stopped before its record was written): the account slot expires by lease.
-      else await server.release(jobId);
-      released++;
+    for (const name of deps.quotaObjectNames()) {
+      released += await (quotaNamespace.getByName(name) as LocalQuotaStub).clearSlots();
     }
     if (released > 0) logEvent("info", "job_slots_reconciled", { released });
   } catch (error) {
@@ -200,16 +223,23 @@ export async function startLocalJobs(
     cancelJob: () => executor.cancel(jobId),
   });
 
+  let closing: Promise<void> | undefined;
+  async function shutdown(): Promise<void> {
+    await executor.close();
+    // onFinal is called on a later microtask than the CLI's exit.
+    await new Promise((resolve) => setImmediate(resolve));
+    await Promise.allSettled([...finals]);
+  }
+
   return {
     maxConcurrent: executor.maxConcurrent,
+    closeBudgetMs: (options.closeTimeoutMs ?? EXECUTOR_CLOSE_TIMEOUT_MS) + CLOSE_MARGIN_MS,
     activeJobs: () => executor.activeJobs(),
     accepting: () => executor.accepting(),
     namespace: { getByName: stub },
-    async close() {
-      await executor.close();
-      // onFinal is called on a later microtask than the final write.
-      await new Promise((resolve) => setImmediate(resolve));
-      await Promise.allSettled([...finals]);
+    close() {
+      closing ??= shutdown();
+      return closing;
     },
   };
 }

@@ -47,7 +47,9 @@ hoặc tốt hơn là digest hiển thị trong phần tóm tắt lần chạy c
 Image chạy bằng user không phải root `node`, lắng nghe cổng `3000`, khai báo
 `/data` là volume, và chạy được với root file system chỉ đọc khi `/tmp` là
 tmpfs ghi được. Để chạy job, image còn chứa CLI `multix` được build từ cùng mã
-nguồn (cùng phiên bản), `ffmpeg` và ImageMagick 7. Không có secret nào được
+nguồn (cùng phiên bản), `ffmpeg`, ImageMagick 7 kèm bộ mã JPEG và WebP, và
+`cwebp`. `tini` chạy làm PID 1: nó chuyển `SIGTERM` cho server và thu dọn các
+tiến trình mà CLI của job để lại. Không có secret nào được
 đóng gói sẵn. Để tự build từ thư mục gốc của repository:
 
 ```bash
@@ -171,16 +173,21 @@ Cách một job chạy:
   xuống bằng giá trị này, nên job vượt giới hạn bị từ chối với
   `server at capacity` (lỗi MCP, REST `429`) trước khi gọi bất kỳ provider
   nào. `MULTIX_MAX_JOBS_PER_ACCOUNT` (mặc định `2`) vẫn giới hạn từng tài khoản.
+- Job giữ slot cho đến khi tiến trình CLI của nó đã thoát, kể cả sau khi bị
+  hủy hoặc hết giờ, nên job tạo ngay sau một lệnh hủy có thể bị từ chối trong
+  chốc lát trong lúc tiến trình cũ dừng lại.
 - Cấp CPU, bộ nhớ và `/tmp` cho chừng đó job: một job có thể tải tới 200 MB
   cho mỗi file đầu vào, và job video chạy `ffmpeg`.
 
 Khởi động lại và tắt server:
 
-- Khi nhận `SIGTERM`, các job đang chạy bị dừng và được ghi là `failed` kèm
-  giải thích `interrupted`; slot của chúng được giải phóng.
+- Khi nhận `SIGTERM`, các job đang chạy bị dừng ngay và được ghi là `failed`
+  kèm giải thích `interrupted`; người gọi còn đang chờ job đó nhận được kết
+  quả này. Slot của chúng được giải phóng trước khi database đóng.
 - Job đang chạy khi tiến trình chết được ghi theo cùng cách ở lần khởi động
   sau. Nó không bao giờ được chạy lại, nên lệnh gọi provider có tính phí không
-  bị lặp lại: người gọi tạo job mới để thử lại.
+  bị lặp lại: người gọi tạo job mới để thử lại. Mọi slot job mà tiến trình
+  trước để lại được xóa khi khởi động.
 
 Một replica cho mỗi volume: executor giữ một lock socket trong
 `$MULTIX_DATA_DIR/jobs`, ngăn tiến trình thứ hai trên cùng máy dùng chung thư
@@ -248,10 +255,12 @@ dừng ngay khi khởi động với thông báo nêu tên biến. Bộ phân t�
   `enabled` hoặc `disabled`.
 
 Khi nhận `SIGTERM` hoặc `SIGINT`, readiness chuyển sang `503`, listener ngừng
-nhận kết nối, request đang mở và tác vụ nền có `MULTIX_SHUTDOWN_TIMEOUT_MS` để
-hoàn tất, các job đang chạy bị dừng và được ghi là bị gián đoạn, sau đó
-database được đóng. Hãy cho orchestrator thời gian chờ dài hơn
-timeout này.
+nhận kết nối và các job đang chạy bị dừng và được ghi là bị gián đoạn. Request
+đang mở và tác vụ nền có `MULTIX_SHUTDOWN_TIMEOUT_MS` để hoàn tất; cùng lúc đó
+tiến trình job có thời gian bằng giá trị nhỏ hơn giữa 10 giây và một nửa
+timeout này để thoát (cộng tối đa 5 giây để ghi lại và giải phóng slot). Sau đó
+database được đóng. Hãy cho orchestrator thời gian chờ dài hơn giá trị lớn hơn
+giữa timeout này và 15 giây.
 
 `npm run smoke:server` trong `worker/` kiểm tra đầu-cuối một server đang chạy
 như một MCP client: readiness, tạo admin hoặc đăng nhập, đăng ký client, ủy

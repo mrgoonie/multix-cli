@@ -58,8 +58,15 @@ export interface StandaloneApp {
   /** Mark the app as shutting down: readiness answers 503 from now on. */
   drain(): void;
   /**
-   * Wait (up to `timeoutMs`) for background work and stop the job executor
-   * (running jobs are recorded as interrupted), then stop alarms.
+   * Stop the job executor: running jobs are recorded as interrupted, their CLI
+   * processes stopped and their slots given back. Bounded by the executor's
+   * own budget (not the HTTP drain), never rejects, and every call returns
+   * the same promise, so shutdown starts it first and awaits it in stop().
+   */
+  closeJobs(): Promise<void>;
+  /**
+   * Wait (up to `timeoutMs`) for background work, then for closeJobs() within
+   * its own budget, then stop alarms. Call before the database closes.
    */
   stop(timeoutMs: number): Promise<void>;
   sweep(): number;
@@ -87,7 +94,14 @@ export async function createStandaloneApp(options: StandaloneOptions): Promise<S
   let jobs: LocalJobs | undefined;
   if (options.jobs) {
     mutableEnv.MULTIX_JOB_QUOTA = host.namespace("MULTIX_JOB_QUOTA", LocalAccountJobQuota as never);
-    jobs = await startLocalJobs(env, options.jobs);
+    jobs = await startLocalJobs(env, options.jobs, {
+      quotaObjectNames: () =>
+        (
+          database.db
+            .prepare("SELECT DISTINCT id FROM do_storage WHERE ns = 'MULTIX_JOB_QUOTA'")
+            .all() as { id: string }[]
+        ).map((row) => row.id),
+    });
     // One CLI process per slot: the quota's server-wide cap never exceeds the executor's.
     const total = Math.min(jobCapsFrom(env).total, jobs.maxConcurrent);
     mutableEnv.MULTIX_MAX_JOBS_TOTAL = String(total);
@@ -110,6 +124,30 @@ export async function createStandaloneApp(options: StandaloneOptions): Promise<S
     if (!publicOrigin(env) || !(await resolveAppContext(env, {}))) checks.config = "fail";
     const ok = !draining && Object.values(checks).every((c) => c === "ok");
     return json(ok ? 200 : 503, { ok, draining, jobs: jobs ? "enabled" : "disabled", checks });
+  }
+
+  let jobsClosed: Promise<void> | undefined;
+  function closeJobs(): Promise<void> {
+    jobsClosed ??= (async () => {
+      if (!jobs) return;
+      const budget = jobs.closeBudgetMs;
+      let timer: NodeJS.Timeout | undefined;
+      const late = new Promise<"late">((resolve) => {
+        timer = setTimeout(() => resolve("late"), budget);
+        timer.unref();
+      });
+      try {
+        const outcome = await Promise.race([jobs.close().then(() => "closed" as const), late]);
+        if (outcome === "late") logEvent("warn", "jobs_close_timeout", { budget_ms: budget });
+      } catch (error) {
+        logEvent("warn", "jobs_close_failed", {
+          error: error instanceof Error ? error.name : "unknown",
+        });
+      } finally {
+        clearTimeout(timer);
+      }
+    })();
+    return jobsClosed;
   }
 
   return {
@@ -145,15 +183,17 @@ export async function createStandaloneApp(options: StandaloneOptions): Promise<S
     drain() {
       draining = true;
     },
+    closeJobs,
     async stop(timeoutMs) {
       draining = true;
+      const jobsDone = closeJobs();
       const started = Date.now();
       const left = () => Math.max(0, timeoutMs - (Date.now() - started));
       const deadline = new Promise((resolve) => setTimeout(resolve, timeoutMs).unref());
-      await Promise.race([
-        Promise.allSettled([...background, ...(jobs ? [jobs.close()] : [])]),
-        deadline,
-      ]);
+      await Promise.race([Promise.allSettled([...background]), deadline]);
+      // Slot releases and event writes need the database: wait for them even
+      // when the HTTP drain used up the shared budget.
+      await jobsDone;
       await host.stop(left());
     },
     sweep: () => sweepExpired(database, now()),

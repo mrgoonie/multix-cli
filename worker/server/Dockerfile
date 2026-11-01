@@ -41,7 +41,10 @@ LABEL org.opencontainers.image.title="multix-server" \
       org.opencontainers.image.source="https://github.com/mrgoonie/multix-cli" \
       org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.version="${MULTIX_VERSION}"
-RUN apk add --no-cache ffmpeg imagemagick ca-certificates
+# ImageMagick's JPEG/WebP coders and cwebp are separate packages; tini reaps
+# the orphaned ffmpeg/magick processes a job's CLI may leave behind.
+RUN apk add --no-cache ffmpeg imagemagick imagemagick-jpeg imagemagick-webp libwebp-tools \
+      ca-certificates tini
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     PORT=3000 \
@@ -59,5 +62,7 @@ VOLUME ["/data"]
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD ["node", "-e", "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
-# exec form: node is PID 1 and receives SIGTERM directly (graceful shutdown).
+# tini is PID 1: it forwards SIGTERM to node (graceful shutdown) and reaps
+# zombies. Exec form throughout, so no shell sits in between.
+ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["node", "--disable-warning=ExperimentalWarning", "--enable-source-maps", "multix-server.mjs"]

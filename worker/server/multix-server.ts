@@ -12,10 +12,12 @@
  * local-jobs.ts); start-up fails when the multix CLI is not on PATH. The
  * `server_started` log line says whether jobs are enabled.
  *
- * SIGTERM / SIGINT: readiness turns 503, the listener stops accepting, open
- * requests and background work get MULTIX_SHUTDOWN_TIMEOUT_MS to finish,
- * running jobs are recorded as interrupted and their CLI processes stopped,
- * then the database is closed.
+ * SIGTERM / SIGINT (see server-shutdown.ts): readiness turns 503 and, at the
+ * same time, the listener stops accepting and running jobs are recorded as
+ * interrupted and their CLI processes stopped (within the executor's own
+ * budget). Open requests and background work get MULTIX_SHUTDOWN_TIMEOUT_MS
+ * to finish; the slots of the stopped jobs are given back before the
+ * database is closed.
  */
 
 // First: the public-only fetch must be in place before any Worker module loads.
@@ -24,6 +26,7 @@ import { logEvent } from "../src/redaction.js";
 import { createHttpServer } from "./http-server.js";
 import { DEFAULT_CLI_BIN, resolveExecutable } from "./local-jobs.js";
 import { serverConfigFrom, workerVars } from "./server-config.js";
+import { shutdownServer } from "./server-shutdown.js";
 import { openDatabase } from "./sqlite-database.js";
 import { createStandaloneApp } from "./standalone-app.js";
 import { prepareBootstrap } from "./standalone-bootstrap.js";
@@ -97,12 +100,8 @@ async function main(): Promise<void> {
     if (stopping) return;
     stopping = true;
     logEvent("info", "server_stopping", { signal });
-    app.drain();
     clearInterval(sweepTimer);
-    const started = Date.now();
-    await http.close(config.shutdownTimeoutMs);
-    await app.stop(Math.max(0, config.shutdownTimeoutMs - (Date.now() - started)));
-    database.close();
+    await shutdownServer(app, http, database, config.shutdownTimeoutMs);
     logEvent("info", "server_stopped", {});
     process.exit(0);
   };
