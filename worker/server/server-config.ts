@@ -65,6 +65,11 @@ function jobExecutor(env: NodeJS.ProcessEnv): "local" | "kubernetes" {
 
 export function serverConfigFrom(env: NodeJS.ProcessEnv): ServerConfig {
   const dataDir = env.MULTIX_DATA_DIR?.trim() || "/data";
+  const localJobs = flag(env, "MULTIX_LOCAL_JOBS");
+  const executor = jobExecutor(env);
+  if (executor === "kubernetes" && !localJobs) {
+    throw new Error("MULTIX_JOB_EXECUTOR=kubernetes needs MULTIX_LOCAL_JOBS=true");
+  }
   return {
     host: env.HOST?.trim() || "0.0.0.0",
     port: int(env, "PORT", 3000, 1, 65535),
@@ -75,10 +80,10 @@ export function serverConfigFrom(env: NodeJS.ProcessEnv): ServerConfig {
     shutdownTimeoutMs: int(env, "MULTIX_SHUTDOWN_TIMEOUT_MS", 20_000, 0, 300_000),
     mcpRateLimit: int(env, "MULTIX_MCP_RATE_LIMIT", 60, 1, 100_000),
     authRateLimit: int(env, "MULTIX_AUTH_RATE_LIMIT", 30, 1, 100_000),
-    localJobs: flag(env, "MULTIX_LOCAL_JOBS"),
+    localJobs,
     jobsStateDir: join(dataDir, "jobs"),
     maxConcurrentJobs: maxConcurrentFromEnv(env),
-    jobExecutor: jobExecutor(env),
+    jobExecutor: executor,
   };
 }
 

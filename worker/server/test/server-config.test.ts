@@ -7,7 +7,14 @@ describe("serverConfigFrom", () => {
   it("runs jobs as child processes unless the Kubernetes executor is chosen", () => {
     expect(serverConfigFrom({}).jobExecutor).toBe("local");
     expect(serverConfigFrom({ MULTIX_JOB_EXECUTOR: "local" }).jobExecutor).toBe("local");
-    expect(serverConfigFrom({ MULTIX_JOB_EXECUTOR: "Kubernetes" }).jobExecutor).toBe("kubernetes");
+    expect(
+      serverConfigFrom({ MULTIX_LOCAL_JOBS: "true", MULTIX_JOB_EXECUTOR: "Kubernetes" })
+        .jobExecutor,
+    ).toBe("kubernetes");
+    // Without jobs on, the executor setting would be silently ignored: refuse it.
+    expect(() => serverConfigFrom({ MULTIX_JOB_EXECUTOR: "kubernetes" })).toThrow(
+      /needs MULTIX_LOCAL_JOBS=true/,
+    );
     expect(() => serverConfigFrom({ MULTIX_JOB_EXECUTOR: "docker" })).toThrow(
       /local or kubernetes/,
     );

@@ -62,7 +62,12 @@ function fakeCluster() {
     runningPolls: 1,
     policy: undefined as Any,
     podGetFails: false,
+    /** Job id job-server reports; defaults to the posted spec's. */
+    runningJobId: undefined as string | undefined,
+    /** Pod-list polls a deleted Job's pod stays listed (terminating). */
+    podLinger: 0,
   };
+  let lingering: { name: string; left: number; labels: Any }[] = [];
   let podListPolls = 0;
 
   async function kube(method: string, path: string, body?: Any) {
@@ -81,7 +86,11 @@ function fakeCluster() {
     if (method === "DELETE" && base.includes("/jobs/")) {
       const name = base.split("/").pop() as string;
       jobs.delete(name);
+      const gone = pods.get(name);
       pods.delete(name);
+      if (gone && state.podLinger > 0) {
+        lingering.push({ name, left: state.podLinger, labels: gone.labels });
+      }
       return { status: 200, body: {} };
     }
     if (method === "GET" && base.endsWith("/jobs")) {
@@ -94,6 +103,11 @@ function fakeCluster() {
           .split(",")
           .map((p) => p.split("=")),
       );
+      for (const l of lingering) l.left--;
+      const terminating = lingering
+        .filter((l) => l.left >= 0 && Object.entries(want).every(([k, v]) => l.labels[k] === v))
+        .map(() => ({ status: { phase: "Running", conditions: [] } }));
+      lingering = lingering.filter((l) => l.left >= 0);
       const items = [...pods.values()]
         .filter((p) => Object.entries(want).every(([k, v]) => p.labels[k] === v))
         .map((p) => {
@@ -109,7 +123,7 @@ function fakeCluster() {
             },
           };
         });
-      return { status: 200, body: { items } };
+      return { status: 200, body: { items: [...items, ...terminating] } };
     }
     if (method === "GET" && base.includes("/networkpolicies/")) {
       return state.policy ? { status: 200, body: state.policy } : { status: 404, body: {} };
@@ -120,6 +134,7 @@ function fakeCluster() {
   async function pod(ip: string, method: string, path: string, body?: Any) {
     podCalls.push({ ip, method, path, body });
     if (method === "POST" && path === "/jobs") {
+      state.runningJobId ??= body.jobId;
       if (state.postStatus === "throw") {
         if (state.jobState === "idle") state.jobState = "running";
         throw new Error("socket hang up");
@@ -130,15 +145,18 @@ function fakeCluster() {
     if (method === "GET" && path === "/jobs/current") {
       if (state.podGetFails) throw new Error("ECONNREFUSED");
       if (state.jobState === "running" && state.runningPolls-- <= 0) state.jobState = "done";
+      const id = state.jobState === "idle" ? {} : { jobId: state.runningJobId };
       return {
         status: 200,
         body:
           state.jobState === "done"
-            ? { state: "done", result: state.result }
-            : { state: state.jobState },
+            ? { state: "done", ...id, result: state.result }
+            : { state: state.jobState, ...id },
       };
     }
-    if (method === "POST" && path === "/jobs/current/cancel") return { status: 202, body: {} };
+    if (method === "POST" && path.startsWith("/jobs/current/cancel")) {
+      return { status: 202, body: {} };
+    }
     return { status: 404, body: {} };
   }
 
@@ -240,7 +258,7 @@ describe("runJob", () => {
     abort.abort();
     const result = await done;
     expect(result.status).toBe("canceled");
-    expect(cluster.podCalls.some((c) => c.path === "/jobs/current/cancel")).toBe(true);
+    expect(cluster.podCalls.some((c) => c.path === `/jobs/current/cancel?jobId=${ID}`)).toBe(true);
     expect(cluster.pods.size).toBe(0);
     expect(cluster.calls.some((c) => c.method === "DELETE")).toBe(true);
   });
@@ -323,6 +341,48 @@ describe("runJob", () => {
     });
     expect(result).toMatchObject({ status: "failed", error: POD_LOST_ERROR });
     expect(cluster.jobs.size).toBe(0);
+  });
+  it("another job in the pod is never taken for this one", async () => {
+    const { NOT_ACCEPTED_ERROR } = await k8s();
+    const cluster = fakeCluster();
+    cluster.state.postStatus = 409;
+    cluster.state.jobState = "running";
+    cluster.state.runningJobId = ID2;
+    const result = await (await runner(cluster)).runJob(spec(), {
+      signal: new AbortController().signal,
+    });
+    expect(result).toMatchObject({ status: "failed", error: NOT_ACCEPTED_ERROR });
+    expect(cluster.jobs.size).toBe(0);
+  });
+
+  it("a done state of another job id is not returned as this job's result", async () => {
+    const { NOT_ACCEPTED_ERROR } = await k8s();
+    const cluster = fakeCluster();
+    cluster.state.runningJobId = ID2;
+    const result = await (await runner(cluster)).runJob(spec(), {
+      signal: new AbortController().signal,
+    });
+    expect(result).toMatchObject({ status: "failed", error: NOT_ACCEPTED_ERROR });
+  });
+
+  it("holds on until the pod is gone, also when the pod was lost", async () => {
+    const { POD_LOST_ERROR } = await k8s();
+    const cluster = fakeCluster();
+    cluster.state.podGetFails = true;
+    cluster.state.podLinger = 3;
+    const result = await (await runner(cluster)).runJob(spec(), {
+      signal: new AbortController().signal,
+    });
+    expect(result).toMatchObject({ status: "failed", error: POD_LOST_ERROR });
+    expect(cluster.podCalls.some((c) => c.path.startsWith("/jobs/current/cancel"))).toBe(true);
+    // The last pod-list read saw no pod left before runJob returned.
+    const last = await cluster.kube(
+      "GET",
+      `/api/v1/namespaces/multix/pods?labelSelector=${encodeURIComponent(`multix.dev/job-id=${ID}`)}`,
+    );
+    expect(last.body.items).toHaveLength(0);
+    const podLists = cluster.calls.filter((c) => c.path.includes("/pods?"));
+    expect(podLists.length).toBeGreaterThan(3);
   });
 });
 

@@ -18,10 +18,13 @@
  *     caller's provider keys: it is never written to a Kubernetes object, a
  *     log or the job record. A POST is never repeated.
  *  4. Poll GET /jobs/current until the job is done, then return its result.
- *  5. Delete the Job (and its pod) whatever happened.
- * Cancel and server shutdown abort the signal: the runner asks job-server to
- * stop the CLI, deletes the Job and returns once the pod is gone, so the
- * executor slot is held until nothing of the job runs any more.
+ *     Only a state carrying this job's id counts, so another job (a POST that
+ *     beat ours, or another pod that got the same IP) is never taken for it.
+ *  5. Whatever happened: ask job-server to stop the CLI if it still runs
+ *     (cancel scoped to this job id), delete the Job, and return only once the
+ *     pod is gone (at most 60 s), so the executor slot is held until nothing
+ *     of the job runs any more. Cancel and shutdown abort the signal and end
+ *     the same way.
  *
  * Network isolation is the NetworkPolicy's job (worker/server/k8s/job-executor.yaml):
  * job pods may reach public addresses and cluster DNS only, never cluster,
@@ -57,6 +60,8 @@ const POD_GONE_TIMEOUT_MS = 60_000;
 const MAX_POLL_FAILURES = 30;
 const MAX_RESPONSE_BYTES = 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 30_000;
+/** Status polls and cancel: short, so a cancel or shutdown is not held up by a hung pod. */
+const POLL_TIMEOUT_MS = 5_000;
 
 export const LABEL_MANAGED_BY = "app.kubernetes.io/managed-by";
 export const LABEL_COMPONENT = "app.kubernetes.io/component";
@@ -217,9 +222,9 @@ export function inClusterKubernetesApi(env = process.env, dir = SERVICE_ACCOUNT_
 }
 
 /** Plain HTTP to a job pod's job-server. */
-export function podHttp(ip, method, path, body) {
+export function podHttp(ip, method, path, body, timeoutMs = REQUEST_TIMEOUT_MS) {
   const host = ip.includes(":") ? `[${ip}]` : ip;
-  return sendJson(httpRequest, `http://${host}:${JOB_PORT}${path}`, { method, body });
+  return sendJson(httpRequest, `http://${host}:${JOB_PORT}${path}`, { method, body, timeoutMs });
 }
 
 /** Labels of every job pod of this server deployment; the NetworkPolicy selects by them. */
@@ -379,10 +384,21 @@ export function createKubernetesJobRunner(options) {
     }
   }
 
-  /** Stop the job: ask job-server to stop the CLI, delete the Job, wait for its pod to go. */
+  /**
+   * End the job's pod: ask job-server to stop the CLI (only if this job is the
+   * one it runs), delete the Job, and wait until its pod is gone, so the
+   * executor slot stays taken while anything of the job still runs.
+   */
   async function stop(jobId, ip) {
-    if (ip) await pod(ip, "POST", "/jobs/current/cancel").catch(() => {});
-    await deleteJob(jobId);
+    // In parallel: on shutdown the Job deletion must not wait behind a hung pod.
+    await Promise.all([
+      ip
+        ? pod(ip, "POST", `/jobs/current/cancel?jobId=${jobId}`, undefined, POLL_TIMEOUT_MS).catch(
+            () => {},
+          )
+        : undefined,
+      deleteJob(jobId),
+    ]);
     await waitPodsGone(jobId);
   }
 
@@ -430,18 +446,17 @@ export function createKubernetesJobRunner(options) {
     let ip;
     try {
       const ready = await waitReady(jobId, signal);
-      if (ready.aborted) {
-        await stop(jobId, undefined);
-        return failedResult(CANCELED_ERROR, "canceled");
-      }
+      if (ready.aborted) return failedResult(CANCELED_ERROR, "canceled");
       if (ready.error) return failedResult(ready.error);
       ip = ready.ip;
 
       // Sent once and never repeated: a second POST could start a second billed call.
+      // 409 means the pod already holds a job that is not this POST's: never ours.
       let accepted = false;
       try {
         const response = await pod(ip, "POST", "/jobs", spec);
-        accepted = response.status === 202 || response.status === 409;
+        if (response.status === 409) return failedResult(NOT_ACCEPTED_ERROR);
+        accepted = response.status === 202;
       } catch {
         // The answer was lost; /jobs/current tells whether the job started.
       }
@@ -449,32 +464,34 @@ export function createKubernetesJobRunner(options) {
       const giveUpAt = Date.now() + spec.timeoutMs + FINISH_GRACE_MS;
       let failures = 0;
       while (!signal.aborted) {
-        if (Date.now() > giveUpAt) {
-          await stop(jobId, ip);
-          return failedResult(RUNNER_TIMEOUT_ERROR, "timed_out");
-        }
+        if (Date.now() > giveUpAt) return failedResult(RUNNER_TIMEOUT_ERROR, "timed_out");
         let current;
         try {
-          const response = await pod(ip, "GET", "/jobs/current");
+          const response = await pod(ip, "GET", "/jobs/current", undefined, POLL_TIMEOUT_MS);
           if (response.status === 200) current = response.body;
         } catch {
           current = undefined;
         }
-        if (current?.state === "done" && current.result && typeof current.result === "object") {
+        const state = current?.state;
+        // Only this job's own state counts: a different id is another job (or another pod at this IP).
+        if ((state === "running" || state === "done") && current.jobId !== jobId) {
+          return failedResult(NOT_ACCEPTED_ERROR);
+        }
+        if (state === "done" && current.result && typeof current.result === "object") {
           return current.result;
         }
-        if (current?.state === "idle" && !accepted) return failedResult(NOT_ACCEPTED_ERROR);
-        if (current?.state === "running" || current?.state === "idle") {
+        if (state === "idle" && !accepted) return failedResult(NOT_ACCEPTED_ERROR);
+        if (state === "running" || state === "idle") {
           failures = 0;
         } else if (++failures >= MAX_POLL_FAILURES || !(await podStillThere(jobId))) {
           return failedResult(POD_LOST_ERROR);
         }
         await sleep(pollMs, signal);
       }
-      await stop(jobId, ip);
       return failedResult(CANCELED_ERROR, "canceled");
     } finally {
-      await deleteJob(jobId);
+      // Every way out, success included, ends the pod and waits until it is gone.
+      await stop(jobId, ip);
     }
   }
 

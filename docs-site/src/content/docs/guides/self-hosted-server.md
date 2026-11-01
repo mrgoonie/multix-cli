@@ -317,7 +317,8 @@ spec:
     matchLabels: { app: multix-server }
   template:
     metadata:
-      labels: { app: multix-server }
+      # The second label lets the server reach job pods (Kubernetes Job executor).
+      labels: { app: multix-server, app.kubernetes.io/name: multix-server }
     spec:
       terminationGracePeriodSeconds: 30
       securityContext:
@@ -391,20 +392,28 @@ What changes:
   job server over the pod network (`POST :8080/jobs`). It is never written to
   a Kubernetes object, a log or the job record. Use a network plugin that
   encrypts pod traffic if your node network is not trusted.
-- A cancel or a server shutdown stops the job's CLI and deletes its Job; the
-  slot is freed once the pod is gone. At start the server deletes every Job
-  the previous process left, after recording those jobs as interrupted; they
-  are never run again.
-- Kubernetes stops a job pod by itself after its time limit plus a margin
-  (`activeDeadlineSeconds`), and removes finished Jobs after 5 minutes, even
-  if the server is gone.
+- However a job ends (finished, canceled, lost or timed out), the server asks
+  its job server to stop the CLI, deletes the Job and keeps the job's slot
+  until the pod is gone, waiting up to 60 seconds. On shutdown it waits only
+  for the shutdown budget; the Job is deleted first, so Kubernetes still
+  stops the pod. At start the server deletes every Job the previous process
+  left, after recording those jobs as interrupted; they are never run again.
+- A result counts only when the job server reports this job's id, so another
+  job (or another pod that got the same IP) is never taken for it.
+- If the server is gone, Kubernetes stops a job pod by itself once its time
+  limit plus a margin has passed (`activeDeadlineSeconds`, a few minutes over
+  the job's own limit) and removes the Job 5 minutes after that.
 
 Setup:
 
 1. Apply [`worker/server/k8s/job-executor.yaml`](https://github.com/mrgoonie/multix-cli/blob/main/worker/server/k8s/job-executor.yaml)
    in the server's namespace. It creates the `multix-server` service account,
-   a role that may only create, read and delete Jobs, read pods and read the
-   NetworkPolicy, and the `multix-job-egress` NetworkPolicy.
+   a role that may only create, list and delete Jobs, list pods and read the
+   NetworkPolicy, and the `multix-job-egress` NetworkPolicy. The role cannot
+   read Secrets through the API, but a Job it creates could mount any Secret
+   of its namespace: give multix-server a namespace of its own, holding
+   nothing else, labelled `pod-security.kubernetes.io/enforce=restricted`
+   (the job pods meet that profile).
 2. Run the server pod with `serviceAccountName: multix-server` and the label
    `app.kubernetes.io/name: multix-server` (the job pods accept connections
    from that label only), and set:
@@ -419,16 +428,21 @@ Setup:
    does not select the job pods by label or does not restrict both ingress and
    egress. The `server_started` log line shows `"job_executor":"kubernetes"`.
 
-The NetworkPolicy lets job pods reach cluster DNS and public addresses only,
-never pod, service, node, link-local metadata or private control-plane
-addresses, and lets only the server reach their port. It works only with a
-network plugin that enforces NetworkPolicy (for example Calico or Cilium);
-the server cannot check that, so check your cluster. If your API server, node
-or metadata addresses are public, add them to the `except` lists.
+The NetworkPolicy lets job pods reach cluster DNS and any address outside the
+private and special ranges (RFC 1918, carrier-grade NAT, loopback,
+link-local metadata, IPv6 unique-local and link-local, and a few more), and
+lets only the server reach their port. That blocks pod, service, node,
+metadata and control-plane addresses only when they lie in those ranges: if
+any of them are public (public IPv4 ranges, or IPv6 global pod addresses as
+on EKS IPv6), add them to the `except` lists. With NodeLocal DNSCache, add an
+egress rule to its address (`169.254.20.10` by default), or job DNS lookups
+fail. The policy works only with a network plugin that enforces
+NetworkPolicy (for example Calico or Cilium); the server cannot check that,
+so check your cluster.
 
 | Variable | Default | Effect |
 |---|---|---|
-| `MULTIX_JOB_EXECUTOR` | `local` | `kubernetes` runs each job as a Kubernetes Job (needs `MULTIX_LOCAL_JOBS=true`). |
+| `MULTIX_JOB_EXECUTOR` | `local` | `kubernetes` runs each job as a Kubernetes Job. Needs `MULTIX_LOCAL_JOBS=true`; the server refuses to start without it. |
 | `MULTIX_K8S_JOB_IMAGE` | required | The job image built from `worker/container/Dockerfile`. |
 | `MULTIX_K8S_NAMESPACE` | the server pod's namespace | Namespace of the job Jobs and the NetworkPolicy. |
 | `MULTIX_K8S_JOB_NETWORK_POLICY` | `multix-job-egress` | NetworkPolicy that must exist and select the job pods. |

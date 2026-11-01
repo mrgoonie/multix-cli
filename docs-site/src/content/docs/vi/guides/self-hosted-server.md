@@ -314,7 +314,8 @@ spec:
     matchLabels: { app: multix-server }
   template:
     metadata:
-      labels: { app: multix-server }
+      # Label thứ hai cho phép server kết nối tới pod job (executor Kubernetes Job).
+      labels: { app: multix-server, app.kubernetes.io/name: multix-server }
     spec:
       terminationGracePeriodSeconds: 30
       securityContext:
@@ -388,20 +389,28 @@ Những gì thay đổi:
   của pod qua mạng pod (`POST :8080/jobs`). Nó không bao giờ được ghi vào
   object Kubernetes, log hay bản ghi job. Nếu mạng giữa các node không đáng
   tin, hãy dùng network plugin mã hóa lưu lượng giữa các pod.
-- Khi hủy job hoặc tắt server, CLI của job bị dừng và Job bị xóa; slot được
-  trả lại khi pod đã biến mất. Lúc khởi động, server xóa mọi Job mà tiến trình
-  trước để lại, sau khi ghi các job đó là bị gián đoạn (interrupted); chúng
-  không bao giờ được chạy lại.
-- Kubernetes tự dừng pod job sau giới hạn thời gian của nó cộng một khoảng dư
-  (`activeDeadlineSeconds`), và xóa các Job đã xong sau 5 phút, kể cả khi
-  server không còn chạy.
+- Dù job kết thúc thế nào (xong, bị hủy, mất pod hay quá thời gian), server
+  yêu cầu job server dừng CLI, xóa Job và giữ slot của job cho đến khi pod đã
+  biến mất, chờ tối đa 60 giây. Khi tắt server, nó chỉ chờ trong thời gian
+  dành cho việc tắt; Job được xóa trước nên Kubernetes vẫn dừng pod. Lúc khởi
+  động, server xóa mọi Job mà tiến trình trước để lại, sau khi ghi các job đó
+  là bị gián đoạn (interrupted); chúng không bao giờ được chạy lại.
+- Kết quả chỉ được chấp nhận khi job server báo đúng id của job này, nên một
+  job khác (hoặc một pod khác nhận lại cùng IP) không bao giờ bị nhầm là nó.
+- Nếu server không còn chạy, Kubernetes tự dừng pod job khi đã quá giới hạn
+  thời gian cộng một khoảng dư (`activeDeadlineSeconds`, dài hơn giới hạn của
+  job vài phút) và xóa Job 5 phút sau đó.
 
 Cài đặt:
 
 1. Áp dụng [`worker/server/k8s/job-executor.yaml`](https://github.com/mrgoonie/multix-cli/blob/main/worker/server/k8s/job-executor.yaml)
    trong namespace của server. File này tạo service account `multix-server`,
-   một role chỉ được tạo, đọc và xóa Job, đọc pod và đọc NetworkPolicy, cùng
-   NetworkPolicy `multix-job-egress`.
+   một role chỉ được tạo, liệt kê và xóa Job, liệt kê pod và đọc
+   NetworkPolicy, cùng NetworkPolicy `multix-job-egress`. Role này không đọc
+   được Secret qua API, nhưng một Job nó tạo có thể mount bất kỳ Secret nào
+   trong namespace: hãy dành cho multix-server một namespace riêng, không chứa
+   gì khác, gắn label `pod-security.kubernetes.io/enforce=restricted` (pod job
+   đáp ứng profile này).
 2. Chạy pod server với `serviceAccountName: multix-server` và label
    `app.kubernetes.io/name: multix-server` (pod job chỉ nhận kết nối từ label
    này), rồi đặt:
@@ -416,17 +425,21 @@ Cài đặt:
    chọn pod job theo label hay không giới hạn cả ingress lẫn egress. Dòng log
    `server_started` hiển thị `"job_executor":"kubernetes"`.
 
-NetworkPolicy chỉ cho pod job tới DNS của cluster và các địa chỉ công khai,
-không bao giờ tới địa chỉ pod, service, node, metadata link-local hay control
-plane riêng, và chỉ cho server kết nối tới cổng của chúng. Nó chỉ có hiệu lực
-với network plugin thực thi NetworkPolicy (ví dụ Calico hoặc Cilium); server
-không kiểm tra được điều này, nên hãy tự kiểm tra cluster của bạn. Nếu địa chỉ
-API server, node hoặc metadata của bạn là địa chỉ công khai, hãy thêm chúng vào
-các danh sách `except`.
+NetworkPolicy cho pod job tới DNS của cluster và mọi địa chỉ nằm ngoài các dải
+riêng và đặc biệt (RFC 1918, NAT cấp nhà mạng, loopback, metadata link-local,
+IPv6 unique-local và link-local, và vài dải khác), và chỉ cho server kết nối
+tới cổng của chúng. Điều đó chỉ chặn được địa chỉ pod, service, node, metadata
+và control plane khi chúng nằm trong các dải trên: nếu có địa chỉ nào là công
+khai (dải IPv4 công khai, hoặc địa chỉ pod IPv6 toàn cục như trên EKS IPv6),
+hãy thêm chúng vào các danh sách `except`. Với NodeLocal DNSCache, hãy thêm
+một quy tắc egress tới địa chỉ của nó (mặc định `169.254.20.10`), nếu không job
+không phân giải được DNS. Policy chỉ có hiệu lực với network plugin thực thi
+NetworkPolicy (ví dụ Calico hoặc Cilium); server không kiểm tra được điều này,
+nên hãy tự kiểm tra cluster của bạn.
 
 | Biến | Mặc định | Tác dụng |
 |---|---|---|
-| `MULTIX_JOB_EXECUTOR` | `local` | `kubernetes` chạy mỗi job thành một Kubernetes Job (cần `MULTIX_LOCAL_JOBS=true`). |
+| `MULTIX_JOB_EXECUTOR` | `local` | `kubernetes` chạy mỗi job thành một Kubernetes Job. Cần `MULTIX_LOCAL_JOBS=true`; thiếu nó server từ chối khởi động. |
 | `MULTIX_K8S_JOB_IMAGE` | bắt buộc | Job image build từ `worker/container/Dockerfile`. |
 | `MULTIX_K8S_NAMESPACE` | namespace của pod server | Namespace chứa các Job và NetworkPolicy. |
 | `MULTIX_K8S_JOB_NETWORK_POLICY` | `multix-job-egress` | NetworkPolicy phải tồn tại và chọn các pod job. |

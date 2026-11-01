@@ -6,8 +6,9 @@
  *
  *   GET  /                      readiness ping
  *   POST /jobs                  start the job (202); a second job is refused (409)
- *   GET  /jobs/current          { state: "idle" | "running" | "done", result? }
- *   POST /jobs/current/cancel   SIGTERM the CLI (202)
+ *   GET  /jobs/current          { state: "idle" | "running" | "done", jobId?, result? }
+ *   POST /jobs/current/cancel   SIGTERM the CLI (202); with `?jobId=<id>`, only
+ *                               when that job is the one running here (else 409)
  *
  * The request body carries the caller's keys: it is never logged, and only
  * the job id and final status are written to the log.
@@ -93,10 +94,15 @@ export function createJobServer() {
       if (!current) return send(res, 200, { state: "idle" });
       return send(res, 200, {
         state: current.state,
+        jobId: current.jobId,
         ...(current.result ? { result: current.result } : {}),
       });
     }
     if (req.method === "POST" && path === "/jobs/current/cancel") {
+      const only = new URL(req.url ?? "/", "http://container").searchParams.get("jobId");
+      if (only !== null && only !== current?.jobId) {
+        return send(res, 409, { error: "Another job runs in this container" });
+      }
       if (current?.state === "running") current.abort.abort();
       return send(res, 202, { state: current?.state ?? "idle" });
     }

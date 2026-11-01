@@ -5,17 +5,28 @@
 # label `app.kubernetes.io/name: multix-server` (the job pods accept
 # connections from pods with that label only).
 #
+# Use a dedicated namespace for multix-server and its job pods, labelled for
+# the Pod Security `restricted` profile (the job pods meet it):
+#   kubectl label namespace <namespace> pod-security.kubernetes.io/enforce=restricted
+# Creating Jobs lets the server start pods, and a pod can mount any Secret or
+# service account of its namespace, so keep nothing else in that namespace.
+#
 # The NetworkPolicy is the job pods' only network boundary. It is enforced
 # only by a network plugin that implements NetworkPolicy (Calico, Cilium,
-# kindnet >= 0.24, ...); check yours does. If your API server, node or
-# metadata addresses are public, add them to the `except` lists below.
+# kindnet >= 0.24, ...); check yours does. It blocks private and special
+# address ranges: when your pod, service, node, API server or metadata
+# addresses are outside them (public IPv4, or IPv6 global pod addresses as on
+# EKS IPv6), add those ranges to the `except` lists below. Clusters using
+# NodeLocal DNSCache need an extra egress rule to its address (169.254.20.10
+# by default), or job DNS lookups fail.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: multix-server
 ---
-# Least privilege: the server creates, watches and deletes its job Jobs and
-# reads its NetworkPolicy. It cannot read Secrets or touch other workloads.
+# What the server calls: create, list and delete Jobs, list pods, read the
+# NetworkPolicy. It cannot read Secrets through the API, but a created Job
+# could mount one (see the namespace note above).
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -23,10 +34,10 @@ metadata:
 rules:
   - apiGroups: ["batch"]
     resources: ["jobs"]
-    verbs: ["create", "get", "list", "delete"]
+    verbs: ["create", "list", "delete"]
   - apiGroups: [""]
     resources: ["pods"]
-    verbs: ["get", "list"]
+    verbs: ["list"]
   - apiGroups: ["networking.k8s.io"]
     resources: ["networkpolicies"]
     verbs: ["get"]
