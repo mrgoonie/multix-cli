@@ -82,6 +82,8 @@ export const CANCELED_ERROR = "Canceled by the caller";
 const QUANTITY_RE = /^[0-9]+(?:\.[0-9]+)?(?:m|Ki|Mi|Gi|Ti|k|M|G|T)?$/;
 const NAME_RE = /^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$/;
 const LABEL_VALUE_RE = /^[A-Za-z0-9](?:[-A-Za-z0-9_.]{0,61}[A-Za-z0-9])?$/;
+/** A DNS subdomain name (RFC 1123), the form of a Secret name; at most 253 characters. */
+const SUBDOMAIN_RE = /^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?(?:\.[a-z0-9](?:[-a-z0-9]*[a-z0-9])?)*$/;
 
 const sleep = (ms, signal) =>
   new Promise((resolve) => {
@@ -102,6 +104,8 @@ const sleep = (ms, signal) =>
  *   MULTIX_K8S_JOB_NETWORK_POLICY  default multix-job-egress
  *   MULTIX_K8S_INSTANCE            default multix-server (label value; one per deployment)
  *   MULTIX_K8S_JOB_CPU / _MEMORY / _TMP_SIZE   limits, defaults 1 / 2Gi / 2Gi
+ *   MULTIX_K8S_JOB_IMAGE_PULL_SECRETS  optional: comma-separated Secret names in the
+ *                                      namespace, used to pull the job image
  */
 export function kubernetesSettingsFromEnv(env = process.env, readNamespace = defaultNamespace) {
   const get = (name) => env[name]?.trim() || undefined;
@@ -126,8 +130,24 @@ export function kubernetesSettingsFromEnv(env = process.env, readNamespace = def
     if (!QUANTITY_RE.test(value)) throw new Error(`${name} must be a Kubernetes quantity`);
     return value;
   };
+  const imagePullSecrets = [
+    ...new Set(
+      (get("MULTIX_K8S_JOB_IMAGE_PULL_SECRETS") ?? "")
+        .split(",")
+        .map((name) => name.trim())
+        .filter(Boolean),
+    ),
+  ];
+  for (const name of imagePullSecrets) {
+    if (name.length > 253 || !SUBDOMAIN_RE.test(name)) {
+      throw new Error(
+        "MULTIX_K8S_JOB_IMAGE_PULL_SECRETS must be comma-separated Kubernetes Secret names",
+      );
+    }
+  }
   return {
     image,
+    imagePullSecrets,
     namespace,
     networkPolicy,
     instance,
@@ -240,7 +260,10 @@ export function jobName(jobId) {
   return `multix-job-${jobId}`;
 }
 
-/** The Job object. Holds no secret: the spec is sent to the pod over HTTP. */
+/**
+ * The Job object. Holds no secret: the spec is sent to the pod over HTTP, and
+ * image pull Secrets are referenced by name only (the server never reads them).
+ */
 export function jobManifest(settings, spec) {
   const labels = { ...jobPodLabels(settings.instance), [LABEL_JOB_ID]: spec.jobId };
   // Kubernetes stops the pod after this long even if the server is gone.
@@ -268,6 +291,9 @@ export function jobManifest(settings, spec) {
             fsGroup: 1000,
             seccompProfile: { type: "RuntimeDefault" },
           },
+          ...(settings.imagePullSecrets?.length
+            ? { imagePullSecrets: settings.imagePullSecrets.map((name) => ({ name })) }
+            : {}),
           containers: [
             {
               name: "job",

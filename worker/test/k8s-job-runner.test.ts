@@ -34,6 +34,7 @@ function spec(jobId = ID) {
 
 const SETTINGS = {
   image: "registry.example/multix-job:1",
+  imagePullSecrets: [] as string[],
   namespace: "multix",
   networkPolicy: "multix-job-egress",
   instance: "multix-server",
@@ -198,6 +199,30 @@ describe("kubernetesSettingsFromEnv", () => {
     ).toThrow();
     expect(() => kubernetesSettingsFromEnv({ ...base, MULTIX_K8S_JOB_IMAGE: "a b" }, ns)).toThrow();
   });
+
+  it("reads image pull Secret names, dropping blanks and repeats", async () => {
+    const { kubernetesSettingsFromEnv } = await k8s();
+    const base = { MULTIX_K8S_JOB_IMAGE: "img:1" };
+    const ns = () => "multix";
+    expect(
+      kubernetesSettingsFromEnv(
+        {
+          ...base,
+          MULTIX_K8S_JOB_IMAGE_PULL_SECRETS: " ghcr-pull , registry.example-pull,,ghcr-pull ",
+        },
+        ns,
+      ).imagePullSecrets,
+    ).toEqual(["ghcr-pull", "registry.example-pull"]);
+    expect(
+      kubernetesSettingsFromEnv({ ...base, MULTIX_K8S_JOB_IMAGE_PULL_SECRETS: "  " }, ns)
+        .imagePullSecrets,
+    ).toEqual([]);
+    for (const bad of ["Bad_Name", "a b", "-x", "x.", `${"a".repeat(254)}`]) {
+      expect(() =>
+        kubernetesSettingsFromEnv({ ...base, MULTIX_K8S_JOB_IMAGE_PULL_SECRETS: bad }, ns),
+      ).toThrow(/MULTIX_K8S_JOB_IMAGE_PULL_SECRETS/);
+    }
+  });
 });
 
 describe("jobManifest", () => {
@@ -228,6 +253,23 @@ describe("jobManifest", () => {
       "multix.dev/job-id": ID,
     });
     expect(manifest.spec.activeDeadlineSeconds).toBeGreaterThan(spec().timeoutMs / 1000);
+    expect(podSpec).not.toHaveProperty("imagePullSecrets");
+  });
+
+  it("references image pull Secrets by name only when they are set", async () => {
+    const { jobManifest } = await k8s();
+    const without = jobManifest(SETTINGS, spec());
+    const withSecrets = jobManifest(
+      { ...SETTINGS, imagePullSecrets: ["ghcr-pull", "mirror-pull"] },
+      spec(),
+    );
+    expect(withSecrets.spec.template.spec.imagePullSecrets).toEqual([
+      { name: "ghcr-pull" },
+      { name: "mirror-pull" },
+    ]);
+    // Apart from the reference, the manifest is unchanged.
+    const { imagePullSecrets: _refs, ...rest } = withSecrets.spec.template.spec;
+    expect(rest).toEqual(without.spec.template.spec);
   });
 });
 

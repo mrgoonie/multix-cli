@@ -448,6 +448,7 @@ so check your cluster.
 | `MULTIX_K8S_JOB_NETWORK_POLICY` | `multix-job-egress` | NetworkPolicy that must exist and select the job pods. |
 | `MULTIX_K8S_INSTANCE` | `multix-server` | Label value of this deployment's job pods; give each deployment in a namespace its own, and match it in the NetworkPolicy. |
 | `MULTIX_K8S_JOB_CPU`, `MULTIX_K8S_JOB_MEMORY`, `MULTIX_K8S_JOB_TMP_SIZE` | `1`, `2Gi`, `2Gi` | Requests and limits of each job pod, and the size of its `/tmp`. |
+| `MULTIX_K8S_JOB_IMAGE_PULL_SECRETS` | none | Comma-separated names of `kubernetes.io/dockerconfigjson` Secrets in `MULTIX_K8S_NAMESPACE`, set as the job pods' `imagePullSecrets` so the job image can come from a private registry. The pods reference the Secrets by name; the server never reads them, so its Role needs no access to Secrets. Unset, the job pods have no pull Secret and the image pulls with the nodes' own credentials, if any. |
 
 ## Network egress
 
