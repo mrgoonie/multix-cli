@@ -157,14 +157,15 @@ function errorName(error: unknown): string {
   return error instanceof Error ? error.name : "unknown";
 }
 
-/**
- * Start the executor and bind it. `env` must already hold MULTIX_JOB_QUOTA
- * (a LocalAccountJobQuota namespace) and may hold MULTIX_EVENTS.
- */
 /** The production runner: the multix CLI at `cliBin`, behind the executor's egress proxy. */
 export function cliRunner(cliBin: string): RunJob {
   return (spec, { signal, egressEnv }) => runJob(spec, { signal, egressEnv, bin: cliBin });
 }
+
+/**
+ * Start the executor and bind it. `env` must already hold MULTIX_JOB_QUOTA
+ * (a LocalAccountJobQuota namespace) and may hold MULTIX_EVENTS.
+ */
 
 export async function startLocalJobs(
   env: WorkerEnv,

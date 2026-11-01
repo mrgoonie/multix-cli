@@ -526,5 +526,6 @@ describe("cliRunner", () => {
     )) as { stderrTail: string };
     expect(result.stderrTail).toContain("proxy http://");
     expect(result.stderrTail).not.toContain("proxy undefined");
+    expect(result.stderrTail).not.toContain("proxy-credential-value");
   });
 });
