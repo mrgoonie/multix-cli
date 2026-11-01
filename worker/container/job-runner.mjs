@@ -114,8 +114,10 @@ function runCli(bin, argv, options) {
 
 /**
  * @param {object} spec validated job spec
- * @param {{ signal?: AbortSignal, bin?: string, fetch?: typeof fetch, get?: Function, basePath?: string }} [options]
+ * @param {{ signal?: AbortSignal, bin?: string, fetch?: typeof fetch, get?: Function, basePath?: string, egressEnv?: Record<string, string> }} [options]
  *   `signal` cancels the job; `fetch` (uploads) and `get` (downloads) are injected in tests.
+ *   `egressEnv` (egress-proxy.mjs) routes the CLI's own HTTP(S) through a public-only proxy;
+ *   it is applied after the spec's keys so nothing in the spec can replace it.
  */
 export async function runJob(spec, options = {}) {
   const secrets = secretsOf(spec);
@@ -148,6 +150,7 @@ export async function runJob(spec, options = {}) {
         MULTIX_OUTPUT_DIR: outDir,
         NO_COLOR: "1",
         ...spec.env,
+        ...options.egressEnv,
       },
       timeout: cliTimeout,
       killSignal: "SIGTERM",

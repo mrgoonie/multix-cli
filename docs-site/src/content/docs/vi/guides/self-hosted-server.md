@@ -271,6 +271,64 @@ spec:
           emptyDir: {}
 ```
 
+## Kết nối ra ngoài (egress)
+
+Tiến trình server chỉ được `fetch` tới địa chỉ công khai (xem ở trên). Khi
+server chạy job ([issue #550](https://github.com/mrgoonie/multix-cli/issues/550)),
+CLI `multix` của mỗi job chạy như một tiến trình con trong chính network
+namespace của server, nên một tuỳ chọn CLI dạng URL mà CLI tự tải cũng phải
+tuân theo cùng quy tắc:
+
+- Bộ chạy job khởi động một proxy trên `127.0.0.1` (cổng ngẫu nhiên, thông tin
+  xác thực ngẫu nhiên cho mỗi tiến trình) và chạy mọi CLI của job với
+  `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY` (cùng dạng chữ thường) trỏ tới nó,
+  `NO_PROXY` rỗng và `NODE_USE_ENV_PROXY=1`, nên `fetch` của Node, `ffmpeg` và
+  `curl` đều đi qua proxy. Key của job không thể thay thế các biến này.
+- Proxy phân giải tên miền tại thời điểm kết nối, từ chối kết nối (`403`) khi
+  bất kỳ địa chỉ nào là loopback, mạng riêng (RFC 1918, ULA), link-local (kể
+  cả metadata `169.254.169.254`), CGNAT, multicast, dải dành riêng hoặc dải tài
+  liệu, và chỉ kết nối tới đúng địa chỉ đã kiểm tra. Địa chỉ IP viết trực tiếp
+  được kiểm tra ngay. Tên miền đổi địa chỉ giữa các lần phân giải (DNS
+  rebinding) bị kiểm tra lại ở mỗi kết nối.
+- Input của job (`inputs`) được bộ chạy job tải về với cùng phép kiểm tra.
+
+Cơ chế này áp dụng cho các client tôn trọng biến proxy. Để phòng thủ nhiều lớp,
+hãy chặn thêm egress tới dải mạng riêng cho pod của server ở tầng mạng. Trên
+Kubernetes, với CNI có thực thi NetworkPolicy (server cần DNS và internet công
+khai, không cần service nào trong cluster):
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: multix-server-egress
+spec:
+  podSelector:
+    matchLabels: { app: multix-server }
+  policyTypes: [Egress]
+  egress:
+    - to:   # DNS của cluster
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels: { k8s-app: kube-dns }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+    - to:   # chỉ internet công khai
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10, 169.254.0.0/16, 127.0.0.0/8]
+        - ipBlock:
+            cidr: ::/0
+            except: ["fc00::/7", "fe80::/10", "::1/128"]
+```
+
+Kiểm tra dải pod, dải service và nhãn DNS của cluster trước khi áp dụng. Với
+Docker thuần, đặt server vào một bridge network riêng và chặn lưu lượng từ
+bridge đó tới các dải mạng riêng trong chain iptables `DOCKER-USER`, ví dụ
+`iptables -I DOCKER-USER -i <bridge> -d 169.254.0.0/16 -j DROP` (lặp lại cho
+các dải ở trên).
+
 ## Sao lưu và khôi phục
 
 Mọi thứ trừ secret đều nằm trong `/data`: `multix.sqlite` cùng các file

@@ -425,6 +425,50 @@ describe("local executor", () => {
     expect(view.result.stderrTail).toContain("[redacted]");
   });
 
+  it("runs every job CLI through its egress proxy and stops the proxy on close", async () => {
+    const { runJob } = await load("../container/job-runner.mjs");
+    const seen: Any[] = [];
+    const ex = await create({
+      stateDir: await stateDir(),
+      runJob: (s: Any, o: Any) => {
+        seen.push(o.egressEnv);
+        return runJob(s, { ...o, bin: FAKE_BIN });
+      },
+    });
+    await ex.start(ID1, spec(ID1, ["media", "optimize", "--fetch=http://127.0.0.1:9/"]), "u");
+    await until(async () => (await ex.status(ID1))?.status === "succeeded");
+    const env = seen[0];
+    expect(env.NODE_USE_ENV_PROXY).toBe("1");
+    const proxyUrl = new URL(env.HTTPS_PROXY);
+    expect(proxyUrl.hostname).toBe("127.0.0.1");
+    const view = await ex.status(ID1);
+    // Loopback is refused by the proxy (403), not reached directly.
+    expect(view.result.stderrTail).toMatch(/fetch-outcome \{"error"/);
+    expect(JSON.parse(view.result.stdout).envNames).toEqual(
+      expect.arrayContaining(["HTTP_PROXY", "HTTPS_PROXY", "NODE_USE_ENV_PROXY"]),
+    );
+    expect(JSON.stringify(view)).not.toContain(proxyUrl.password);
+    await ex.close();
+    const { connect } = await import("node:net");
+    const socket = connect(Number(proxyUrl.port), "127.0.0.1");
+    const code = await new Promise((r) => socket.once("error", (e: Any) => r(e.code)));
+    expect(code).toBe("ECONNREFUSED");
+  });
+
+  it("releases the state directory when the egress proxy cannot start", async () => {
+    const dir = await stateDir();
+    await expect(
+      create({
+        stateDir: dir,
+        startEgressProxy: async () => {
+          throw new Error("no loopback");
+        },
+      }),
+    ).rejects.toThrow("no loopback");
+    const ex = await create({ stateDir: dir });
+    expect(ex.accepting()).toBe(true);
+  });
+
   it("reads the concurrency cap from MULTIX_LOCAL_MAX_CONCURRENT_JOBS", async () => {
     const { maxConcurrentFromEnv } = await mod();
     expect(maxConcurrentFromEnv({})).toBe(1);
