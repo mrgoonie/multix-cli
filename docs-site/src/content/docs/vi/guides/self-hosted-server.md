@@ -38,7 +38,9 @@ khoản tự lưu key của mình trong dashboard, giống trên Cloudflare.
 
 ## Image
 
-Mỗi bản phát hành publish `ghcr.io/mrgoonie/multix-server` cho `linux/amd64`
+Mỗi bản phát hành publish `ghcr.io/mrgoonie/multix-server` (và job image
+`ghcr.io/mrgoonie/multix-job` cho
+[executor Kubernetes Job](#executor-kubernetes-job)) cho `linux/amd64`
 và `linux/arm64` với hai tag bất biến, `<version>` (ví dụ phiên bản npm) và
 `sha-<12 ký tự hex của commit>`. Không có tag `latest`. Hãy ghim một phiên bản,
 hoặc tốt hơn là digest hiển thị trong phần tóm tắt lần chạy của
@@ -371,9 +373,12 @@ trong `$MULTIX_DATA_DIR/jobs`, và một replica cho mỗi volume dữ liệu.
 
 Những gì thay đổi:
 
-- Mỗi job chạy trong một pod của job image (`worker/container/Dockerfile`).
-  Image này không được phát hành sẵn; hãy build và đẩy nó lên registry mà
-  cluster của bạn kéo được, từ cùng bản phát hành với server:
+- Mỗi job chạy trong một pod của job image, build từ
+  `worker/container/Dockerfile` và được publish cùng server dưới tên
+  `ghcr.io/mrgoonie/multix-job:<version>`. Dùng cùng phiên bản với server
+  (hoặc ghim digest của nó từ cùng lần chạy publish). Với bản phát hành có
+  trước khi job image được publish, hoặc khi dùng registry riêng, hãy tự build
+  và đẩy nó từ mã nguồn của bản phát hành đó:
 
   ```bash
   docker build -f worker/container/Dockerfile -t <registry>/multix-job:<version> .
@@ -418,7 +423,7 @@ Cài đặt:
    ```yaml
    - { name: MULTIX_LOCAL_JOBS, value: "true" }
    - { name: MULTIX_JOB_EXECUTOR, value: kubernetes }
-   - { name: MULTIX_K8S_JOB_IMAGE, value: <registry>/multix-job:<version> }
+   - { name: MULTIX_K8S_JOB_IMAGE, value: ghcr.io/mrgoonie/multix-job:<version> }
    ```
 
 3. Server từ chối khởi động khi thiếu NetworkPolicy, hoặc khi policy không
@@ -440,7 +445,7 @@ nên hãy tự kiểm tra cluster của bạn.
 | Biến | Mặc định | Tác dụng |
 |---|---|---|
 | `MULTIX_JOB_EXECUTOR` | `local` | `kubernetes` chạy mỗi job thành một Kubernetes Job. Cần `MULTIX_LOCAL_JOBS=true`; thiếu nó server từ chối khởi động. |
-| `MULTIX_K8S_JOB_IMAGE` | bắt buộc | Job image build từ `worker/container/Dockerfile`. |
+| `MULTIX_K8S_JOB_IMAGE` | bắt buộc | Job image, `ghcr.io/mrgoonie/multix-job:<version>` (cùng phiên bản với server) hoặc bản bạn tự build từ `worker/container/Dockerfile`. |
 | `MULTIX_K8S_NAMESPACE` | namespace của pod server | Namespace chứa các Job và NetworkPolicy. |
 | `MULTIX_K8S_JOB_NETWORK_POLICY` | `multix-job-egress` | NetworkPolicy phải tồn tại và chọn các pod job. |
 | `MULTIX_K8S_INSTANCE` | `multix-server` | Giá trị label của pod job thuộc bản triển khai này; mỗi bản triển khai trong một namespace cần một giá trị riêng, khớp với NetworkPolicy. |

@@ -19,6 +19,14 @@ COPY worker/container/package.json worker/container/package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund
 
 FROM node:22-alpine
+# Set by the release workflow (publish-server-image.yml); the Cloudflare
+# container build leaves it at "dev".
+ARG MULTIX_VERSION=dev
+LABEL org.opencontainers.image.title="multix-job" \
+      org.opencontainers.image.description="Multix job runner: one multix CLI job per container (internal, never expose it)" \
+      org.opencontainers.image.source="https://github.com/mrgoonie/multix-cli" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.version="${MULTIX_VERSION}"
 RUN apk add --no-cache ffmpeg imagemagick ca-certificates
 
 WORKDIR /app
