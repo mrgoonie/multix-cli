@@ -149,6 +149,11 @@ export default defineConfig({
               slug: "guides/mcp-server",
             },
             {
+              label: "Self-hosted server",
+              translations: { vi: "Server tự host" },
+              slug: "guides/self-hosted-server",
+            },
+            {
               label: "REST API",
               translations: { vi: "REST API" },
               slug: "guides/rest-api",
