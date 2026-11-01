@@ -22,6 +22,10 @@ console.error(`using key ${process.env.GEMINI_API_KEY}`);
 writeFileSync(join(out, "result.txt"), "hello");
 mkdirSync(join(out, "nested"));
 writeFileSync(join(out, "nested", "result.txt"), "again");
+if (argv.includes("--ignore-term")) {
+  process.on("SIGTERM", () => {});
+  process.stdout.on("error", () => {});
+}
 if (argv.includes("--print-proxy")) console.error(`proxy ${process.env.HTTPS_PROXY}`);
 // Fetch a URL the way the CLI fetches a URL-valued option, and record what happened.
 const fetchUrl = argv.find((a) => a.startsWith("--fetch="))?.slice("--fetch=".length);

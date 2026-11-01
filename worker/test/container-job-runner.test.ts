@@ -226,6 +226,41 @@ describe("container job runner", () => {
     expect(slow.status).toBe("timed_out");
   }, 30_000);
 
+  it("kills a CLI that ignores SIGTERM after the grace period, on timeout and on cancel", async () => {
+    const { runJob } = await load("../container/job-runner.mjs");
+    const { fetch, get } = mockFetch();
+    const argv = ["x", "--ignore-term", "--sleep"];
+    const started = Date.now();
+    const timedOut = await runJob(spec({ argv, inputs: [], timeoutMs: 400 }), {
+      bin: FAKE_BIN,
+      fetch,
+      get,
+      killGraceMs: 300,
+    });
+    expect(timedOut.status).toBe("timed_out");
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 300);
+    const canceled = await runJob(spec({ argv, inputs: [] }), {
+      bin: FAKE_BIN,
+      fetch,
+      get,
+      signal: controller.signal,
+      killGraceMs: 300,
+    });
+    expect(canceled.status).toBe("canceled");
+    // Without SIGKILL each run would wait for the 30 s sleep.
+    expect(Date.now() - started).toBeLessThan(10_000);
+
+    // An output overflow is answered with SIGTERM too; SIGKILL follows the grace, not the CLI timeout.
+    const floodStart = Date.now();
+    const flooded = await runJob(
+      spec({ argv: ["x", "--ignore-term", "--flood"], inputs: [], timeoutMs: 20_000 }),
+      { bin: FAKE_BIN, fetch, get, killGraceMs: 300 },
+    );
+    expect(flooded.status).toBe("failed");
+    expect(Date.now() - floodStart).toBeLessThan(4_000);
+  }, 30_000);
+
   it("follows up to 5 redirects and refuses an input that resolves to a private address", async () => {
     const { runJob } = await load("../container/job-runner.mjs");
     const { fetch, get } = mockFetch();

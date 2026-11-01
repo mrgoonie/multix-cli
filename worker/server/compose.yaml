@@ -15,11 +15,17 @@ services:
     environment:
       MULTIX_PUBLIC_URL: http://localhost:3000
       MULTIX_LOCAL_AUTH: "true"
+      # Jobs run as child processes of this one container (one replica per data volume).
+      # Defaults below; .env next to this file overrides them.
+      MULTIX_LOCAL_JOBS: ${MULTIX_LOCAL_JOBS:-true}
+      MULTIX_LOCAL_MAX_CONCURRENT_JOBS: ${MULTIX_LOCAL_MAX_CONCURRENT_JOBS:-1}
+      MULTIX_MCP_UNCAPPED_SPEND: ${MULTIX_MCP_UNCAPPED_SPEND:-deny}
     volumes:
       - multix-data:/data
     read_only: true
     tmpfs:
-      - /tmp
+      # Each job downloads its inputs and writes its outputs here.
+      - /tmp:size=2g
     security_opt:
       - no-new-privileges:true
     cap_drop: [ALL]

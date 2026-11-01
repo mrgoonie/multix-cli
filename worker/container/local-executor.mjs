@@ -245,8 +245,10 @@ async function acquireLock(stateDir) {
  *   onFinal?: (jobId: string, view: object, owner: { userId: string, command: string }) => unknown,
  * }} options
  *   `runJob` is injected in tests; a replacement must pass `egressEnv` on to job-runner.mjs
- *   `runJob` so the CLI keeps going through the egress proxy. `onFinal` is told once about each job's final view
- *   (events, slot accounting); its errors, sync or async, are ignored.
+ *   `runJob` so the CLI keeps going through the egress proxy. `onFinal` is told once about
+ *   each job's final view (events, slot accounting) when the job no longer holds an executor
+ *   slot: at once for a job whose CLI never ran or has exited, otherwise (cancel, shutdown)
+ *   only once its CLI process has exited. Its errors, sync or async, are ignored.
  */
 export async function createLocalExecutor(options) {
   const stateDir = resolve(options.stateDir);
@@ -319,7 +321,13 @@ export async function createLocalExecutor(options) {
         // running, so a restart records the job as interrupted; it is never run again.
         unsaved.set(jobId, { ...record, view });
       }
-      notifyFinal(jobId, view, record.owner);
+      const slot = running.get(jobId);
+      if (slot?.done) {
+        // The CLI may still run (cancel, shutdown): report the end once its slot is free.
+        slot.done.finally(() => notifyFinal(jobId, view, record.owner)).catch(() => {});
+      } else {
+        notifyFinal(jobId, view, record.owner);
+      }
       return view;
     });
   }

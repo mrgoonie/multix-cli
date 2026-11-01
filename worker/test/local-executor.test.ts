@@ -163,16 +163,19 @@ describe("local executor", () => {
     expect(run.first().signal.aborted).toBe(true);
     // The CLI has not exited yet: the slot is still taken.
     expect((await ex.start(ID2, spec(ID2), "u")).status).toBe("failed");
+    // The cancel is not reported (slots, events) while its CLI still runs.
+    await tick();
+    expect(finals).toEqual([[ID2, "failed"]]);
     // A result arriving after the cancel does not replace it.
     run.first().finish(RESULT);
     await until(() => ex.activeJobs() === 0);
     expect((await ex.status(ID1)).status).toBe("canceled");
     expect((await ex.start(ID3, spec(ID3), "u")).status).toBe("running");
-    // One final notice per job: the cancel, and the refusal of the job tried while the slot was taken.
+    // One final notice per job: the refusal of the job tried while the slot was taken, then the cancel.
     await tick();
     expect(finals).toEqual([
-      [ID1, "canceled"],
       [ID2, "failed"],
+      [ID1, "canceled"],
     ]);
   });
 

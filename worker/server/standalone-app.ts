@@ -5,20 +5,32 @@
  * a route: /mcp, /dashboard, OAuth, /api/v1, /api/docs and /health are the
  * Worker's. This module adds only the readiness probe, /health/ready.
  *
- * Not bound: MULTIX_JOBS and MULTIX_JOB_QUOTA (per-job containers), so
- * `multix_run` and the job REST endpoints are not offered (self-hosted job
- * execution is tracked in issue #550). `multix_catalog`, skills, events,
- * accounts, API keys and the dashboard work.
+ * Job execution is opt-in (`jobs` option, MULTIX_LOCAL_JOBS=true in
+ * multix-server.ts). With it, MULTIX_JOB_QUOTA is the real AccountJobQuota
+ * Durable Object on SQLite and MULTIX_JOBS is the local child-process
+ * executor (local-jobs.ts), so `multix_run`, `multix_job_status`,
+ * `multix_job_cancel` and /api/v1/jobs run the Worker's own code. The
+ * server-wide job cap (MULTIX_MAX_JOBS_TOTAL) is lowered to the executor's
+ * MULTIX_LOCAL_MAX_CONCURRENT_JOBS, so a job over the cap is refused by the
+ * quota check before anything runs. Without it neither binding exists and
+ * the job tools and endpoints are not offered; `multix_catalog`, skills,
+ * events, accounts, API keys and the dashboard work either way.
  */
 
 import { publicOrigin, resolveAppContext } from "../src/app-context.js";
-import type { WorkerEnv } from "../src/config.js";
+import { type WorkerEnv, jobCapsFrom } from "../src/config.js";
 import { AccountEvents } from "../src/events/account-events.js";
 import { json } from "../src/http-responses.js";
 import { createWorker } from "../src/index.js";
 import { logEvent } from "../src/redaction.js";
 import { AccountSkills } from "../src/skills/account-skills.js";
 import { DurableObjectHost } from "./durable-object-host.js";
+import {
+  LocalAccountJobQuota,
+  type LocalJobs,
+  type LocalJobsOptions,
+  startLocalJobs,
+} from "./local-jobs.js";
 import { MemoryRateLimiter } from "./memory-rate-limiter.js";
 import type { MultixDatabase } from "./sqlite-database.js";
 import { SqliteKvNamespace, sweepExpired } from "./sqlite-kv-namespace.js";
@@ -31,22 +43,36 @@ export interface StandaloneOptions {
   vars: Record<string, string>;
   mcpRateLimit?: number;
   authRateLimit?: number;
+  /** Run jobs as child processes of this server; absent: no job tools. */
+  jobs?: LocalJobsOptions;
   now?: () => number;
 }
 
 export interface StandaloneApp {
   env: WorkerEnv;
   host: DurableObjectHost;
+  /** The local executor when job execution is enabled. */
+  jobs?: LocalJobs;
   /** Handle one request (the public origin is already in its URL). */
   fetch(request: Request): Promise<Response>;
   /** Mark the app as shutting down: readiness answers 503 from now on. */
   drain(): void;
-  /** Wait (up to `timeoutMs`) for background work, then stop alarms. */
+  /**
+   * Stop the job executor: running jobs are recorded as interrupted, their CLI
+   * processes stopped and their slots given back. Bounded by the executor's
+   * own budget (not the HTTP drain), never rejects, and every call returns
+   * the same promise, so shutdown starts it first and awaits it in stop().
+   */
+  closeJobs(): Promise<void>;
+  /**
+   * Wait (up to `timeoutMs`) for background work, then for closeJobs() within
+   * its own budget, then stop alarms. Call before the database closes.
+   */
   stop(timeoutMs: number): Promise<void>;
   sweep(): number;
 }
 
-export function createStandaloneApp(options: StandaloneOptions): StandaloneApp {
+export async function createStandaloneApp(options: StandaloneOptions): Promise<StandaloneApp> {
   const { database } = options;
   const now = options.now ?? Date.now;
   const env = {
@@ -65,6 +91,22 @@ export function createStandaloneApp(options: StandaloneOptions): StandaloneApp {
   const mutableEnv = env as unknown as Record<string, unknown>;
   mutableEnv.MULTIX_EVENTS = host.namespace("MULTIX_EVENTS", AccountEvents as never);
   mutableEnv.MULTIX_SKILLS = host.namespace("MULTIX_SKILLS", AccountSkills as never);
+  let jobs: LocalJobs | undefined;
+  if (options.jobs) {
+    mutableEnv.MULTIX_JOB_QUOTA = host.namespace("MULTIX_JOB_QUOTA", LocalAccountJobQuota as never);
+    jobs = await startLocalJobs(env, options.jobs, {
+      quotaObjectNames: () =>
+        (
+          database.db
+            .prepare("SELECT DISTINCT id FROM do_storage WHERE ns = 'MULTIX_JOB_QUOTA'")
+            .all() as { id: string }[]
+        ).map((row) => row.id),
+    });
+    // One CLI process per slot: the quota's server-wide cap never exceeds the executor's.
+    const total = Math.min(jobCapsFrom(env).total, jobs.maxConcurrent);
+    mutableEnv.MULTIX_MAX_JOBS_TOTAL = String(total);
+    mutableEnv.MULTIX_JOBS = jobs.namespace;
+  }
   host.resumeAlarms();
 
   const worker = createWorker();
@@ -73,19 +115,45 @@ export function createStandaloneApp(options: StandaloneOptions): StandaloneApp {
 
   async function ready(): Promise<Response> {
     const checks: Record<string, "ok" | "fail"> = { storage: "ok", config: "ok" };
+    if (jobs) checks.jobs = jobs.accepting() ? "ok" : "fail";
     try {
       database.check();
     } catch {
       checks.storage = "fail";
     }
     if (!publicOrigin(env) || !(await resolveAppContext(env, {}))) checks.config = "fail";
-    const ok = !draining && checks.storage === "ok" && checks.config === "ok";
-    return json(ok ? 200 : 503, { ok, draining, checks });
+    const ok = !draining && Object.values(checks).every((c) => c === "ok");
+    return json(ok ? 200 : 503, { ok, draining, jobs: jobs ? "enabled" : "disabled", checks });
+  }
+
+  let jobsClosed: Promise<void> | undefined;
+  function closeJobs(): Promise<void> {
+    jobsClosed ??= (async () => {
+      if (!jobs) return;
+      const budget = jobs.closeBudgetMs;
+      let timer: NodeJS.Timeout | undefined;
+      const late = new Promise<"late">((resolve) => {
+        timer = setTimeout(() => resolve("late"), budget);
+        timer.unref();
+      });
+      try {
+        const outcome = await Promise.race([jobs.close().then(() => "closed" as const), late]);
+        if (outcome === "late") logEvent("warn", "jobs_close_timeout", { budget_ms: budget });
+      } catch (error) {
+        logEvent("warn", "jobs_close_failed", {
+          error: error instanceof Error ? error.name : "unknown",
+        });
+      } finally {
+        clearTimeout(timer);
+      }
+    })();
+    return jobsClosed;
   }
 
   return {
     env,
     host,
+    jobs,
     async fetch(request) {
       const { pathname } = new URL(request.url);
       if (pathname === READY_PATH) {
@@ -115,11 +183,18 @@ export function createStandaloneApp(options: StandaloneOptions): StandaloneApp {
     drain() {
       draining = true;
     },
+    closeJobs,
     async stop(timeoutMs) {
       draining = true;
+      const jobsDone = closeJobs();
+      const started = Date.now();
+      const left = () => Math.max(0, timeoutMs - (Date.now() - started));
       const deadline = new Promise((resolve) => setTimeout(resolve, timeoutMs).unref());
       await Promise.race([Promise.allSettled([...background]), deadline]);
-      await host.stop(timeoutMs);
+      // Slot releases and event writes need the database: wait for them even
+      // when the HTTP drain used up the shared budget.
+      await jobsDone;
+      await host.stop(left());
     },
     sweep: () => sweepExpired(database, now()),
   };

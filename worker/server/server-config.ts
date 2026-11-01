@@ -6,6 +6,7 @@
  */
 
 import { join } from "node:path";
+import { maxConcurrentFromEnv } from "../container/local-executor.mjs";
 
 export interface ServerConfig {
   host: string;
@@ -18,6 +19,19 @@ export interface ServerConfig {
   shutdownTimeoutMs: number;
   mcpRateLimit: number;
   authRateLimit: number;
+  /** MULTIX_LOCAL_JOBS=true: run jobs as child processes (needs the multix CLI). */
+  localJobs: boolean;
+  /** Job records and the executor lock: `<dataDir>/jobs`. */
+  jobsStateDir: string;
+  /** MULTIX_LOCAL_MAX_CONCURRENT_JOBS, 1 to 64 (default 1). */
+  maxConcurrentJobs: number;
+}
+
+function flag(env: NodeJS.ProcessEnv, name: string): boolean {
+  const raw = env[name]?.trim().toLowerCase();
+  if (!raw || raw === "false" || raw === "0") return false;
+  if (raw === "true" || raw === "1") return true;
+  throw new Error(`${name} must be true or false`);
 }
 
 function int(
@@ -48,6 +62,9 @@ export function serverConfigFrom(env: NodeJS.ProcessEnv): ServerConfig {
     shutdownTimeoutMs: int(env, "MULTIX_SHUTDOWN_TIMEOUT_MS", 20_000, 0, 300_000),
     mcpRateLimit: int(env, "MULTIX_MCP_RATE_LIMIT", 60, 1, 100_000),
     authRateLimit: int(env, "MULTIX_AUTH_RATE_LIMIT", 30, 1, 100_000),
+    localJobs: flag(env, "MULTIX_LOCAL_JOBS"),
+    jobsStateDir: join(dataDir, "jobs"),
+    maxConcurrentJobs: maxConcurrentFromEnv(env),
   };
 }
 
@@ -67,6 +84,8 @@ const SERVER_ONLY = new Set([
   "MULTIX_SHUTDOWN_TIMEOUT_MS",
   "MULTIX_MCP_RATE_LIMIT",
   "MULTIX_AUTH_RATE_LIMIT",
+  "MULTIX_LOCAL_JOBS",
+  "MULTIX_LOCAL_MAX_CONCURRENT_JOBS",
 ]);
 
 /**

@@ -65,7 +65,8 @@ export function takeSlot(
   return { ok: true, slots: { ...live, [jobId]: now + leaseMs } };
 }
 
-const SLOTS_KEY = "slots";
+/** Storage key of the slot map; exported for the self-hosted server's start-up reconciliation. */
+export const SLOTS_KEY = "slots";
 
 export class AccountJobQuota extends DurableObject {
   /** Take a slot for `jobId`; false when `limit` slots are already taken. */

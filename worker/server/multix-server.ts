@@ -6,17 +6,27 @@
  *
  *   GET /health         liveness, from the Worker: { ok: true }
  *   GET /health/ready   readiness: storage writable, configuration complete, not draining
+ *                       (and, with jobs enabled, the job executor accepting jobs)
  *
- * SIGTERM / SIGINT: readiness turns 503, the listener stops accepting, open
- * requests and background work get MULTIX_SHUTDOWN_TIMEOUT_MS to finish,
- * then the database is closed.
+ * MULTIX_LOCAL_JOBS=true runs `multix_run` jobs as child processes (see
+ * local-jobs.ts); start-up fails when the multix CLI is not on PATH. The
+ * `server_started` log line says whether jobs are enabled.
+ *
+ * SIGTERM / SIGINT (see server-shutdown.ts): readiness turns 503 and, at the
+ * same time, the listener stops accepting and running jobs are recorded as
+ * interrupted and their CLI processes stopped (within the executor's own
+ * budget). Open requests and background work get MULTIX_SHUTDOWN_TIMEOUT_MS
+ * to finish; the slots of the stopped jobs are given back before the
+ * database is closed.
  */
 
 // First: the public-only fetch must be in place before any Worker module loads.
 import "./install-public-fetch-guard.js";
 import { logEvent } from "../src/redaction.js";
 import { createHttpServer } from "./http-server.js";
+import { DEFAULT_CLI_BIN, resolveExecutable } from "./local-jobs.js";
 import { serverConfigFrom, workerVars } from "./server-config.js";
+import { shutdownServer } from "./server-shutdown.js";
 import { openDatabase } from "./sqlite-database.js";
 import { createStandaloneApp } from "./standalone-app.js";
 import { prepareBootstrap } from "./standalone-bootstrap.js";
@@ -28,12 +38,28 @@ declare const MULTIX_SERVER_VERSION: string | undefined;
 async function main(): Promise<void> {
   const config = serverConfigFrom(process.env);
   const vars = workerVars(process.env);
+  let cliBin: string | undefined;
+  if (config.localJobs) {
+    cliBin = await resolveExecutable(DEFAULT_CLI_BIN);
+    if (!cliBin) {
+      throw new Error("MULTIX_LOCAL_JOBS=true but the multix CLI is not on PATH");
+    }
+  }
   const database = openDatabase(config.databasePath);
-  const app = createStandaloneApp({
+  const app = await createStandaloneApp({
     database,
     vars,
     mcpRateLimit: config.mcpRateLimit,
     authRateLimit: config.authRateLimit,
+    jobs: cliBin
+      ? {
+          stateDir: config.jobsStateDir,
+          maxConcurrent: config.maxConcurrentJobs,
+          cliBin,
+          // Leave part of the shutdown budget for the database and alarms.
+          closeTimeoutMs: Math.min(10_000, Math.floor(config.shutdownTimeoutMs / 2)),
+        }
+      : undefined,
   });
   await prepareBootstrap(app.env, (line) => process.stdout.write(`${line}\n`));
 
@@ -65,6 +91,8 @@ async function main(): Promise<void> {
     version: typeof MULTIX_SERVER_VERSION === "string" ? MULTIX_SERVER_VERSION : "dev",
     port: config.port,
     data_dir: config.dataDir,
+    jobs: app.jobs ? "enabled" : "disabled",
+    max_concurrent_jobs: app.jobs?.maxConcurrent,
   });
 
   let stopping = false;
@@ -72,12 +100,8 @@ async function main(): Promise<void> {
     if (stopping) return;
     stopping = true;
     logEvent("info", "server_stopping", { signal });
-    app.drain();
     clearInterval(sweepTimer);
-    const started = Date.now();
-    await http.close(config.shutdownTimeoutMs);
-    await app.stop(Math.max(0, config.shutdownTimeoutMs - (Date.now() - started)));
-    database.close();
+    await shutdownServer(app, http, database, config.shutdownTimeoutMs);
     logEvent("info", "server_stopped", {});
     process.exit(0);
   };
