@@ -103,7 +103,8 @@ describe("local executor", () => {
     expect(await ex.status(ID1)).toMatchObject({ status: "running" });
     run.first().finish(RESULT);
     await until(async () => (await ex.status(ID1))?.status === "succeeded");
-    expect(ex.activeJobs()).toBe(0);
+    // The final view is visible once its file is renamed; the slot is freed after the directory fsync.
+    await until(() => ex.activeJobs() === 0);
     expect(finals).toEqual([
       expect.objectContaining({ id: ID1, owner: { userId: "user-a", command: "image generate" } }),
     ]);
