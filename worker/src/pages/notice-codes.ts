@@ -7,8 +7,19 @@
 import type { R2SettingsProblem } from "../accounts/r2-settings.js";
 import type { R2AccessResult } from "../storage/r2-access-check.js";
 
-const R2_PROBLEMS = ["account", "keys", "bucket", "url", "prefix"] as const;
+const R2_PROBLEMS = [
+  "account",
+  "endpoint",
+  "region",
+  "addressing",
+  "keys",
+  "bucket",
+  "url",
+  "prefix",
+  "expiry",
+] as const;
 const R2_CHECKS = [
+  "endpoint-not-public",
   "denied",
   "no-bucket",
   "read-only",

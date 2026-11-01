@@ -1,14 +1,17 @@
 /**
- * Prove that R2 credentials can read and write one bucket before they are
- * saved: ListObjectsV2 max-keys=1 (allowed for every R2 token type, including
- * bucket-scoped ones), then PUT and DELETE of an empty probe object.
+ * Prove that R2 or S3-compatible credentials can read and write one bucket
+ * before they are saved: ListObjectsV2 max-keys=1 (allowed for every R2 token
+ * type, including bucket-scoped ones), then PUT and DELETE of an empty probe
+ * object. For a custom endpoint, the host the requests go to (the bucket host
+ * when virtual-hosted) must first resolve only to public addresses.
  *
  * The result is a fixed code, never text from R2, so nothing the user typed
  * (or R2 echoed back) can reach the page or the logs.
  */
 
 import type { FetchLike } from "../../../src/core/fetch-json.js";
-import { R2Client, type R2Credentials, R2RequestError } from "./r2-client.js";
+import { CallbackDnsError, assertPublicCallbackUrl } from "../events/callback-guard.js";
+import { R2Client, type R2Credentials, R2RequestError, bucketBaseUrl } from "./r2-client.js";
 
 /** Prefix of the object written and removed again by the write check; a random suffix keeps it off user objects. */
 export const R2_PROBE_PREFIX = ".multix-probe-";
@@ -17,6 +20,8 @@ const CHECK_TIMEOUT_MS = 10_000;
 
 export type R2AccessResult =
   | "ok"
+  /** The custom endpoint does not resolve, or resolves to a private or reserved address. */
+  | "endpoint-not-public"
   /** 401/403 on list: wrong key pair, or a token not scoped to this bucket. */
   | "denied"
   /** 404 NoSuchBucket on list. */
@@ -51,6 +56,17 @@ export async function checkR2Access(
   directory = "",
 ): Promise<R2AccessResult> {
   const client = new R2Client({ ...settings, fetch, timeoutMs: CHECK_TIMEOUT_MS });
+  if (!client.target.r2) {
+    try {
+      await assertPublicCallbackUrl(
+        `${bucketBaseUrl(settings.bucket, client.target)}/`,
+        fetch ?? ((input, init) => globalThis.fetch(input, init)),
+        "endpoint",
+      );
+    } catch (error) {
+      return error instanceof CallbackDnsError ? "unreachable" : "endpoint-not-public";
+    }
+  }
   const probeKey = `${directory ? `${directory}/` : ""}${R2_PROBE_PREFIX}${crypto.randomUUID()}`;
   const steps: ["list" | "put" | "delete", () => Promise<void>][] = [
     ["list", () => client.listProbe(settings.bucket)],

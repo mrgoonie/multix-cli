@@ -20,7 +20,7 @@
 import { isProviderSecretName, isValidSecretValue } from "../accounts/account-store.js";
 import type { Account } from "../accounts/account-store.js";
 import { API_KEY_NAME_RE, ApiKeyStore, TooManyApiKeysError } from "../accounts/api-key-store.js";
-import { r2Prefix } from "../accounts/r2-settings.js";
+import { linkExpirySeconds, r2Prefix } from "../accounts/r2-settings.js";
 import {
   type AppContext,
   type AppDeps,
@@ -29,6 +29,7 @@ import {
   signedInSession,
 } from "../app-context.js";
 import { SESSION_COOKIE, clearCookie, csrfToken, csrfValid } from "../auth/signed-cookies.js";
+import { outputLinkMaxSecondsFrom } from "../config.js";
 import { html, redirect, text } from "../http-responses.js";
 import type { NewApiKey } from "../pages/api-keys-card.js";
 import { type ConnectedClient, dashboardPage, signInPage } from "../pages/dashboard-page.js";
@@ -109,7 +110,16 @@ async function showDashboard(
     dashboardPage({
       account,
       secrets: await ctx.accounts.secrets(account.id),
-      r2: r2 ? { bucket: r2.bucket, publicBaseUrl: r2.publicBaseUrl, prefix: r2Prefix(r2) } : null,
+      r2: r2
+        ? {
+            bucket: r2.bucket,
+            publicBaseUrl: r2.publicBaseUrl,
+            prefix: r2Prefix(r2),
+            endpointHost: r2.endpoint ? new URL(r2.endpoint).host : undefined,
+            linkExpirySeconds: linkExpirySeconds(r2, outputLinkMaxSecondsFrom(ctx.env)),
+            savedLinkExpirySeconds: r2.linkExpirySeconds,
+          }
+        : null,
       csrf: await csrfToken(ctx.sessionSecret, session),
       origin: ctx.origin,
       mcpUrl: `${ctx.origin}/mcp`,

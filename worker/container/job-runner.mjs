@@ -26,7 +26,7 @@ const MAX_UPLOAD_RESERVE_MS = 5 * 60_000;
 const KEY_NAME_RE =
   /^(?:[A-Z][A-Z0-9]*_API_(?:KEY|TOKEN)|FAL_KEY|CLOUDFLARE_(?:ACCOUNT_ID|AI_GATEWAY_ID))$/;
 const NO_STORAGE_NOTE =
-  "R2 storage is not configured: configure R2 in /dashboard to receive output files. Provider URLs printed by the CLI are returned unchanged.";
+  "Output storage is not configured: configure an R2 or S3-compatible bucket in /dashboard to receive output files. Provider URLs printed by the CLI are returned unchanged.";
 
 export class SpecError extends Error {}
 

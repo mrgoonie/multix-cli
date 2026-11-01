@@ -31,7 +31,7 @@ export const DEFAULT_WAIT_SECONDS = 25;
 const POLL_INTERVAL_MS = 2_000;
 
 export const NO_STORAGE_NOTE =
-  "R2 storage is not configured: configure R2 in /dashboard to receive output files. Provider URLs printed by the CLI are returned unchanged.";
+  "Output storage is not configured: configure an R2 or S3-compatible bucket in /dashboard to receive output files. Provider URLs printed by the CLI are returned unchanged.";
 
 export interface JobToolsContext {
   userId: string;

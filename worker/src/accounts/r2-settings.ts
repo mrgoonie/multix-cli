@@ -1,18 +1,34 @@
 /**
- * Per-account Cloudflare R2 settings: where the account's job outputs are
- * uploaded. Stored in ACCOUNTS_KV under `r2:<userId>` as one AES-GCM record
+ * Per-account output storage settings: the Cloudflare R2 bucket or other
+ * S3-compatible bucket the account's job outputs are uploaded to. Stored in ACCOUNTS_KV under `r2:<userId>` as one AES-GCM record
  * (same key and scheme as provider keys, bound to the account and to the
  * `r2-settings` name), so the access key pair never sits in KV in plaintext.
  */
 
 import { MAX_URL_CHARS } from "../config.js";
 import { logEvent } from "../redaction.js";
-import { ACCOUNT_ID_RE, BUCKET_RE } from "../storage/r2-client.js";
+import {
+  ACCOUNT_ID_RE,
+  MAX_PRESIGN_SECONDS,
+  REGION_RE,
+  type S3Addressing,
+  normaliseEndpoint,
+  resolveTarget,
+  validBucket,
+} from "../storage/r2-client.js";
 import { type EncryptedValue, decryptSecret, encryptSecret } from "./provider-secret-crypto.js";
 
 export interface R2Settings {
-  /** Cloudflare account id that owns the bucket (32 lower-case hex characters). */
-  accountId: string;
+  /** Cloudflare account id that owns the bucket (32 lower-case hex characters); set for R2. */
+  accountId?: string;
+  /** https origin of an S3-compatible API; set instead of accountId for other services. */
+  endpoint?: string;
+  /** Signing region of a custom endpoint; absent means DEFAULT_S3_REGION (R2 always signs with `auto`). */
+  region?: string;
+  /** Virtual-hosted bucket URLs on a custom endpoint; absent means path-style. */
+  addressing?: S3Addressing;
+  /** Lifetime of presigned output links in seconds; absent means the longest allowed (7 days). */
+  linkExpirySeconds?: number;
   accessKeyId: string;
   secretAccessKey: string;
   bucket: string;
@@ -40,14 +56,34 @@ const ACCESS_KEY_ID_RE = /^[A-Za-z0-9]{16,128}$/;
 const SECRET_ACCESS_KEY_RE = /^[\x21-\x7e]{16,1024}$/;
 
 /** Which field was rejected; the dashboard maps it to a fixed message, never echoing the value. */
-export type R2SettingsProblem = "account" | "keys" | "bucket" | "url" | "prefix";
+export type R2SettingsProblem =
+  | "account"
+  | "endpoint"
+  | "region"
+  | "addressing"
+  | "keys"
+  | "bucket"
+  | "url"
+  | "prefix"
+  | "expiry";
+
+/** Shortest presigned-link lifetime an account may choose. */
+export const MIN_LINK_EXPIRY_SECONDS = 60;
 
 export type R2SettingsParse =
   | { ok: true; settings: R2Settings }
   | { ok: false; problem: R2SettingsProblem };
 
 export interface R2SettingsFields {
+  /** R2 account id; leave blank when `endpoint` is given. */
   accountId: string;
+  /** Custom S3-compatible endpoint; leave blank for R2. */
+  endpoint?: string;
+  region?: string;
+  /** `path` (default) or `virtual`. */
+  addressing?: string;
+  /** Presigned-link lifetime in seconds; blank means 7 days. */
+  linkExpirySeconds?: string;
   accessKeyId: string;
   secretAccessKey: string;
   bucket: string;
@@ -90,19 +126,43 @@ export function r2Prefix(settings: R2Settings): string {
   return settings.prefix || DEFAULT_R2_PREFIX;
 }
 
-/** Validate dashboard input before any request is made with it (the account id becomes a hostname). */
+/** Validate dashboard or API input before any request is made with it (the account id or endpoint becomes a hostname). */
 export function parseR2Settings(fields: R2SettingsFields): R2SettingsParse {
   const accountId = fields.accountId.trim().toLowerCase();
+  const rawEndpoint = (fields.endpoint ?? "").trim();
+  const region = (fields.region ?? "").trim().toLowerCase();
+  const addressing = (fields.addressing ?? "").trim().toLowerCase();
+  const rawExpiry = (fields.linkExpirySeconds ?? "").trim();
   const accessKeyId = fields.accessKeyId.trim();
   const secretAccessKey = fields.secretAccessKey.trim();
   const bucket = fields.bucket.trim();
   const rawUrl = fields.publicBaseUrl.trim();
-  if (!ACCOUNT_ID_RE.test(accountId)) return { ok: false, problem: "account" };
+  if (accountId && rawEndpoint) return { ok: false, problem: "account" };
+  if (!rawEndpoint && !ACCOUNT_ID_RE.test(accountId)) return { ok: false, problem: "account" };
+  const target: Pick<R2Settings, "accountId" | "endpoint" | "region" | "addressing"> = {};
+  if (rawEndpoint) {
+    const endpoint = normaliseEndpoint(rawEndpoint);
+    if (!endpoint) return { ok: false, problem: "endpoint" };
+    target.endpoint = endpoint;
+    if (region) {
+      if (!REGION_RE.test(region)) return { ok: false, problem: "region" };
+      target.region = region;
+    }
+    if (addressing && addressing !== "path" && addressing !== "virtual") {
+      return { ok: false, problem: "addressing" };
+    }
+    if (addressing === "virtual") target.addressing = "virtual";
+  } else {
+    target.accountId = accountId;
+    // R2 signs with region `auto` and only serves path-style URLs from the account endpoint.
+    if (region && region !== "auto") return { ok: false, problem: "region" };
+    if (addressing && addressing !== "path") return { ok: false, problem: "addressing" };
+  }
   if (!ACCESS_KEY_ID_RE.test(accessKeyId) || !SECRET_ACCESS_KEY_RE.test(secretAccessKey)) {
     return { ok: false, problem: "keys" };
   }
-  if (!BUCKET_RE.test(bucket)) return { ok: false, problem: "bucket" };
-  const settings: R2Settings = { accountId, accessKeyId, secretAccessKey, bucket };
+  if (!validBucket(bucket, resolveTarget(target))) return { ok: false, problem: "bucket" };
+  const settings: R2Settings = { ...target, accessKeyId, secretAccessKey, bucket };
   if (rawUrl) {
     const publicBaseUrl = normalisePublicBaseUrl(rawUrl);
     if (!publicBaseUrl) return { ok: false, problem: "url" };
@@ -111,7 +171,19 @@ export function parseR2Settings(fields: R2SettingsFields): R2SettingsParse {
   const prefix = normaliseR2Prefix(fields.prefix ?? "");
   if (prefix === undefined) return { ok: false, problem: "prefix" };
   if (prefix && prefix !== DEFAULT_R2_PREFIX) settings.prefix = prefix;
+  if (rawExpiry) {
+    const seconds = /^\d{1,7}$/.test(rawExpiry) ? Number(rawExpiry) : Number.NaN;
+    if (!(seconds >= MIN_LINK_EXPIRY_SECONDS && seconds <= MAX_PRESIGN_SECONDS)) {
+      return { ok: false, problem: "expiry" };
+    }
+    if (seconds !== MAX_PRESIGN_SECONDS) settings.linkExpirySeconds = seconds;
+  }
   return { ok: true, settings };
+}
+
+/** Effective presigned-link lifetime: the account's choice, never above the operator's cap. */
+export function linkExpirySeconds(settings: R2Settings, operatorMax = MAX_PRESIGN_SECONDS): number {
+  return Math.min(settings.linkExpirySeconds ?? MAX_PRESIGN_SECONDS, operatorMax);
 }
 
 export function r2SettingsKey(userId: string): string {
@@ -126,7 +198,13 @@ export async function writeR2Settings(
   now = Date.now(),
 ): Promise<void> {
   const plain: R2Settings = {
-    accountId: settings.accountId,
+    ...(settings.accountId !== undefined ? { accountId: settings.accountId } : {}),
+    ...(settings.endpoint !== undefined ? { endpoint: settings.endpoint } : {}),
+    ...(settings.region !== undefined ? { region: settings.region } : {}),
+    ...(settings.addressing !== undefined ? { addressing: settings.addressing } : {}),
+    ...(settings.linkExpirySeconds !== undefined
+      ? { linkExpirySeconds: settings.linkExpirySeconds }
+      : {}),
     accessKeyId: settings.accessKeyId,
     secretAccessKey: settings.secretAccessKey,
     bucket: settings.bucket,
@@ -141,8 +219,15 @@ export async function writeR2Settings(
 function isR2Settings(value: unknown): value is R2Settings {
   if (!value || typeof value !== "object") return false;
   const v = value as Record<string, unknown>;
+  const optionalString = (name: string) => v[name] === undefined || typeof v[name] === "string";
+  const hasTarget = typeof v.accountId === "string" || typeof v.endpoint === "string";
   return (
-    typeof v.accountId === "string" &&
+    hasTarget &&
+    optionalString("accountId") &&
+    optionalString("endpoint") &&
+    optionalString("region") &&
+    (v.addressing === undefined || v.addressing === "path" || v.addressing === "virtual") &&
+    (v.linkExpirySeconds === undefined || typeof v.linkExpirySeconds === "number") &&
     typeof v.accessKeyId === "string" &&
     typeof v.secretAccessKey === "string" &&
     typeof v.bucket === "string" &&

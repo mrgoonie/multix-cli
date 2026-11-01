@@ -7,12 +7,19 @@
 import type { Account, SecretChanges } from "../accounts/account-store.js";
 import { isProviderSecretName, isValidSecretValue } from "../accounts/account-store.js";
 import { ApiKeyStore, publicApiKey } from "../accounts/api-key-store.js";
-import { type R2SettingsProblem, parseR2Settings, r2Prefix } from "../accounts/r2-settings.js";
+import {
+  type R2SettingsProblem,
+  linkExpirySeconds,
+  parseR2Settings,
+  r2Prefix,
+} from "../accounts/r2-settings.js";
 import type { AppContext } from "../app-context.js";
+import { outputLinkMaxSecondsFrom } from "../config.js";
 import { json } from "../http-responses.js";
 import { PROVIDER_SECRET_NAMES } from "../provider-secret-names.js";
 import { logEvent } from "../redaction.js";
 import { checkR2Access } from "../storage/r2-access-check.js";
+import { DEFAULT_S3_REGION } from "../storage/r2-client.js";
 import { ApiError, readJsonObject } from "./api-http.js";
 
 export interface ApiCaller {
@@ -131,19 +138,31 @@ export async function getStorage(app: AppContext, caller: ApiCaller): Promise<Re
     r2
       ? {
           configured: true,
-          account_id: r2.accountId,
+          provider: r2.endpoint ? "s3" : "r2",
+          account_id: r2.accountId ?? null,
+          endpoint: r2.endpoint ?? null,
+          region: r2.endpoint ? (r2.region ?? DEFAULT_S3_REGION) : "auto",
+          addressing: r2.addressing ?? "path",
           bucket: r2.bucket,
           public_base_url: r2.publicBaseUrl ?? null,
           prefix: r2Prefix(r2),
+          link_expiry_seconds: linkExpirySeconds(r2, outputLinkMaxSecondsFrom(app.env)),
         }
       : { configured: false },
   );
 }
 
 const STORAGE_PROBLEMS: Record<R2SettingsProblem, string> = {
-  account: "account_id must be 32 hexadecimal characters",
+  account:
+    "give either account_id (32 hexadecimal characters, Cloudflare R2) or endpoint (an S3-compatible API), not both",
+  endpoint:
+    "endpoint must be a public https origin by host name (no IP address, internal name, port, path, query or credentials)",
+  region: "region must be lower-case letters, digits or hyphens (R2 accepts only auto)",
+  addressing: "addressing must be path or virtual (R2 accepts only path)",
+  expiry: "link_expiry_seconds must be a whole number from 60 to 604800",
   keys: "access_key_id must be 16-128 letters or digits and secret_access_key 16-1024 characters without spaces",
-  bucket: "bucket must be 3-63 lower-case letters, digits or hyphens",
+  bucket:
+    "bucket must be 3-63 lower-case letters, digits or hyphens (dots are allowed only with path-style addressing on a custom endpoint)",
   url: "public_base_url must be an https URL without a query string or fragment",
   prefix:
     "prefix may only use letters, digits, '.', '_', '-' and '/' (no '.' or '..' segments, at most 256 characters)",
@@ -152,6 +171,13 @@ const STORAGE_PROBLEMS: Record<R2SettingsProblem, string> = {
 function field(body: Record<string, unknown>, name: string): string {
   const value = body[name];
   return typeof value === "string" ? value : "";
+}
+
+/** `link_expiry_seconds` as JSON number or string; anything else is passed on to fail validation. */
+function expiryField(body: Record<string, unknown>): string {
+  const value = body.link_expiry_seconds;
+  if (value === undefined || value === null) return "";
+  return typeof value === "number" || typeof value === "string" ? String(value) : "invalid";
 }
 
 /** PUT /storage: validate, check access with a list, upload and delete, then save. */
@@ -163,6 +189,10 @@ export async function putStorage(
   const body = await readJsonObject(request);
   const parsed = parseR2Settings({
     accountId: field(body, "account_id"),
+    endpoint: field(body, "endpoint"),
+    region: field(body, "region"),
+    addressing: field(body, "addressing"),
+    linkExpirySeconds: expiryField(body),
     accessKeyId: field(body, "access_key_id"),
     secretAccessKey: field(body, "secret_access_key"),
     bucket: field(body, "bucket"),
@@ -176,7 +206,9 @@ export async function putStorage(
     throw new ApiError(
       422,
       "storage_check_failed",
-      `R2 access check failed (${result}); nothing was saved. Use a token with Object Read & Write on this bucket.`,
+      result === "endpoint-not-public"
+        ? "Storage access check failed (endpoint-not-public): the endpoint must resolve only to public addresses; nothing was saved."
+        : `Storage access check failed (${result}); nothing was saved. Use credentials with object read and write access on this bucket.`,
     );
   }
   await app.accounts.saveR2Settings(caller.account.id, parsed.settings);

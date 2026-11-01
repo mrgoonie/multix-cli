@@ -123,7 +123,7 @@ describe("language and theme on the served pages", () => {
     const html = dashboardPage(
       dashboardView({ notice: "r2-denied", prefs: { lang: "vi", theme: "auto" } }),
     );
-    expect(html).toContain('<p class="notice warn" role="status">Chưa lưu cấu hình R2');
+    expect(html).toContain('<p class="notice warn" role="status">Chưa lưu cấu hình lưu trữ');
     expect(html).toContain('data-copied="Đã sao chép"');
     expect(html).toContain('aria-label="Sao chép URL MCP server"');
   });
