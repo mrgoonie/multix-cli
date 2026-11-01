@@ -67,7 +67,7 @@ function fakeCluster() {
 
   async function kube(method: string, path: string, body?: Any) {
     calls.push({ method, path, body });
-    const [base, query = ""] = path.split("?");
+    const [base = "", query = ""] = path.split("?");
     if (method === "POST" && base.endsWith("/jobs")) {
       if (state.createStatus !== 201) return { status: state.createStatus, body: {} };
       jobs.set(body.metadata.name, body);
@@ -221,8 +221,8 @@ describe("runJob", () => {
     expect(result).toEqual(RESULT);
     const posts = cluster.podCalls.filter((c) => c.method === "POST" && c.path === "/jobs");
     expect(posts).toHaveLength(1);
-    expect(posts[0].body.env.GEMINI_API_KEY).toBe(KEY);
-    expect(posts[0].ip).toBe("10.1.2.3");
+    expect(posts[0]?.body.env.GEMINI_API_KEY).toBe(KEY);
+    expect(posts[0]?.ip).toBe("10.1.2.3");
     // The spec never went to the Kubernetes API.
     expect(JSON.stringify(cluster.calls)).not.toContain(KEY);
     expect(cluster.jobs.size).toBe(0);
