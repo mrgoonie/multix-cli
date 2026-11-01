@@ -148,15 +148,15 @@ export interface R2ClientOptions extends R2Credentials {
 export class R2RequestError extends Error {
   constructor(
     readonly operation: string,
-    /** HTTP status, or 0 when R2 could not be reached. */
+    /** HTTP status, or 0 when the storage service could not be reached. */
     readonly status: number,
     /** S3 error code from the response body, e.g. `NoSuchBucket`. */
     readonly code?: string,
   ) {
     super(
       status === 0
-        ? `R2 ${operation} failed: R2 could not be reached`
-        : `R2 ${operation} failed: HTTP ${status}${code ? ` ${code}` : ""}`,
+        ? `Storage ${operation} failed: the storage service could not be reached`
+        : `Storage ${operation} failed: HTTP ${status}${code ? ` ${code}` : ""}`,
     );
     this.name = "R2RequestError";
   }
@@ -189,8 +189,39 @@ function encodeKey(key: string): string {
   return segments.map(encodeSegment).join("/");
 }
 
+const MAX_ERROR_BODY_BYTES = 64 * 1024;
+
+/** Read at most MAX_ERROR_BODY_BYTES of an error body, then drop the rest. */
+async function readCapped(response: Response): Promise<string> {
+  if (!response.body) return "";
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (total < MAX_ERROR_BODY_BYTES) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      total += value.byteLength;
+    }
+  } catch {
+    return "";
+  } finally {
+    reader.cancel().catch(() => {});
+  }
+  const bytes = new Uint8Array(Math.min(total, MAX_ERROR_BODY_BYTES));
+  let offset = 0;
+  for (const chunk of chunks) {
+    const part = chunk.subarray(0, bytes.length - offset);
+    bytes.set(part, offset);
+    offset += part.length;
+    if (offset >= bytes.length) break;
+  }
+  return new TextDecoder().decode(bytes);
+}
+
 async function errorCode(response: Response): Promise<string | undefined> {
-  const body = await response.text().catch(() => "");
+  const body = await readCapped(response);
   return /<Code>([A-Za-z]{1,64})<\/Code>/.exec(body)?.[1];
 }
 
@@ -232,7 +263,8 @@ export class R2Client {
     body?: BodyInit,
   ): Promise<Response> {
     const signed = await this.signer(url, method, { headers, body }).sign();
-    const init: RequestInit = { method, headers: signed.headers, body };
+    // Never follow a redirect: the signed request would go to a host that was not checked.
+    const init: RequestInit = { method, headers: signed.headers, body, redirect: "manual" };
     if (this.options.timeoutMs) init.signal = AbortSignal.timeout(this.options.timeoutMs);
     let response: Response;
     try {

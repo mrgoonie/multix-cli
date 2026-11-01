@@ -5,6 +5,7 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { isNonPublicIpv6 } from "../src/events/callback-guard.js";
 
 // biome-ignore lint/suspicious/noExplicitAny: untyped .mjs modules
 type Any = any;
@@ -13,6 +14,57 @@ const local = (rel: string) => decodeURIComponent(new URL(rel, testFileUrl).path
 const load = (rel: string): Promise<Any> => import(/* @vite-ignore */ local(rel));
 
 const FAKE_BIN = local("./fixtures/fake-multix.mjs");
+
+// Node built-ins, loaded untyped like the .mjs modules above.
+const nodeModule = (name: string): Promise<Any> => import(/* @vite-ignore */ name);
+const { execFileSync } = await nodeModule("node:child_process");
+const { createServer: createHttpsServer } = await nodeModule("node:https");
+const { mkdtempSync, readFileSync, rmSync } = await nodeModule("node:fs");
+const { tmpdir } = await nodeModule("node:os");
+const { join } = await nodeModule("node:path");
+
+const hasOpenssl = (() => {
+  try {
+    execFileSync("openssl", ["version"], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+})();
+
+/** A throwaway self-signed certificate for localhost, made with openssl. */
+function selfSignedCert(): { key: string; cert: string } {
+  const dir = mkdtempSync(join(tmpdir(), "multix-tls-"));
+  try {
+    execFileSync(
+      "openssl",
+      [
+        "req",
+        "-x509",
+        "-newkey",
+        "rsa:2048",
+        "-nodes",
+        "-days",
+        "1",
+        "-subj",
+        "/CN=localhost",
+        "-addext",
+        "subjectAltName=DNS:localhost",
+        "-keyout",
+        join(dir, "key.pem"),
+        "-out",
+        join(dir, "cert.pem"),
+      ],
+      { stdio: "ignore" },
+    );
+    return {
+      key: readFileSync(join(dir, "key.pem"), "utf8"),
+      cert: readFileSync(join(dir, "cert.pem"), "utf8"),
+    };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
 const KEY = "AIza-gemini-secret-value-1234";
 const R2 = {
   accountId: "0123456789abcdef0123456789abcdef",
@@ -424,6 +476,132 @@ describe("container S3-compatible uploads", () => {
       ).rejects.toMatchObject({ code: "EBLOCKEDADDRESS" });
     }
     await expect(publicHttpsFetch("http://s3.example.com/x")).rejects.toThrow("Only https");
+  });
+
+  it.skipIf(!hasOpenssl)("streams a PUT with its length and maps the response back", async () => {
+    const { publicHttpsFetch } = await load("../container/job-network.mjs");
+    const { key, cert } = selfSignedCert();
+    const seen: { method?: string; host?: string; length?: string; bytes: number } = { bytes: 0 };
+    const server = createHttpsServer({ key, cert }, (req: Any, res: Any) => {
+      seen.method = req.method;
+      seen.host = req.headers.host;
+      seen.length = req.headers["content-length"];
+      req.on("data", (chunk: Uint8Array) => {
+        seen.bytes += chunk.length;
+      });
+      req.on("end", () => {
+        if (req.url === "/denied") {
+          res.writeHead(403, { "content-type": "application/xml" });
+          res.end("<Error><Code>AccessDenied</Code></Error>");
+          return;
+        }
+        res.writeHead(200, { etag: '"abc"' });
+        res.end();
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const port = server.address().port;
+    // Test-only lookup: the real one refuses loopback, which the tests above cover.
+    const lookup = (_h: string, o: Any, cb: Any) => {
+      const done = typeof o === "function" ? o : cb;
+      if (o?.all) done(null, [{ address: "127.0.0.1", family: 4 }]);
+      else done(null, "127.0.0.1", 4);
+    };
+    try {
+      const payload = new Uint8Array(3 * 1024 * 1024).fill(7);
+      const ok = await publicHttpsFetch(`https://localhost:${port}/media/k.bin`, {
+        method: "PUT",
+        headers: { "content-length": String(payload.length) },
+        body: new Blob([payload]).stream(),
+        lookup,
+        ca: cert,
+      });
+      expect(ok.status).toBe(200);
+      expect(ok.headers.get("etag")).toBe('"abc"');
+      expect(seen).toEqual({
+        method: "PUT",
+        host: `localhost:${port}`,
+        length: String(payload.length),
+        bytes: payload.length,
+      });
+      const denied = await publicHttpsFetch(`https://localhost:${port}/denied`, {
+        method: "PUT",
+        headers: { "content-length": "4" },
+        body: "data",
+        lookup,
+        ca: cert,
+      });
+      expect(denied.status).toBe(403);
+      expect(await denied.text()).toContain("AccessDenied");
+      const aborted = new AbortController();
+      aborted.abort();
+      await expect(
+        publicHttpsFetch(`https://localhost:${port}/x`, {
+          signal: aborted.signal,
+          lookup,
+          ca: cert,
+        }),
+      ).rejects.toThrow();
+    } finally {
+      server.close();
+    }
+  });
+
+  it("refuses at connect time every address the save-time check refuses", async () => {
+    const { isPublicAddress } = await load("../container/job-network.mjs");
+    const addresses = [
+      "::ffff:0:a00:1",
+      "64:ff9b:1:a00:1:0:808:808",
+      "64:ff9b::808:808",
+      "4000::1",
+      "3fff::1",
+      "2001::1",
+      "2001:20::1",
+      "2001:2::1",
+      "2002:808:808::1",
+      "fc00::1",
+      "fe80::1",
+      "::1",
+      "::ffff:10.0.0.1",
+      "::ffff:8.8.8.8",
+      "2606:4700:4700::1111",
+      "2a00:1450:4001::1",
+    ];
+    for (const ip of addresses) {
+      expect(isPublicAddress(ip), ip).toBe(!isNonPublicIpv6(ip));
+    }
+  });
+
+  it("reads at most 64 KiB of an error body", async () => {
+    const { createR2Uploader } = await load("../container/r2-upload.mjs");
+    let pulled = 0;
+    const huge = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled += 16 * 1024;
+        if (pulled > 4 * 1024 * 1024) {
+          controller.close();
+          return;
+        }
+        controller.enqueue(
+          new TextEncoder().encode("<Code>SlowDown</Code>".padEnd(16 * 1024, " ")),
+        );
+      },
+    });
+    const uploader = createR2Uploader(
+      {
+        endpoint: "https://s3.example.com",
+        accessKeyId: "AKIDEXAMPLE",
+        secretAccessKey: "secret",
+        bucket: "media",
+      },
+      { fetch: async () => new Response(huge, { status: 503 }) },
+    );
+    await expect(
+      uploader.put("multix/x/out.txt", new Blob(["data"]).stream(), "text/plain", {
+        contentLength: 4,
+      }),
+    ).rejects.toThrow("Output upload failed: HTTP 503 SlowDown");
+    expect(pulled).toBeLessThanOrEqual(128 * 1024);
   });
 });
 

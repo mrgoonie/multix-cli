@@ -12,7 +12,7 @@
 import { lookup as dnsLookup } from "node:dns";
 import { request } from "node:https";
 import { isIP } from "node:net";
-import { Readable } from "node:stream";
+import { Readable, pipeline } from "node:stream";
 
 export class BlockedAddressError extends Error {
   constructor() {
@@ -72,21 +72,21 @@ function embeddedV4(groups) {
   return `${g6 >> 8}.${g6 & 0xff}.${g7 >> 8}.${g7 & 0xff}`;
 }
 
+/** Same rules as the Worker's save-time check (worker/src/events/callback-guard.ts). */
 function isPublicV6(ip) {
   const g = v6Groups(ip);
   if (!g) return false;
-  const zeroPrefix = (n) => g.slice(0, n).every((x) => x === 0);
-  if (zeroPrefix(7) && (g[7] === 0 || g[7] === 1)) return false; // ::, ::1
-  if (zeroPrefix(5) && g[5] === 0xffff) return isPublicV4(embeddedV4(g)); // ::ffff:a.b.c.d
-  if (zeroPrefix(6)) return false; // deprecated IPv4-compatible
-  if (g[0] === 0x64 && g[1] === 0xff9b) return isPublicV4(embeddedV4(g)); // NAT64
-  if (g[0] === 0x2002) return isPublicV4(`${g[1] >> 8}.${g[1] & 0xff}.${g[2] >> 8}.${g[2] & 0xff}`); // 6to4
-  if ((g[0] & 0xfe00) === 0xfc00) return false; // ULA fc00::/7
-  if ((g[0] & 0xffc0) === 0xfe80) return false; // link-local fe80::/10
-  if ((g[0] & 0xffc0) === 0xfec0) return false; // site-local (deprecated)
-  if ((g[0] & 0xff00) === 0xff00) return false; // multicast
+  const zeroHead = g.slice(0, 5).every((x) => x === 0);
+  if (zeroHead && g[5] === 0xffff) return isPublicV4(embeddedV4(g)); // ::ffff:a.b.c.d
+  if (zeroHead) return false; // ::, ::1 and the deprecated IPv4-compatible range
+  if (g[0] === 0x64 && g[1] === 0xff9b) return false; // NAT64 can reach internal IPv4
+  if ((g[0] & 0xe000) !== 0x2000) return false; // only 2000::/3 is global unicast
   if (g[0] === 0x2001 && g[1] === 0x0db8) return false; // documentation
-  if (g[0] === 0x0100 && g[1] === 0 && g[2] === 0 && g[3] === 0) return false; // discard 100::/64
+  if (g[0] === 0x2001 && g[1] === 0) return false; // Teredo
+  if (g[0] === 0x2001 && g[1] === 2 && g[2] === 0) return false; // benchmarking 2001:2::/48
+  if (g[0] === 0x2001 && g[1] >= 0x10 && g[1] <= 0x2f) return false; // ORCHID
+  if (g[0] === 0x3fff && g[1] <= 0x0fff) return false; // documentation 3fff::/20
+  if (g[0] === 0x2002) return false; // 6to4 embeds an arbitrary IPv4
   return true;
 }
 
@@ -149,7 +149,8 @@ function toNodeBody(body) {
  * chose: a name re-pointed at a private address after the dashboard checked
  * it is refused here.
  * @param {string | URL} input
- * @param {{ method?: string, headers?: HeadersInit, body?: ReadableStream | Uint8Array | string, signal?: AbortSignal, lookup?: Function }} [init]
+ * `lookup` and `ca` are injected in tests.
+ * @param {{ method?: string, headers?: HeadersInit, body?: ReadableStream | Uint8Array | string, signal?: AbortSignal, lookup?: Function, ca?: string }} [init]
  */
 export function publicHttpsFetch(input, init = {}) {
   const url = new URL(String(input));
@@ -160,7 +161,14 @@ export function publicHttpsFetch(input, init = {}) {
   return new Promise((resolve, reject) => {
     const req = request(
       url,
-      { method: init.method ?? "GET", agent: false, lookup, signal: init.signal, headers },
+      {
+        method: init.method ?? "GET",
+        agent: false,
+        lookup,
+        signal: init.signal,
+        headers,
+        ...(init.ca ? { ca: init.ca } : {}),
+      },
       (res) => {
         const status = res.statusCode ?? 502;
         if (status < 200 || status > 599 || NULL_BODY_STATUSES.has(status)) {
@@ -184,8 +192,10 @@ export function publicHttpsFetch(input, init = {}) {
       req.end();
       return;
     }
-    body.on("error", (error) => req.destroy(error));
-    body.pipe(req);
+    // pipeline closes the source (an open output file) when the request fails.
+    pipeline(body, req, (error) => {
+      if (error) req.destroy(error);
+    });
   });
 }
 

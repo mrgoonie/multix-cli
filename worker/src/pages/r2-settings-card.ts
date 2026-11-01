@@ -25,6 +25,8 @@ export interface R2SettingsSummary {
   endpointHost?: string;
   /** Effective lifetime of presigned links in seconds (account choice under the operator cap). */
   linkExpirySeconds: number;
+  /** The account's own saved lifetime, before the operator cap; undefined for the default. */
+  savedLinkExpirySeconds?: number;
 }
 
 function hidden(name: string, value: string): string {
@@ -67,9 +69,9 @@ ${hidden("csrf", csrf)}
 <label><small>${escapeHtml(s.addressing)}</small><select name="addressing"><option value="path">${escapeHtml(s.addressingPath)}</option><option value="virtual">${escapeHtml(s.addressingVirtual)}</option></select></label>
 <label><small>${escapeHtml(s.accessKeyId)}</small><input type="text" name="access_key_id" required maxlength="128" spellcheck="false"></label>
 <label><small>${escapeHtml(s.secretAccessKey)}</small><input type="password" name="secret_access_key" required maxlength="1024" spellcheck="false"></label>
-<label><small>${escapeHtml(s.bucket)}</small><input type="text" name="bucket" required pattern="[a-z0-9][a-z0-9\\-]{1,61}[a-z0-9]" maxlength="63" spellcheck="false"></label>
+<label><small>${escapeHtml(s.bucket)}</small><input type="text" name="bucket" required pattern="[a-z0-9][a-z0-9.\\-]{1,61}[a-z0-9]" maxlength="63" spellcheck="false"></label>
 <label><small>${s.prefix(DEFAULT_R2_PREFIX)}</small><input type="text" name="prefix" maxlength="${MAX_R2_PREFIX_CHARS}" value="${escapeHtml(summary?.prefix ?? DEFAULT_R2_PREFIX)}" placeholder="${DEFAULT_R2_PREFIX}" spellcheck="false"></label>
-<label><small>${escapeHtml(s.linkExpiry(MAX_PRESIGN_SECONDS))}</small><input type="number" name="link_expiry_seconds" min="${MIN_LINK_EXPIRY_SECONDS}" max="${MAX_PRESIGN_SECONDS}" step="1" placeholder="${MAX_PRESIGN_SECONDS}" value="${summary?.linkExpirySeconds ?? ""}"></label>
+<label><small>${escapeHtml(s.linkExpiry(MAX_PRESIGN_SECONDS))}</small><input type="number" name="link_expiry_seconds" min="${MIN_LINK_EXPIRY_SECONDS}" max="${MAX_PRESIGN_SECONDS}" step="1" placeholder="${MAX_PRESIGN_SECONDS}" value="${summary?.savedLinkExpirySeconds ?? ""}"></label>
 <label><small>${escapeHtml(s.publicBaseUrl)}</small><input type="url" name="public_base_url" maxlength="2048" placeholder="https://media.example.com" spellcheck="false"></label>
 </div>
 <button class="btn small" name="intent" value="save">${escapeHtml(action)}</button>

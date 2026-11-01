@@ -54,12 +54,35 @@ const BLOCKED_SUFFIXES = [
 // biome-ignore lint/suspicious/noControlCharactersInRegex: stripping control characters is the point
 const CONTROL_RE = /[\u0000-\u001f\u007f]/g;
 
+const MAX_ERROR_BODY_BYTES = 64 * 1024;
+
+/** Read at most MAX_ERROR_BODY_BYTES of a response body, then drop the rest. */
+async function readCapped(response) {
+  if (!response.body) return "";
+  const reader = response.body.getReader();
+  const chunks = [];
+  let total = 0;
+  try {
+    while (total < MAX_ERROR_BODY_BYTES) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      total += value.byteLength;
+    }
+  } catch {
+    return "";
+  } finally {
+    reader.cancel().catch(() => {});
+  }
+  return new TextDecoder().decode(Buffer.concat(chunks).subarray(0, MAX_ERROR_BODY_BYTES));
+}
+
 export class R2UploadError extends Error {
   constructor(status, code) {
     super(
       status === 0
-        ? "R2 upload failed: R2 could not be reached"
-        : `R2 upload failed: HTTP ${status}${code ? ` ${code}` : ""}`,
+        ? "Output upload failed: the storage service could not be reached"
+        : `Output upload failed: HTTP ${status}${code ? ` ${code}` : ""}`,
     );
     this.name = "R2UploadError";
   }
@@ -216,8 +239,10 @@ export function createR2Uploader(r2, options = {}) {
         if (put.signal?.aborted) throw put.signal.reason ?? new Error("aborted");
         throw new R2UploadError(0);
       }
-      const text = await response.text().catch(() => "");
-      if (!response.ok) throw new R2UploadError(response.status, errorCode(text));
+      if (!response.ok) {
+        throw new R2UploadError(response.status, errorCode(await readCapped(response)));
+      }
+      await response.body?.cancel().catch(() => {});
       return this.url(key);
     },
 

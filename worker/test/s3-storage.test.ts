@@ -29,6 +29,20 @@ const dns = route("GET", /^https:\/\/cloudflare-dns\.com\/dns-query\?/, (call) =
 const ok = () => new Response(null, { status: 200 });
 
 describe("S3-compatible endpoint client", () => {
+  it("never follows a redirect from the endpoint", async () => {
+    const seen: RequestInit[] = [];
+    const client = new R2Client({
+      ...CREDS,
+      fetch: async (_url: string, init?: RequestInit) => {
+        seen.push(init ?? {});
+        return new Response(null, { status: 307, headers: { location: "https://10.0.0.1/" } });
+      },
+    });
+    await expect(client.listProbe("my-bucket")).rejects.toMatchObject({ status: 307 });
+    expect(seen).toHaveLength(1);
+    expect(seen[0]?.redirect).toBe("manual");
+  });
+
   it("signs a path-style PUT with SigV4 for the endpoint's region", async () => {
     const s3 = mockFetch(route("PUT", /./, ok));
     const client = new R2Client({ ...CREDS, fetch: s3.fetch });

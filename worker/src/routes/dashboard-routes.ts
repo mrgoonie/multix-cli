@@ -117,6 +117,7 @@ async function showDashboard(
             prefix: r2Prefix(r2),
             endpointHost: r2.endpoint ? new URL(r2.endpoint).host : undefined,
             linkExpirySeconds: linkExpirySeconds(r2, outputLinkMaxSecondsFrom(ctx.env)),
+            savedLinkExpirySeconds: r2.linkExpirySeconds,
           }
         : null,
       csrf: await csrfToken(ctx.sessionSecret, session),
