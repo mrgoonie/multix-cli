@@ -75,6 +75,19 @@ describe("multix catalog (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     }
   });
 
+  it("names each provider's key env vars in the providers payload", async () => {
+    const body = await envelope(["catalog", "providers"]);
+    const byId = Object.fromEntries(
+      (body.data?.providers ?? body.providers).map((p: { id: string; keys?: string[][] }) => [
+        p.id,
+        p.keys,
+      ]),
+    );
+    expect(byId.sume).toEqual([["SUME_API_KEY"]]);
+    expect(byId.byteplus).toEqual([["BYTEPLUS_API_KEY", "ARK_API_KEY"]]);
+    expect(byId.cloudflare).toEqual([["CLOUDFLARE_ACCOUNT_ID"], ["CLOUDFLARE_API_TOKEN"]]);
+  });
+
   it("prints the compare payload under the catalogue schema", async () => {
     const body = await envelope([
       "catalog",

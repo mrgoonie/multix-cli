@@ -80,6 +80,7 @@ export function catalogQuery(
   q: CatalogQuery,
   ready: (provider: string) => boolean,
   groups: readonly string[],
+  keyRows?: (provider: string) => readonly (readonly string[])[] | undefined,
 ): Record<string, unknown> {
   if (!(CATALOG_VIEWS as readonly string[]).includes(q.view)) {
     throw new ValidationError(`Invalid view: ${q.view}. Valid: ${CATALOG_VIEWS.join(", ")}`);
@@ -87,7 +88,7 @@ export function catalogQuery(
   const all = buildOfferings(q.at);
   const withReady = <T extends { provider: string }>(o: T) => ({ ...o, ready: ready(o.provider) });
   if (q.view === "providers") {
-    const rows = buildProviders(all, groups, ready).filter((p) => !q.ready || p.ready);
+    const rows = buildProviders(all, groups, ready, keyRows).filter((p) => !q.ready || p.ready);
     return { schema: CATALOG_SCHEMA, providers: rows };
   }
   if (q.view === "show") {

@@ -283,6 +283,7 @@ export function buildProviders(
   offerings: Offering[],
   groups: readonly string[],
   ready: (provider: string) => boolean,
+  keyRows: (provider: string) => readonly (readonly string[])[] | undefined = () => undefined,
 ): ProviderView[] {
   const ids = new Set([
     ...groups.filter((g) => PROVIDER_INFO[g]),
@@ -291,6 +292,7 @@ export function buildProviders(
   return [...ids].sort().map((id) => {
     const own = offerings.filter((o) => o.provider === id);
     const info = PROVIDER_INFO[id];
+    const keys = keyRows(id);
     return {
       id,
       name: info?.name ?? id,
@@ -298,6 +300,7 @@ export function buildProviders(
       ...(info?.pricing_url ? { pricing_url: info.pricing_url } : {}),
       ...(info?.docs_url ? { docs_url: info.docs_url } : {}),
       ready: ready(id),
+      ...(keys?.length ? { keys: keys.map((row) => [...row]) } : {}),
       offerings: own.length,
       priced_offerings: own.filter((o) => o.price_status === "priced").length,
     };
