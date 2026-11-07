@@ -95,6 +95,8 @@ const TASK_MODALITY: Record<Exclude<Task, "any">, ProviderModality> = {
   video: "video",
   "image-to-video": "video",
   "video-edit": "video",
+  lipsync: "video",
+  upscale: "image",
   "avatar-video": "avatar",
   speech: "speech",
   transcription: "transcription",
@@ -115,6 +117,7 @@ const NON_PROVIDER_GROUPS: Readonly<Record<string, string | null>> = {
   doc: "gemini",
   speech: null,
   scene: null,
+  generate: null,
 };
 
 /** Return `id` if the provider's own model list has it; otherwise fail the build. */

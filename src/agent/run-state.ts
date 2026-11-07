@@ -17,6 +17,19 @@ export interface HttpCall {
   ms: number;
 }
 
+/** How a façade command mapped its request onto one provider command. */
+export interface RunRoute {
+  /** The façade command, e.g. `generate`. */
+  via: string;
+  task: string;
+  provider: string;
+  model?: string;
+  /** The provider command that ran, e.g. `fal video`. */
+  command: string;
+  /** Its arguments (the prompt and other values included as given). */
+  args: string[];
+}
+
 export interface RunState {
   startedAt: number;
   argv: string[];
@@ -98,6 +111,11 @@ export interface RunState {
    * that run instead of a rerun that pays again for the saved files.
    */
   partial?: { options: Record<string, string | null> };
+  /**
+   * Set by a façade (`multix generate`) that ran this provider command for it:
+   * the request it was given and the command it chose. Reported in the envelope.
+   */
+  route?: RunRoute;
   /** True once a command action started (help and parse errors never get there). */
   actionStarted: boolean;
   finalized: boolean;

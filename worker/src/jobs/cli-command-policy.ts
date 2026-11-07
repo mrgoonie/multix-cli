@@ -133,6 +133,9 @@ export const EXCLUDED_COMMANDS: ReadonlySet<string> = new Set([
   "history show",
   "history stats",
   "rerun",
+  // Routes to a provider command chosen at run time, so its spend caps and file inputs cannot be
+  // checked up front; remote callers run that provider command directly.
+  "generate",
   // The catalogue reads local usage and reviews; remote callers use multix_model_catalog.
   "catalog providers",
   "catalog models",

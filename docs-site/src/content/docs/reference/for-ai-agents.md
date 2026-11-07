@@ -43,6 +43,10 @@ https://multix.zuey.me/llms.txt
    the directory and TTL in seconds, up to 7 days). Offline, a stale copy up to 7 days
    old is used; with no such copy the catalog is `unavailable` and nothing is
    claimed available.
+   For `image`, `video`, `lipsync` and `upscale`, `--live` also adds
+   `providers`: every provider that [`multix generate`](/commands/generate/)
+   can route the task to, with its models (live where the provider has a
+   catalog, else static), `ready` and the `command` to run.
 2. **Validate for free.** Add `--dry-run` to any command: local checks run
    (flags, input files, keys), then the first provider request is shown
    (method, URL without query string, body with long values shortened, header

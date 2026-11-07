@@ -9,7 +9,7 @@ metadata:
 
 # multix image generation
 
-Check verified model capabilities before picking a model: `multix models --task image --ready` (or `--task image-edit`) lists each command with its default model and whether its key is set, and `multix models --model <id>` shows a verified model's inputs, formats and example. The capability registry is authoritative; the model ids below are examples and defaults, not a complete list. Agent protocol, keys, output dir and the generic fal.ai / Atlas Cloud / Replicate runners: [../SKILL.md](../SKILL.md).
+Check verified model capabilities before picking a model: `multix models --task image --ready` (or `--task image-edit`) lists each command with its default model and whether its key is set, and `multix models --model <id>` shows a verified model's inputs, formats and example. `multix generate image` runs the same request on any image provider (`multix models --task image --live` lists them). are examples and defaults, not a complete list. Agent protocol, keys, output dir and the generic fal.ai / Atlas Cloud / Replicate runners: [../SKILL.md](../SKILL.md).
 
 ## When to use
 

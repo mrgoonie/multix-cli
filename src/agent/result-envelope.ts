@@ -9,7 +9,7 @@ import type { CostReceipt } from "../budget/cost-receipt.js";
 import type { ErrorInfo } from "../core/error-classify.js";
 import type { DryRunRequest } from "./fetch-telemetry.js";
 import type { OutputFile, OutputWarning } from "./output-file-inspect.js";
-import type { JobIdentity, UsageSummary } from "./run-state.js";
+import type { JobIdentity, RunRoute, UsageSummary } from "./run-state.js";
 
 export const ENVELOPE_SCHEMA = "multix.result/v1";
 
@@ -18,6 +18,8 @@ export interface ResultEnvelope {
   ok: boolean;
   command: string;
   provider?: string;
+  /** Set when a façade (`multix generate`) chose the provider command that ran. */
+  route?: RunRoute;
   /** Same as model_requested; kept for readers written before it existed. */
   model?: string;
   /** Model the run asked the provider for (request body or path, else --model); null when none. */

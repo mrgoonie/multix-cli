@@ -61,6 +61,12 @@ const UNRECORDED = new RegExp(`^(${TOOLING_GROUPS.join("|")})\\b`);
 const SPEND_LOOKUPS = /^(openrouter generation|sume estimate|topview credit)\b/;
 /** Groups that run locally (ffmpeg/ImageMagick): dry run stops before the action. */
 const LOCAL_GROUPS = new Set(["media"]);
+/**
+ * Façade commands that run one provider command for the request in the same
+ * process (`generate`): that command's own pre-action prices and guards the
+ * run, so the façade skips both and the run finalizes once, after it.
+ */
+const FACADE_COMMANDS = new Set(["generate"]);
 /** Exit statuses of a run stopped by SIGHUP, SIGINT or SIGTERM (128 + the signal number). */
 const SIGNAL_EXITS = new Set([129, 130, 143]);
 
@@ -443,6 +449,7 @@ export function finalizeRun(input: FinalizeInput): number {
       ok: !failed,
       command: run.command,
       ...(run.group ? { provider: run.group } : {}),
+      ...(run.route ? { route: { ...run.route, args: redactArgv(run.route.args) } } : {}),
       ...(model ? { model } : {}),
       model_requested: model ?? null,
       model_resolved: modelResolved,
@@ -532,10 +539,17 @@ export function installAgentRuntime(program: Command, cliVersion: string): void 
     return realExit(finalizeRun({ exitCode: numeric }));
   }) as typeof process.exit;
 
+  // A façade's provider command runs nested inside it; only the outermost action finalizes.
+  let depth = 0;
   program.hook("preAction", (_root, action) => {
+    depth++;
     const names = commandPath(action);
     setCommand(names);
     run.actionStarted = true;
+    if (FACADE_COMMANDS.has(names.join(" "))) {
+      run.options = action.opts();
+      return;
+    }
     run.options = action.opts();
     run.dryRun = Boolean(run.options.dryRun) && !ownDryRun.has(action);
     if (run.dryRun && LOCAL_GROUPS.has(names[0] ?? "")) {
@@ -545,6 +559,8 @@ export function installAgentRuntime(program: Command, cliVersion: string): void 
     if (preflightCost()) realExit(finalizeRun({ exitCode: 0, estimateOnly: true }));
   });
   program.hook("postAction", async () => {
+    depth--;
+    if (depth > 0) return;
     await settleTelemetry();
     const code = typeof process.exitCode === "number" ? process.exitCode : 0;
     process.exitCode = finalizeRun({ exitCode: code });

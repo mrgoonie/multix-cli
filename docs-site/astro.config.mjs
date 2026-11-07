@@ -97,6 +97,11 @@ export default defineConfig({
           items: [
             { label: "Command overview", translations: { vi: "Tổng quan lệnh" }, slug: "commands" },
             {
+              label: "Generate (all providers)",
+              translations: { vi: "Generate (mọi provider)" },
+              slug: "commands/generate",
+            },
+            {
               label: "Speech (all providers)",
               translations: { vi: "Speech (mọi provider)" },
               slug: "commands/speech",
