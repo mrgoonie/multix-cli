@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.27.0-beta.3](https://github.com/mrgoonie/multix-cli/compare/v1.27.0-beta.2...v1.27.0-beta.3) (2026-11-07)
+
+
+### Added
+
+* **generate:** add cross-provider generate command and live model list per task ([#579](https://github.com/mrgoonie/multix-cli/issues/579)) ([ff466a2](https://github.com/mrgoonie/multix-cli/commit/ff466a27edf3deaff76d6e5dffa9be44161a3458))
+
 ## [1.27.0-beta.2](https://github.com/mrgoonie/multix-cli/compare/v1.27.0-beta.1...v1.27.0-beta.2) (2026-11-07)
 
 
