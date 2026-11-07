@@ -148,7 +148,12 @@ function forwarded(opts: GenerateOpts, target: Command): string[] {
   const out: string[] = [];
   if (opts.json && has("--json")) out.push("--json");
   if (opts.dryRun && has("--dry-run")) out.push("--dry-run");
-  if (opts.estimate && has("--estimate")) out.push("--estimate");
+  if (opts.estimate) {
+    // Dropping the flag would turn a free quote into a paid run.
+    if (!has("--estimate"))
+      throw new ConfigError(`${target.name()} cannot price a request with --estimate`);
+    out.push("--estimate");
+  }
   if (opts.maxCost !== undefined) {
     if (!has("--max-cost")) {
       throw new ConfigError(`${target.name()} cannot enforce --max-cost; run without it`);
