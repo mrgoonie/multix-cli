@@ -37,7 +37,9 @@ its own in the dashboard, as on Cloudflare.
 
 ## Image
 
-Each release publishes `ghcr.io/mrgoonie/multix-server` for `linux/amd64` and
+Each release publishes `ghcr.io/mrgoonie/multix-server` (and the job image
+`ghcr.io/mrgoonie/multix-job` for the
+[Kubernetes Job executor](#kubernetes-job-executor)) for `linux/amd64` and
 `linux/arm64` with two immutable tags, `<version>` (for example the npm
 version) and `sha-<12 hex digits of the commit>`. There is no `latest` tag. Pin
 a version, or better the digest shown in the
@@ -374,14 +376,29 @@ records in `$MULTIX_DATA_DIR/jobs`, and one replica per data volume.
 
 What changes:
 
-- Each job runs in a pod of the job image (`worker/container/Dockerfile`).
-  It is not published; build and push it to a registry your cluster can pull
-  from, from the same release as the server:
+- Each job runs in a pod of the job image, built from
+  `worker/container/Dockerfile` and published next to the server as
+  `ghcr.io/mrgoonie/multix-job:<version>`. Use the same version as the
+  server (or pin its digest from the same publish run). For a release
+  published before the job image was, or for a private registry, build and
+  push it yourself from that release's source:
 
   ```bash
   docker build -f worker/container/Dockerfile -t <registry>/multix-job:<version> .
   docker push <registry>/multix-job:<version>
   ```
+
+  For a private registry, create a pull Secret in the namespace and name it in
+  `MULTIX_K8S_JOB_IMAGE_PULL_SECRETS`:
+
+  ```bash
+  kubectl -n <namespace> create secret docker-registry multix-job-pull \
+    --docker-server=<registry> --docker-username=<user> --docker-password=<token>
+  ```
+
+  A missing or wrong pull Secret leaves the job pod in `ImagePullBackOff`; the
+  job then fails after 5 minutes with "The job pod did not start in time".
+  Check `kubectl -n <namespace> describe pod -l app.kubernetes.io/component=job`.
 
 - The Job never retries (`backoffLimit: 0`, `restartPolicy: Never`), so a
   failed or evicted pod never repeats a billed provider call. The pod has no
@@ -421,7 +438,7 @@ Setup:
    ```yaml
    - { name: MULTIX_LOCAL_JOBS, value: "true" }
    - { name: MULTIX_JOB_EXECUTOR, value: kubernetes }
-   - { name: MULTIX_K8S_JOB_IMAGE, value: <registry>/multix-job:<version> }
+   - { name: MULTIX_K8S_JOB_IMAGE, value: ghcr.io/mrgoonie/multix-job:<version> }
    ```
 
 3. The server refuses to start when the NetworkPolicy is missing, or when it
@@ -443,7 +460,7 @@ so check your cluster.
 | Variable | Default | Effect |
 |---|---|---|
 | `MULTIX_JOB_EXECUTOR` | `local` | `kubernetes` runs each job as a Kubernetes Job. Needs `MULTIX_LOCAL_JOBS=true`; the server refuses to start without it. |
-| `MULTIX_K8S_JOB_IMAGE` | required | The job image built from `worker/container/Dockerfile`. |
+| `MULTIX_K8S_JOB_IMAGE` | required | The job image, `ghcr.io/mrgoonie/multix-job:<version>` (same version as the server) or your own build of `worker/container/Dockerfile`. |
 | `MULTIX_K8S_NAMESPACE` | the server pod's namespace | Namespace of the job Jobs and the NetworkPolicy. |
 | `MULTIX_K8S_JOB_NETWORK_POLICY` | `multix-job-egress` | NetworkPolicy that must exist and select the job pods. |
 | `MULTIX_K8S_INSTANCE` | `multix-server` | Label value of this deployment's job pods; give each deployment in a namespace its own, and match it in the NetworkPolicy. |

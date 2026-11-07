@@ -41,6 +41,7 @@ const SETTINGS = {
   cpu: "1",
   memory: "2Gi",
   tmpSize: "2Gi",
+  imagePullSecrets: [] as string[],
 };
 
 type PodPhase = "Pending" | "Running" | "Failed" | "Succeeded";
@@ -198,6 +199,21 @@ describe("kubernetesSettingsFromEnv", () => {
       kubernetesSettingsFromEnv({ ...base, MULTIX_K8S_JOB_MEMORY: "2 GB" }, ns),
     ).toThrow();
     expect(() => kubernetesSettingsFromEnv({ ...base, MULTIX_K8S_JOB_IMAGE: "a b" }, ns)).toThrow();
+    expect(() =>
+      kubernetesSettingsFromEnv({ ...base, MULTIX_K8S_JOB_IMAGE_PULL_SECRETS: "ok,Bad_Name" }, ns),
+    ).toThrow(/MULTIX_K8S_JOB_IMAGE_PULL_SECRETS: "Bad_Name"/);
+  });
+
+  it("reads image pull secret names, trimmed and without duplicates", async () => {
+    const { kubernetesSettingsFromEnv } = await k8s();
+    const settings = kubernetesSettingsFromEnv(
+      {
+        MULTIX_K8S_JOB_IMAGE: "img:1",
+        MULTIX_K8S_JOB_IMAGE_PULL_SECRETS: " ghcr-pull , registry.example-pull,,ghcr-pull ",
+      },
+      () => "multix",
+    );
+    expect(settings.imagePullSecrets).toEqual(["ghcr-pull", "registry.example-pull"]);
   });
 
   it("reads image pull Secret names, dropping blanks and repeats", async () => {
@@ -278,6 +294,13 @@ describe("jobManifest", () => {
     // Apart from the reference, the manifest is unchanged.
     const { imagePullSecrets: _refs, ...rest } = withSecrets.spec.template.spec;
     expect(rest).toEqual(without.spec.template.spec);
+  });
+
+  it("keeps the API key out of a manifest with image pull secrets", async () => {
+    const { jobManifest } = await k8s();
+    const manifest = jobManifest({ ...SETTINGS, imagePullSecrets: ["ghcr-pull"] }, spec());
+    expect(manifest.spec.template.spec.imagePullSecrets).toEqual([{ name: "ghcr-pull" }]);
+    expect(JSON.stringify(manifest)).not.toContain(KEY);
   });
 });
 

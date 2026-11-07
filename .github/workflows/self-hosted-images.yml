@@ -1,0 +1,80 @@
+name: Self-hosted images
+
+# Builds both self-hosted images without pushing them, so a change that breaks
+# either Dockerfile (an Alpine package rename, a missing COPY, a build script
+# error) fails on the pull request instead of at release time:
+#   multix-server  worker/server/Dockerfile     (server, dashboard, REST API, local jobs)
+#   multix-job     worker/container/Dockerfile  (one job per pod or container)
+# Each image is then smoke-checked by .github/scripts/check-self-hosted-image.sh:
+# ImageMagick 7 with JPEG and WebP, ffmpeg, `multix --version` equal to
+# package.json, the non-root user and, for the job image, its job server.
+
+on:
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - "worker/**"
+      - "src/**"
+      - "skill/**"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig.json"
+      - "tsup.config.ts"
+      - ".github/scripts/check-self-hosted-image.sh"
+      - ".github/workflows/self-hosted-images.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: self-hosted-images-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  image:
+    name: Build ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: multix-server
+            kind: server
+            file: worker/server/Dockerfile
+          - name: multix-job
+            kind: job
+            file: worker/container/Dockerfile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Version
+        id: meta
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # linux/amd64 only (the runner's platform), loaded into the local daemon
+      # for the smoke check. The release workflow builds both platforms.
+      - name: Build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.file }}
+          push: false
+          load: true
+          build-args: |
+            MULTIX_VERSION=${{ steps.meta.outputs.version }}
+          tags: ${{ matrix.name }}:check
+
+      - name: Smoke check
+        env:
+          IMAGE: ${{ matrix.name }}:check
+          KIND: ${{ matrix.kind }}
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: .github/scripts/check-self-hosted-image.sh "$IMAGE" "$KIND" "$VERSION"
