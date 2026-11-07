@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.27.0-beta](https://github.com/mrgoonie/multix-cli/compare/v1.26.0...v1.27.0-beta) (2026-11-07)
+
+
+### Added
+
+* **mcp:** add a local child-process job executor for self-hosted servers ([#553](https://github.com/mrgoonie/multix-cli/issues/553)) ([fba318b](https://github.com/mrgoonie/multix-cli/commit/fba318bb4a709087416523415c64f7fd281f3ff6))
+* **mcp:** S3-compatible output storage with presigned link lifetime ([40fc528](https://github.com/mrgoonie/multix-cli/commit/40fc5287b0259f78d25ce3256aa4aed71e7b0be7))
+* **mcp:** S3-compatible output storage with presigned link lifetime ([750a203](https://github.com/mrgoonie/multix-cli/commit/750a2033331976a68bd0e7387ee3ed83a37fc115))
+* **server:** portable self-hosted multix-server (MCP, dashboard, REST API) ([c960f98](https://github.com/mrgoonie/multix-cli/commit/c960f985b6a14bbc35fcc83baa621308f16c6c60))
+* **server:** portable self-hosted multix-server for MCP, dashboard and REST API ([65c73bd](https://github.com/mrgoonie/multix-cli/commit/65c73bd02ac17229249894102c981a471c56d9dc)), closes [#549](https://github.com/mrgoonie/multix-cli/issues/549)
+* **server:** pull the Kubernetes job image with named image pull secrets ([#569](https://github.com/mrgoonie/multix-cli/issues/569)) ([a9b8a37](https://github.com/mrgoonie/multix-cli/commit/a9b8a37d075ff2382f4cba6ef718269353b9069c))
+* **server:** run multix jobs in the self-hosted server ([#559](https://github.com/mrgoonie/multix-cli/issues/559)) ([b4ca1a4](https://github.com/mrgoonie/multix-cli/commit/b4ca1a4e3bcbdf08ce4758c2548a3dbd12708fab))
+* **server:** run self-hosted jobs as Kubernetes Jobs ([#564](https://github.com/mrgoonie/multix-cli/issues/564)) ([905c4df](https://github.com/mrgoonie/multix-cli/commit/905c4df2a6a0553c583570be7ec2542422fafb8c))
+* **server:** support imagePullSecrets for the Kubernetes Job executor's job image ([#568](https://github.com/mrgoonie/multix-cli/issues/568)) ([672aa97](https://github.com/mrgoonie/multix-cli/commit/672aa9788f839e40f731b5cfef3a39fb7e31f0a5))
+
+
+### Fixed
+
+* **mcp:** harden custom storage endpoint requests ([5fab164](https://github.com/mrgoonie/multix-cli/commit/5fab164e36c1e2c924b7a43dd618c80cc5061a04))
+* **server:** fail closed when the job CLI's Node ignores the egress proxy ([6c90e61](https://github.com/mrgoonie/multix-cli/commit/6c90e61df8a2c646b6a33d694c7dd2dbc05b8c97))
+* **server:** send self-hosted job CLI traffic through a public-only egress proxy ([9153b1d](https://github.com/mrgoonie/multix-cli/commit/9153b1d80103d06d8f203681f3dc194640e9032e))
+* **server:** send self-hosted job CLI traffic through a public-only egress proxy ([9c14cc0](https://github.com/mrgoonie/multix-cli/commit/9c14cc037d6f0e31dd809a25304e3a2871dda4a8)), closes [#555](https://github.com/mrgoonie/multix-cli/issues/555)
+* **server:** serialize Durable Object turns and pin the request origin ([a5ee85e](https://github.com/mrgoonie/multix-cli/commit/a5ee85e6fb84a367f3257058cfb831be50304ee1)), closes [#549](https://github.com/mrgoonie/multix-cli/issues/549)
+* **worker:** bump zod to 4.6.7 for GHSA-mrhx-c7xc-m3w5 ([af478ca](https://github.com/mrgoonie/multix-cli/commit/af478cab338ea63d97b281c3be42fd5ea17b405f)), closes [#551](https://github.com/mrgoonie/multix-cli/issues/551)
+
+
+### Documentation
+
+* **server:** self-hosted multix-server guide in English and Vietnamese ([e602e0b](https://github.com/mrgoonie/multix-cli/commit/e602e0ba119fd876db5773b1bf37b62a955c943f)), closes [#549](https://github.com/mrgoonie/multix-cli/issues/549)
+
 ## [1.26.0](https://github.com/mrgoonie/multix-cli/compare/v1.25.0...v1.26.0) (2026-10-31)
 
 
