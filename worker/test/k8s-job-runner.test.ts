@@ -34,6 +34,7 @@ function spec(jobId = ID) {
 
 const SETTINGS = {
   image: "registry.example/multix-job:1",
+  imagePullSecrets: [] as string[],
   namespace: "multix",
   networkPolicy: "multix-job-egress",
   instance: "multix-server",
@@ -214,6 +215,38 @@ describe("kubernetesSettingsFromEnv", () => {
     );
     expect(settings.imagePullSecrets).toEqual(["ghcr-pull", "registry.example-pull"]);
   });
+
+  it("reads image pull Secret names, dropping blanks and repeats", async () => {
+    const { kubernetesSettingsFromEnv } = await k8s();
+    const base = { MULTIX_K8S_JOB_IMAGE: "img:1" };
+    const ns = () => "multix";
+    expect(
+      kubernetesSettingsFromEnv(
+        {
+          ...base,
+          MULTIX_K8S_JOB_IMAGE_PULL_SECRETS: " ghcr-pull , registry.example-pull,,ghcr-pull ",
+        },
+        ns,
+      ).imagePullSecrets,
+    ).toEqual(["ghcr-pull", "registry.example-pull"]);
+    expect(
+      kubernetesSettingsFromEnv({ ...base, MULTIX_K8S_JOB_IMAGE_PULL_SECRETS: "  " }, ns)
+        .imagePullSecrets,
+    ).toEqual([]);
+    const longest = `${"a".repeat(126)}.${"b".repeat(126)}`;
+    expect(longest).toHaveLength(253);
+    expect(
+      kubernetesSettingsFromEnv(
+        { ...base, MULTIX_K8S_JOB_IMAGE_PULL_SECRETS: `a.b.c,${longest}` },
+        ns,
+      ).imagePullSecrets,
+    ).toEqual(["a.b.c", longest]);
+    for (const bad of ["Bad_Name", "a b", "-x", "x.", `${"a".repeat(254)}`]) {
+      expect(() =>
+        kubernetesSettingsFromEnv({ ...base, MULTIX_K8S_JOB_IMAGE_PULL_SECRETS: bad }, ns),
+      ).toThrow(/MULTIX_K8S_JOB_IMAGE_PULL_SECRETS/);
+    }
+  });
 });
 
 describe("jobManifest", () => {
@@ -247,7 +280,23 @@ describe("jobManifest", () => {
     expect(podSpec).not.toHaveProperty("imagePullSecrets");
   });
 
-  it("references image pull secrets by name only", async () => {
+  it("references image pull Secrets by name only when they are set", async () => {
+    const { jobManifest } = await k8s();
+    const without = jobManifest(SETTINGS, spec());
+    const withSecrets = jobManifest(
+      { ...SETTINGS, imagePullSecrets: ["ghcr-pull", "mirror-pull"] },
+      spec(),
+    );
+    expect(withSecrets.spec.template.spec.imagePullSecrets).toEqual([
+      { name: "ghcr-pull" },
+      { name: "mirror-pull" },
+    ]);
+    // Apart from the reference, the manifest is unchanged.
+    const { imagePullSecrets: _refs, ...rest } = withSecrets.spec.template.spec;
+    expect(rest).toEqual(without.spec.template.spec);
+  });
+
+  it("keeps the API key out of a manifest with image pull secrets", async () => {
     const { jobManifest } = await k8s();
     const manifest = jobManifest({ ...SETTINGS, imagePullSecrets: ["ghcr-pull"] }, spec());
     expect(manifest.spec.template.spec.imagePullSecrets).toEqual([{ name: "ghcr-pull" }]);
