@@ -270,4 +270,16 @@ describe("buildProviders", () => {
     const providers = buildProviders(offerings, ["fal"], () => true);
     expect(JSON.stringify(providers)).not.toMatch(/key|secret|token/i);
   });
+
+  it("lists the key env names a provider reads, never values", () => {
+    const rows: Record<string, string[][]> = { fal: [["FAL_KEY"]], minimax: [] };
+    const providers = buildProviders(
+      offerings,
+      ["minimax", "fal"],
+      () => false,
+      (p) => rows[p],
+    );
+    expect(providers.find((p) => p.id === "fal")?.keys).toEqual([["FAL_KEY"]]);
+    expect(providers.find((p) => p.id === "minimax")).not.toHaveProperty("keys");
+  });
 });

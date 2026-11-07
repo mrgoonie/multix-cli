@@ -236,7 +236,12 @@ function registerBrowse(catalog: Command): void {
     .description("Providers multix runs: links, key readiness, offerings with a current price")
     .option("--ready", "Only providers whose API key is set")
     .action((opts: { ready?: boolean }) => {
-      const payload = catalogQuery(queryOf("providers", opts), groupReady, PROVIDER_GROUPS);
+      const payload = catalogQuery(
+        queryOf("providers", opts),
+        groupReady,
+        PROVIDER_GROUPS,
+        (id) => GROUP_KEY_ROWS[id],
+      );
       if (run.json) return console.log(JSON.stringify(payload));
       const rows = payload.providers as ProviderView[];
       for (const p of rows) {

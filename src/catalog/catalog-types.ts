@@ -102,6 +102,11 @@ export interface ProviderView {
   docs_url?: string;
   /** Whether the caller has the keys this provider needs (never key values). */
   ready: boolean;
+  /**
+   * Env names of the provider's keys: every row is required, the names in a row are alternatives
+   * (any one is enough). Absent when the provider needs no key.
+   */
+  keys?: string[][];
   offerings: number;
   priced_offerings: number;
 }
