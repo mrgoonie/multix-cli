@@ -41,7 +41,6 @@ const SETTINGS = {
   cpu: "1",
   memory: "2Gi",
   tmpSize: "2Gi",
-  imagePullSecrets: [] as string[],
 };
 
 type PodPhase = "Pending" | "Running" | "Failed" | "Succeeded";
