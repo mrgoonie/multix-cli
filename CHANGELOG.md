@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.27.0-beta.2](https://github.com/mrgoonie/multix-cli/compare/v1.27.0-beta.1...v1.27.0-beta.2) (2026-11-07)
+
+
+### Chore
+
+* publish the provider key catalog release ([19f5be2](https://github.com/mrgoonie/multix-cli/commit/19f5be24121be71438b6196c6cd4aa4a7d6a40ec))
+
 ## [1.27.0-beta.1](https://github.com/mrgoonie/multix-cli/compare/v1.27.0-beta...v1.27.0-beta.1) (2026-11-07)
 
 
