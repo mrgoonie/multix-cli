@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.27.0-beta.1](https://github.com/mrgoonie/multix-cli/compare/v1.27.0-beta...v1.27.0-beta.1) (2026-11-07)
+
+
+### Added
+
+* **catalog:** list each provider's key env names in catalog providers ([#572](https://github.com/mrgoonie/multix-cli/issues/572)) ([13ac0fd](https://github.com/mrgoonie/multix-cli/commit/13ac0fd77909535fe0f8b7d5aeaec249e8bda72a)), closes [#571](https://github.com/mrgoonie/multix-cli/issues/571)
+
 ## [1.27.0-beta](https://github.com/mrgoonie/multix-cli/compare/v1.26.0...v1.27.0-beta) (2026-11-07)
 
 
