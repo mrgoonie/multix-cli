@@ -24,6 +24,7 @@ description: Choose the multix command group that matches your media workflow.
 | [HeyGen](/commands/heygen/) | Video Agent prompt-to-video, scripted avatar videos, video translation, lipsync, and TTS. |
 | [Sume](/commands/sume/) | Images and video (including lip-sync and captions) from Sume's model catalog with one key, cost pre-flight, and job status/cancel. |
 | [TopView](/commands/topview/) | Product marketing videos, talking and product avatars, and product shots (Legacy API), plus API Platform models such as Seedance, Wan, and GPT Image 2. |
+| [Generate](/commands/generate/) | Image, video, lip-sync and upscale on 14 providers with one set of flags, explicit routing, and inputs checked before any request. |
 | [Speech](/commands/speech/) | Text-to-speech on Gemini, OpenAI, ElevenLabs, MiniMax, Atlas Cloud, or Fish Audio with one set of flags, capability checks, and opt-in fallback. |
 | [Scenes](/commands/scene/) | Multi-character dialogue audio: voice profiles, per-line cached takes, approval, and stem export. |
 | [Catalogue](/commands/catalog/) | Compare providers and models before a run: prices per configuration with source and check date, your usage through multix, ratings, reviews and use-case notes. |

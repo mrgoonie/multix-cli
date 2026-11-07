@@ -27,7 +27,8 @@ chỉ được đặt những biến mà chính `multix` đọc:
   `MULTIX_MAX_DOWNLOAD_MB`, `MULTIX_UPLOAD_MIN_KBPS`, `MULTIX_OUTPUT` (`json`
   cho envelope dành cho agent), `MULTIX_HISTORY` (`0` tắt ledger lịch sử chạy),
   `MULTIX_MODELS_TTL` (số giây cache catalog của `multix models --live` còn
-  mới; mặc định `86400`, tối đa `604800`) và `MULTIX_DISABLE_HOME_ENV` (không
+  mới; mặc định `86400`, tối đa `604800`), `MULTIX_WAIT_TIMEOUT` (giá trị
+  mặc định của `multix generate --wait-timeout`, tính bằng mili giây) và `MULTIX_DISABLE_HOME_ENV` (không
   có tác dụng ở đó), cùng `NO_COLOR`.
 
 Hai biến opt-in `MULTIX_ALLOW_PROJECT_BASE_URL` và `MULTIX_LEGACY_CLAUDE_ENV`,

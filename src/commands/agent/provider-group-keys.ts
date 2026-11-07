@@ -39,6 +39,27 @@ export const GROUP_KEY_ROWS: Readonly<Record<string, readonly (readonly string[]
       "FAL_KEY",
     ],
   ],
+  // `multix generate` routes to one provider; any one of their keys makes it usable.
+  generate: [
+    [
+      "GEMINI_API_KEY",
+      "MINIMAX_API_KEY",
+      "OPENAI_API_KEY",
+      "OPENROUTER_API_KEY",
+      "LEONARDO_API_KEY",
+      "BYTEPLUS_API_KEY",
+      "ARK_API_KEY",
+      "CLOUDFLARE_API_TOKEN",
+      "FAL_KEY",
+      "ATLASCLOUD_API_KEY",
+      "REPLICATE_API_TOKEN",
+      "REPLICATE_API_KEY",
+      "RUNWAYML_API_SECRET",
+      "SUME_API_KEY",
+      "TOPVIEW_PLATFORM_API_KEY",
+      "HEYGEN_API_KEY",
+    ],
+  ],
   // A scene renders through the providers its voice profiles name; `scene
   // render` itself checks those exact keys before its first request.
   scene: [["GEMINI_API_KEY", "OPENAI_API_KEY", "ELEVENLABS_API_KEY"]],

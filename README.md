@@ -63,6 +63,8 @@ multix guide                                  # the agent protocol in one screen
 multix models --task video --ready            # which command and model serve a task, key set or not
 multix models --model google/gemini-3.8-flash-tts  # a verified model's inputs, voices, formats, how to run it
 multix models --task speech --live            # plus what fal and OpenRouter catalogs list now (cached)
+multix models --task video --live --json      # every generate provider for the task, with its models
+multix generate video "waves" --provider atlas --image frame.png --dry-run --json  # one request shape, any provider
 multix fal image "a red fox" --dry-run --json # validate; show the request instead of sending it
 multix fal image "a red fox" --json           # one-line multix.result/v1 envelope on stdout
 multix elevenlabs tts --text "Hi" --estimate  # price range, units, rate and source; nothing is sent
@@ -187,6 +189,7 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `MULTIX_CATALOG_FILE` | No | Private `multix catalog` ratings, reviews and notes (default `~/.multix/catalog-notes.json`; shell or `~/.multix/.env` only) |
 | `MULTIX_CACHE_DIR` | No | Cache root for `multix models --live` catalogs (default `~/.multix/cache`; shell or `~/.multix/.env` only) |
 | `MULTIX_MODELS_TTL` | No | Seconds a cached catalog stays fresh (default `86400`, at most `604800`) |
+| `MULTIX_WAIT_TIMEOUT` | No | Default `multix generate --wait-timeout` in milliseconds |
 | `OPENROUTER_IMAGE_MODEL` | No | Default OpenRouter model |
 | `OPENROUTER_FALLBACK_MODELS` | No | Comma-separated fallback model ids |
 | `OPENROUTER_TTS_MODEL` | No | Default `multix openrouter tts` model (default `google/gemini-3.8-flash-tts`) |

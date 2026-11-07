@@ -25,6 +25,8 @@ export const TASKS = [
   "analysis",
   "document",
   "avatar-video",
+  "lipsync",
+  "upscale",
   "any",
 ] as const;
 

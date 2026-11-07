@@ -21,6 +21,8 @@ import { DISCOVERY_PROVIDERS } from "../../capabilities/model-discovery.js";
 import { findModelCapability, verifiedModels } from "../../capabilities/model-registry.js";
 import { type ModelView, mergeModelViews } from "../../capabilities/model-views.js";
 import { ValidationError } from "../../core/errors.js";
+import { isGenerateTask } from "../generate/generate-adapters.js";
+import { type ProviderModels, generateProviderModels } from "../generate/generate-models.js";
 import { discoverCatalog } from "./model-discovery-cache.js";
 import { groupKeyNames, groupReady } from "./provider-group-keys.js";
 
@@ -339,6 +341,23 @@ function printLive(
   }
 }
 
+function printProviders(providers: ProviderModels[]): void {
+  console.log("\nmultix generate providers:");
+  for (const p of providers) {
+    const src =
+      p.source.kind === "live"
+        ? `live, ${p.source.state}${p.source.fetched_at ? ` ${p.source.fetched_at}` : ""}`
+        : `static${p.source.error ? ` (live list: ${p.source.error})` : ""}`;
+    const shown = p.models.slice(0, 6).map((m) => m.id);
+    const more = p.models.length > shown.length ? ` +${p.models.length - shown.length} more` : "";
+    console.log(
+      `  ${p.provider}  [${p.ready ? "ready" : `needs ${p.keys?.join(", ")}`}]  ${p.models.length} model(s), ${src}${p.any_model ? ", any id passes" : ""}`,
+    );
+    if (shown.length) console.log(`    ${shown.join(", ")}${more}`);
+  }
+  console.log("Run: multix generate <task> --provider <p> --model <id>  (--json for every model)");
+}
+
 export function registerModelsCommand(program: Command): void {
   program
     .command("models")
@@ -351,7 +370,7 @@ export function registerModelsCommand(program: Command): void {
     .option("--model <id>", "Inspect one model: inputs, voices, formats, how to run it")
     .option(
       "--live",
-      "Also list models the provider catalogs serve for --task now (fal, openrouter; cached)",
+      "Also list models the provider catalogs serve for --task now (cached), and for image, video, lipsync and upscale every multix generate provider's models",
     )
     .option("--refresh", "With --live: refetch the catalogs instead of using the cache")
     .action(async (opts: ModelsFlags) => {
@@ -396,6 +415,11 @@ export function registerModelsCommand(program: Command): void {
           (!opts.ready || r.ready),
       );
       const live = (opts.live || opts.refresh) && task ? await liveModels(task, opts) : undefined;
+      // Every `multix generate` provider for the task, with the models it can run now.
+      const providers =
+        live && task && isGenerateTask(task)
+          ? (await generateProviderModels(task, opts)).filter((p) => !opts.ready || p.ready)
+          : undefined;
       if (run.json) {
         console.log(
           JSON.stringify(
@@ -406,6 +430,7 @@ export function registerModelsCommand(program: Command): void {
                   commands: rows,
                   models: live.models,
                   sources: live.sources,
+                  ...(providers ? { providers } : {}),
                 }
               : rows,
           ),
@@ -414,5 +439,6 @@ export function registerModelsCommand(program: Command): void {
       }
       printRows(rows);
       if (live) printLive(live.models, live.sources);
+      if (providers) printProviders(providers);
     });
 }

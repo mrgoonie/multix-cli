@@ -71,6 +71,8 @@ const OWN_SETTINGS = [
   "MULTIX_HISTORY",
   // Seconds `multix models --live` reuses a cached provider catalog.
   "MULTIX_MODELS_TTL",
+  // Default `multix generate --wait-timeout`, in milliseconds.
+  "MULTIX_WAIT_TIMEOUT",
   MAX_DOWNLOAD_ENV,
   UPLOAD_MIN_KBPS_ENV,
   // Read before the project file loads, so setting it there has no effect.

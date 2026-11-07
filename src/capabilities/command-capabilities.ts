@@ -68,7 +68,7 @@ export const COMMAND_CAPABILITIES: Readonly<Record<string, CommandCapability>> =
   "leonardo image-to-image": fixed(["image-edit"], ["image"]),
   "leonardo video": fixed(["video"], ["video"]),
   "leonardo image-to-video": fixed(["image-to-video"], ["video"]),
-  "leonardo upscale": fixed(["image-edit"], ["image"]),
+  "leonardo upscale": fixed(["image-edit", "upscale"], ["image"]),
   "byteplus generate": fixed(["image"], ["image"]),
   "byteplus image-to-image": fixed(["image-edit"], ["image"]),
   "byteplus video": fixed(["video"], ["video"]),
@@ -135,7 +135,7 @@ export const COMMAND_CAPABILITIES: Readonly<Record<string, CommandCapability>> =
   "heygen template": fixed(["avatar-video"], ["video"]),
   "heygen model-video": fixed(["video", "image-to-video"], ["video"]),
   "heygen translate": fixed(["video-edit"], ["video"]),
-  "heygen lipsync": fixed(["video-edit"], ["video"]),
+  "heygen lipsync": fixed(["video-edit", "lipsync"], ["video"]),
   "heygen tts": fixed(["speech"], ["audio"]),
   "heygen run": fixed(["any"], []),
   "sume image": catalog(
@@ -144,7 +144,7 @@ export const COMMAND_CAPABILITIES: Readonly<Record<string, CommandCapability>> =
     "Sume image model ids (multix sume models --kind image)",
   ),
   "sume video": catalog(
-    ["video", "image-to-video", "video-edit"],
+    ["video", "image-to-video", "video-edit", "lipsync"],
     ["video"],
     "Sume video, lip-sync and captions model ids (multix sume models --kind video)",
   ),
@@ -160,6 +160,13 @@ export const COMMAND_CAPABILITIES: Readonly<Record<string, CommandCapability>> =
     "any TopView API Platform route (multix topview models); inputs and outputs depend on the model",
   ),
   "doc convert": fixed(["document"], ["text"]),
+  // Maps one request shape onto the provider command --provider names and runs it;
+  // inputs that command cannot take are refused before any request.
+  generate: catalog(
+    ["image", "image-edit", "video", "image-to-video", "lipsync", "upscale"],
+    ["image", "video"],
+    "any model id the chosen provider's command takes (multix models --task <task> --live)",
+  ),
   // Routes to the one provider --provider names and checks --model against
   // that provider's documented TTS models before any request.
   "speech generate": fixed(["speech"], ["audio"]),

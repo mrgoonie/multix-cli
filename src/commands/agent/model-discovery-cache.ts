@@ -19,6 +19,7 @@ import {
   type Task,
 } from "../../capabilities/capability-types.js";
 import {
+  type CatalogRead,
   type DiscoveryProvider,
   type FetchFn,
   discoverySupported,
@@ -120,6 +121,24 @@ export async function discoverCatalog(
     const source: DiscoverySource = { provider, task, state: "unsupported" };
     return { source, models: [] };
   }
+  return cachedCatalog(
+    provider,
+    task,
+    () => readCatalog(provider, task, opts.fetchFn ?? fetch),
+    opts,
+  );
+}
+
+/**
+ * Any provider model list read through `read`, cached under `<provider>-<task>.json`
+ * with the same TTL and stale rules as the public catalogs. Never throws.
+ */
+export async function cachedCatalog(
+  provider: string,
+  task: Task,
+  read: () => Promise<CatalogRead>,
+  opts: DiscoverOptions = {},
+): Promise<CatalogResult> {
   const now = opts.now ?? Date.now;
   const file = path.join(opts.dir ?? modelsCacheDir(), `${provider}-${task}.json`);
   const cached = readCache(file, provider, task);
@@ -130,15 +149,15 @@ export async function discoverCatalog(
     return fromCache(cached, "cached");
   }
   try {
-    const read = await readCatalog(provider, task, opts.fetchFn ?? fetch);
+    const fresh = await read();
     const data: CacheFile = {
       schema: CAPABILITY_SCHEMA,
       provider,
       task,
-      url: read.url,
+      url: fresh.url,
       fetched_at: new Date(now()).toISOString(),
-      ...(read.truncated ? { truncated: true } : {}),
-      models: read.models,
+      ...(fresh.truncated ? { truncated: true } : {}),
+      models: fresh.models,
     };
     try {
       writeCache(file, data);
@@ -150,11 +169,11 @@ export async function discoverCatalog(
         provider,
         task,
         state: "fresh",
-        url: read.url,
+        url: fresh.url,
         fetched_at: data.fetched_at,
-        ...(read.truncated ? { truncated: true } : {}),
+        ...(fresh.truncated ? { truncated: true } : {}),
       },
-      models: read.models,
+      models: fresh.models,
     };
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);

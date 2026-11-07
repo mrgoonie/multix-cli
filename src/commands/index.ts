@@ -27,6 +27,7 @@ import { registerHistoryCommands } from "./agent/history-command.js";
 import { registerModelsCommand } from "./agent/models-command.js";
 import { registerCheckCommand } from "./check.js";
 import { registerDocCommands } from "./doc/index.js";
+import { registerGenerateCommand } from "./generate/index.js";
 import { registerMediaCommands } from "./media/index.js";
 import { registerSceneCommands } from "./scene/index.js";
 import { registerSpeechCommands } from "./speech/index.js";
@@ -53,6 +54,7 @@ export function registerCommands(program: Command): void {
   registerSumeCommands(program);
   registerTopviewCommands(program);
   registerSpeechCommands(program);
+  registerGenerateCommand(program);
   registerMediaCommands(program);
   registerSceneCommands(program);
   registerDocCommands(program);

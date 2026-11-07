@@ -9,7 +9,7 @@ metadata:
 
 # multix video production
 
-Check verified model capabilities before picking a model: `multix models --task video --ready` (or `--task image-to-video`, `video-edit`, `avatar-video`) lists each command with its default model and whether its key is set, and `multix models --model <id>` shows a verified model's inputs, formats and example. The capability registry is authoritative; the model ids below are examples and defaults, not a complete list. Agent protocol, keys, output dir and the generic fal.ai / Atlas Cloud / Replicate runners (including `atlas video`, `replicate video`): [../SKILL.md](../SKILL.md).
+Check verified model capabilities before picking a model: `multix models --task video --ready` (or `--task image-to-video`, `video-edit`, `avatar-video`) lists each command with its default model and whether its key is set, and `multix models --model <id>` shows a verified model's inputs, formats and example. `multix generate video` (and `lipsync`) runs the same request on any video provider (`multix models --task video --live` lists them). are examples and defaults, not a complete list. Agent protocol, keys, output dir and the generic fal.ai / Atlas Cloud / Replicate runners (including `atlas video`, `replicate video`): [../SKILL.md](../SKILL.md).
 
 ## When to use
 

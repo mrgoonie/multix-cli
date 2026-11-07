@@ -14296,6 +14296,194 @@
       ]
     },
     {
+      "group": "generate",
+      "description": "Generate an image or video, lip-sync or upscale on any provider with one set of flags; refuses inputs the provider cannot take before any request",
+      "commands": [
+        {
+          "command": "generate",
+          "description": "Generate an image or video, lip-sync or upscale on any provider with one set of flags; refuses inputs the provider cannot take before any request",
+          "positionals": [
+            {
+              "name": "task",
+              "description": "Task: image|video|lipsync|upscale",
+              "required": true,
+              "variadic": false
+            },
+            {
+              "name": "prompt",
+              "description": "Prompt (not used by lipsync or upscale)",
+              "required": false,
+              "variadic": true
+            }
+          ],
+          "options": [
+            {
+              "long": "--provider",
+              "flags": "--provider <id>",
+              "description": "Provider (gemini|minimax|openai|openrouter|leonardo|byteplus|cloudflare|fal|atlas|replicate|runway|sume|topview|heygen)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--model",
+              "flags": "--model <id>",
+              "description": "Model id, or <provider>:<model> to name both (multix models --task <task> --live)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--image",
+              "flags": "--image <path|url>",
+              "description": "Input image: image edit, first frame for video, subject for lipsync, source for upscale (repeatable)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--end-image",
+              "flags": "--end-image <path|url>",
+              "description": "Last frame of an image-to-video run",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--video",
+              "flags": "--video <path|url>",
+              "description": "Source video (lipsync)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--audio",
+              "flags": "--audio <path|url>",
+              "description": "Audio track (lipsync)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--aspect-ratio",
+              "flags": "--aspect-ratio <ratio>",
+              "description": "Aspect ratio, e.g. 16:9",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--resolution",
+              "flags": "--resolution <res>",
+              "description": "Resolution, e.g. 720p, 1080p, 2K",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--duration",
+              "flags": "--duration <s>",
+              "description": "Video length in seconds",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--num-images",
+              "flags": "--num-images <n>",
+              "description": "Number of images",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--generate-audio",
+              "flags": "--generate-audio",
+              "description": "Make a soundtrack (video models with audio)",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--no-generate-audio",
+              "flags": "--no-generate-audio",
+              "description": "Make no soundtrack (video models with audio)",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": true
+            },
+            {
+              "long": "--output",
+              "flags": "--output <path>",
+              "description": "Save the result to this path",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--async",
+              "flags": "--async",
+              "description": "Submit and return the job id and resume command instead of waiting",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--wait-timeout",
+              "flags": "--wait-timeout <ms>",
+              "description": "How long to wait for the result (default: MULTIX_WAIT_TIMEOUT, else the provider command's)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "group": "media",
       "description": "Media processing via ffmpeg/ImageMagick: compress video/audio/images, split long videos, batch optimize directories, inspect and verify media offline",
       "commands": [
@@ -15425,7 +15613,7 @@
             {
               "long": "--task",
               "flags": "-t, --task <task>",
-              "description": "Filter by task: image, image-edit, video, image-to-video, video-edit, speech, transcription, music, sfx, voice, 3d, analysis, document, avatar-video, any",
+              "description": "Filter by task: image, image-edit, video, image-to-video, video-edit, speech, transcription, music, sfx, voice, 3d, analysis, document, avatar-video, lipsync, upscale, any",
               "required": false,
               "takesValue": true,
               "valueOptional": false,
@@ -15467,7 +15655,7 @@
             {
               "long": "--live",
               "flags": "--live",
-              "description": "Also list models the provider catalogs serve for --task now (fal, openrouter; cached)",
+              "description": "Also list models the provider catalogs serve for --task now (cached), and for image, video, lipsync and upscale every multix generate provider's models",
               "required": false,
               "takesValue": false,
               "valueOptional": false,
@@ -15705,7 +15893,7 @@
             {
               "long": "--task",
               "flags": "-t, --task <task>",
-              "description": "Only this task: image, image-edit, video, image-to-video, video-edit, speech, transcription, music, sfx, voice, 3d, analysis, document, avatar-video, any",
+              "description": "Only this task: image, image-edit, video, image-to-video, video-edit, speech, transcription, music, sfx, voice, 3d, analysis, document, avatar-video, lipsync, upscale, any",
               "required": false,
               "takesValue": true,
               "valueOptional": false,
@@ -15819,7 +16007,7 @@
             {
               "long": "--task",
               "flags": "-t, --task <task>",
-              "description": "Only this task: image, image-edit, video, image-to-video, video-edit, speech, transcription, music, sfx, voice, 3d, analysis, document, avatar-video, any",
+              "description": "Only this task: image, image-edit, video, image-to-video, video-edit, speech, transcription, music, sfx, voice, 3d, analysis, document, avatar-video, lipsync, upscale, any",
               "required": false,
               "takesValue": true,
               "valueOptional": false,
@@ -15958,7 +16146,7 @@
             {
               "long": "--task",
               "flags": "-t, --task <task>",
-              "description": "Only this task: image, image-edit, video, image-to-video, video-edit, speech, transcription, music, sfx, voice, 3d, analysis, document, avatar-video, any",
+              "description": "Only this task: image, image-edit, video, image-to-video, video-edit, speech, transcription, music, sfx, voice, 3d, analysis, document, avatar-video, lipsync, upscale, any",
               "required": false,
               "takesValue": true,
               "valueOptional": false,

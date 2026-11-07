@@ -29,7 +29,8 @@ may only set variables that `multix` itself reads:
   `MULTIX_MAX_DOWNLOAD_MB`, `MULTIX_UPLOAD_MIN_KBPS`, `MULTIX_OUTPUT` (`json`
   for the agent envelope), `MULTIX_HISTORY` (`0` turns the run ledger off),
   `MULTIX_MODELS_TTL` (seconds a `multix models --live` catalog cache stays
-  fresh; default `86400`, at most `604800`) and `MULTIX_DISABLE_HOME_ENV`
+  fresh; default `86400`, at most `604800`), `MULTIX_WAIT_TIMEOUT` (default
+  `multix generate --wait-timeout` in milliseconds) and `MULTIX_DISABLE_HOME_ENV`
   (which has no effect there), plus `NO_COLOR`.
 
 The opt-ins `MULTIX_ALLOW_PROJECT_BASE_URL` and `MULTIX_LEGACY_CLAUDE_ENV`, and
