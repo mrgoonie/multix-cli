@@ -164,11 +164,10 @@ async function runImageToImage(opts: RunOpts): Promise<string[]> {
   } catch (e) {
     if (!isImagesEndpointRequired(e)) throw e;
     opts.logger.debug(`${opts.model} is image-only; retrying via /api/v1/images`);
-    parsed = await requestOpenRouterImages(apiKey, {
-      prompt: opts.prompt,
-      model: opts.model,
-      refs: opts.refs,
-    });
+    parsed = await requestOpenRouterImages(
+      { prompt: opts.prompt, model: opts.model, refs: opts.refs },
+      { headers },
+    );
   }
   if (parsed.urls.length === 0) {
     throw new ProviderError(formatNoImagesError(opts.model, parsed), "openrouter");

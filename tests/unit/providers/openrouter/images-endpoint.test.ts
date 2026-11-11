@@ -8,6 +8,7 @@ import {
   buildImagesPayload,
   extractImagesFromImagesResponse,
   isImagesEndpointRequired,
+  requestOpenRouterImages,
 } from "../../../../src/providers/openrouter/images-endpoint.js";
 
 const PNG_B64 = Buffer.from("fake-png-bytes").toString("base64");
@@ -45,6 +46,27 @@ describe("openrouter /images endpoint", () => {
       data: [{ b64_json: "QUJD", media_type: "image/webp" }, { b64_json: "" }],
     });
     expect(parsed.urls).toEqual(["data:image/webp;base64,QUJD"]);
+  });
+
+  it("sends references and surfaces an /images failure", async () => {
+    let body: Record<string, unknown> = {};
+    const ok = (async (_u: string | URL | Request, init?: RequestInit) => {
+      body = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({ data: [{ b64_json: "QUJD" }] }), { status: 200 });
+    }) as typeof fetch;
+    const parsed = await requestOpenRouterImages(
+      { prompt: "edit", model: "m/x", refs: ["https://e.com/a.png"] },
+      { headers: { Authorization: "Bearer k" }, fetch: ok },
+    );
+    expect(parsed.urls).toEqual(["data:image/png;base64,QUJD"]);
+    expect(body.input_references).toEqual([
+      { type: "image_url", image_url: { url: "https://e.com/a.png" } },
+    ]);
+
+    const bad = (async () => new Response('{"error":"nope"}', { status: 402 })) as typeof fetch;
+    await expect(
+      requestOpenRouterImages({ prompt: "p", model: "m/x" }, { headers: {}, fetch: bad }),
+    ).rejects.toMatchObject({ status: 402 });
   });
 
   describe("generate fallback", () => {

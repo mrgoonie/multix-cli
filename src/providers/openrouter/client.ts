@@ -120,12 +120,10 @@ export async function generateOpenRouterImage(opts: {
       }
       logger?.debug(`${model} is image-only; retrying via /api/v1/images`);
       try {
-        const viaImages = await requestOpenRouterImages(apiKey, {
-          prompt,
-          model,
-          aspectRatio,
-          imageSize,
-        });
+        const viaImages = await requestOpenRouterImages(
+          { prompt, model, aspectRatio, imageSize },
+          { headers: buildOpenRouterHeaders(apiKey) },
+        );
         if (viaImages.urls.length === 0) {
           return { status: "error", error: formatNoImagesError(model, viaImages) };
         }

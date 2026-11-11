@@ -11,8 +11,8 @@
  */
 
 import { HttpError } from "../../core/errors.js";
-import { httpJson } from "../../core/http-client.js";
-import { type ParsedImageResponse, buildOpenRouterHeaders } from "./payload.js";
+import { type FetchLike, fetchJson } from "../../core/fetch-json.js";
+import type { ParsedImageResponse } from "./payload.js";
 
 export const OPENROUTER_IMAGES_API_URL = "https://openrouter.ai/api/v1/images";
 
@@ -66,13 +66,14 @@ export function extractImagesFromImagesResponse(data: unknown): ParsedImageRespo
 
 /** Generate (or edit, when refs are set) through `/api/v1/images`. */
 export async function requestOpenRouterImages(
-  apiKey: string,
   req: ImagesEndpointRequest,
+  conn: { headers: Record<string, string>; fetch?: FetchLike; baseUrl?: string },
 ): Promise<ParsedImageResponse> {
-  const data = await httpJson<unknown>({
-    url: OPENROUTER_IMAGES_API_URL,
+  const data = await fetchJson<unknown>({
+    url: conn.baseUrl ?? OPENROUTER_IMAGES_API_URL,
     method: "POST",
-    headers: buildOpenRouterHeaders(apiKey),
+    headers: conn.headers,
+    fetch: conn.fetch,
     body: buildImagesPayload(req),
     timeoutMs: 240_000,
   });
