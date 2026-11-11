@@ -312,6 +312,14 @@ describe("multix --help (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     expect(orientation).toContain("multix skills");
   });
 
+  it("keeps --version a single result envelope under --json", async () => {
+    const result = await run(["--version", "--json"]);
+    expect(result.exitCode).toBe(0);
+    const lines = result.stdout.trim().split("\n");
+    expect(lines).toHaveLength(1);
+    expect(JSON.parse(lines[0] as string).schema).toBe("multix.result/v1");
+  });
+
   it("lists the shipped agent skills and prints one", async () => {
     const list = await run(["skills", "--json"]);
     expect(list.exitCode).toBe(0);

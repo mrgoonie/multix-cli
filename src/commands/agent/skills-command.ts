@@ -21,13 +21,26 @@ export interface SkillInfo {
   path: string;
 }
 
-/** The package's `skill/` directory, from the bundled dist/cli.js or from source. */
+/**
+ * The package's `skill/` directory: next to `dist/` in an install (dist/cli.js
+ * is one level below the package root) and next to `src/` in a checkout
+ * (src/commands/agent is three levels below). Only a directory whose parent
+ * holds multix's own package.json counts, so a sibling package is never read.
+ */
 export function skillsDir(
   from: string = path.dirname(fileURLToPath(import.meta.url)),
 ): string | undefined {
-  for (const rel of ["../skill", "../../skill", "../../../skill"]) {
-    const dir = path.resolve(from, rel);
-    if (fs.existsSync(path.join(dir, "SKILL.md"))) return dir;
+  for (const rel of ["..", "../../.."]) {
+    const root = path.resolve(from, rel);
+    try {
+      const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")) as {
+        name?: string;
+      };
+      const dir = path.join(root, "skill");
+      if (pkg.name === "@mrgoonie/multix" && fs.existsSync(path.join(dir, "SKILL.md"))) return dir;
+    } catch {
+      // no package.json at this level
+    }
   }
   return undefined;
 }
@@ -78,6 +91,10 @@ export function registerSkillsCommand(program: Command): void {
         );
       }
       if (!name) {
+        if (opts.path) {
+          const entry = skills[0]?.path;
+          return console.log(run.json ? JSON.stringify({ path: entry }) : entry);
+        }
         if (run.json) return console.log(JSON.stringify({ skills }));
         console.log(
           "multix agent skills (read one with `multix skills <name>`; start with `multix`):",

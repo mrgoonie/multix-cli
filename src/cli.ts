@@ -1,8 +1,7 @@
 #!/usr/bin/env node
-import { writeSync } from "node:fs";
 import { createRequire } from "node:module";
 import { Command } from "commander";
-import { exitWithError, installAgentRuntime } from "./agent/agent-runtime.js";
+import { exitWithError, installAgentRuntime, writeOut } from "./agent/agent-runtime.js";
 import { AGENT_INTRO } from "./commands/agent/agent-intro.js";
 import { registerCommands } from "./commands/index.js";
 import { loadEnv } from "./core/index.js";
@@ -26,8 +25,13 @@ const program = new Command()
 
 // `multix -V` prints the bare version on line 1, then where an agent should start.
 // This listener must be added before .version() so it runs first and ends the process.
+// Under --json / MULTIX_OUTPUT=json the listener stays out of the way so commander's own
+// version output is captured into the single result envelope (stdout stays one line).
 program.on("option:version", () => {
-  writeSync(1, `${pkg.version}\n${AGENT_INTRO}`);
+  const json =
+    process.argv.includes("--json") || process.env.MULTIX_OUTPUT?.toLowerCase() === "json";
+  if (json) return;
+  writeOut(`${pkg.version}\n${AGENT_INTRO}`);
   process.exit(0);
 });
 program.version(pkg.version as string);

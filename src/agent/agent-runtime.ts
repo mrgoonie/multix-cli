@@ -219,7 +219,8 @@ function captureStreams(): void {
   }) as typeof process.stderr.write;
 }
 
-function writeOut(text: string): void {
+/** Blocking write to fd 1 that survives EAGAIN and a closed pipe (EPIPE is ignored). */
+export function writeOut(text: string): void {
   const buf = Buffer.from(text);
   let offset = 0;
   while (offset < buf.length) {
