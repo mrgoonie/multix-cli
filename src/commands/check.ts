@@ -175,6 +175,8 @@ export function registerCheckCommand(program: Command): void {
       const logger = createLogger({ verbose: opts.verbose ?? false });
       let exitCode = 0;
 
+      logger.info(`multix ${program.version() ?? "unknown"}`);
+
       // ── Section 1: Tooling ──────────────────────────────────────────────
       logger.header("Tooling");
 

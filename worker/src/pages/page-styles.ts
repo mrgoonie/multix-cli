@@ -33,6 +33,7 @@ pre{font-family:var(--mx-font-mono);font-size:.8125rem;background:var(--mx-bg-de
 .brand{display:inline-flex;align-items:center;gap:var(--mx-space-2);font-weight:600;font-size:var(--mx-text-lg);letter-spacing:var(--mx-tracking-tight);text-decoration:none}
 .brand-mark{width:10px;height:10px;border-radius:50%;background:var(--mx-accent);box-shadow:0 0 14px var(--mx-glow)}
 .brand-tag{font-family:var(--mx-font-mono);font-size:var(--mx-text-xs);font-weight:500;letter-spacing:var(--mx-tracking-caps);color:var(--mx-text-muted);border:1px solid var(--mx-line-strong);border-radius:var(--mx-radius-pill);padding:1px 8px}
+.brand-version{font-family:var(--mx-font-mono);font-size:var(--mx-text-xs);color:var(--mx-text-muted);margin-left:6px}
 `;
 
 const CONTROLS = `

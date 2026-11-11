@@ -9,6 +9,7 @@ describe("MCP protocol", () => {
       clientInfo: { name: "test", version: "0" },
     });
     expect(body.result.serverInfo.name).toBe("multix");
+    expect(body.result.serverInfo.version).toMatch(/^\d+\.\d+\.\d+/);
     expect(body.result.capabilities.tools).toBeDefined();
   });
 
