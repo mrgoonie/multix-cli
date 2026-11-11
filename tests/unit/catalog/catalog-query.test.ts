@@ -189,3 +189,35 @@ describe("quoteRequestOf", () => {
     );
   });
 });
+
+describe("sort by release date", () => {
+  const ready = () => true;
+  it("puts the newest first and undated offerings last, and marks the source", () => {
+    const base = catalogQuery({ view: "models" }, ready, []).offerings as Array<{
+      provider: string;
+      model: string;
+    }>;
+    const [first, second] = [base[0], base[1]] as [(typeof base)[number], (typeof base)[number]];
+    const dates: Record<string, string> = {
+      [`${first.provider}\n${first.model}`]: "2026-01-01T00:00:00.000Z",
+      [`${second.provider}\n${second.model}`]: "2026-06-01T00:00:00.000Z",
+    };
+    const lookup = (p: string, m: string) => {
+      const d = dates[`${p}\n${m}`];
+      return d ? { released_at: d, released_source: "provider_listing" as const } : undefined;
+    };
+    const rows = catalogQuery({ view: "models", sort: "released" }, ready, [], lookup)
+      .offerings as Array<{ model: string; released_at?: string; released_source?: string }>;
+    expect(rows[0]?.model).toBe(second.model);
+    expect(rows[0]?.released_source).toBe("provider_listing");
+    expect(rows[1]?.model).toBe(first.model);
+    expect(rows.slice(2).every((r) => r.released_at === undefined)).toBe(true);
+  });
+
+  it("leaves every offering undated without a lookup", () => {
+    const rows = catalogQuery({ view: "models", sort: "released" }, ready, []).offerings as Array<{
+      released_at?: string;
+    }>;
+    expect(rows.every((r) => r.released_at === undefined)).toBe(true);
+  });
+});

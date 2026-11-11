@@ -340,7 +340,7 @@ export function openApiDocument(origin: string): Json {
               name: "sort",
               in: "query",
               required: false,
-              schema: { type: "string", enum: ["id", "provider", "price", "checked"] },
+              schema: { type: "string", enum: ["id", "provider", "price", "checked", "released"] },
             },
           ],
           responses: { ...ok("Catalogue view", { type: "object" }), ...ERRORS },

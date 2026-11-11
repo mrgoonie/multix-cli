@@ -19,7 +19,7 @@ import {
 import { commandCapability } from "../../capabilities/command-capabilities.js";
 import { DISCOVERY_PROVIDERS } from "../../capabilities/model-discovery.js";
 import { findModelCapability, verifiedModels } from "../../capabilities/model-registry.js";
-import { type ModelView, mergeModelViews } from "../../capabilities/model-views.js";
+import { type ModelView, mergeModelViews, sortByReleased } from "../../capabilities/model-views.js";
 import { ValidationError } from "../../core/errors.js";
 import { discoverCatalog } from "./model-discovery-cache.js";
 import { groupKeyNames, groupReady } from "./provider-group-keys.js";
@@ -190,6 +190,7 @@ interface ModelsFlags {
   model?: string;
   live?: boolean;
   refresh?: boolean;
+  sort?: string;
 }
 
 /** Catalog models for a task from the providers that publish one. */
@@ -204,9 +205,10 @@ async function liveModels(
   const catalogs = await Promise.all(
     providers.map((p) => discoverCatalog(p, task, { refresh: opts.refresh ?? false })),
   );
-  const models = mergeModelViews(task, catalogs, opts.provider).map((m) =>
+  const merged = mergeModelViews(task, catalogs, opts.provider).map((m) =>
     m.command ? { ...m, ready: groupReady(m.provider), ...keyFields(m.provider) } : m,
   );
+  const models = opts.sort === "released" ? sortByReleased(merged) : merged;
   return {
     models: opts.ready ? models.filter((m) => "ready" in m && m.ready) : models,
     sources: catalogs.map((c) => c.source),
@@ -333,8 +335,11 @@ function printLive(
       : m.runner
         ? `unverified, multix ${m.runner} passes any id`
         : "no multix command";
+    const released = m.released_at
+      ? `  released ${m.released_at.slice(0, 10)} (${m.released_source})`
+      : "";
     console.log(
-      `  ${m.verified ? "✓" : "?"} ${m.provider} ${m.model}  ${run}${state ? `  (${state})` : ""}`,
+      `  ${m.verified ? "✓" : "?"} ${m.provider} ${m.model}  ${run}${state ? `  (${state})` : ""}${released}`,
     );
   }
 }
@@ -354,11 +359,23 @@ export function registerModelsCommand(program: Command): void {
       "Also list models the provider catalogs serve for --task now (fal, openrouter; cached)",
     )
     .option("--refresh", "With --live: refetch the catalogs instead of using the cache")
+    .option(
+      "--sort <field>",
+      "With --live: released = newest first by the date the provider catalog lists (fal, openrouter); models without a date come last",
+    )
     .action(async (opts: ModelsFlags) => {
       if (opts.task && !isTask(opts.task)) {
         throw new ValidationError(`Invalid --task: ${opts.task}. Valid: ${TASKS.join(", ")}`);
       }
       const task = opts.task as Task | undefined;
+      if (opts.sort !== undefined && opts.sort !== "released") {
+        throw new ValidationError(`Invalid --sort: ${opts.sort}. Valid: released`);
+      }
+      if (opts.sort && !opts.live && !opts.refresh) {
+        throw new ValidationError(
+          "--sort released needs --live (dates come from provider catalogs)",
+        );
+      }
       if ((opts.live || opts.refresh) && !task && !opts.model) {
         throw new ValidationError("--live needs --task (e.g. multix models --task speech --live)");
       }

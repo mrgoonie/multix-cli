@@ -5,7 +5,7 @@
  * an unread catalog leaves `listed` null (unknown).
  */
 
-import type { DiscoveredModel, DiscoverySource, Task } from "./capability-types.js";
+import type { DiscoveredModel, DiscoverySource, ReleaseSource, Task } from "./capability-types.js";
 import { COMMAND_CAPABILITIES } from "./command-capabilities.js";
 import { verifiedModels } from "./model-registry.js";
 
@@ -26,7 +26,23 @@ export interface ModelView {
   status?: string;
   voices?: number;
   pricing?: Record<string, string>;
+  /** ISO date from the provider listing; absent when no catalog gave one. */
+  released_at?: string;
+  released_source?: ReleaseSource;
   note?: string;
+}
+
+/** Newest release first; models without a date last (unknown, never guessed), then by id. */
+export function sortByReleased<T extends { provider: string; model: string; released_at?: string }>(
+  rows: T[],
+): T[] {
+  return [...rows].sort((a, b) => {
+    if (a.released_at && b.released_at && a.released_at !== b.released_at) {
+      return b.released_at.localeCompare(a.released_at);
+    }
+    if (!a.released_at !== !b.released_at) return a.released_at ? -1 : 1;
+    return a.provider.localeCompare(b.provider) || a.model.localeCompare(b.model);
+  });
 }
 
 /** A command of `provider` that takes any catalog id for `task`, if one exists. */
@@ -95,6 +111,9 @@ export function mergeModelViews(
             }
           : {}),
       ...(cap.deprecated ? { status: "deprecated" } : {}),
+      ...(found?.released_at
+        ? { released_at: found.released_at, released_source: found.released_source }
+        : {}),
     });
   }
   for (const c of catalogs) {
@@ -115,6 +134,9 @@ export function mergeModelViews(
         ...(m.status ? { status: m.status } : {}),
         ...(m.voices?.length ? { voices: m.voices.length } : {}),
         ...(m.pricing ? { pricing: m.pricing } : {}),
+        ...(m.released_at
+          ? { released_at: m.released_at, released_source: m.released_source }
+          : {}),
         note: command
           ? `unverified: ${command} passes the id through; check the model's inputs first`
           : runner

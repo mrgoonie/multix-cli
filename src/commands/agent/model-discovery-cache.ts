@@ -16,15 +16,19 @@ import {
   CAPABILITY_SCHEMA,
   type DiscoveredModel,
   type DiscoverySource,
+  type ReleaseSource,
+  TASKS,
   type Task,
 } from "../../capabilities/capability-types.js";
 import {
+  DISCOVERY_PROVIDERS,
   type DiscoveryProvider,
   type FetchFn,
   discoverySupported,
   readCatalog,
 } from "../../capabilities/model-discovery.js";
 import type { CatalogResult } from "../../capabilities/model-views.js";
+import type { ReleaseLookup } from "../../catalog/catalog-build.js";
 
 export const DEFAULT_MODELS_TTL_S = 24 * 60 * 60;
 
@@ -169,4 +173,27 @@ export async function discoverCatalog(
       models: [],
     };
   }
+}
+
+/**
+ * Release dates from the catalogs already cached on disk (no network, no TTL:
+ * a past release date does not expire). Run `multix models --task <task> --live`
+ * to fill the cache for a task.
+ */
+export function cachedReleaseLookup(dir: string = modelsCacheDir()): ReleaseLookup {
+  const dates = new Map<string, { released_at: string; released_source: ReleaseSource }>();
+  for (const provider of DISCOVERY_PROVIDERS) {
+    for (const task of TASKS) {
+      const cached = readCache(path.join(dir, `${provider}-${task}.json`), provider, task);
+      for (const m of cached?.models ?? []) {
+        if (m.released_at && m.released_source) {
+          dates.set(`${m.provider}\n${m.model}`, {
+            released_at: m.released_at,
+            released_source: m.released_source,
+          });
+        }
+      }
+    }
+  }
+  return (provider, model) => dates.get(`${provider}\n${model}`);
 }

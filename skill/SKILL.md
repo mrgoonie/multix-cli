@@ -15,6 +15,7 @@ metadata:
 multix models --task <task> --ready     # command + default model per task, key set or not
 multix models --model <id>              # verified model: inputs, voices, formats, example; else verified null
 multix models --task <task> --live      # + models fal/OpenRouter catalogs list now, marked verified or not
+multix models --task <task> --live --sort released   # newest first; date = provider listing (fal, openrouter), undated last
 multix <group> <cmd> ... --dry-run      # free: local checks, then shows the request instead of sending it
 multix <group> <cmd> ... --json         # stdout = ONE line, schema multix.result/v1
 ```

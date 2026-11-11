@@ -25,7 +25,7 @@ import {
   type JobToolsContext,
   MAX_WAIT_SECONDS,
 } from "./job-runner.js";
-import { modelCatalogPayload } from "./model-catalog-view.js";
+import { modelCatalogPayloadAsync } from "./model-catalog-view.js";
 import { prepareRun } from "./run-argv-builder.js";
 import { MAX_INPUT_FILES } from "./run-input-files.js";
 import { assertSpendGuard } from "./run-option-caps.js";
@@ -160,7 +160,9 @@ export function registerJobTools(
         sort: z
           .enum(OFFERING_SORTS as [string, ...string[]])
           .optional()
-          .describe("models: sort"),
+          .describe(
+            "models: sort; released = newest first by the date the provider catalog lists (fal, openrouter), undated last",
+          ),
       }),
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
@@ -168,7 +170,7 @@ export function registerJobTools(
       runTool(
         "multix_model_catalog",
         { view: args.view, task: args.task, provider: args.provider, offering: args.offering },
-        async () => modelCatalogPayload(keys, args),
+        async () => modelCatalogPayloadAsync(keys, args),
       ),
   );
 

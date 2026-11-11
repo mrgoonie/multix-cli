@@ -60,6 +60,7 @@ import {
   storeFile,
   upsertReview,
 } from "./catalog-store.js";
+import { cachedReleaseLookup } from "./model-discovery-cache.js";
 import { GROUP_KEY_ROWS, groupReady } from "./provider-group-keys.js";
 
 function collect(value: string, prev: string[] = []): string[] {
@@ -224,7 +225,10 @@ function printOfferings(rows: Offering[]): void {
   for (const o of rows) {
     const ready = groupReady(o.provider) ? "ready" : "no key";
     const run = o.command ? `multix ${o.command}` : "no multix command";
-    console.log(`${o.id}  ${o.tasks.join(", ")}  [${ready}]  ${run}`);
+    const released = o.released_at
+      ? `  released ${o.released_at.slice(0, 10)} (${o.released_source})`
+      : "";
+    console.log(`${o.id}  ${o.tasks.join(", ")}  [${ready}]  ${run}${released}`);
     if (o.rates.length === 0) console.log("    price: unknown (no price on file)");
     for (const r of o.rates) console.log(`    ${rateLine(r)}`);
   }
@@ -258,9 +262,18 @@ function registerBrowse(catalog: Command): void {
   )
     .option("-q, --query <text>", "Text in the offering id, name or family")
     .option("--priced", "Only offerings with a current price")
-    .option("--sort <field>", "id, provider, price (per billing unit) or checked", "id")
+    .option(
+      "--sort <field>",
+      "id, provider, price (per billing unit), checked, or released (newest first; dates from `multix models --live` catalogs)",
+      "id",
+    )
     .action((opts: FilterFlags) => {
-      const payload = catalogQuery(queryOf("models", opts), groupReady, PROVIDER_GROUPS);
+      const payload = catalogQuery(
+        queryOf("models", opts),
+        groupReady,
+        PROVIDER_GROUPS,
+        opts.sort === "released" ? cachedReleaseLookup() : undefined,
+      );
       if (run.json) return console.log(JSON.stringify(payload));
       printOfferings(payload.offerings as Offering[]);
     });
