@@ -302,10 +302,26 @@ describe("multix --help (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     expect(result.stderr).toContain("At least one --ref is required for image-to-image.");
   });
 
-  it("prints version", async () => {
+  it("prints the version first, then where agents should start", async () => {
     const result = await run(["--version"]);
     expect(result.exitCode).toBe(0);
-    expect(result.stdout.trim()).toMatch(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/);
+    const [first, ...rest] = result.stdout.trim().split("\n");
+    expect(first).toMatch(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/);
+    const orientation = rest.join("\n");
+    expect(orientation).toContain("multix guide");
+    expect(orientation).toContain("multix skills");
+  });
+
+  it("lists the shipped agent skills and prints one", async () => {
+    const list = await run(["skills", "--json"]);
+    expect(list.exitCode).toBe(0);
+    const names = (JSON.parse(list.stdout).data.skills as { name: string }[]).map((s) => s.name);
+    expect(names).toContain("multix");
+    const entry = await run(["skills", "multix"]);
+    expect(entry.exitCode).toBe(0);
+    expect(entry.stdout).toContain("Best practices and troubleshooting");
+    const missing = await run(["skills", "nope"]);
+    expect(missing.exitCode).not.toBe(0);
   });
 });
 

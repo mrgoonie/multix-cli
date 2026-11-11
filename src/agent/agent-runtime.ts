@@ -50,7 +50,16 @@ import { jobIdentity, run, summarizeUsage } from "./run-state.js";
  * never a provider, and offered no global dry run or cost flags. Add a new local
  * group here, not to the lists derived from it.
  */
-const TOOLING_GROUPS = ["history", "models", "guide", "rerun", "check", "update", "catalog"];
+const TOOLING_GROUPS = [
+  "history",
+  "models",
+  "guide",
+  "skills",
+  "rerun",
+  "check",
+  "update",
+  "catalog",
+];
 /** Commands that are themselves agent tooling or setup: not recorded in history. */
 const UNRECORDED = new RegExp(`^(${TOOLING_GROUPS.join("|")})\\b`);
 /**

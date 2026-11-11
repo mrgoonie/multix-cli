@@ -59,7 +59,9 @@ so an agent can find a model, validate a call for free, check its own result and
 recover without trial and error:
 
 ```bash
+multix -V                                     # version, then where an agent should start
 multix guide                                  # the agent protocol in one screen
+multix skills                                 # agent skills shipped with multix; `multix skills multix` prints one
 multix models --task video --ready            # which command and model serve a task, key set or not
 multix models --model google/gemini-3.8-flash-tts  # a verified model's inputs, voices, formats, how to run it
 multix models --task speech --live            # plus what fal and OpenRouter catalogs list now (cached)
