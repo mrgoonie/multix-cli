@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.27.0](https://github.com/mrgoonie/multix-cli/compare/v1.26.1...v1.27.0) (2026-11-11)
+
+
+### Added
+
+* show the multix version in the dashboard and multix check ([#587](https://github.com/mrgoonie/multix-cli/issues/587)) ([0063abd](https://github.com/mrgoonie/multix-cli/commit/0063abd7c2784ea2095b6976dca84ace8e01eaaa))
+
 ## [1.26.1](https://github.com/mrgoonie/multix-cli/compare/v1.26.0...v1.26.1) (2026-11-11)
 
 
