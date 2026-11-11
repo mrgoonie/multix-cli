@@ -8,6 +8,7 @@ description: Chọn nhóm lệnh multix phù hợp với workflow media của b�
 | Lệnh | Dùng cho |
 | --- | --- |
 | `multix check` | Kiểm tra tool, credential, Gemini connectivity và Codex image; dòng đầu hiện version multix đang cài (cũng có `multix --version`). Sidebar dashboard và server info của MCP hiện version đang deploy. |
+| `multix skills` | Liệt kê các agent skill đi kèm multix, hoặc in một skill (`multix skills <tên>`): cách dùng lệnh, best practice, lỗi thường gặp và troubleshooting. `multix -V` in version và nơi agent nên bắt đầu (`multix guide`, `multix models --ready`, `multix skills`). |
 | [Gemini](/vi/commands/gemini/) | Phân tích, transcript, extract, tạo ảnh, tạo/chỉnh sửa/nối dài video và Gemini TTS. |
 | [OpenAI](/vi/commands/openai/) | Tạo/chỉnh ảnh, Codex image driver, TTS và transcription. |
 | [MiniMax](/vi/commands/minimax/) | Ảnh/video, i2i giữ chủ thể, speech và music. |

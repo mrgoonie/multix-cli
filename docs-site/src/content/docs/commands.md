@@ -8,6 +8,7 @@ description: Choose the multix command group that matches your media workflow.
 | Command | Use it for |
 | --- | --- |
 | `multix check` | Verify tools, credentials, Gemini connectivity, and Codex image availability; the first line shows the installed multix version (also `multix --version`). The dashboard sidebar and the MCP server info show the deployed version. |
+| `multix skills` | List the agent skills shipped with multix, or print one (`multix skills <name>`): command usage, best practices, common issues and troubleshooting. `multix -V` prints the version and where an agent should start (`multix guide`, `multix models --ready`, `multix skills`). |
 | [Gemini](/commands/gemini/) | Analyze, transcribe, extract, generate images, generate/edit/extend video, image-to-video, and Gemini TTS. |
 | [OpenAI](/commands/openai/) | Image generation/editing, Codex image driver, TTS, and transcription. |
 | [MiniMax](/commands/minimax/) | Image/video, subject-preserving image-to-image, speech, and music. |

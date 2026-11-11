@@ -25,6 +25,7 @@ import { registerCatalogCommands } from "./agent/catalog-command.js";
 import { registerGuideCommand } from "./agent/guide-command.js";
 import { registerHistoryCommands } from "./agent/history-command.js";
 import { registerModelsCommand } from "./agent/models-command.js";
+import { registerSkillsCommand } from "./agent/skills-command.js";
 import { registerCheckCommand } from "./check.js";
 import { registerDocCommands } from "./doc/index.js";
 import { registerMediaCommands } from "./media/index.js";
@@ -58,6 +59,7 @@ export function registerCommands(program: Command): void {
   registerDocCommands(program);
   registerModelsCommand(program);
   registerGuideCommand(program);
+  registerSkillsCommand(program);
   registerHistoryCommands(program);
   registerCatalogCommands(program);
 }

@@ -15501,6 +15501,36 @@
       ]
     },
     {
+      "group": "skills",
+      "description": "Agent skills shipped with multix: list them, or print one (usage, best practices, troubleshooting). Start with `multix skills multix`",
+      "commands": [
+        {
+          "command": "skills",
+          "description": "Agent skills shipped with multix: list them, or print one (usage, best practices, troubleshooting). Start with `multix skills multix`",
+          "positionals": [
+            {
+              "name": "name",
+              "description": "",
+              "required": false,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--path",
+              "flags": "--path",
+              "description": "Print only the path of the skill's SKILL.md",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            }
+          ]
+        }
+      ]
+    },
+    {
       "group": "history",
       "description": "Review past runs: outcome, outputs, provider usage (tokens, cost, credits), duration. Ledger: ~/.multix/history.jsonl",
       "commands": [

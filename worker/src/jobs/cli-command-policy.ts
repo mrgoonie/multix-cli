@@ -129,6 +129,7 @@ export const EXCLUDED_COMMANDS: ReadonlySet<string> = new Set([
   // Agent tooling that reads the local run ledger or key setup; remote callers use multix_catalog.
   "models",
   "guide",
+  "skills",
   "history list",
   "history show",
   "history stats",

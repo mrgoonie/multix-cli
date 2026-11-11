@@ -174,6 +174,7 @@ export const UTILITY_COMMANDS: ReadonlySet<string> = new Set([
   "update",
   "models",
   "guide",
+  "skills",
   "history list",
   "history show",
   "history stats",
