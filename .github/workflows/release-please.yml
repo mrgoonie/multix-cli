@@ -9,6 +9,7 @@ permissions:
   pull-requests: write
   id-token: write
   checks: read
+  actions: write
 
 # Stable releases are completed in this workflow because pushes made by
 # GITHUB_TOKEN do not trigger follow-up workflows.
@@ -118,3 +119,12 @@ jobs:
           npm run build
           npm test
           npm publish --access public --tag latest
+
+      # Pushes made by GITHUB_TOKEN do not start Deploy MCP server, so the
+      # Worker (dashboard version, MCP serverInfo, bundled skills) would keep
+      # the previous version. workflow_dispatch is allowed with GITHUB_TOKEN.
+      - name: Deploy the MCP server for the new release
+        if: ${{ steps.release.outputs.release_created == 'true' || steps.merged-release.outputs.release_created == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run deploy-mcp.yml --repo "$GITHUB_REPOSITORY" --ref main
