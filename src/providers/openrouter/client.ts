@@ -12,6 +12,7 @@ import { fetchBytes, httpJson } from "../../core/http-client.js";
 import type { Logger } from "../../core/logger.js";
 import { getOutputDir } from "../../core/output-dir.js";
 import { outputStamp } from "../../core/output-name.js";
+import { isImagesEndpointRequired, requestOpenRouterImages } from "./images-endpoint.js";
 import {
   buildOpenRouterHeaders,
   extractImagesFromResponse,
@@ -114,7 +115,26 @@ export async function generateOpenRouterImage(opts: {
         timeoutMs: 240_000,
       });
     } catch (e) {
-      return { status: "error", error: e instanceof Error ? e.message : String(e) };
+      if (!isImagesEndpointRequired(e)) {
+        return { status: "error", error: e instanceof Error ? e.message : String(e) };
+      }
+      logger?.debug(`${model} is image-only; retrying via /api/v1/images`);
+      try {
+        const viaImages = await requestOpenRouterImages(apiKey, {
+          prompt,
+          model,
+          aspectRatio,
+          imageSize,
+        });
+        if (viaImages.urls.length === 0) {
+          return { status: "error", error: formatNoImagesError(model, viaImages) };
+        }
+        imageUrls.push(...viaImages.urls);
+        if (imageUrls.length >= numImages) break;
+        continue;
+      } catch (e2) {
+        return { status: "error", error: e2 instanceof Error ? e2.message : String(e2) };
+      }
     }
 
     const parsed = extractImagesFromResponse(data);
