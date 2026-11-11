@@ -11,10 +11,26 @@ import { type CatalogQuery, catalogQuery } from "../../../src/catalog/catalog-qu
 import type { ProviderKeys } from "../provider-secret-names.js";
 import { hasGroupKeys } from "./catalog-view.js";
 import { GROUP_KEYS } from "./cli-command-policy.js";
+import { liveReleaseLookup } from "./release-dates.js";
 
 export function modelCatalogPayload(
   keys: ProviderKeys,
   query: CatalogQuery,
 ): Record<string, unknown> {
   return catalogQuery(query, (provider) => hasGroupKeys(provider, keys), Object.keys(GROUP_KEYS));
+}
+
+/** Like modelCatalogPayload; `sort: "released"` also reads the public catalog listings for dates. */
+export async function modelCatalogPayloadAsync(
+  keys: ProviderKeys,
+  query: CatalogQuery,
+  fetchFn?: typeof fetch,
+): Promise<Record<string, unknown>> {
+  const releases = query.sort === "released" ? await liveReleaseLookup(fetchFn) : undefined;
+  return catalogQuery(
+    query,
+    (provider) => hasGroupKeys(provider, keys),
+    Object.keys(GROUP_KEYS),
+    releases,
+  );
 }

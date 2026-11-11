@@ -9,8 +9,9 @@
 
 import { type PriceEntry, type PriceMeter, resolveRate } from "../budget/pricing-catalog.js";
 import { PRICING_CATALOG } from "../budget/pricing-catalog.js";
-import type { Task } from "../capabilities/capability-types.js";
+import type { ReleaseSource, Task } from "../capabilities/capability-types.js";
 import { MODEL_CAPABILITIES } from "../capabilities/model-registry.js";
+import { sortByReleased } from "../capabilities/model-views.js";
 import type {
   Offering,
   OfferingConfig,
@@ -237,7 +238,21 @@ export function filterOfferings(offerings: Offering[], f: OfferingFilter): Offer
   );
 }
 
-export type OfferingSort = "id" | "provider" | "price" | "checked";
+export type OfferingSort = "id" | "provider" | "price" | "checked" | "released";
+
+/** Release date of one provider model, when a catalog listing gave one. */
+export type ReleaseLookup = (
+  provider: string,
+  model: string,
+) => { released_at: string; released_source: ReleaseSource } | undefined;
+
+/** Offerings with the release date a lookup knows; the rest stay undated. */
+export function withReleaseDates(offerings: Offering[], lookup: ReleaseLookup): Offering[] {
+  return offerings.map((o) => {
+    const found = lookup(o.provider, o.model);
+    return found ? { ...o, ...found } : o;
+  });
+}
 
 /** Lowest current per-unit price of an offering, as [meter, USD per unit]. */
 function unitPrice(o: Offering): [string, number] | undefined {
@@ -267,6 +282,8 @@ export function sortOfferings(offerings: Offering[], by: OfferingSort): Offering
         .sort()
         .at(-1) ?? "";
     rows.sort((a, b) => latest(b).localeCompare(latest(a)) || a.id.localeCompare(b.id));
+  } else if (by === "released") {
+    return sortByReleased(rows);
   } else if (by === "price") {
     rows.sort((a, b) => {
       const pa = unitPrice(a);

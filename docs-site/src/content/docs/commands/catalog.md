@@ -24,6 +24,19 @@ multix catalog usage --by provider --since 7d    # what went through multix on t
 multix catalog recommend -t video -u product-ugc --resolution 720p --duration 10 --audio on --aspect-ratio 16:9
 ```
 
+## Newest models first
+
+`--sort released` (also `multix models --task <task> --live --sort released`, and
+`sort=released` in `multix_model_catalog` and the REST API) lists the newest
+release first. The date comes only from the provider's own catalog listing, and
+only fal (`date`) and OpenRouter (`created`) publish one; each row says so with
+`released_source: "provider_listing"`. That is the date the model was added to
+that platform, which can be later than the original model launch. Models with
+no known date come last and carry no date, never a guess. The CLI reads the
+catalogs already cached by `multix models --task <task> --live` (run it first
+to fill the cache); the MCP server and REST API read the public listings
+directly.
+
 An offering id is `<provider>:<model>`. `show` also accepts a bare model id when
 only one provider offers it.
 

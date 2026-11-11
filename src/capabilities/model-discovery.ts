@@ -42,6 +42,21 @@ export function discoverySupported(provider: string, task: Task): boolean {
   return false;
 }
 
+/**
+ * A provider-reported date as ISO 8601, or undefined when it is missing,
+ * unparseable, implausibly old or in the future (never guessed).
+ */
+export function releaseDate(value: unknown, now = Date.now()): string | undefined {
+  const ms =
+    typeof value === "number" && Number.isFinite(value)
+      ? value * 1000 // OpenRouter reports epoch seconds
+      : typeof value === "string" && value
+        ? Date.parse(value)
+        : Number.NaN;
+  if (!Number.isFinite(ms) || ms < Date.UTC(2015, 0, 1) || ms > now + 86_400_000) return undefined;
+  return new Date(ms).toISOString();
+}
+
 const MAX_FAL_PAGES = 5;
 const TIMEOUT_MS = 15_000;
 
@@ -61,7 +76,7 @@ const str = (v: unknown) => {
 interface FalPage {
   models?: Array<{
     endpoint_id?: unknown;
-    metadata?: { display_name?: unknown; status?: unknown };
+    metadata?: { display_name?: unknown; status?: unknown; date?: unknown };
   }>;
   has_more?: unknown;
   next_cursor?: unknown;
@@ -82,12 +97,16 @@ async function readFal(task: Task, fetchFn: FetchFn): Promise<CatalogRead> {
       if (!model) continue;
       const name = str(m.metadata?.display_name);
       const status = str(m.metadata?.status);
+      const released = releaseDate(m.metadata?.date);
       models.push({
         provider: "fal",
         model,
         task,
         ...(name ? { name } : {}),
         ...(status ? { status } : {}),
+        ...(released
+          ? { released_at: released, released_source: "provider_listing" as const }
+          : {}),
       });
     }
     cursor = body.has_more === true ? str(body.next_cursor) : undefined;
@@ -107,6 +126,7 @@ interface OpenRouterModel {
   pricing?: Record<string, unknown>;
   supported_voices?: unknown;
   expiration_date?: unknown;
+  created?: unknown;
 }
 
 async function readOpenRouter(task: Task, fetchFn: FetchFn): Promise<CatalogRead> {
@@ -129,6 +149,7 @@ async function readOpenRouter(task: Task, fetchFn: FetchFn): Promise<CatalogRead
         (e): e is [string, string] => typeof e[1] === "string",
       ),
     );
+    const released = releaseDate(m.created);
     models.push({
       provider: "openrouter",
       model,
@@ -137,6 +158,7 @@ async function readOpenRouter(task: Task, fetchFn: FetchFn): Promise<CatalogRead
       ...(str(m.expiration_date) ? { status: `expires ${str(m.expiration_date)}` } : {}),
       ...(voices.length ? { voices } : {}),
       ...(Object.keys(pricing).length ? { pricing } : {}),
+      ...(released ? { released_at: released, released_source: "provider_listing" as const } : {}),
     });
   }
   return { url, models };

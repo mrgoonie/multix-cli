@@ -25,6 +25,18 @@ multix catalog usage --by provider --since 7d    # những gì đã chạy qua m
 multix catalog recommend -t video -u product-ugc --resolution 720p --duration 10 --audio on --aspect-ratio 16:9
 ```
 
+## Model mới nhất trước
+
+`--sort released` (cũng có `multix models --task <task> --live --sort released`,
+và `sort=released` trong `multix_model_catalog` và REST API) xếp model mới ra
+mắt lên đầu. Ngày chỉ lấy từ danh sách catalog của chính provider, và chỉ fal
+(`date`) và OpenRouter (`created`) có; mỗi dòng ghi rõ
+`released_source: "provider_listing"`. Đó là ngày model được thêm vào nền tảng
+đó, có thể muộn hơn ngày model gốc ra mắt. Model không có ngày xếp cuối và không
+hiện ngày, không đoán. CLI đọc các catalog đã cache bởi
+`multix models --task <task> --live` (chạy lệnh này trước để có cache); MCP
+server và REST API đọc trực tiếp danh sách công khai.
+
 Id của offering có dạng `<provider>:<model>`. `show` cũng nhận id model không
 kèm provider khi chỉ một provider cung cấp model đó.
 

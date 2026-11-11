@@ -65,6 +65,7 @@ multix skills                                 # agent skills shipped with multix
 multix models --task video --ready            # which command and model serve a task, key set or not
 multix models --model google/gemini-3.8-flash-tts  # a verified model's inputs, voices, formats, how to run it
 multix models --task speech --live            # plus what fal and OpenRouter catalogs list now (cached)
+multix models --task image --live --sort released   # newest first by provider-listed date; undated last
 multix fal image "a red fox" --dry-run --json # validate; show the request instead of sending it
 multix fal image "a red fox" --json           # one-line multix.result/v1 envelope on stdout
 multix elevenlabs tts --text "Hi" --estimate  # price range, units, rate and source; nothing is sent

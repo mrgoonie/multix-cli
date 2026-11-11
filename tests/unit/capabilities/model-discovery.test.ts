@@ -376,3 +376,41 @@ describe("catalog cache", () => {
     }
   });
 });
+
+describe("release dates", () => {
+  it("reads fal metadata.date and OpenRouter created, and never invents one", async () => {
+    const fal = fakeFetch([
+      [
+        "category=text-to-image",
+        {
+          body: {
+            models: [
+              { endpoint_id: "a/new", metadata: { date: "2026-11-05T18:30:18.248Z" } },
+              { endpoint_id: "a/none", metadata: {} },
+              { endpoint_id: "a/bad", metadata: { date: "not a date" } },
+              { endpoint_id: "a/future", metadata: { date: "2999-01-01T00:00:00Z" } },
+            ],
+            has_more: false,
+          },
+        },
+      ],
+    ]);
+    const read = await readCatalog("fal", "image", fal.fn);
+    expect(read.models.map((m) => [m.model, m.released_at, m.released_source])).toEqual([
+      ["a/new", "2026-11-05T18:30:18.248Z", "provider_listing"],
+      ["a/none", undefined, undefined],
+      ["a/bad", undefined, undefined],
+      ["a/future", undefined, undefined],
+    ]);
+
+    const or = fakeFetch([
+      [
+        "output_modalities=image",
+        { body: { data: [{ id: "x/y", created: 1794363447 }, { id: "x/z" }] } },
+      ],
+    ]);
+    const orRead = await readCatalog("openrouter", "image", or.fn);
+    expect(orRead.models[0]?.released_at).toBe(new Date(1794363447 * 1000).toISOString());
+    expect(orRead.models[1]?.released_at).toBeUndefined();
+  });
+});

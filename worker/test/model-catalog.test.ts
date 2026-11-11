@@ -57,3 +57,39 @@ describe("multix_model_catalog", () => {
     expect(modelCatalogPayload({}, query)).toEqual(catalogQuery(query, () => false, []));
   });
 });
+
+describe("sort=released", () => {
+  it("dates offerings from the public catalog listings and puts undated ones last", async () => {
+    const { modelCatalogPayloadAsync } = await import("../src/jobs/model-catalog-view.js");
+    const { resetReleaseDates } = await import("../src/jobs/release-dates.js");
+    resetReleaseDates();
+    const base = catalogQuery({ view: "models" }, () => false, []).offerings as Array<{
+      provider: string;
+      model: string;
+    }>;
+    const target = base.find((o) => o.provider === "fal");
+    expect(target).toBeDefined();
+    const fetchFn = (async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes("api.fal.ai")) {
+        return new Response(
+          JSON.stringify({
+            models: [{ endpoint_id: target?.model, metadata: { date: "2026-10-01T00:00:00Z" } }],
+            has_more: false,
+          }),
+        );
+      }
+      throw new Error("offline");
+    }) as typeof fetch;
+    const payload = (await modelCatalogPayloadAsync(
+      {},
+      { view: "models", sort: "released" },
+      fetchFn,
+    )) as { offerings: Array<{ model: string; released_at?: string; released_source?: string }> };
+    expect(payload.offerings[0]?.model).toBe(target?.model);
+    expect(payload.offerings[0]?.released_at).toBe("2026-10-01T00:00:00.000Z");
+    expect(payload.offerings[0]?.released_source).toBe("provider_listing");
+    expect(payload.offerings.slice(1).every((o) => o.released_at === undefined)).toBe(true);
+    resetReleaseDates();
+  });
+});

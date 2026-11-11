@@ -7,7 +7,7 @@
  */
 
 import type { PriceComponent, PriceEntry, PriceMeter } from "../budget/pricing-catalog.js";
-import type { Task } from "../capabilities/capability-types.js";
+import type { ReleaseSource, Task } from "../capabilities/capability-types.js";
 
 export const CATALOG_SCHEMA = "multix.catalog/v1";
 
@@ -90,6 +90,9 @@ export interface Offering {
   /** True when multix checked the model's inputs against the provider schema. */
   verified_capability: boolean;
   rates: RateView[];
+  /** ISO date the provider's catalog lists this model (see ReleaseSource); absent when unknown. */
+  released_at?: string;
+  released_source?: ReleaseSource;
   /** Overall price state: priced (a current rate), or the first problem found. */
   price_status: "priced" | RateProblem;
 }

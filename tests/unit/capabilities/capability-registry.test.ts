@@ -321,3 +321,22 @@ describe("merged model views", () => {
     ]);
   });
 });
+
+import { sortByReleased } from "../../../src/capabilities/model-views.js";
+
+describe("sortByReleased", () => {
+  it("orders newest first, undated last, ties by provider and model", () => {
+    const rows = [
+      { provider: "b", model: "undated" },
+      { provider: "a", model: "old", released_at: "2025-01-01T00:00:00.000Z" },
+      { provider: "a", model: "new", released_at: "2026-01-01T00:00:00.000Z" },
+      { provider: "a", model: "undated" },
+    ];
+    expect(sortByReleased(rows).map((r) => `${r.provider}/${r.model}`)).toEqual([
+      "a/new",
+      "a/old",
+      "a/undated",
+      "b/undated",
+    ]);
+  });
+});

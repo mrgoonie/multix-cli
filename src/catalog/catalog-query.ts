@@ -10,18 +10,26 @@ import { TASKS, type Task, isTask } from "../capabilities/capability-types.js";
 import { ValidationError } from "../core/errors.js";
 import {
   type OfferingSort,
+  type ReleaseLookup,
   buildOfferings,
   buildProviders,
   filterOfferings,
   findOfferings,
   sortOfferings,
+  withReleaseDates,
 } from "./catalog-build.js";
 import { CATALOG_SCHEMA, type QuoteRequest } from "./catalog-types.js";
 import { compareOfferings } from "./price-compare.js";
 
 export const CATALOG_VIEWS = ["providers", "models", "show", "compare"] as const;
 export type CatalogView = (typeof CATALOG_VIEWS)[number];
-export const OFFERING_SORTS: readonly OfferingSort[] = ["id", "provider", "price", "checked"];
+export const OFFERING_SORTS: readonly OfferingSort[] = [
+  "id",
+  "provider",
+  "price",
+  "checked",
+  "released",
+];
 
 export interface CatalogQuery {
   view: CatalogView;
@@ -80,11 +88,14 @@ export function catalogQuery(
   q: CatalogQuery,
   ready: (provider: string) => boolean,
   groups: readonly string[],
+  /** Where release dates come from (provider catalog listings); none: offerings stay undated. */
+  releases?: ReleaseLookup,
 ): Record<string, unknown> {
   if (!(CATALOG_VIEWS as readonly string[]).includes(q.view)) {
     throw new ValidationError(`Invalid view: ${q.view}. Valid: ${CATALOG_VIEWS.join(", ")}`);
   }
-  const all = buildOfferings(q.at);
+  const built = buildOfferings(q.at);
+  const all = releases ? withReleaseDates(built, releases) : built;
   const withReady = <T extends { provider: string }>(o: T) => ({ ...o, ready: ready(o.provider) });
   if (q.view === "providers") {
     const rows = buildProviders(all, groups, ready).filter((p) => !q.ready || p.ready);

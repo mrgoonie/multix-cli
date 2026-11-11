@@ -12,7 +12,7 @@ import { type JobStatus, isTerminal } from "../jobs/job-protocol.js";
 import { DEFAULT_WAIT_SECONDS, JobRunner, MAX_WAIT_SECONDS } from "../jobs/job-runner.js";
 import type { JobToolsContext } from "../jobs/job-runner.js";
 import { costPreflight } from "../jobs/job-tools.js";
-import { modelCatalogPayload } from "../jobs/model-catalog-view.js";
+import { modelCatalogPayloadAsync } from "../jobs/model-catalog-view.js";
 import { type RunRequest, prepareRun } from "../jobs/run-argv-builder.js";
 import { assertSpendGuard } from "../jobs/run-option-caps.js";
 import type { ProviderKeys } from "../provider-secret-names.js";
@@ -59,7 +59,7 @@ function numberParam(url: URL, name: string, max: number, whole = false): number
 }
 
 /** GET /model-catalog: the same views as `multix catalog --json` and multix_model_catalog. */
-export function getModelCatalog(keys: ProviderKeys, url: URL): Response {
+export async function getModelCatalog(keys: ProviderKeys, url: URL): Promise<Response> {
   const p = url.searchParams;
   const text = (name: string, max: number) => {
     const v = p.get(name) ?? undefined;
@@ -85,7 +85,7 @@ export function getModelCatalog(keys: ProviderKeys, url: URL): Response {
     images: numberParam(url, "images", 100, true),
   };
   const defined = Object.fromEntries(Object.entries(query).filter(([, v]) => v !== undefined));
-  return json(200, modelCatalogPayload(keys, defined as typeof query));
+  return json(200, await modelCatalogPayloadAsync(keys, defined as typeof query));
 }
 
 function requireJobs(jobs: JobToolsContext | undefined): JobToolsContext {

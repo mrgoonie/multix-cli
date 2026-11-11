@@ -89,6 +89,13 @@ export interface ModelCapability {
   source: { url: string; verified_at: string };
 }
 
+/**
+ * Where a release date comes from. "provider_listing": the date the provider's
+ * own catalog reports (when the model was added to that platform, which can be
+ * later than the original model launch). "curated": written by hand with a source.
+ */
+export type ReleaseSource = "provider_listing" | "curated";
+
 /** A model listed by a provider catalog at fetch time. */
 export interface DiscoveredModel {
   provider: string;
@@ -100,6 +107,9 @@ export interface DiscoveredModel {
   voices?: string[];
   /** Provider-reported prices, as strings in the provider's units. */
   pricing?: Record<string, string>;
+  /** ISO 8601 date the provider listing reports; absent when the catalog gives none. */
+  released_at?: string;
+  released_source?: ReleaseSource;
 }
 
 export type DiscoveryState = "fresh" | "cached" | "stale" | "unavailable" | "unsupported";
