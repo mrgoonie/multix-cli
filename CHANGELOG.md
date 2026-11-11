@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.28.0](https://github.com/mrgoonie/multix-cli/compare/v1.27.0...v1.28.0) (2026-11-11)
+
+
+### Added
+
+* **catalog:** sort models by provider-listed release date, newest first ([#590](https://github.com/mrgoonie/multix-cli/issues/590)) ([9093a9c](https://github.com/mrgoonie/multix-cli/commit/9093a9c0860041f2eb43ec52dc4c45b60117f920))
+* **cli:** agent-friendly multix -V and a skills command ([#594](https://github.com/mrgoonie/multix-cli/issues/594)) ([f48be6b](https://github.com/mrgoonie/multix-cli/commit/f48be6ba77c30e0a716ec22fb61729efe6297989))
+
 ## [1.27.0](https://github.com/mrgoonie/multix-cli/compare/v1.26.1...v1.27.0) (2026-11-11)
 
 
