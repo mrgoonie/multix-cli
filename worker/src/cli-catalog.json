@@ -15483,6 +15483,16 @@
               "valueOptional": false,
               "variadic": false,
               "negatable": false
+            },
+            {
+              "long": "--sort",
+              "flags": "--sort <field>",
+              "description": "With --live: released = newest first by the date the provider catalog lists (fal, openrouter); models without a date come last",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
             }
           ]
         }
@@ -15788,7 +15798,7 @@
             {
               "long": "--sort",
               "flags": "--sort <field>",
-              "description": "id, provider, price (per billing unit) or checked",
+              "description": "id, provider, price (per billing unit), checked, or released (newest first; dates from `multix models --live` catalogs)",
               "required": false,
               "takesValue": true,
               "valueOptional": false,
