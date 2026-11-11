@@ -102,6 +102,8 @@ Atlas Cloud image edits (`multix atlas image-to-image`) are in [../SKILL.md](../
 
 **`--strength <0..1>`** — Recraft init-image strength control. Pass when using Recraft models; ignore for others.
 
+**Image-only models** (e.g. `openai/gpt-image-2.6-flare`, `bytedance-seed/seedream-5-0-*`) are rejected by chat completions; multix retries them through OpenRouter's `/api/v1/images` automatically. That route ignores `--strength` and `OPENROUTER_FALLBACK_MODELS`.
+
 **`OPENROUTER_FALLBACK_MODELS`** (CSV) — applies to BOTH `generate` and `i2i`. When set, the request uses `models: [primary, ...fallbacks]` so OpenRouter routes on availability:
 ```bash
 export OPENROUTER_FALLBACK_MODELS="openai/gpt-5-image-mini,google/gemini-2.5-flash-image"

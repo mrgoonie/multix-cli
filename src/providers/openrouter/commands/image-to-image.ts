@@ -28,6 +28,7 @@ import { type Logger, createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import { outputStamp } from "../../../core/output-name.js";
 import { OPENROUTER_API_URL, requireOpenRouterKey } from "../client.js";
+import { isImagesEndpointRequired, requestOpenRouterImages } from "../images-endpoint.js";
 import {
   buildI2IPayload,
   buildOpenRouterHeaders,
@@ -150,15 +151,24 @@ async function runImageToImage(opts: RunOpts): Promise<string[]> {
     fallbackModels: opts.fallbackModels,
   });
 
-  const data = await httpJson<unknown>({
-    url: OPENROUTER_API_URL,
-    method: "POST",
-    headers,
-    body: payload,
-    timeoutMs: 240_000,
-  });
-
-  const parsed = extractImagesFromResponse(data);
+  let parsed: ReturnType<typeof extractImagesFromResponse>;
+  try {
+    const data = await httpJson<unknown>({
+      url: OPENROUTER_API_URL,
+      method: "POST",
+      headers,
+      body: payload,
+      timeoutMs: 240_000,
+    });
+    parsed = extractImagesFromResponse(data);
+  } catch (e) {
+    if (!isImagesEndpointRequired(e)) throw e;
+    opts.logger.debug(`${opts.model} is image-only; retrying via /api/v1/images`);
+    parsed = await requestOpenRouterImages(
+      { prompt: opts.prompt, model: opts.model, refs: opts.refs },
+      { headers },
+    );
+  }
   if (parsed.urls.length === 0) {
     throw new ProviderError(formatNoImagesError(opts.model, parsed), "openrouter");
   }

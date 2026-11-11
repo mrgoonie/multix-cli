@@ -23,7 +23,11 @@ multix openrouter i2i \
 
 Image references accept local paths or URLs. `--strength` applies only to
 Recraft image-to-image models. If configured, `OPENROUTER_FALLBACK_MODELS`
-applies to image generation and image-to-image requests.
+applies to image generation and image-to-image requests. Image-only models
+(for example `openai/gpt-image-2.6-flare`) are served by OpenRouter's
+`/api/v1/images` endpoint; multix retries there automatically when chat
+completions rejects the model. That endpoint ignores `--strength` and
+`OPENROUTER_FALLBACK_MODELS`.
 
 ## Image-to-video jobs
 

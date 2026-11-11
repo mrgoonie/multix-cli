@@ -23,7 +23,10 @@ multix openrouter i2i \
 
 Ảnh tham chiếu nhận local path hoặc URL. `--strength` chỉ áp dụng cho model
 Recraft i2i. Nếu cấu hình, `OPENROUTER_FALLBACK_MODELS` áp dụng cho generate
-và image-to-image.
+và image-to-image. Model chỉ-ảnh (ví dụ
+`openai/gpt-image-2.6-flare`) chạy qua endpoint `/api/v1/images` của OpenRouter;
+multix tự retry ở đó khi chat completions từ chối model. Endpoint đó bỏ qua
+`--strength` và `OPENROUTER_FALLBACK_MODELS`.
 
 ## Job image-to-video
 
