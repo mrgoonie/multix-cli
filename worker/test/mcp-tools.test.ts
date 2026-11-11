@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { version } from "../../package.json";
 import { fullEnv, rpc } from "./helpers.js";
 
 describe("MCP protocol", () => {
@@ -9,6 +10,7 @@ describe("MCP protocol", () => {
       clientInfo: { name: "test", version: "0" },
     });
     expect(body.result.serverInfo.name).toBe("multix");
+    expect(body.result.serverInfo.version).toBe(version);
     expect(body.result.capabilities.tools).toBeDefined();
   });
 

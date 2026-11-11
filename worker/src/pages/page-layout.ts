@@ -7,6 +7,7 @@
  * Every interpolated value must go through escapeHtml().
  */
 
+import { version } from "../../../package.json";
 import { escapeHtml } from "../http-responses.js";
 import { COPY_SCRIPT } from "./copy-script.js";
 import { type Messages, messagesFor } from "./i18n.js";
@@ -65,7 +66,7 @@ ${body}${copySupport(body, t)}</body>
 }
 
 function brand(t: Messages, href = "/dashboard"): string {
-  return `<a class="brand" href="${href}"><span class="brand-mark" aria-hidden="true"></span>multix <span class="brand-tag">${escapeHtml(t.brandTag)}</span></a>`;
+  return `<a class="brand" href="${href}"><span class="brand-mark" aria-hidden="true"></span>multix <span class="brand-tag">${escapeHtml(t.brandTag)}</span> <span class="brand-version">v${escapeHtml(version)}</span></a>`;
 }
 
 /** The EN/VI and Auto/Light/Dark switches: plain links, so they work without JavaScript. */

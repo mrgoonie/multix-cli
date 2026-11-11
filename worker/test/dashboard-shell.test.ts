@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { version } from "../../package.json";
 import { apiDocsPage } from "../src/pages/api-docs-page.js";
 import { dashboardPage, signInPage } from "../src/pages/dashboard-page.js";
 import { negotiateLanguage } from "../src/pages/i18n.js";
@@ -227,5 +228,12 @@ describe("onboarding", () => {
     );
     expect(html).not.toContain("<img src=x");
     expect(html).not.toContain("<b>x</b>");
+  });
+});
+
+describe("dashboard version", () => {
+  it("shows the multix version on the signed-in and sign-in pages", () => {
+    expect(dashboardPage(dashboardView())).toContain(`>v${version}</span>`);
+    expect(signInPage()).toContain(`>v${version}</span>`);
   });
 });
