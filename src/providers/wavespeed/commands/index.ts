@@ -56,14 +56,19 @@ export function buildWave3dInput(
   return { ...extra, [spec.field]: spec.field === "images" ? [...refs] : refs[0] };
 }
 
-async function uploadImage(client: WaveSpeedClient, input: string): Promise<string> {
+async function uploadMedia(
+  client: WaveSpeedClient,
+  input: string,
+  imageOnly = true,
+): Promise<string> {
   if (input.startsWith("https://")) {
     checkUrlSafety(input, { provider: "wavespeed", action: "fetch" });
     return input;
   }
   if (input.includes("://")) throw new ValidationError("Use https:// or local image paths");
   const file = await inspectLocalMedia(input);
-  if (!file.mime.startsWith("image/")) throw new ValidationError("WaveSpeed 3D requires an image");
+  if (imageOnly && !file.mime.startsWith("image/"))
+    throw new ValidationError("WaveSpeed 3D requires an image");
   if (file.size > 200 * 1024 * 1024) throw new ValidationError("WaveSpeed 200 MB upload limit");
   const ticket = await client.uploadTicket(file.name, file.size, file.mime);
   return client.uploadBytes(ticket, await fs.readFile(file.abs));
@@ -79,7 +84,7 @@ async function applyFileFlags(
     const name = flag.slice(0, pivot);
     if (pivot <= 0 || !/^[a-z_][a-z_0-9]*(\[\])?$/.test(name))
       throw new ValidationError("Expected --file name=path or name[]=path");
-    const url = await uploadImage(client, flag.slice(pivot + 1));
+    const url = await uploadMedia(client, flag.slice(pivot + 1), false);
     if (name.endsWith("[]")) {
       const field = name.slice(0, -2);
       if (input[field] !== undefined && !Array.isArray(input[field]))
@@ -103,7 +108,11 @@ async function printOrDownload(prediction: WavePrediction, flags: Flags): Promis
   for (const [index, url] of urls.entries()) {
     checkUrlSafety(url, { provider: "wavespeed" });
     const originalExt = path.extname(new URL(url).pathname).toLowerCase();
-    const ext = /^\.[a-z0-9]{1,8}$/.test(originalExt) ? originalExt : ".glb";
+    const ext = /^\.[a-z0-9]{1,8}$/.test(originalExt)
+      ? originalExt
+      : prediction.model && wave3dModel(prediction.model)
+        ? ".glb"
+        : ".bin";
     const dest = flags.output
       ? path.resolve(flags.output)
       : path.join(dir, `wavespeed-${prediction.id}-${index + 1}${ext}`);
@@ -183,7 +192,7 @@ export function registerWaveSpeedCommands(root: Command): void {
     .description("WaveSpeedAI API: models, 3D generation, upload and resumable jobs");
   parent
     .command("models")
-    .description("Verified WaveSpeedAI 3D model IDs")
+    .description("Curated WaveSpeedAI 3D model IDs")
     .action(() => console.log(JSON.stringify(WAVESPEED_3D_MODELS, null, 2)));
 
   addOutputFlags(
@@ -213,7 +222,7 @@ export function registerWaveSpeedCommands(root: Command): void {
     buildWave3dInput(model, prompt, flags.ref); // preflight before any billable upload
     const extra = flags.input ? parseJsonInput(flags.input) : {};
     const client = createWaveSpeedClient();
-    const refs = await Promise.all(flags.ref.map((input) => uploadImage(client, input)));
+    const refs = await Promise.all(flags.ref.map((input) => uploadMedia(client, input)));
     await generate(client, model, buildWave3dInput(model, prompt, refs, extra), flags);
   });
 
@@ -238,6 +247,6 @@ export function registerWaveSpeedCommands(root: Command): void {
     .command("upload <file>")
     .description("Upload a local image and print its media URL")
     .action(async (file: string) =>
-      console.log(JSON.stringify({ url: await uploadImage(createWaveSpeedClient(), file) })),
+      console.log(JSON.stringify({ url: await uploadMedia(createWaveSpeedClient(), file, false) })),
     );
 }

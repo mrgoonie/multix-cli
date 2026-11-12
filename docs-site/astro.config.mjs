@@ -111,6 +111,7 @@ export default defineConfig({
             { label: "ElevenLabs", slug: "commands/elevenlabs" },
             { label: "Fish Audio", slug: "commands/fish" },
             { label: "fal.ai", slug: "commands/fal" },
+            { label: "WaveSpeedAI", slug: "commands/wavespeed" },
             { label: "Atlas Cloud", slug: "commands/atlascloud" },
             { label: "Replicate", slug: "commands/replicate" },
             { label: "Runway", slug: "commands/runway" },

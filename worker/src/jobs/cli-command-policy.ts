@@ -17,6 +17,8 @@
  */
 
 import { BYTEPLUS_3D_MODELS } from "../../../src/providers/byteplus/models.js";
+import { FAL_3D_PRESETS } from "../../../src/providers/fal/three-d-models.js";
+import { WAVESPEED_3D_MODELS } from "../../../src/providers/wavespeed/models.js";
 import type { ProviderSecretName } from "../provider-secret-names.js";
 
 /** `file`: one or more downloaded files (repeatable when the CLI option is). `dir`: a directory of them. */
@@ -363,6 +365,20 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   // `--file key=path` maps a model field to a local file and `--receipt` takes
   // a local path; neither is expressible remotely (pass URLs in --input).
   "fal run": { unsupported: ["file", "receipt"], uncappedSpend: PASS_THROUGH },
+  "fal 3d": {
+    fileOptions: { ref: "file" },
+    allowedValues: { model: FAL_3D_PRESETS.map((m) => m.id) },
+    uncappedSpend: "3D texture and geometry settings change per-run price",
+    uncappedOptions: ["input"],
+  },
+  "wavespeed run": { unsupported: ["file"], uncappedSpend: PASS_THROUGH },
+  "wavespeed 3d": {
+    fileOptions: { ref: "file" },
+    allowedValues: { model: WAVESPEED_3D_MODELS.map((m) => m.id) },
+    uncappedSpend: "3D model and settings determine cost",
+    uncappedOptions: ["input"],
+  },
+  "wavespeed upload": { filePositionals: ["file"] },
   "fal upload": { filePositionals: ["file"] },
   "fal image": { caps: IMAGE_COUNT, priceOptions: ["image-size"] },
   "fal video": {
@@ -550,6 +566,7 @@ export const GROUP_KEYS: Readonly<Record<string, readonly ProviderSecretName[]>>
   cloudflare: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_AI_GATEWAY_ID"],
   elevenlabs: ["ELEVENLABS_API_KEY"],
   fal: ["FAL_KEY"],
+  wavespeed: ["WAVESPEED_API_KEY"],
   atlas: ["ATLASCLOUD_API_KEY"],
   fish: ["FISH_API_KEY"],
   replicate: ["REPLICATE_API_TOKEN", "REPLICATE_API_KEY"],

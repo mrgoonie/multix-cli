@@ -44,6 +44,12 @@ export const PROVIDER_INFO: Readonly<
     pricing_url: "https://openrouter.ai/models",
     docs_url: "https://openrouter.ai/docs",
   },
+  wavespeed: {
+    name: "WaveSpeedAI",
+    homepage: "https://wavespeed.ai",
+    pricing_url: "https://wavespeed.ai/models",
+    docs_url: "https://wavespeed.ai/docs",
+  },
   fal: {
     name: "fal",
     homepage: "https://fal.ai",

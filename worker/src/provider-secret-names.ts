@@ -32,6 +32,7 @@ const CLI_KEY_NAMES = [
   "ELEVENLABS_API_KEY",
   "FISH_API_KEY",
   "FAL_KEY",
+  "WAVESPEED_API_KEY",
   "ATLASCLOUD_API_KEY",
   "REPLICATE_API_TOKEN",
   "REPLICATE_API_KEY",
@@ -87,6 +88,7 @@ export const CLI_PROVIDER_KEY_GROUPS: readonly ProviderKeyGroup[] = [
   },
   { provider: "Fish Audio", link: "https://fish.audio/app/api-keys/", names: ["FISH_API_KEY"] },
   { provider: "fal.ai", link: "https://fal.ai/dashboard/keys", names: ["FAL_KEY"] },
+  { provider: "WaveSpeedAI", link: "https://wavespeed.ai/accesskey", names: ["WAVESPEED_API_KEY"] },
   {
     provider: "Atlas Cloud",
     link: "https://www.atlascloud.ai/console/api-keys",

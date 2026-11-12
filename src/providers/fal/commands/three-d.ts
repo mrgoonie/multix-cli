@@ -6,7 +6,7 @@ import { parseJsonInput } from "../../../core/json-input.js";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import { createFalClient, requireFalKey } from "../client.js";
-import { uploadLocalFile } from "../local-files.js";
+import { inspectLocalMedia, uploadLocalFile } from "../local-files.js";
 import { buildReceipt, persistReceipt } from "../request-receipt.js";
 import {
   downloadResultMedia,
@@ -74,6 +74,9 @@ export function registerFal3dCommand(parent: Command): void {
             if (ref.startsWith("https://")) return ref;
             if (ref.includes("://"))
               throw new ValidationError("Use a local file or https:// image URL");
+            const file = await inspectLocalMedia(ref);
+            if (!file.mime.startsWith("image/"))
+              throw new ValidationError("fal 3D references must be images");
             return (await uploadLocalFile(ref, requireFalKey(), logger)).url;
           }),
         );

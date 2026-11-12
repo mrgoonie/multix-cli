@@ -17,6 +17,7 @@ description: Choose a source-backed command reference for any multix AI provider
 | ElevenLabs | [Commands](/commands/elevenlabs/) | Voice, speech, audio, and dubbing | Dubbing has a job/status workflow. |
 | Fish Audio | [Commands](/commands/fish/) | Native TTS (Drama 3 by default), multi-speaker turns, pronunciation dictionaries, voice models | The model is the exact `model` header; separate from OpenRouter's `fish-audio/*` models and their prices. |
 | fal.ai | [Commands](/commands/fal/) | Any queue model, plus image/video convenience commands | Status/result use the model's app id (first two path segments), not the full model id. |
+| WaveSpeedAI | [Commands](/commands/wavespeed/) | Seed3D 2.0, Tripo H3.1, Hunyuan3D Rapid, Meshy and generic jobs | Do not retry an ambiguous paid submit; resume via status. |
 | Atlas Cloud | [Commands](/commands/atlascloud/) | Any model: image, image edit, video, audio, and 3D | Inputs are validated against each model's schema; `--async` plus `status --wait --download` resumes a job. |
 | Replicate | [Commands](/commands/replicate/) | Any model via the direct API, plus image/video convenience commands | Community models need a version; resume or cancel jobs by prediction ID. |
 | Runway | [Commands](/commands/runway/) | Gen-4.5 / Gen-4 Turbo video and Gen-4 images | `video` prints a task ID unless `--wait`; resume with `status <id> --wait --download`. |
