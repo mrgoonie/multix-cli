@@ -27,6 +27,7 @@ import {
   CATALOG_SCHEMA,
   type Offering,
   type ProviderView,
+  type RateCard,
   type Review,
   type ReviewScope,
 } from "../../catalog/catalog-types.js";
@@ -51,6 +52,7 @@ import {
   resolvedModel,
 } from "../../catalog/usage-aggregate.js";
 import { ValidationError } from "../../core/errors.js";
+import { atlas3dCatalogCards } from "./atlas-3d-prices.js";
 import {
   addNote,
   locate,
@@ -176,6 +178,17 @@ interface QuoteFlags extends FilterFlags {
   images?: string;
 }
 
+/**
+ * Atlas Cloud 3D prices from its live price list (cached like `models --live`),
+ * read only when the view can show Atlas 3D offerings. Only a view that asks
+ * for 3D fetches the list; the others use a cached copy when there is one.
+ */
+async function liveCards(opts: { task?: string; provider?: string }): Promise<RateCard[]> {
+  if (opts.task !== undefined && opts.task !== "3d") return [];
+  if (opts.provider !== undefined && opts.provider !== "atlas") return [];
+  return atlas3dCatalogCards({ cacheOnly: opts.task !== "3d" });
+}
+
 /** Offerings for a task, provider and family (recommend scores the rest itself). */
 function selected(opts: FilterFlags): Offering[] {
   const task = parseTask(opts.task);
@@ -235,9 +248,9 @@ function registerBrowse(catalog: Command): void {
     .command("providers")
     .description("Providers multix runs: links, key readiness, offerings with a current price")
     .option("--ready", "Only providers whose API key is set")
-    .action((opts: { ready?: boolean }) => {
+    .action(async (opts: { ready?: boolean }) => {
       const payload = catalogQuery(
-        queryOf("providers", opts),
+        { ...queryOf("providers", opts), rate_cards: await liveCards({}) },
         groupReady,
         PROVIDER_GROUPS,
         (id) => GROUP_KEY_ROWS[id],
@@ -264,8 +277,12 @@ function registerBrowse(catalog: Command): void {
     .option("-q, --query <text>", "Text in the offering id, name or family")
     .option("--priced", "Only offerings with a current price")
     .option("--sort <field>", "id, provider, price (per billing unit) or checked", "id")
-    .action((opts: FilterFlags) => {
-      const payload = catalogQuery(queryOf("models", opts), groupReady, PROVIDER_GROUPS);
+    .action(async (opts: FilterFlags) => {
+      const payload = catalogQuery(
+        { ...queryOf("models", opts), rate_cards: await liveCards(opts) },
+        groupReady,
+        PROVIDER_GROUPS,
+      );
       if (run.json) return console.log(JSON.stringify(payload));
       printOfferings(payload.offerings as Offering[]);
     });
@@ -273,8 +290,11 @@ function registerBrowse(catalog: Command): void {
   catalog
     .command("show <offering>")
     .description("One offering: prices, your usage through multix, ratings and use-case notes")
-    .action((ref: string) => {
-      const o = oneOffering(buildOfferings(), ref);
+    .action(async (ref: string) => {
+      const cards = /^atlas:|-to-3d$/i.test(ref)
+        ? await liveCards({ task: /-to-3d$/i.test(ref) ? "3d" : undefined })
+        : [];
+      const o = oneOffering(buildOfferings(new Date(), cards), ref);
       const usage = aggregateUsage(readHistory(), "offering").find((u) => u.key === o.id) ?? null;
       const store = readAll();
       const reviews = store.reviews.filter((r) => r.offering === o.id);

@@ -51,6 +51,8 @@ export interface CostReceipt {
   actual_source:
     | "provider_reported"
     | "computed_from_usage"
+    /** The provider's list price for exactly this request; it reports no cost itself. */
+    | "list_price"
     | "no_request"
     /** Every billable request was refused with a 4xx: the provider did no work. */
     | "refused"
@@ -86,6 +88,11 @@ export interface ReceiptInput {
   /** A known-free operation (a price quote): its requests start no paid work. */
   free?: boolean;
   estimate?: CostEstimate;
+  /**
+   * The provider's list price for exactly this request (one flat charge per
+   * successful run, e.g. an Atlas Cloud 3D model), used when it reports no cost.
+   */
+  list_price?: { usd: number; label: string };
   max_cost_usd?: number;
   policy?: string;
   at?: Date;
@@ -202,13 +209,20 @@ export function buildCostReceipt(input: ReceiptInput): CostReceipt {
       status = "computed";
       actual = round6(computed);
       source = "computed_from_usage";
+    } else if (input.list_price && role === "charge" && input.outcome === "ok") {
+      status = "computed";
+      actual = round6(input.list_price.usd);
+      source = "list_price";
+      reason = `The provider reported no cost; priced at the ${input.list_price.label} for this request.`;
     } else {
       status = "unknown";
       reason =
         role === "observation"
           ? input.free
             ? "A free price quote; it starts no paid work."
-            : "Status or download only; spend belongs to the operation's submit run."
+            : input.outcome === "failed"
+              ? "The run failed after sending only read requests; it submitted no billable work itself."
+              : "Status or download only; spend belongs to the operation's submit run."
           : "The provider reported no cost and there is no trusted price for the measured usage.";
     }
   }

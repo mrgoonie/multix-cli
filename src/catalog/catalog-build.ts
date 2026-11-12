@@ -154,8 +154,14 @@ function priceStatus(rates: RateView[]): Offering["price_status"] {
   return (rates[0]?.status as RateProblem | undefined) ?? "no_price";
 }
 
-/** Every offering multix knows a capability or a price for, at `at`. */
-export function buildOfferings(at: Date = new Date()): Offering[] {
+/**
+ * Every offering multix knows a capability or a price for, at `at`. `extraCards`
+ * are rate cards a caller read from a provider's live price list (Atlas 3D).
+ */
+export function buildOfferings(
+  at: Date = new Date(),
+  extraCards: readonly RateCard[] = [],
+): Offering[] {
   const byId = new Map<string, Omit<Offering, "price_status">>();
   const get = (provider: string, model: string) => {
     const id = `${provider}:${model}`;
@@ -186,14 +192,16 @@ export function buildOfferings(at: Date = new Date()): Offering[] {
       o.rates.push(rateView(entry, model, at));
     }
   }
-  for (const card of RATE_CARDS) {
+  for (const card of [...RATE_CARDS, ...extraCards]) {
     for (const model of card.models) {
       const o = get(card.provider, model);
       o.family = card.family;
       o.command ??=
-        card.task === "image-to-video"
-          ? `${card.provider} image-to-video`
-          : `${card.provider} video`;
+        card.task === "3d"
+          ? `${card.provider} 3d`
+          : card.task === "image-to-video"
+            ? `${card.provider} image-to-video`
+            : `${card.provider} video`;
       addTask(o, card.task);
       o.rates.push(rateView(card, model, at));
     }

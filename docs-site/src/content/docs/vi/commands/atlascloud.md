@@ -85,6 +85,40 @@ multix atlas 3d --ref object.png [-m <model>]
 (`ATLASCLOUD_IMAGE_TO_3D_MODEL`). Atlas Cloud phục vụ model 3D qua endpoint ảnh,
 và multix đọc đúng endpoint từ schema của từng model.
 
+### Giá 3D
+
+`--estimate` và `--max-cost` tính giá `atlas 3d`, và `atlas run` với model 3D,
+từ bảng giá công khai của Atlas Cloud (dữ liệu của
+<https://www.atlascloud.ai/pricing/models>), được cache 24 giờ trong
+`~/.multix/cache/models/atlas-3d.json` như các catalog `--live` khác. `base_price`
+trong danh sách model của Atlas không phải là giá một lần chạy 3D, nên multix
+không dùng nó.
+
+```bash
+multix atlas 3d --ref chair.png -m meshy-v7/image-to-3d --estimate          # $0.66, thiết lập mặc định của model
+multix atlas 3d --ref chair.png -m hi3d/v3.0-master/image-to-3d --max-cost 6  # $5.185, mức trần được chứng minh
+multix atlas run meshy-v7/image-to-3d --input '{"image_url":"https://...","should_texture":false}' --estimate
+multix models --task 3d --live      # mọi model 3D của Atlas kèm khoảng giá
+multix catalog models --task 3d     # một mức giá cho mỗi cấu hình, kèm nguồn và ngày kiểm tra
+```
+
+- `atlas 3d` không đặt thiết lập nào mà giá phụ thuộc, nên áp dụng giá với
+  thiết lập mặc định của model. `atlas run` thu hẹp các cấu hình theo thiết lập
+  mà `--input` đặt; thiết lập mà bảng giá không cố định (một `face_count` tùy
+  chỉnh) được nêu trong ghi chú của ước tính.
+- Phần lớn model 3D của Atlas được báo giá lại lúc submit từ toàn bộ request,
+  nên mức cao chỉ là ước tính: `--max-cost` cần `--cost-policy estimate`. Model
+  có một mức giá duy nhất mà Atlas không báo giá lại (Hi3D) có mức trần được
+  chứng minh.
+- Sau một lần chạy thành công có chờ kết quả, `cost.actual_usd` là mức giá niêm
+  yết đó (`computed`, `actual_source: "list_price"`), vì Atlas không trả về chi
+  phí cho prediction. Điều này cần đúng một mức giá niêm yết cho thiết lập của
+  request; nếu không, và với lần submit `--async`, chi phí thực vẫn là `null`.
+  Lần chạy lỗi sau khi chỉ gửi request đọc (đọc schema) sẽ nói rõ là nó không
+  submit công việc tính phí nào.
+- Khi không có bảng giá trong cache và không có mạng, hoặc bảng giá cũ hơn 7
+  ngày, giá là `unknown` và `--max-cost` từ chối chạy.
+
 ## Mọi model: `run`
 
 ```bash

@@ -84,7 +84,8 @@ and actual cost, variance; unknown stays `null`, never $0). Only
 `elevenlabs music` (per minute of the requested length), `fish tts`, `fish voice-design`, `openrouter tts`,
 `openrouter transcribe` (local files, measured with `ffprobe`) and
 `speech generate` on its Gemini, ElevenLabs and Fish routes (a `--fallback` plan at
-its most expensive route) are priced so far; `--max-cost`
+its most expensive route), and `atlas 3d` / `atlas run` with a 3D model (from Atlas
+Cloud's live price list) are priced so far; `--max-cost`
 refuses anything it cannot price. With `--json`, exit codes are `2` usage or
 input (including a refused `--max-cost`), `3` key or setup, `4` temporary
 (retry), `5` rejected (quota, safety, model), `6` timed out (job may still run),

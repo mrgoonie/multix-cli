@@ -16,7 +16,7 @@ import {
   findOfferings,
   sortOfferings,
 } from "./catalog-build.js";
-import { CATALOG_SCHEMA, type QuoteRequest } from "./catalog-types.js";
+import { CATALOG_SCHEMA, type QuoteRequest, type RateCard } from "./catalog-types.js";
 import { compareOfferings } from "./price-compare.js";
 
 export const CATALOG_VIEWS = ["providers", "models", "show", "compare"] as const;
@@ -40,6 +40,8 @@ export interface CatalogQuery {
   images?: number;
   sort?: string;
   at?: Date;
+  /** Rate cards the caller read from a provider's live price list (Atlas 3D in the CLI). */
+  rate_cards?: readonly RateCard[];
 }
 
 function task(value: string | undefined): Task | undefined {
@@ -85,7 +87,7 @@ export function catalogQuery(
   if (!(CATALOG_VIEWS as readonly string[]).includes(q.view)) {
     throw new ValidationError(`Invalid view: ${q.view}. Valid: ${CATALOG_VIEWS.join(", ")}`);
   }
-  const all = buildOfferings(q.at);
+  const all = buildOfferings(q.at, q.rate_cards);
   const withReady = <T extends { provider: string }>(o: T) => ({ ...o, ready: ready(o.provider) });
   if (q.view === "providers") {
     const rows = buildProviders(all, groups, ready, keyRows).filter((p) => !q.ready || p.ready);

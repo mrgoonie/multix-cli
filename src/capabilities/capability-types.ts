@@ -102,6 +102,31 @@ export interface DiscoveredModel {
   voices?: string[];
   /** Provider-reported prices, as strings in the provider's units. */
   pricing?: Record<string, string>;
+  /** A per-run price list the provider publishes for this model (Atlas Cloud 3D). */
+  price?: ListedPrice;
+}
+
+/** One configuration of a per-run price list. */
+export interface ListedPriceRow {
+  id: string;
+  label?: string;
+  usd: number;
+  /** Billing unit as the provider writes it ("/pic", "/generation"). */
+  unit?: string;
+  /** The request settings this price applies to. */
+  settings?: Record<string, string | number | boolean>;
+}
+
+/** A provider's per-run prices for one model, by configuration. */
+export interface ListedPrice {
+  rows: ListedPriceRow[];
+  /** Price of a run with the model's default settings. */
+  default_usd?: number;
+  /** Request settings the provider says the price depends on. */
+  settings?: string[];
+  /** The provider quotes the final price at submit time from the full request. */
+  quoted_at_run: boolean;
+  source: string;
 }
 
 export type DiscoveryState = "fresh" | "cached" | "stale" | "unavailable" | "unsupported";

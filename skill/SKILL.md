@@ -145,13 +145,14 @@ multix atlas audio "Hello from multix" [--voice <id>]                      # TTS
 multix atlas audio --audio ./meeting.mp3                                   # STT, transcript printed to stdout
 multix atlas 3d "a low-poly treasure chest" [--ref ./object.png]           # tencent/hunyuan3d-rapid
 multix atlas run <modelId> --input '{"prompt":"a cat"}' [--type image|video|audio]
+multix atlas 3d --ref ./object.png -m meshy-v7/image-to-3d --estimate      # 3D price from Atlas's live price list
 
 # Async + resume
 id=$(multix atlas video "waves" --async)
 multix atlas status "$id" --wait --download [--output <path>]
 ```
 
-`--ref` takes one value per flag; repeat it for several references. Local `--ref` and `--audio` files are uploaded first (`multix atlas upload <file>` prints only a temporary URL). Uploads accept only image, video and audio files up to 200 MB (`ATLASCLOUD_MAX_UPLOAD_MB`). `run --no-validate` skips the schema, so pass `--type` with it. Atlas Cloud has no cancel endpoint.
+`--ref` takes one value per flag; repeat it for several references. Local `--ref` and `--audio` files are uploaded first (`multix atlas upload <file>` prints only a temporary URL). Uploads accept only image, video and audio files up to 200 MB (`ATLASCLOUD_MAX_UPLOAD_MB`). `run --no-validate` skips the schema, so pass `--type` with it. Atlas Cloud has no cancel endpoint. `--estimate`/`--max-cost` price `atlas 3d` and `atlas run <3D model>` from Atlas's live price list (cached 24h; `multix models --task 3d --live` shows each model's range): most 3D models are re-quoted at submit, so `--max-cost` needs `--cost-policy estimate` (Hi3D has a proven cap), and a successful (non-`--async`) run priced at exactly one listed configuration reports that list price as `cost.actual_usd` (`actual_source: "list_price"`). Atlas's `base_price` is not a 3D run price; never quote it.
 
 ## Replicate
 
