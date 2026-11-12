@@ -52,7 +52,7 @@ describe("elevenlabs transcribe cost", () => {
         { input: "a.wav", model },
         { audioSeconds: 10, at: AT },
       );
-      expect(e).toMatchObject({ status: "unknown", reason: "missing_input", high_usd: null });
+      expect(e).toMatchObject({ status: "unknown", reason: "no_price", high_usd: null });
       expect(e.detail).toContain(`${model} is deprecated`);
       expect(e.detail).toContain("scribe_v2");
     }

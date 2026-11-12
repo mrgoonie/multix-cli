@@ -137,7 +137,10 @@ const DEPRECATED_SCRIBE_MODELS = ["scribe_v1", "scribe_v1_experimental"] as cons
 
 /** Why a builder could not price a request it knows, for the "missing_input" detail. */
 class Unpriced {
-  constructor(readonly detail: string) {}
+  constructor(
+    readonly detail: string,
+    readonly reason: "missing_input" | "no_price" = "missing_input",
+  ) {}
 }
 
 function lengthRequest(
@@ -262,6 +265,7 @@ const BUILDERS: Record<string, RequestBuilder> = {
     if ((DEPRECATED_SCRIBE_MODELS as readonly string[]).includes(model)) {
       return new Unpriced(
         `${model} is deprecated and ElevenLabs publishes no price for it; pass --model scribe_v2 or scribe_v3`,
+        "no_price",
       );
     }
     return {
@@ -530,7 +534,7 @@ export function estimateCommand(
   if (req instanceof Unpriced) {
     return unknownEstimate(
       command,
-      "missing_input",
+      req.reason,
       `Cannot estimate ${command}: ${req.detail}`,
       opt(named, "model") ?? defaults.model ?? "",
       defaults.at,
