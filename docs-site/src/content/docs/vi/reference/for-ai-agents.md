@@ -293,6 +293,7 @@ offering trước khi chạy; xem [Danh mục](/vi/commands/catalog/).
 | Voice workflow, dubbing hoặc audio generation | [ElevenLabs](/vi/commands/elevenlabs/) |
 | Speech qua API gốc của Fish Audio: Drama 3, hội thoại nhiều giọng, từ điển phát âm | [Fish Audio](/vi/commands/fish/) |
 | Bất kỳ model queue fal.ai, ảnh hoặc video | [fal.ai](/vi/commands/fal/) |
+| Tạo 3D bằng WaveSpeedAI Seed3D, Tripo, Hunyuan Rapid hoặc Meshy; hỗ trợ job bất đồng bộ | [WaveSpeedAI](/vi/commands/wavespeed/) |
 | Bất kỳ model Atlas Cloud nào, hoặc job ảnh/video/âm thanh/3D bất đồng bộ cần tiếp tục sau | [Atlas Cloud](/vi/commands/atlascloud/) |
 | Bất kỳ model Replicate, ảnh hoặc video; tiếp tục/hủy theo prediction ID | [Replicate](/vi/commands/replicate/) |
 | Video Runway Gen-4.5 / Gen-4 Turbo hoặc ảnh Gen-4; tiếp tục/hủy theo task ID | [Runway](/vi/commands/runway/) |

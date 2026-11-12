@@ -20,6 +20,7 @@ import {
   TOPVIEW_ROUTING,
   TOPVIEW_UID_ENV,
 } from "./topview/models.js";
+import { WAVESPEED_ROUTING } from "./wavespeed/models.js";
 
 export interface ProviderEntry {
   name: string;
@@ -91,6 +92,12 @@ export const PROVIDER_KEYS: readonly ProviderEntry[] = [
     ...keyNames(FAL_ROUTING),
     optional: true,
     link: "https://fal.ai/dashboard/keys",
+  },
+  {
+    name: "WaveSpeedAI",
+    ...keyNames(WAVESPEED_ROUTING),
+    optional: true,
+    link: "https://wavespeed.ai/accesskey",
   },
   {
     name: "Atlas Cloud",

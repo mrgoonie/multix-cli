@@ -69,6 +69,7 @@ import {
   VIDEO_MODELS as RUNWAY_VIDEO_MODELS,
 } from "../../../../src/providers/runway/models.ts";
 import { PLATFORM_ROUTES as TOPVIEW_PLATFORM_ROUTES } from "../../../../src/providers/topview/models.ts";
+import { WAVESPEED_3D_MODELS } from "../../../../src/providers/wavespeed/models.ts";
 
 /** What a provider can produce or read, as shown on the page (labels live in landing-copy.ts). */
 export const PROVIDER_MODALITIES = [
@@ -230,6 +231,16 @@ const SOURCES: readonly ProviderSource[] = [
       listed(falRegistry, "elevenlabs/tts/eleven-v4", "the verified model registry"),
       listed(falRegistry, "google/gemini-3.8-flash-tts", "the verified model registry"),
       listed(falRegistry, "fal-ai/minimax/speech-2.8-hd", "the verified model registry"),
+    ],
+  },
+  {
+    group: "wavespeed",
+    name: "WaveSpeedAI",
+    slug: "wavespeed",
+    models: [
+      listed(ids(WAVESPEED_3D_MODELS), "bytedance/seed3d-2.0/image-to-3d", "WAVESPEED_3D_MODELS"),
+      listed(ids(WAVESPEED_3D_MODELS), "tripo3d/h3.1/image-to-3d", "WAVESPEED_3D_MODELS"),
+      listed(ids(WAVESPEED_3D_MODELS), "meshy/v7.1/image-to-3d", "WAVESPEED_3D_MODELS"),
     ],
   },
   {

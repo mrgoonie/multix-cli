@@ -117,6 +117,7 @@ test("provider pages retain command caveats and asynchronous workflows", async (
     "cloudflare",
     "elevenlabs",
     "fal",
+    "wavespeed",
     "atlascloud",
     "replicate",
     "runway",

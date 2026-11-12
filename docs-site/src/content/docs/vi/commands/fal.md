@@ -226,3 +226,14 @@ cũng dùng được ở đây.
 - Trích xuất media ưu tiên các field kết quả đã biết (`images[].url`,
   `video.url`, `image.url`, `audio.url`) trước khi rơi về quét chung toàn bộ
   payload kết quả.
+
+## Tạo mô hình 3D
+
+`multix fal 3d` hỗ trợ Tripo H3.1, Hi3D v3.0/v2.1, Hunyuan 3.1 Pro/Rapid và Meshy v7/v7.1. Các tùy chọn resolution, texture, geometry, PBR truyền qua JSON trong `--input`.
+
+```bash
+multix fal 3d --ref ./object.png --model hitem3d/hi3d/v3.0/image-to-3d
+multix fal 3d --ref ./object.png --model meshy/v7.1/image-to-3d
+```
+
+Tham khảo [hướng dẫn tạo 3D qua các provider](/vi/commands/wavespeed/) và cách tiếp tục truy vấn job.

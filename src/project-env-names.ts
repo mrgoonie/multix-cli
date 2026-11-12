@@ -40,6 +40,7 @@ import {
   TOPVIEW_ROUTING,
   TOPVIEW_UID_ENV,
 } from "./providers/topview/models.js";
+import { WAVESPEED_ROUTING } from "./providers/wavespeed/models.js";
 
 /**
  * Names multix reads that a project `.env` may NOT set: opt-ins that widen
@@ -127,6 +128,7 @@ const ROUTING = [
   ATLAS_ROUTING,
   BYTEPLUS_ROUTING,
   FAL_ROUTING,
+  WAVESPEED_ROUTING,
   HEYGEN_ROUTING,
   LEONARDO_ROUTING,
   REPLICATE_ROUTING,

@@ -38,6 +38,7 @@ import { REPLICATE_ROUTING } from "../providers/replicate/models.js";
 import { RUNWAY_ROUTING } from "../providers/runway/models.js";
 import { SUME_ROUTING } from "../providers/sume/models.js";
 import { TOPVIEW_PLATFORM_ROUTING, TOPVIEW_ROUTING } from "../providers/topview/models.js";
+import { WAVESPEED_ROUTING } from "../providers/wavespeed/models.js";
 import { checkBinary } from "./check-helpers/binary-check.js";
 import { pingGemini } from "./check-helpers/gemini-ping.js";
 import { FFMPEG_HINT, MAGICK_HINT, SETUP_HINTS } from "./check-helpers/setup-hints.js";
@@ -81,6 +82,7 @@ const BASE_URL_ROUTING: readonly BaseUrlRouting[] = [
   ATLAS_ROUTING,
   BYTEPLUS_ROUTING,
   FAL_ROUTING,
+  WAVESPEED_ROUTING,
   HEYGEN_ROUTING,
   LEONARDO_ROUTING,
   REPLICATE_ROUTING,

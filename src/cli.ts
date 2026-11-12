@@ -17,7 +17,7 @@ const pkg = require("../package.json") as any;
 const program = new Command()
   .name("multix")
   .description(
-    "AI multimodal CLI — image/video/audio/3D generation, editing, transcription, and media processing via OpenAI, Gemini, MiniMax, OpenRouter, Leonardo, BytePlus, ElevenLabs, fal.ai, Atlas Cloud, Replicate, Runway, HeyGen, Sume, TopView, ffmpeg, and ImageMagick",
+    "AI multimodal CLI — image/video/audio/3D generation, editing, transcription, and media processing via OpenAI, Gemini, MiniMax, OpenRouter, Leonardo, BytePlus, ElevenLabs, fal.ai, WaveSpeedAI, Atlas Cloud, Replicate, Runway, HeyGen, Sume, TopView, ffmpeg, and ImageMagick",
   )
   // Root options (e.g. --version) are only parsed before the subcommand, so
   // subcommands can define their own --version (multix replicate run --version <id>).
