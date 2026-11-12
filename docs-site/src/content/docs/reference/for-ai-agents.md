@@ -296,6 +296,7 @@ offerings before you run it; see [Catalogue](/commands/catalog/).
 | Voice workflows, dubbing, or generated audio | [ElevenLabs](/commands/elevenlabs/) |
 | Native Fish Audio speech: Drama 3, multi-speaker turns, pronunciation dictionaries | [Fish Audio](/commands/fish/) |
 | Any fal.ai queue model, image, or video | [fal.ai](/commands/fal/) |
+| WaveSpeedAI 3D models such as Seed3D, Tripo H3.1, Hunyuan Rapid or Meshy, including resumable async jobs | [WaveSpeedAI](/commands/wavespeed/) |
 | Any Atlas Cloud model, or a resumable async image/video/audio/3D job | [Atlas Cloud](/commands/atlascloud/) |
 | Any Replicate model, image, or video; resume/cancel by prediction ID | [Replicate](/commands/replicate/) |
 | Runway Gen-4.5 / Gen-4 Turbo video or Gen-4 images; resume/cancel by task ID | [Runway](/commands/runway/) |
