@@ -165,7 +165,19 @@ export function ttsModelCaps(model: string): TtsModelCaps | undefined {
     : undefined;
 }
 
-export const ELEVENLABS_STT_MODELS = ["scribe_v1", "scribe_v1_experimental"] as const;
+/**
+ * Batch Scribe models for POST /v1/speech-to-text, current first. scribe_v1
+ * is deprecated (replacement scribe_v2) and scribe_v1_experimental is no
+ * longer listed, but both are still served; ElevenLabs publishes no price for
+ * them, so they are never estimated.
+ */
+export const ELEVENLABS_STT_MODELS = [
+  "scribe_v2",
+  "scribe_v3",
+  "scribe_v2_medical",
+  "scribe_v1",
+  "scribe_v1_experimental",
+] as const;
 
 /** Output format query string accepted by /text-to-speech and /sound-generation. */
 export const ELEVENLABS_OUTPUT_FORMATS = [
@@ -231,7 +243,7 @@ export const TASK_DEFAULTS = {
   ttsModel: "eleven_multilingual_v2",
   ttsVoice: ELEVENLABS_RECOMMENDED_VOICES.alexandra,
   ttsFormat: "mp3_44100_128" as ElevenLabsOutputFormat,
-  sttModel: "scribe_v1",
+  sttModel: "scribe_v2",
   voiceChangerModel: "eleven_multilingual_sts_v2",
   sfxFormat: "mp3_44100_128" as ElevenLabsOutputFormat,
   musicFormat: "mp3_44100_128" as ElevenLabsOutputFormat,

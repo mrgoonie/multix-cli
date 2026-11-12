@@ -84,6 +84,11 @@ multix elevenlabs isolate --input noisy.wav --output clean.wav
 multix elevenlabs align --input narration.mp3 --text-file transcript.txt
 ```
 
+`transcribe` uses `scribe_v2` by default. Pass `--model scribe_v3` for ElevenLabs'
+most accurate batch model or `--model scribe_v2_medical` for clinical audio.
+`scribe_v1` (deprecated) and `scribe_v1_experimental` (no longer listed by
+ElevenLabs) are still accepted.
+
 `sfx` and `music` can be priced before they run. `--estimate` prices the
 length you ask for at ElevenLabs' API rate ($0.12 per minute of sound, $0.15
 per minute of music): `--duration-seconds`, `--music-length-ms` or, from the CLI, the

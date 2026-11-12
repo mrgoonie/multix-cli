@@ -9,6 +9,7 @@
 import { describe, expect, it } from "vitest";
 import { checkBudget, estimateCommand, pricedCommands } from "../../../src/budget/command-cost.js";
 import { BudgetError } from "../../../src/core/errors.js";
+import { ELEVENLABS_STT_MODELS } from "../../../src/providers/elevenlabs/models.js";
 
 const AT = new Date("2026-11-12T12:00:00Z");
 
@@ -30,6 +31,26 @@ describe("elevenlabs transcribe cost", () => {
     });
     expect(e.expected_usd).toBeCloseTo((0.2 / 3600) * 27, 5);
     expect(e.high_usd).toBeCloseTo((0.2 / 3600) * 60, 5);
+  });
+
+  it("prices the default model when --model is omitted", () => {
+    const e = estimateCommand(
+      "elevenlabs transcribe",
+      { input: "a.wav" },
+      { audioSeconds: 60, at: AT },
+    );
+    expect(e).toMatchObject({ status: "estimated", model: "scribe_v2", upper_bound: "proven" });
+  });
+
+  it("lists every current batch Scribe model, and each has a price", () => {
+    for (const model of ELEVENLABS_STT_MODELS.filter((m) => !m.startsWith("scribe_v1"))) {
+      const e = estimateCommand(
+        "elevenlabs transcribe",
+        { input: "a.wav", model },
+        { audioSeconds: 60, at: AT },
+      );
+      expect(e.status).toBe("estimated");
+    }
   });
 
   it("prices every current batch Scribe model at one rate", () => {

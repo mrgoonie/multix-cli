@@ -6080,13 +6080,13 @@
             {
               "long": "--model",
               "flags": "--model <id>",
-              "description": "STT model (scribe_v1|scribe_v1_experimental)",
+              "description": "STT model (scribe_v2|scribe_v3|scribe_v2_medical|scribe_v1|scribe_v1_experimental)",
               "required": false,
               "takesValue": true,
               "valueOptional": false,
               "variadic": false,
               "negatable": false,
-              "default": "scribe_v1"
+              "default": "scribe_v2"
             },
             {
               "long": "--language",

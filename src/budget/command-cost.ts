@@ -264,7 +264,7 @@ const BUILDERS: Record<string, RequestBuilder> = {
     const model = (opt(o, "model") ?? d.model ?? ELEVENLABS_DEFAULTS.sttModel).trim();
     if ((DEPRECATED_SCRIBE_MODELS as readonly string[]).includes(model)) {
       return new Unpriced(
-        `${model} is deprecated and ElevenLabs publishes no price for it; pass --model scribe_v2 or scribe_v3`,
+        `${model} is deprecated and ElevenLabs publishes no price for it; omit --model for the default scribe_v2, or pass scribe_v3`,
         "no_price",
       );
     }

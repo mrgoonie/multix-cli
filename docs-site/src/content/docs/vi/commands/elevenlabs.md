@@ -79,6 +79,11 @@ multix elevenlabs isolate --input noisy.wav --output clean.wav
 multix elevenlabs align --input narration.mp3 --text-file transcript.txt
 ```
 
+`transcribe` mặc định dùng `scribe_v2`. Dùng `--model scribe_v3` cho model batch
+chính xác nhất của ElevenLabs hoặc `--model scribe_v2_medical` cho âm thanh y khoa.
+`scribe_v1` (đã lỗi thời) và `scribe_v1_experimental` (ElevenLabs không còn liệt
+kê) vẫn được chấp nhận.
+
 `sfx` và `music` có thể được ước tính giá trước khi chạy. `--estimate` tính giá
 theo độ dài bạn yêu cầu với mức giá API của ElevenLabs ($0.12 mỗi phút âm thanh,
 $0.15 mỗi phút nhạc): `--duration-seconds`, `--music-length-ms` hoặc, khi chạy CLI,
