@@ -24,6 +24,7 @@ import { envDefault } from "../core/env-default.js";
 import { BudgetError } from "../core/errors.js";
 import { parseJsonInput } from "../core/json-input.js";
 import { atlasDefaultModel } from "../providers/atlascloud/commands/env.js";
+import { exactAtlasListPrice } from "../providers/atlascloud/pricing.js";
 import { FAL_DEFAULTS } from "../providers/fal/models.js";
 import { DEFAULT_FISH_TTS_MODEL, FISH_TTS_MODEL_ENV } from "../providers/fish/models.js";
 import { turnsToSpeakerText } from "../providers/fish/tts-request.js";
@@ -34,6 +35,7 @@ import {
 } from "../providers/openrouter/speech-defaults.js";
 import { SUME_IMAGE_MODEL_ENV, SUME_VIDEO_MODEL_ENV } from "../providers/sume/models.js";
 import { sumeCatalogSnapshot } from "../providers/sume/node-catalog.js";
+import { untrackedFetch } from "./fetch-telemetry.js";
 import { probeDuration } from "./output-file-inspect.js";
 import { jobIdentity, run } from "./run-state.js";
 
@@ -190,17 +192,19 @@ async function atlasDefaults(
   args: readonly unknown[],
   priceAnyway: boolean,
 ): Promise<{ defaults: CommandDefaults; priced: boolean }> {
+  // Not the provider request: kept out of --dry-run and the run's calls; a dry run only reads the cache.
+  const read = () => atlas3dPriceSnapshot({ fetchFn: untrackedFetch(), cacheOnly: run.dryRun });
   if (command === "atlas 3d") {
     const flag = typeof options.model === "string" ? options.model.trim() : "";
     const refs = Array.isArray(options.ref) ? options.ref : [];
     const model = flag || atlasDefaultModel(refs.length > 0 ? "imageTo3d" : "textTo3d");
-    const atlas3dPrices = await atlas3dPriceSnapshot();
+    const atlas3dPrices = await read();
     return { defaults: { model, ...(atlas3dPrices ? { atlas3dPrices } : {}) }, priced: true };
   }
   const model = typeof args[0] === "string" ? args[0].trim() : "";
   // Unasked, only an id that names a 3D task reads the price list, so other runs never wait on it.
   if (!priceAnyway && !/-to-3d$/i.test(model)) return { defaults: {}, priced: false };
-  const atlas3dPrices = await atlas3dPriceSnapshot();
+  const atlas3dPrices = await read();
   const is3d = Boolean(model && atlas3dPrices?.models.some((m) => m.model === model));
   if (!is3d && !priceAnyway) return { defaults: {}, priced: false };
   const atlasInput = atlasRunInput(options.input);
@@ -262,9 +266,11 @@ export async function preflightCost(args: readonly unknown[] = []): Promise<bool
 function listPrice(
   e: CostEstimate | undefined,
 ): { list_price: { usd: number; label: string } } | Record<string, never> {
-  if (!e || e.status !== "estimated" || e.provider !== "atlas") return {};
-  if (e.low_usd === null || e.low_usd !== e.high_usd) return {};
-  return { list_price: { usd: e.low_usd, label: e.rate?.label ?? "provider list price" } };
+  // An --async submit ends before the job does; Atlas does not bill a job that fails later.
+  if (run.options.async) return {};
+  const usd = exactAtlasListPrice(e);
+  if (usd === undefined) return {};
+  return { list_price: { usd, label: e?.rate?.label ?? "provider list price" } };
 }
 
 /** The run's receipt, or undefined for commands that never call a provider. */

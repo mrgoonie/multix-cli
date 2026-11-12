@@ -30,7 +30,7 @@ export function atlas3dCatalog(opts: Atlas3dOptions = {}): Promise<CatalogResult
 
 /** The list as an estimator input; undefined when it could not be read and nothing is cached. */
 export async function atlas3dPriceSnapshot(
-  opts: DiscoverOptions = {},
+  opts: Atlas3dOptions = {},
 ): Promise<Atlas3dPriceSnapshot | undefined> {
   const { source, models } = await atlas3dCatalog(opts);
   if (!source.fetched_at) return undefined;

@@ -40,8 +40,10 @@ Atlas Cloud shows its prices as estimates and bills the final amount from usage,
 so multix marks them `estimate` (`basis: "estimated"` in JSON).
 Atlas Cloud 3D prices come from its live price list instead of the built-in
 price book: `catalog models --task 3d` (and `catalog show` of a 3D model) reads
-the list, cached for 24 hours like `multix models --live`; other views use a
-cached copy when there is one and never fetch it. Each 3D price is per run, one
+the list, cached for 24 hours like `multix models --live`; `catalog models`
+without `--task 3d` and `catalog providers` use a cached copy when there is one
+and never fetch it. `compare`, `recommend` and the notes commands do not include
+Atlas 3D offerings yet. Each 3D price is per run, one
 row per configuration; a model Atlas does not re-quote at submit time (Hi3D) is
 a list price, the others are estimates.
 

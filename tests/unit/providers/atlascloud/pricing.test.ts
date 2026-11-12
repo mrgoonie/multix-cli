@@ -21,6 +21,7 @@ import {
   type Atlas3dPriceSnapshot,
   atlas3dRateCards,
   estimateAtlas3dCost,
+  exactAtlasListPrice,
   listedPriceOf,
   readAtlas3dCatalog,
 } from "../../../../src/providers/atlascloud/pricing.js";
@@ -211,6 +212,55 @@ describe("estimateAtlas3dCost", () => {
       at: AT,
     });
     expect(partial).toMatchObject({ low_usd: 0.66, expected_usd: 0.66, high_usd: 0.77 });
+    // Unset settings stay at the model's defaults (Ultra off), so expected is the texture-off default row.
+    const off = estimateAtlas3dCost({
+      command: "atlas run",
+      model: MESHY,
+      input: { should_texture: false },
+      prices: await snapshot(),
+      at: AT,
+    });
+    expect(off).toMatchObject({ low_usd: 0.44, expected_usd: 0.44, high_usd: 0.55 });
+    expect(exactAtlasListPrice(off)).toBeUndefined();
+  });
+
+  it("never proves a cap or a list price when no row matches the request", async () => {
+    const prices = await snapshot();
+    const hi3d = prices.models.find((m) => m.model === HI3D);
+    if (!hi3d?.price) throw new Error("fixture");
+    hi3d.price = {
+      ...hi3d.price,
+      rows: [{ id: "q", usd: 1, settings: { quality: "high" } }],
+      settings: ["quality"],
+    };
+    const e = estimateAtlas3dCost({
+      command: "atlas run",
+      model: HI3D,
+      input: { quality: "low" },
+      prices,
+      at: AT,
+    });
+    expect(e).toMatchObject({ high_usd: 1, upper_bound: "estimated" });
+    expect(exactAtlasListPrice(e)).toBeUndefined();
+  });
+
+  it("does not crash on a malformed cached price", async () => {
+    const prices = await snapshot();
+    const meshy = prices.models.find((m) => m.model === MESHY);
+    if (!meshy) throw new Error("fixture");
+    meshy.price = { rows: "x" } as never;
+    expect(
+      estimateAtlas3dCost({ command: "atlas 3d", model: MESHY, prices, at: AT }),
+    ).toMatchObject({
+      status: "unknown",
+      reason: "no_price",
+    });
+  });
+
+  it("says when it prices from a copy it could not refresh", async () => {
+    const prices = { ...(await snapshot()), error: "HTTP 503 from api.atlascloud.ai" };
+    const e = estimateAtlas3dCost({ command: "atlas 3d", model: HI3D, prices, at: AT });
+    expect(e.assumptions.join(" ")).toMatch(/could not be refreshed \(HTTP 503/);
   });
 
   it("says when a numeric setting is not pinned by the listed rows", async () => {
@@ -223,6 +273,8 @@ describe("estimateAtlas3dCost", () => {
     });
     expect(e).toMatchObject({ low_usd: 0.5, high_usd: 0.7, upper_bound: "estimated" });
     expect(e.assumptions.join(" ")).toMatch(/do not pin face_count/);
+    expect(e.expected_usd).toBe(0.5);
+    expect(exactAtlasListPrice(e)).toBeUndefined();
   });
 
   it("proves the cap for a single price Atlas does not re-quote", async () => {
@@ -233,6 +285,7 @@ describe("estimateAtlas3dCost", () => {
       at: AT,
     });
     expect(e).toMatchObject({ high_usd: 5.185, upper_bound: "proven" });
+    expect(exactAtlasListPrice(e)).toBe(5.185);
   });
 
   it("is unknown (never $0) without a usable price list", async () => {
@@ -310,7 +363,7 @@ describe("receipts", () => {
     expect(r).toMatchObject({
       status: "computed",
       actual_usd: 0.66,
-      actual_source: "computed_from_usage",
+      actual_source: "list_price",
       role: "charge",
     });
     expect(r.reason).toMatch(/priced at the Atlas Cloud list price/);
@@ -334,7 +387,7 @@ describe("receipts", () => {
       at: AT,
     });
     expect(r).toMatchObject({ role: "observation", status: "unknown" });
-    expect(r.reason).toMatch(/submitted nothing, so it was not billed/);
+    expect(r.reason).toMatch(/submitted no billable work itself/);
   });
 });
 
@@ -387,6 +440,38 @@ describe("CLI wiring (cached price list)", () => {
     const receipt = costReceiptFor({ failed: false, notSent: false, model: HI3D });
     Object.assign(run, saved2);
     expect(receipt).toMatchObject({ status: "computed", actual_usd: 5.185 });
+  });
+
+  it("reports no list price for an --async submit or an unpinned setting", async () => {
+    vi.stubGlobal("fetch", stubAtlas().fn);
+    const saved2 = { group: run.group, calls: run.calls };
+    run.group = "atlas";
+    run.calls = [{ method: "POST", status: 200 }] as typeof run.calls;
+    run.command = "atlas 3d";
+    run.options = { ref: ["a.png"], model: HI3D, async: true };
+    await preflightCost();
+    expect(costReceiptFor({ failed: false, notSent: false })?.actual_usd).toBeNull();
+    run.command = "atlas run";
+    run.options = { input: '{"generate_type":"Normal","face_count":200000}' };
+    await preflightCost([PRO]);
+    expect(run.estimate).toMatchObject({ low_usd: 0.5, high_usd: 0.7 });
+    expect(costReceiptFor({ failed: false, notSent: false })?.actual_usd).toBeNull();
+    Object.assign(run, saved2);
+  });
+
+  it("reads only the cache on a dry run", async () => {
+    const atlas = stubAtlas();
+    vi.stubGlobal("fetch", atlas.fn);
+    run.dryRun = true;
+    run.command = "atlas 3d";
+    run.options = { ref: ["a.png"] };
+    try {
+      await preflightCost();
+    } finally {
+      run.dryRun = false;
+    }
+    expect(atlas.calls).toEqual([]);
+    expect(run.estimate).toMatchObject({ status: "unknown", reason: "no_price" });
   });
 
   it("never reads the price list for an atlas run that is not 3D unless a price is asked", async () => {

@@ -207,7 +207,12 @@ export function estimateAtlas3dCost(input: Atlas3dEstimateInput): CostEstimate {
   }
   const prices = input.prices;
   if (!prices) {
-    return unknown(model, at, "no_price", `No Atlas Cloud 3D price list; ${REFRESH_HINT}`);
+    return unknown(
+      model,
+      at,
+      "no_price",
+      `No Atlas Cloud 3D price list was read (the multix CLI reads it: ${REFRESH_HINT.replace(/^run /, "")})`,
+    );
   }
   const fetched = Date.parse(prices.fetched_at);
   if (Number.isNaN(fetched) || at.getTime() - fetched > ATLAS_PRICE_MAX_AGE_MS) {
@@ -229,8 +234,8 @@ export function estimateAtlas3dCost(input: Atlas3dEstimateInput): CostEstimate {
         : `The Atlas Cloud price list (fetched ${prices.fetched_at}) does not list ${model} as a 3D model; ${REFRESH_HINT}`,
     );
   }
-  const price = row.price;
-  if (!price || price.rows.length === 0) {
+  const price = usablePrice(row.price);
+  if (!price) {
     return unknown(model, at, "no_price", `Atlas Cloud lists no price for ${model}`);
   }
 
@@ -242,7 +247,13 @@ export function estimateAtlas3dCost(input: Atlas3dEstimateInput): CostEstimate {
   ]);
   const set = [...named].filter((k) => body[k] !== undefined);
   let rows = price.rows;
+  let matched = true;
   const assumptions: string[] = [];
+  if (prices.error) {
+    assumptions.push(
+      `Atlas's price list could not be refreshed (${prices.error}); priced from the copy fetched ${prices.fetched_at}.`,
+    );
+  }
   if (set.length > 0) {
     const narrowed = price.rows.filter((r) =>
       Object.entries(r.settings ?? {}).every(
@@ -250,7 +261,10 @@ export function estimateAtlas3dCost(input: Atlas3dEstimateInput): CostEstimate {
       ),
     );
     if (narrowed.length > 0) rows = narrowed;
-    else assumptions.push("No listed configuration matches the request's settings exactly.");
+    else {
+      matched = false;
+      assumptions.push("No listed configuration matches the request's settings exactly.");
+    }
   }
   const rowPrices = rows.map((r) => r.usd);
   let low = Math.min(...rowPrices);
@@ -265,8 +279,7 @@ export function estimateAtlas3dCost(input: Atlas3dEstimateInput): CostEstimate {
       `${command === "atlas 3d" ? "atlas 3d sets none of the settings the price depends on" : "The input sets none of the settings the price depends on"}, so the model's default settings apply (Atlas list price ${fmt(price.default_usd)}).`,
     );
   } else {
-    expected = rows.length === 1 ? high : (price.default_usd ?? high);
-    if (expected < low || expected > high) expected = high;
+    expected = defaultSettingsRow(price, rows, body)?.usd ?? high;
   }
   // Settings no listed row pins down (e.g. a numeric face_count) can still move the price.
   const unpinned = set.filter((k) =>
@@ -277,7 +290,8 @@ export function estimateAtlas3dCost(input: Atlas3dEstimateInput): CostEstimate {
       `Atlas's listed rows do not pin ${unpinned.join(", ")}; the final price may differ.`,
     );
   }
-  const exact = low === high && unpinned.length === 0;
+  // One price for exactly these settings: no unpinned setting, no failed match.
+  const exact = low === high && unpinned.length === 0 && matched;
   // A proven ceiling needs a price Atlas does not re-quote at submit time.
   const proven = exact && !price.quoted_at_run;
   if (price.quoted_at_run) {
@@ -291,7 +305,7 @@ export function estimateAtlas3dCost(input: Atlas3dEstimateInput): CostEstimate {
     );
   }
   assumptions.push("One 3D model per run; Atlas does not charge failed tasks.");
-  return {
+  const estimate: CostEstimate = {
     status: "estimated",
     currency: "USD",
     provider: "atlas",
@@ -313,6 +327,58 @@ export function estimateAtlas3dCost(input: Atlas3dEstimateInput): CostEstimate {
     assumptions,
     at: at.toISOString(),
   };
+  if (exact) EXACT.add(estimate);
+  return estimate;
+}
+
+/** Estimates that name one list price for exactly the request's settings. */
+const EXACT = new WeakSet<CostEstimate>();
+
+/**
+ * The list price an Atlas 3D estimate pins to exactly (one configuration, no
+ * unpinned or unmatched setting), else undefined: what a successful run is billed
+ * at the listed price.
+ */
+export function exactAtlasListPrice(estimate: CostEstimate | undefined): number | undefined {
+  return estimate && EXACT.has(estimate) ? (estimate.high_usd ?? undefined) : undefined;
+}
+
+/** A cached price that has the expected shape (a hand-edited cache never crashes a run). */
+function usablePrice(p: ListedPrice | undefined): ListedPrice | undefined {
+  if (!p || typeof p !== "object" || !Array.isArray(p.rows)) return undefined;
+  const rows = p.rows.filter(
+    (r) => r && typeof r === "object" && typeof r.usd === "number" && Number.isFinite(r.usd),
+  );
+  if (rows.length === 0) return undefined;
+  return {
+    ...p,
+    rows,
+    settings: Array.isArray(p.settings) ? p.settings.filter((s) => typeof s === "string") : [],
+    default_usd:
+      typeof p.default_usd === "number" && Number.isFinite(p.default_usd)
+        ? p.default_usd
+        : undefined,
+  };
+}
+
+/**
+ * Among `rows`, the one whose settings the request leaves at the model's
+ * defaults (the settings of the row priced at the default price).
+ */
+function defaultSettingsRow(
+  price: ListedPrice,
+  rows: ListedPrice["rows"],
+  body: Record<string, unknown>,
+): ListedPrice["rows"][number] | undefined {
+  if (rows.length === 1) return rows[0];
+  const base = price.rows.find((r) => r.usd === price.default_usd);
+  if (!base?.settings) return undefined;
+  const defaults = base.settings;
+  return rows.find((r) =>
+    Object.entries(r.settings ?? {}).every(
+      ([k, v]) => body[k] !== undefined || defaults[k] === undefined || defaults[k] === v,
+    ),
+  );
 }
 
 /**

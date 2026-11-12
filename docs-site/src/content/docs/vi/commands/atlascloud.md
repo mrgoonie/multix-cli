@@ -110,9 +110,12 @@ multix catalog models --task 3d     # một mức giá cho mỗi cấu hình, k�
   nên mức cao chỉ là ước tính: `--max-cost` cần `--cost-policy estimate`. Model
   có một mức giá duy nhất mà Atlas không báo giá lại (Hi3D) có mức trần được
   chứng minh.
-- Sau một lần chạy thành công, `cost.actual_usd` là mức giá niêm yết đó
-  (`computed`): Atlas không trả về chi phí cho prediction. Lần chạy lỗi trước khi
-  submit bất cứ thứ gì sẽ nói rõ và không bị tính tiền.
+- Sau một lần chạy thành công có chờ kết quả, `cost.actual_usd` là mức giá niêm
+  yết đó (`computed`, `actual_source: "list_price"`), vì Atlas không trả về chi
+  phí cho prediction. Điều này cần đúng một mức giá niêm yết cho thiết lập của
+  request; nếu không, và với lần submit `--async`, chi phí thực vẫn là `null`.
+  Lần chạy lỗi sau khi chỉ gửi request đọc (đọc schema) sẽ nói rõ là nó không
+  submit công việc tính phí nào.
 - Khi không có bảng giá trong cache và không có mạng, hoặc bảng giá cũ hơn 7
   ngày, giá là `unknown` và `--max-cost` từ chối chạy.
 

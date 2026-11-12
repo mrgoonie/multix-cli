@@ -101,6 +101,17 @@ function describeRequest(input: string | URL | Request, init?: RequestInit): Dry
   return out;
 }
 
+let untracked: typeof fetch | undefined;
+
+/**
+ * fetch without the wrapper, for multix's own reads (a price list) that are
+ * not the provider request: they are neither shown by --dry-run nor counted
+ * in the run's calls. The current global fetch before the wrapper is installed.
+ */
+export function untrackedFetch(): typeof fetch {
+  return untracked ?? globalThis.fetch;
+}
+
 /**
  * Install the wrapper. `onDryRun` is called with the first request when the
  * run is a dry run; it must end the process (it never returns normally).
@@ -108,6 +119,7 @@ function describeRequest(input: string | URL | Request, init?: RequestInit): Dry
 export function installFetchTelemetry(onDryRun: (request: DryRunRequest) => never): void {
   const original = globalThis.fetch;
   if (typeof original !== "function") return;
+  untracked = original;
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     if (run.dryRun) onDryRun(describeRequest(input, init));
     const started = Date.now();
