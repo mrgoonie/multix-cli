@@ -18,7 +18,12 @@ import {
 import { type SumeCatalogSnapshot, estimateSumeCost } from "../providers/sume/cost.js";
 import { SPEECH_PROVIDERS, type SpeechProvider } from "../speech/speech-catalog.js";
 import { parseRouteSpec, resolveTarget } from "../speech/speech-request.js";
-import { type CostEstimate, type EstimateRequest, estimateCost } from "./cost-estimate.js";
+import {
+  type CostEstimate,
+  type EstimateRequest,
+  type UnitRange,
+  estimateCost,
+} from "./cost-estimate.js";
 
 export type CostPolicy = "strict" | "estimate";
 export const COST_POLICIES: readonly CostPolicy[] = ["strict", "estimate"];
@@ -47,6 +52,11 @@ export interface CommandDefaults {
    * model's row), read by a caller that has the cache. Without it the price is unknown.
    */
   sumeCatalog?: SumeCatalogSnapshot;
+  /**
+   * `elevenlabs music --plan`: the plan's total length (sum of its sections'
+   * or chunks' `duration_ms`), read by a caller that can read the file.
+   */
+  planLengthMs?: number;
   at?: Date;
 }
 
@@ -56,6 +66,46 @@ type RequestBuilder = (options: Options, defaults: CommandDefaults) => EstimateR
 /** OpenRouter matches model ids ignoring case; the price list spells them in lower case. */
 const openrouterModel = (o: Options, d: CommandDefaults, fallback: string) =>
   (opt(o, "model") ?? d.model ?? fallback).trim().toLowerCase();
+
+/** A numeric option: a number (MCP) or a numeric string (commander, MCP). */
+function num(options: Options, name: string): number | undefined {
+  const value = options[name] ?? options[camel(name)];
+  if (typeof value === "number") return Number.isFinite(value) ? value : Number.NaN;
+  if (typeof value !== "string" || value.trim() === "") return undefined;
+  return /^\s*\d+(\.\d+)?\s*$/.test(value) ? Number(value) : Number.NaN;
+}
+
+const round1 = (n: number) => Math.round(n * 1000) / 1000;
+
+/**
+ * Output length the request asks for, in seconds: the set length, or the
+ * provider's whole allowed range when the model picks one. Out-of-range or
+ * malformed lengths are not priced (the API rejects them).
+ */
+function requestedSeconds(
+  value: number | undefined,
+  bounds: { min: number; max: number },
+  unit: { name: string; perSecond: number },
+): { seconds: UnitRange; note: string } | undefined {
+  if (value === undefined) {
+    return {
+      seconds: { low: bounds.min, expected: bounds.max, high: bounds.max },
+      note: `No ${unit.name} set: the model picks the length, so the estimate assumes the longest it may pick (${bounds.max} s).`,
+    };
+  }
+  const s = value / unit.perSecond;
+  if (!(s >= bounds.min && s <= bounds.max)) return undefined;
+  return {
+    seconds: { low: round1(s), expected: round1(s), high: round1(s) },
+    note: `Priced on the requested ${round1(s)} s of audio.`,
+  };
+}
+
+/** ElevenLabs' sound-generation default model; the CLI sends no model_id. */
+export const ELEVENLABS_SFX_MODEL = "eleven_text_to_sound_v2";
+const SFX_SECONDS = { min: 0.5, max: 30 };
+/** music_length_ms and a plan's total are bounded by the API to 3 s..10 min. */
+const MUSIC_SECONDS = { min: 3, max: 600 };
 
 const BUILDERS: Record<string, RequestBuilder> = {
   "gemini generate-speech": (o, d) => {
@@ -85,6 +135,49 @@ const BUILDERS: Record<string, RequestBuilder> = {
       extra_text: [opt(o, "previous-text"), opt(o, "next-text")].filter(
         (t): t is string => t !== undefined,
       ),
+    };
+  },
+  // Billed per minute of sound: the set --duration-seconds, or up to 30 s when the model picks.
+  "elevenlabs sfx": (o) => {
+    if ((opt(o, "text") ?? opt(o, "prompt")) === undefined) return undefined;
+    const length = requestedSeconds(num(o, "duration-seconds"), SFX_SECONDS, {
+      name: "--duration-seconds",
+      perSecond: 1,
+    });
+    if (!length) return undefined;
+    return {
+      provider: "elevenlabs",
+      model: ELEVENLABS_SFX_MODEL,
+      text: "",
+      output_seconds: length.seconds,
+      output_note: length.note,
+    };
+  },
+  // Billed per minute of music: --music-length-ms, a --plan's total, or up to 10 min when the model picks.
+  "elevenlabs music": (o, d) => {
+    const model = (opt(o, "model") ?? d.model ?? "music_v1").trim();
+    let length: ReturnType<typeof requestedSeconds>;
+    if (opt(o, "plan") !== undefined) {
+      if (d.planLengthMs === undefined) return undefined;
+      length = requestedSeconds(d.planLengthMs, MUSIC_SECONDS, {
+        name: "plan length",
+        perSecond: 1000,
+      });
+      if (length) length.note = `Priced on the plan's total ${length.seconds.high} s of music.`;
+    } else {
+      if (opt(o, "prompt") === undefined) return undefined;
+      length = requestedSeconds(num(o, "music-length-ms"), MUSIC_SECONDS, {
+        name: "--music-length-ms",
+        perSecond: 1000,
+      });
+    }
+    if (!length) return undefined;
+    return {
+      provider: "elevenlabs",
+      model,
+      text: "",
+      output_seconds: length.seconds,
+      output_note: length.note,
     };
   },
   "openrouter tts": (o, d) => {
@@ -126,6 +219,10 @@ const NEEDS: Record<string, string> = {
   "openrouter tts": "--text or --prompt (text from --text-file or --turns-file is not priced)",
   "openrouter transcribe": "the audio to transcribe (--input)",
   "fish tts": "--text, --prompt or (from the CLI) a readable --text-file or --turns-file",
+  "elevenlabs sfx":
+    "--text or --prompt, and a --duration-seconds between 0.5 and 30 when one is set",
+  "elevenlabs music":
+    "--prompt with a --music-length-ms between 3000 and 600000 when one is set, or (from the CLI) a readable --plan whose sections total 3 s to 10 min",
 };
 
 /** Priced from the model's row in Sume's catalog (per image or per second). */
