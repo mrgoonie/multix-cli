@@ -13,6 +13,7 @@ import { LEONARDO_ROUTING } from "./leonardo/models.js";
 import { REPLICATE_ROUTING } from "./replicate/models.js";
 import { RUNWAY_DASHBOARD_LINK, RUNWAY_ROUTING } from "./runway/models.js";
 import { SUME_DASHBOARD_LINK, SUME_ROUTING } from "./sume/models.js";
+import { WAVESPEED_ROUTING } from "./wavespeed/models.js";
 import {
   TOPVIEW_API_SETTINGS_LINK,
   TOPVIEW_PLATFORM_CONSOLE_LINK,
@@ -91,6 +92,12 @@ export const PROVIDER_KEYS: readonly ProviderEntry[] = [
     ...keyNames(FAL_ROUTING),
     optional: true,
     link: "https://fal.ai/dashboard/keys",
+  },
+  {
+    name: "WaveSpeedAI",
+    ...keyNames(WAVESPEED_ROUTING),
+    optional: true,
+    link: "https://wavespeed.ai/accesskey",
   },
   {
     name: "Atlas Cloud",

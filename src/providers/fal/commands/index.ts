@@ -8,6 +8,7 @@ import { registerFalResultCommand } from "./result.js";
 import { registerFalRunCommand } from "./run.js";
 import { registerFalStatusCommand } from "./status.js";
 import { registerFalTtsCommand } from "./tts.js";
+import { registerFal3dCommand } from "./three-d.js";
 import { registerFalUploadCommand } from "./upload.js";
 import { registerFalVideoCommand } from "./video.js";
 import { registerFalVoicesCommand } from "./voices.js";
@@ -20,6 +21,7 @@ export function registerFalCommands(program: Command): void {
     );
 
   registerFalRunCommand(fal);
+  registerFal3dCommand(fal);
   registerFalImageCommand(fal);
   registerFalVideoCommand(fal);
   registerFalTtsCommand(fal);

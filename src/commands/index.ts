@@ -21,6 +21,7 @@ import { registerReplicateCommands } from "../providers/replicate/commands/index
 import { registerRunwayCommands } from "../providers/runway/commands/index.js";
 import { registerSumeCommands } from "../providers/sume/commands/index.js";
 import { registerTopviewCommands } from "../providers/topview/commands/index.js";
+import { registerWaveSpeedCommands } from "../providers/wavespeed/commands/index.js";
 import { registerCatalogCommands } from "./agent/catalog-command.js";
 import { registerGuideCommand } from "./agent/guide-command.js";
 import { registerHistoryCommands } from "./agent/history-command.js";
@@ -46,6 +47,7 @@ export function registerCommands(program: Command): void {
   registerCloudflareCommands(program);
   registerElevenLabsCommands(program);
   registerFalCommands(program);
+  registerWaveSpeedCommands(program);
   registerFishCommands(program);
   registerAtlasCloudCommands(program);
   registerReplicateCommands(program);

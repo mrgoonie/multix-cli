@@ -30,6 +30,7 @@ import { LEONARDO_ROUTING } from "./providers/leonardo/models.js";
 import { PROVIDER_KEYS } from "./providers/provider-keys.js";
 import { REPLICATE_ROUTING } from "./providers/replicate/models.js";
 import { RUNWAY_ROUTING } from "./providers/runway/models.js";
+import { WAVESPEED_ROUTING } from "./providers/wavespeed/models.js";
 import {
   SUME_IMAGE_MODEL_ENV,
   SUME_ROUTING,
@@ -127,6 +128,7 @@ const ROUTING = [
   ATLAS_ROUTING,
   BYTEPLUS_ROUTING,
   FAL_ROUTING,
+  WAVESPEED_ROUTING,
   HEYGEN_ROUTING,
   LEONARDO_ROUTING,
   REPLICATE_ROUTING,
