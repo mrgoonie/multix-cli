@@ -15,6 +15,8 @@ import {
   ELEVENLABS_FORMATS as ELEVEN_FORMATS,
   GEMINI_VOICES as GEMINI_TTS_VOICES,
 } from "../providers/fal/speech-models.js";
+import { FAL_3D_PRESETS } from "../providers/fal/three-d-models.js";
+import { WAVESPEED_3D_MODELS } from "../providers/wavespeed/models.js";
 import type { InputSpec, ModelCapability, Task } from "./capability-types.js";
 
 const falSchema = (id: string) => `https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=${id}`;
@@ -154,7 +156,49 @@ function lyria(model: string, name: string, formats: string[]): ModelCapability 
   };
 }
 
+const THREE_D_VERIFIED_DATE = "2026-11-12";
+const WAVE_3D_CAPABILITIES: readonly ModelCapability[] = WAVESPEED_3D_MODELS.map((spec) => ({
+  provider: "wavespeed",
+  model: spec.id,
+  name: spec.id,
+  tasks: ["3d"],
+  command: "wavespeed 3d",
+  example:
+    spec.mode === "text"
+      ? `multix wavespeed 3d \"a wooden chest\" --model ${spec.id}`
+      : `multix wavespeed 3d --ref ./object.png --model ${spec.id}`,
+  inputs:
+    spec.mode === "text"
+      ? { prompt: { type: "string", required: true } }
+      : { [spec.field]: { type: spec.field === "images" ? "array" : "string", required: true } },
+  outputs: [{ field: "outputs", modality: "3d", formats: ["glb", "obj", "fbx", "zip"] }],
+  async: true,
+  source: { url: spec.source, verified_at: THREE_D_VERIFIED_DATE },
+}));
+const FAL_3D_CAPABILITIES: readonly ModelCapability[] = FAL_3D_PRESETS.map((spec) => ({
+  provider: "fal",
+  model: spec.id,
+  name: spec.id,
+  tasks: ["3d"],
+  command: "fal 3d",
+  example:
+    spec.mode === "text"
+      ? `multix fal 3d \"a wooden chest\" --model ${spec.id}`
+      : `multix fal 3d --ref ./object.png --model ${spec.id}`,
+  inputs:
+    spec.mode === "text"
+      ? { prompt: { type: "string", required: true } }
+      : {
+          [spec.field]: { type: spec.field === "image_urls" ? "array" : "string", required: true },
+        },
+  outputs: [{ field: "model_mesh", modality: "3d", formats: ["glb", "fbx", "obj", "stl", "usdz"] }],
+  async: true,
+  source: { url: falSchema(spec.id), verified_at: THREE_D_VERIFIED_DATE },
+}));
+
 export const MODEL_CAPABILITIES: readonly ModelCapability[] = [
+  ...WAVE_3D_CAPABILITIES,
+  ...FAL_3D_CAPABILITIES,
   lyria("lyria-3-clip-preview", "Lyria 3 Clip (30 s)", ["mp3"]),
   lyria("lyria-3.5", "Lyria 3.5 (full song)", ["mp3", "wav"]),
   {
