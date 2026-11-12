@@ -80,7 +80,8 @@ metrics, and `sources` naming the header or body field each money number came
 from), `error` (`code`, `retryable`, `retry_after_s`, `hint`) and `next`
 commands, plus a `cost` receipt (`multix.cost/v1`: estimate, provider-reported
 and actual cost, variance; unknown stays `null`, never $0). Only
-`gemini generate-speech`, `gemini generate-music`, `elevenlabs tts`, `fish tts`, `openrouter tts`,
+`gemini generate-speech`, `gemini generate-music`, `elevenlabs tts`, `elevenlabs sfx`,
+`elevenlabs music` (per minute of the requested length), `fish tts`, `fish voice-design`, `openrouter tts`,
 `openrouter transcribe` (local files, measured with `ffprobe`) and
 `speech generate` on its Gemini, ElevenLabs and Fish routes (a `--fallback` plan at
 its most expensive route) are priced so far; `--max-cost`

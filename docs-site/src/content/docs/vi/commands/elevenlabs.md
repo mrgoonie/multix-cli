@@ -79,6 +79,20 @@ multix elevenlabs isolate --input noisy.wav --output clean.wav
 multix elevenlabs align --input narration.mp3 --text-file transcript.txt
 ```
 
+`sfx` và `music` có thể được ước tính giá trước khi chạy. `--estimate` tính giá
+theo độ dài bạn yêu cầu với mức giá API của ElevenLabs ($0.12 mỗi phút âm thanh,
+$0.15 mỗi phút nhạc): `--duration-seconds`, `--music-length-ms` hoặc, khi chạy CLI,
+tổng `duration_ms` của các section hay chunk trong `--plan` (qua MCP, plan không
+được tính giá). Khi không đặt độ dài, model tự chọn, nên ước tính lấy độ
+dài dài nhất model có thể chọn (30 giây âm thanh, 10 phút nhạc). Mức cao chỉ là
+ước tính, nên `--max-cost` cần `--cost-policy estimate`.
+
+```bash
+multix elevenlabs sfx --text "bronze drum hit" --duration-seconds 3 --estimate
+multix elevenlabs music --prompt "Dreamy synthwave loop" --music-length-ms 14000 \
+  --max-cost 0.05 --cost-policy estimate
+```
+
 ## Job dubbing
 
 `dub` là bất đồng bộ. Dùng `--async` để nhận dubbing ID ngay, rồi tải track

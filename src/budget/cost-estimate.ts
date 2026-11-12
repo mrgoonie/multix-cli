@@ -8,6 +8,7 @@
  * provider bills output it has not produced yet, e.g. seconds of audio).
  */
 
+import type { Task } from "../capabilities/capability-types.js";
 import { type PriceMeter, type ResolvedRate, priceOf, resolveRate } from "./pricing-catalog.js";
 
 export interface TextUnits {
@@ -35,6 +36,15 @@ export interface EstimateRequest {
   extra_text?: string[];
   /** Length of the audio to transcribe, measured by the caller (seconds). */
   audio_seconds?: number;
+  /**
+   * Seconds of output the request asks for (a set duration, or the range the
+   * model may pick from), for output priced by length rather than by text.
+   */
+  output_seconds?: UnitRange;
+  /** Says where `output_seconds` came from; shown with the estimate. */
+  output_note?: string;
+  /** Task the command serves; a price kept for another task (music, sfx) does not apply. */
+  task?: Task;
   at?: Date;
 }
 
@@ -141,6 +151,7 @@ function meterRanges(
   all: TextUnits,
   audioSeconds: number | undefined,
   assumptions: string[],
+  output?: { seconds: UnitRange; note?: string },
 ): CostEstimate["units"] | undefined {
   const units: CostEstimate["units"] = {};
   if (meters.has("characters")) {
@@ -180,7 +191,10 @@ function meterRanges(
       `Audio billed per second of input; the high end adds ${Math.round((AUDIO_LENGTH_MARGIN - 1) * 100)}% to the measured length and rounds up to a whole minute.`,
     );
   }
-  if (meters.has("output_audio_tokens") || meters.has("output_audio_seconds")) {
+  if (output && meters.has("output_audio_seconds") && !meters.has("output_audio_tokens")) {
+    units.output_audio_seconds = output.seconds;
+    if (output.note) assumptions.push(output.note);
+  } else if (meters.has("output_audio_tokens") || meters.has("output_audio_seconds")) {
     const sec = (cps: number) => Math.max(1, text.characters / cps);
     const seconds = {
       low: Math.round(sec(CHARS_PER_SECOND.fast) * 10) / 10,
@@ -212,6 +226,15 @@ export function estimateCost(req: EstimateRequest): CostEstimate {
   const lookup = resolveRate(req.provider, req.model, at);
   if (!lookup.ok) return unknown(req, text, at, lookup.reason, lookup.detail);
   const { rate } = lookup;
+  if (rate.task && rate.task !== req.task) {
+    return unknown(
+      req,
+      text,
+      at,
+      "no_price",
+      `${rate.id} prices ${rate.task}, not ${req.task ?? "this command"}`,
+    );
+  }
   const assumptions: string[] = [];
   const meters = new Set(rate.components.map((c) => c.meter));
   const seconds = req.audio_seconds;
@@ -224,7 +247,14 @@ export function estimateCost(req: EstimateRequest): CostEstimate {
       `${rate.id} bills seconds of audio, and the length of the input audio is not known (pass a local file that ffprobe can read)`,
     );
   }
-  const units = meterRanges(meters, text, all, seconds, assumptions);
+  const units = meterRanges(
+    meters,
+    text,
+    all,
+    seconds,
+    assumptions,
+    req.output_seconds ? { seconds: req.output_seconds, note: req.output_note } : undefined,
+  );
   if (!units) {
     return unknown(req, text, at, "unsupported", `Cannot count units for ${rate.id}`);
   }

@@ -496,6 +496,37 @@ export const PRICING_CATALOG: PriceEntry[] = [
     notes: "API usage billed in USD per character; subscription plans spend credits instead.",
   },
   {
+    id: "elevenlabs/sound-effects@api",
+    provider: "elevenlabs",
+    task: "sfx",
+    // The CLI sends no model_id, so the API's default model makes every sound.
+    models: ["eleven_text_to_sound_v2"],
+    tier: "api-usage",
+    currency: "USD",
+    region: "global",
+    windows: [{ components: [{ meter: "output_audio_seconds", usd: 0.12, per: 60 }] }],
+    last_checked: "2026-11-12",
+    source: ELEVENLABS_PRICING,
+    verified: true,
+    notes:
+      "Sound Effects: USD 0.12 per minute of sound, one price for the product. The page also says sound effects are billed per generation and publishes no rounding or minimum, so the high end is an estimate.",
+  },
+  {
+    id: "elevenlabs/music@api",
+    provider: "elevenlabs",
+    task: "music",
+    models: ["music_v1", "music_v2", "music_v2_5"],
+    tier: "api-usage",
+    currency: "USD",
+    region: "global",
+    windows: [{ components: [{ meter: "output_audio_seconds", usd: 0.15, per: 60 }] }],
+    last_checked: "2026-11-12",
+    source: ELEVENLABS_PRICING,
+    verified: true,
+    notes:
+      "Eleven Music: USD 0.15 per minute of music, one price for every music model. The page also says music is billed per generation and publishes no rounding or minimum, so the high end is an estimate.",
+  },
+  {
     id: "fish/s2-pro@api",
     provider: "fish",
     models: ["s2.1-pro", "s2-pro"],
@@ -575,6 +606,8 @@ export interface ResolvedRate {
   tier: string;
   currency: "USD";
   region: string;
+  /** Task the price is for, when the entry names one; other tasks are not priced with it. */
+  task?: Task;
   /** Price in force at the requested instant. */
   components: PriceComponent[];
   /** Highest price per meter among windows within a day of the instant. */
@@ -666,6 +699,7 @@ export function resolveRate(
       tier: entry.tier,
       currency: entry.currency,
       region: entry.region,
+      ...(entry.task ? { task: entry.task } : {}),
       components: current.components,
       upper_components: maxComponents(entry.windows.filter((w) => nearWindow(w, t))),
       ...(current.label ? { label: current.label } : {}),

@@ -85,10 +85,47 @@ function fishTurnsText(path: unknown): string | undefined {
   }
 }
 
+/**
+ * Total length of an `elevenlabs music --plan` file: the sum of its sections'
+ * (music_v1) or chunks' (music_v2) `duration_ms`. Unreadable files, plans
+ * without them, or a section without a valid length stay unpriced.
+ */
+export function musicPlanLengthMs(path: unknown): number | undefined {
+  if (typeof path !== "string") return undefined;
+  try {
+    const stat = fs.statSync(path);
+    if (!stat.isFile() || stat.size > MAX_SPEECH_TEXT_FILE_BYTES) return undefined;
+    const plan = JSON.parse(fs.readFileSync(path, "utf8").replace(/^\uFEFF/, "")) as Record<
+      string,
+      unknown
+    >;
+    // music_v1 plans have sections, music_v2 plans chunks; one plan with both is not valid.
+    if (Array.isArray(plan?.sections) === Array.isArray(plan?.chunks)) return undefined;
+    const parts = (Array.isArray(plan.sections) ? plan.sections : plan.chunks) as unknown[];
+    if (parts.length === 0) return undefined;
+    let total = 0;
+    for (const part of parts) {
+      const ms = (part as { duration_ms?: unknown } | null)?.duration_ms;
+      if (typeof ms !== "number" || !Number.isFinite(ms) || ms <= 0) return undefined;
+      total += ms;
+    }
+    return total;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Defaults a command resolves at run time (env overrides, file probes), not in commander. */
-function runtimeDefaults(command: string, options: Record<string, unknown>): CommandDefaults {
+export function runtimeDefaults(
+  command: string,
+  options: Record<string, unknown>,
+): CommandDefaults {
   if (command === "gemini generate-speech") return { model: getDefaultModel("generate-speech") };
   if (command === "gemini generate-music") return { model: getDefaultModel("generate-music") };
+  if (command === "elevenlabs music" && options.plan !== undefined) {
+    const planLengthMs = musicPlanLengthMs(options.plan);
+    return planLengthMs !== undefined ? { planLengthMs } : {};
+  }
   if (command === "openrouter transcribe") {
     const audioSeconds = localAudioSeconds(options.input);
     return audioSeconds !== undefined ? { audioSeconds } : {};

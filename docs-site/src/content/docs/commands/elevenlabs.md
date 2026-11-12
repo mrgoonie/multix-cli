@@ -84,6 +84,20 @@ multix elevenlabs isolate --input noisy.wav --output clean.wav
 multix elevenlabs align --input narration.mp3 --text-file transcript.txt
 ```
 
+`sfx` and `music` can be priced before they run. `--estimate` prices the
+length you ask for at ElevenLabs' API rate ($0.12 per minute of sound, $0.15
+per minute of music): `--duration-seconds`, `--music-length-ms` or, from the CLI, the
+total `duration_ms` of a `--plan`'s sections or chunks (over MCP a plan is not
+priced). Without a length, the model picks one, so the estimate
+assumes the longest it may pick (30 s of sound, 10 minutes of music). The high
+end is an estimate, so `--max-cost` needs `--cost-policy estimate`.
+
+```bash
+multix elevenlabs sfx --text "bronze drum hit" --duration-seconds 3 --estimate
+multix elevenlabs music --prompt "Dreamy synthwave loop" --music-length-ms 14000 \
+  --max-cost 0.05 --cost-policy estimate
+```
+
 ## Dubbing jobs
 
 `dub` is asynchronous. Use `--async` to receive a dubbing ID immediately, then
