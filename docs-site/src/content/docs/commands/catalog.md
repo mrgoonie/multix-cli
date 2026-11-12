@@ -18,6 +18,7 @@ Run `multix catalog <command> --help` for every flag. With `--json`, the
 ```bash
 multix catalog providers --ready                 # providers with your key set, pricing links
 multix catalog models -t video --priced          # offerings with a current price
+multix catalog models -t 3d --live --sort price  # Atlas Cloud 3D models with their live prices
 multix catalog show fal:bytedance/seedance-2.5/text-to-video
 multix catalog compare -t video --resolution 720p --duration 10 --audio on --aspect-ratio 16:9
 multix catalog usage --by provider --since 7d    # what went through multix on this machine
@@ -36,8 +37,16 @@ URL and the date it was last checked.
 
 A price that is missing, not verified, last checked more than 120 days ago, or
 outside its dated window is shown as unknown with that reason, never as $0.
-Atlas Cloud shows its prices as estimates and bills the final amount from usage,
-so multix marks them `estimate` (`basis: "estimated"` in JSON).
+Atlas Cloud shows its video prices as estimates and bills the final amount from
+usage, so multix marks them `estimate` (`basis: "estimated"` in JSON).
+
+Atlas Cloud 3D models come from Atlas Cloud's live price list rather than from
+multix's own rate cards: one list price per configuration (the variant names
+the settings, such as "Should Texture enabled"), billed per completed request.
+`catalog models --live` reads the list (a free public request) and caches it;
+without `--live`, `models` and `show` use only a cached copy and fetch nothing.
+A copy older than 24 hours shows its prices as `stale`. The MCP tool and REST
+API do not include these offerings.
 
 ## Compare
 

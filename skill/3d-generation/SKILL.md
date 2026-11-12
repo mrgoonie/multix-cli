@@ -9,7 +9,7 @@ metadata:
 
 # multix 3D generation
 
-Check verified model capabilities before picking a model: `multix models --task 3d --ready` lists each command with its default model and whether its key is set, and `multix models --model <id>` shows a verified model's inputs and example. The capability registry is authoritative; do not rely on a static model list. Agent protocol, keys and output dir: [../SKILL.md](../SKILL.md). Atlas Cloud 3D (`multix atlas 3d`) and its async/resume rules are in [../SKILL.md](../SKILL.md#atlas-cloud).
+Check verified model capabilities before picking a model: `multix models --task 3d --ready` lists each command with its default model and whether its key is set, and `multix models --model <id>` shows a verified model's inputs and example. The capability registry is authoritative; do not rely on a static model list. Agent protocol, keys and output dir: [../SKILL.md](../SKILL.md). Atlas Cloud 3D (`multix atlas 3d`) and its async/resume rules are in [../SKILL.md](../SKILL.md#atlas-cloud). To pick an Atlas 3D model by price, run `multix catalog models -t 3d --live --sort price` (or `multix models --task 3d --live`); `multix atlas 3d ... --estimate` returns the exact per-request price, and `--max-cost <usd>` refuses a run above it.
 
 ## When to use
 

@@ -165,6 +165,8 @@ Estimate: $0.00136 expected, $0.00136–$0.00136 range (proven ceiling)
 | `openrouter transcribe` | Seconds of input audio, measured with `ffprobe` from the local `--input` file | Proven. The high end adds 5% to the measured length and rounds up to a whole minute. A URL input, a file `ffprobe` cannot read, or a token-priced model is `unknown`. |
 | `speech generate` | Each route's price, as `gemini generate-speech`, `elevenlabs tts` or `fish tts` would bill it; text from `--text` or `--text-file` | As for that provider. `--style` counts in the high end on Gemini; `--extra elevenlabs.previous_text`/`next_text` count in the high end on ElevenLabs. A `--fallback` plan is priced at its most expensive route and is proven only if every route is. A route on another provider (OpenAI, MiniMax, Atlas) or an ElevenLabs model without a listed price (`eleven_v3_conversational`) makes the whole run `unknown`. Over MCP, `text-file` is not priced. |
 
+| `atlas 3d`, `atlas run <3D model>` | One completed request at the price Atlas Cloud's public pricing service quotes for the request's settings (`atlas run` sends the pricing fields of `--input`); failed tasks are not charged | Proven when Atlas does not mark the quote as an estimate. CLI only: needs Atlas's 3D price list fetched within 24 hours (fetched on demand, cached) and a quote; over MCP, on `--dry-run` or offline it is `unknown`. A completed run's `actual_usd` is the quote. |
+
 Any other command or model has estimate status `unknown`, never $0, and
 `--max-cost` refuses it.
 

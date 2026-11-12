@@ -17,7 +17,7 @@ import {
   isTask,
 } from "../../capabilities/capability-types.js";
 import { commandCapability } from "../../capabilities/command-capabilities.js";
-import { DISCOVERY_PROVIDERS } from "../../capabilities/model-discovery.js";
+import { discoveryProvidersFor } from "../../capabilities/model-discovery.js";
 import { findModelCapability, verifiedModels } from "../../capabilities/model-registry.js";
 import { type ModelView, mergeModelViews } from "../../capabilities/model-views.js";
 import { ValidationError } from "../../core/errors.js";
@@ -202,7 +202,9 @@ async function liveModels(
   models: Array<ModelView & { ready?: boolean; keys?: string[] }>;
   sources: DiscoverySource[];
 }> {
-  const providers = DISCOVERY_PROVIDERS.filter((p) => !opts.provider || p === opts.provider);
+  const providers = discoveryProvidersFor(task).filter(
+    (p) => !opts.provider || p === opts.provider,
+  );
   const catalogs = await Promise.all(
     providers.map((p) => discoverCatalog(p, task, { refresh: opts.refresh ?? false })),
   );
@@ -315,6 +317,15 @@ function printRows(rows: ModelRow[]): void {
   }
 }
 
+/** A per-request listed price ("$0.44-$0.88/request"), when the catalog states one. */
+function requestPrice(p: Record<string, string> | undefined): string | undefined {
+  if (!p) return undefined;
+  if (p.usd_per_request) return `$${p.usd_per_request}/request`;
+  if (p.usd_per_request_min && p.usd_per_request_max)
+    return `$${p.usd_per_request_min}-$${p.usd_per_request_max}/request`;
+  return undefined;
+}
+
 function printLive(
   models: Array<ModelView & { ready?: boolean; keys?: string[] }>,
   sources: DiscoverySource[],
@@ -335,8 +346,9 @@ function printLive(
       : m.runner
         ? `unverified, multix ${m.runner} passes any id`
         : "no multix command";
+    const price = requestPrice(m.pricing);
     console.log(
-      `  ${m.verified ? "✓" : "?"} ${m.provider} ${m.model}  ${run}${state ? `  (${state})` : ""}`,
+      `  ${m.verified ? "✓" : "?"} ${m.provider} ${m.model}  ${run}${price ? `  ${price}` : ""}${state ? `  (${state})` : ""}`,
     );
   }
 }

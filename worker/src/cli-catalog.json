@@ -15983,6 +15983,16 @@
               "variadic": false,
               "negatable": false,
               "default": "id"
+            },
+            {
+              "long": "--live",
+              "flags": "--live",
+              "description": "Also read Atlas Cloud's live 3D price list (cached for 24h)",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
             }
           ]
         },

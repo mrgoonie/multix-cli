@@ -164,6 +164,8 @@ Estimate: $0.00136 expected, $0.00136–$0.00136 range (proven ceiling)
 | `openrouter transcribe` | Số giây âm thanh đầu vào, đo bằng `ffprobe` từ file `--input` cục bộ | Đã chứng minh. Mức cao cộng thêm 5% vào độ dài đo được và làm tròn lên tròn phút. Đầu vào là URL, file mà `ffprobe` không đọc được, hoặc model tính giá theo token sẽ là `unknown`. |
 | `speech generate` | Giá của từng route, tính như `gemini generate-speech`, `elevenlabs tts` hoặc `fish tts`; văn bản từ `--text` hoặc `--text-file` | Như provider đó. Với Gemini, `--style` được tính vào mức cao; với ElevenLabs, `--extra elevenlabs.previous_text`/`next_text` được tính vào mức cao. Kế hoạch có `--fallback` được tính theo route đắt nhất và chỉ được chứng minh khi mọi route đều được chứng minh. Một route trên provider khác (OpenAI, MiniMax, Atlas) hoặc model ElevenLabs chưa có giá (`eleven_v3_conversational`) khiến cả lần chạy là `unknown`. Qua MCP, `text-file` không được tính giá. |
 
+| `atlas 3d`, `atlas run <model 3D>` | Một request hoàn tất, theo giá mà dịch vụ báo giá công khai của Atlas Cloud đưa ra cho thiết lập của request (`atlas run` gửi các field giá trong `--input`); task thất bại không bị tính phí | Đã chứng minh khi Atlas không đánh dấu báo giá là ước tính. Chỉ trên CLI: cần bảng giá 3D của Atlas tải trong vòng 24 giờ (tải khi cần, có cache) và một báo giá; qua MCP, khi `--dry-run` hoặc offline thì là `unknown`. `actual_usd` của lần chạy hoàn tất là giá đã báo. |
+
 Mọi lệnh hoặc model khác có trạng thái ước tính `unknown`, không bao giờ là $0,
 và `--max-cost` từ chối chạy.
 

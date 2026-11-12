@@ -85,6 +85,37 @@ multix atlas 3d --ref object.png [-m <model>]
 (`ATLASCLOUD_IMAGE_TO_3D_MODEL`). Atlas Cloud phục vụ model 3D qua endpoint ảnh,
 và multix đọc đúng endpoint từ schema của từng model.
 
+### Chi phí 3D
+
+`atlas 3d` và `atlas run <model 3D>` được tính giá trước khi chạy. Atlas Cloud
+tính phí model 3D theo mỗi request hoàn tất, với mức giá phụ thuộc thiết lập của
+request (texture, PBR, số mặt, ...), và không tính phí task thất bại. multix đọc
+danh sách model 3D cùng giá niêm yết từ bảng giá công khai của Atlas Cloud (cache
+tối đa 24 giờ, dùng chung cache với `multix models --task 3d --live`), rồi hỏi
+dịch vụ báo giá công khai của Atlas Cloud giá của đúng request này. Chỉ model id
+và các thiết lập ảnh hưởng đến giá được gửi đi, không bao giờ gửi key, prompt hay
+file của bạn.
+
+```bash
+multix atlas 3d "a low-poly treasure chest" --estimate            # $0.30, mức trần đã chứng minh
+multix atlas 3d --ref object.png -m meshy-v7/image-to-3d --max-cost 0.70
+multix atlas run meshy-v7/image-to-3d --input @input.json --estimate  # tính giá theo các field giá trong --input
+```
+
+- Báo giá mà Atlas Cloud không đánh dấu là ước tính là mức trần đã chứng minh,
+  nên `--max-cost` hoạt động với policy strict mặc định.
+- Sau khi chạy xong, `cost.actual_usd` là giá đã báo
+  (`actual_source: "computed_from_usage"`). Lần chạy thất bại hoặc hết thời gian
+  chờ vẫn là `uncertain`; lần chạy `--async` không được chốt vì task vẫn có thể
+  thất bại.
+- Lần chạy bị từ chối trước khi submit (ví dụ `--format` với model không có
+  field định dạng) ghi rõ trong `cost.reason`: không có gì được submit và không
+  bị tính phí.
+- Khi không có bảng giá còn mới hoặc không có báo giá (offline, dịch vụ báo giá
+  lỗi, `--dry-run`, hoặc qua MCP server), ước tính là `unknown`, không bao giờ là
+  $0, và `--max-cost` từ chối chạy. `atlas run` với model không phải 3D vẫn không
+  có giá.
+
 ## Mọi model: `run`
 
 ```bash

@@ -14,9 +14,10 @@ import {
   buildProviders,
   filterOfferings,
   findOfferings,
+  mergeOfferings,
   sortOfferings,
 } from "./catalog-build.js";
-import { CATALOG_SCHEMA, type QuoteRequest } from "./catalog-types.js";
+import { CATALOG_SCHEMA, type Offering, type QuoteRequest } from "./catalog-types.js";
 import { compareOfferings } from "./price-compare.js";
 
 export const CATALOG_VIEWS = ["providers", "models", "show", "compare"] as const;
@@ -81,11 +82,13 @@ export function catalogQuery(
   ready: (provider: string) => boolean,
   groups: readonly string[],
   keyRows?: (provider: string) => readonly (readonly string[])[] | undefined,
+  /** Offerings priced from a provider's live list (the CLI's cached Atlas 3D prices). */
+  liveOfferings: Offering[] = [],
 ): Record<string, unknown> {
   if (!(CATALOG_VIEWS as readonly string[]).includes(q.view)) {
     throw new ValidationError(`Invalid view: ${q.view}. Valid: ${CATALOG_VIEWS.join(", ")}`);
   }
-  const all = buildOfferings(q.at);
+  const all = mergeOfferings(buildOfferings(q.at), liveOfferings);
   const withReady = <T extends { provider: string }>(o: T) => ({ ...o, ready: ready(o.provider) });
   if (q.view === "providers") {
     const rows = buildProviders(all, groups, ready, keyRows).filter((p) => !q.ready || p.ready);

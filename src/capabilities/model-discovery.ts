@@ -1,9 +1,10 @@
 /**
  * Read provider model catalogs for one task. Runtime-neutral: the caller
- * passes fetch; caching lives in the CLI layer. Both catalogs are public, so
+ * passes fetch; caching lives in the CLI layer. Every catalog is public, so
  * no key is sent.
  */
 
+import { readAtlas3dCatalog } from "../providers/atlascloud/pricing.js";
 import type { DiscoveredModel, Task } from "./capability-types.js";
 
 export type FetchFn = typeof fetch;
@@ -33,13 +34,23 @@ const OPENROUTER_OUTPUTS: Partial<Record<Task, string>> = {
   "image-edit": "image",
 };
 
-export const DISCOVERY_PROVIDERS = ["fal", "openrouter"] as const;
+export const DISCOVERY_PROVIDERS = ["fal", "openrouter", "atlas"] as const;
 export type DiscoveryProvider = (typeof DISCOVERY_PROVIDERS)[number];
 
 export function discoverySupported(provider: string, task: Task): boolean {
   if (provider === "fal") return FAL_CATEGORIES[task] !== undefined;
   if (provider === "openrouter") return OPENROUTER_OUTPUTS[task] !== undefined;
+  // Atlas's model list with its per-request prices (see providers/atlascloud/pricing.ts).
+  if (provider === "atlas") return task === "3d";
   return false;
+}
+
+/**
+ * Catalogs `models --task <task> --live` reads: fal and OpenRouter (reported
+ * even when they have no list for the task), plus Atlas for the tasks it lists.
+ */
+export function discoveryProvidersFor(task: Task): DiscoveryProvider[] {
+  return DISCOVERY_PROVIDERS.filter((p) => p !== "atlas" || discoverySupported(p, task));
 }
 
 const MAX_FAL_PAGES = 5;
@@ -148,5 +159,6 @@ export function readCatalog(
   task: Task,
   fetchFn: FetchFn,
 ): Promise<CatalogRead> {
+  if (provider === "atlas") return readAtlas3dCatalog(fetchFn);
   return provider === "fal" ? readFal(task, fetchFn) : readOpenRouter(task, fetchFn);
 }

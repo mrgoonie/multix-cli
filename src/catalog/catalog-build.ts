@@ -11,6 +11,8 @@ import { type PriceEntry, type PriceMeter, resolveRate } from "../budget/pricing
 import { PRICING_CATALOG } from "../budget/pricing-catalog.js";
 import type { Task } from "../capabilities/capability-types.js";
 import { MODEL_CAPABILITIES } from "../capabilities/model-registry.js";
+import { ATLAS_PRICE_MAX_AGE_MS } from "../providers/atlascloud/cost.js";
+import { ATLAS_PRICING_PAGE, type Atlas3dModel } from "../providers/atlascloud/pricing.js";
 import type {
   Offering,
   OfferingConfig,
@@ -201,6 +203,83 @@ export function buildOfferings(at: Date = new Date()): Offering[] {
   return [...byId.values()]
     .map((o) => ({ ...o, price_status: priceStatus(o.rates) }))
     .sort((a, b) => a.id.localeCompare(b.id));
+}
+
+/**
+ * Atlas Cloud 3D models from the cached live price list (`fetchedAt` is when it
+ * was read). Each listed configuration is one rate per completed request; a
+ * list older than 24h makes every rate "stale" rather than current.
+ */
+export function atlas3dOfferings(
+  models: readonly Atlas3dModel[],
+  fetchedAt: string,
+  at: Date = new Date(),
+): Offering[] {
+  const age = at.getTime() - Date.parse(fetchedAt);
+  const fresh = age >= 0 && age <= ATLAS_PRICE_MAX_AGE_MS;
+  return models.map((m) => {
+    const rates: RateView[] = (m.price_rows ?? []).map((row, i) => {
+      const base = {
+        id: `atlas/${m.model}#${i + 1}`,
+        tier: "api",
+        currency: "USD" as const,
+        basis: "list" as const,
+        config: row.label && row.label !== "default" ? { variant: row.label } : {},
+        last_checked: fetchedAt,
+        source: ATLAS_PRICING_PAGE,
+        notes: `Atlas Cloud live price list${row.unit ? ` (${row.unit})` : ""}; billed per completed request, failed tasks are not charged.`,
+      };
+      if (!fresh) {
+        return {
+          ...base,
+          status: "stale" as const,
+          detail: `Atlas Cloud price list fetched ${fetchedAt} is older than 24h; refresh it with \`multix catalog models --task 3d --live\``,
+          units: [],
+        };
+      }
+      return {
+        ...base,
+        status: "current" as const,
+        components: [{ meter: "requests" as const, usd: row.usd, per: 1 }],
+        units: [unitText("requests", row.usd, 1)],
+        label: row.label,
+      };
+    });
+    return {
+      id: `atlas:${m.model}`,
+      provider: "atlas",
+      model: m.model,
+      ...(m.name ? { name: m.name } : {}),
+      tasks: ["3d"] as Task[],
+      command: "atlas 3d",
+      verified_capability: false,
+      rates,
+      price_status: priceStatus(rates),
+    };
+  });
+}
+
+/** Static offerings plus live ones; a live offering adds its rates to a static one of the same id. */
+export function mergeOfferings(base: Offering[], live: readonly Offering[]): Offering[] {
+  if (live.length === 0) return base;
+  const byId = new Map(base.map((o) => [o.id, o]));
+  for (const l of live) {
+    const o = byId.get(l.id);
+    if (!o) {
+      byId.set(l.id, l);
+      continue;
+    }
+    const rates = [...o.rates, ...l.rates];
+    byId.set(l.id, {
+      ...o,
+      name: o.name ?? l.name,
+      tasks: [...new Set([...o.tasks, ...l.tasks])],
+      command: o.command ?? l.command,
+      rates,
+      price_status: priceStatus(rates),
+    });
+  }
+  return [...byId.values()].sort((a, b) => a.id.localeCompare(b.id));
 }
 
 export interface OfferingFilter {

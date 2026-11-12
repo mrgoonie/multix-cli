@@ -19,6 +19,7 @@ của envelope `multix.result/v1` mang `schema: "multix.catalog/v1"`.
 ```bash
 multix catalog providers --ready                 # provider đã đặt key, link bảng giá
 multix catalog models -t video --priced          # offering có giá hiện hành
+multix catalog models -t 3d --live --sort price  # model 3D của Atlas Cloud với giá trực tiếp
 multix catalog show fal:bytedance/seedance-2.5/text-to-video
 multix catalog compare -t video --resolution 720p --duration 10 --audio on --aspect-ratio 16:9
 multix catalog usage --by provider --since 7d    # những gì đã chạy qua multix trên máy này
@@ -37,9 +38,17 @@ ngày kiểm tra gần nhất.
 
 Giá bị thiếu, chưa xác minh, kiểm tra lần cuối quá 120 ngày, hoặc nằm ngoài
 khoảng thời gian hiệu lực sẽ hiển thị là không rõ (unknown) kèm lý do, không bao
-giờ là $0. Atlas Cloud hiển thị giá dưới dạng ước tính và tính tiền cuối cùng
-theo usage đo được, nên multix đánh dấu các giá này là `estimate`
+giờ là $0. Atlas Cloud hiển thị giá video dưới dạng ước tính và tính tiền cuối
+cùng theo usage đo được, nên multix đánh dấu các giá này là `estimate`
 (`basis: "estimated"` trong JSON).
+
+Model 3D của Atlas Cloud lấy từ bảng giá trực tiếp của Atlas Cloud chứ không từ
+bảng giá riêng của multix: mỗi cấu hình một giá niêm yết (variant ghi tên thiết
+lập, ví dụ "Should Texture enabled"), tính phí theo mỗi request hoàn tất.
+`catalog models --live` đọc bảng giá này (một request công khai, miễn phí) và lưu
+cache; không có `--live` thì `models` và `show` chỉ dùng bản cache, không tải gì.
+Bản cache cũ hơn 24 giờ hiển thị giá là `stale`. MCP tool và REST API không gồm
+các offering này.
 
 ## So sánh
 

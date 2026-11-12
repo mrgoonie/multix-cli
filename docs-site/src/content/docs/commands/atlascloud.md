@@ -85,6 +85,36 @@ pass `--ref`, the default is `tencent/hunyuan3d-rapid/image-to-3d`
 (`ATLASCLOUD_IMAGE_TO_3D_MODEL`). Atlas Cloud serves 3D models through its image
 endpoint, and multix reads the right endpoint from each model's schema.
 
+### 3D cost
+
+`atlas 3d` and `atlas run <3D model>` are priced before the run. Atlas Cloud
+bills a 3D model per completed request at a price that depends on the request's
+settings (texture, PBR, face count, ...), and failed tasks are not charged.
+multix reads the 3D models and their listed prices from Atlas Cloud's public
+price list (cached for at most 24 hours, the same cache as
+`multix models --task 3d --live`), then asks Atlas Cloud's public pricing
+service for this request's price. Only the model id and its pricing settings
+are sent there: never your key, prompt or files.
+
+```bash
+multix atlas 3d "a low-poly treasure chest" --estimate            # $0.30, proven ceiling
+multix atlas 3d --ref object.png -m meshy-v7/image-to-3d --max-cost 0.70
+multix atlas run meshy-v7/image-to-3d --input @input.json --estimate  # priced with --input's pricing fields
+```
+
+- A quote Atlas Cloud does not mark as an estimate is a proven ceiling, so
+  `--max-cost` works under the default strict policy.
+- After a completed run, `cost.actual_usd` is the quoted price
+  (`actual_source: "computed_from_usage"`). A failed or timed-out run stays
+  `uncertain`; an `--async` run is not settled, since the task may still fail.
+- A run that is rejected before it is submitted (for example `--format` on a
+  model that has no format field) says so in `cost.reason`: nothing was
+  submitted and nothing was charged.
+- Without a fresh price list or a quote (offline, pricing service down, a
+  `--dry-run`, or the MCP server), the estimate is `unknown`, never $0, and
+  `--max-cost` refuses the run. `atlas run` with a model that is not a 3D model
+  stays unpriced.
+
 ## Any model: `run`
 
 ```bash

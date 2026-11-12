@@ -85,6 +85,11 @@ export interface ReceiptInput {
   usage?: ReceiptUsage;
   /** A known-free operation (a price quote): its requests start no paid work. */
   free?: boolean;
+  /**
+   * A price the provider fixed for one completed run before it was sent (an
+   * Atlas 3D quote). A successful run with no reported cost is computed at it.
+   */
+  fixed_price_usd?: number;
   estimate?: CostEstimate;
   max_cost_usd?: number;
   policy?: string;
@@ -182,6 +187,10 @@ export function buildCostReceipt(input: ReceiptInput): CostReceipt {
       const lookup = resolveRate(input.provider, input.model, at);
       if (lookup.ok) computed = computeActual(lookup.rate.components, measured);
     }
+    if (computed === undefined && role === "charge" && input.fixed_price_usd !== undefined) {
+      computed = input.fixed_price_usd;
+      measured.requests ??= 1;
+    }
     // Cut off, timed out or a server error: the provider may have done (and
     // billed) the work. A 4xx refusal (bad input, auth, rate limit) is not billed.
     const refused = billable.every((c) => c.status >= 400 && c.status < 500 && c.status !== 408);
@@ -208,7 +217,9 @@ export function buildCostReceipt(input: ReceiptInput): CostReceipt {
         role === "observation"
           ? input.free
             ? "A free price quote; it starts no paid work."
-            : "Status or download only; spend belongs to the operation's submit run."
+            : input.outcome === "failed"
+              ? "The run failed before it sent a billable request (only reads, such as the model schema); nothing was submitted, so this run was not charged."
+              : "Status or download only; spend belongs to the operation's submit run."
           : "The provider reported no cost and there is no trusted price for the measured usage.";
     }
   }

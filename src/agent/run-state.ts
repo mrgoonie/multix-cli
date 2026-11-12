@@ -38,6 +38,8 @@ export interface RunState {
   group: string;
   /** Resolved options of the action command (defaults included). */
   options: Record<string, unknown>;
+  /** Positional arguments of the action command (`atlas run <modelId>`). */
+  operands?: string[];
   json: boolean;
   dryRun: boolean;
   verbose: boolean;
@@ -76,6 +78,8 @@ export interface RunState {
   estimate?: CostEstimate;
   maxCost?: number;
   costPolicy?: CostPolicy;
+  /** A price the provider fixed per completed run before it was sent (an Atlas 3D quote). */
+  fixedPriceUsd?: number;
   /**
    * `--text-file` (or `fish tts --turns-file`) as read by the pre-flight
    * estimate, without a leading BOM; the command speaks this same text so a

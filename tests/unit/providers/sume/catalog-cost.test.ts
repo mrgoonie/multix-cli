@@ -323,7 +323,7 @@ describe("command-cost and the pre-flight", () => {
       run.costPolicy = undefined;
     });
 
-    it("prices from the cached row and enforces --max-cost", () => {
+    it("prices from the cached row and enforces --max-cost", async () => {
       writeSumeCatalogCache(
         CATALOG_URL,
         parseCatalog(catalogBody([SEEDREAM])),
@@ -331,18 +331,18 @@ describe("command-cost and the pre-flight", () => {
       );
       run.command = "sume image";
       run.options = { model: "seedream-4-5-edit", numImages: "2", maxCost: "0.05" };
-      expect(() => preflightCost()).toThrow(/exceeds --max-cost/);
+      await expect(preflightCost()).rejects.toThrow(/exceeds --max-cost/);
       expect(run.estimate).toMatchObject({
         status: "estimated",
         upper_bound: "proven",
         high_usd: 0.08,
       });
       run.options = { model: "seedream-4-5-edit", numImages: "2", maxCost: "0.10" };
-      expect(preflightCost()).toBe(false);
+      expect(await preflightCost()).toBe(false);
       expect(run.budget?.ok).toBe(true);
     });
 
-    it("reads the env default model", () => {
+    it("reads the env default model", async () => {
       writeSumeCatalogCache(
         CATALOG_URL,
         parseCatalog(catalogBody([SEEDREAM])),
@@ -351,7 +351,7 @@ describe("command-cost and the pre-flight", () => {
       vi.stubEnv("SUME_IMAGE_MODEL", "seedream-4-5-edit");
       run.command = "sume image";
       run.options = { estimate: true };
-      expect(preflightCost()).toBe(true);
+      expect(await preflightCost()).toBe(true);
       expect(run.estimate).toMatchObject({ model: "seedream-4-5-edit", high_usd: 0.04 });
     });
   });

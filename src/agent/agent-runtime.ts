@@ -541,7 +541,7 @@ export function installAgentRuntime(program: Command, cliVersion: string): void 
 
   // A façade's provider command runs nested inside it; only the outermost action finalizes.
   let depth = 0;
-  program.hook("preAction", (_root, action) => {
+  program.hook("preAction", async (_root, action) => {
     depth++;
     const names = commandPath(action);
     setCommand(names);
@@ -551,12 +551,13 @@ export function installAgentRuntime(program: Command, cliVersion: string): void 
       return;
     }
     run.options = action.opts();
+    run.operands = action.args.filter((a): a is string => typeof a === "string");
     run.dryRun = Boolean(run.options.dryRun) && !ownDryRun.has(action);
     if (run.dryRun && LOCAL_GROUPS.has(names[0] ?? "")) {
       realExit(finalizeRun({ exitCode: 0, dryRunLocal: true }));
     }
     // Throws BudgetError (classified, nothing sent) when --max-cost refuses.
-    if (preflightCost()) realExit(finalizeRun({ exitCode: 0, estimateOnly: true }));
+    if (await preflightCost()) realExit(finalizeRun({ exitCode: 0, estimateOnly: true }));
   });
   program.hook("postAction", async () => {
     depth--;

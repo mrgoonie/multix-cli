@@ -7,6 +7,7 @@
  */
 
 import { BudgetError } from "../core/errors.js";
+import { type AtlasPriceSnapshot, estimateAtlasCost } from "../providers/atlascloud/cost.js";
 import { TASK_DEFAULTS as ELEVENLABS_DEFAULTS } from "../providers/elevenlabs/models.js";
 import { DEFAULT_FISH_TTS_MODEL } from "../providers/fish/models.js";
 import { MUSIC_MODEL_DEFAULT as GEMINI_MUSIC_DEFAULT } from "../providers/gemini/lyria.js";
@@ -47,6 +48,11 @@ export interface CommandDefaults {
    * model's row), read by a caller that has the cache. Without it the price is unknown.
    */
   sumeCatalog?: SumeCatalogSnapshot;
+  /**
+   * `atlas 3d` / `atlas run`: the cached Atlas 3D price list row and Atlas's
+   * quote for the request, from a caller that can fetch them. Without it the price is unknown.
+   */
+  atlasPrice?: AtlasPriceSnapshot;
   at?: Date;
 }
 
@@ -131,6 +137,9 @@ const NEEDS: Record<string, string> = {
 /** Priced from the model's row in Sume's catalog (per image or per second). */
 const SUME_COMMANDS = ["sume image", "sume video"] as const;
 
+/** Priced per request from Atlas's quote (3D models only; `atlas run` takes the model as an argument). */
+const ATLAS_COMMANDS = ["atlas 3d", "atlas run"] as const;
+
 /**
  * Requests that cost nothing even though they POST: a provider's own price
  * quote. They are priced at a proven $0, so --max-cost lets them through, and
@@ -144,7 +153,7 @@ export function isFreeCommand(command: string): boolean {
 
 /** Commands with a pre-flight estimator. */
 export function pricedCommands(): string[] {
-  return [...Object.keys(BUILDERS), "speech generate", ...SUME_COMMANDS];
+  return [...Object.keys(BUILDERS), "speech generate", ...SUME_COMMANDS, ...ATLAS_COMMANDS];
 }
 
 function unknownEstimate(
@@ -330,6 +339,17 @@ export function estimateCommand(
       model: (opt(named, "model") ?? defaults.model ?? "").trim(),
       options: named,
       catalog: defaults.sumeCatalog,
+      at: defaults.at,
+    });
+  }
+  if ((ATLAS_COMMANDS as readonly string[]).includes(command)) {
+    return estimateAtlasCost({
+      command,
+      model: (command === "atlas run"
+        ? (defaults.model ?? "")
+        : (opt(named, "model") ?? defaults.model ?? "")
+      ).trim(),
+      snapshot: defaults.atlasPrice,
       at: defaults.at,
     });
   }

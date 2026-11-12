@@ -19,8 +19,19 @@ import {
 } from "../budget/command-cost.js";
 import type { CostEstimate } from "../budget/cost-estimate.js";
 import { type CostReceipt, buildCostReceipt, operationIdFor } from "../budget/cost-receipt.js";
+import { cachedCatalog, modelsTtlSeconds } from "../commands/agent/model-discovery-cache.js";
 import { envDefault } from "../core/env-default.js";
 import { BudgetError } from "../core/errors.js";
+import { parseJsonInput } from "../core/json-input.js";
+import { atlasDefaultModel } from "../providers/atlascloud/commands/env.js";
+import { ATLAS_PRICE_MAX_AGE_MS, type AtlasPriceSnapshot } from "../providers/atlascloud/cost.js";
+import {
+  type Atlas3dModel,
+  parseAtlas3dModel,
+  pricingSettings,
+  quoteAtlasPrice,
+  readAtlas3dCatalog,
+} from "../providers/atlascloud/pricing.js";
 import { FAL_DEFAULTS } from "../providers/fal/models.js";
 import { DEFAULT_FISH_TTS_MODEL, FISH_TTS_MODEL_ENV } from "../providers/fish/models.js";
 import { turnsToSpeakerText } from "../providers/fish/tts-request.js";
@@ -31,6 +42,7 @@ import {
 } from "../providers/openrouter/speech-defaults.js";
 import { SUME_IMAGE_MODEL_ENV, SUME_VIDEO_MODEL_ENV } from "../providers/sume/models.js";
 import { sumeCatalogSnapshot } from "../providers/sume/node-catalog.js";
+import { untrackedFetch } from "./fetch-telemetry.js";
 import { probeDuration } from "./output-file-inspect.js";
 import { jobIdentity, run } from "./run-state.js";
 
@@ -85,8 +97,79 @@ function fishTurnsText(path: unknown): string | undefined {
   }
 }
 
-/** Defaults a command resolves at run time (env overrides, file probes), not in commander. */
-function runtimeDefaults(command: string, options: Record<string, unknown>): CommandDefaults {
+const message = (e: unknown) => (e instanceof Error ? e.message : String(e)).slice(0, 200);
+
+/**
+ * `atlas 3d` / `atlas run`: the model's row in the Atlas 3D price list (cached
+ * like `multix models --live`) and Atlas's quote for the request's pricing
+ * settings. Both are free public lookups that bypass the run's request record.
+ * A dry run sends nothing: it reads only the cached list and asks for no quote,
+ * so it stays unpriced.
+ */
+async function atlasPriceSnapshot(
+  command: string,
+  model: string,
+  options: Record<string, unknown>,
+): Promise<AtlasPriceSnapshot | undefined> {
+  if (!model) return undefined;
+  const fetchFn = untrackedFetch();
+  const dryRun = Boolean(run.dryRun);
+  // A price list is used for a day at most, whatever MULTIX_MODELS_TTL allows `models --live`.
+  const list = await cachedCatalog(
+    "atlas",
+    "3d",
+    dryRun
+      ? () => Promise.reject(new Error("a dry run fetches no price list"))
+      : () => readAtlas3dCatalog(fetchFn),
+    { ttlSeconds: Math.min(modelsTtlSeconds(), ATLAS_PRICE_MAX_AGE_MS / 1000) },
+  );
+  if (!list.source.fetched_at) return { error: list.source.error ?? "price list unavailable" };
+  const listed = list.models
+    .map((m) => parseAtlas3dModel(m))
+    .find((m): m is Atlas3dModel => m?.model === model);
+  const snapshot: AtlasPriceSnapshot = {
+    fetched_at: list.source.fetched_at,
+    ...(listed ? { model: listed } : {}),
+  };
+  if (!listed) return snapshot;
+  if (dryRun) return { ...snapshot, error: "a dry run asks for no price quote; use --estimate" };
+  let settings: Record<string, unknown> = {};
+  if (command === "atlas run") {
+    try {
+      settings = pricingSettings(
+        parseJsonInput(String(options.input ?? "{}")),
+        listed.pricing_params,
+      );
+    } catch {
+      return snapshot; // the command reports the bad --input itself
+    }
+  }
+  try {
+    const quote = await quoteAtlasPrice({ fetchFn, model, settings });
+    return { ...snapshot, quote, settings };
+  } catch (e) {
+    return { ...snapshot, settings, error: message(e) };
+  }
+}
+
+/** The model an `atlas 3d|run` run uses: the flag, the env default, or `run`'s argument. */
+function atlasModel(command: string, options: Record<string, unknown>): string {
+  if (command === "atlas run") return (run.operands?.[0] ?? "").trim();
+  const flag = typeof options.model === "string" ? options.model.trim() : "";
+  const refs = Array.isArray(options.ref) ? options.ref : options.ref ? [options.ref] : [];
+  return flag || atlasDefaultModel(refs.length > 0 ? "imageTo3d" : "textTo3d");
+}
+
+/** Defaults a command resolves at run time (env overrides, file probes, price lookups), not in commander. */
+async function runtimeDefaults(
+  command: string,
+  options: Record<string, unknown>,
+): Promise<CommandDefaults> {
+  if (command === "atlas 3d" || command === "atlas run") {
+    const model = atlasModel(command, options);
+    const atlasPrice = await atlasPriceSnapshot(command, model, options);
+    return { ...(model ? { model } : {}), ...(atlasPrice ? { atlasPrice } : {}) };
+  }
   if (command === "gemini generate-speech") return { model: getDefaultModel("generate-speech") };
   if (command === "gemini generate-music") return { model: getDefaultModel("generate-music") };
   if (command === "openrouter transcribe") {
@@ -134,14 +217,34 @@ function runtimeDefaults(command: string, options: Record<string, unknown>): Com
  * apply --max-cost. Throws BudgetError when the guard refuses; returns true
  * when the run is estimate-only and must stop here.
  */
-export function preflightCost(): boolean {
+export async function preflightCost(): Promise<boolean> {
   const o = run.options;
   const estimateOnly = Boolean(o.estimate);
   const hasMax = o.maxCost !== undefined;
   const maxCost = hasMax ? parseMaxCost(o.maxCost) : undefined;
   const policy = parseCostPolicy(o.costPolicy);
   if (estimateOnly || hasMax || pricedCommands().includes(run.command)) {
-    run.estimate = estimateCommand(run.command, o, runtimeDefaults(run.command, o));
+    run.estimate = estimateCommand(run.command, o, await runtimeDefaults(run.command, o));
+    // `atlas run` is priced for 3D models only: another model's run keeps no estimate unless asked.
+    if (
+      run.command === "atlas run" &&
+      run.estimate.reason === "unsupported" &&
+      !estimateOnly &&
+      !hasMax
+    ) {
+      run.estimate = undefined;
+    }
+    // Atlas fixes a 3D price per request before the run: a completed run costs the quote.
+    // An --async run exits before the task completes (a failed task is not billed).
+    const e = run.estimate;
+    if (
+      e?.provider === "atlas" &&
+      e.status === "estimated" &&
+      e.upper_bound === "proven" &&
+      !o.async
+    ) {
+      run.fixedPriceUsd = e.high_usd ?? undefined;
+    }
   }
   if (maxCost !== undefined && run.estimate) {
     run.maxCost = maxCost;
@@ -191,6 +294,7 @@ export function costReceiptFor(opts: {
     usage: opts.usage,
     ...(isFreeCommand(run.command) ? { free: true } : {}),
     estimate: run.estimate,
+    ...(run.fixedPriceUsd !== undefined ? { fixed_price_usd: run.fixedPriceUsd } : {}),
     max_cost_usd: run.maxCost,
     policy: run.maxCost !== undefined ? run.costPolicy : undefined,
   });

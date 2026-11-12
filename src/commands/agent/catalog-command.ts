@@ -13,9 +13,11 @@ import { run } from "../../agent/run-state.js";
 import { TASKS, type Task, isTask } from "../../capabilities/capability-types.js";
 import {
   PROVIDER_INFO,
+  atlas3dOfferings,
   buildOfferings,
   filterOfferings,
   findOfferings,
+  mergeOfferings,
 } from "../../catalog/catalog-build.js";
 import {
   type CatalogQuery,
@@ -51,6 +53,12 @@ import {
   resolvedModel,
 } from "../../catalog/usage-aggregate.js";
 import { ValidationError } from "../../core/errors.js";
+import { ATLAS_PRICE_MAX_AGE_MS } from "../../providers/atlascloud/cost.js";
+import {
+  type Atlas3dModel,
+  parseAtlas3dModel,
+  readAtlas3dCatalog,
+} from "../../providers/atlascloud/pricing.js";
 import {
   addNote,
   locate,
@@ -60,6 +68,7 @@ import {
   storeFile,
   upsertReview,
 } from "./catalog-store.js";
+import { cachedCatalog, modelsTtlSeconds } from "./model-discovery-cache.js";
 import { GROUP_KEY_ROWS, groupReady } from "./provider-group-keys.js";
 
 function collect(value: string, prev: string[] = []): string[] {
@@ -157,6 +166,60 @@ function queryOf(view: CatalogView, opts: QuoteFlags): CatalogQuery {
 }
 
 const PROVIDER_GROUPS = Object.keys(GROUP_KEY_ROWS);
+
+/** Live-priced offerings for a listing, and what to tell the reader about them. */
+interface LiveOfferings {
+  offerings: Offering[];
+  /** Why the Atlas 3D list is missing or not fresh; absent when it is in use and fresh. */
+  note?: string;
+}
+
+/**
+ * The Atlas Cloud 3D models with their listed prices, from the price list
+ * `atlas 3d --estimate` also uses. `live` reads it from Atlas (a free public
+ * list, kept for 24h at most); otherwise only the cached copy is used and
+ * nothing is fetched.
+ */
+async function atlasLive(opts: {
+  task?: string;
+  provider?: string;
+  live?: boolean;
+}): Promise<LiveOfferings> {
+  if (
+    (opts.task !== undefined && opts.task !== "3d") ||
+    (opts.provider && opts.provider !== "atlas")
+  ) {
+    return { offerings: [] };
+  }
+  const list = await cachedCatalog(
+    "atlas",
+    "3d",
+    opts.live
+      ? () => readAtlas3dCatalog(fetch)
+      : () => Promise.reject(new Error("not fetched without --live")),
+    { ttlSeconds: Math.min(modelsTtlSeconds(), ATLAS_PRICE_MAX_AGE_MS / 1000) },
+  );
+  const hint = "add --live to read Atlas Cloud's 3D price list";
+  // A listing that did not ask for 3D or Atlas is not told about the 3D list.
+  const asked = opts.task === "3d" || opts.provider === "atlas";
+  let note: string | undefined;
+  if (!list.source.fetched_at) {
+    note = opts.live
+      ? `Atlas Cloud 3D price list unavailable: ${list.source.error ?? "unknown error"}`
+      : `Atlas Cloud 3D models are not listed: no cached price list; ${hint}`;
+  } else if (list.source.state === "stale") {
+    note = opts.live
+      ? `Atlas Cloud 3D price list could not be refreshed (${list.source.error}); showing the copy from ${list.source.fetched_at}`
+      : `Atlas Cloud 3D prices are from ${list.source.fetched_at}; ${hint}`;
+  }
+  const models = list.models
+    .map((m) => parseAtlas3dModel(m))
+    .filter((m): m is Atlas3dModel => m !== undefined);
+  return {
+    offerings: list.source.fetched_at ? atlas3dOfferings(models, list.source.fetched_at) : [],
+    ...(note && (asked || opts.live) ? { note } : {}),
+  };
+}
 
 interface FilterFlags {
   task?: string;
@@ -264,17 +327,30 @@ function registerBrowse(catalog: Command): void {
     .option("-q, --query <text>", "Text in the offering id, name or family")
     .option("--priced", "Only offerings with a current price")
     .option("--sort <field>", "id, provider, price (per billing unit) or checked", "id")
-    .action((opts: FilterFlags) => {
-      const payload = catalogQuery(queryOf("models", opts), groupReady, PROVIDER_GROUPS);
-      if (run.json) return console.log(JSON.stringify(payload));
+    .option("--live", "Also read Atlas Cloud's live 3D price list (cached for 24h)")
+    .action(async (opts: FilterFlags & { live?: boolean }) => {
+      const live = await atlasLive(opts);
+      const payload = catalogQuery(
+        queryOf("models", opts),
+        groupReady,
+        PROVIDER_GROUPS,
+        undefined,
+        live.offerings,
+      );
+      if (run.json) {
+        return console.log(
+          JSON.stringify(live.note ? { ...payload, notes: [live.note] } : payload),
+        );
+      }
       printOfferings(payload.offerings as Offering[]);
+      if (live.note) console.error(live.note);
     });
 
   catalog
     .command("show <offering>")
     .description("One offering: prices, your usage through multix, ratings and use-case notes")
-    .action((ref: string) => {
-      const o = oneOffering(buildOfferings(), ref);
+    .action(async (ref: string) => {
+      const o = oneOffering(mergeOfferings(buildOfferings(), (await atlasLive({})).offerings), ref);
       const usage = aggregateUsage(readHistory(), "offering").find((u) => u.key === o.id) ?? null;
       const store = readAll();
       const reviews = store.reviews.filter((r) => r.offering === o.id);
