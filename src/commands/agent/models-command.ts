@@ -23,6 +23,7 @@ import { type ModelView, mergeModelViews } from "../../capabilities/model-views.
 import { ValidationError } from "../../core/errors.js";
 import { isGenerateTask } from "../generate/generate-adapters.js";
 import { type ProviderModels, generateProviderModels } from "../generate/generate-models.js";
+import { atlas3dCatalog } from "./atlas-3d-prices.js";
 import { discoverCatalog } from "./model-discovery-cache.js";
 import { groupKeyNames, groupReady } from "./provider-group-keys.js";
 
@@ -203,9 +204,14 @@ async function liveModels(
   sources: DiscoverySource[];
 }> {
   const providers = DISCOVERY_PROVIDERS.filter((p) => !opts.provider || p === opts.provider);
-  const catalogs = await Promise.all(
-    providers.map((p) => discoverCatalog(p, task, { refresh: opts.refresh ?? false })),
-  );
+  const refresh = opts.refresh ?? false;
+  const catalogs = await Promise.all([
+    ...providers.map((p) => discoverCatalog(p, task, { refresh })),
+    // Atlas Cloud publishes its 3D models with per-configuration prices.
+    ...(task === "3d" && (!opts.provider || opts.provider === "atlas")
+      ? [atlas3dCatalog({ refresh })]
+      : []),
+  ]);
   const models = mergeModelViews(task, catalogs, opts.provider).map((m) =>
     m.command ? { ...m, ready: groupReady(m.provider), ...keyFields(m.provider) } : m,
   );
@@ -335,10 +341,19 @@ function printLive(
       : m.runner
         ? `unverified, multix ${m.runner} passes any id`
         : "no multix command";
+    const price = listedPriceText(m.pricing);
     console.log(
-      `  ${m.verified ? "✓" : "?"} ${m.provider} ${m.model}  ${run}${state ? `  (${state})` : ""}`,
+      `  ${m.verified ? "✓" : "?"} ${m.provider} ${m.model}  ${run}${state ? `  (${state})` : ""}${price ? `  ${price}` : ""}`,
     );
   }
+}
+
+/** "$0.66/pic (by settings $0.44-$0.77)" for a model with a per-run price list. */
+function listedPriceText(p: Record<string, string> | undefined): string | undefined {
+  if (!p?.min_usd || !p.max_usd) return undefined;
+  const unit = p.unit ?? "";
+  const range = p.min_usd === p.max_usd ? "" : ` (by settings $${p.min_usd}-$${p.max_usd})`;
+  return `$${p.default_usd ?? p.min_usd}${unit}${range}`;
 }
 
 function printProviders(providers: ProviderModels[]): void {

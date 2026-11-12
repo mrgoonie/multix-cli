@@ -38,6 +38,12 @@ A price that is missing, not verified, last checked more than 120 days ago, or
 outside its dated window is shown as unknown with that reason, never as $0.
 Atlas Cloud shows its prices as estimates and bills the final amount from usage,
 so multix marks them `estimate` (`basis: "estimated"` in JSON).
+Atlas Cloud 3D prices come from its live price list instead of the built-in
+price book: `catalog models --task 3d` (and `catalog show` of a 3D model) reads
+the list, cached for 24 hours like `multix models --live`; other views use a
+cached copy when there is one and never fetch it. Each 3D price is per run, one
+row per configuration; a model Atlas does not re-quote at submit time (Hi3D) is
+a list price, the others are estimates.
 
 ## Compare
 

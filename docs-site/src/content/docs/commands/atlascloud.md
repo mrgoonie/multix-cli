@@ -85,6 +85,36 @@ pass `--ref`, the default is `tencent/hunyuan3d-rapid/image-to-3d`
 (`ATLASCLOUD_IMAGE_TO_3D_MODEL`). Atlas Cloud serves 3D models through its image
 endpoint, and multix reads the right endpoint from each model's schema.
 
+### 3D prices
+
+`--estimate` and `--max-cost` price `atlas 3d`, and `atlas run` with a 3D model,
+from Atlas Cloud's public price list (the data behind
+<https://www.atlascloud.ai/pricing/models>), cached for 24 hours in
+`~/.multix/cache/models/atlas-3d.json` like the other `--live` catalogs. The
+`base_price` in Atlas's model list is not what a 3D run costs, so multix does not
+use it.
+
+```bash
+multix atlas 3d --ref chair.png -m meshy-v7/image-to-3d --estimate          # $0.66, the model's default settings
+multix atlas 3d --ref chair.png -m hi3d/v3.0-master/image-to-3d --max-cost 6  # $5.185, a proven cap
+multix atlas run meshy-v7/image-to-3d --input '{"image_url":"https://...","should_texture":false}' --estimate
+multix models --task 3d --live      # every Atlas 3D model with its price range
+multix catalog models --task 3d     # one price per configuration, with source and date
+```
+
+- `atlas 3d` sets none of the settings a price depends on, so the model's
+  default-settings price applies. `atlas run` narrows the configurations to the
+  settings its `--input` sets; a setting the list does not pin (a custom
+  `face_count`) is named in the estimate's notes.
+- Most Atlas 3D models are quoted again at submit time from the full request,
+  so their high end is an estimate: `--max-cost` needs `--cost-policy estimate`.
+  A model with one price that Atlas does not re-quote (Hi3D) has a proven cap.
+- After a successful run, `cost.actual_usd` is that list price (`computed`):
+  Atlas returns no cost for a prediction. A run that failed before it submitted
+  anything says so and was not billed.
+- With no cached list and no network, or a list older than 7 days, the price is
+  `unknown` and `--max-cost` refuses the run.
+
 ## Any model: `run`
 
 ```bash

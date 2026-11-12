@@ -40,6 +40,12 @@ khoảng thời gian hiệu lực sẽ hiển thị là không rõ (unknown) kè
 giờ là $0. Atlas Cloud hiển thị giá dưới dạng ước tính và tính tiền cuối cùng
 theo usage đo được, nên multix đánh dấu các giá này là `estimate`
 (`basis: "estimated"` trong JSON).
+Giá 3D của Atlas Cloud lấy từ bảng giá trực tiếp của Atlas thay vì bảng giá
+có sẵn: `catalog models --task 3d` (và `catalog show` một model 3D) đọc bảng giá
+đó, được cache 24 giờ như `multix models --live`; các view khác dùng bản cache
+nếu có và không bao giờ tải về. Mỗi giá 3D tính theo lần chạy, một dòng cho mỗi
+cấu hình; model mà Atlas không báo giá lại lúc submit (Hi3D) là giá niêm yết,
+các model khác là ước tính.
 
 ## So sánh
 

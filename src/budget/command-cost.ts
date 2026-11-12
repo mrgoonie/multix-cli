@@ -7,6 +7,8 @@
  */
 
 import { BudgetError } from "../core/errors.js";
+import { ATLAS_DEFAULT_MODELS } from "../providers/atlascloud/models.js";
+import { type Atlas3dPriceSnapshot, estimateAtlas3dCost } from "../providers/atlascloud/pricing.js";
 import { TASK_DEFAULTS as ELEVENLABS_DEFAULTS } from "../providers/elevenlabs/models.js";
 import { DEFAULT_FISH_TTS_MODEL } from "../providers/fish/models.js";
 import { MUSIC_MODEL_DEFAULT as GEMINI_MUSIC_DEFAULT } from "../providers/gemini/lyria.js";
@@ -57,6 +59,13 @@ export interface CommandDefaults {
    * or chunks' `duration_ms`), read by a caller that can read the file.
    */
   planLengthMs?: number;
+  /**
+   * `atlas 3d` / `atlas run`: the cached Atlas Cloud 3D price list, read by a
+   * caller that has the cache. Without it the price is unknown.
+   */
+  atlas3dPrices?: Atlas3dPriceSnapshot;
+  /** `atlas run`: the parsed --input body, read by a caller that can read an @file. */
+  atlasInput?: Record<string, unknown>;
   at?: Date;
 }
 
@@ -268,9 +277,22 @@ export function isFreeCommand(command: string): boolean {
   return FREE_COMMANDS.has(command);
 }
 
+/**
+ * Priced from Atlas Cloud's live 3D price list. `atlas run` is priced only for
+ * 3D models; the caller decides when an `atlas run` model is one.
+ */
+const ATLAS_3D_COMMANDS = ["atlas 3d", "atlas run"] as const;
+
+/** `atlas 3d`'s built-in model: image-to-3D with --ref, text-to-3D without. */
+function atlas3dDefault(options: Options): string {
+  return list(options.ref).length > 0
+    ? ATLAS_DEFAULT_MODELS.imageTo3d
+    : ATLAS_DEFAULT_MODELS.textTo3d;
+}
+
 /** Commands with a pre-flight estimator. */
 export function pricedCommands(): string[] {
-  return [...Object.keys(BUILDERS), "speech generate", ...SUME_COMMANDS];
+  return [...Object.keys(BUILDERS), "speech generate", ...SUME_COMMANDS, "atlas 3d"];
 }
 
 function unknownEstimate(
@@ -459,6 +481,28 @@ export function estimateCommand(
       at: defaults.at,
     });
   }
+  if ((ATLAS_3D_COMMANDS as readonly string[]).includes(command)) {
+    // `atlas run <modelId>` takes the model as an argument; the caller passes it as the default.
+    const inline = command === "atlas run" ? opt(named, "input") : undefined;
+    let input = defaults.atlasInput;
+    if (!input && inline?.trim().startsWith("{")) {
+      try {
+        input = JSON.parse(inline) as Record<string, unknown>;
+      } catch {
+        input = undefined;
+      }
+    }
+    return estimateAtlas3dCost({
+      command,
+      model: (command === "atlas 3d"
+        ? (opt(named, "model") ?? defaults.model ?? atlas3dDefault(named))
+        : (defaults.model ?? "")
+      ).trim(),
+      ...(input ? { input } : {}),
+      ...(defaults.atlas3dPrices ? { prices: defaults.atlas3dPrices } : {}),
+      at: defaults.at,
+    });
+  }
   const builder = BUILDERS[command];
   const req = builder?.(named, defaults);
   if (req instanceof Unpriced) {
@@ -522,7 +566,7 @@ export function checkBudget(estimate: CostEstimate, maxCost: number, policy: Cos
   }
   if (estimate.upper_bound !== "proven" && policy !== "estimate") {
     throw new BudgetError(
-      `Refusing to run: the provider bills output it has not produced yet, so the high estimate ${usd(estimate.high_usd)} is not a proven cap. Re-run with --cost-policy estimate to accept the estimated high end against --max-cost ${usd(maxCost)}.`,
+      `Refusing to run: ${estimate.provider === "atlas" ? "Atlas Cloud quotes the final price at submit time" : "the provider bills output it has not produced yet"}, so the high estimate ${usd(estimate.high_usd)} is not a proven cap. Re-run with --cost-policy estimate to accept the estimated high end against --max-cost ${usd(maxCost)}.`,
       "BUDGET_UNPROVEN",
     );
   }
