@@ -382,8 +382,11 @@ describe("budget guards (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
       actual_usd: 0.66,
       actual_source: "provider_reported",
     });
-    const history = await run(["history", "--json"]);
-    expect(history.exitCode).toBe(0);
-    expect(history.stdout).toContain("0.66");
+    // One operation: the run and the status read count the charge once.
+    const stats = await run(["history", "stats", "--json"]);
+    expect(stats.exitCode).toBe(0);
+    expect(envelope(stats.stdout).data).toEqual([
+      expect.objectContaining({ provider: "atlas", runs: 2, cost_usd: 0.66, credits: 30 }),
+    ]);
   });
 });

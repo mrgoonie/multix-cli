@@ -110,7 +110,8 @@ multix catalog models --task 3d     # một mức giá cho mỗi cấu hình, k�
   nên mức cao chỉ là ước tính: `--max-cost` cần `--cost-policy estimate`. Model
   có một mức giá duy nhất mà Atlas không báo giá lại (Hi3D) có mức trần được
   chứng minh.
-- Prediction đã hoàn tất báo số tiền Atlas đã tính phí trong `data.price` (USD).
+- Prediction đã hoàn tất của mọi model Atlas (ảnh, video, âm thanh, 3D) báo số
+  tiền Atlas đã tính phí trong `data.price` (USD).
   Lần chạy có chờ kết quả, và `multix atlas status <id>`, báo số đó là
   `cost.actual_usd` (`settled`, `actual_source: "provider_reported"`;
   `usage.sources.cost_usd` ghi `body.data.price`), và `multix history` hiển thị
@@ -119,8 +120,9 @@ multix catalog models --task 3d     # một mức giá cho mỗi cấu hình, k�
 - Khi prediction không báo giá, lần chạy thành công có chờ kết quả dùng mức giá
   niêm yết (`computed`, `actual_source: "list_price"`). Điều này cần đúng một
   mức giá niêm yết cho thiết lập của request; nếu không, và với lần submit
-  `--async`, chi phí thực vẫn là `null` cho đến khi `atlas status` đọc
-  prediction đã hoàn tất.
+  `--async`, chi phí thực của lần chạy đó vẫn là `null`. Lệnh `atlas status`
+  sau đó đọc prediction đã hoàn tất sẽ báo `data.price`, và `multix history`
+  chỉ tính nó một lần cho prediction đó.
   Lần chạy lỗi sau khi chỉ gửi request đọc (đọc schema) sẽ nói rõ là nó không
   submit công việc tính phí nào.
 - Khi không có bảng giá trong cache và không có mạng, hoặc bảng giá cũ hơn 7

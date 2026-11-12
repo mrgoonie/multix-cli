@@ -290,12 +290,6 @@ export function extractUsage(body: unknown, headers?: Headers | null): ResponseU
   if (obj) {
     tokensFrom(obj, out.tokens);
     walk(obj, "", 0, out, held);
-    const price = predictionPrice(obj);
-    if (price !== undefined) {
-      out.metrics["data.price"] = price;
-      out.cost_usd = price;
-      out.sources = { cost_usd: "body.data.price" };
-    }
   }
   // With a charge summary in the body, only its captured amounts are spend:
   // a reservation reported elsewhere in the same body never is.
@@ -327,6 +321,13 @@ export function extractUsage(body: unknown, headers?: Headers | null): ResponseU
         out.sources = { ...out.sources, credits: `body.${path}` };
       }
     }
+  }
+  // Only when the body names no other charge: a cost key it reports wins.
+  const price = obj && out.cost_usd === undefined ? predictionPrice(obj) : undefined;
+  if (price !== undefined) {
+    out.metrics["data.price"] = price;
+    out.cost_usd = price;
+    out.sources = { ...out.sources, cost_usd: "body.data.price" };
   }
   if (headers) {
     for (const name of USAGE_HEADERS) {

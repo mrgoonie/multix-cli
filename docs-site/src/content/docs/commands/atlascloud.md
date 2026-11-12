@@ -109,8 +109,9 @@ multix catalog models --task 3d     # one price per configuration, with source a
 - Most Atlas 3D models are quoted again at submit time from the full request,
   so their high end is an estimate: `--max-cost` needs `--cost-policy estimate`.
   A model with one price that Atlas does not re-quote (Hi3D) has a proven cap.
-- A finished prediction reports what Atlas charged as `data.price` (USD). A run
-  that waited for its result, and `multix atlas status <id>`, report it as
+- A finished prediction of any Atlas model (image, video, audio, 3D) reports
+  what Atlas charged as `data.price` (USD). A run that waited for its result,
+  and `multix atlas status <id>`, report it as
   `cost.actual_usd` (`settled`, `actual_source: "provider_reported"`;
   `usage.sources.cost_usd` names `body.data.price`), and `multix history` shows
   it. A 3D run often costs many times the per-unit list price (a Meshy
@@ -118,8 +119,9 @@ multix catalog models --task 3d     # one price per configuration, with source a
 - When the prediction reports no price, a successful run that waited for its
   result falls back to the list price (`computed`, `actual_source:
   "list_price"`). This needs one listed price for exactly the request's
-  settings; otherwise, and for an `--async` submit, the actual cost stays
-  `null` until `atlas status` reads the finished prediction. A run that failed
+  settings; otherwise, and for an `--async` submit, that run's actual cost
+  stays `null`. A later `atlas status` of the finished prediction reports
+  `data.price`, and `multix history` counts it once for the prediction. A run that failed
   after sending only read requests (a schema read) says it submitted no
   billable work.
 - With no cached list and no network, or a list older than 7 days, the price is

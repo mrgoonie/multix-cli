@@ -226,6 +226,12 @@ describe("extractUsage", () => {
     ]) {
       expect(extractUsage({ code: 200, data }).cost_usd).toBeUndefined();
     }
+    // A cost the body reports itself wins over data.price.
+    const both = extractUsage({
+      data: { id: "p", status: "completed", price: 0.66, usage: { cost: 0.5 } },
+    });
+    expect(both.cost_usd).toBe(0.5);
+    expect(both.sources?.cost_usd).toBe("body.data.usage.cost");
     // A price elsewhere in a body is not a charge.
     expect(extractUsage({ id: "p", status: "completed", price: 0.66 }).cost_usd).toBeUndefined();
   });
