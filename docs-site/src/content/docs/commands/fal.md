@@ -227,3 +227,14 @@ path segments, e.g. `fal-ai/kling-video`); the full model id used for `run`,
 - Media extraction prefers known result fields (`images[].url`, `video.url`,
   `image.url`, `audio.url`) before falling back to a generic scan of the
   result payload.
+
+## 3D models
+
+The typed `fal 3d` command supports Tripo H3.1, Hi3D v3.0/v2.1, Hunyuan 3.1 Pro/Rapid and Meshy v7/v7.1. Model-specific resolution, texture, geometry and PBR options go in `--input` JSON.
+
+```bash
+multix fal 3d --ref ./object.png --model hitem3d/hi3d/v3.0/image-to-3d
+multix fal 3d --ref ./object.png --model meshy/v7.1/image-to-3d
+```
+
+See [3D through WaveSpeedAI and fal.ai](/commands/wavespeed/) for examples and job resumption.

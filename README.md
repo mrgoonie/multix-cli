@@ -1211,3 +1211,19 @@ npm test
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+### WaveSpeedAI and fal.ai 3D generation
+
+Set `WAVESPEED_API_KEY` or `FAL_KEY` and run `multix check`. The WaveSpeedAI client supports asynchronous prediction jobs, local image/media uploads, downloading model assets and resuming without resubmitting.
+
+```bash
+multix wavespeed models
+multix wavespeed 3d --ref ./object.png --model bytedance/seed3d-2.0/image-to-3d
+multix wavespeed 3d "a wooden chest" --model tripo3d/h3.1/text-to-3d
+multix wavespeed 3d --ref ./front.png --ref ./side.png --model tripo3d/h3.1/multiview-to-3d --detach
+multix wavespeed status PREDICTION_ID --wait
+multix fal 3d --ref ./object.png --model hitem3d/hi3d/v3.0/image-to-3d
+multix fal 3d --ref ./object.png --model fal-ai/hunyuan-3d/v3.1/pro/image-to-3d
+```
+
+See [WaveSpeedAI 3D docs](docs-site/src/content/docs/commands/wavespeed.md) for model-specific inputs and safe retries. A catalog unit price is not necessarily the final charge for a textured 3D model.

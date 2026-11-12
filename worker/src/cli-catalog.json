@@ -6777,6 +6777,104 @@
           ]
         },
         {
+          "command": "fal 3d",
+          "description": "3D via fal.ai: Tripo H3.1, Hi3D v3/v2.1, Hunyuan 3.1 and Meshy v7/v7.1",
+          "positionals": [
+            {
+              "name": "prompt",
+              "description": "",
+              "required": false,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--model",
+              "flags": "-m, --model <id>",
+              "description": "Model preset; defaults to Tripo H3.1 image/text",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-m"
+            },
+            {
+              "long": "--ref",
+              "flags": "--ref <path|url>",
+              "description": "Reference image, repeat for multi-image models",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--input",
+              "flags": "--input <json>",
+              "description": "Additional model-specific input JSON or @file.json",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--detach",
+              "flags": "--detach",
+              "description": "Submit and print resumable receipt",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--no-download",
+              "flags": "--no-download",
+              "description": "Print result JSON instead of files",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": true
+            },
+            {
+              "long": "--output-dir",
+              "flags": "--output-dir <dir>",
+              "description": "Destination directory",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--wait-timeout",
+              "flags": "--wait-timeout <ms>",
+              "description": "Polling timeout in milliseconds",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "900000"
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        },
+        {
           "command": "fal image",
           "description": "Generate images from a text prompt via fal.ai (default: fal-ai/flux/schnell)",
           "positionals": [
@@ -7320,6 +7418,301 @@
               "short": "-v"
             }
           ]
+        }
+      ]
+    },
+    {
+      "group": "wavespeed",
+      "description": "WaveSpeedAI API: models, 3D generation, upload and resumable jobs",
+      "commands": [
+        {
+          "command": "wavespeed models",
+          "description": "Curated WaveSpeedAI 3D model IDs",
+          "positionals": [],
+          "options": []
+        },
+        {
+          "command": "wavespeed run",
+          "description": "Run any WaveSpeedAI model by ID",
+          "positionals": [
+            {
+              "name": "model",
+              "description": "",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--input",
+              "flags": "--input <json>",
+              "description": "Input JSON or @file.json",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--file",
+              "flags": "--file <field=path>",
+              "description": "Upload an image to field; field[]=path appends",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--detach",
+              "flags": "--detach",
+              "description": "Print accepted prediction ID and return",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--no-download",
+              "flags": "--no-download",
+              "description": "Print raw result instead of downloading",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": true
+            },
+            {
+              "long": "--output-dir",
+              "flags": "--output-dir <dir>",
+              "description": "Output directory",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--output",
+              "flags": "--output <file>",
+              "description": "Exact file path for a single output",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--wait-timeout",
+              "flags": "--wait-timeout <ms>",
+              "description": "Maximum polling duration (ms)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "900000"
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        },
+        {
+          "command": "wavespeed 3d",
+          "description": "Image/text/multi-image to 3D with Seed3D, Tripo, Hunyuan and Meshy",
+          "positionals": [
+            {
+              "name": "prompt",
+              "description": "",
+              "required": false,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--model",
+              "flags": "-m, --model <id>",
+              "description": "Model ID; image default Seed3D 2.0, text default Tripo H3.1",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-m"
+            },
+            {
+              "long": "--ref",
+              "flags": "--ref <path|url>",
+              "description": "Reference image; repeat for multi-view models",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--input",
+              "flags": "--input <json>",
+              "description": "Additional provider-specific JSON settings or @file.json",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--detach",
+              "flags": "--detach",
+              "description": "Print accepted prediction ID and return",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--no-download",
+              "flags": "--no-download",
+              "description": "Print raw result instead of downloading",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": true
+            },
+            {
+              "long": "--output-dir",
+              "flags": "--output-dir <dir>",
+              "description": "Output directory",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--output",
+              "flags": "--output <file>",
+              "description": "Exact file path for a single output",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--wait-timeout",
+              "flags": "--wait-timeout <ms>",
+              "description": "Maximum polling duration (ms)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "900000"
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        },
+        {
+          "command": "wavespeed status",
+          "description": "Inspect or resume a prediction without resubmission",
+          "positionals": [
+            {
+              "name": "id",
+              "description": "",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--wait",
+              "flags": "--wait",
+              "description": "Poll to terminal status",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--no-download",
+              "flags": "--no-download",
+              "description": "Print raw result",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": true
+            },
+            {
+              "long": "--output-dir",
+              "flags": "--output-dir <dir>",
+              "description": "Output directory",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--output",
+              "flags": "--output <file>",
+              "description": "Exact file path for one output",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--wait-timeout",
+              "flags": "--wait-timeout <ms>",
+              "description": "Maximum polling duration (ms)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "900000"
+            }
+          ]
+        },
+        {
+          "command": "wavespeed upload",
+          "description": "Upload a local image and print its media URL",
+          "positionals": [
+            {
+              "name": "file",
+              "description": "",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": []
         }
       ]
     },
