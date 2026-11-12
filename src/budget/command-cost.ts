@@ -61,21 +61,30 @@ export interface CommandDefaults {
 }
 
 /** Speaker labels ("Joe:") of multi-speaker text are part of the text; nothing extra to add. */
-type RequestBuilder = (options: Options, defaults: CommandDefaults) => EstimateRequest | undefined;
+type RequestBuilder = (
+  options: Options,
+  defaults: CommandDefaults,
+) => EstimateRequest | Unpriced | undefined;
 
 /** OpenRouter matches model ids ignoring case; the price list spells them in lower case. */
 const openrouterModel = (o: Options, d: CommandDefaults, fallback: string) =>
   (opt(o, "model") ?? d.model ?? fallback).trim().toLowerCase();
 
-/** A numeric option: a number (MCP) or a numeric string (commander, MCP). */
-function num(options: Options, name: string): number | undefined {
+/**
+ * A numeric option, read the way the command reads it: commander's string
+ * through parseFloat (`sfx`) or parseInt (`music`), a number from MCP as is.
+ * NaN when present but not a number.
+ */
+function num(options: Options, name: string, parse: (s: string) => number): number | undefined {
   const value = options[name] ?? options[camel(name)];
-  if (typeof value === "number") return Number.isFinite(value) ? value : Number.NaN;
+  if (typeof value === "number") return value;
   if (typeof value !== "string" || value.trim() === "") return undefined;
-  return /^\s*\d+(\.\d+)?\s*$/.test(value) ? Number(value) : Number.NaN;
+  return parse(value);
 }
 
-const round1 = (n: number) => Math.round(n * 1000) / 1000;
+const roundMs = (n: number) => Math.round(n * 1000) / 1000;
+
+type LengthResult = { ok: true; seconds: UnitRange; note: string } | { ok: false; detail: string };
 
 /**
  * Output length the request asks for, in seconds: the set length, or the
@@ -86,18 +95,25 @@ function requestedSeconds(
   value: number | undefined,
   bounds: { min: number; max: number },
   unit: { name: string; perSecond: number },
-): { seconds: UnitRange; note: string } | undefined {
+): LengthResult {
   if (value === undefined) {
     return {
+      ok: true,
       seconds: { low: bounds.min, expected: bounds.max, high: bounds.max },
       note: `No ${unit.name} set: the model picks the length, so the estimate assumes the longest it may pick (${bounds.max} s).`,
     };
   }
   const s = value / unit.perSecond;
-  if (!(s >= bounds.min && s <= bounds.max)) return undefined;
+  if (!(Number.isFinite(s) && s >= bounds.min && s <= bounds.max)) {
+    return {
+      ok: false,
+      detail: `${unit.name} must be ${bounds.min * unit.perSecond} to ${bounds.max * unit.perSecond}, got ${Number.isNaN(value) ? "a non-number" : value}`,
+    };
+  }
   return {
-    seconds: { low: round1(s), expected: round1(s), high: round1(s) },
-    note: `Priced on the requested ${round1(s)} s of audio.`,
+    ok: true,
+    seconds: { low: roundMs(s), expected: roundMs(s), high: roundMs(s) },
+    note: `Priced on the requested ${roundMs(s)} s of audio.`,
   };
 }
 
@@ -106,6 +122,27 @@ export const ELEVENLABS_SFX_MODEL = "eleven_text_to_sound_v2";
 const SFX_SECONDS = { min: 0.5, max: 30 };
 /** music_length_ms and a plan's total are bounded by the API to 3 s..10 min. */
 const MUSIC_SECONDS = { min: 3, max: 600 };
+
+/** Why a builder could not price a request it knows, for the "missing_input" detail. */
+class Unpriced {
+  constructor(readonly detail: string) {}
+}
+
+function lengthRequest(
+  model: string,
+  task: "sfx" | "music",
+  length: LengthResult,
+): EstimateRequest | Unpriced {
+  if (!length.ok) return new Unpriced(length.detail);
+  return {
+    provider: "elevenlabs",
+    model,
+    text: "",
+    task,
+    output_seconds: length.seconds,
+    output_note: length.note,
+  };
+}
 
 const BUILDERS: Record<string, RequestBuilder> = {
   "gemini generate-speech": (o, d) => {
@@ -124,6 +161,7 @@ const BUILDERS: Record<string, RequestBuilder> = {
     provider: "gemini",
     model: (opt(o, "model") ?? d.model ?? GEMINI_MUSIC_DEFAULT).trim(),
     text: "",
+    task: "music",
   }),
   "elevenlabs tts": (o, d) => {
     const text = opt(o, "text") ?? opt(o, "prompt");
@@ -140,45 +178,37 @@ const BUILDERS: Record<string, RequestBuilder> = {
   // Billed per minute of sound: the set --duration-seconds, or up to 30 s when the model picks.
   "elevenlabs sfx": (o) => {
     if ((opt(o, "text") ?? opt(o, "prompt")) === undefined) return undefined;
-    const length = requestedSeconds(num(o, "duration-seconds"), SFX_SECONDS, {
-      name: "--duration-seconds",
-      perSecond: 1,
-    });
-    if (!length) return undefined;
-    return {
-      provider: "elevenlabs",
-      model: ELEVENLABS_SFX_MODEL,
-      text: "",
-      output_seconds: length.seconds,
-      output_note: length.note,
-    };
+    const seconds = num(o, "duration-seconds", Number.parseFloat);
+    return lengthRequest(
+      ELEVENLABS_SFX_MODEL,
+      "sfx",
+      requestedSeconds(seconds, SFX_SECONDS, { name: "--duration-seconds", perSecond: 1 }),
+    );
   },
   // Billed per minute of music: --music-length-ms, a --plan's total, or up to 10 min when the model picks.
   "elevenlabs music": (o, d) => {
     const model = (opt(o, "model") ?? d.model ?? "music_v1").trim();
-    let length: ReturnType<typeof requestedSeconds>;
+    const ms = num(o, "music-length-ms", (v) => Number.parseInt(v, 10));
     if (opt(o, "plan") !== undefined) {
+      if (opt(o, "prompt") !== undefined || ms !== undefined) {
+        return new Unpriced("--plan cannot be combined with --prompt or --music-length-ms");
+      }
       if (d.planLengthMs === undefined) return undefined;
-      length = requestedSeconds(d.planLengthMs, MUSIC_SECONDS, {
-        name: "plan length",
+      const length = requestedSeconds(d.planLengthMs, MUSIC_SECONDS, {
+        name: "the plan's total duration_ms",
         perSecond: 1000,
       });
-      if (length) length.note = `Priced on the plan's total ${length.seconds.high} s of music.`;
-    } else {
-      if (opt(o, "prompt") === undefined) return undefined;
-      length = requestedSeconds(num(o, "music-length-ms"), MUSIC_SECONDS, {
-        name: "--music-length-ms",
-        perSecond: 1000,
-      });
+      if (length.ok) length.note = `Priced on the plan's total ${length.seconds.high} s of music.`;
+      return lengthRequest(model, "music", length);
     }
-    if (!length) return undefined;
-    return {
-      provider: "elevenlabs",
+    if (opt(o, "prompt") === undefined) return undefined;
+    // The command sends parseInt's whole milliseconds.
+    const whole = ms === undefined || !Number.isFinite(ms) ? ms : Math.trunc(ms);
+    return lengthRequest(
       model,
-      text: "",
-      output_seconds: length.seconds,
-      output_note: length.note,
-    };
+      "music",
+      requestedSeconds(whole, MUSIC_SECONDS, { name: "--music-length-ms", perSecond: 1000 }),
+    );
   },
   "openrouter tts": (o, d) => {
     const text = opt(o, "text") ?? opt(o, "prompt");
@@ -219,10 +249,9 @@ const NEEDS: Record<string, string> = {
   "openrouter tts": "--text or --prompt (text from --text-file or --turns-file is not priced)",
   "openrouter transcribe": "the audio to transcribe (--input)",
   "fish tts": "--text, --prompt or (from the CLI) a readable --text-file or --turns-file",
-  "elevenlabs sfx":
-    "--text or --prompt, and a --duration-seconds between 0.5 and 30 when one is set",
+  "elevenlabs sfx": "--text or --prompt",
   "elevenlabs music":
-    "--prompt with a --music-length-ms between 3000 and 600000 when one is set, or (from the CLI) a readable --plan whose sections total 3 s to 10 min",
+    "--prompt, or (from the CLI) a readable --plan whose sections or chunks all set duration_ms",
 };
 
 /** Priced from the model's row in Sume's catalog (per image or per second). */
@@ -432,6 +461,15 @@ export function estimateCommand(
   }
   const builder = BUILDERS[command];
   const req = builder?.(named, defaults);
+  if (req instanceof Unpriced) {
+    return unknownEstimate(
+      command,
+      "missing_input",
+      `Cannot estimate ${command}: ${req.detail}`,
+      opt(named, "model") ?? defaults.model ?? "",
+      defaults.at,
+    );
+  }
   if (req) return estimateCost({ ...req, at: defaults.at });
   return unknownEstimate(
     command,

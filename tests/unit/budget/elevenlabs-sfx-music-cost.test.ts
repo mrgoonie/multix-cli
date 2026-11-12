@@ -11,7 +11,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { musicPlanLengthMs } from "../../../src/agent/cost-preflight.js";
+import { musicPlanLengthMs, runtimeDefaults } from "../../../src/agent/cost-preflight.js";
 import { checkBudget, estimateCommand, pricedCommands } from "../../../src/budget/command-cost.js";
 import { BudgetError } from "../../../src/core/errors.js";
 
@@ -59,11 +59,40 @@ describe("elevenlabs sfx cost", () => {
     expect(
       estimateCommand("elevenlabs sfx", { text: "x", "duration-seconds": 10 }, { at: AT }).high_usd,
     ).toBe(0.02);
-    for (const bad of ["31", "0.1", "abc", "-1"]) {
+    for (const bad of ["31", "0.1", "abc", "-1", "0"]) {
       const e = estimateCommand("elevenlabs sfx", { text: "x", durationSeconds: bad }, { at: AT });
       expect(e).toMatchObject({ status: "unknown", reason: "missing_input" });
     }
     expect(estimateCommand("elevenlabs sfx", {}, { at: AT }).status).toBe("unknown");
+    expect(
+      estimateCommand("elevenlabs sfx", { text: "x", durationSeconds: "31" }, { at: AT }).detail,
+    ).toBe("Cannot estimate elevenlabs sfx: --duration-seconds must be 0.5 to 30, got 31");
+  });
+
+  it("reads the duration as the command does (parseFloat)", () => {
+    for (const [value, usd] of [
+      [".5", 0.001],
+      ["5.", 0.01],
+      ["1e1", 0.02],
+    ] as const) {
+      expect(
+        estimateCommand("elevenlabs sfx", { text: "x", durationSeconds: value }, { at: AT })
+          .high_usd,
+      ).toBe(usd);
+    }
+  });
+
+  it("does not price another task's command with sound or music rates", () => {
+    expect(
+      estimateCommand("elevenlabs tts", { text: "hi", model: "music_v1" }, { at: AT }),
+    ).toMatchObject({ status: "unknown", reason: "no_price" });
+    expect(
+      estimateCommand(
+        "elevenlabs tts",
+        { text: "hi", model: "eleven_text_to_sound_v2" },
+        { at: AT },
+      ).status,
+    ).toBe("unknown");
   });
 
   it("enforces --max-cost only under the estimate policy", () => {
@@ -90,6 +119,19 @@ describe("elevenlabs music cost", () => {
     });
     expect(e.rate?.id).toBe("elevenlabs/music@api");
     expect(() => checkBudget(e, 0.01, "estimate")).toThrow(/exceeds --max-cost/);
+  });
+
+  it("prices the whole milliseconds the command sends (parseInt)", () => {
+    const e = estimateCommand(
+      "elevenlabs music",
+      { prompt: "x", musicLengthMs: "14000.9" },
+      { at: AT },
+    );
+    expect(e.units.output_audio_seconds?.high).toBe(14);
+    expect(
+      estimateCommand("elevenlabs music", { prompt: "x", "music-length-ms": 14000 }, { at: AT })
+        .high_usd,
+    ).toBe(0.035);
   });
 
   it("prices an omitted length at the 10 minutes the model may pick", () => {
@@ -126,6 +168,22 @@ describe("elevenlabs music cost", () => {
     const e = estimateCommand("elevenlabs music", { plan: v1 }, { at: AT, planLengthMs: 60000 });
     expect(e).toMatchObject({ status: "estimated", high_usd: 0.15 });
     expect(e.assumptions).toContain("Priced on the plan's total 60 s of music.");
+    expect(runtimeDefaults("elevenlabs music", { plan: v1 })).toEqual({ planLengthMs: 60000 });
+    expect(runtimeDefaults("elevenlabs music", { plan: bad })).toEqual({});
+    const both = path.join(dir, "both.json");
+    fs.writeFileSync(
+      both,
+      JSON.stringify({ sections: [{ duration_ms: 3000 }], chunks: [{ duration_ms: 3000 }] }),
+    );
+    expect(musicPlanLengthMs(both)).toBeUndefined();
+    // The API rejects a plan sent with a prompt or a length; such a run is not priced.
+    expect(
+      estimateCommand(
+        "elevenlabs music",
+        { plan: v1, musicLengthMs: "14000" },
+        { at: AT, planLengthMs: 60000 },
+      ),
+    ).toMatchObject({ status: "unknown", reason: "missing_input" });
     // Without a readable plan (MCP, or a broken file) the run is not priced.
     expect(estimateCommand("elevenlabs music", { plan: v1 }, { at: AT })).toMatchObject({
       status: "unknown",

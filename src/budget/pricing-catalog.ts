@@ -606,6 +606,8 @@ export interface ResolvedRate {
   tier: string;
   currency: "USD";
   region: string;
+  /** Task the price is for, when the entry names one; other tasks are not priced with it. */
+  task?: Task;
   /** Price in force at the requested instant. */
   components: PriceComponent[];
   /** Highest price per meter among windows within a day of the instant. */
@@ -697,6 +699,7 @@ export function resolveRate(
       tier: entry.tier,
       currency: entry.currency,
       region: entry.region,
+      ...(entry.task ? { task: entry.task } : {}),
       components: current.components,
       upper_components: maxComponents(entry.windows.filter((w) => nearWindow(w, t))),
       ...(current.label ? { label: current.label } : {}),

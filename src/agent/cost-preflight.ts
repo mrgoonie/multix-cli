@@ -99,7 +99,9 @@ export function musicPlanLengthMs(path: unknown): number | undefined {
       string,
       unknown
     >;
-    const parts = [plan?.sections, plan?.chunks].filter(Array.isArray).flat() as unknown[];
+    // music_v1 plans have sections, music_v2 plans chunks; one plan with both is not valid.
+    if (Array.isArray(plan?.sections) === Array.isArray(plan?.chunks)) return undefined;
+    const parts = (Array.isArray(plan.sections) ? plan.sections : plan.chunks) as unknown[];
     if (parts.length === 0) return undefined;
     let total = 0;
     for (const part of parts) {
@@ -114,7 +116,10 @@ export function musicPlanLengthMs(path: unknown): number | undefined {
 }
 
 /** Defaults a command resolves at run time (env overrides, file probes), not in commander. */
-function runtimeDefaults(command: string, options: Record<string, unknown>): CommandDefaults {
+export function runtimeDefaults(
+  command: string,
+  options: Record<string, unknown>,
+): CommandDefaults {
   if (command === "gemini generate-speech") return { model: getDefaultModel("generate-speech") };
   if (command === "gemini generate-music") return { model: getDefaultModel("generate-music") };
   if (command === "elevenlabs music" && options.plan !== undefined) {

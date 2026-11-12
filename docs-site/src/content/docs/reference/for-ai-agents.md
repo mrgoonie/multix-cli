@@ -160,7 +160,7 @@ Estimate: $0.00136 expected, $0.00136–$0.00136 range (proven ceiling)
 | `gemini generate-music` | A flat price per song: $0.04 for a `lyria-3-clip-preview` clip, $0.08 for a `lyria-3.5` song; the receipt counts the request | Proven. `gemini music-live` (Lyria RealTime) has no published price and stays `unknown`. |
 | `elevenlabs tts` | Characters (Unicode code points as sent) | Proven. `--previous-text` and `--next-text` count only in the high end. |
 | `elevenlabs sfx` | $0.12 per minute of sound (`eleven_text_to_sound_v2`, the API's default): the set `--duration-seconds` (0.5 to 30), or 30 s when the model picks the length | Estimated: ElevenLabs also says sound effects are billed per generation and publishes no rounding, so `--max-cost` needs `--cost-policy estimate`. A duration outside 0.5 to 30 is `unknown`. |
-| `elevenlabs music` | $0.15 per minute of music (`music_v1`, `music_v2`, `music_v2_5`): `--music-length-ms` (3000 to 600000), from the CLI the total `duration_ms` of a readable `--plan`'s sections or chunks, or 10 minutes when the model picks the length | Estimated, as for `elevenlabs sfx`. Over MCP, a `--plan` is not priced. |
+| `elevenlabs music` | $0.15 per minute of music (`music_v1`, `music_v2`, `music_v2_5`): `--music-length-ms` (3000 to 600000), from the CLI the total `duration_ms` of a readable `--plan`'s sections or chunks, or 10 minutes when the model picks the length | Estimated, as for `elevenlabs sfx`. Over MCP, or combined with `--prompt` or `--music-length-ms`, a `--plan` is not priced. |
 | `openrouter tts` | The model's OpenRouter price: characters for most models, UTF-8 bytes for Fish Audio, tokens for Gemini TTS, seconds of output audio for Seed Audio | Proven for character and byte prices (`--instructions` counts only in the high end); estimated for token and output-second prices. Text must come from `--text`. |
 | `fish tts` | UTF-8 bytes of the text as sent, tags included; text from `--text`, or from the CLI a readable `--text-file` or `--turns-file` (the tagged text multix builds) | Proven. Over MCP, file text is not priced. |
 | `fish voice-design` | A flat $0.01 per successful request, whatever the prompt or `--count`; the receipt counts the request | Proven. |
@@ -180,7 +180,7 @@ unverified, or last checked more than 120 days ago resolves to `unknown`.
 Within 24 hours of a price change the high end uses the higher price; a price
 that ends within 24 hours with no known next price is `unknown`.
 
-Prices as checked on 2026-10-26 (`--estimate` shows the rate in force):
+Prices as checked on 2026-10-26, ElevenLabs Sound Effects and Music on 2026-11-12 (`--estimate` shows the rate in force):
 
 | Rate id | Models | Price (USD) |
 | --- | --- | --- |
@@ -191,6 +191,8 @@ Prices as checked on 2026-10-26 (`--estimate` shows the rate in force):
 | `gemini/gemini-2.5-pro-preview-tts@paid-standard` | `gemini-2.5-pro-preview-tts` | $1 / 1M input tokens, $20 / 1M audio tokens |
 | `elevenlabs/multilingual@api` | `eleven_v4`, `eleven_v3`, `eleven_multilingual_v2` | $0.08 / 1K characters |
 | `elevenlabs/flash-turbo@api` | `eleven_v4_turbo`, `eleven_flash_v2_5`, `eleven_flash_v2`, `eleven_turbo_v2_5`, `eleven_turbo_v2` | $0.04 / 1K characters |
+| `elevenlabs/sound-effects@api` | `eleven_text_to_sound_v2` (`elevenlabs sfx` only) | $0.12 / minute of sound |
+| `elevenlabs/music@api` | `music_v1`, `music_v2`, `music_v2_5` (`elevenlabs music` only) | $0.15 / minute of music |
 | `fish/s2-pro@api` | `s2.1-pro`, `s2-pro` | $15 / 1M UTF-8 bytes |
 | `fish/s2.1-pro-free@api` | `s2.1-pro-free` | $0 (the free model's limits are not modelled) |
 | `fish/s1@api` | `s1` | $15 / 1M UTF-8 bytes |

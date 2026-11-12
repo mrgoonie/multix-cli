@@ -8,6 +8,7 @@
  * provider bills output it has not produced yet, e.g. seconds of audio).
  */
 
+import type { Task } from "../capabilities/capability-types.js";
 import { type PriceMeter, type ResolvedRate, priceOf, resolveRate } from "./pricing-catalog.js";
 
 export interface TextUnits {
@@ -42,6 +43,8 @@ export interface EstimateRequest {
   output_seconds?: UnitRange;
   /** Says where `output_seconds` came from; shown with the estimate. */
   output_note?: string;
+  /** Task the command serves; a price kept for another task (music, sfx) does not apply. */
+  task?: Task;
   at?: Date;
 }
 
@@ -223,6 +226,15 @@ export function estimateCost(req: EstimateRequest): CostEstimate {
   const lookup = resolveRate(req.provider, req.model, at);
   if (!lookup.ok) return unknown(req, text, at, lookup.reason, lookup.detail);
   const { rate } = lookup;
+  if (rate.task && rate.task !== req.task) {
+    return unknown(
+      req,
+      text,
+      at,
+      "no_price",
+      `${rate.id} prices ${rate.task}, not ${req.task ?? "this command"}`,
+    );
+  }
   const assumptions: string[] = [];
   const meters = new Set(rate.components.map((c) => c.meter));
   const seconds = req.audio_seconds;
