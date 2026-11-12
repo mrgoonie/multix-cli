@@ -216,7 +216,7 @@ const SOURCES: readonly ProviderSource[] = [
     models: [
       listed(ELEVENLABS_TTS_MODELS, "eleven_v4", "ELEVENLABS_TTS_MODELS"),
       listed(ELEVENLABS_TTS_MODELS, "eleven_flash_v2_5", "ELEVENLABS_TTS_MODELS"),
-      listed(ELEVENLABS_STT_MODELS, "scribe_v1", "ELEVENLABS_STT_MODELS"),
+      listed(ELEVENLABS_STT_MODELS, "scribe_v2", "ELEVENLABS_STT_MODELS"),
     ],
   },
   {
