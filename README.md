@@ -603,7 +603,7 @@ multix elevenlabs models   # live: capabilities, languages, text limit, credit m
 
 **ElevenLabs models:**
 - TTS: `eleven_multilingual_v2` (default), `eleven_v4`, `eleven_v4_turbo`, `eleven_v3`, `eleven_v3_conversational`, `eleven_flash_v2_5`, `eleven_flash_v2`, `eleven_turbo_v2_5`, `eleven_turbo_v2`
-- STT: `scribe_v2` (default), `scribe_v3` (most accurate), `scribe_v2_medical`; deprecated: `scribe_v1`, `scribe_v1_experimental`
+- STT: `scribe_v2` (default), `scribe_v3` (most accurate), `scribe_v2_medical`; older: `scribe_v1` (deprecated), `scribe_v1_experimental` (no longer listed by ElevenLabs)
 - Voice changer: `eleven_multilingual_sts_v2` (default)
 - Music: `music_v1`
 

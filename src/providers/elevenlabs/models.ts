@@ -167,8 +167,9 @@ export function ttsModelCaps(model: string): TtsModelCaps | undefined {
 
 /**
  * Batch Scribe models for POST /v1/speech-to-text, current first. scribe_v1
- * and scribe_v1_experimental are deprecated (replacement scribe_v2) but still
- * served; ElevenLabs publishes no price for them, so they are never estimated.
+ * is deprecated (replacement scribe_v2) and scribe_v1_experimental is no
+ * longer listed, but both are still served; ElevenLabs publishes no price for
+ * them, so they are never estimated.
  */
 export const ELEVENLABS_STT_MODELS = [
   "scribe_v2",
