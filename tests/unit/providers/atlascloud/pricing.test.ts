@@ -378,6 +378,27 @@ describe("receipts", () => {
     expect(failed.actual_usd).not.toBe(0.66);
   });
 
+  it("prefers the price the prediction reports over the list price", () => {
+    const r = buildCostReceipt({
+      operation_id: "op",
+      outcome: "ok",
+      provider: "atlas",
+      calls: [
+        { method: "POST", status: 200 },
+        { method: "GET", status: 200 },
+      ],
+      usage: { cost_usd: 0.66, credits: 30 },
+      list_price: { usd: 0.02, label: "Atlas Cloud list price" },
+      at: AT,
+    });
+    expect(r).toMatchObject({
+      status: "settled",
+      actual_usd: 0.66,
+      actual_source: "provider_reported",
+      provider_reported: { cost_usd: 0.66, credits: 30 },
+    });
+  });
+
   it("says a run that failed before submitting sent nothing billable", () => {
     const r = buildCostReceipt({
       operation_id: "op",

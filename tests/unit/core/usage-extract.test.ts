@@ -190,6 +190,46 @@ describe("extractUsage", () => {
     expect(usage.ids).toEqual(["gen-tts-1"]);
   });
 
+  it("reads a finished Atlas Cloud prediction's data.price as the USD charged", () => {
+    // The numbers of a real meshy-v7 image-to-3D prediction (list base_price 0.02).
+    const usage = extractUsage({
+      code: 200,
+      data: {
+        id: "pred-1",
+        status: "completed",
+        outputs: ["https://cdn.test/m.glb"],
+        price: 0.66,
+        credits_consumed: 30,
+      },
+    });
+    expect(usage.cost_usd).toBe(0.66);
+    expect(usage.credits).toBe(30);
+    expect(usage.sources).toEqual({
+      cost_usd: "body.data.price",
+      credits: "body.data.credits_consumed",
+    });
+    expect(usage.ids).toEqual(["pred-1"]);
+    // Atlas also sends the price as a decimal string.
+    const text = extractUsage({ code: 200, data: { id: "p", status: "succeeded", price: "0.55" } });
+    expect(text.cost_usd).toBe(0.55);
+    expect(text.metrics["data.price"]).toBe(0.55);
+  });
+
+  it("does not report an Atlas price before the prediction finished, or a zero or odd one", () => {
+    for (const data of [
+      { id: "p", status: "processing", price: 0.66 },
+      { id: "p", status: "failed", price: 0.66 },
+      { id: "p", status: "completed", price: 0 },
+      { id: "p", status: "completed", price: "" },
+      { id: "p", status: "completed", price: "$0.66" },
+      { status: "completed", price: 0.66 },
+    ]) {
+      expect(extractUsage({ code: 200, data }).cost_usd).toBeUndefined();
+    }
+    // A price elsewhere in a body is not a charge.
+    expect(extractUsage({ id: "p", status: "completed", price: 0.66 }).cost_usd).toBeUndefined();
+  });
+
   it("ignores ids of catalog entries in a list of several items", () => {
     const usage = extractUsage({ data: [{ id: "a/model-1" }, { id: "b/model-2" }] });
     expect(usage.ids).toEqual([]);
