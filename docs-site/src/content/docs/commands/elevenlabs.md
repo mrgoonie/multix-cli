@@ -98,6 +98,19 @@ multix elevenlabs music --prompt "Dreamy synthwave loop" --music-length-ms 14000
   --max-cost 0.05 --cost-policy estimate
 ```
 
+`transcribe` is priced from the length of a local `--input` file (read with
+`ffprobe`) at ElevenLabs' Speech to Text rate, $0.20 per hour of audio for
+`scribe_v3`, `scribe_v2` and `scribe_v2_medical`. The high end adds 5% to the
+measured length and rounds up to a whole minute, so it is a proven ceiling and
+`--max-cost` works under the default policy. A URL, and the deprecated
+`scribe_v1` and `scribe_v1_experimental` (ElevenLabs publishes no price for
+them), stay `unknown`.
+
+```bash
+multix elevenlabs transcribe --input clip.mp3 --model scribe_v2 --estimate
+multix elevenlabs transcribe --input clip.mp3 --model scribe_v2 --max-cost 0.01
+```
+
 ## Dubbing jobs
 
 `dub` is asynchronous. Use `--async` to receive a dubbing ID immediately, then

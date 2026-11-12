@@ -131,7 +131,7 @@ export function runtimeDefaults(
     const planLengthMs = musicPlanLengthMs(options.plan);
     return planLengthMs !== undefined ? { planLengthMs } : {};
   }
-  if (command === "openrouter transcribe") {
+  if (command === "openrouter transcribe" || command === "elevenlabs transcribe") {
     const audioSeconds = localAudioSeconds(options.input);
     return audioSeconds !== undefined ? { audioSeconds } : {};
   }

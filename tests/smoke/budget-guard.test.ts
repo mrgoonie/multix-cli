@@ -241,6 +241,28 @@ describe("budget guards (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     },
   );
 
+  it.skipIf(!HAS_FFPROBE)(
+    "--estimate prices elevenlabs transcribe of a local file by its measured length",
+    async () => {
+      fs.writeFileSync(path.join(tmp, "clip.wav"), silentWav(2));
+      const args = ["elevenlabs", "transcribe", "--input", "clip.wav", "--model", "scribe_v2"];
+      const est = await run([...args, "--estimate", "--json"]);
+      expect(est.exitCode).toBe(0);
+      expect(envelope(est.stdout).estimate).toMatchObject({
+        status: "estimated",
+        provider: "elevenlabs",
+        model: "scribe_v2",
+        upper_bound: "proven",
+        units: { input_audio_seconds: { low: 2, expected: 2, high: 60 } },
+        high_usd: 0.003334,
+      });
+      // A ceiling over the limit is refused before the upload.
+      const over = await run([...args, "--max-cost", "0.001", "--json"]);
+      expect(over.exitCode).toBe(2);
+      expect(envelope(over.stdout).error.code).toBe("BUDGET_EXCEEDED");
+    },
+  );
+
   it("speech generate is priced per route, reading --text-file, and sends nothing", async () => {
     fs.writeFileSync(path.join(tmp, "scene.txt"), `${VI}\n`);
     const est = await run([

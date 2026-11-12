@@ -82,7 +82,7 @@ commands, plus a `cost` receipt (`multix.cost/v1`: estimate, provider-reported
 and actual cost, variance; unknown stays `null`, never $0). Only
 `gemini generate-speech`, `gemini generate-music`, `elevenlabs tts`, `elevenlabs sfx`,
 `elevenlabs music` (per minute of the requested length), `fish tts`, `fish voice-design`, `openrouter tts`,
-`openrouter transcribe` (local files, measured with `ffprobe`) and
+`openrouter transcribe` and `elevenlabs transcribe` (Scribe v2/v3, $0.20 per hour; local files, measured with `ffprobe`) and
 `speech generate` on its Gemini, ElevenLabs and Fish routes (a `--fallback` plan at
 its most expensive route), and `atlas 3d` / `atlas run` with a 3D model (from Atlas
 Cloud's live price list) are priced so far; `--max-cost`

@@ -226,7 +226,9 @@ export function estimateCost(req: EstimateRequest): CostEstimate {
   const lookup = resolveRate(req.provider, req.model, at);
   if (!lookup.ok) return unknown(req, text, at, lookup.reason, lookup.detail);
   const { rate } = lookup;
-  if (rate.task && rate.task !== req.task) {
+  // A price kept for one task never prices another, and a request for a task
+  // (transcription, music, sfx) is priced only by a price kept for that task.
+  if ((rate.task || req.task) && rate.task !== req.task) {
     return unknown(
       req,
       text,

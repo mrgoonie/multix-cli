@@ -160,6 +160,7 @@ Estimate: $0.00136 expected, $0.00136–$0.00136 range (proven ceiling)
 | `elevenlabs tts` | Ký tự (Unicode code point đúng như khi gửi) | Đã chứng minh. `--previous-text` và `--next-text` chỉ được tính vào mức cao. |
 | `elevenlabs sfx` | $0.12 mỗi phút âm thanh (`eleven_text_to_sound_v2`, model mặc định của API): theo `--duration-seconds` đã đặt (0.5 đến 30), hoặc 30 giây khi model tự chọn độ dài | Ước tính: ElevenLabs cũng ghi sound effects tính phí theo lần tạo và không công bố cách làm tròn, nên `--max-cost` cần `--cost-policy estimate`. Thời lượng ngoài 0.5 đến 30 là `unknown`. |
 | `elevenlabs music` | $0.15 mỗi phút nhạc (`music_v1`, `music_v2`, `music_v2_5`): theo `--music-length-ms` (3000 đến 600000), khi chạy CLI là tổng `duration_ms` của các section hoặc chunk trong `--plan` đọc được, hoặc 10 phút khi model tự chọn độ dài | Ước tính, như `elevenlabs sfx`. Qua MCP, hoặc khi đi kèm `--prompt` hay `--music-length-ms`, `--plan` không được tính giá. |
+| `elevenlabs transcribe` | $0.20 mỗi giờ âm thanh đầu vào (`scribe_v3`, `scribe_v2`, `scribe_v2_medical`), đo từ `--input` cục bộ bằng `ffprobe`; mức cao cộng thêm 5% và làm tròn lên cả phút | Chắc chắn. URL hoặc tệp không đọc được, và `scribe_v1` / `scribe_v1_experimental` đã ngừng hỗ trợ (không có giá công bố), là `unknown`. |
 | `openrouter tts` | Giá OpenRouter của model: ký tự với đa số model, byte UTF-8 với Fish Audio, token với Gemini TTS, giây âm thanh đầu ra với Seed Audio | Đã chứng minh với giá theo ký tự và byte (`--instructions` chỉ được tính vào mức cao); ước tính với giá theo token và theo giây đầu ra. Văn bản phải truyền qua `--text`. |
 | `fish tts` | Byte UTF-8 của văn bản đúng như khi gửi, kể cả tag; văn bản từ `--text`, hoặc khi chạy CLI là `--text-file` hay `--turns-file` đọc được (văn bản đã gắn tag do multix tạo) | Đã chứng minh. Qua MCP, văn bản từ file không được tính giá. |
 | `fish voice-design` | Cố định $0.01 cho mỗi request thành công, bất kể prompt hay `--count`; biên nhận đếm số request | Đã chứng minh. |
@@ -180,7 +181,7 @@ chưa xác minh, hoặc được kiểm tra lần cuối hơn 120 ngày trước
 `unknown`. Trong vòng 24 giờ quanh một lần đổi giá, mức cao dùng giá cao hơn; giá kết thúc
 trong vòng 24 giờ mà chưa biết giá tiếp theo sẽ là `unknown`.
 
-Giá được kiểm tra ngày 2026-10-26, riêng Sound Effects và Music của ElevenLabs ngày 2026-11-12 (`--estimate` hiển thị giá đang áp dụng):
+Giá được kiểm tra ngày 2026-10-26, riêng Sound Effects, Music và Speech to Text của ElevenLabs ngày 2026-11-12 (`--estimate` hiển thị giá đang áp dụng):
 
 | Rate id | Model | Giá (USD) |
 | --- | --- | --- |
@@ -193,6 +194,7 @@ Giá được kiểm tra ngày 2026-10-26, riêng Sound Effects và Music của 
 | `elevenlabs/flash-turbo@api` | `eleven_v4_turbo`, `eleven_flash_v2_5`, `eleven_flash_v2`, `eleven_turbo_v2_5`, `eleven_turbo_v2` | $0,04 / 1.000 ký tự |
 | `elevenlabs/sound-effects@api` | `eleven_text_to_sound_v2` (chỉ `elevenlabs sfx`) | $0,12 / phút âm thanh |
 | `elevenlabs/music@api` | `music_v1`, `music_v2`, `music_v2_5` (chỉ `elevenlabs music`) | $0,15 / phút nhạc |
+| `elevenlabs/scribe@api` | `scribe_v3`, `scribe_v2`, `scribe_v2_medical` (chỉ `elevenlabs transcribe`) | $0,20 / giờ âm thanh đầu vào |
 | `fish/s2-pro@api` | `s2.1-pro`, `s2-pro` | $15 / 1 triệu byte UTF-8 |
 | `fish/s2.1-pro-free@api` | `s2.1-pro-free` | $0 (giới hạn của model miễn phí không được mô hình hóa) |
 | `fish/s1@api` | `s1` | $15 / 1 triệu byte UTF-8 |
