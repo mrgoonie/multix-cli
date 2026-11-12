@@ -13,7 +13,6 @@ import { LEONARDO_ROUTING } from "./leonardo/models.js";
 import { REPLICATE_ROUTING } from "./replicate/models.js";
 import { RUNWAY_DASHBOARD_LINK, RUNWAY_ROUTING } from "./runway/models.js";
 import { SUME_DASHBOARD_LINK, SUME_ROUTING } from "./sume/models.js";
-import { WAVESPEED_ROUTING } from "./wavespeed/models.js";
 import {
   TOPVIEW_API_SETTINGS_LINK,
   TOPVIEW_PLATFORM_CONSOLE_LINK,
@@ -21,6 +20,7 @@ import {
   TOPVIEW_ROUTING,
   TOPVIEW_UID_ENV,
 } from "./topview/models.js";
+import { WAVESPEED_ROUTING } from "./wavespeed/models.js";
 
 export interface ProviderEntry {
   name: string;

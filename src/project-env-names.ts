@@ -30,7 +30,6 @@ import { LEONARDO_ROUTING } from "./providers/leonardo/models.js";
 import { PROVIDER_KEYS } from "./providers/provider-keys.js";
 import { REPLICATE_ROUTING } from "./providers/replicate/models.js";
 import { RUNWAY_ROUTING } from "./providers/runway/models.js";
-import { WAVESPEED_ROUTING } from "./providers/wavespeed/models.js";
 import {
   SUME_IMAGE_MODEL_ENV,
   SUME_ROUTING,
@@ -41,6 +40,7 @@ import {
   TOPVIEW_ROUTING,
   TOPVIEW_UID_ENV,
 } from "./providers/topview/models.js";
+import { WAVESPEED_ROUTING } from "./providers/wavespeed/models.js";
 
 /**
  * Names multix reads that a project `.env` may NOT set: opt-ins that widen
