@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.27.0-beta.4](https://github.com/mrgoonie/multix-cli/compare/v1.27.0-beta.3...v1.27.0-beta.4) (2026-11-12)
+
+
+### Added
+
+* **atlas:** price 3D runs from Atlas Cloud's live price list ([#601](https://github.com/mrgoonie/multix-cli/issues/601)) ([32cb590](https://github.com/mrgoonie/multix-cli/commit/32cb590216dcc46b24a4c8512870a9dd38d1b407)), closes [#597](https://github.com/mrgoonie/multix-cli/issues/597)
+* **elevenlabs:** pre-flight estimate for sfx and music ([#599](https://github.com/mrgoonie/multix-cli/issues/599)) ([c09cf53](https://github.com/mrgoonie/multix-cli/commit/c09cf53981facb24483ae5ca7c0541c8e028a741))
+* **elevenlabs:** pre-flight estimate for transcribe ([#608](https://github.com/mrgoonie/multix-cli/issues/608)) ([9694b2e](https://github.com/mrgoonie/multix-cli/commit/9694b2ebfe6083c54f5d32bb3bea822c0acfe500))
+
+
+### Fixed
+
+* **elevenlabs:** default transcribe to scribe_v2 and list current Scribe models ([#609](https://github.com/mrgoonie/multix-cli/issues/609)) ([0c3a07f](https://github.com/mrgoonie/multix-cli/commit/0c3a07f9e311c4dd013547d881c567ef3b202815))
+
 ## [1.27.0-beta.3](https://github.com/mrgoonie/multix-cli/compare/v1.27.0-beta.2...v1.27.0-beta.3) (2026-11-07)
 
 
