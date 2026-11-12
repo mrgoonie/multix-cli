@@ -132,9 +132,15 @@ const SFX_SECONDS = { min: 0.5, max: 30 };
 /** music_length_ms and a plan's total are bounded by the API to 3 s..10 min. */
 const MUSIC_SECONDS = { min: 3, max: 600 };
 
+/** Scribe models ElevenLabs still serves but no longer prices on its API price list. */
+const DEPRECATED_SCRIBE_MODELS = ["scribe_v1", "scribe_v1_experimental"] as const;
+
 /** Why a builder could not price a request it knows, for the "missing_input" detail. */
 class Unpriced {
-  constructor(readonly detail: string) {}
+  constructor(
+    readonly detail: string,
+    readonly reason: "missing_input" | "no_price" = "missing_input",
+  ) {}
 }
 
 function lengthRequest(
@@ -248,6 +254,25 @@ const BUILDERS: Record<string, RequestBuilder> = {
       provider: "openrouter",
       model: openrouterModel(o, d, DEFAULT_OPENROUTER_STT_MODEL),
       text: "",
+      task: "transcription",
+      ...(d.audioSeconds !== undefined ? { audio_seconds: d.audioSeconds } : {}),
+    };
+  },
+  // Billed per minute of input audio; the length is read from the local --input file.
+  "elevenlabs transcribe": (o, d) => {
+    if (opt(o, "input") === undefined) return undefined;
+    const model = (opt(o, "model") ?? d.model ?? ELEVENLABS_DEFAULTS.sttModel).trim();
+    if ((DEPRECATED_SCRIBE_MODELS as readonly string[]).includes(model)) {
+      return new Unpriced(
+        `${model} is deprecated and ElevenLabs publishes no price for it; pass --model scribe_v2 or scribe_v3`,
+        "no_price",
+      );
+    }
+    return {
+      provider: "elevenlabs",
+      model,
+      text: "",
+      task: "transcription",
       ...(d.audioSeconds !== undefined ? { audio_seconds: d.audioSeconds } : {}),
     };
   },
@@ -257,6 +282,7 @@ const BUILDERS: Record<string, RequestBuilder> = {
 const NEEDS: Record<string, string> = {
   "openrouter tts": "--text or --prompt (text from --text-file or --turns-file is not priced)",
   "openrouter transcribe": "the audio to transcribe (--input)",
+  "elevenlabs transcribe": "the audio to transcribe (--input)",
   "fish tts": "--text, --prompt or (from the CLI) a readable --text-file or --turns-file",
   "elevenlabs sfx": "--text or --prompt",
   "elevenlabs music":
@@ -508,7 +534,7 @@ export function estimateCommand(
   if (req instanceof Unpriced) {
     return unknownEstimate(
       command,
-      "missing_input",
+      req.reason,
       `Cannot estimate ${command}: ${req.detail}`,
       opt(named, "model") ?? defaults.model ?? "",
       defaults.at,

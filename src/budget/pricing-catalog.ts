@@ -145,10 +145,12 @@ function openrouter(
 
 const speechChars = (id: string, models: string[], usdPerM: number) =>
   openrouter(id, models, [perM("characters", usdPerM)], { source: OPENROUTER_SPEECH });
-const sttSeconds = (id: string, models: string[], usdPerM: number) =>
-  openrouter(id, models, [perM("input_audio_seconds", usdPerM)], {
+const sttSeconds = (id: string, models: string[], usdPerM: number): PriceEntry => ({
+  ...openrouter(id, models, [perM("input_audio_seconds", usdPerM)], {
     source: OPENROUTER_TRANSCRIPTION,
-  });
+  }),
+  task: "transcription",
+});
 
 const OPENROUTER_CATALOG: PriceEntry[] = [
   // Text to speech, USD per input character.
@@ -525,6 +527,22 @@ export const PRICING_CATALOG: PriceEntry[] = [
     verified: true,
     notes:
       "Eleven Music: USD 0.15 per minute of music, one price for every music model. The page also says music is billed per generation and publishes no rounding or minimum, so the high end is an estimate.",
+  },
+  {
+    id: "elevenlabs/scribe@api",
+    provider: "elevenlabs",
+    task: "transcription",
+    // Batch Speech to Text models; the deprecated scribe_v1 has no published price.
+    models: ["scribe_v3", "scribe_v2", "scribe_v2_medical"],
+    tier: "api-usage",
+    currency: "USD",
+    region: "global",
+    windows: [{ components: [{ meter: "input_audio_seconds", usd: 0.2, per: 3600 }] }],
+    last_checked: "2026-11-12",
+    source: ELEVENLABS_PRICING,
+    verified: true,
+    notes:
+      "Speech to Text: USD 0.20 per hour of audio for Scribe v3, v2 and v2 Medical, billed per audio minute. Keyterm prompting, transcript editing, speaker roles and multichannel cost extra; multix sends none of them.",
   },
   {
     id: "fish/s2-pro@api",

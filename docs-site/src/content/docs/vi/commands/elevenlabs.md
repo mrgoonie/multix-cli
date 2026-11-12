@@ -93,6 +93,18 @@ multix elevenlabs music --prompt "Dreamy synthwave loop" --music-length-ms 14000
   --max-cost 0.05 --cost-policy estimate
 ```
 
+`transcribe` được tính giá theo độ dài của tệp `--input` cục bộ (đọc bằng
+`ffprobe`) với mức giá Speech to Text của ElevenLabs, $0.20 mỗi giờ âm thanh cho
+`scribe_v3`, `scribe_v2` và `scribe_v2_medical`. Mức cao cộng thêm 5% vào độ dài
+đo được và làm tròn lên cả phút, nên đây là mức trần chắc chắn và `--max-cost`
+hoạt động với policy mặc định. URL, cùng `scribe_v1` và `scribe_v1_experimental`
+đã ngừng hỗ trợ (ElevenLabs không công bố giá), vẫn là `unknown`.
+
+```bash
+multix elevenlabs transcribe --input clip.mp3 --model scribe_v2 --estimate
+multix elevenlabs transcribe --input clip.mp3 --model scribe_v2 --max-cost 0.01
+```
+
 ## Job dubbing
 
 `dub` là bất đồng bộ. Dùng `--async` để nhận dubbing ID ngay, rồi tải track
