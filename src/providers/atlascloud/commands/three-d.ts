@@ -34,7 +34,10 @@ export function registerAtlas3dCommand(parent: Command): void {
       "-m, --model <id>",
       "Atlas Cloud 3D model id (env: ATLASCLOUD_TEXT_TO_3D_MODEL / ATLASCLOUD_IMAGE_TO_3D_MODEL)",
     )
-    .option("--format <fmt>", "Mesh format, e.g. GLB, OBJ, FBX (model-dependent)")
+    .option(
+      "--format <fmt>",
+      "Mesh format, e.g. glb, obj, fbx (model-dependent; matched to the model schema's spelling)",
+    )
     .option("--seed <n>", "Seed (model-dependent)");
   addRunOptions(cmd, { waitTimeoutMs: THREE_D_WAIT_MS }).action(
     async (prompt: string | undefined, opts: ThreeDFlags) => {

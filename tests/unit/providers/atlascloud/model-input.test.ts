@@ -40,6 +40,37 @@ const seedanceI2v = parseModelSpec(
   ),
 ) as AtlasModelSpec;
 
+// Shapes copied from the published schemas: meshy-v7 declares the formats on
+// array items in lower case; hunyuan3d-rapid declares an upper-case string enum.
+const meshyMulti = parseModelSpec(
+  "meshy-v7/multi-image-to-3d",
+  modelSchemaDoc(
+    "Image",
+    {
+      image_urls: { type: "array", items: { type: "string" }, maxItems: 4 },
+      target_formats: {
+        type: "array",
+        items: { type: "string", enum: ["glb", "obj", "fbx", "stl", "usdz", "3mf"] },
+        default: ["glb"],
+        minItems: 1,
+        maxItems: 6,
+      },
+    },
+    ["model", "image_urls"],
+  ),
+) as AtlasModelSpec;
+const hunyuanRapid = parseModelSpec(
+  "tencent/hunyuan3d-rapid/text-to-3d",
+  modelSchemaDoc(
+    "Image",
+    {
+      prompt: { type: "string" },
+      format: { type: "string", enum: ["GLB", "OBJ", "USDZ", "FBX", "STL", "MP4"], default: "GLB" },
+    },
+    ["model", "prompt"],
+  ),
+) as AtlasModelSpec;
+
 describe("parseModelSpec", () => {
   it("takes the endpoint from the schema's submit path", () => {
     expect(flux.endpoint).toBe("image");
@@ -111,6 +142,78 @@ describe("buildModelInput", () => {
       { flag: "--resolution", value: "720p", candidates: F.resolution },
     ]);
     expect(ok).toMatchObject({ duration: 5, resolution: "720p" });
+  });
+
+  it("matches 3D --format to each model's own enum spelling, whatever the case", () => {
+    const meshy = buildModelInput(meshyMulti, [
+      {
+        flag: "--ref",
+        value: ["https://x/front.png", "https://x/back.png"],
+        candidates: F.primaryImage,
+      },
+      { flag: "--format", value: "GLB", candidates: F.modelFormat },
+    ]);
+    expect(meshy).toEqual({
+      image_urls: ["https://x/front.png", "https://x/back.png"],
+      target_formats: ["glb"],
+    });
+    const hunyuan = buildModelInput(hunyuanRapid, [
+      { flag: "[prompt]", value: "a chest", candidates: F.prompt },
+      { flag: "--format", value: "glb", candidates: F.modelFormat },
+    ]);
+    expect(hunyuan).toEqual({ prompt: "a chest", format: "GLB" });
+  });
+
+  it("leaves enum values alone when the match is exact, ambiguous or not a string", () => {
+    const spec = parseModelSpec(
+      "x/audio",
+      modelSchemaDoc(
+        "Audio",
+        {
+          text: { type: "string" },
+          format: { type: "string", enum: ["mp3", "MP3", "wav"] },
+          duration: { type: "integer", enum: [5, 10] },
+          codec: { type: "string", enum: ["opus"] },
+        },
+        ["model", "text"],
+      ),
+    ) as AtlasModelSpec;
+    const base = { flag: "[text]", value: "hi", candidates: F.speechText };
+    expect(
+      buildModelInput(spec, [base, { flag: "--format", value: "MP3", candidates: F.audioFormat }]),
+    ).toMatchObject({ format: "MP3" });
+    expect(() =>
+      buildModelInput(spec, [base, { flag: "--format", value: "Mp3", candidates: F.audioFormat }]),
+    ).toThrow(/Valid format: mp3, MP3, wav/);
+    expect(
+      buildModelInput(spec, [base, { flag: "--format", value: "WAV", candidates: F.audioFormat }]),
+    ).toMatchObject({ format: "wav" });
+    expect(
+      buildModelInput(spec, [base, { flag: "--duration", value: "10", candidates: F.duration }]),
+    ).toMatchObject({ duration: 10 });
+  });
+
+  it("enforces minItems on array fields", () => {
+    const spec = parseModelSpec(
+      "x/multi",
+      modelSchemaDoc(
+        "Image",
+        { image_urls: { type: "array", items: { type: "string" }, minItems: 2 } },
+        ["model", "image_urls"],
+      ),
+    ) as AtlasModelSpec;
+    expect(() =>
+      buildModelInput(spec, [{ flag: "--ref", value: ["a"], candidates: F.primaryImage }]),
+    ).toThrow(/at least 2 item/);
+  });
+
+  it("rejects array values outside the items enum before submit", () => {
+    expect(() =>
+      buildModelInput(meshyMulti, [
+        { flag: "--ref", value: ["https://x/a.png"], candidates: F.primaryImage },
+        { flag: "--format", value: "gltf", candidates: F.modelFormat },
+      ]),
+    ).toThrow(/--format: "gltf" is not supported by this model\. Valid target_formats: glb, obj/);
   });
 
   it("enforces numeric ranges and types", () => {
@@ -245,5 +348,23 @@ describe("validateRawInput", () => {
       /Valid resolution/,
     );
     expect(() => validateRawInput(seedance, { resolution: "720p" })).toThrow(/requires: prompt/);
+  });
+
+  it("checks array items against the items enum and minItems, without rewriting the payload", () => {
+    const ok = { image_urls: ["u"], target_formats: ["glb", "obj"] };
+    expect(validateRawInput(meshyMulti, ok)).toEqual([]);
+    expect(ok.target_formats).toEqual(["glb", "obj"]);
+    expect(() =>
+      validateRawInput(meshyMulti, { image_urls: ["u"], target_formats: ["GLB"] }),
+    ).toThrow(/"GLB" is not supported by this model\. Valid target_formats: glb/);
+    expect(() =>
+      validateRawInput(meshyMulti, { image_urls: ["u"], target_formats: "GLB" }),
+    ).toThrow(/"GLB" is not supported/);
+    expect(() => validateRawInput(hunyuanRapid, { prompt: "x", format: "glb" })).toThrow(
+      /Valid format: GLB/,
+    );
+    expect(() => validateRawInput(meshyMulti, { image_urls: ["u"], target_formats: [] })).toThrow(
+      /at least 1 item/,
+    );
   });
 });
