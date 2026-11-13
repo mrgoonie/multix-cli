@@ -90,7 +90,8 @@ gửi bất kỳ yêu cầu nào, và bạn có thể gõ chữ hoa hay chữ th
 cách viết của model (`glb` với Meshy và Hi3D, `GLB` với Hunyuan3D). Định dạng mà
 model không liệt kê sẽ báo lỗi kèm các giá trị hợp lệ. Payload `atlas run --input`
 cũng được kiểm tra như vậy nhưng được gửi nguyên văn, nên hãy dùng đúng cách viết
-trong schema.
+trong schema. Với `--no-validate`, hoặc khi không tải được schema, multix không
+kiểm tra gì và gửi `--format` đúng như bạn gõ, nên hãy dùng cách viết của model.
 
 ### Giá 3D
 

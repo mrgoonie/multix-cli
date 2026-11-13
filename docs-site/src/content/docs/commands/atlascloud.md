@@ -90,7 +90,8 @@ anything is submitted, and you can type it in any letter case: multix sends the
 model's own spelling (`glb` for Meshy and Hi3D, `GLB` for Hunyuan3D). A format
 the model does not list fails with the valid values. `atlas run --input` payloads
 are checked the same way but sent exactly as written, so use the schema's
-spelling there.
+spelling there. With `--no-validate`, or when the schema cannot be loaded,
+nothing is checked and `--format` is sent as typed, so use the model's spelling.
 
 ### 3D prices
 

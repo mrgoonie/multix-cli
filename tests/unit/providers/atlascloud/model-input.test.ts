@@ -164,6 +164,49 @@ describe("buildModelInput", () => {
     expect(hunyuan).toEqual({ prompt: "a chest", format: "GLB" });
   });
 
+  it("leaves enum values alone when the match is exact, ambiguous or not a string", () => {
+    const spec = parseModelSpec(
+      "x/audio",
+      modelSchemaDoc(
+        "Audio",
+        {
+          text: { type: "string" },
+          format: { type: "string", enum: ["mp3", "MP3", "wav"] },
+          duration: { type: "integer", enum: [5, 10] },
+          codec: { type: "string", enum: ["opus"] },
+        },
+        ["model", "text"],
+      ),
+    ) as AtlasModelSpec;
+    const base = { flag: "[text]", value: "hi", candidates: F.speechText };
+    expect(
+      buildModelInput(spec, [base, { flag: "--format", value: "MP3", candidates: F.audioFormat }]),
+    ).toMatchObject({ format: "MP3" });
+    expect(() =>
+      buildModelInput(spec, [base, { flag: "--format", value: "Mp3", candidates: F.audioFormat }]),
+    ).toThrow(/Valid format: mp3, MP3, wav/);
+    expect(
+      buildModelInput(spec, [base, { flag: "--format", value: "WAV", candidates: F.audioFormat }]),
+    ).toMatchObject({ format: "wav" });
+    expect(
+      buildModelInput(spec, [base, { flag: "--duration", value: "10", candidates: F.duration }]),
+    ).toMatchObject({ duration: 10 });
+  });
+
+  it("enforces minItems on array fields", () => {
+    const spec = parseModelSpec(
+      "x/multi",
+      modelSchemaDoc(
+        "Image",
+        { image_urls: { type: "array", items: { type: "string" }, minItems: 2 } },
+        ["model", "image_urls"],
+      ),
+    ) as AtlasModelSpec;
+    expect(() =>
+      buildModelInput(spec, [{ flag: "--ref", value: ["a"], candidates: F.primaryImage }]),
+    ).toThrow(/at least 2 item/);
+  });
+
   it("rejects array values outside the items enum before submit", () => {
     expect(() =>
       buildModelInput(meshyMulti, [
@@ -314,6 +357,12 @@ describe("validateRawInput", () => {
     expect(() =>
       validateRawInput(meshyMulti, { image_urls: ["u"], target_formats: ["GLB"] }),
     ).toThrow(/"GLB" is not supported by this model\. Valid target_formats: glb/);
+    expect(() =>
+      validateRawInput(meshyMulti, { image_urls: ["u"], target_formats: "GLB" }),
+    ).toThrow(/"GLB" is not supported/);
+    expect(() => validateRawInput(hunyuanRapid, { prompt: "x", format: "glb" })).toThrow(
+      /Valid format: GLB/,
+    );
     expect(() => validateRawInput(meshyMulti, { image_urls: ["u"], target_formats: [] })).toThrow(
       /at least 1 item/,
     );

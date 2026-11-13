@@ -198,8 +198,10 @@ function checkConstraints(
     }
   }
   const itemEnum = prop.items?.enum;
-  if (Array.isArray(v) && Array.isArray(itemEnum) && itemEnum.length > 0) {
-    for (const item of v) {
+  // A raw payload may give a bare value for an array field; check it against the item enum too.
+  const items = Array.isArray(v) ? v : prop.type === "array" ? [v] : [];
+  if (Array.isArray(itemEnum) && itemEnum.length > 0) {
+    for (const item of items) {
       if (!itemEnum.some((e) => e === item || String(e) === String(item))) {
         throw enumError(flag, field, item, itemEnum);
       }
