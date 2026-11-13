@@ -75,7 +75,7 @@ multix atlas audio --audio meeting.mp3 [-m <model>] [--language en] [--output tr
 ## 3D
 
 ```bash
-multix atlas 3d "a low-poly treasure chest" [-m <model>] [--format GLB] [--seed <n>]
+multix atlas 3d "a low-poly treasure chest" [-m <model>] [--format glb] [--seed <n>]
 multix atlas 3d --ref object.png [-m <model>]
 ```
 
@@ -84,6 +84,13 @@ multix atlas 3d --ref object.png [-m <model>]
 pass `--ref`, the default is `tencent/hunyuan3d-rapid/image-to-3d`
 (`ATLASCLOUD_IMAGE_TO_3D_MODEL`). Atlas Cloud serves 3D models through its image
 endpoint, and multix reads the right endpoint from each model's schema.
+
+`--format` is checked against the formats the model's schema lists before
+anything is submitted, and you can type it in any letter case: multix sends the
+model's own spelling (`glb` for Meshy and Hi3D, `GLB` for Hunyuan3D). A format
+the model does not list fails with the valid values. `atlas run --input` payloads
+are checked the same way but sent exactly as written, so use the schema's
+spelling there.
 
 ### 3D prices
 

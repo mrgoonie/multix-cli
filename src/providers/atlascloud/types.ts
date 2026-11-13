@@ -76,8 +76,9 @@ export interface AtlasSchemaProperty {
   description?: string;
   minimum?: number;
   maximum?: number;
+  minItems?: number;
   maxItems?: number;
-  items?: { type?: string };
+  items?: { type?: string; enum?: unknown[] };
 }
 
 /** The parts of a model's OpenAPI document multix needs. */

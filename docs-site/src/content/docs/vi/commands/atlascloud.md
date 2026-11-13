@@ -75,7 +75,7 @@ multix atlas audio --audio meeting.mp3 [-m <model>] [--language en] [--output tr
 ## 3D
 
 ```bash
-multix atlas 3d "a low-poly treasure chest" [-m <model>] [--format GLB] [--seed <n>]
+multix atlas 3d "a low-poly treasure chest" [-m <model>] [--format glb] [--seed <n>]
 multix atlas 3d --ref object.png [-m <model>]
 ```
 
@@ -84,6 +84,13 @@ multix atlas 3d --ref object.png [-m <model>]
 `--ref`, model mặc định là `tencent/hunyuan3d-rapid/image-to-3d`
 (`ATLASCLOUD_IMAGE_TO_3D_MODEL`). Atlas Cloud phục vụ model 3D qua endpoint ảnh,
 và multix đọc đúng endpoint từ schema của từng model.
+
+`--format` được kiểm tra với danh sách định dạng trong schema của model trước khi
+gửi bất kỳ yêu cầu nào, và bạn có thể gõ chữ hoa hay chữ thường: multix gửi đúng
+cách viết của model (`glb` với Meshy và Hi3D, `GLB` với Hunyuan3D). Định dạng mà
+model không liệt kê sẽ báo lỗi kèm các giá trị hợp lệ. Payload `atlas run --input`
+cũng được kiểm tra như vậy nhưng được gửi nguyên văn, nên hãy dùng đúng cách viết
+trong schema.
 
 ### Giá 3D
 

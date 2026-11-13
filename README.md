@@ -715,7 +715,7 @@ multix atlas audio "Hello from multix" [--voice <id>] [--format mp3]
 multix atlas audio --audio ./meeting.mp3 [--output transcript.txt]
 
 # 3D (defaults tencent/hunyuan3d-rapid/text-to-3d, or .../image-to-3d with --ref)
-multix atlas 3d "a low-poly treasure chest" [--format GLB]
+multix atlas 3d "a low-poly treasure chest" [--format glb]
 
 # Any model, raw JSON input (fields per the model's docs; `model` is added for you)
 multix atlas run <modelId> --input '{"prompt":"a cat"}' [--type image|video|audio]

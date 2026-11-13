@@ -159,6 +159,32 @@ function coerceScalar(
   return value;
 }
 
+/**
+ * Map a string onto the schema's own spelling of an enum value when it differs
+ * only in letter case (Atlas schemas mix `GLB` and `glb` across models), so a
+ * convenience flag works whichever spelling the model uses. An exact match, an
+ * ambiguous one, or no match leaves the value unchanged for the enum check.
+ */
+function canonicalEnumValue(value: unknown, allowed: unknown[] | undefined): unknown {
+  if (typeof value !== "string" || !Array.isArray(allowed) || allowed.length === 0) return value;
+  if (allowed.some((e) => e === value)) return value;
+  const lower = value.toLowerCase();
+  const matches = allowed.filter((e) => typeof e === "string" && e.toLowerCase() === lower);
+  return matches.length === 1 ? matches[0] : value;
+}
+
+/** Apply `canonicalEnumValue` to a scalar (field enum) or each array item (items enum). */
+function canonicalizeEnum(prop: AtlasSchemaProperty, v: unknown): unknown {
+  if (Array.isArray(v)) return v.map((item) => canonicalEnumValue(item, prop.items?.enum));
+  return canonicalEnumValue(v, prop.enum);
+}
+
+function enumError(flag: string, field: string, v: unknown, allowed: unknown[]): ValidationError {
+  return new ValidationError(
+    `${flag}: "${String(v)}" is not supported by this model. Valid ${field}: ${allowed.map(String).join(", ")}`,
+  );
+}
+
 function checkConstraints(
   flag: string,
   field: string,
@@ -168,9 +194,15 @@ function checkConstraints(
   const values = Array.isArray(v) ? v : [v];
   if (Array.isArray(prop.enum) && prop.enum.length > 0 && !Array.isArray(v)) {
     if (!prop.enum.some((e) => e === v || String(e) === String(v))) {
-      throw new ValidationError(
-        `${flag}: "${String(v)}" is not supported by this model. Valid ${field}: ${prop.enum.map(String).join(", ")}`,
-      );
+      throw enumError(flag, field, v, prop.enum);
+    }
+  }
+  const itemEnum = prop.items?.enum;
+  if (Array.isArray(v) && Array.isArray(itemEnum) && itemEnum.length > 0) {
+    for (const item of v) {
+      if (!itemEnum.some((e) => e === item || String(e) === String(item))) {
+        throw enumError(flag, field, item, itemEnum);
+      }
     }
   }
   for (const item of values) {
@@ -185,6 +217,11 @@ function checkConstraints(
         `${flag}: ${item} exceeds the maximum ${prop.maximum} for "${field}"`,
       );
     }
+  }
+  if (Array.isArray(v) && prop.minItems !== undefined && v.length < prop.minItems) {
+    throw new ValidationError(
+      `${flag}: this model needs at least ${prop.minItems} item(s) for "${field}", got ${v.length}`,
+    );
   }
   if (Array.isArray(v) && prop.maxItems !== undefined && v.length > prop.maxItems) {
     throw new ValidationError(
@@ -242,7 +279,7 @@ export function buildModelInput(
       );
     }
     const prop = spec.properties[field] as AtlasSchemaProperty;
-    const value = coerce(req.flag, field, prop, req.value);
+    const value = canonicalizeEnum(prop, coerce(req.flag, field, prop, req.value));
     checkConstraints(req.flag, field, prop, value);
     body[field] = value;
   }
