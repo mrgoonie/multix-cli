@@ -8,7 +8,9 @@
  * plain decimal amounts under a money key (Sume usage.usd "0.35", TopView
  * charged_usd "0.4160" and costCredit "5.00"). A Sume job's usage_summary
  * reports the captured charge in USD cents (captured_usd_cents), counted once
- * the summary is captured or refunded.
+ * the summary is captured or refunded. A finished Atlas Cloud prediction
+ * (`{ code, data: { id, status: "completed", price } }`) reports what it was
+ * charged in USD as data.price.
  */
 
 export interface UsageTokens {
@@ -258,6 +260,27 @@ function walk(
   }
 }
 
+/** Atlas Cloud prediction statuses that end in a delivered (and charged) result. */
+const PREDICTION_DONE = /^(completed|succeeded|success)$/i;
+
+/**
+ * The USD an Atlas Cloud prediction was charged: `data.price` (a number or a
+ * plain decimal string) beside a finished `data.status` and the prediction's
+ * `data.id`. A running or failed prediction's price is not a charge, and a
+ * zero or missing price says nothing, so neither is reported.
+ */
+function predictionPrice(body: Record<string, unknown>): number | undefined {
+  const data = asRecord(body.data);
+  if (!data || typeof data.id !== "string" || typeof data.status !== "string") return undefined;
+  if (!PREDICTION_DONE.test(data.status.trim())) return undefined;
+  const price =
+    num(data.price) ??
+    (typeof data.price === "string" && PLAIN_DECIMAL.test(data.price.trim())
+      ? Number(data.price.trim())
+      : undefined);
+  return price !== undefined && price > 0 ? price : undefined;
+}
+
 /** Extract usage from one parsed JSON response body and its headers. */
 export function extractUsage(body: unknown, headers?: Headers | null): ResponseUsage {
   const out: ResponseUsage = { tokens: {}, metrics: {}, ids: [] };
@@ -298,6 +321,13 @@ export function extractUsage(body: unknown, headers?: Headers | null): ResponseU
         out.sources = { ...out.sources, credits: `body.${path}` };
       }
     }
+  }
+  // Only when the body names no other charge: a cost key it reports wins.
+  const price = obj && out.cost_usd === undefined ? predictionPrice(obj) : undefined;
+  if (price !== undefined) {
+    out.metrics["data.price"] = price;
+    out.cost_usd = price;
+    out.sources = { ...out.sources, cost_usd: "body.data.price" };
   }
   if (headers) {
     for (const name of USAGE_HEADERS) {

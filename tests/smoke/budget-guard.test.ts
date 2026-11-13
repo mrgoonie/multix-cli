@@ -17,6 +17,7 @@ import { isolatedEnv } from "./child-env.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLI = path.resolve(__dirname, "../../dist/cli.js");
 const FAKE_ELEVENLABS = pathToFileURL(path.join(__dirname, "fixtures/fake-elevenlabs-fetch.mjs"));
+const FAKE_ATLAS = pathToFileURL(path.join(__dirname, "fixtures/fake-atlas-fetch.mjs"));
 const SPAWN_TIMEOUT = 15_000;
 const VI = "Xin chào thế giới";
 const HAS_FFPROBE = spawnSync("ffprobe", ["-version"], { stdio: "ignore" }).status === 0;
@@ -67,6 +68,7 @@ describe("budget guards (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
       ELEVENLABS_API_KEY: "test-key-not-real",
       GEMINI_API_KEY: "test-key-not-real",
       OPENROUTER_API_KEY: "test-key-not-real",
+      ATLASCLOUD_API_KEY: "test-key-not-real",
       MULTIX_HISTORY: "1",
       MULTIX_HISTORY_FILE: path.join(tmp, "h.jsonl"),
       // Any real request would fail fast instead of hanging.
@@ -358,5 +360,55 @@ describe("budget guards (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     expect(result.exitCode).not.toBe(0);
     const out = envelope(result.stdout);
     expect(out.cost).toMatchObject({ role: "charge", status: "uncertain", actual_usd: null });
+  });
+
+  it("an Atlas run reports the prediction's data.price as its actual cost", async () => {
+    const result = await run(
+      [
+        "atlas",
+        "run",
+        "meshy-v7/multi-image-to-3d",
+        "--type",
+        "image",
+        "--input",
+        '{"image_urls":["https://cdn.test/a.png"]}',
+        "--no-validate",
+        "--no-download",
+        "--json",
+      ],
+      {},
+      FAKE_ATLAS,
+    );
+    expect(result.stderr).not.toContain("test-key-not-real");
+    expect(result.exitCode).toBe(0);
+    const out = envelope(result.stdout);
+    expect(out.usage).toMatchObject({ cost_usd: 0.66, credits: 30 });
+    expect(out.usage.sources.cost_usd).toEqual(["api.atlascloud.ai body.data.price"]);
+    expect(out.cost).toMatchObject({
+      role: "charge",
+      status: "settled",
+      actual_usd: 0.66,
+      actual_source: "provider_reported",
+      provider_reported: { cost_usd: 0.66, credits: 30 },
+    });
+    expect(ledger()[0].cost).toMatchObject({
+      actual_usd: 0.66,
+      actual_source: "provider_reported",
+    });
+
+    // `atlas status` reads the same charge from the prediction.
+    const status = await run(["atlas", "status", "pred-3d-1", "--json"], {}, FAKE_ATLAS);
+    expect(status.exitCode).toBe(0);
+    expect(envelope(status.stdout).cost).toMatchObject({
+      role: "observation",
+      actual_usd: 0.66,
+      actual_source: "provider_reported",
+    });
+    // One operation: the run and the status read count the charge once.
+    const stats = await run(["history", "stats", "--json"]);
+    expect(stats.exitCode).toBe(0);
+    expect(envelope(stats.stdout).data).toEqual([
+      expect.objectContaining({ provider: "atlas", runs: 2, cost_usd: 0.66, credits: 30 }),
+    ]);
   });
 });
