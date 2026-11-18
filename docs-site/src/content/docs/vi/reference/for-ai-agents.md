@@ -299,6 +299,7 @@ offering trước khi chạy; xem [Danh mục](/vi/commands/catalog/).
 | Video avatar từ prompt (Video Agent) hoặc kịch bản chính xác, dịch video, lipsync | [HeyGen](/vi/commands/heygen/) |
 | Mọi model ảnh hoặc video trong catalog của Sume (gồm lip-sync và phụ đề) với một key; tiếp tục/hủy theo job ID | [Sume](/vi/commands/sume/) |
 | Video marketing sản phẩm từ URL hoặc tư liệu, avatar nói hoặc avatar cầm sản phẩm, ảnh sản phẩm; các model của TopView API Platform | [TopView](/vi/commands/topview/) |
+| Ảnh hoặc video của nhiều nhà cung cấp (Seedance, Veo, Kling, ảnh Gemini, Seedream) bằng một key của bên bán lại; báo giá; tiếp tục theo task ID | [ToAPIs](/vi/commands/toapis/) |
 | Convert tài liệu hoặc tối ưu media local | [Media và tài liệu](/vi/commands/media-and-documents/) |
 | Tự cập nhật CLI | [Tổng quan lệnh](/vi/commands/#tự-cập-nhật) |
 

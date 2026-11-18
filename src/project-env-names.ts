@@ -36,6 +36,11 @@ import {
   SUME_VIDEO_MODEL_ENV,
 } from "./providers/sume/models.js";
 import {
+  TOAPIS_IMAGE_MODEL_ENV,
+  TOAPIS_ROUTING,
+  TOAPIS_VIDEO_MODEL_ENV,
+} from "./providers/toapis/models.js";
+import {
   TOPVIEW_PLATFORM_ROUTING,
   TOPVIEW_ROUTING,
   TOPVIEW_UID_ENV,
@@ -134,6 +139,7 @@ const ROUTING = [
   SUME_ROUTING,
   TOPVIEW_ROUTING,
   TOPVIEW_PLATFORM_ROUTING,
+  TOAPIS_ROUTING,
 ];
 
 /** Every fixed name a project `.env` may set (numbered Gemini keys are matched by pattern). */
@@ -150,6 +156,8 @@ export const PROJECT_ENV_NAMES: ReadonlySet<string> = new Set([
   SUME_IMAGE_MODEL_ENV,
   SUME_VIDEO_MODEL_ENV,
   TOPVIEW_UID_ENV,
+  TOAPIS_IMAGE_MODEL_ENV,
+  TOAPIS_VIDEO_MODEL_ENV,
   ...OWN_SETTINGS,
   ...INLINE_SETTINGS,
 ]);

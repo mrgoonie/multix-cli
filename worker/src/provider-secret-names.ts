@@ -41,6 +41,7 @@ const CLI_KEY_NAMES = [
   "TOPVIEW_API_KEY",
   "TOPVIEW_UID",
   "TOPVIEW_PLATFORM_API_KEY",
+  "TOAPIS_API_KEY",
 ] as const;
 
 const CLOUDFLARE_NAMES = [
@@ -110,6 +111,7 @@ export const CLI_PROVIDER_KEY_GROUPS: readonly ProviderKeyGroup[] = [
     link: "https://platform.topview.ai",
     names: ["TOPVIEW_PLATFORM_API_KEY"],
   },
+  { provider: "ToAPIs", link: "https://toapis.com/dashboard/tokens", names: ["TOAPIS_API_KEY"] },
 ];
 
 /** Dashboard groups: the CLI providers, then Cloudflare Workers AI. */

@@ -481,6 +481,22 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
     urlOptions: ["image", "end-image", "reference-image", "video", "audio"],
     repeatable: ["image", "reference-image", "param"],
   },
+  // --param sets any other request field of the model (n, seconds, metadata.*).
+  "toapis image": {
+    fileOptions: { image: "file" },
+    repeatable: ["image", "param"],
+    caps: { count: ["count"], countFromModel: true },
+    uncappedOptions: ["param"],
+    // 1K/2K/4K tiers and the default tier differ per model.
+    uncappedSpend: "the model's ToAPIs list price sets the per-image price at each resolution tier",
+  },
+  "toapis video": {
+    fileOptions: { image: "file", "first-frame": "file", "last-frame": "file" },
+    repeatable: ["image", "param"],
+    caps: { duration: ["duration"], resolution: ["resolution"], resolutionFromModel: true },
+    uncappedOptions: ["param"],
+  },
+  "toapis upload": { filePositionals: ["file"] },
   // The product page URL is sent as given; the CLI accepts only http(s).
   "topview url-to-video": {
     uncappedSpend: M2V_LENGTH,
@@ -557,6 +573,7 @@ export const GROUP_KEYS: Readonly<Record<string, readonly ProviderSecretName[]>>
   heygen: ["HEYGEN_API_KEY"],
   sume: ["SUME_API_KEY"],
   topview: ["TOPVIEW_API_KEY", "TOPVIEW_UID", "TOPVIEW_PLATFORM_API_KEY"],
+  toapis: ["TOAPIS_API_KEY"],
   // Readiness only: a speech job gets the keys of the providers it routes to (keyOptions).
   speech: [
     "GEMINI_API_KEY",

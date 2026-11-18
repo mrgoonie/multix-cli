@@ -269,6 +269,12 @@ không chờ: đặt `"wait": true` trong `options`, hoặc tiếp tục sau b�
 `topview prediction <id> --wait --download`. Xem
 [Sume](/vi/commands/sume/) và [TopView](/vi/commands/topview/).
 
+**ToAPIs.** `toapis image`, `toapis video`, `toapis upload`, `toapis status`,
+`toapis models` và `toapis quote` chạy được từ xa. Truyền `--image`,
+`--first-frame` và `--last-frame` dưới dạng URL công khai. Job giới hạn
+`--count`, `--duration` và `--resolution`; một trường `--param` được tính là
+chi phí không giới hạn. Xem [ToAPIs](/vi/commands/toapis/).
+
 **Speech.** `speech generate` phải nêu `--provider`. Job chỉ nhận key của các
 provider được nêu trong `--provider` và `--fallback`, không phải mọi key speech
 bạn đã lưu. Truyền `--text-file` dưới dạng URL `https://` trong `inputs`.
@@ -311,8 +317,8 @@ bị bỏ qua.
   OpenRouter, OpenAI, MiniMax, Leonardo.Ai, BytePlus với `ARK_API_KEY` làm tên
   dự phòng, ElevenLabs, fal.ai, Atlas Cloud, Replicate với `REPLICATE_API_KEY`
   làm tên dự phòng, Runway với `RUNWAYML_API_SECRET` mang nhãn "API secret",
-  HeyGen, Sume, TopView với `TOPVIEW_API_KEY` và `TOPVIEW_UID`, và TopView
-  Platform), cùng account ID, API token và AI Gateway ID (tùy chọn) của
+  HeyGen, Sume, TopView với `TOPVIEW_API_KEY` và `TOPVIEW_UID`, TopView
+  Platform, và ToAPIs), cùng account ID, API token và AI Gateway ID (tùy chọn) của
   Cloudflare Workers AI. `TOPVIEW_UID` là account ID chứ không phải secret,
   nên được nhập bằng ô văn bản thường thay vì ô mật khẩu. Một job `topview`
   nhận cả ba giá trị TopView; các lệnh Legacy cần `TOPVIEW_API_KEY` và

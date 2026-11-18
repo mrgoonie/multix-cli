@@ -89,6 +89,7 @@ not filtered. On Windows the check ignores case, as the OS does.
 | `SUME_API_KEY` | Sume (USD balance, from the [Sume app](https://app.sume.com)) |
 | `TOPVIEW_API_KEY` and `TOPVIEW_UID` | TopView Legacy API (plan credits, from [API Settings](https://www.topview.ai/api-settings)) |
 | `TOPVIEW_PLATFORM_API_KEY` | TopView API Platform (separate USD balance, from [platform.topview.ai](https://platform.topview.ai)) |
+| `TOAPIS_API_KEY` | ToAPIs reseller (USD balance, from the [ToAPIs dashboard](https://toapis.com/dashboard/tokens)) |
 
 ```bash
 export GEMINI_API_KEY="your-key"
@@ -223,6 +224,10 @@ refuse to run; `multix sume models` lists the IDs. TopView accepts
 `https://platform-backend.topview.ai`). Sume and TopView downloads also stop at
 `MULTIX_MAX_DOWNLOAD_MB`; see [Sume](/commands/sume/#outputs) and
 [TopView](/commands/topview/#outputs).
+
+ToAPIs accepts `TOAPIS_BASE_URL` (default `https://toapis.com`),
+`TOAPIS_IMAGE_MODEL` (default `doubao-seedream-4-5`), and `TOAPIS_VIDEO_MODEL`
+(default `seedance-2-fast`); see [ToAPIs](/commands/toapis/).
 
 ### Base URL overrides and trust
 

@@ -16,6 +16,11 @@ import {
   DEFAULT_OPENROUTER_TTS_MODEL,
 } from "../providers/openrouter/speech-defaults.js";
 import { type SumeCatalogSnapshot, estimateSumeCost } from "../providers/sume/cost.js";
+import { estimateToapisCost } from "../providers/toapis/cost.js";
+import {
+  DEFAULT_TOAPIS_IMAGE_MODEL,
+  DEFAULT_TOAPIS_VIDEO_MODEL,
+} from "../providers/toapis/models.js";
 import { SPEECH_PROVIDERS, type SpeechProvider } from "../speech/speech-catalog.js";
 import { parseRouteSpec, resolveTarget } from "../speech/speech-request.js";
 import { type CostEstimate, type EstimateRequest, estimateCost } from "./cost-estimate.js";
@@ -131,12 +136,15 @@ const NEEDS: Record<string, string> = {
 /** Priced from the model's row in Sume's catalog (per image or per second). */
 const SUME_COMMANDS = ["sume image", "sume video"] as const;
 
+/** Priced from ToAPIs list prices (per image, per second or per Seedance token). */
+const TOAPIS_COMMANDS = ["toapis image", "toapis video"] as const;
+
 /**
  * Requests that cost nothing even though they POST: a provider's own price
  * quote. They are priced at a proven $0, so --max-cost lets them through, and
  * their receipts are observations rather than charges.
  */
-const FREE_COMMANDS: ReadonlySet<string> = new Set(["sume estimate"]);
+const FREE_COMMANDS: ReadonlySet<string> = new Set(["sume estimate", "toapis quote"]);
 
 export function isFreeCommand(command: string): boolean {
   return FREE_COMMANDS.has(command);
@@ -144,7 +152,7 @@ export function isFreeCommand(command: string): boolean {
 
 /** Commands with a pre-flight estimator. */
 export function pricedCommands(): string[] {
-  return [...Object.keys(BUILDERS), "speech generate", ...SUME_COMMANDS];
+  return [...Object.keys(BUILDERS), "speech generate", ...SUME_COMMANDS, ...TOAPIS_COMMANDS];
 }
 
 function unknownEstimate(
@@ -330,6 +338,19 @@ export function estimateCommand(
       model: (opt(named, "model") ?? defaults.model ?? "").trim(),
       options: named,
       catalog: defaults.sumeCatalog,
+      at: defaults.at,
+    });
+  }
+  if (command === "toapis image" || command === "toapis video") {
+    const kind = command === "toapis image" ? "image" : "video";
+    return estimateToapisCost({
+      kind,
+      model: (
+        opt(named, "model") ??
+        defaults.model ??
+        (kind === "image" ? DEFAULT_TOAPIS_IMAGE_MODEL : DEFAULT_TOAPIS_VIDEO_MODEL)
+      ).trim(),
+      options: named,
       at: defaults.at,
     });
   }
