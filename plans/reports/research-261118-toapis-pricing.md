@@ -125,3 +125,9 @@ Cần `TOAPIS_API_KEY` (lưu qua `ak secrets` hoặc `~/.multix/.env`) và số 
 - Giá Veo 3.1 trên trang chính thức Google chưa đọc được trực tiếp; đang dùng nguồn thứ cấp.
 - Giá gpt-image-2 chính thức chưa xác minh (OpenAI trả 403).
 - Phụ phí audio của các model tính theo giây trên ToAPIs chưa xác định.
+
+## Đối chiếu sau khi chạy thực tế (2026-11-18)
+
+- Video `seedance-2-mini` 480p 4 s: `usage.total_tokens` = 40 594, đúng công thức 864 × 496 × (24 × 4 + 1) / 1024. ToAPIs tính $0.076642, tức $1.888/1M, khớp bảng ở mục 2. Ước tính của multix trước khi chạy là $0.0766.
+- Ảnh và video thử đều được tính đúng `billing.cost_usd` như đơn giá niêm yết; tổng chi cho mọi lần thử là $0.1653.
+- Kết luận về giá ở trên vẫn đúng. Bảng chỉ phản ánh giá niêm yết của nhóm tài khoản mặc định vào ngày kiểm tra; ToAPIs có thể đổi giá, nên `multix toapis quote` là nguồn kiểm tra lại.
