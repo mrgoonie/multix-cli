@@ -65,7 +65,13 @@ export async function uploadLocalFile(
   file: string,
   logger: Logger,
 ): Promise<string> {
-  const abs = path.resolve(file.trim());
+  let abs: string;
+  try {
+    // Check the real target, so a media-named link to a secret file is refused.
+    abs = await fs.realpath(path.resolve(file.trim()));
+  } catch {
+    throw new ValidationError(`File not found: ${file}`);
+  }
   const name = path.basename(abs);
   // Only media leaves the machine: a stray `--image .env` must not become a public URL.
   const type = UPLOAD_TYPES[path.extname(name).toLowerCase()];

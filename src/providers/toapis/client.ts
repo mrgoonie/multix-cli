@@ -137,6 +137,8 @@ export class ToapisClient {
     if (typeof id !== "string" || !id) {
       throw new ProviderError("ToAPIs submit returned no task id", TOAPIS_PROVIDER);
     }
+    // The id names local output files and later URLs; refuse anything unusual.
+    assertValidTaskId(id);
     return { ...task, id, status: task.status || "queued" };
   }
 
@@ -152,7 +154,9 @@ export class ToapisClient {
     if (!task || typeof task !== "object") {
       throw new ProviderError(`ToAPIs task ${id}: empty response`, TOAPIS_PROVIDER);
     }
-    return { ...task, id: task.id || id };
+    const taskId = task.id || id;
+    assertValidTaskId(taskId);
+    return { ...task, id: taskId };
   }
 
   /** Poll until completed or failed. Throws PollTimeoutError at the deadline. */
@@ -266,7 +270,7 @@ export async function quoteToapis(
   });
   const rows = Array.isArray(json?.data) ? json.data : [];
   return items.map((_, i) => {
-    const row = rows.find((r) => r.key === String(i)) ?? rows[i];
+    const row = rows.find((r) => r.key === String(i));
     return row?.success && row.data ? row.data : null;
   });
 }

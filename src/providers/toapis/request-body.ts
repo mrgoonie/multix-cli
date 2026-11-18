@@ -46,6 +46,21 @@ const metadataResolutionImage = (m: string) =>
 const aspectInSize = (m: string, kind: ToapisMediaKind) =>
   (kind === "image" && !/^grok-image/.test(lower(m))) || isVeoOfficial(m) || isSeedanceExt(m);
 
+/**
+ * Fields the cost preflight prices from named flags. Setting them through
+ * `--param` would charge for a run other than the one priced.
+ */
+const PRICED_FIELDS = new Set([
+  "model",
+  "prompt",
+  "n",
+  "duration",
+  "seconds",
+  "resolution",
+  "mode",
+  "metadata.resolution",
+]);
+
 function setPath(body: Body, key: string, value: unknown): void {
   const parts = key.split(".");
   let node = body;
@@ -122,6 +137,9 @@ export function buildToapisBody(opts: ToapisBodyOptions): Body {
     else body.resolution = lower(opts.resolution);
   }
 
+  // Seedance's own default is not documented; send the 720p the estimate prices.
+  if (!opts.resolution && kind === "video" && isSeedance(model)) body.resolution = "720p";
+
   if (opts.duration !== undefined)
     body[isSeedanceExt(model) ? "seconds" : "duration"] = opts.duration;
   if (opts.count !== undefined) body.n = opts.count;
@@ -141,7 +159,14 @@ export function buildToapisBody(opts: ToapisBodyOptions): Body {
 
   putImages(body, opts);
 
-  for (const [key, value] of Object.entries(opts.extra ?? {})) setPath(body, key, value);
+  for (const [key, value] of Object.entries(opts.extra ?? {})) {
+    if (PRICED_FIELDS.has(key)) {
+      throw new ValidationError(
+        `--param ${key} is priced; use the matching flag (--model, --count, --duration, --resolution) instead`,
+      );
+    }
+    setPath(body, key, value);
+  }
   return body;
 }
 

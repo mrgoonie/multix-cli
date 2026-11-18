@@ -1,6 +1,6 @@
 ---
 name: multix
-description: AI multimodal CLI (multix) — generate and edit images, generate, edit and extend video, text-to-speech, speech-to-text, voice cloning, music and sound effects, multi-character dialogue audio, 3D models, media analysis and document-to-Markdown conversion, ffmpeg/ImageMagick media optimization, offline media QA receipts, and self-update. Use whenever the user wants to create, edit, or transform images/video/audio/3D/documents from a CLI or the multix remote MCP server, or mentions any of OpenAI, Codex image driver, Gemini, Nano Banana, Gemini Omni, Veo, Lyria, OpenRouter, MiniMax, Hailuo, Leonardo, BytePlus, Seedream, Seedance, Hyper3D, Kling, Flux, Cloudflare Workers AI, AI Gateway, fal.ai, Atlas Cloud, Replicate, Runway, Gen-4.5, HeyGen, avatar video, lipsync, dubbing, Sume, TopView, product marketing video, product avatar, product photos, ElevenLabs, Fish Audio, Drama 3, image-to-image, i2i, image-to-video, i2v, text-to-video, TTS, STT, transcription, updating/upgrading multix, or batch media optimization.
+description: AI multimodal CLI (multix) — generate and edit images, generate, edit and extend video, text-to-speech, speech-to-text, voice cloning, music and sound effects, multi-character dialogue audio, 3D models, media analysis and document-to-Markdown conversion, ffmpeg/ImageMagick media optimization, offline media QA receipts, and self-update. Use whenever the user wants to create, edit, or transform images/video/audio/3D/documents from a CLI or the multix remote MCP server, or mentions any of OpenAI, Codex image driver, Gemini, Nano Banana, Gemini Omni, Veo, Lyria, OpenRouter, MiniMax, Hailuo, Leonardo, BytePlus, Seedream, Seedance, Hyper3D, Kling, Flux, Cloudflare Workers AI, AI Gateway, fal.ai, Atlas Cloud, Replicate, Runway, Gen-4.5, HeyGen, avatar video, lipsync, dubbing, Sume, TopView, ToAPIs, product marketing video, product avatar, product photos, ElevenLabs, Fish Audio, Drama 3, i2i, i2v, text-to-video, TTS, STT, transcription, updating/upgrading multix, or batch media optimization.
 version: 1.28.0 # x-release-please-version
 license: MIT
 metadata:
@@ -50,7 +50,7 @@ Order of work: `multix -V` (version and where to start) → `multix guide` → `
 
 ## Task skills
 
-This file covers what every task shares: the protocol above, setup, keys, output, the generic fal.ai / Atlas Cloud / Replicate / Sume runners, the remote MCP server and security rules. Task-specific commands, flags, caveats and decision trees live in one task skill each. Read only the task skill you need.
+This file covers what every task shares: the protocol above, setup, keys, output, the generic fal.ai / Atlas Cloud / Replicate / Sume / ToAPIs runners, the remote MCP server and security rules. Task-specific commands, flags, caveats and decision trees live in one task skill each. Read only the task skill you need.
 
 | Skill | File | When to use |
 |---|---|---|
@@ -69,6 +69,7 @@ Activate this skill for any multix task, then open the matching task skill above
 - Run any Atlas Cloud model (image, image edit, video, TTS/STT, 3D) with schema-validated inputs and resumable async predictions
 - Run any Replicate model (official or versioned) via the direct API, generate Replicate images/video, or resume/cancel a Replicate prediction by id
 - Generate images or video (incl. lip-sync and captions) with any model in Sume's catalog on one key, with catalog-checked flags, cost pre-flight, and resumable/cancellable jobs (`multix sume`)
+- Generate images or video from many vendors (Seedance, Veo, Kling, Wan, gpt-image, Gemini image, Seedream, Flux) on one ToAPIs reseller key, with price quotes and resumable tasks (`multix toapis`)
 - Update multix itself to the latest (or a given dist-tag) npm version
 
 ## Self-update
@@ -101,6 +102,7 @@ SUME_API_KEY          # Sume (image/video catalog, USD balance); https://app.sum
 TOPVIEW_API_KEY       # TopView Legacy API (plan credits), with TOPVIEW_UID; https://www.topview.ai/api-settings
 TOPVIEW_UID           # TopView account id sent with TOPVIEW_API_KEY
 TOPVIEW_PLATFORM_API_KEY # TopView API Platform (separate USD balance); https://platform.topview.ai
+TOAPIS_API_KEY        # ToAPIs reseller (image/video from many vendors, USD balance); https://toapis.com/dashboard/tokens
 CLOUDFLARE_ACCOUNT_ID # Cloudflare Workers AI / AI Gateway account
 CLOUDFLARE_API_TOKEN  # Cloudflare Workers AI / AI Gateway token
 # Video additionally requires CLOUDFLARE_AI_GATEWAY_ID and REPLICATE_API_TOKEN.
@@ -214,6 +216,25 @@ multix sume estimate "<text>" -m <model> [...]   # Sume's own quote (not billed;
 - Every submit carries an `Idempotency-Key`; if the outcome stays unknown, re-run with the printed `--idempotency-key` instead of submitting again.
 - Full reference: https://multix.zuey.me/commands/sume/
 
+## ToAPIs
+
+Auth is `TOAPIS_API_KEY` (base `https://toapis.com`). ToAPIs is a reseller, not the model vendor: one key and balance for image and video models from many vendors. Its cheapest image and Veo variants (`preview`/`vip`-style ids) likely come through unofficial channels; prefer other models when stability matters. Defaults: image `doubao-seedream-4-5`, video `seedance-2-fast`.
+
+```bash
+multix toapis models [--type image|video|audio|all]   # model ids this key can use (live)
+multix toapis quote -m <model> [--resolution 720p] [--duration 5] [-n 2]   # public price list; no key, not billed
+multix toapis image "<text>" [-m <model>] [--image <path|url>]... [--aspect-ratio 16:9] [--resolution 2K] [-n N] [--param key=value]
+multix toapis video "<text>" [-m <model>] [--first-frame <path|url>] [--last-frame <path|url>] [--image <path|url>]... [--duration 5] [--resolution 720p] [--audio|--no-audio]
+multix toapis status <taskId> [--kind image|video] [--wait]   # --kind defaults to video
+multix toapis upload <file>                         # media only; prints a public URL
+```
+
+- `image`/`video` wait and download by default (outputs expire after 30 days on ToAPIs); `--async` prints the task ID, resume with `status <id> --kind <kind> --wait`.
+- Each model family keeps its vendor's field names; multix maps the common flags, and `--param key=value` (dotted keys nest) sends anything else. Seedance 2.x takes first/last frames or reference images, not both.
+- Inputs: `http(s)` URLs pass through; local media files are uploaded first (ToAPIs takes no base64 or `data:` URIs).
+- Cost: `--estimate` / `--max-cost` use list prices recorded in multix (unknown, never $0, for an unlisted model; use `quote`). Seedance 2.x bills by tokens, so its ceiling is an estimate. Receipts record `billing.cost_usd`. No balance command: an API key cannot read the balance.
+- Full reference: https://multix.zuey.me/commands/toapis/
+
 ## Environment variables (selected)
 
 Task-specific model defaults are listed in each task skill.
@@ -246,6 +267,8 @@ Task-specific model defaults are listed in each task skill.
 | `RUNWAY_VIDEO_MODEL` / `RUNWAY_IMAGE_MODEL` | Runway default models (default `gen4.5`, `gen4_image`) |
 | `SUME_BASE_URL` | Override Sume API root (default `https://api.sume.com`) |
 | `SUME_IMAGE_MODEL` / `SUME_VIDEO_MODEL` | Sume default models; no built-in default, so without these or `-m` the command refuses |
+| `TOAPIS_BASE_URL` | Override ToAPIs API root (default `https://toapis.com`) |
+| `TOAPIS_IMAGE_MODEL` / `TOAPIS_VIDEO_MODEL` | ToAPIs default models (default `doubao-seedream-4-5`, `seedance-2-fast`) |
 | `TOPVIEW_BASE_URL` / `TOPVIEW_PLATFORM_BASE_URL` | Override TopView Legacy API root (default `https://api.topview.ai`) / API Platform root (default `https://platform-backend.topview.ai`) |
 | `CLOUDFLARE_AI_IMAGE_MODEL` / `CLOUDFLARE_AI_TTS_MODEL` | Fixed-model settings: only `@cf/black-forest-labs/flux-1-schnell` and `@cf/myshell-ai/melotts` respectively are accepted |
 | `MULTIX_DISABLE_HOME_ENV` | `1` to skip every home-directory env file (`~/.multix/.env`, `~/.claude/...`) |

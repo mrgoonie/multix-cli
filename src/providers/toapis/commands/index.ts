@@ -212,7 +212,8 @@ export function registerToapisCommands(program: Command): void {
     .action(async (opts: GenerateOpts & { model: string }) => {
       const duration = parsePositiveInt(opts.duration, "--duration");
       const count = parsePositiveInt(opts.count, "--count");
-      const kind: ToapisMediaKind = duration ? "video" : "image";
+      const kind: ToapisMediaKind =
+        duration || /p$/i.test(opts.resolution ?? "") ? "video" : "image";
       const params = { ...quoteParams(opts, kind), ...parseParams(opts.param) };
       const [quote] = await quoteToapis([{ model: opts.model, params }], {
         baseUrl: toapisBaseUrlFromEnv(),

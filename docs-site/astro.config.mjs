@@ -117,6 +117,7 @@ export default defineConfig({
             { label: "HeyGen", slug: "commands/heygen" },
             { label: "Sume", slug: "commands/sume" },
             { label: "TopView", slug: "commands/topview" },
+            { label: "ToAPIs", slug: "commands/toapis" },
             {
               label: "Scenes (dialogue audio)",
               translations: { vi: "Scene (audio hội thoại)" },

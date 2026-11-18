@@ -268,6 +268,12 @@ resume later with `sume status <id> --wait --download`,
 `topview prediction <id> --wait --download`. See
 [Sume](/commands/sume/) and [TopView](/commands/topview/).
 
+**ToAPIs.** `toapis image`, `toapis video`, `toapis upload`, `toapis status`,
+`toapis models` and `toapis quote` run remotely. Give `--image`,
+`--first-frame` and `--last-frame` as public URLs. The job caps `--count`,
+`--duration` and `--resolution`; a `--param` field is treated as uncapped
+spend. See [ToAPIs](/commands/toapis/).
+
 **Speech.** `speech generate` must name `--provider`. The job gets only the
 keys of the providers named by `--provider` and `--fallback`, not every speech
 key you saved. Give `--text-file` as an `https://` URL in `inputs`.
@@ -312,7 +318,7 @@ Worker, and keys set there are ignored.
   `ARK_API_KEY` as fallback, ElevenLabs, fal.ai, Atlas Cloud, Replicate with
   `REPLICATE_API_KEY` as fallback, Runway's `RUNWAYML_API_SECRET` as
   "API secret", HeyGen, Sume, TopView with `TOPVIEW_API_KEY` and
-  `TOPVIEW_UID`, and TopView Platform), plus the Cloudflare Workers AI
+  `TOPVIEW_UID`, TopView Platform, and ToAPIs), plus the Cloudflare Workers AI
   account ID, API token and optional AI Gateway ID.
   `TOPVIEW_UID` is an account ID, not a secret, so it has a plain text input
   instead of a password field. A `topview` job gets all three TopView values;

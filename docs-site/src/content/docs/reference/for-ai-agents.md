@@ -302,6 +302,7 @@ offerings before you run it; see [Catalogue](/commands/catalog/).
 | Avatar video from a prompt (Video Agent) or an exact script, video translation, lipsync | [HeyGen](/commands/heygen/) |
 | Any image or video model in Sume's catalog (including lip-sync and captions) with one key; resume/cancel by job ID | [Sume](/commands/sume/) |
 | Product marketing video from a URL or materials, talking or product avatars, product shots; TopView API Platform models | [TopView](/commands/topview/) |
+| Image or video from many vendors (Seedance, Veo, Kling, Gemini image, Seedream) on one reseller key; price quote; resume by task ID | [ToAPIs](/commands/toapis/) |
 | Convert a document or optimize media locally | [Media and documents](/commands/media-and-documents/) |
 | Self-update the CLI | [Command overview](/commands/#self-update) |
 

@@ -23,6 +23,7 @@ description: Chọn tài liệu lệnh có đối chiếu source cho từng AI p
 | HeyGen | [Lệnh](/vi/commands/heygen/) | Video Agent (tạo video từ prompt), video avatar theo kịch bản, dịch video, lipsync, TTS, template | Credit API tính riêng với gói web của HeyGen; dùng `status --type` khớp với job (`agent` nhận session ID). |
 | Sume | [Lệnh](/vi/commands/sume/) | Mọi model ảnh hoặc video trong catalog của Sume, gồm lip-sync và phụ đề | Không có model mặc định: truyền `-m` hoặc đặt `SUME_*_MODEL`; job chạy bất đồng bộ trừ khi có `--wait`, và `cancel` chỉ dùng được khi job còn trong hàng đợi. |
 | TopView | [Lệnh](/vi/commands/topview/) | Video marketing sản phẩm, avatar nói và avatar cầm sản phẩm, ảnh sản phẩm; các model của API Platform | Hai API với key và số dư riêng (Legacy tính credit, Platform tính USD); không có endpoint hủy, nên task đã gửi sẽ bị tính phí. |
+| ToAPIs | [Lệnh](/vi/commands/toapis/) | Model ảnh và video của nhiều nhà cung cấp bằng một key | Là bên bán lại, không phải nhà phát triển model; kết quả hết hạn sau 30 ngày nên được tải về ngay. |
 
 Chạy `multix <provider> --help` và `--help` của từng subcommand trước khi tự
 động hóa. Đó là nguồn chuẩn cho option và default hiện tại.

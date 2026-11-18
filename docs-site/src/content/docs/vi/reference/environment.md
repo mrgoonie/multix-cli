@@ -89,6 +89,7 @@ Windows, việc kiểm tra không phân biệt hoa thường, giống hệ đi�
 | `SUME_API_KEY` | Sume (số dư USD, lấy từ [ứng dụng Sume](https://app.sume.com)) |
 | `TOPVIEW_API_KEY` và `TOPVIEW_UID` | TopView Legacy API (credit của gói, lấy ở [API Settings](https://www.topview.ai/api-settings)) |
 | `TOPVIEW_PLATFORM_API_KEY` | TopView API Platform (số dư USD riêng, lấy từ [platform.topview.ai](https://platform.topview.ai)) |
+| `TOAPIS_API_KEY` | Bên bán lại ToAPIs (số dư USD, lấy từ [bảng điều khiển ToAPIs](https://toapis.com/dashboard/tokens)) |
 
 ```bash
 export GEMINI_API_KEY="your-key"
@@ -223,6 +224,10 @@ Legacy API (mặc định `https://api.topview.ai`) và `TOPVIEW_PLATFORM_BASE_U
 cho API Platform (mặc định `https://platform-backend.topview.ai`). Việc tải
 output của Sume và TopView cũng dừng ở `MULTIX_MAX_DOWNLOAD_MB`; xem
 [Sume](/vi/commands/sume/#kết-quả) và [TopView](/vi/commands/topview/#kết-quả-đầu-ra).
+
+ToAPIs nhận `TOAPIS_BASE_URL` (mặc định `https://toapis.com`),
+`TOAPIS_IMAGE_MODEL` (mặc định `doubao-seedream-4-5`) và `TOAPIS_VIDEO_MODEL`
+(mặc định `seedance-2-fast`); xem [ToAPIs](/vi/commands/toapis/).
 
 ### Ghi đè base URL và độ tin cậy
 

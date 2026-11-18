@@ -14091,6 +14091,541 @@
       ]
     },
     {
+      "group": "toapis",
+      "description": "ToAPIs aggregator (reseller): image and video models from many vendors on one key — Seedance, Veo, Kling, Wan, gpt-image, Gemini image, Seedream, Flux",
+      "commands": [
+        {
+          "command": "toapis image",
+          "description": "Generate images (async task)",
+          "positionals": [
+            {
+              "name": "prompt",
+              "description": "Text prompt",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--model",
+              "flags": "-m, --model <id>",
+              "description": "Model id (see `multix toapis models --type image`)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-m"
+            },
+            {
+              "long": "--aspect-ratio",
+              "flags": "--aspect-ratio <r>",
+              "description": "Aspect ratio, e.g. 16:9, 9:16, 1:1",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--resolution",
+              "flags": "--resolution <r>",
+              "description": "Resolution: 1K, 2K or 4K (model dependent)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--seed",
+              "flags": "--seed <n>",
+              "description": "Fixed seed",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--negative",
+              "flags": "--negative <text>",
+              "description": "Negative prompt (models that support it)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--image",
+              "flags": "--image <pathOrUrl>",
+              "description": "Reference image; local files are uploaded (repeatable)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--param",
+              "flags": "--param <key=value>",
+              "description": "Extra model field sent as-is; dotted keys nest, JSON values parse (repeatable)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--count",
+              "flags": "-n, --count <n>",
+              "description": "Number of images (model dependent)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-n"
+            },
+            {
+              "long": "--async",
+              "flags": "--async",
+              "description": "Submit and exit; print the task id (resume with `toapis status`)",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--wait-timeout",
+              "flags": "--wait-timeout <ms>",
+              "description": "Max time to wait for completion",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "300000"
+            },
+            {
+              "long": "--output",
+              "flags": "--output <path>",
+              "description": "Output file (single output) or directory",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--no-download",
+              "flags": "--no-download",
+              "description": "Do not download media; print output URLs instead",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": true
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        },
+        {
+          "command": "toapis video",
+          "description": "Generate a video: text-to-video, or image-to-video with --first-frame (async task)",
+          "positionals": [
+            {
+              "name": "prompt",
+              "description": "Text prompt",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--model",
+              "flags": "-m, --model <id>",
+              "description": "Model id (see `multix toapis models --type video`)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-m"
+            },
+            {
+              "long": "--aspect-ratio",
+              "flags": "--aspect-ratio <r>",
+              "description": "Aspect ratio, e.g. 16:9, 9:16, 1:1",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--resolution",
+              "flags": "--resolution <r>",
+              "description": "Resolution: 480p, 720p, 1080p",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--seed",
+              "flags": "--seed <n>",
+              "description": "Fixed seed",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--negative",
+              "flags": "--negative <text>",
+              "description": "Negative prompt (models that support it)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--image",
+              "flags": "--image <pathOrUrl>",
+              "description": "Reference image; local files are uploaded (repeatable)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--param",
+              "flags": "--param <key=value>",
+              "description": "Extra model field sent as-is; dotted keys nest, JSON values parse (repeatable)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--duration",
+              "flags": "--duration <s>",
+              "description": "Duration in seconds (model dependent, e.g. Seedance 4-15)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--first-frame",
+              "flags": "--first-frame <pathOrUrl>",
+              "description": "First frame image (image-to-video)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--last-frame",
+              "flags": "--last-frame <pathOrUrl>",
+              "description": "Last frame image",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--audio",
+              "flags": "--audio",
+              "description": "Generate an audio track",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--no-audio",
+              "flags": "--no-audio",
+              "description": "Generate no audio track",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": true
+            },
+            {
+              "long": "--async",
+              "flags": "--async",
+              "description": "Submit and exit; print the task id (resume with `toapis status`)",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--wait-timeout",
+              "flags": "--wait-timeout <ms>",
+              "description": "Max time to wait for completion",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "900000"
+            },
+            {
+              "long": "--output",
+              "flags": "--output <path>",
+              "description": "Output file (single output) or directory",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--no-download",
+              "flags": "--no-download",
+              "description": "Do not download media; print output URLs instead",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": true
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        },
+        {
+          "command": "toapis status",
+          "description": "Show a task; with --wait, wait for it and download the outputs",
+          "positionals": [
+            {
+              "name": "taskId",
+              "description": "Task id printed by --async",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--kind",
+              "flags": "--kind <kind>",
+              "description": "image or video",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "video"
+            },
+            {
+              "long": "--wait",
+              "flags": "--wait",
+              "description": "Wait until the task finishes, then download",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--wait-timeout",
+              "flags": "--wait-timeout <ms>",
+              "description": "Max time to wait",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "900000"
+            },
+            {
+              "long": "--output",
+              "flags": "--output <path>",
+              "description": "Output file or directory",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--no-download",
+              "flags": "--no-download",
+              "description": "Do not download media; print output URLs instead",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": true
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        },
+        {
+          "command": "toapis models",
+          "description": "List the image/video/audio models this key can use (live)",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--type",
+              "flags": "--type <type>",
+              "description": "image, video, audio or all",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": "all"
+            }
+          ]
+        },
+        {
+          "command": "toapis quote",
+          "description": "Price quote from ToAPIs' public price list (no key needed, nothing is charged)",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--model",
+              "flags": "-m, --model <id>",
+              "description": "Model id",
+              "required": true,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-m"
+            },
+            {
+              "long": "--resolution",
+              "flags": "--resolution <r>",
+              "description": "Resolution (480p/720p/1080p or 1K/2K/4K)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--duration",
+              "flags": "--duration <s>",
+              "description": "Video duration in seconds",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--aspect-ratio",
+              "flags": "--aspect-ratio <r>",
+              "description": "Aspect ratio",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--count",
+              "flags": "-n, --count <n>",
+              "description": "Image count",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-n"
+            },
+            {
+              "long": "--param",
+              "flags": "--param <key=value>",
+              "description": "Extra quote parameter (repeatable)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            }
+          ]
+        },
+        {
+          "command": "toapis upload",
+          "description": "Upload a local image, video or audio file; prints its public URL",
+          "positionals": [
+            {
+              "name": "file",
+              "description": "Local media file",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "group": "speech",
       "description": "Text-to-speech across providers with one request shape and explicit routing",
       "commands": [

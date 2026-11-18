@@ -23,6 +23,7 @@ description: Choose a source-backed command reference for any multix AI provider
 | HeyGen | [Commands](/commands/heygen/) | Video Agent (prompt-to-video), scripted avatar video, translation, lipsync, TTS, templates | API credits are billed separately from HeyGen web plans; use `status --type` matching the job (`agent` takes a session ID). |
 | Sume | [Commands](/commands/sume/) | Any image or video model in Sume's catalog, including lip-sync and captions | No default model: pass `-m` or set `SUME_*_MODEL`; jobs are async unless `--wait`, and `cancel` works only while queued. |
 | TopView | [Commands](/commands/topview/) | Product marketing video, talking and product avatars, product shots; API Platform models | Two APIs with separate keys and balances (Legacy credits, Platform USD); no cancel endpoint, so a submitted task is billed. |
+| ToAPIs | [Commands](/commands/toapis/) | Image and video models from many vendors on one key | A reseller, not the model vendor; outputs expire after 30 days, so they are downloaded right away. |
 
 Use `multix <provider> --help` and the specific subcommand's `--help` before
 automating a workflow. Those commands own current options and defaults.

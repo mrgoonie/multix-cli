@@ -68,6 +68,10 @@ import {
   DEFAULT_RUNWAY_VIDEO_MODEL,
   VIDEO_MODELS as RUNWAY_VIDEO_MODELS,
 } from "../../../../src/providers/runway/models.ts";
+import {
+  DEFAULT_TOAPIS_IMAGE_MODEL,
+  DEFAULT_TOAPIS_VIDEO_MODEL,
+} from "../../../../src/providers/toapis/models.ts";
 import { PLATFORM_ROUTES as TOPVIEW_PLATFORM_ROUTES } from "../../../../src/providers/topview/models.ts";
 
 /** What a provider can produce or read, as shown on the page (labels live in landing-copy.ts). */
@@ -281,6 +285,12 @@ const SOURCES: readonly ProviderSource[] = [
       listed(topviewModels, "bytedance/seedance-2.5", "TopView PLATFORM_ROUTES"),
       listed(topviewModels, "openai/gpt-image-2", "TopView PLATFORM_ROUTES"),
     ],
+  },
+  {
+    group: "toapis",
+    name: "ToAPIs",
+    slug: "toapis",
+    models: [DEFAULT_TOAPIS_IMAGE_MODEL, DEFAULT_TOAPIS_VIDEO_MODEL],
   },
 ];
 

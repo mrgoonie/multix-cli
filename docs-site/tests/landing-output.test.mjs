@@ -32,7 +32,7 @@ test("headline and subline", () => {
   );
   assert.match(pages.vi, /<em>và trí tưởng tượng\.<\/em>/);
   assert.match(pages.en, /Unlock multimodal for every AI agent/);
-  assert.match(pages.en, /16 providers behind one CLI, one MCP server and one REST API/);
+  assert.match(pages.en, /17 providers behind one CLI, one MCP server and one REST API/);
 });
 
 test("canonical, hreflang alternates and social meta", () => {

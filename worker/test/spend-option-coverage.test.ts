@@ -38,6 +38,9 @@ const NOT_SPEND: Readonly<Record<string, string>> = {
   "sume estimate --duration": "a price quote; nothing is generated or billed",
   "sume estimate --resolution": "a price quote; nothing is generated or billed",
   "sume estimate --num-images": "a price quote; nothing is generated or billed",
+  "toapis quote --resolution": "a price quote; nothing is generated or billed",
+  "toapis quote --duration": "a price quote; nothing is generated or billed",
+  "toapis quote --count": "a price quote; nothing is generated or billed",
   "speech generate --extra":
     "keys come from a fixed list per provider; the billed ones (previous_text, next_text) add text, which no TTS cap bounds",
 };
