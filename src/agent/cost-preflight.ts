@@ -31,6 +31,7 @@ import {
 } from "../providers/openrouter/speech-defaults.js";
 import { SUME_IMAGE_MODEL_ENV, SUME_VIDEO_MODEL_ENV } from "../providers/sume/models.js";
 import { sumeCatalogSnapshot } from "../providers/sume/node-catalog.js";
+import { toapisDefaultModel } from "../providers/toapis/commands/env.js";
 import { probeDuration } from "./output-file-inspect.js";
 import { jobIdentity, run } from "./run-state.js";
 
@@ -125,6 +126,9 @@ function runtimeDefaults(command: string, options: Record<string, unknown>): Com
     const model = flag || envDefault(env, "");
     const sumeCatalog = sumeCatalogSnapshot(model || undefined);
     return { ...(model ? { model } : {}), ...(sumeCatalog ? { sumeCatalog } : {}) };
+  }
+  if (command === "toapis image" || command === "toapis video") {
+    return { model: toapisDefaultModel(command === "toapis image" ? "image" : "video") };
   }
   return {};
 }

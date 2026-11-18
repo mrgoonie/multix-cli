@@ -20,6 +20,7 @@ import {
   TOPVIEW_ROUTING,
   TOPVIEW_UID_ENV,
 } from "./topview/models.js";
+import { TOAPIS_DASHBOARD_LINK, TOAPIS_ROUTING } from "./toapis/models.js";
 
 export interface ProviderEntry {
   name: string;
@@ -134,5 +135,11 @@ export const PROVIDER_KEYS: readonly ProviderEntry[] = [
     ...keyNames(TOPVIEW_PLATFORM_ROUTING),
     optional: true,
     link: TOPVIEW_PLATFORM_CONSOLE_LINK,
+  },
+  {
+    name: "ToAPIs",
+    ...keyNames(TOAPIS_ROUTING),
+    optional: true,
+    link: TOAPIS_DASHBOARD_LINK,
   },
 ];

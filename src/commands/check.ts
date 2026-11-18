@@ -37,6 +37,7 @@ import { checkCodexAuthenticated } from "../providers/openai/codex-image-driver.
 import { REPLICATE_ROUTING } from "../providers/replicate/models.js";
 import { RUNWAY_ROUTING } from "../providers/runway/models.js";
 import { SUME_ROUTING } from "../providers/sume/models.js";
+import { TOAPIS_ROUTING } from "../providers/toapis/models.js";
 import { TOPVIEW_PLATFORM_ROUTING, TOPVIEW_ROUTING } from "../providers/topview/models.js";
 import { checkBinary } from "./check-helpers/binary-check.js";
 import { pingGemini } from "./check-helpers/gemini-ping.js";
@@ -88,6 +89,7 @@ const BASE_URL_ROUTING: readonly BaseUrlRouting[] = [
   SUME_ROUTING,
   TOPVIEW_ROUTING,
   TOPVIEW_PLATFORM_ROUTING,
+  TOAPIS_ROUTING,
 ];
 
 export type ReportLine = { level: "info" | "warn"; message: string };

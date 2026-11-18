@@ -21,6 +21,7 @@ To configure multix, set at least one provider API key:
     Sume               : https://www.sume.com/docs/authentication
     TopView (legacy)   : https://www.topview.ai/api-settings
     TopView Platform   : https://platform.topview.ai
+    ToAPIs             : https://toapis.com/dashboard/tokens
 
   Option A — user global config (recommended):
     echo 'GEMINI_API_KEY=your-key' >> ~/.multix/.env

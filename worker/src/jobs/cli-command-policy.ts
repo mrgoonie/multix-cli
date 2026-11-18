@@ -557,6 +557,7 @@ export const GROUP_KEYS: Readonly<Record<string, readonly ProviderSecretName[]>>
   heygen: ["HEYGEN_API_KEY"],
   sume: ["SUME_API_KEY"],
   topview: ["TOPVIEW_API_KEY", "TOPVIEW_UID", "TOPVIEW_PLATFORM_API_KEY"],
+  toapis: ["TOAPIS_API_KEY"],
   // Readiness only: a speech job gets the keys of the providers it routes to (keyOptions).
   speech: [
     "GEMINI_API_KEY",
