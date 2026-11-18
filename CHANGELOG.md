@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.29.0](https://github.com/mrgoonie/multix-cli/compare/v1.28.0...v1.29.0) (2026-11-18)
+
+
+### Added
+
+* **toapis:** add ToAPIs image and video provider ([#613](https://github.com/mrgoonie/multix-cli/issues/613)) ([87c6339](https://github.com/mrgoonie/multix-cli/commit/87c63391671648dc199450f59c4812554807202d))
+
 ## [1.28.0](https://github.com/mrgoonie/multix-cli/compare/v1.27.0...v1.28.0) (2026-11-11)
 
 
