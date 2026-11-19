@@ -61,6 +61,7 @@ const en = {
   nav: {
     label: "Main",
     docs: "Docs",
+    pricing: "Pricing",
     mcp: "MCP",
     rest: "REST API",
     github: "GitHub",
@@ -228,6 +229,7 @@ const vi: LandingCopy = {
   nav: {
     label: "Chính",
     docs: "Tài liệu",
+    pricing: "Bảng giá",
     mcp: "MCP",
     rest: "REST API",
     github: "GitHub",

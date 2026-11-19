@@ -47,6 +47,8 @@ export interface LiveSnapshot {
   fetched_at: string;
   sources: LiveSource[];
   listings: LiveListing[];
+  /** Updated fal price book to keep for the next refresh (internal; not for display). */
+  fal_prices?: FalPriceBook;
 }
 
 const TIMEOUT_MS = 15_000;
@@ -140,24 +142,49 @@ interface FalPrice {
   currency?: unknown;
 }
 
-/** Most fal pricing requests one snapshot may make (Workers cap subrequests per request). */
-const FAL_PRICING_MAX_REQUESTS = 150;
+/** One fal endpoint's price as last read; `price: null` means fal listed none. */
+export interface FalPriceEntry {
+  price: ListedPrice | null;
+  checked_at: string;
+}
+
+/** fal prices kept between snapshots (by endpoint id), so each refresh asks fal only for what is missing or old. */
+export type FalPriceBook = Record<string, FalPriceEntry>;
+
+/** A kept fal price is asked again after this long. */
+export const FAL_PRICE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+/** Most fal pricing requests one refresh makes; the rest wait for the next refresh (avoids 429). */
+export const FAL_PRICING_MAX_REQUESTS = 20;
 
 /**
- * fal prices per endpoint (https://docs.fal.ai/platform-apis/v1/models/pricing); needs a key.
- * fal answers 404 for a whole batch when one id in it has no price, so a 404
- * batch is split in half until the unpriced ids are isolated and skipped.
+ * Refresh the fal price book (https://docs.fal.ai/platform-apis/v1/models/pricing; needs a key):
+ * only ids that are missing or older than FAL_PRICE_MAX_AGE_MS, missing first, at most
+ * FAL_PRICING_MAX_REQUESTS requests. fal answers 404 for a whole batch when one id in it has
+ * no price, so a 404 batch is split in half until that id is isolated and recorded as unpriced.
+ * A 429 stops the refresh; what was read is kept.
  */
-async function readFalPrices(
+async function refreshFalPrices(
   fetchFn: FetchFn,
   key: string,
   ids: string[],
-): Promise<Map<string, ListedPrice>> {
-  const prices = new Map<string, ListedPrice>();
+  known: FalPriceBook,
+  at: string,
+): Promise<{ book: FalPriceBook; asked: number; partial: boolean }> {
+  const book: FalPriceBook = {};
+  for (const id of ids) if (known[id]) book[id] = known[id];
+  const now = Date.parse(at);
+  const due = ids
+    .filter((id) => !book[id] || now - Date.parse(book[id].checked_at) > FAL_PRICE_MAX_AGE_MS)
+    .sort((a, b) => (book[a]?.checked_at ?? "").localeCompare(book[b]?.checked_at ?? ""));
   const queue: string[][] = [];
-  for (let i = 0; i < ids.length; i += 50) queue.push(ids.slice(i, i + 50));
+  for (let i = 0; i < due.length; i += 50) queue.push(due.slice(i, i + 50));
   let requests = 0;
-  while (queue.length && requests < FAL_PRICING_MAX_REQUESTS) {
+  let partial = false;
+  while (queue.length) {
+    if (requests >= FAL_PRICING_MAX_REQUESTS) {
+      partial = true;
+      break;
+    }
     const batch = queue.shift() as string[];
     const query = batch.map((id) => `endpoint_id=${encodeURIComponent(id)}`).join("&");
     requests++;
@@ -169,25 +196,35 @@ async function readFalPrices(
       if (batch.length > 1) {
         const mid = Math.ceil(batch.length / 2);
         queue.unshift(batch.slice(0, mid), batch.slice(mid));
-      }
+      } else if (batch[0]) book[batch[0]] = { price: null, checked_at: at };
       continue;
+    }
+    if (res.status === 429) {
+      partial = true;
+      break;
     }
     if (!res.ok) throw new Error(`HTTP ${res.status} from api.fal.ai pricing`);
     const body = (await res.json()) as { prices?: FalPrice[] };
+    for (const id of batch) book[id] = { price: null, checked_at: at };
     for (const p of body.prices ?? []) {
       const usd = Number(p.unit_price);
-      if (typeof p.endpoint_id !== "string" || p.currency !== "USD" || !(usd > 0)) continue;
-      prices.set(p.endpoint_id, {
-        label: "unit_price",
-        usd,
-        unit: typeof p.unit === "string" && p.unit ? p.unit : null,
-      });
+      if (typeof p.endpoint_id !== "string" || !batch.includes(p.endpoint_id)) continue;
+      if (p.currency !== "USD" || !(usd > 0)) continue;
+      book[p.endpoint_id] = {
+        price: {
+          label: "unit_price",
+          usd,
+          unit: typeof p.unit === "string" && p.unit ? p.unit : null,
+        },
+        checked_at: at,
+      };
     }
   }
-  return prices;
+  return { book, asked: requests, partial };
 }
 
-async function readFal(fetchFn: FetchFn, at: string, key?: string) {
+async function readFal(fetchFn: FetchFn, at: string, key?: string, known: FalPriceBook = {}) {
+  let falBook: FalPriceBook | undefined;
   // The anonymous listing is rate limited; with a key, send it so the listing reads reliably.
   const listFetch: FetchFn = key
     ? (input, init) => fetchFn(input, { ...init, headers: { authorization: `Key ${key}` } })
@@ -230,12 +267,14 @@ async function readFal(fetchFn: FetchFn, at: string, key?: string) {
       count: 0,
       detail: "no pricing key configured",
     });
-    return { listings, sources };
+    return { listings, sources, falBook };
   }
   try {
-    const prices = await readFalPrices(fetchFn, key, [...new Set(listings.map((l) => l.model))]);
+    const ids = [...new Set(listings.map((l) => l.model))];
+    const { book, asked, partial } = await refreshFalPrices(fetchFn, key, ids, known, at);
+    falBook = book;
     for (const l of listings) {
-      const p = prices.get(l.model);
+      const p = book[l.model]?.price;
       if (p) l.prices = [p];
     }
     sources.push({
@@ -243,12 +282,13 @@ async function readFal(fetchFn: FetchFn, at: string, key?: string) {
       url: pricingUrl,
       state: "fresh",
       fetched_at: at,
-      count: prices.size,
+      count: Object.values(book).filter((e) => e.price).length,
+      detail: `${asked} request(s) this refresh${partial ? "; more prices on later refreshes" : ""}`,
     });
   } catch (e) {
     sources.push(unavailable("fal", pricingUrl, at, e));
   }
-  return { listings, sources };
+  return { listings, sources, falBook };
 }
 
 const ATLAS_URL = "https://api.atlascloud.ai/api/v1/models";
@@ -325,12 +365,12 @@ async function readAtlas(fetchFn: FetchFn, at: string) {
  */
 export async function readLiveListings(
   fetchFn: FetchFn,
-  opts: { falKey?: string; now?: Date } = {},
+  opts: { falKey?: string; falPrices?: FalPriceBook; now?: Date } = {},
 ): Promise<LiveSnapshot> {
   const at = (opts.now ?? new Date()).toISOString();
   const parts = await Promise.all([
     readOpenRouter(fetchFn, at),
-    readFal(fetchFn, at, opts.falKey),
+    readFal(fetchFn, at, opts.falKey, opts.falPrices),
     readAtlas(fetchFn, at),
   ]);
   return {
@@ -338,5 +378,6 @@ export async function readLiveListings(
     fetched_at: at,
     sources: parts.flatMap((p) => p.sources),
     listings: parts.flatMap((p) => p.listings),
+    ...(parts[1].falBook ? { fal_prices: parts[1].falBook } : {}),
   };
 }

@@ -152,6 +152,53 @@ describe("readLiveListings", () => {
     expect(snap.sources.find((s) => s.url.endsWith("/pricing"))?.state).toBe("fresh");
   });
 
+  it("asks fal only for prices missing or older than a week, and stops on 429", async () => {
+    const ids = Array.from({ length: 60 }, (_, i) => `fal-ai/m${i}`);
+    const asked: string[][] = [];
+    let calls = 0;
+    const { fn } = fakeFetch({
+      "api.fal.ai/v1/models/pricing": (url) => {
+        const batch = new URL(url).searchParams.getAll("endpoint_id");
+        asked.push(batch);
+        if (++calls > 1) return { __status: 429 };
+        return {
+          prices: batch.map((id) => ({
+            endpoint_id: id,
+            unit_price: 0.01,
+            unit: "image",
+            currency: "USD",
+          })),
+        };
+      },
+      "api.fal.ai/v1/models?": () => ({
+        models: ids.map((id) => ({ endpoint_id: id, metadata: {} })),
+        has_more: false,
+      }),
+      "openrouter.ai": openrouter,
+      "atlascloud.ai": atlas,
+    });
+    const now = new Date("2026-11-19T00:00:00Z");
+    const fresh = {
+      price: { label: "unit_price", usd: 0.5, unit: "video" },
+      checked_at: "2026-11-18T00:00:00.000Z",
+    };
+    const old = {
+      price: { label: "unit_price", usd: 0.9, unit: "video" },
+      checked_at: "2026-11-01T00:00:00.000Z",
+    };
+    const known = Object.fromEntries(ids.slice(0, 55).map((id, i) => [id, i === 0 ? old : fresh]));
+    const snap = await readLiveListings(fn, { falKey: "k", falPrices: known, now });
+    // Only the 5 missing ids and the 1 old one are asked, missing first.
+    expect(asked[0]?.sort()).toEqual(["fal-ai/m0", ...ids.slice(55)].sort());
+    expect(snap.fal_prices?.["fal-ai/m1"]).toEqual(fresh);
+    expect(snap.fal_prices?.["fal-ai/m0"]?.price?.usd).toBe(0.01);
+    expect(snap.listings.find((l) => l.model === "fal-ai/m2")?.prices[0]?.usd).toBe(0.5);
+    expect(snap.sources.find((s) => s.url.endsWith("/pricing"))).toMatchObject({
+      state: "fresh",
+      count: 60,
+    });
+  });
+
   it("marks a failing provider unavailable without failing the snapshot", async () => {
     const { fn } = fakeFetch({ "openrouter.ai": 500, "api.fal.ai": 503, "atlascloud.ai": atlas });
     const snap = await readLiveListings(fn);
