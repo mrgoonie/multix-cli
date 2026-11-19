@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>multix model pricing</title>
+<style>
+:root{--bg:#f7f7f5;--panel:#fff;--fg:#1c1d1f;--muted:#6b6f76;--line:#e3e3df;--accent:#2f5bd3;--ok:#1d7a46;--warn:#a86200;--bad:#b3261e;--chip:#eef0f4;--mono:ui-monospace,SFMono-Regular,Menlo,monospace}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#121315;--panel:#1b1c1f;--fg:#e8e8e6;--muted:#9a9ea6;--line:#2c2e33;--accent:#7d9cff;--ok:#5fc48a;--warn:#e0a54a;--bad:#ff8a80;--chip:#26282d}}
+:root[data-theme=dark]{--bg:#121315;--panel:#1b1c1f;--fg:#e8e8e6;--muted:#9a9ea6;--line:#2c2e33;--accent:#7d9cff;--ok:#5fc48a;--warn:#e0a54a;--bad:#ff8a80;--chip:#26282d}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+header{padding:20px 16px 8px;max-width:1280px;margin:auto;display:flex;gap:12px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
+h1{font-size:20px;margin:0}.sub{color:var(--muted);font-size:13px;margin-top:4px}
+main{max-width:1280px;margin:auto;padding:0 16px 48px}
+.controls{position:sticky;top:0;z-index:5;background:var(--bg);padding:10px 0;border-bottom:1px solid var(--line);display:grid;gap:8px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+input,select,button{font:inherit;color:var(--fg);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:6px 8px;min-height:32px}
+input[type=search]{flex:1 1 240px}input.num{width:96px}input[type=date]{width:140px}
+button{cursor:pointer}.chip{background:var(--chip);border-color:transparent;border-radius:999px;padding:4px 10px;font-size:13px}
+.chip[aria-pressed=true]{background:var(--accent);color:#fff}
+label.l{font-size:12px;color:var(--muted);display:flex;gap:6px;align-items:center}
+.stats{color:var(--muted);font-size:12px}
+section{margin-top:22px}section h2{font-size:15px;margin:0 0 8px;display:flex;gap:8px;align-items:baseline}section h2 .n{color:var(--muted);font-weight:400;font-size:12px}
+table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12px;color:var(--muted);font-weight:600;background:var(--panel)}
+tr.main{cursor:pointer}tr.main:hover td{background:var(--chip)}
+.mono{font-family:var(--mono);font-size:12.5px;word-break:break-all}
+.price{font-variant-numeric:tabular-nums;white-space:nowrap}
+.tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:999px;border:1px solid var(--line);color:var(--muted);margin:1px 2px 1px 0;white-space:nowrap}
+.tag.ok{color:var(--ok);border-color:currentColor}.tag.warn{color:var(--warn);border-color:currentColor}.tag.bad{color:var(--bad);border-color:currentColor}
+.unknown{color:var(--warn);font-style:italic}
+.detail td{background:var(--bg)}.rates{display:grid;gap:8px}
+.rate{border:1px solid var(--line);border-radius:6px;padding:8px;background:var(--panel)}
+.rate .h{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+a{color:var(--accent)}.muted{color:var(--muted)}.small{font-size:12px}
+.empty{padding:24px;text-align:center;color:var(--muted)}
+.note{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:13px;margin-top:12px}
+@media (max-width:760px){
+ .controls{position:static}
+ thead{display:none}table,tbody,tr,td{display:block;width:100%}
+ tr.main{border-bottom:1px solid var(--line);padding:8px 4px}tr.main td{border:0;padding:2px 8px}
+ td[data-k]::before{content:attr(data-k) ": ";color:var(--muted);font-size:12px}
+ input.num{width:80px}
+}
+</style>
+</head>
+<body>
+<header>
+ <div><h1>multix — model & pricing catalogue (preview)</h1>
+ <div class="sub" id="sub"></div></div>
+ <button id="theme" title="Đổi giao diện sáng/tối">◐ Theme</button>
+</header>
+<main>
+<div class="controls">
+ <div class="row">
+  <input type="search" id="q" placeholder="Tìm model, tên, provider, family, command…">
+  <select id="provider"><option value="">Mọi provider</option></select>
+  <select id="sort">
+   <option value="name">Sắp xếp: tên</option><option value="provider">provider</option>
+   <option value="price">giá (theo đơn vị)</option><option value="released">ngày ra mắt (mới nhất)</option>
+   <option value="checked">ngày kiểm giá (mới nhất)</option>
+  </select>
+ </div>
+ <div class="row" id="cats"></div>
+ <div class="row">
+  <label class="l">Nguồn
+   <select id="kind"><option value="">Tất cả</option><option value="verified">Đã verify capability</option><option value="catalog">Có trong price book (chưa verify capability)</option><option value="discovered">Liệt kê từ provider (chưa verify)</option><option value="command">Chỉ có command (không có model/giá)</option></select></label>
+  <label class="l">Giá <select id="pstat"><option value="">Tất cả</option><option value="priced">Có giá hiện hành</option><option value="unknown">Không rõ giá</option></select></label>
+  <label class="l">Đơn vị <select id="unit"><option value="">mọi đơn vị</option></select></label>
+  <label class="l">USD/đơn vị <input class="num" id="pmin" type="number" step="any" min="0" placeholder="min">–<input class="num" id="pmax" type="number" step="any" min="0" placeholder="max"></label>
+  <label class="l">Ra mắt từ <input type="date" id="dfrom"> đến <input type="date" id="dto"></label>
+  <button id="reset">Xoá lọc</button>
+ </div>
+ <div class="stats" id="stats"></div>
+</div>
+<div id="out"></div>
+<div class="note" id="notes"></div>
+</main>
+<script>
+const DATA = /*__DATA__*/null;
+const CAT = {image:"Tạo ảnh (text→image)","image-edit":"Sửa ảnh / image→image",video:"Tạo video (text→video)","image-to-video":"Image→video","video-edit":"Sửa / lồng tiếng video","avatar-video":"Video avatar",speech:"Giọng nói / TTS",transcription:"Chuyển giọng nói→văn bản (STT)",music:"Nhạc",sfx:"Hiệu ứng âm thanh",voice:"Voice design / clone / isolate","3d":"3D",analysis:"Phân tích",document:"Tài liệu",any:"Đa năng (run bất kỳ model)"};
+const ORDER = Object.keys(CAT);
+const METER = {output_video_seconds:"giây video",characters:"ký tự",input_audio_seconds:"giây audio vào",output_audio_seconds:"giây audio ra",requests:"request",images:"ảnh",video_tokens:"video token",input_tokens:"input token",output_tokens:"output token"};
+const fmtUSD = v => v===0?"$0":v<0.001?"$"+v.toPrecision(3):"$"+(+v.toFixed(v<1?5:3)).toString();
+const esc = s => String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const pname = id => DATA.providers[id]?.name ?? id;
+
+// ---- normalise every source into one row shape ----
+const rows = [];
+for (const o of DATA.offerings) {
+  const comps = o.rates.filter(r=>r.status==="current").flatMap(r=>(r.components||[]).map(c=>({meter:c.meter,unit:c.usd/c.per,r})));
+  rows.push({key:o.id,kind:o.verified_capability?"verified":"catalog",provider:o.provider,model:o.model,name:o.name,family:o.family,tasks:o.tasks,command:o.command,
+    rates:o.rates,comps,priced:o.price_status==="priced",price_status:o.price_status,released:o.released_at,checked:o.rates.map(r=>r.last_checked).sort().at(-1),capSrc:o.capability_source});
+}
+const have = new Set(rows.map(r=>r.key));
+for (const m of DATA.discovered) {
+  const key = `${m.provider}:${m.model}`; if (have.has(key)) continue; have.add(key);
+  rows.push({key,kind:"discovered",provider:m.provider,model:m.model,name:m.name,tasks:[m.task],rates:[],comps:[],priced:false,price_status:"no_price",
+    released:m.released_at,listing:m.pricing,fetched:m.fetched_at,listingUrl:m.listing_url,status:m.status});
+}
+const covered = new Set(rows.flatMap(r=>r.tasks.map(t=>r.provider+"|"+t)));
+for (const [cmd,c] of Object.entries(DATA.commands)) {
+  const prov = cmd.split(" ")[0];
+  for (const t of c.tasks) {
+    if (covered.has(prov+"|"+t)) continue;
+    rows.push({key:"cmd:"+cmd+":"+t,kind:"command",provider:prov,model:"multix "+cmd,name:c.models==="provider-catalog"?"Model bất kỳ provider phục vụ ("+(c.scope||"pass-through")+")":"Model mặc định/cố định của command",
+      tasks:[t],command:cmd,rates:[],comps:[],priced:false,price_status:"no_price",modelChoice:c.models});
+  }
+}
+
+// ---- controls ----
+const $ = id => document.getElementById(id);
+const st = {cats:new Set()};
+const provs=[...new Set(rows.map(r=>r.provider))].sort();
+$("provider").innerHTML += provs.map(p=>`<option value="${p}">${esc(pname(p))} (${rows.filter(r=>r.provider===p).length})</option>`).join("");
+const meters=[...new Set(rows.flatMap(r=>r.comps.map(c=>c.meter)))].sort();
+$("unit").innerHTML += meters.map(m=>`<option value="${m}">${METER[m]||m}</option>`).join("");
+const presentCats = ORDER.filter(t=>rows.some(r=>r.tasks.includes(t)));
+$("cats").innerHTML = `<button class="chip" data-c="" aria-pressed="true">Tất cả</button>`+presentCats.map(t=>`<button class="chip" data-c="${t}" aria-pressed="false">${CAT[t]} <span class="muted">${rows.filter(r=>r.tasks.includes(t)).length}</span></button>`).join("");
+$("cats").onclick = e => { const b=e.target.closest("button"); if(!b) return; const c=b.dataset.c;
+  if(!c) st.cats.clear(); else st.cats.has(c)?st.cats.delete(c):st.cats.add(c);
+  for(const x of $("cats").children) x.setAttribute("aria-pressed", x.dataset.c? st.cats.has(x.dataset.c):!st.cats.size); render(); };
+for (const id of ["q","provider","sort","kind","pstat","unit","pmin","pmax","dfrom","dto"]) $(id).addEventListener("input",render);
+$("reset").onclick=()=>{for(const id of ["q","provider","kind","pstat","unit","pmin","pmax","dfrom","dto"]) $(id).value="";st.cats.clear();$("cats").firstChild.click();};
+const root=document.documentElement;
+try{const t=localStorage.getItem("mx-theme"); if(t) root.dataset.theme=t;}catch{}
+$("theme").onclick=()=>{const dark=root.dataset.theme? root.dataset.theme==="dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  root.dataset.theme=dark?"light":"dark"; try{localStorage.setItem("mx-theme",root.dataset.theme)}catch{}};
+
+// ---- price helpers ----
+function bestComp(r, meter){ const cs=r.comps.filter(c=>!meter||c.meter===meter); return cs.sort((a,b)=>a.meter.localeCompare(b.meter)||a.unit-b.unit)[0]; }
+function priceCell(r, meter){
+  if (r.priced){ const cs=r.comps.filter(c=>!meter||c.meter===meter); const by={};
+    for(const c of cs){(by[c.meter]??=[]).push(c.unit)}
+    return Object.entries(by).map(([m,v])=>{const lo=Math.min(...v),hi=Math.max(...v);return `<div class="price">${fmtUSD(lo)}${hi>lo?" – "+fmtUSD(hi):""} <span class="muted small">/ ${METER[m]||m}</span></div>`}).join("")
+      + (r.rates.length>1?`<div class="muted small">${r.rates.length} mức giá (cấu hình)</div>`:"");
+  }
+  if (r.listing){ return `<span class="unknown">không rõ (multix chưa có giá)</span><div class="muted small">listing OpenRouter: ${Object.entries(r.listing).filter(([,v])=>+v>0).map(([k,v])=>esc(k)+" $"+v+"/token").join(", ")||"—"}</div>`; }
+  const why={no_price:"không rõ giá",unverified:"giá chưa verify",stale:"giá đã cũ",no_window:"không có giá hiệu lực hôm nay"}[r.price_status]||r.price_status;
+  return `<span class="unknown">${why}</span>`;
+}
+const KIND={verified:'<span class="tag ok">capability verified</span>',catalog:'<span class="tag">price book</span>',discovered:'<span class="tag warn">provider listing · chưa verify</span>',command:'<span class="tag">chỉ command</span>'};
+
+function matches(r){
+  const q=$("q").value.trim().toLowerCase(), p=$("provider").value, k=$("kind").value, ps=$("pstat").value, u=$("unit").value;
+  const mn=$("pmin").value, mx=$("pmax").value, df=$("dfrom").value, dt=$("dto").value;
+  if (q && ![r.key,r.name,r.family,r.command,pname(r.provider)].some(s=>String(s??"").toLowerCase().includes(q))) return false;
+  if (p && r.provider!==p) return false; if (k && r.kind!==k) return false;
+  if (ps==="priced" && !r.priced) return false; if (ps==="unknown" && r.priced) return false;
+  if (u || mn || mx){ const cs=r.comps.filter(c=>!u||c.meter===u); if(!cs.length) return false;
+    if (mn && !cs.some(c=>c.unit>=+mn) ) return false; if (mx && !cs.some(c=>c.unit<=+mx)) return false; }
+  if ((df||dt) && !r.released) return false;
+  if (df && r.released.slice(0,10)<df) return false; if (dt && r.released.slice(0,10)>dt) return false;
+  return true;
+}
+function sorter(by,u){ return (a,b)=>{
+  if(by==="provider") return a.provider.localeCompare(b.provider)||a.key.localeCompare(b.key);
+  if(by==="released"){ if(!a.released||!b.released) return a.released?-1:b.released?1:a.key.localeCompare(b.key); return b.released.localeCompare(a.released); }
+  if(by==="checked"){ if(!a.checked||!b.checked) return a.checked?-1:b.checked?1:a.key.localeCompare(b.key); return b.checked.localeCompare(a.checked)||a.key.localeCompare(b.key); }
+  if(by==="price"){ const pa=bestComp(a,u),pb=bestComp(b,u); if(!pa||!pb) return pa?-1:pb?1:a.key.localeCompare(b.key);
+    return pa.meter.localeCompare(pb.meter)||pa.unit-pb.unit||a.key.localeCompare(b.key); }
+  return (a.name||a.model).localeCompare(b.name||b.model);
+};}
+function detail(r){
+  let h="";
+  if (r.rates.length) h+=`<div class="rates">`+r.rates.map(x=>`<div class="rate"><div class="h"><span class="mono">${esc(x.id)}</span>
+    <span class="tag ${x.status==="current"?"ok":"warn"}">${x.status==="current"?"hiện hành":esc(x.status)}</span><span class="tag">${esc(x.basis==="estimated"?"ước tính":"giá niêm yết")}</span><span class="tag">${esc(x.tier)}</span>
+    ${Object.entries(x.config||{}).map(([k,v])=>`<span class="tag">${esc(k)}: ${esc(v)}</span>`).join("")}${(x.config_independent||[]).map(k=>`<span class="tag">không phụ thuộc ${esc(k)}</span>`).join("")}</div>
+    <div class="small">${x.units.length?x.units.map(esc).join("<br>"):`<span class="unknown">${esc(x.detail||"không có giá dùng được")}</span>`}${x.label?` · ${esc(x.label)}`:""}${x.effective_from?` · hiệu lực từ ${esc(x.effective_from)}`:""}${x.effective_until?` đến ${esc(x.effective_until)}`:""}</div>
+    ${x.notes?`<div class="small muted">${esc(x.notes)}</div>`:""}
+    <div class="small muted">Kiểm ${esc(x.last_checked)} · nguồn: <a href="${esc(x.source)}" target="_blank" rel="noopener">${esc(x.source)}</a></div></div>`).join("")+`</div>`;
+  if (r.capSrc) h+=`<div class="small muted" style="margin-top:6px">Capability verify ${esc(r.capSrc.verified_at)} theo <a href="${esc(r.capSrc.url)}" target="_blank" rel="noopener">${esc(r.capSrc.url)}</a></div>`;
+  if (r.kind==="discovered") h+=`<div class="small muted">Từ cache <code>multix models --live</code> lấy lúc ${esc(r.fetched)} · <a href="${esc(r.listingUrl)}" target="_blank" rel="noopener">listing</a>. multix chưa verify input/giá của model này.</div>`;
+  if (r.kind==="command") h+=`<div class="small muted">Command <code>multix ${esc(r.command)}</code> (${r.modelChoice==="fixed"?"model cố định/mặc định":"nhận model id provider phục vụ, chưa verify"}). Repo chưa có bảng giá cho provider/tác vụ này.</div>`;
+  const pi=DATA.providers[r.provider]; if(pi?.pricing_url) h+=`<div class="small muted">Trang giá provider: <a href="${esc(pi.pricing_url)}" target="_blank" rel="noopener">${esc(pi.pricing_url)}</a></div>`;
+  return h;
+}
+const open=new Set();
+function render(){
+  const by=$("sort").value,u=$("unit").value;
+  const list=rows.filter(matches).sort(sorter(by,u));
+  const cats = st.cats.size? ORDER.filter(t=>st.cats.has(t)) : presentCats;
+  let html="", shown=new Set();
+  for (const t of cats){ const rs=list.filter(r=>r.tasks.includes(t)); if(!rs.length) continue; rs.forEach(r=>shown.add(r.key));
+    html+=`<section><h2>${CAT[t]} <span class="n">${rs.length} mục · ${rs.filter(r=>r.priced).length} có giá</span></h2><table><thead><tr><th>Model</th><th>Provider</th><th>Giá</th><th>Nguồn dữ liệu</th><th>Ra mắt</th><th>Kiểm giá</th></tr></thead><tbody>`+
+    rs.map(r=>{const id=t+"|"+r.key; return `<tr class="main" data-id="${esc(id)}"><td><div>${esc(r.name||r.model)}</div><div class="mono muted">${esc(r.model)}</div>${r.family?`<span class="tag">family ${esc(r.family)}</span>`:""}${r.tasks.length>1?r.tasks.filter(x=>x!==t).map(x=>`<span class="tag">+${esc(x)}</span>`).join(""):""}</td>
+      <td data-k="Provider">${esc(pname(r.provider))}</td><td data-k="Giá">${priceCell(r,u)}</td><td data-k="Nguồn">${KIND[r.kind]}</td>
+      <td data-k="Ra mắt">${r.released?esc(r.released.slice(0,10)):'<span class="muted">không rõ</span>'}</td><td data-k="Kiểm giá">${r.checked?esc(r.checked):'<span class="muted">—</span>'}</td></tr>`+
+      (open.has(id)?`<tr class="detail"><td colspan="6">${detail(r)}</td></tr>`:"");}).join("")+`</tbody></table></section>`;
+  }
+  $("out").innerHTML = html || `<div class="empty">Không có model nào khớp bộ lọc.</div>`;
+  $("stats").textContent = `${shown.size} / ${rows.length} mục · ${[...shown].filter(k=>rows.find(r=>r.key===k).priced).length} có giá hiện hành · bấm vào dòng để xem chi tiết giá, cấu hình và nguồn`;
+}
+$("out").onclick=e=>{const tr=e.target.closest("tr.main"); if(!tr||e.target.closest("a")) return; const id=tr.dataset.id; open.has(id)?open.delete(id):open.add(id); render();};
+$("sub").textContent = `Dữ liệu export ${DATA.generated_at.slice(0,10)} từ src/capabilities + src/budget/pricing-catalog.ts + src/catalog/rate-cards.ts` + (DATA.listings.length?` + cache provider listing (${DATA.listings.map(l=>l.provider+"/"+l.task+" "+l.fetched_at.slice(0,10)).join(", ")})`:"");
+$("notes").innerHTML = `<b>Cách đọc:</b> giá chỉ hiện khi multix có một rate card <i>verified, còn hiệu lực, chưa quá hạn</i>; ngược lại ghi rõ lý do, không bao giờ hiện $0. Giá theo đơn vị khác nhau (giây video, ký tự, request…) không so sánh chéo được; sắp xếp theo giá nhóm theo đơn vị trước. Ngày ra mắt chỉ có cho model mà provider listing cung cấp.`;
+render();
+</script>
+</body>
+</html>

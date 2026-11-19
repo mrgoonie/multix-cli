@@ -53,6 +53,23 @@ giờ là $0. Atlas Cloud hiển thị giá dưới dạng ước tính và tín
 theo usage đo được, nên multix đánh dấu các giá này là `estimate`
 (`basis: "estimated"` trong JSON).
 
+## Giá trên web
+
+[multix.zuey.me/models](https://multix.zuey.me/models) liệt kê mọi model multix
+biết, chia theo tác vụ, có tìm kiếm, bộ lọc (tác vụ, provider, nguồn giá, giá,
+đơn vị, khoảng USD, ngày ra mắt) và sắp xếp (tên, provider, giá theo đơn vị,
+ngày ra mắt, ngày kiểm giá). Dữ liệu cũng có dạng JSON tại
+[`/models.json`](https://multix.zuey.me/models.json). Mỗi dòng lấy giá từ nguồn
+đầu tiên có giá:
+
+1. bảng giá của multix (các giá ở trang này: đã xác minh, có ngày, có nguồn);
+2. giá provider công bố trong listing model trực tiếp, do server đọc và dùng lại
+   trong sáu giờ: OpenRouter (theo token hoặc theo ảnh), Atlas Cloud (`base_price`
+   được niêm yết, kèm đơn vị khi Atlas có ghi) và fal khi operator đặt
+   `MULTIX_PRICING_FAL_KEY`. Các số này được đánh dấu "listing của provider":
+   multix không xác minh và không bao giờ dùng chúng cho ngân sách hay hoá đơn;
+3. nếu không có, hiển thị "không rõ giá" kèm link tới trang giá của provider.
+
 ## So sánh
 
 `compare` báo giá mọi offering phù hợp cho đúng một request (`--task`,

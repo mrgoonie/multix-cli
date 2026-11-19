@@ -52,6 +52,24 @@ outside its dated window is shown as unknown with that reason, never as $0.
 Atlas Cloud shows its prices as estimates and bills the final amount from usage,
 so multix marks them `estimate` (`basis: "estimated"` in JSON).
 
+## Prices on the web
+
+[multix.zuey.me/models](https://multix.zuey.me/models) lists every model multix
+knows, grouped by task, with search, filters (task, provider, price source,
+price, unit, USD range, release date) and sorting (name, provider, price per
+unit, release date, price check date). Its data is also served as JSON at
+[`/models.json`](https://multix.zuey.me/models.json). Each row takes its price
+from the first source that has one:
+
+1. a multix rate card (the prices on this page: verified, dated, with source);
+2. the price the provider publishes in its live model listing, read by the
+   server and reused for six hours: OpenRouter (per token or per image),
+   Atlas Cloud (its listed `base_price`, with the unit when Atlas states one),
+   and fal when the operator sets `MULTIX_PRICING_FAL_KEY`. These figures are
+   marked "provider listing": multix does not verify them and never uses them
+   for budgets or receipts;
+3. otherwise "price unknown" with a link to the provider's own pricing page.
+
 ## Compare
 
 `compare` quotes every matching offering for one exact request (`--task`,

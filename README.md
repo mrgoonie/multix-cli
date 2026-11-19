@@ -117,6 +117,9 @@ ranks only rows whose price confirms every setting you pinned (others are
 `review` and `note` keep your own verdicts in a private or project store (text
 is scrubbed and returned as untrusted data), and `recommend` scores offerings
 from that evidence. Details: [Catalogue](https://multix.zuey.me/commands/catalog/).
+The same list, with prices providers publish in their live listings and a link
+to the provider's pricing page when no price is known, is on the web at
+[multix.zuey.me/models](https://multix.zuey.me/models) (JSON: `/models.json`).
 
 ## Environment variables
 

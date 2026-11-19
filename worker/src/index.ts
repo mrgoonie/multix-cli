@@ -9,6 +9,7 @@
  *   POST /oauth/register, /oauth/token              DCR and token endpoint (library)
  *   *    /oauth/authorize                           consent page (GitHub sign-in first)
  *   GET  /oauth/github/callback                     GitHub sign-in callback
+ *   GET  /models, /models.json                     public model list with per-provider prices
  *   *    /dashboard[/…]                             account dashboard (provider keys, storage, API keys, clients)
  *   *    /api/v1/…                                  REST API; account API key required (api/api-router.ts)
  *                                                   (incl. /api/v1/events: job event webhooks, events/)
@@ -39,6 +40,7 @@ import { resolvePreferences, withPreferenceCookies } from "./pages/preferences.j
 import { logEvent } from "./redaction.js";
 import { handleDashboard } from "./routes/dashboard-routes.js";
 import { GITHUB_CALLBACK_PATH, finishGithubSignIn } from "./routes/github-sign-in-routes.js";
+import { handleModels, isModelsPath } from "./routes/models-routes.js";
 import {
   AUTHORIZE_PATH,
   type GrantProps,
@@ -108,6 +110,7 @@ async function handleDefault(request: Request, env: WorkerEnv, deps: AppDeps): P
   }
   const isDashboard = pathname === "/dashboard" || pathname.startsWith("/dashboard/");
   const isApi = pathname === API_PREFIX || pathname.startsWith(`${API_PREFIX}/`);
+  if (isModelsPath(pathname)) return handleModels(request, env, deps);
   if (pathname === API_DOCS_PATH) {
     const origin = publicOrigin(env);
     if (!origin) return notConfigured();

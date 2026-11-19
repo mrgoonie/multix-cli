@@ -80,6 +80,7 @@ export function dashboardNav(t: Messages): NavItem[] {
     { href: "#api-keys", label: t.nav.apiKeys, icon: "code" },
     { href: "#clients", label: t.nav.clients, icon: "plug" },
     { href: "/api/docs", label: t.nav.apiDocs, icon: "book" },
+    { href: "/models", label: t.nav.models, icon: "file" },
   ];
 }
 
