@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.30.1](https://github.com/mrgoonie/multix-cli/compare/v1.30.0...v1.30.1) (2026-11-19)
+
+
+### Fixed
+
+* **worker:** skip fal ids without a price instead of losing every fal price ([#618](https://github.com/mrgoonie/multix-cli/issues/618)) ([57f3531](https://github.com/mrgoonie/multix-cli/commit/57f3531b77211fd4e56b1812d11515863651f253))
+
 ## [1.30.0](https://github.com/mrgoonie/multix-cli/compare/v1.29.0...v1.30.0) (2026-11-19)
 
 
