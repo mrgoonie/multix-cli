@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.30.2](https://github.com/mrgoonie/multix-cli/compare/v1.30.1...v1.30.2) (2026-11-19)
+
+
+### Fixed
+
+* **worker:** cache live prices in KV and refresh fal prices gradually to avoid 429; add pricing link to the home page ([#620](https://github.com/mrgoonie/multix-cli/issues/620)) ([3c61c15](https://github.com/mrgoonie/multix-cli/commit/3c61c1599ef465a7601dfb82ddb3376ab170b5f6))
+
 ## [1.30.1](https://github.com/mrgoonie/multix-cli/compare/v1.30.0...v1.30.1) (2026-11-19)
 
 
