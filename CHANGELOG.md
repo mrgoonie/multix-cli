@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.30.0](https://github.com/mrgoonie/multix-cli/compare/v1.29.0...v1.30.0) (2026-11-19)
+
+
+### Added
+
+* **worker:** public /models page with per-provider prices and live price refresh ([#616](https://github.com/mrgoonie/multix-cli/issues/616)) ([2180872](https://github.com/mrgoonie/multix-cli/commit/21808721e9978ece18ce1568bcaf2284a74b173f))
+
 ## [1.29.0](https://github.com/mrgoonie/multix-cli/compare/v1.28.0...v1.29.0) (2026-11-18)
 
 
