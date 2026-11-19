@@ -85,6 +85,12 @@ export interface WorkerEnv extends ServerSettings {
   /** Base64 of 32 random bytes: AES-256-GCM key for stored provider keys. */
   SECRETS_ENCRYPTION_KEY?: string;
 
+  /**
+   * Optional fal key used only to read fal's public model prices for /models
+   * (GET /v1/models/pricing, no generation). Without it fal rows link to fal's pricing page.
+   */
+  MULTIX_PRICING_FAL_KEY?: string;
+
   /** Optional Workers Rate Limiting binding applied per account to /mcp. */
   MCP_RATE_LIMITER?: RateLimiter;
   /** Optional Workers Rate Limiting binding applied per IP to sign-in and dashboard writes. */

@@ -11,3 +11,5 @@ SESSION_SECRET=
 # openssl rand -base64 32   (exactly 32 bytes, base64)
 SECRETS_ENCRYPTION_KEY=
 # Provider keys and R2 bucket settings are not set here: save them per account at /dashboard.
+# Optional: a fal key used only to read fal model prices for /models (no generation).
+MULTIX_PRICING_FAL_KEY=

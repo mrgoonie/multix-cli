@@ -1,6 +1,7 @@
 /** Small response builders shared by the MCP endpoint, sign-in routes and dashboard. */
 
 import { COPY_SCRIPT_HASH } from "./pages/copy-script.js";
+import { MODELS_SCRIPT_HASH } from "./pages/models-page-script.js";
 
 export const SECURITY_HEADERS: Record<string, string> = {
   "cache-control": "no-store",
@@ -8,7 +9,7 @@ export const SECURITY_HEADERS: Record<string, string> = {
 };
 
 /**
- * Headers for every HTML page: no framing, no script but the copy-button one
+ * Headers for every HTML page: no framing, no script but the copy-button and /models ones
  * (allowed by hash), no third-party resources,
  * no referrer sent to other origins. `same-origin` rather than `no-referrer`:
  * under `no-referrer` browsers send `Origin: null` on form POSTs, which the
@@ -17,7 +18,7 @@ export const SECURITY_HEADERS: Record<string, string> = {
  */
 export const HTML_SECURITY_HEADERS: Record<string, string> = {
   ...SECURITY_HEADERS,
-  "content-security-policy": `default-src 'none'; script-src '${COPY_SCRIPT_HASH}'; style-src 'unsafe-inline'; img-src https://avatars.githubusercontent.com; frame-ancestors 'none'; base-uri 'none'`,
+  "content-security-policy": `default-src 'none'; script-src '${COPY_SCRIPT_HASH}' '${MODELS_SCRIPT_HASH}'; style-src 'unsafe-inline'; img-src https://avatars.githubusercontent.com; frame-ancestors 'none'; base-uri 'none'`,
   "x-frame-options": "DENY",
   "referrer-policy": "same-origin",
 };

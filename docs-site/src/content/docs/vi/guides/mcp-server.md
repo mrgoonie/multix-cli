@@ -433,7 +433,7 @@ curl https://mcp.example.com/health
 ### Dùng chung host với site khác
 
 Worker chỉ cần các path: `/mcp`, `/dashboard`, `/oauth/*`,
-`/.well-known/oauth-*`, `/health` và `/api/*`. Route theo path được ưu tiên hơn Custom
+`/.well-known/oauth-*`, `/health`, `/api/*` và `/models*` ([danh sách model và giá](/vi/commands/catalog/#giá-trên-web) công khai). Route theo path được ưu tiên hơn Custom
 Domain trên cùng host, nên một Worker khác (ví dụ site tài liệu) vẫn phục vụ
 mọi path còn lại. `multix.zuey.me` được thiết lập theo cách này.
 
@@ -775,6 +775,7 @@ Secret (đặt bằng `npx wrangler secret put <NAME>`):
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | GitHub OAuth App dùng để đăng nhập. |
 | `SESSION_SECRET` | Ít nhất 32 ký tự. Ký cookie dashboard và token của form. |
 | `SECRETS_ENCRYPTION_KEY` | Base64 của đúng 32 byte ngẫu nhiên. Mã hóa provider key đã lưu. |
+| `MULTIX_PRICING_FAL_KEY` | Key fal tuỳ chọn, chỉ dùng để đọc giá model của fal (`GET /v1/models/pricing`, không sinh nội dung) cho `/models`. Không có key thì các dòng fal ở đó dẫn link tới trang giá của fal. |
 | `MULTIX_ALLOWED_USERS` | Login GitHub (không phân biệt hoa thường) hoặc email đã xác minh (mục có `@`) được phép đăng nhập, phân tách bằng dấu phẩy. Chưa đặt hoặc để trống thì không ai đăng nhập được. Đặt dưới dạng secret để danh sách (có thể chứa email) không nằm trong repository, và đổi được mà không cần deploy. |
 
 Nếu thiếu hoặc sai một trong bốn secret đầu, hoặc `MULTIX_PUBLIC_URL` không phải

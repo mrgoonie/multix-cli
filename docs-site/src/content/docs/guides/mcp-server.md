@@ -433,7 +433,7 @@ curl https://mcp.example.com/health
 ### Sharing a host with another site
 
 The Worker only needs these paths: `/mcp`, `/dashboard`, `/oauth/*`,
-`/.well-known/oauth-*`, `/health` and `/api/*`. Path routes take priority over a Custom
+`/.well-known/oauth-*`, `/health`, `/api/*` and `/models*` (the public [model and price list](/commands/catalog/#prices-on-the-web)). Path routes take priority over a Custom
 Domain on the same host, so another Worker (for example a docs site) can keep
 serving every other path. `multix.zuey.me` is set up this way.
 
@@ -768,6 +768,7 @@ Secrets (set with `npx wrangler secret put <NAME>`):
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | GitHub OAuth App used for sign-in. |
 | `SESSION_SECRET` | At least 32 characters. Signs dashboard cookies and form tokens. |
 | `SECRETS_ENCRYPTION_KEY` | Base64 of exactly 32 random bytes. Encrypts saved provider keys. |
+| `MULTIX_PRICING_FAL_KEY` | Optional fal key used only to read fal's model prices (`GET /v1/models/pricing`, no generation) for `/models`. Without it, fal rows there link to fal's pricing page. |
 | `MULTIX_ALLOWED_USERS` | Comma-separated GitHub logins (case-insensitive) or verified emails (entries containing `@`) that may sign in. Unset or empty allows nobody. It is a secret so the list (which may hold emails) stays out of the repository, and it changes without a deploy. |
 
 If any of the first four is missing or invalid, or `MULTIX_PUBLIC_URL` is not an
