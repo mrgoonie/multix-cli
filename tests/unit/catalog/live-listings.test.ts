@@ -13,7 +13,8 @@ function fakeFetch(routes: Record<string, Route | number>) {
     if (!hit) return new Response("{}", { status: 404 });
     const [, r] = hit;
     if (typeof r === "number") return new Response("{}", { status: r });
-    return new Response(JSON.stringify(r(url, init)), { status: 200 });
+    const body = r(url, init) as { __status?: number };
+    return new Response(JSON.stringify(body), { status: body?.__status ?? 200 });
   }) as typeof fetch;
   return { fn, calls };
 }
@@ -118,6 +119,37 @@ describe("readLiveListings", () => {
     const priced = calls.find((c) => c.url.includes("/pricing"));
     expect(new Headers(priced?.init?.headers).get("authorization")).toBe("Key secret-key");
     expect(JSON.stringify(snap)).not.toContain("secret-key");
+  });
+
+  it("isolates fal ids without a price when fal answers 404 for their batch", async () => {
+    const ids = Array.from({ length: 5 }, (_, i) => `fal-ai/m${i}`);
+    const list = () => ({
+      models: ids.map((id) => ({ endpoint_id: id, metadata: {} })),
+      has_more: false,
+    });
+    const { fn } = fakeFetch({
+      "api.fal.ai/v1/models/pricing": (url) => {
+        const asked = new URL(url).searchParams.getAll("endpoint_id");
+        if (asked.includes("fal-ai/m3")) return { __status: 404 };
+        return {
+          prices: asked.map((id) => ({
+            endpoint_id: id,
+            unit_price: 0.01,
+            unit: "image",
+            currency: "USD",
+          })),
+        };
+      },
+      "api.fal.ai/v1/models?": list,
+      "openrouter.ai": openrouter,
+      "atlascloud.ai": atlas,
+    });
+    const snap = await readLiveListings(fn, { falKey: "k" });
+    const priced = new Set(
+      snap.listings.filter((l) => l.provider === "fal" && l.prices.length).map((l) => l.model),
+    );
+    expect([...priced].sort()).toEqual(["fal-ai/m0", "fal-ai/m1", "fal-ai/m2", "fal-ai/m4"]);
+    expect(snap.sources.find((s) => s.url.endsWith("/pricing"))?.state).toBe("fresh");
   });
 
   it("marks a failing provider unavailable without failing the snapshot", async () => {
