@@ -140,22 +140,38 @@ interface FalPrice {
   currency?: unknown;
 }
 
-/** fal prices per endpoint (https://docs.fal.ai/platform-apis/v1/models/pricing); needs a key. */
+/** Most fal pricing requests one snapshot may make (Workers cap subrequests per request). */
+const FAL_PRICING_MAX_REQUESTS = 150;
+
+/**
+ * fal prices per endpoint (https://docs.fal.ai/platform-apis/v1/models/pricing); needs a key.
+ * fal answers 404 for a whole batch when one id in it has no price, so a 404
+ * batch is split in half until the unpriced ids are isolated and skipped.
+ */
 async function readFalPrices(
   fetchFn: FetchFn,
   key: string,
   ids: string[],
 ): Promise<Map<string, ListedPrice>> {
   const prices = new Map<string, ListedPrice>();
-  for (let i = 0; i < ids.length; i += 50) {
-    const query = ids
-      .slice(i, i + 50)
-      .map((id) => `endpoint_id=${encodeURIComponent(id)}`)
-      .join("&");
+  const queue: string[][] = [];
+  for (let i = 0; i < ids.length; i += 50) queue.push(ids.slice(i, i + 50));
+  let requests = 0;
+  while (queue.length && requests < FAL_PRICING_MAX_REQUESTS) {
+    const batch = queue.shift() as string[];
+    const query = batch.map((id) => `endpoint_id=${encodeURIComponent(id)}`).join("&");
+    requests++;
     const res = await fetchFn(`https://api.fal.ai/v1/models/pricing?${query}`, {
       headers: { authorization: `Key ${key}` },
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
+    if (res.status === 404) {
+      if (batch.length > 1) {
+        const mid = Math.ceil(batch.length / 2);
+        queue.unshift(batch.slice(0, mid), batch.slice(mid));
+      }
+      continue;
+    }
     if (!res.ok) throw new Error(`HTTP ${res.status} from api.fal.ai pricing`);
     const body = (await res.json()) as { prices?: FalPrice[] };
     for (const p of body.prices ?? []) {

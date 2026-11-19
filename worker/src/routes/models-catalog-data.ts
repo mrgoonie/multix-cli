@@ -27,7 +27,7 @@ export const MODELS_SCHEMA = "multix.models-page/v1";
 
 /** How long a live snapshot is reused before providers are asked again. */
 export const LIVE_TTL_S = 6 * 60 * 60;
-const CACHE_KEY = "https://multix.internal/cache/live-prices/v1";
+const CACHE_KEY = "https://multix.internal/cache/live-prices/v2";
 
 export type RowKind = "verified" | "catalog" | "listed" | "command";
 
