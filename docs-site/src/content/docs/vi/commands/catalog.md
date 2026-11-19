@@ -67,7 +67,10 @@ ngày ra mắt, ngày kiểm giá). Dữ liệu cũng có dạng JSON tại
    trong sáu giờ: OpenRouter (theo token hoặc theo ảnh), Atlas Cloud (`base_price`
    được niêm yết, kèm đơn vị khi Atlas có ghi) và fal khi operator đặt
    `MULTIX_PRICING_FAL_KEY`. Các số này được đánh dấu "listing của provider":
-   multix không xác minh và không bao giờ dùng chúng cho ngân sách hay hoá đơn;
+   multix không xác minh và không bao giờ dùng chúng cho ngân sách hay hoá đơn.
+   Server giữ snapshot gần nhất cho mọi vị trí Cloudflare và giữ giá fal trong
+   một tuần, mỗi lần làm mới chỉ hỏi fal vài lô giá còn thiếu hoặc đã cũ, nên
+   model fal mới có thể hiện giá sau một hai lần làm mới;
 3. nếu không có, hiển thị "không rõ giá" kèm link tới trang giá của provider.
 
 ## So sánh

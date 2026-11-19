@@ -67,7 +67,10 @@ from the first source that has one:
    Atlas Cloud (its listed `base_price`, with the unit when Atlas states one),
    and fal when the operator sets `MULTIX_PRICING_FAL_KEY`. These figures are
    marked "provider listing": multix does not verify them and never uses them
-   for budgets or receipts;
+   for budgets or receipts. The server keeps the last snapshot for every
+   Cloudflare location and keeps fal prices for a week, asking fal for at most
+   a few batches of missing or old prices per refresh, so a new fal model may
+   show its price a refresh or two later;
 3. otherwise "price unknown" with a link to the provider's own pricing page.
 
 ## Compare

@@ -27,7 +27,7 @@ export async function handleModels(
   }
   const fetchFn = (deps.fetch as typeof fetch | undefined) ?? ((input, init) => fetch(input, init));
   const key = env.MULTIX_PRICING_FAL_KEY?.trim() || undefined;
-  const snap = await liveSnapshot(fetchFn, key).catch(() => undefined);
+  const snap = await liveSnapshot(fetchFn, key, env.ACCOUNTS_KV).catch(() => undefined);
   const data = buildModelsData(snap);
   const { pathname } = new URL(request.url);
   if (pathname === MODELS_JSON_PATH) {

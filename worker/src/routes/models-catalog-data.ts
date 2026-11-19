@@ -17,6 +17,7 @@ import {
 } from "../../../src/catalog/catalog-build.js";
 import type { RateView } from "../../../src/catalog/catalog-types.js";
 import {
+  type FalPriceBook,
   type ListedPrice,
   type LiveSnapshot,
   type LiveSource,
@@ -27,7 +28,7 @@ export const MODELS_SCHEMA = "multix.models-page/v1";
 
 /** How long a live snapshot is reused before providers are asked again. */
 export const LIVE_TTL_S = 6 * 60 * 60;
-const CACHE_KEY = "https://multix.internal/cache/live-prices/v2";
+const CACHE_KEY = "https://multix.internal/cache/live-prices/v3";
 
 export type RowKind = "verified" | "catalog" | "listed" | "command";
 
@@ -58,25 +59,51 @@ export interface ModelsData {
   rows: ModelRow[];
 }
 
-/** Read the live snapshot from the Workers cache, refreshing it after LIVE_TTL_S. */
-export async function liveSnapshot(fetchFn: FetchFn, falKey?: string): Promise<LiveSnapshot> {
+/** KV keys: the last snapshot (shared by every Cloudflare location) and the fal price book. */
+export const SNAPSHOT_KV_KEY = "models:live-snapshot:v1";
+export const FAL_BOOK_KV_KEY = "models:fal-price-book:v1";
+
+type SnapshotKv = Pick<KVNamespace, "get" | "put">;
+
+/**
+ * The live snapshot, read in this order so providers are asked at most once
+ * per LIVE_TTL_S for the whole Worker: this location's Workers cache, then the
+ * snapshot in KV, then the providers. The fal price book is kept in KV across
+ * refreshes, so each refresh asks fal only for prices that are missing or old
+ * (bounded per refresh) instead of every endpoint at once.
+ */
+export async function liveSnapshot(
+  fetchFn: FetchFn,
+  falKey?: string,
+  kv?: SnapshotKv,
+  now: Date = new Date(),
+): Promise<LiveSnapshot> {
   const cache =
     typeof caches === "undefined" ? undefined : (caches as unknown as { default: Cache }).default;
   const hit = await cache?.match(CACHE_KEY);
   if (hit) return (await hit.json()) as LiveSnapshot;
-  const snap = await readLiveListings(fetchFn, { falKey });
-  // A snapshot in which every source failed is not cached, so the next visit retries.
-  if (cache && snap.sources.some((s) => s.state === "fresh")) {
-    await cache.put(
+  const remember = async (snap: LiveSnapshot) => {
+    const ageS = Math.max(0, (now.getTime() - Date.parse(snap.fetched_at)) / 1000);
+    const left = Math.max(60, Math.floor(LIVE_TTL_S - ageS));
+    await cache?.put(
       CACHE_KEY,
       new Response(JSON.stringify(snap), {
-        headers: {
-          "content-type": "application/json",
-          "cache-control": `public, max-age=${LIVE_TTL_S}`,
-        },
+        headers: { "content-type": "application/json", "cache-control": `public, max-age=${left}` },
       }),
     );
+  };
+  const stored = (await kv?.get(SNAPSHOT_KV_KEY, "json").catch(() => null)) as LiveSnapshot | null;
+  if (stored && now.getTime() - Date.parse(stored.fetched_at) < LIVE_TTL_S * 1000) {
+    await remember(stored);
+    return stored;
   }
+  const book = ((await kv?.get(FAL_BOOK_KV_KEY, "json").catch(() => null)) ?? {}) as FalPriceBook;
+  const { fal_prices, ...snap } = await readLiveListings(fetchFn, { falKey, falPrices: book, now });
+  if (fal_prices) await kv?.put(FAL_BOOK_KV_KEY, JSON.stringify(fal_prices)).catch(() => undefined);
+  // A snapshot in which every source failed is not kept: serve the last good one and retry next visit.
+  if (!snap.sources.some((s) => s.state === "fresh")) return stored ?? snap;
+  await kv?.put(SNAPSHOT_KV_KEY, JSON.stringify(snap)).catch(() => undefined);
+  await remember(snap);
   return snap;
 }
 

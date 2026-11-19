@@ -3,7 +3,12 @@ import { describe, expect, it } from "vitest";
 import type { WorkerEnv } from "../src/config.js";
 import { HTML_SECURITY_HEADERS } from "../src/http-responses.js";
 import { MODELS_SCRIPT, MODELS_SCRIPT_HASH } from "../src/pages/models-page-script.js";
-import { buildModelsData } from "../src/routes/models-catalog-data.js";
+import {
+  FAL_BOOK_KV_KEY,
+  SNAPSHOT_KV_KEY,
+  buildModelsData,
+  liveSnapshot,
+} from "../src/routes/models-catalog-data.js";
 import { handleModels } from "../src/routes/models-routes.js";
 
 const snapshot = {
@@ -105,5 +110,73 @@ describe("/models routes", () => {
       `sha256-${createHash("sha256").update(MODELS_SCRIPT).digest("base64")}`,
     );
     expect(HTML_SECURITY_HEADERS["content-security-policy"]).toContain(`'${MODELS_SCRIPT_HASH}'`);
+  });
+});
+
+describe("live snapshot cache", () => {
+  function memoryKv() {
+    const store = new Map<string, string>();
+    return {
+      store,
+      get: async (k: string) => (store.has(k) ? JSON.parse(store.get(k) as string) : null),
+      put: async (k: string, v: string) => {
+        store.set(k, v);
+      },
+    };
+  }
+  const now = new Date("2026-11-19T00:00:00Z");
+
+  it("reuses a snapshot from KV without asking providers", async () => {
+    const kv = memoryKv();
+    kv.store.set(
+      SNAPSHOT_KV_KEY,
+      JSON.stringify({ ...snapshot, fetched_at: "2026-11-18T22:00:00.000Z" }),
+    );
+    let calls = 0;
+    const fetchFn = (async () => {
+      calls++;
+      return new Response("{}", { status: 500 });
+    }) as unknown as typeof fetch;
+    const snap = await liveSnapshot(fetchFn, undefined, kv as never, now);
+    expect(calls).toBe(0);
+    expect(snap.listings).toHaveLength(2);
+  });
+
+  it("refreshes an old snapshot, keeps the fal book in KV and never stores it in the snapshot", async () => {
+    const kv = memoryKv();
+    kv.store.set(
+      SNAPSHOT_KV_KEY,
+      JSON.stringify({ ...snapshot, fetched_at: "2026-11-18T00:00:00.000Z" }),
+    );
+    const fetchFn = (async (input: string) => {
+      const url = String(input);
+      if (url.includes("/pricing"))
+        return new Response(
+          JSON.stringify({
+            prices: [{ endpoint_id: "fal-ai/x", unit_price: 0.02, unit: "image", currency: "USD" }],
+          }),
+        );
+      if (url.includes("api.fal.ai"))
+        return new Response(
+          JSON.stringify({ models: [{ endpoint_id: "fal-ai/x", metadata: {} }], has_more: false }),
+        );
+      return new Response("{}", { status: 503 });
+    }) as unknown as typeof fetch;
+    const snap = await liveSnapshot(fetchFn, "k", kv as never, now);
+    expect(snap.fetched_at).toBe(now.toISOString());
+    expect("fal_prices" in snap).toBe(false);
+    expect(JSON.parse(kv.store.get(FAL_BOOK_KV_KEY) as string)["fal-ai/x"].price.usd).toBe(0.02);
+    expect(kv.store.get(SNAPSHOT_KV_KEY)).not.toContain("fal_prices");
+  });
+
+  it("serves the last good snapshot when every provider fails", async () => {
+    const kv = memoryKv();
+    kv.store.set(
+      SNAPSHOT_KV_KEY,
+      JSON.stringify({ ...snapshot, fetched_at: "2026-11-01T00:00:00.000Z" }),
+    );
+    const down = (async () => new Response("{}", { status: 503 })) as unknown as typeof fetch;
+    const snap = await liveSnapshot(down, undefined, kv as never, now);
+    expect(snap.fetched_at).toBe("2026-11-01T00:00:00.000Z");
   });
 });

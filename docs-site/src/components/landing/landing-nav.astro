@@ -38,6 +38,7 @@ const themes = [
     </a>
     <ul class="mx-nav-links">
       <li><a href={localePath(lang, "/getting-started/")}>{t.nav.docs}</a></li>
+      <li><a href={lang === "vi" ? "/models?lang=vi" : "/models"}>{t.nav.pricing}</a></li>
       <li class="mx-hide-sm"><a href={localePath(lang, "/guides/mcp-server/")}>{t.nav.mcp}</a></li>
       <li class="mx-hide-sm"><a href={localePath(lang, "/guides/rest-api/")}>{t.nav.rest}</a></li>
       <li class="mx-hide-sm"><a href="https://github.com/mrgoonie/multix-cli">{t.nav.github}</a></li>
