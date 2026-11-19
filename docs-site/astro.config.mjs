@@ -129,6 +129,12 @@ export default defineConfig({
               slug: "commands/catalog",
             },
             {
+              // Served by the MCP Worker on the same host, not by this site.
+              label: "Models and prices (web)",
+              translations: { vi: "Model và giá (web)" },
+              link: "https://multix.zuey.me/models",
+            },
+            {
               label: "Provider directory",
               translations: { vi: "Danh mục provider" },
               slug: "commands/providers",

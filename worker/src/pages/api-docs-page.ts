@@ -92,6 +92,7 @@ export function apiDocsPage(origin: string, prefs: Preferences = DEFAULT_PREFERE
         { href: "#intro", label: t.nav.gettingStarted, icon: "overview" },
         { href: "#endpoints", label: t.nav.endpoints, icon: "code" },
         { href: "/api/v1/openapi.json", label: t.nav.openapi, icon: "file" },
+        { href: "/models", label: t.nav.models, icon: "book" },
         { href: "/dashboard", label: t.nav.dashboard, icon: "back" },
       ],
     },
